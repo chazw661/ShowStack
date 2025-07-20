@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AudioPatch</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #eee;
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+        }
+      
+        .container {
+          display: flex;
+          height: 100vh;
+          margin-top: 4rem;  /* 👈 Add this line */
+        }
+
+      
+        .sidebar {
+            width: 250px;
+            background-color: #2a2a2a;
+            padding: 1rem;
+            border-right: 1px solid #444;
+        }
+      
+        .main {
+            flex-grow: 1;
+            padding: 2rem;
+        }
+      
+        .sidebar a {
+            display: block;
+            margin-bottom: 0.5rem;
+            text-decoration: none;
+            color: #eee;
+        }
+      
+        .sidebar a:hover {
+            font-weight: bold;
+            color: #00c8ff;
+        }
+      
+        .styled-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            background-color: #2a2a2a;
+        }
+      
+        .styled-table th, .styled-table td {
+            padding: 0.6rem 1rem;
+            border: 1px solid #444;
+        }
+      
+        .styled-table th {
+            background-color: #333;
+            text-align: left;
+        }
+      
+        .styled-table tr:hover {
+            background-color: #3a3a3a;
+
+            
+        }
+        .navbar {
+      display: flex;
+      gap: 1.5rem;
+      background-color: #1a1a1a;
+      padding: 1rem 2rem;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border-bottom: 1px solid #444;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .navbar a {
+      color: #fff;
+      text-decoration: none;
+      transition: color 0.2s ease-in-out;
+    }
+
+    .navbar a:hover {
+      color: #1e90ff;
+    }
+</style>  <!-- keep this closing tag -->
+
+      
+</head>
+<body>
+    <div class="navbar">
+        <a href="/consoles/">Consoles</a>
+        <a href="/devices/">Devices</a>
+        <a href="/inputs/">Inputs</a>
+        <a href="/outputs/">Outputs</a>
+        <a href="/patch/">Patch Sheets</a>
+        <!-- Add more tabs here as needed -->
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <h2>Consoles</h2>
+            {% for c in consoles %}
+                <a href="{% url 'console_detail' c.id %}">{{ c.name }}</a>
+            {% endfor %}
+        </div>
+        <div class="main">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+</body>
+</html>
