@@ -1,54 +1,54 @@
 {% extends "base.html" %}
-{% load custom_tags %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-4 pr-12">
-    <h2 class="text-lg font-semibold pl-2">
-        Console: <span class="font-normal">{{ console.name }}</span>
-    </h2>
-</div>
+<div class="flex">
 
 
-    <form method="POST" class="space-y-10">
-        {% csrf_token %}
-        {{ formset.management_form }}
 
-        <div>
-            <h2 class="text-xl font-semibold mb-3">Inputs</h2>
-            <table class="w-full table-auto border border-gray-700">
-                <thead class="bg-gray-800">
-                    <tr>
-                        {% for field in formset.forms.0.visible_fields %}
-                            {% if field.name != "console" %}
-                                <th class="p-2 border border-gray-700 text-center text-sm font-medium">
-                                    {{ field.label }}
-                                </th>
-                            {% endif %}
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for form in formset %}
-                        <tr>
-                            {% for field in form.visible_fields %}
-                                {% if field.name != "console" %}
-                                    <td class="p-2 text-center align-middle border border-gray-700">
-                                        {{ field.errors }}
-                                        {{ field }}
-                                    </td>
-                                {% endif %}
-                            {% endfor %}
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
 
-        <div class="mt-6">
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded">
-                Save Changes
-            </button>
-        </div>
+  <!-- Main content -->
+  <div class="w-4/5 p-6">
+
+    <h1 class="text-2xl font-bold mb-6">{{ console.name }}</h1>
+
+    <form method="post">
+      {% csrf_token %}
+      {{ formset.management_form }}
+
+      <table class="table-auto w-full border-collapse border border-gray-600 text-sm text-white">
+        <thead>
+          <tr class="bg-gray-700">
+            <th class="border border-gray-600 px-2 py-1 text-center">Dante #</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Input Ch</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Source</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Group</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">DCA</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Mute</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Direct Out</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Omni</th>
+            <th class="border border-gray-600 px-2 py-1 text-center">Delete</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for form in formset %}
+            <tr class="bg-gray-900">
+              {% for field in form.visible_fields %}
+                <td class="border border-gray-600 px-2 py-1 text-center align-middle">
+                  {{ field }}
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="mt-4">
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded">
+          Save Changes
+        </button>
+      </div>
     </form>
-</div>
+  </div>
+
+</div> <!-- this closes the flex container -->
 {% endblock %}
