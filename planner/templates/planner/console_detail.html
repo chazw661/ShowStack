@@ -28,7 +28,9 @@
         <tbody>
           {% for form in formset %}
            <tr class="bg-gray-900">
-            <td class="border border-gray-600 px-2 py-1 text-center align-middle">{{ form.dante }}</td>
+            <td class="border border-gray-600 px-2 py-1 text-center align-middle">
+              {{ form.dante_number }}
+            </td>
             <td class="border border-gray-600 px-2 py-1 text-center align-middle">{{ form.input_ch }}</td>
             <td class="border border-gray-600 px-2 py-1 text-center align-middle">{{ form.source }}</td>
             <td class="border border-gray-600 px-2 py-1 text-center align-middle">{{ form.group }}</td>

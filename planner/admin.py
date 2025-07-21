@@ -1,7 +1,15 @@
 from django.contrib import admin
-from .models import Device, Console, Input, Output
+from .models import Console, ConsoleInput, ConsoleOutput
 
-admin.site.register(Device)
-admin.site.register(Console)
-admin.site.register(Input)
-admin.site.register(Output)
+class ConsoleInputInline(admin.TabularInline):
+    model = ConsoleInput
+    extra = 10  # Number of blank entries shown by default
+
+class ConsoleOutputInline(admin.TabularInline):
+    model = ConsoleOutput
+    extra = 10
+
+@admin.register(Console)
+class ConsoleAdmin(admin.ModelAdmin):
+    list_display = ['name']
+    inlines = [ConsoleInputInline, ConsoleOutputInline]
