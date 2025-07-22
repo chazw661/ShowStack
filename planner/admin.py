@@ -1,19 +1,35 @@
 from django.contrib import admin
-from .models import Console, ConsoleInput, ConsoleOutput
-
-from planner.forms import ConsoleInputForm #ConsoleOutputForm 
+from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
+from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
 
 class ConsoleInputInline(admin.TabularInline):
     model = ConsoleInput
     form = ConsoleInputForm
-    extra = 10  # Number of blank entries shown by default
-
-class ConsoleOutputInline(admin.TabularInline):
-    model = ConsoleOutput
-    #form = ConsoleOutputForm
     extra = 10
+    can_delete = True
+    classes = ['collapse']  # ✅ Makes it collapsible
+
+
+class ConsoleAuxOutputInline(admin.TabularInline):
+    model = ConsoleAuxOutput
+    form = ConsoleAuxOutputForm
+    extra = 10
+    can_delete = True
+    classes = ['collapse']
+
+
+class ConsoleMatrixOutputInline(admin.TabularInline):
+    model = ConsoleMatrixOutput
+    form = ConsoleMatrixOutputForm
+    extra = 10
+    can_delete = True
+    classes = ['collapse']
 
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
     list_display = ['name']
-    inlines = [ConsoleInputInline, ConsoleOutputInline]
+    inlines = [
+        ConsoleInputInline,
+        ConsoleAuxOutputInline,
+        ConsoleMatrixOutputInline
+    ]
