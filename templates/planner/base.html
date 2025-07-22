@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% load static %}
+  <meta charset="UTF-8">
+  <title>{% block title %}AudioPatch{% endblock %}</title>
+ <link href="{% static 'theme/css/dist/styles.css' %}" rel="stylesheet">
+<body>
+    <div class="navbar">
+        <a href="/consoles/">Consoles</a>
+        <a href="/devices/">Devices</a>
+        <a href="/inputs/">Inputs</a>
+        <a href="/outputs/">Outputs</a>
+        <a href="/patch/">Patch Sheets</a>
+        <!-- Add more tabs here as needed -->
+    </div>
+
+   <div class="container bg-blue-200 p-10 text-center">
+  <p class="text-xl font-bold text-red-600">Tailwind is working!</p>
+</div>
+        <div class="sidebar">
+            <h2>Consoles</h2>
+            {% for c in consoles %}
+                <a href="{% url 'console_detail' c.id %}">{{ c.name }}</a>
+            {% endfor %}
+        </div>
+        <div class="main">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+</body>
+</html>

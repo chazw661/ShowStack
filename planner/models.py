@@ -10,11 +10,11 @@ class Console(models.Model):
 class ConsoleInput(models.Model):
     console = models.ForeignKey(Console, related_name='inputs', on_delete=models.CASCADE)
     dante_number = models.PositiveIntegerField(null=True, blank=True)
-    channel = models.CharField(max_length=10, blank=True)
+    input_ch = models.CharField(max_length=10, blank=True)
     source = models.CharField(max_length=100, blank=True)
     group = models.CharField(max_length=50, blank=True)
     dca = models.CharField(max_length=50, blank=True)
-    mute = models.BooleanField(default=False)
+    mute = models.CharField(max_length=20, blank=True)
     direct_out = models.CharField(max_length=100, blank=True)
     omni_in = models.CharField(max_length=100, blank=True)
     omni_out = models.CharField(max_length=100, blank=True)

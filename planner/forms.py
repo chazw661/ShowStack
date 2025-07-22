@@ -2,11 +2,11 @@
 
 from django import forms
 from django.forms import modelformset_factory
-from .models import Input
+from .models import ConsoleInput
 
 class ConsoleInputForm(forms.ModelForm):
     class Meta:
-        model = Input
+        model = ConsoleInput
         fields = [
             'dante_number',
             'input_ch',
@@ -24,10 +24,11 @@ class ConsoleInputForm(forms.ModelForm):
 
         # Apply consistent styling and sizing to each field
         self.fields['dante_number'].widget.attrs.update({
-        'class': 'block w-8 text-center align-middle bg-white text-black rounded-sm',
+        'class': 'block w-16 text-center align-middle bg-white text-black rounded-sm',
         'maxlength': '3',
         'placeholder': '###',
         })
+        print("DANTE NUMBER ATTRS:", self.fields['dante_number'].widget.attrs),
         self.fields['input_ch'].widget.attrs.update({
             'class': 'w-24 text-center align-middle bg-white text-black rounded-sm',
         })
@@ -55,8 +56,8 @@ class ConsoleInputForm(forms.ModelForm):
 
 # Keep your formset setup
 InputFormSet = modelformset_factory(
-    Input,
+    ConsoleInput,
     form=ConsoleInputForm,
-    extra=144,
+    extra=10,
     can_delete=True
 )
