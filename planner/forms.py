@@ -67,7 +67,6 @@ class ConsoleAuxOutputForm(forms.ModelForm):
             'name',
             'mono_stereo',
             'bus_type',
-            'omni_in',
             'omni_out',
         ]
 
@@ -86,9 +85,7 @@ class ConsoleAuxOutputForm(forms.ModelForm):
         self.fields['bus_type'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
-        self.fields['omni_in'].widget.attrs.update({
-            'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
-        })
+        
         self.fields['omni_out'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })

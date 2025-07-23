@@ -5,25 +5,60 @@ from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixO
 class ConsoleInputInline(admin.TabularInline):
     model = ConsoleInput
     form = ConsoleInputForm
-    extra = 10
+    extra = 144
     can_delete = True
-    classes = ['collapse']  # ✅ Makes it collapsible
+    classes = ['collapse']
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        # Override __init__ of the formset to assign input_ch values
+        class PrepopulatedFormSet(formset):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                for index, form in enumerate(self.forms):
+                    if not form.instance.pk:  # only for new (unsaved) forms
+                        form.initial['input_ch'] = index + 1
+        return PrepopulatedFormSet
 
 
 class ConsoleAuxOutputInline(admin.TabularInline):
     model = ConsoleAuxOutput
     form = ConsoleAuxOutputForm
-    extra = 10
+    extra = 72  # 72 rows
     can_delete = True
     classes = ['collapse']
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+
+        class PrepopulatedFormSet(formset):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                for index, form in enumerate(self.forms):
+                    if not form.instance.pk:
+                        form.initial['aux_number'] = index + 1
+
+        return PrepopulatedFormSet
 
 
 class ConsoleMatrixOutputInline(admin.TabularInline):
     model = ConsoleMatrixOutput
     form = ConsoleMatrixOutputForm
-    extra = 10
+    extra = 36
     can_delete = True
     classes = ['collapse']
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+
+        class PrepopulatedFormSet(formset):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                for index, form in enumerate(self.forms):
+                    if not form.instance.pk:
+                        form.initial['matrix_number'] = index + 1
+
+        return PrepopulatedFormSet
 
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
