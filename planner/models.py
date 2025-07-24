@@ -76,8 +76,16 @@ class Device(models.Model):
 
 class DeviceInput(models.Model):
     device = models.ForeignKey(Device, related_name="inputs", on_delete=models.CASCADE)
-    input_label = models.CharField(max_length=20)  # e.g. "IN 1"
+    input_number = models.PositiveIntegerField()
     signal_name = models.CharField(max_length=100)  # e.g. "Wless 1 Analogue"
 
     def __str__(self):
-        return f"{self.device.name} - {self.input_label}: {self.signal_name}"
+     return ""
+    
+class DeviceOutput(models.Model):
+    device = models.ForeignKey(Device, related_name="outputs", on_delete=models.CASCADE)
+    output_number = models.PositiveIntegerField()
+    signal_name = models.CharField(max_length=100, blank=True, null=True)
+
+    def __str__(self):
+        return ""

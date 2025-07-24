@@ -2,6 +2,18 @@ from django import forms
 from django.forms import modelformset_factory
 from .models import ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 
+from django import forms
+from .models import Device
+
+class DeviceForm(forms.ModelForm):
+    input_count = forms.IntegerField(min_value=0, label="Number of Inputs", initial=16)
+    output_count = forms.IntegerField(min_value=0, label="Number of Outputs", initial=16)
+
+    class Meta:
+        model = Device
+        fields = ['name', 'input_count', 'output_count']
+
+
 # ─── Console Input Form ────────────────────────────────────────────────────────
 
 class ConsoleInputForm(forms.ModelForm):

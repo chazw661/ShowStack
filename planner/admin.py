@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Device, DeviceInput
+from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
 
@@ -97,16 +97,40 @@ class ConsoleAdmin(admin.ModelAdmin):
 
 # ========== Device Admin ==========
 
-from .models import Device, DeviceInput  # ensure this is included at the top
-
+from django.contrib import admin
+from .models import Device, DeviceInput,DeviceOutput
+from .forms import DeviceForm
 
 class DeviceInputInline(admin.TabularInline):
     model = DeviceInput
-    extra = 16
+    extra = 0
     max_num = 64
 
+class DeviceOutputInline(admin.TabularInline):
+    model = DeviceOutput
+    extra = 0
+    max_num = 64
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
+    form = DeviceForm
+    inlines = [DeviceInputInline, DeviceOutputInline]
     list_display = ['name']
-    inlines = [DeviceInputInline]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        # Only create inputs/outputs if it's a new device
+        if not change:
+            input_count = form.cleaned_data.get('input_count', 0)
+            output_count = form.cleaned_data.get('output_count', 0)
+
+            # Create DeviceInputs
+            DeviceInput.objects.bulk_create([
+                DeviceInput(device=obj, input_number=i + 1) for i in range(input_count)
+            ])
+
+            # Optional: Create DeviceOutputs model if/when you add it
+            DeviceOutput.objects.bulk_create([
+            DeviceOutput(device=obj, output_number=i + 1) for i in range(output_count)
+            ])
