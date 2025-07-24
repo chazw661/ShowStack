@@ -80,7 +80,7 @@ class ConsoleAuxOutputForm(forms.ModelForm):
             'class': 'w-36 text-center align-middle bg-white text-black rounded-sm',
         })
         self.fields['mono_stereo'].widget.attrs.update({
-            'class': 'w-20 text-center align-middle bg-white text-black rounded-sm',
+             'class': 'mono-stereo-select'
         })
         self.fields['bus_type'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
@@ -120,7 +120,7 @@ class ConsoleMatrixOutputForm(forms.ModelForm):
             'class': 'w-36 text-center align-middle bg-white text-black rounded-sm',
         })
         self.fields['mono_stereo'].widget.attrs.update({
-            'class': 'w-20 text-center align-middle bg-white text-black rounded-sm',
+            'class': 'mono-stereo-select'
         })
         self.fields['destination'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',

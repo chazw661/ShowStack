@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.forms import modelformset_factory
-from .models import Console, ConsoleInput, ConsoleOutput
+from .models import Console, ConsoleInput
 
 def console_detail(request, console_id):
     console = get_object_or_404(Console, pk=console_id)

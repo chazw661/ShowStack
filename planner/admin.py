@@ -66,5 +66,11 @@ class ConsoleAdmin(admin.ModelAdmin):
     inlines = [
         ConsoleInputInline,
         ConsoleAuxOutputInline,
-        ConsoleMatrixOutputInline
+        ConsoleMatrixOutputInline,
     ]
+
+    class Media:
+     js = ['planner/js/mono_stereo_handler.js']
+     css = {
+        'all': ['css/custom_admin.css']
+    }
