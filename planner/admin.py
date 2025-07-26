@@ -98,39 +98,77 @@ class ConsoleAdmin(admin.ModelAdmin):
 # ========== Device Admin ==========
 
 from django.contrib import admin
-from .models import Device, DeviceInput,DeviceOutput
-from .forms import DeviceForm
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+
+from .models import Device, DeviceInput, DeviceOutput
+from .forms import DeviceForm, NameOnlyForm
+
+# ———— your inlines here ——————————————————————————————————
 
 class DeviceInputInline(admin.TabularInline):
     model = DeviceInput
-    extra = 0
-    max_num = 64
+    extra = 0  # we'll override in get_formset()
+
+    def get_formset(self, request, obj=None, **kwargs):
+        # show exactly obj.input_count extra blank rows
+        kwargs['extra'] = obj.input_count if obj else 0
+        FormSet = super().get_formset(request, obj, **kwargs)
+
+        class InitializingFormSet(FormSet):
+            def __init__(self, *args, **kw):
+                super().__init__(*args, **kw)
+                # auto-populate input_number for new rows
+                for idx, form in enumerate(self.forms):
+                    if not form.instance.pk:
+                        form.initial.setdefault('input_number', idx + 1)
+
+        return InitializingFormSet
+
 
 class DeviceOutputInline(admin.TabularInline):
     model = DeviceOutput
     extra = 0
-    max_num = 64
+
+    def get_formset(self, request, obj=None, **kwargs):
+        kwargs['extra'] = obj.output_count if obj else 0
+        FormSet = super().get_formset(request, obj, **kwargs)
+
+        class InitializingFormSet(FormSet):
+            def __init__(self, *args, **kw):
+                super().__init__(*args, **kw)
+                # auto-populate output_number for new rows
+                for idx, form in enumerate(self.forms):
+                    if not form.instance.pk:
+                        form.initial.setdefault('output_number', idx + 1)
+
+        return InitializingFormSet
+
+
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    form = DeviceForm
     inlines = [DeviceInputInline, DeviceOutputInline]
-    list_display = ['name']
+    list_display = ('name',)
 
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
+    def get_fields(self, request, obj=None):
+        """
+        On the add form (obj is None) show name + counts.
+        On the change form, everything is in the title/inlines,
+        so show no fields above the inlines.
+        """
+        if obj is None:
+            return ['name', 'input_count', 'output_count']
+        return []
 
-        # Only create inputs/outputs if it's a new device
-        if not change:
-            input_count = form.cleaned_data.get('input_count', 0)
-            output_count = form.cleaned_data.get('output_count', 0)
+    def get_form(self, request, obj=None, **kwargs):
+        if obj is None:
+            kwargs['form'] = NameOnlyForm
+        else:
+            kwargs['form'] = DeviceForm
+        return super().get_form(request, obj, **kwargs)
 
-            # Create DeviceInputs
-            DeviceInput.objects.bulk_create([
-                DeviceInput(device=obj, input_number=i + 1) for i in range(input_count)
-            ])
-
-            # Optional: Create DeviceOutputs model if/when you add it
-            DeviceOutput.objects.bulk_create([
-            DeviceOutput(device=obj, output_number=i + 1) for i in range(output_count)
-            ])
+    def response_add(self, request, obj, post_url_continue=None):
+        # redirect into the change page so the inlines appear.
+        change_url = reverse('admin:planner_device_change', args=(obj.pk,))
+        return HttpResponseRedirect(change_url)

@@ -1,17 +1,28 @@
+
+# planner/forms.py
+
 from django import forms
 from django.forms import modelformset_factory
-from .models import ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
+from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 
-from django import forms
-from .models import Device
+
 
 class DeviceForm(forms.ModelForm):
-    input_count = forms.IntegerField(min_value=0, label="Number of Inputs", initial=16)
-    output_count = forms.IntegerField(min_value=0, label="Number of Outputs", initial=16)
-
+    """Full form used when editing an existing Device."""
     class Meta:
         model = Device
-        fields = ['name', 'input_count', 'output_count']
+        fields = ["name", "input_count", "output_count"]
+
+class NameOnlyForm(forms.ModelForm):
+    """
+    A stripped‐down ModelForm used only on the very first “Add”:
+    only name, input_count and output_count.
+    """
+    class Meta:
+        model = Device
+        fields = ["name", "input_count", "output_count"]
+
+# … then your ConsoleInputForm, ConsoleAuxOutputForm, etc. below …
 
 
 # ─── Console Input Form ────────────────────────────────────────────────────────
@@ -147,3 +158,4 @@ MatrixOutputFormSet = modelformset_factory(
     extra=10,
     can_delete=True
 )
+
