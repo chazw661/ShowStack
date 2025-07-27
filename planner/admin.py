@@ -102,15 +102,20 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 
 from .models import Device, DeviceInput, DeviceOutput
+from .forms  import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
 
 # ———— your inlines here ——————————————————————————————————
 
 class DeviceInputInline(admin.TabularInline):
     model = DeviceInput
-    extra = 0  # we'll override in get_formset()
+    form     = DeviceInputInlineForm
+    extra = 0  
+    template = "admin/planner/device_input_grid.html"
+
 
     def get_formset(self, request, obj=None, **kwargs):
+        print("👉 DeviceInputInline.get_formset() called with obj=", obj) 
         # show exactly obj.input_count extra blank rows
         kwargs['extra'] = obj.input_count if obj else 0
         FormSet = super().get_formset(request, obj, **kwargs)
@@ -128,7 +133,10 @@ class DeviceInputInline(admin.TabularInline):
 
 class DeviceOutputInline(admin.TabularInline):
     model = DeviceOutput
+    form     = DeviceOutputInlineForm
     extra = 0
+    template = "admin/planner/device_output_grid.html"
+
 
     def get_formset(self, request, obj=None, **kwargs):
         kwargs['extra'] = obj.output_count if obj else 0

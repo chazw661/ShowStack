@@ -159,3 +159,92 @@ MatrixOutputFormSet = modelformset_factory(
     can_delete=True
 )
 
+
+#----------Device dropdowns--------
+from django import forms
+from .models import (
+    DeviceInput,
+    DeviceOutput,
+    ConsoleInput,
+    ConsoleAuxOutput,
+    ConsoleMatrixOutput,
+    Console,
+)
+
+
+class DeviceInputInlineForm(forms.ModelForm):
+    console_input = forms.ChoiceField(
+        label="Console Input",
+        required=False,
+        widget=forms.Select,
+        choices=[],
+    )
+
+    class Meta:
+        model = DeviceInput
+        fields = ("input_number", "console_input")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        grouped = []
+        # grab every Console and do Python‐side filtering
+        for console in Console.objects.prefetch_related("consoleinput_set"):
+            opts = [
+                (ci.pk, f"{ci.input_ch}: {ci.source}")
+                for ci in console.consoleinput_set.all()
+                if ci.source  # only non‐empty, non‐None sources
+            ]
+            if opts:
+                grouped.append((console.name, opts))
+
+        # always start with the blank header
+        self.fields["console_input"].choices = [("", "---------")] + grouped
+
+        # if we’re editing an existing DeviceInput, preserve its current value
+        if getattr(self, "instance", None) and self.instance.pk:
+            self.fields["console_input"].initial = self.instance.console_input_id
+
+
+class DeviceOutputInlineForm(forms.ModelForm):
+    console_output = forms.ChoiceField(
+        label="Console Output",
+        required=False,
+        widget=forms.Select,
+        choices=[],
+    )
+
+    class Meta:
+        model = DeviceOutput
+        fields = ("output_number", "console_output")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        grouped = []
+        # grab every Console and do Python‐side filtering on both Aux & Matrix outputs
+        for console in Console.objects.prefetch_related(
+            "consoleauxoutput_set", "consolematrixoutput_set"
+        ):
+            opts = []
+            # Aux outputs
+            opts += [
+                (ao.pk, f"Aux {ao.aux_number}: {ao.name}")
+                for ao in console.consoleauxoutput_set.all()
+                if ao.name  # only non‐empty, non‐None names
+            ]
+            # Matrix outputs
+            opts += [
+                (mo.pk, f"Mat {mo.matrix_number}: {mo.name}")
+                for mo in console.consolematrixoutput_set.all()
+                if mo.name
+            ]
+
+            if opts:
+                grouped.append((console.name, opts))
+
+        self.fields["console_output"].choices = [("", "---------")] + grouped
+
+        # if we’re editing an existing DeviceOutput, preserve its current value
+        if getattr(self, "instance", None) and self.instance.pk:
+            self.fields["console_output"].initial = self.instance.console_output_id
