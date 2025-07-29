@@ -20,7 +20,13 @@ class ConsoleInput(models.Model):
     omni_out = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
-        return f"Input {self.dante_number}"
+        if self.dante_number:
+            return f"Input {self.dante_number}"
+        elif self.input_ch:
+            return f"Input {self.input_ch}"
+        else:
+            return f"Input {self.pk or 'New'}"
+        
 
 
 class ConsoleAuxOutput(models.Model):
@@ -75,19 +81,38 @@ class Device(models.Model):
     # …any other fields…
     def __str__(self):
         return self.name
+    
+    def save(self, *args, **kwargs):
+        # Custom model save logic
+        super().save(*args, **kwargs)
+    
 
 class DeviceInput(models.Model):
     device = models.ForeignKey(Device, related_name="inputs", on_delete=models.CASCADE)
-    input_number = models.PositiveIntegerField()
+    input_number = models.IntegerField(blank=True, null=True)
     signal_name = models.CharField(max_length=100)  # e.g. "Wless 1 Analogue"
+    console_input = models.ForeignKey(
+        'ConsoleInput', 
+        on_delete=models.SET_NULL, 
+        blank=True, 
+        null=True,
+        related_name='device_inputs'
+    )
 
     def __str__(self):
-     return ""
+     return f"Input {self.input_number or 'N/A'}: {self.signal_name or 'No signal'}"
     
 class DeviceOutput(models.Model):
     device = models.ForeignKey(Device, related_name="outputs", on_delete=models.CASCADE)
-    output_number = models.PositiveIntegerField()
+    output_number = models.IntegerField(blank=True, null=True) 
     signal_name = models.CharField(max_length=100, blank=True, null=True)
+    console_output = models.ForeignKey(
+        'ConsoleAuxOutput',  # You might need to create a base ConsoleOutput model
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='device_outputs'
+    )
 
     def __str__(self):
-        return ""
+        return f"Output {self.output_number or 'N/A'}: {self.signal_name or 'No signal'}"

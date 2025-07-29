@@ -11,6 +11,8 @@ class ConsoleInputInline(admin.TabularInline):
     can_delete = True
     classes = ['collapse']
 
+    
+
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
 
@@ -26,7 +28,21 @@ class ConsoleInputInline(admin.TabularInline):
                     if not form.instance.pk:
                         form.initial['input_ch'] = index + 1
 
-        return PrepopulatedFormSet
+
+            def add_fields(self, form, index):
+                super().add_fields(form, index)    
+
+                if hasattr(form, 'fields') and 'DELETE' in form.fields:
+                     form.fields['DELETE'].label = ""
+
+
+        original_str = self.model.__str__
+        self.model.__str__ = lambda self: ""
+        
+        return PrepopulatedFormSet       
+
+               
+       
 
 
 class ConsoleAuxOutputInline(admin.TabularInline):
@@ -51,6 +67,7 @@ class ConsoleAuxOutputInline(admin.TabularInline):
                     if not form.instance.pk:
                         form.initial['aux_number'] = index + 1
 
+                
         return PrepopulatedFormSet
 
 
@@ -75,6 +92,7 @@ class ConsoleMatrixOutputInline(admin.TabularInline):
                 for index, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial['matrix_number'] = index + 1
+
 
         return PrepopulatedFormSet
 
@@ -128,6 +146,7 @@ class DeviceInputInline(admin.TabularInline):
                     if not form.instance.pk:
                         form.initial.setdefault('input_number', idx + 1)
 
+
         return InitializingFormSet
 
 
@@ -180,3 +199,35 @@ class DeviceAdmin(admin.ModelAdmin):
         # redirect into the change page so the inlines appear.
         change_url = reverse('admin:planner_device_change', args=(obj.pk,))
         return HttpResponseRedirect(change_url)
+    
+    
+    def save_model(self, request, obj, form, change):
+        print("=== SAVE_MODEL DEBUG ===")
+        print(f"Form is valid: {form.is_valid()}")
+        print(f"Form errors: {form.errors}")
+        print(f"Object data: {obj.__dict__}")
+        
+        if not form.is_valid():
+            print("FORM VALIDATION FAILED!")
+            for field, errors in form.errors.items():
+                print(f"Field '{field}': {errors}")
+    
+        super().save_model(request, obj, form, change)
+    
+    def save_formset(self, request, form, formset, change):
+        # If you have inline formsets
+        super().save_formset(request, form, formset, change)
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        print("=== CHANGEFORM_VIEW ===")
+        print(f"Request method: {request.method}")
+        if request.method == "POST":
+            print(f"POST data: {request.POST}")
+        return super().changeform_view(request, object_id, form_url, extra_context)
+    
+    def save_model(self, request, obj, form, change):
+        print("=== SAVE_MODEL CALLED ===")
+        print(f"Form is valid: {form.is_valid()}")
+        print(f"Form errors: {form.errors}")
+        super().save_model(request, obj, form, change)    
+

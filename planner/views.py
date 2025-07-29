@@ -6,7 +6,7 @@ def console_detail(request, console_id):
     console = get_object_or_404(Console, pk=console_id)
 
     InputFormSet = modelformset_factory(
-        Input,
+        ConsoleInput,
         fields=[
             "output", "dante_number", "input_ch", "source", "group",
             "dca", "mute", "direct_out", "omni_in", "omni_out"
@@ -16,7 +16,7 @@ def console_detail(request, console_id):
     )
 
     if request.method == "POST":
-        formset = InputFormSet(request.POST, queryset=Input.objects.filter(console=console))
+        formset = InputFormSet(request.POST, queryset=ConsoleInput.objects.filter(console=console))
         if formset.is_valid():
             instances = formset.save(commit=False)
             for instance in instances:
@@ -25,7 +25,7 @@ def console_detail(request, console_id):
             for obj in formset.deleted_objects:
                 obj.delete()
     else:
-        formset = InputFormSet(queryset=Input.objects.filter(console=console))
+        formset = InputFormSet(queryset=ConsoleInput.objects.filter(console=console))
 
     consoles = Console.objects.all()
 
