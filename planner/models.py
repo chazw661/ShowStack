@@ -116,3 +116,106 @@ class DeviceOutput(models.Model):
 
     def __str__(self):
         return f"Output {self.output_number or 'N/A'}: {self.signal_name or 'No signal'}"
+    
+
+
+
+
+    #-------Amps--------
+
+
+# Updated models based on spreadsheet analysis
+# Add these models to your existing models.py file
+
+class Location(models.Model):
+    """Physical locations where amplifiers are deployed"""
+    name = models.CharField(max_length=100, help_text="e.g., HL LA Racks, HR LA Racks, Monitor World")
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name = "Location"
+        verbose_name_plural = "Locations"
+        ordering = ['name']
+
+
+class Amp(models.Model):
+    """Individual amplifier units"""
+    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='amps')
+    name = models.CharField(max_length=100, help_text="Amp identifier or model name")
+    
+    # Network configuration
+    ip_address = models.GenericIPAddressField(help_text="Network IP address")
+    
+    # Hardware details
+    manufacturer = models.CharField(max_length=50, blank=True, null=True)
+    model_number = models.CharField(max_length=50, blank=True, null=True)
+    channel_count = models.PositiveIntegerField(default=4, help_text="Number of output channels")
+    
+    # Audio routing
+    avb_stream_input = models.CharField(max_length=50, blank=True, null=True, help_text="AVB stream source")
+    xlr_input_count = models.PositiveIntegerField(default=0, help_text="Number of XLR inputs")
+    analogue_input_count = models.PositiveIntegerField(default=0, help_text="Number of analogue inputs")
+    aes_input_count = models.PositiveIntegerField(default=0, help_text="Number of AES inputs")
+    
+    # Output configuration
+    nl4_outputs = models.PositiveIntegerField(default=0, help_text="Number of NL4 outputs")
+    cacom_output = models.BooleanField(default=False, help_text="Has Cacom output")
+    
+    # Additional settings
+    preset_name = models.CharField(max_length=100, blank=True, null=True, help_text="Active preset")
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.ip_address}) - {self.location.name}"
+    
+    @property
+    def ip_last_octet(self):
+        """Extract last octet of IP address for sorting"""
+        try:
+            return int(self.ip_address.split('.')[-1])
+        except (ValueError, IndexError):
+            return 999
+    
+    class Meta:
+        verbose_name = "Amp"
+        verbose_name_plural = "Amps"
+        ordering = ['location', 'ip_address']
+        unique_together = ['location', 'ip_address']
+
+
+class AmpChannel(models.Model):
+    """Individual channels within an amplifier"""
+    amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
+    channel_number = models.PositiveIntegerField()
+    
+    # Channel configuration
+    channel_name = models.CharField(max_length=100, blank=True, null=True, 
+                                   help_text="e.g., Left, Right, Center, Sub, Front Fill, Delay, Foldback")
+    
+    # Signal routing
+    avb_stream = models.CharField(max_length=50, blank=True, null=True)
+    analogue_input = models.CharField(max_length=50, blank=True, null=True)
+    aes_input = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Output configuration  
+    nl4_output = models.CharField(max_length=50, blank=True, null=True)
+    cacom_output = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Settings
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, null=True)
+    
+    def __str__(self):
+        channel_display = self.channel_name or f"Channel {self.channel_number}"
+        return f"{self.amp.name} - {channel_display}"
+    
+    class Meta:
+        verbose_name = "Amp Channel"
+        verbose_name_plural = "Amp Channels"
+        ordering = ['amp', 'channel_number']
+        unique_together = ['amp', 'channel_number']
