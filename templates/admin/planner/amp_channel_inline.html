@@ -67,7 +67,26 @@
                   </div>
                 </div>
               </td>
-              <td class="field-cacom_output">{{ inline_admin_form.form.cacom_output }}</td>
+              <td class="field-cacom" style="padding: 5px;">
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <div>
+                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">1</label>
+                    {{ inline_admin_form.form.cacom_1 }}
+                    </div>
+                    <div>
+                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">2</label>
+                    {{ inline_admin_form.form.cacom_2 }}
+                    </div>
+                    <div>
+                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">3</label>
+                    {{ inline_admin_form.form.cacom_3 }}
+                    </div>
+                    <div>
+                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">4</label>
+                    {{ inline_admin_form.form.cacom_4 }}
+                    </div>
+                </div>
+                </td>
               <td class="field-is_active">{{ inline_admin_form.form.is_active }}</td>
               <td class="field-notes">{{ inline_admin_form.form.notes }}</td>
               {% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission %}

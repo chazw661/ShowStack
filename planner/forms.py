@@ -609,9 +609,12 @@ class AmpChannelForm(forms.ModelForm):
         model = AmpChannel
         fields = [
             'channel_number', 'channel_name', 'avb_stream', 
-            'analogue_input', 'aes_input', 'cacom_output',
+            'analogue_input', 'aes_input',
+            'nl4_pair_1', 'nl4_pair_2',  # NL4 fields
+            'cacom_1', 'cacom_2', 'cacom_3', 'cacom_4',  # New cacom fields
             'is_active', 'notes'
         ]
+        
         widgets = {
             'channel_number': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -635,10 +638,7 @@ class AmpChannelForm(forms.ModelForm):
                 'placeholder': 'AES input source'
             }),
             
-            'cacom_output': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Cacom output assignment'
-            }),
+            
             'is_active': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
             }),

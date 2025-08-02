@@ -1,5 +1,3 @@
-/* static/css/amp_channel_admin.css */
-
 /* Style the NL4 column */
 .field-nl4 input {
     width: 100px !important;
@@ -7,6 +5,17 @@
 }
 
 .field-nl4 label {
+    font-weight: normal;
+    color: #666;
+}
+
+/* Style the Cacom column */
+.field-cacom input {
+    width: 80px !important;
+    margin: 2px 0;
+}
+
+.field-cacom label {
     font-weight: normal;
     color: #666;
 }

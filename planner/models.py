@@ -218,7 +218,10 @@ class AmpChannel(models.Model):
         help_text="NL4 connector pair 2 +/- assignment"
     )
     
-    cacom_output = models.CharField(max_length=50, blank=True, null=True)
+    cacom_1 = models.CharField(max_length=50, blank=True, null=True, verbose_name="Cacom 1")
+    cacom_2 = models.CharField(max_length=50, blank=True, null=True, verbose_name="Cacom 2")
+    cacom_3 = models.CharField(max_length=50, blank=True, null=True, verbose_name="Cacom 3")
+    cacom_4 = models.CharField(max_length=50, blank=True, null=True, verbose_name="Cacom 4")
     
     # Settings
     is_active = models.BooleanField(default=True)
