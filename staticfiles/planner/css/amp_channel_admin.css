@@ -1,0 +1,12 @@
+/* static/css/amp_channel_admin.css */
+
+/* Style the NL4 column */
+.field-nl4 input {
+    width: 100px !important;
+    margin: 2px 0;
+}
+
+.field-nl4 label {
+    font-weight: normal;
+    color: #666;
+}

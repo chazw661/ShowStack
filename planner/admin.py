@@ -264,8 +264,9 @@ from .models import Location, Amp, AmpChannel
 class AmpChannelInline(admin.TabularInline):
     model = AmpChannel
     extra = 0
-    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'cacom_output', 'is_active', 'notes']
+    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'nl4_pair_1', 'nl4_pair_2', 'cacom_output', 'is_active', 'notes']
     ordering = ['channel_number']
+    template = 'admin/planner/amp_channel_inline.html'  
     
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
@@ -345,6 +346,10 @@ class AmpAdmin(admin.ModelAdmin):
     search_fields = ['name', 'ip_address', 'model_number', 'manufacturer', 'preset_name']
     list_select_related = ['location']
     inlines = [AmpChannelInline]
+
+    class Media:
+        css = {'all': ('planner/css/amp_channel_admin.css',)
+    }
     
     # Add the PDF export action
     

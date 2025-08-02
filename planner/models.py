@@ -202,7 +202,22 @@ class AmpChannel(models.Model):
     aes_input = models.CharField(max_length=50, blank=True, null=True)
     
     # Output configuration  
-    nl4_output = models.CharField(max_length=50, blank=True, null=True)
+    # Output configuration
+    nl4_pair_1 = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True, 
+        verbose_name="1 +/-",
+        help_text="NL4 connector pair 1 +/- assignment"
+    )
+    nl4_pair_2 = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        verbose_name="2 +/-", 
+        help_text="NL4 connector pair 2 +/- assignment"
+    )
+    
     cacom_output = models.CharField(max_length=50, blank=True, null=True)
     
     # Settings
