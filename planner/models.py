@@ -162,7 +162,6 @@ class Amp(models.Model):
     aes_input_count = models.PositiveIntegerField(default=0, help_text="Number of AES inputs")
     
     # Output configuration
-    nl4_outputs = models.PositiveIntegerField(default=0, help_text="Number of NL4 outputs")
     cacom_output = models.BooleanField(default=False, help_text="Has Cacom output")
     
     # Additional settings

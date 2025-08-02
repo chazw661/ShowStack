@@ -513,7 +513,7 @@ class AmpForm(forms.ModelForm):
         fields = [
             'location', 'name', 'ip_address', 'manufacturer', 'model_number', 'channel_count',
             'avb_stream_input', 'analogue_input_count', 'aes_input_count',
-            'nl4_outputs', 'cacom_output', 'preset_name', 'notes'
+            'cacom_output', 'preset_name', 'notes'
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -542,7 +542,6 @@ class AmpForm(forms.ModelForm):
             'avb_stream_input': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'AVB stream source'
-            
             }),
             'analogue_input_count': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -550,11 +549,6 @@ class AmpForm(forms.ModelForm):
                 'max': '32'
             }),
             'aes_input_count': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'min': '0',
-                'max': '16'
-            }),
-            'nl4_outputs': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': '0',
                 'max': '16'
@@ -609,12 +603,13 @@ class AmpForm(forms.ModelForm):
         return cleaned_data
 
 
+
 class AmpChannelForm(forms.ModelForm):
     class Meta:
         model = AmpChannel
         fields = [
             'channel_number', 'channel_name', 'avb_stream', 
-            'analogue_input', 'aes_input', 'nl4_output', 'cacom_output', 
+            'analogue_input', 'aes_input', 'cacom_output',
             'is_active', 'notes'
         ]
         widgets = {
@@ -630,7 +625,6 @@ class AmpChannelForm(forms.ModelForm):
             'avb_stream': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'AVB stream assignment'
-            
             }),
             'analogue_input': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -640,10 +634,7 @@ class AmpChannelForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'AES input source'
             }),
-            'nl4_output': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'NL4 output assignment'
-            }),
+            
             'cacom_output': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Cacom output assignment'

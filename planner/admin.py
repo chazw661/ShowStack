@@ -259,10 +259,12 @@ class DeviceAdmin(admin.ModelAdmin):
 
 from .models import Location, Amp, AmpChannel
 
+# Update your admin.py file - replace the AmpChannelInline class with this:
+
 class AmpChannelInline(admin.TabularInline):
     model = AmpChannel
     extra = 0
-    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'nl4_output', 'cacom_output', 'is_active', 'notes']
+    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'cacom_output', 'is_active', 'notes']
     ordering = ['channel_number']
     
     def get_formset(self, request, obj=None, **kwargs):
@@ -293,6 +295,8 @@ class AmpChannelInline(admin.TabularInline):
             existing_channels = obj.channels.count()
             return max(0, obj.channel_count - existing_channels)
         return 1
+
+
 
 
 class AmpInline(admin.TabularInline):
@@ -336,7 +340,7 @@ class LocationAdmin(admin.ModelAdmin):
 
 @admin.register(Amp)
 class AmpAdmin(admin.ModelAdmin):
-    list_display = ['name', 'location', 'ip_address', 'manufacturer', 'model_number', 'channel_count', 'preset_name']
+    list_display = ['name', 'location', 'ip_address', 'manufacturer', 'channel_count', 'created_at']
     list_filter = ['location', 'manufacturer', 'channel_count', 'cacom_output', 'created_at']
     search_fields = ['name', 'ip_address', 'model_number', 'manufacturer', 'preset_name']
     list_select_related = ['location']
@@ -357,8 +361,8 @@ class AmpAdmin(admin.ModelAdmin):
             'classes': ['collapse']
         }),
         ('Output Configuration', {
-            'fields': ('nl4_outputs', 'cacom_output'),
-            'classes': ['collapse']
+             'fields': ('cacom_output',),  
+             'classes': ['collapse']
         }),
         ('Settings', {
             'fields': ('preset_name', 'notes'),
@@ -387,30 +391,3 @@ class AmpAdmin(admin.ModelAdmin):
                 )
 
 
-@admin.register(AmpChannel)
-class AmpChannelAdmin(admin.ModelAdmin):
-    list_display = ['amp', 'channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'is_active']
-    list_filter = ['amp__location', 'amp', 'is_active', 'channel_name']
-    search_fields = ['amp__name', 'channel_name', 'avb_stream', 'analogue_input']
-    list_select_related = ['amp', 'amp__location']
-    
-    fieldsets = (
-        ('Channel Information', {
-            'fields': ('amp', 'channel_number', 'channel_name', 'is_active')
-        }),
-        ('Input Routing', {
-            'fields': ('avb_stream', 'analogue_input', 'aes_input'),
-        }),
-        ('Output Routing', {
-            'fields': ('nl4_output', 'cacom_output'),
-        }),
-        ('Notes', {
-            'fields': ('notes',),
-            'classes': ['collapse']
-        }),
-    )
-    
-    def get_queryset(self, request):
-        """Sort channels by amp and channel number"""
-        qs = super().get_queryset(request)
-        return qs.order_by('amp__location', 'amp__name', 'channel_number')
