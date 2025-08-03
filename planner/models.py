@@ -156,10 +156,32 @@ class Amp(models.Model):
     channel_count = models.PositiveIntegerField(default=4, help_text="Number of output channels")
     
     # Audio routing
-    avb_stream_input = models.CharField(max_length=50, blank=True, null=True, help_text="AVB stream source")
-    xlr_input_count = models.PositiveIntegerField(default=0, help_text="Number of XLR inputs")
-    analogue_input_count = models.PositiveIntegerField(default=0, help_text="Number of analogue inputs")
-    aes_input_count = models.PositiveIntegerField(default=0, help_text="Number of AES inputs")
+   # Audio routing
+    avb_stream = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True, 
+        verbose_name="AVB Stream",
+        help_text="AVB stream source"
+    )
+    analogue_input = models.ForeignKey(
+        'Device',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        verbose_name="Analogue Input",
+        related_name='amps_using_as_analogue',
+        help_text="Analogue input source device"
+    )
+    aes_input = models.ForeignKey(
+        'Device',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        verbose_name="AES Input",
+        related_name='amps_using_as_aes',
+        help_text="AES input source device"
+    )
     
     # Output configuration
     cacom_output = models.BooleanField(default=False, help_text="Has Cacom output")

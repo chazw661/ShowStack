@@ -512,7 +512,7 @@ class AmpForm(forms.ModelForm):
         model = Amp
         fields = [
             'location', 'name', 'ip_address', 'manufacturer', 'model_number', 'channel_count',
-            'avb_stream_input', 'analogue_input_count', 'aes_input_count',
+            'avb_stream', 'analogue_input', 'aes_input',
             'cacom_output', 'preset_name', 'notes'
         ]
         widgets = {

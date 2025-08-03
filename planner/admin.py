@@ -362,9 +362,10 @@ class AmpAdmin(admin.ModelAdmin):
             'fields': ('manufacturer', 'model_number', 'channel_count'),
         }),
         ('Input Configuration', {
-            'fields': ('avb_stream_input', 'analogue_input_count', 'aes_input_count'),
-            'classes': ['collapse']
+        'fields': ('avb_stream', 'analogue_input', 'aes_input'),
+        'classes': ['collapse']
         }),
+        
         ('Output Configuration', {
              'fields': ('cacom_output',),  
              'classes': ['collapse']
