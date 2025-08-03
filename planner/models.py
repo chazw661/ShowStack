@@ -76,15 +76,18 @@ from django.db import models
 
 class Device(models.Model):
     name = models.CharField(max_length=200)
-    input_count  = models.PositiveIntegerField(default=0)
+    input_count = models.PositiveIntegerField(default=0)
     output_count = models.PositiveIntegerField(default=0)
-    # …any other fields…
+    
     def __str__(self):
         return self.name
     
     def save(self, *args, **kwargs):
-        # Custom model save logic
         super().save(*args, **kwargs)
+    
+    class Meta:
+        verbose_name = "I/O Device"
+        verbose_name_plural = "I/O Devices"
     
 
 class DeviceInput(models.Model):
@@ -102,6 +105,10 @@ class DeviceInput(models.Model):
     def __str__(self):
      return f"Input {self.input_number or 'N/A'}: {self.signal_name or 'No signal'}"
     
+    class Meta:
+        verbose_name = "I/O Device Input"
+        verbose_name_plural = "I/O Device Inputs"
+    
 class DeviceOutput(models.Model):
     device = models.ForeignKey(Device, related_name="outputs", on_delete=models.CASCADE)
     output_number = models.IntegerField(blank=True, null=True) 
@@ -116,6 +123,10 @@ class DeviceOutput(models.Model):
 
     def __str__(self):
         return f"Output {self.output_number or 'N/A'}: {self.signal_name or 'No signal'}"
+    
+    class Meta:
+        verbose_name = "I/O Device Input"
+        verbose_name_plural = "I/O Device Inputs"
     
 
 
@@ -155,7 +166,7 @@ class Amp(models.Model):
     model_number = models.CharField(max_length=50, blank=True, null=True)
     channel_count = models.PositiveIntegerField(default=4, help_text="Number of output channels")
     
-    # Audio routing
+    
    # Audio routing
     avb_stream = models.CharField(
         max_length=50, 
