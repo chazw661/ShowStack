@@ -264,7 +264,7 @@ from .models import Location, Amp, AmpChannel
 class AmpChannelInline(admin.TabularInline):
     model = AmpChannel
     extra = 0
-    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'nl4_pair_1', 'nl4_pair_2', 'cacom_1', 'cacom_2', 'cacom_3', 'cacom_4', 'is_active', 'notes']
+    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'nl4_pair_1', 'nl4_pair_2', 'cacom_pair', 'is_active', 'notes']
     ordering = ['channel_number']
     template = 'admin/planner/amp_channel_inline.html'  
     

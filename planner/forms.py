@@ -610,8 +610,8 @@ class AmpChannelForm(forms.ModelForm):
         fields = [
             'channel_number', 'channel_name', 'avb_stream', 
             'analogue_input', 'aes_input',
-            'nl4_pair_1', 'nl4_pair_2',  # NL4 fields
-            'cacom_1', 'cacom_2', 'cacom_3', 'cacom_4',  # New cacom fields
+            'nl4_pair_1', 'nl4_pair_2',
+            'cacom_pair',  # Single field now
             'is_active', 'notes'
         ]
         

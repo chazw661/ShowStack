@@ -67,24 +67,10 @@
                   </div>
                 </div>
               </td>
-              <td class="field-cacom" style="padding: 5px;">
-                <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <div>
-                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">1</label>
-                    {{ inline_admin_form.form.cacom_1 }}
-                    </div>
-                    <div>
-                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">2</label>
-                    {{ inline_admin_form.form.cacom_2 }}
-                    </div>
-                    <div>
-                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">3</label>
-                    {{ inline_admin_form.form.cacom_3 }}
-                    </div>
-                    <div>
-                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">4</label>
-                    {{ inline_admin_form.form.cacom_4 }}
-                    </div>
+              <td class="field-cacom_output">
+                <div style="text-align: center;">
+                    <label style="font-size: 11px; margin-bottom: 2px; display: block;">Ch{{ inline_admin_form.form.instance.channel_number|default:'' }}</label>
+                    {{ inline_admin_form.form.cacom_pair }}
                 </div>
                 </td>
               <td class="field-is_active">{{ inline_admin_form.form.is_active }}</td>
