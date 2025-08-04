@@ -272,3 +272,42 @@ class AmpChannel(models.Model):
         verbose_name_plural = "Amp Channels"
         ordering = ['amp', 'channel_number']
         unique_together = ['amp', 'channel_number']
+
+
+
+        # -------System Processors--------
+
+class SystemProcessor(models.Model):
+        """System processor devices for audio systems"""
+    
+        DEVICE_TYPE_CHOICES = [
+        ('P1', "L'Acoustics P1"),
+        ('GALAXY', 'Meyer GALAXY'),
+    ]
+    
+        name = models.CharField(max_length=200, help_text="Device name/identifier")
+        device_type = models.CharField(
+            max_length=20,
+            choices=DEVICE_TYPE_CHOICES,
+            help_text="Type of system processor"
+        )
+        location = models.ForeignKey(
+            Location, 
+            on_delete=models.CASCADE, 
+            related_name='system_processors',
+            help_text="Physical location of device"
+        )
+        ip_address = models.GenericIPAddressField(
+            blank=True, 
+            null=True,
+            help_text="Network IP address"
+        )
+        notes = models.TextField(blank=True, null=True)
+        created_at = models.DateTimeField(auto_now_add=True)
+    
+        def __str__(self):
+            return f"{self.name} ({self.get_device_type_display()})"
+        
+        class Meta:
+            verbose_name = "System Processor"
+            verbose_name_plural = "System Processors"

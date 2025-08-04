@@ -10,6 +10,7 @@ from django.utils import timezone
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import Location, Amp, AmpChannel
+from .models import SystemProcessor  # Changed from SystemDriveDevice
 
 # Your existing form imports
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
@@ -337,7 +338,7 @@ class LocationAdmin(admin.ModelAdmin):
     total_channels.short_description = 'Total Channels'
 
 
-# Replace your existing AmpAdmin class with this updated version
+
 
 @admin.register(Amp)
 class AmpAdmin(admin.ModelAdmin):
@@ -365,7 +366,7 @@ class AmpAdmin(admin.ModelAdmin):
         'fields': ('avb_stream', 'analogue_input', 'aes_input'),
         'classes': ['collapse']
         }),
-        
+
         ('Output Configuration', {
              'fields': ('cacom_output',),  
              'classes': ['collapse']
@@ -396,4 +397,12 @@ class AmpAdmin(admin.ModelAdmin):
                     defaults={'channel_name': f'Channel {i}'}
                 )
 
+
+
+        #------------System Drive------
+    @admin.register(SystemProcessor)
+    class SystemProcessorAdmin(admin.ModelAdmin):
+        list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at']
+        list_filter = ['device_type', 'location', 'created_at']
+        search_fields = ['name', 'ip_address']
 
