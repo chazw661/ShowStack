@@ -1,0 +1,67 @@
+{% load i18n admin_urls static admin_modify %}
+
+<div class="js-inline-admin-formset inline-group" id="{{ inline_admin_formset.formset.prefix }}-group">
+  <div class="tabular inline-related {{ inline_admin_formset.opts.classes }}">
+    {{ inline_admin_formset.formset.management_form }}
+    
+    <fieldset class="module {{ inline_admin_formset.classes }}">
+      <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
+      
+      <table width="100%">
+        <thead>
+          <tr>
+            <th style="width: 150px;">Type</th>
+            <th style="width: 300px;">Label</th>
+            <th style="width: 250px;">Assigned Bus</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inline_admin_form in inline_admin_formset %}
+            <tr class="form-row {% cycle 'row1' 'row2' %}">
+              {% if inline_admin_form.form.non_field_errors %}
+                <td colspan="3">{{ inline_admin_form.form.non_field_errors }}</td>
+              {% endif %}
+              
+              <!-- FK field if exists -->
+              {% if inline_admin_form.fk_field %}
+                {{ inline_admin_form.fk_field.field }}
+              {% endif %}
+              
+              <!-- Hidden fields -->
+              {% for hidden in inline_admin_form.form.hidden_fields %}
+                {{ hidden }}
+              {% endfor %}
+              
+              <!-- Output Type with Channel Number (readonly) -->
+              <td class="field-output_type">
+                {% if inline_admin_form.original %}
+                  {{ inline_admin_form.original.get_output_type_display }} {{ inline_admin_form.original.channel_number }}
+                {% else %}
+                  {{ inline_admin_form.form.instance.get_output_type_display }} {{ inline_admin_form.form.instance.channel_number }}
+                {% endif %}
+                {{ inline_admin_form.form.output_type.as_hidden }}
+                {{ inline_admin_form.form.channel_number.as_hidden }}
+              </td>
+              
+              <!-- Label (editable) -->
+              <td class="field-label">
+                {{ inline_admin_form.form.label }}
+                {% if inline_admin_form.form.label.errors %}
+                  <ul class="errorlist">{{ inline_admin_form.form.label.errors }}</ul>
+                {% endif %}
+              </td>
+              
+              <!-- Assigned Bus (editable) -->
+              <td class="field-assigned_bus">
+                {{ inline_admin_form.form.assigned_bus }}
+                {% if inline_admin_form.form.assigned_bus.errors %}
+                  <ul class="errorlist">{{ inline_admin_form.form.assigned_bus.errors }}</ul>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </fieldset>
+  </div>
+</div>

@@ -277,41 +277,48 @@ class AmpChannel(models.Model):
 
         # -------System Processors--------
 
+# -------System Processors--------
+
 class SystemProcessor(models.Model):
-        """System processor devices for audio systems"""
+    """System processor devices for audio systems"""
     
-        DEVICE_TYPE_CHOICES = [
+    DEVICE_TYPE_CHOICES = [
         ('P1', "L'Acoustics P1"),
         ('GALAXY', 'Meyer GALAXY'),
     ]
     
-        name = models.CharField(max_length=200, help_text="Device name/identifier")
-        device_type = models.CharField(
-            max_length=20,
-            choices=DEVICE_TYPE_CHOICES,
-            help_text="Type of system processor"
-        )
-        location = models.ForeignKey(
-            Location, 
-            on_delete=models.CASCADE, 
-            related_name='system_processors',
-            help_text="Physical location of device"
-        )
-        ip_address = models.GenericIPAddressField(
-            blank=True, 
-            null=True,
-            help_text="Network IP address"
-        )
-        notes = models.TextField(blank=True, null=True)
-        created_at = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(max_length=200, help_text="Device name/identifier")
+    device_type = models.CharField(
+        max_length=20,
+        choices=DEVICE_TYPE_CHOICES,
+        help_text="Type of system processor"
+    )
+    location = models.ForeignKey(
+        Location, 
+        on_delete=models.CASCADE, 
+        related_name='system_processors',
+        help_text="Physical location of device"
+    )
+    ip_address = models.GenericIPAddressField(
+        blank=True, 
+        null=True,
+        help_text="Network IP address"
+    )
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     
-        def __str__(self):
-            return f"{self.name} ({self.get_device_type_display()})"
-        
-        class Meta:
-            verbose_name = "System Processor"
-            verbose_name_plural = "System Processors"
+    def __str__(self):
+        return f"{self.name} ({self.get_device_type_display()})"
+    
+    class Meta:
+        verbose_name = "System Processor"
+        verbose_name_plural = "System Processors"
 
+
+# -------P1 Processor Models--------
+
+# Update the P1Processor model in models.py
+# -------P1 Processor Models--------
 
 # -------P1 Processor Models--------
 
@@ -332,8 +339,8 @@ class P1Processor(models.Model):
         is_new = self.pk is None
         super().save(*args, **kwargs)
         
-        if is_new:
-            # Auto-create standard channels for new P1 processors
+        # Only create channels if this is a new P1 processor AND no channels exist yet
+        if is_new and not self.inputs.exists() and not self.outputs.exists():
             self._create_default_channels()
     
     def _create_default_channels(self):
@@ -345,7 +352,7 @@ class P1Processor(models.Model):
                 p1_processor=self,
                 input_type='ANALOG',
                 channel_number=i,
-                defaults={'label': f'Analog {i}'}
+                defaults={'label': ''}  # Blank label
             )
         
         # 4 AES inputs  
@@ -354,7 +361,7 @@ class P1Processor(models.Model):
                 p1_processor=self,
                 input_type='AES',
                 channel_number=i,
-                defaults={'label': f'AES {i}'}
+                defaults={'label': ''}  # Blank label
             )
         
         # 8 AVB inputs
@@ -363,7 +370,7 @@ class P1Processor(models.Model):
                 p1_processor=self,
                 input_type='AVB',
                 channel_number=i,
-                defaults={'label': f'AVB {i}'}
+                defaults={'label': ''}  # Blank label
             )
         
         # Create Outputs
@@ -373,7 +380,7 @@ class P1Processor(models.Model):
                 p1_processor=self,
                 output_type='ANALOG',
                 channel_number=i,
-                defaults={'label': f'Analog Out {i}'}
+                defaults={'label': ''}  # Blank label
             )
         
         # 4 AES outputs
@@ -382,7 +389,7 @@ class P1Processor(models.Model):
                 p1_processor=self,
                 output_type='AES',
                 channel_number=i,
-                defaults={'label': f'AES Out {i}'}
+                defaults={'label': ''}  # Blank label
             )
         
         # 8 AVB outputs
@@ -391,7 +398,7 @@ class P1Processor(models.Model):
                 p1_processor=self,
                 output_type='AVB',
                 channel_number=i,
-                defaults={'label': f'AVB Out {i}'}
+                defaults={'label': ''}  # Blank label
             )
     
     class Meta:
@@ -463,6 +470,7 @@ class P1Output(models.Model):
     def __str__(self):
         bus_str = f" → Bus {self.assigned_bus}" if self.assigned_bus else ""
         return f"{self.get_output_type_display()} {self.channel_number} - {self.label or 'Unlabeled'}{bus_str}"
+
             
 
 

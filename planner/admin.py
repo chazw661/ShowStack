@@ -472,6 +472,8 @@ from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 # ========== P1 Processor Admin ==========
 
 
+# ========== P1 Processor Admin ==========
+
 class P1InputInline(admin.TabularInline):
     model = P1Input
     form = P1InputInlineForm
@@ -479,7 +481,8 @@ class P1InputInline(admin.TabularInline):
     fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
     readonly_fields = ['input_type', 'channel_number']
     can_delete = False
-    
+    template = 'admin/planner/p1_input_inline.html'  # Use custom template
+     
     def has_add_permission(self, request, obj=None):
         return False
     
@@ -488,7 +491,7 @@ class P1InputInline(admin.TabularInline):
         return qs.select_related('origin_device_output__device').order_by('input_type', 'channel_number')
     
     class Media:
-        js = ('admin/js/p1_input_admin.js',)  # We'll create this for dynamic form behavior
+        js = ('admin/js/p1_input_admin.js',)
 
 
 class P1OutputInline(admin.TabularInline):
@@ -498,6 +501,7 @@ class P1OutputInline(admin.TabularInline):
     fields = ['output_type', 'channel_number', 'label', 'assigned_bus']
     readonly_fields = ['output_type', 'channel_number']
     can_delete = False
+    template = 'admin/planner/p1_output_inline.html'  # Use custom template
     
     def has_add_permission(self, request, obj=None):
         return False
@@ -505,12 +509,7 @@ class P1OutputInline(admin.TabularInline):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.order_by('output_type', 'channel_number')
-    
 
-    #-------P1 Register-----
-
-
-# Update your P1Processor admin registration:
 
 # First, unregister if it was already registered
 try:
@@ -533,27 +532,122 @@ class P1ProcessorAdmin(admin.ModelAdmin):
         # Hide from main admin menu but still accessible via direct URL
         return False
     
-    fieldsets = (
-        ('System Processor', {
-            'fields': ('system_processor',),
-            'classes': ('collapse',),
-            'description': 'This P1 configuration is linked to the system processor above.'
-        }),
-        ('P1 Configuration Notes', {
-            'fields': ('notes',),
-            'classes': ('wide',)
-        }),
-        ('Import Configuration', {
-            'fields': ('import_config',),
-            'classes': ('collapse',),
-            'description': 'Optionally import configuration from L\'Acoustics Network Manager'
-        }),
-    )
+    def get_fieldsets(self, request, obj=None):
+        """Different fieldsets for add vs change forms"""
+        if obj is None:  # Add form
+            return (
+                ('Create P1 Configuration', {
+                    'fields': ('system_processor', 'notes'),
+                    'description': 'Select the system processor and add any initial notes. Channels will be auto-created after saving.'
+                }),
+            )
+        else:  # Change form
+            return (
+                ('System Processor', {
+                    'fields': ('system_processor',),
+                    'classes': ('collapse',),
+                    'description': 'This P1 configuration is linked to the system processor above.'
+                }),
+                ('P1 Configuration Notes', {
+                    'fields': ('notes',),
+                    'classes': ('wide',)
+                }),
+                ('Import Configuration', {
+                    'fields': ('import_config',),
+                    'classes': ('collapse',),
+                    'description': 'Optionally import configuration from L\'Acoustics Network Manager'
+                }),
+            )
+    
+    def get_inline_instances(self, request, obj=None):
+        """Only show inlines on change form, not add form"""
+        if obj is None:
+            return []
+        return super().get_inline_instances(request, obj)
     
     def get_readonly_fields(self, request, obj=None):
         if obj:  # Editing existing P1
             return ['system_processor']
         return []
+    
+    def response_add(self, request, obj, post_url_continue=None):
+        """After adding, redirect to change form to show the inlines"""
+        # The channels are created in save_model, so they'll be ready
+        change_url = reverse('admin:planner_p1processor_change', args=(obj.pk,))
+        messages.success(request, f'P1 Processor created with standard channel configuration (4 Analog, 4 AES, 8 AVB channels).')
+        return HttpResponseRedirect(change_url)
+    
+    def save_model(self, request, obj, form, change):
+        """Save the model and create channels if new"""
+        is_new = obj.pk is None
+        super().save_model(request, obj, form, change)
+        
+        if is_new:
+            # Auto-create standard P1 channels
+            self._create_default_channels(obj)
+            messages.info(request, 'Standard P1 channels have been created. You can now configure each channel.')
+    
+    def _create_default_channels(self, p1_processor):
+        """Create default P1 channels based on standard configuration"""
+        # Check if channels already exist to avoid duplicates
+        if p1_processor.inputs.exists() or p1_processor.outputs.exists():
+            return
+        
+        # Create Inputs
+        # 4 Analog inputs
+        for i in range(1, 5):
+            P1Input.objects.create(
+                p1_processor=p1_processor,
+                input_type='ANALOG',
+                channel_number=i,
+                label=''  # Blank label
+            )
+        
+        # 4 AES inputs
+        for i in range(1, 5):
+            P1Input.objects.create(
+                p1_processor=p1_processor,
+                input_type='AES',
+                channel_number=i,
+                label=''  # Blank label
+            )
+        
+        # 8 AVB inputs
+        for i in range(1, 9):
+            P1Input.objects.create(
+                p1_processor=p1_processor,
+                input_type='AVB',
+                channel_number=i,
+                label=''  # Blank label
+            )
+        
+        # Create Outputs
+        # 4 Analog outputs
+        for i in range(1, 5):
+            P1Output.objects.create(
+                p1_processor=p1_processor,
+                output_type='ANALOG',
+                channel_number=i,
+                label=''  # Blank label
+            )
+        
+        # 4 AES outputs
+        for i in range(1, 5):
+            P1Output.objects.create(
+                p1_processor=p1_processor,
+                output_type='AES',
+                channel_number=i,
+                label=''  # Blank label
+            )
+        
+        # 8 AVB outputs
+        for i in range(1, 9):
+            P1Output.objects.create(
+                p1_processor=p1_processor,
+                output_type='AVB',
+                channel_number=i,
+                label=''  # Blank label
+            )
     
     def change_view(self, request, object_id, form_url='', extra_context=None):
         extra_context = extra_context or {}
@@ -567,22 +661,32 @@ class P1ProcessorAdmin(admin.ModelAdmin):
                 '<a href="{}">← Back to System Processor</a>',
                 back_url
             )
+            extra_context['show_summary_link'] = True
+            extra_context['summary_url'] = f'/p1/{object_id}/summary/'
         return super().change_view(request, object_id, form_url, extra_context)
+    
+    def add_view(self, request, form_url='', extra_context=None):
+        """Customize the add view"""
+        extra_context = extra_context or {}
+        extra_context['title'] = 'Create New P1 Processor Configuration'
+        
+        # If system_processor is in GET params, show which one
+        if 'system_processor' in request.GET:
+            try:
+                sp_id = request.GET['system_processor']
+                sp = SystemProcessor.objects.get(pk=sp_id)
+                extra_context['subtitle'] = f'For System Processor: {sp.name}'
+            except (SystemProcessor.DoesNotExist, ValueError):
+                pass
+        
+        return super().add_view(request, form_url, extra_context)
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         # Pre-populate system_processor if passed in URL
-        if 'system_processor' in request.GET:
+        if 'system_processor' in request.GET and not obj:
             form.base_fields['system_processor'].initial = request.GET['system_processor']
         return form
-    
-    # Keep all the existing methods...
-    
-    class Media:
-        css = {
-            'all': ('admin/css/p1_processor_admin.css',)
-        }
-        js = ('admin/js/p1_input_admin.js',)
     
     def get_location(self, obj):
         return obj.system_processor.location.name
@@ -599,72 +703,6 @@ class P1ProcessorAdmin(admin.ModelAdmin):
     def output_count(self, obj):
         return obj.outputs.count()
     output_count.short_description = 'Outputs'
-    
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        
-        if not change:  # New P1 Processor
-            # Auto-create standard channels
-            self._create_default_channels(obj)
-    
-    def _create_default_channels(self, p1_processor):
-        """Create default P1 channels based on standard configuration"""
-        
-        # Create Inputs
-        # 4 Analog inputs
-        for i in range(1, 5):
-            P1Input.objects.create(
-                p1_processor=p1_processor,
-                input_type='ANALOG',
-                channel_number=i,
-                label=f'Analog {i}'
-            )
-        
-        # 4 AES inputs
-        for i in range(1, 5):
-            P1Input.objects.create(
-                p1_processor=p1_processor,
-                input_type='AES',
-                channel_number=i,
-                label=f'AES {i}'
-            )
-        
-        # 8 AVB inputs
-        for i in range(1, 9):
-            P1Input.objects.create(
-                p1_processor=p1_processor,
-                input_type='AVB',
-                channel_number=i,
-                label=f'AVB {i}'
-            )
-        
-        # Create Outputs
-        # 4 Analog outputs
-        for i in range(1, 5):
-            P1Output.objects.create(
-                p1_processor=p1_processor,
-                output_type='ANALOG',
-                channel_number=i,
-                label=f'Analog Out {i}'
-            )
-        
-        # 4 AES outputs
-        for i in range(1, 5):
-            P1Output.objects.create(
-                p1_processor=p1_processor,
-                output_type='AES',
-                channel_number=i,
-                label=f'AES Out {i}'
-            )
-        
-        # 8 AVB outputs
-        for i in range(1, 9):
-            P1Output.objects.create(
-                p1_processor=p1_processor,
-                output_type='AVB',
-                channel_number=i,
-                label=f'AVB Out {i}'
-            )
     
     def export_configurations(self, request, queryset):
         """Export selected P1 configurations"""
@@ -690,11 +728,10 @@ class P1ProcessorAdmin(admin.ModelAdmin):
             response['Content-Disposition'] = 'attachment; filename="p1_configs.json"'
             return response
     
-    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
-        extra_context = extra_context or {}
-        if object_id:
-            extra_context['show_summary_link'] = True
-            extra_context['summary_url'] = f'/p1/{object_id}/summary/'
-        return super().changeform_view(request, object_id, form_url, extra_context)
+    class Media:
+        css = {
+            'all': ('admin/css/p1_processor_admin.css',)
+        }
+        js = ('admin/js/p1_input_admin.js',)
 
 

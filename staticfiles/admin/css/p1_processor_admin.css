@@ -1,67 +1,92 @@
-/* staticfiles/admin/css/p1_processor_admin.css */
-
-/* Group headers for input/output types */
-.p1-input-group-header,
-.p1-output-group-header {
-    background-color: #f0f0f0;
-    font-weight: bold;
-    padding: 8px;
-    border-left: 4px solid #333;
+/* P1 Inline Table Styling */
+.module.p1input_set table,
+.module.p1output_set table {
+    width: 100%;
+    border-collapse: collapse;
 }
 
-/* Different colors for different input types */
-.input-type-analog {
-    border-left: 4px solid #ff6b6b;
-}
-
-.input-type-aes {
-    border-left: 4px solid #4dabf7;
-}
-
-.input-type-avb {
-    border-left: 4px solid #51cf66;
-}
-
-/* P1 Processor inline styles */
-#p1input_set-group .tabular tr.has_original td,
-#p1output_set-group .tabular tr.has_original td {
-    padding: 8px 10px;
-}
-
-/* Make dropdowns wider for better readability */
-#p1input_set-group select,
-#p1output_set-group select {
-    min-width: 200px;
-}
-
-/* Style for bus assignment dropdown */
-select[name$="-assigned_bus"] {
-    min-width: 100px;
-}
-
-/* Hide origin field for AVB inputs */
-tr.input-type-avb .field-origin_device_output {
-    display: none;
-}
-
-/* Highlight required fields */
-#p1input_set-group .required label:after,
-#p1output_set-group .required label:after {
-    content: " *";
-    color: #ff0000;
-}
-
-/* Improve readability of inline headers */
-.inline-group h2 {
+.module.p1input_set thead th,
+.module.p1output_set thead th {
     background: #417690;
     color: white;
-    padding: 10px 15px;
-    margin: 0 -10px 10px -10px;
+    padding: 8px;
+    text-align: left;
+    font-weight: normal;
+    border-right: 1px solid #5a8aa8;
+}
+
+.module.p1input_set thead th:last-child,
+.module.p1output_set thead th:last-child {
+    border-right: none;
+}
+
+.module.p1input_set tbody tr,
+.module.p1output_set tbody tr {
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.module.p1input_set tbody tr:hover,
+.module.p1output_set tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+.module.p1input_set td,
+.module.p1output_set td {
+    padding: 8px;
+    vertical-align: middle;
+}
+
+/* Group rows by type with subtle visual separation */
+.module.p1input_set tbody tr:nth-child(4),
+.module.p1input_set tbody tr:nth-child(8),
+.module.p1output_set tbody tr:nth-child(4),
+.module.p1output_set tbody tr:nth-child(8) {
+    border-bottom: 2px solid #ccc;
 }
 
 /* Style readonly fields */
-#p1input_set-group input[readonly],
-#p1output_set-group input[readonly] {
-    background-color: #f5f5f5;
-    border: 1px solid #ddd;
+.field-input_type,
+.field-output_type,
+.field-channel_number {
+    color: #666;
+    font-weight: 500;
+}
+
+/* Label field styling */
+.field-label input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Origin device output dropdown */
+.field-origin_device_output select {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Assigned bus dropdown */
+.field-assigned_bus select {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Error styling */
+.errorlist {
+    margin: 4px 0 0 0;
+    padding: 0;
+    list-style: none;
+    color: #ba2121;
+    font-size: 12px;
+}
+
+/* Back link styling */
+a[href*="systemprocessor"] {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: #417690;
+    text-decoration: none;
+}
+
+a[href*="systemprocessor"]:hover {
+    text-decoration: underline;
 }
