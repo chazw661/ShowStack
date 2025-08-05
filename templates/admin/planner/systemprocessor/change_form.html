@@ -1,0 +1,9 @@
+<!-- templates/admin/planner/systemprocessor/change_form.html -->
+{% extends "admin/change_form.html" %}
+
+{% block submit_buttons_bottom %}
+{{ block.super }}
+{% if show_configure_button %}
+    <a href="{{ configure_url }}" class="button" style="margin-left: 10px;">Configure {{ original.get_device_type_display }}</a>
+{% endif %}
+{% endblock %}

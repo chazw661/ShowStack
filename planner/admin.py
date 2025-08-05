@@ -1,21 +1,26 @@
 # Make sure these imports are at the top of your admin.py file
 
 from django.contrib import admin
+from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
+from django.urls import reverse, path 
 from django.utils import timezone
+from django.utils.html import format_html
+from django import forms
 
 
 # Your existing model imports
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import Location, Amp, AmpChannel
-from .models import SystemProcessor  # Changed from SystemDriveDevice
+from .models import SystemProcessor, P1Processor, P1Input, P1Output
 
 # Your existing form imports
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
 from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
+from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 
 #-----------PDF Creation Start------
 
@@ -399,10 +404,297 @@ class AmpAdmin(admin.ModelAdmin):
 
 
 
-        #------------System Drive------
-    @admin.register(SystemProcessor)
-    class SystemProcessorAdmin(admin.ModelAdmin):
-        list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at']
-        list_filter = ['device_type', 'location', 'created_at']
-        search_fields = ['name', 'ip_address']
+        #------------Processor------
+@admin.register(SystemProcessor)
+class SystemProcessorAdmin(admin.ModelAdmin):
+    list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at', 'configure_button']
+    list_filter = ['device_type', 'location', 'created_at']
+    search_fields = ['name', 'ip_address']
+
+    def configure_button(self, obj):
+        if obj.pk:  # Only show for saved objects
+            if obj.device_type == 'P1':
+                # Check if P1 config exists
+                try:
+                    p1 = obj.p1_config
+                    url = reverse('admin:planner_p1processor_change', args=[p1.pk])
+                    return format_html('<a class="button" href="{}">Configure P1</a>', url)
+                except P1Processor.DoesNotExist:
+                    # Create P1 config URL
+                    url = reverse('admin:planner_p1processor_add') + f'?system_processor={obj.pk}'
+                    return format_html('<a class="button" href="{}">Setup P1 Configuration</a>', url)
+            elif obj.device_type == 'GALAXY':
+                return format_html('<span style="color: #999;">Galaxy configuration coming soon</span>')
+        return '-'
+    configure_button.short_description = 'Configuration'
+    configure_button.allow_tags = True
+    
+    
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:pk>/configure/', self.configure_view, name='systemprocessor-configure'),
+        ]
+        return custom_urls + urls
+    
+    def configure_view(self, request, pk):
+        """Redirect to appropriate configuration based on device type"""
+        obj = self.get_object(request, pk)
+        if obj.device_type == 'P1':
+            p1, created = P1Processor.objects.get_or_create(system_processor=obj)
+            return HttpResponseRedirect(
+                reverse('admin:planner_p1processor_change', args=[p1.pk])
+            )
+        messages.warning(request, f"Configuration for {obj.get_device_type_display()} not yet implemented.")
+        return HttpResponseRedirect(reverse('admin:planner_systemprocessor_change', args=[pk]))
+    
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj and obj.device_type in ['P1', 'GALAXY']:
+            configure_url = reverse('admin:systemprocessor-configure', args=[obj.pk])
+            extra_context['show_configure_button'] = True
+            extra_context['configure_url'] = configure_url
+        return super().change_view(request, object_id, form_url, extra_context)
+
+
+#--------P1 Processor----
+
+
+# Add these to your admin.py
+from django import forms
+from django.http import HttpResponseRedirect, JsonResponse
+from .models import P1Processor, P1Input, P1Output, DeviceOutput
+# Import P1 forms after your existing form imports
+from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
+
+# ========== P1 Processor Admin ==========
+
+
+class P1InputInline(admin.TabularInline):
+    model = P1Input
+    form = P1InputInlineForm
+    extra = 0
+    fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+    readonly_fields = ['input_type', 'channel_number']
+    can_delete = False
+    
+    def has_add_permission(self, request, obj=None):
+        return False
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('origin_device_output__device').order_by('input_type', 'channel_number')
+    
+    class Media:
+        js = ('admin/js/p1_input_admin.js',)  # We'll create this for dynamic form behavior
+
+
+class P1OutputInline(admin.TabularInline):
+    model = P1Output
+    form = P1OutputInlineForm
+    extra = 0
+    fields = ['output_type', 'channel_number', 'label', 'assigned_bus']
+    readonly_fields = ['output_type', 'channel_number']
+    can_delete = False
+    
+    def has_add_permission(self, request, obj=None):
+        return False
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.order_by('output_type', 'channel_number')
+    
+
+    #-------P1 Register-----
+
+
+# Update your P1Processor admin registration:
+
+# First, unregister if it was already registered
+try:
+    admin.site.unregister(P1Processor)
+except admin.sites.NotRegistered:
+    pass
+
+@admin.register(P1Processor)
+class P1ProcessorAdmin(admin.ModelAdmin):
+    form = P1ProcessorAdminForm
+    change_form_template = 'admin/planner/p1processor/change_form.html'
+    list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
+    list_filter = ['system_processor__location']
+    search_fields = ['system_processor__name', 'system_processor__ip_address']
+    actions = ['export_configurations']
+    inlines = [P1InputInline, P1OutputInline]
+    
+    # Hide from main admin index
+    def has_module_permission(self, request):
+        # Hide from main admin menu but still accessible via direct URL
+        return False
+    
+    fieldsets = (
+        ('System Processor', {
+            'fields': ('system_processor',),
+            'classes': ('collapse',),
+            'description': 'This P1 configuration is linked to the system processor above.'
+        }),
+        ('P1 Configuration Notes', {
+            'fields': ('notes',),
+            'classes': ('wide',)
+        }),
+        ('Import Configuration', {
+            'fields': ('import_config',),
+            'classes': ('collapse',),
+            'description': 'Optionally import configuration from L\'Acoustics Network Manager'
+        }),
+    )
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj:  # Editing existing P1
+            return ['system_processor']
+        return []
+    
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj:
+            extra_context['title'] = f'P1 Configuration for {obj.system_processor.name}'
+            extra_context['subtitle'] = f'Location: {obj.system_processor.location.name} | IP: {obj.system_processor.ip_address}'
+            # Add back link to system processor
+            back_url = reverse('admin:planner_systemprocessor_change', args=[obj.system_processor.pk])
+            extra_context['back_link'] = format_html(
+                '<a href="{}">← Back to System Processor</a>',
+                back_url
+            )
+        return super().change_view(request, object_id, form_url, extra_context)
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Pre-populate system_processor if passed in URL
+        if 'system_processor' in request.GET:
+            form.base_fields['system_processor'].initial = request.GET['system_processor']
+        return form
+    
+    # Keep all the existing methods...
+    
+    class Media:
+        css = {
+            'all': ('admin/css/p1_processor_admin.css',)
+        }
+        js = ('admin/js/p1_input_admin.js',)
+    
+    def get_location(self, obj):
+        return obj.system_processor.location.name
+    get_location.short_description = 'Location'
+    
+    def get_ip_address(self, obj):
+        return obj.system_processor.ip_address
+    get_ip_address.short_description = 'IP Address'
+    
+    def input_count(self, obj):
+        return obj.inputs.count()
+    input_count.short_description = 'Inputs'
+    
+    def output_count(self, obj):
+        return obj.outputs.count()
+    output_count.short_description = 'Outputs'
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        
+        if not change:  # New P1 Processor
+            # Auto-create standard channels
+            self._create_default_channels(obj)
+    
+    def _create_default_channels(self, p1_processor):
+        """Create default P1 channels based on standard configuration"""
+        
+        # Create Inputs
+        # 4 Analog inputs
+        for i in range(1, 5):
+            P1Input.objects.create(
+                p1_processor=p1_processor,
+                input_type='ANALOG',
+                channel_number=i,
+                label=f'Analog {i}'
+            )
+        
+        # 4 AES inputs
+        for i in range(1, 5):
+            P1Input.objects.create(
+                p1_processor=p1_processor,
+                input_type='AES',
+                channel_number=i,
+                label=f'AES {i}'
+            )
+        
+        # 8 AVB inputs
+        for i in range(1, 9):
+            P1Input.objects.create(
+                p1_processor=p1_processor,
+                input_type='AVB',
+                channel_number=i,
+                label=f'AVB {i}'
+            )
+        
+        # Create Outputs
+        # 4 Analog outputs
+        for i in range(1, 5):
+            P1Output.objects.create(
+                p1_processor=p1_processor,
+                output_type='ANALOG',
+                channel_number=i,
+                label=f'Analog Out {i}'
+            )
+        
+        # 4 AES outputs
+        for i in range(1, 5):
+            P1Output.objects.create(
+                p1_processor=p1_processor,
+                output_type='AES',
+                channel_number=i,
+                label=f'AES Out {i}'
+            )
+        
+        # 8 AVB outputs
+        for i in range(1, 9):
+            P1Output.objects.create(
+                p1_processor=p1_processor,
+                output_type='AVB',
+                channel_number=i,
+                label=f'AVB Out {i}'
+            )
+    
+    def export_configurations(self, request, queryset):
+        """Export selected P1 configurations"""
+        if queryset.count() == 1:
+            # Single export - redirect to export view
+            return HttpResponseRedirect(f'/p1/{queryset.first().id}/export/')
+        else:
+            # Multiple export - create combined JSON
+            all_configs = []
+            for p1 in queryset:
+                config = {
+                    'processor': {
+                        'name': p1.system_processor.name,
+                        'location': p1.system_processor.location.name,
+                        'ip_address': str(p1.system_processor.ip_address),
+                    },
+                    'inputs': list(p1.inputs.values()),
+                    'outputs': list(p1.outputs.values())
+                }
+                all_configs.append(config)
+            
+            response = JsonResponse({'configurations': all_configs}, json_dumps_params={'indent': 2})
+            response['Content-Disposition'] = 'attachment; filename="p1_configs.json"'
+            return response
+    
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            extra_context['show_summary_link'] = True
+            extra_context['summary_url'] = f'/p1/{object_id}/summary/'
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
 

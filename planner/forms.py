@@ -681,3 +681,98 @@ class AmpChannelInlineForm(AmpChannelForm):
                 'placeholder': 'Notes'
             }),
         }
+
+
+#-------P1 Processor-----
+
+# Add these to your forms.py
+
+from django import forms
+from .models import P1Processor, P1Input, P1Output, DeviceOutput
+
+
+class P1InputInlineForm(forms.ModelForm):
+    """Form for P1 Input inline admin"""
+    class Meta:
+        model = P1Input
+        fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Customize the origin dropdown to show device and output info
+        if 'origin_device_output' in self.fields:
+            self.fields['origin_device_output'].queryset = DeviceOutput.objects.select_related('device')
+            self.fields['origin_device_output'].label_from_instance = lambda obj: f"{obj.device.name} - Output {obj.output_number}: {obj.signal_name}" if obj.signal_name else f"{obj.device.name} - Output {obj.output_number}"
+            self.fields['origin_device_output'].empty_label = "-- Select source --"
+        
+        # Make fields required/optional based on input type
+        if self.instance.pk:
+            if self.instance.input_type == 'AVB':
+                self.fields['origin_device_output'].widget = forms.HiddenInput()
+                self.fields['origin_device_output'].required = False
+            else:
+                # Make it optional - user might not have devices configured yet
+                self.fields['origin_device_output'].required = False
+
+
+class P1OutputInlineForm(forms.ModelForm):
+    """Form for P1 Output inline admin"""
+    class Meta:
+        model = P1Output
+        fields = ['output_type', 'channel_number', 'label', 'assigned_bus']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Customize the bus dropdown
+        if 'assigned_bus' in self.fields:
+            self.fields['assigned_bus'].empty_label = "-- Not assigned --"
+
+
+class P1ImportForm(forms.Form):
+    """Form for importing P1 configuration from L'Acoustics Network Manager"""
+    config_file = forms.FileField(
+        label="P1 Configuration File",
+        help_text="Upload an exported P1 configuration file from L'Acoustics Network Manager (optional)",
+        required=False,
+        widget=forms.FileInput(attrs={'accept': '.xml,.json,.p1,.txt'})
+    )
+    
+    def clean_config_file(self):
+        file = self.cleaned_data.get('config_file')
+        
+        if file:
+            # Validate file type
+            if not file.name.endswith(('.xml', '.json', '.p1', '.txt')):
+                raise forms.ValidationError("Invalid file format. Please upload a P1 configuration file.")
+            
+            # Check file size (limit to 10MB)
+            if file.size > 10 * 1024 * 1024:
+                raise forms.ValidationError("File too large. Maximum size is 10MB.")
+        
+        return file
+
+
+class P1ProcessorAdminForm(forms.ModelForm):
+    """Custom form for P1 Processor admin"""
+    class Meta:
+        model = P1Processor
+        fields = '__all__'
+    
+    import_config = forms.FileField(
+        required=False,
+        help_text="Optionally import configuration from L'Acoustics Network Manager file",
+        widget=forms.FileInput(attrs={'accept': '.xml,.json,.p1,.txt'})
+    )
+    
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        
+        # Handle config import if provided
+        if self.cleaned_data.get('import_config'):
+            # TODO: Implement import logic based on file format
+            # This would parse the file and update the P1Input/P1Output records
+            pass
+        
+        return instance

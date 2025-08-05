@@ -311,3 +311,160 @@ class SystemProcessor(models.Model):
         class Meta:
             verbose_name = "System Processor"
             verbose_name_plural = "System Processors"
+
+
+# -------P1 Processor Models--------
+
+class P1Processor(models.Model):
+    """L'Acoustics P1 Processor configuration tracking"""
+    system_processor = models.OneToOneField(
+        SystemProcessor,
+        on_delete=models.CASCADE,
+        related_name='p1_config'
+    )
+    
+    notes = models.TextField(blank=True, null=True, help_text="Additional configuration notes")
+    
+    def __str__(self):
+        return f"P1 Config - {self.system_processor.name}"
+    
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        if is_new:
+            # Auto-create standard channels for new P1 processors
+            self._create_default_channels()
+    
+    def _create_default_channels(self):
+        """Create default P1 channels based on standard configuration"""
+        # Create Inputs
+        # 4 Analog inputs
+        for i in range(1, 5):
+            P1Input.objects.get_or_create(
+                p1_processor=self,
+                input_type='ANALOG',
+                channel_number=i,
+                defaults={'label': f'Analog {i}'}
+            )
+        
+        # 4 AES inputs  
+        for i in range(1, 5):
+            P1Input.objects.get_or_create(
+                p1_processor=self,
+                input_type='AES',
+                channel_number=i,
+                defaults={'label': f'AES {i}'}
+            )
+        
+        # 8 AVB inputs
+        for i in range(1, 9):
+            P1Input.objects.get_or_create(
+                p1_processor=self,
+                input_type='AVB',
+                channel_number=i,
+                defaults={'label': f'AVB {i}'}
+            )
+        
+        # Create Outputs
+        # 4 Analog outputs
+        for i in range(1, 5):
+            P1Output.objects.get_or_create(
+                p1_processor=self,
+                output_type='ANALOG',
+                channel_number=i,
+                defaults={'label': f'Analog Out {i}'}
+            )
+        
+        # 4 AES outputs
+        for i in range(1, 5):
+            P1Output.objects.get_or_create(
+                p1_processor=self,
+                output_type='AES',
+                channel_number=i,
+                defaults={'label': f'AES Out {i}'}
+            )
+        
+        # 8 AVB outputs
+        for i in range(1, 9):
+            P1Output.objects.get_or_create(
+                p1_processor=self,
+                output_type='AVB',
+                channel_number=i,
+                defaults={'label': f'AVB Out {i}'}
+            )
+    
+    class Meta:
+        verbose_name = "P1 Processor"
+        verbose_name_plural = "P1 Processors"
+
+
+class P1Input(models.Model):
+    """P1 Input channel configuration"""
+    INPUT_TYPES = [
+        ('ANALOG', 'Analog'),
+        ('AES', 'AES/EBU'),
+        ('AVB', 'AVB'),
+    ]
+    
+    p1_processor = models.ForeignKey(P1Processor, on_delete=models.CASCADE, related_name='inputs')
+    input_type = models.CharField(max_length=10, choices=INPUT_TYPES)
+    channel_number = models.PositiveIntegerField()
+    label = models.CharField(max_length=100, blank=True, null=True, help_text="Channel label/name")
+    
+    # Origin for Analog and AES inputs only
+    origin_device_output = models.ForeignKey(
+        'DeviceOutput',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        help_text="Source device output (for Analog/AES only)",
+        related_name='p1_inputs'
+    )
+    
+    class Meta:
+        unique_together = ['p1_processor', 'input_type', 'channel_number']
+        ordering = ['input_type', 'channel_number']
+        verbose_name = "P1 Input"
+        verbose_name_plural = "P1 Inputs"
+    
+    def __str__(self):
+        return f"{self.get_input_type_display()} {self.channel_number} - {self.label or 'Unlabeled'}"
+    
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        # AVB inputs should not have origin_device_output
+        if self.input_type == 'AVB' and self.origin_device_output:
+            raise ValidationError("AVB inputs should not have an origin device output")
+
+
+class P1Output(models.Model):
+    """P1 Output channel configuration"""
+    OUTPUT_TYPES = [
+        ('ANALOG', 'Analog'),
+        ('AES', 'AES/EBU'),
+        ('AVB', 'AVB'),
+    ]
+    
+    BUS_CHOICES = [(i, f'Bus {i}') for i in range(1, 9)]  # Bus 1-8
+    
+    p1_processor = models.ForeignKey(P1Processor, on_delete=models.CASCADE, related_name='outputs')
+    output_type = models.CharField(max_length=10, choices=OUTPUT_TYPES)
+    channel_number = models.PositiveIntegerField()
+    label = models.CharField(max_length=100, blank=True, null=True, help_text="Channel label/name")
+    assigned_bus = models.IntegerField(choices=BUS_CHOICES, blank=True, null=True, help_text="Assigned bus (1-8)")
+    
+    class Meta:
+        unique_together = ['p1_processor', 'output_type', 'channel_number']
+        ordering = ['output_type', 'channel_number']
+        verbose_name = "P1 Output"
+        verbose_name_plural = "P1 Outputs"
+    
+    def __str__(self):
+        bus_str = f" → Bus {self.assigned_bus}" if self.assigned_bus else ""
+        return f"{self.get_output_type_display()} {self.channel_number} - {self.label or 'Unlabeled'}{bus_str}"
+            
+
+
+
+           

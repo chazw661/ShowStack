@@ -1,0 +1,67 @@
+/* staticfiles/admin/css/p1_processor_admin.css */
+
+/* Group headers for input/output types */
+.p1-input-group-header,
+.p1-output-group-header {
+    background-color: #f0f0f0;
+    font-weight: bold;
+    padding: 8px;
+    border-left: 4px solid #333;
+}
+
+/* Different colors for different input types */
+.input-type-analog {
+    border-left: 4px solid #ff6b6b;
+}
+
+.input-type-aes {
+    border-left: 4px solid #4dabf7;
+}
+
+.input-type-avb {
+    border-left: 4px solid #51cf66;
+}
+
+/* P1 Processor inline styles */
+#p1input_set-group .tabular tr.has_original td,
+#p1output_set-group .tabular tr.has_original td {
+    padding: 8px 10px;
+}
+
+/* Make dropdowns wider for better readability */
+#p1input_set-group select,
+#p1output_set-group select {
+    min-width: 200px;
+}
+
+/* Style for bus assignment dropdown */
+select[name$="-assigned_bus"] {
+    min-width: 100px;
+}
+
+/* Hide origin field for AVB inputs */
+tr.input-type-avb .field-origin_device_output {
+    display: none;
+}
+
+/* Highlight required fields */
+#p1input_set-group .required label:after,
+#p1output_set-group .required label:after {
+    content: " *";
+    color: #ff0000;
+}
+
+/* Improve readability of inline headers */
+.inline-group h2 {
+    background: #417690;
+    color: white;
+    padding: 10px 15px;
+    margin: 0 -10px 10px -10px;
+}
+
+/* Style readonly fields */
+#p1input_set-group input[readonly],
+#p1output_set-group input[readonly] {
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+}
