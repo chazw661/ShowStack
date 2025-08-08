@@ -125,8 +125,8 @@ class DeviceOutput(models.Model):
         return f"Output {self.output_number or 'N/A'}: {self.signal_name or 'No signal'}"
     
     class Meta:
-        verbose_name = "I/O Device Input"
-        verbose_name_plural = "I/O Device Inputs"
+        verbose_name = "I/O Device Output"
+        verbose_name_plural = "I/O Device Outputs"
     
 
 

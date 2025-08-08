@@ -691,28 +691,56 @@ from django import forms
 from .models import P1Processor, P1Input, P1Output, DeviceOutput
 
 
+# Replace the P1InputInlineForm in forms.py with this version that handles 'None' strings:
+
 class P1InputInlineForm(forms.ModelForm):
     """Form for P1 Input inline admin"""
     class Meta:
         model = P1Input
         fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+        widgets = {
+            'label': forms.TextInput(attrs={'class': 'vTextField'}),
+        }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Customize the origin dropdown to show device and output info
+        # Configure the origin_device_output dropdown
         if 'origin_device_output' in self.fields:
-            self.fields['origin_device_output'].queryset = DeviceOutput.objects.select_related('device')
-            self.fields['origin_device_output'].label_from_instance = lambda obj: f"{obj.device.name} - Output {obj.output_number}: {obj.signal_name}" if obj.signal_name else f"{obj.device.name} - Output {obj.output_number}"
+            # Get all DeviceOutputs that have meaningful signal_name populated
+            # Exclude null, empty strings, and the string 'None'
+            queryset = DeviceOutput.objects.exclude(
+                signal_name__isnull=True
+            ).exclude(
+                signal_name=''
+            ).exclude(
+                signal_name='None'  # Exclude the string 'None'
+            ).exclude(
+                signal_name='none'  # Also exclude lowercase variant
+            ).select_related('device').order_by('device__name', 'output_number')
+            
+            # Set the queryset
+            self.fields['origin_device_output'].queryset = queryset
+            
+            # Create a nice label for each option
+            def format_label(obj):
+                return f"{obj.device.name} - Out {obj.output_number}: {obj.signal_name}"
+            
+            self.fields['origin_device_output'].label_from_instance = format_label
+            
+            # Set the empty option
             self.fields['origin_device_output'].empty_label = "-- Select source --"
+            
+            # Make it optional
+            self.fields['origin_device_output'].required = False
+            
+            # Add CSS class for styling
+            self.fields['origin_device_output'].widget.attrs['class'] = 'vSelect'
         
-        # Make fields required/optional based on input type
-        if self.instance.pk:
+        # Hide the origin_device_output field for AVB inputs (they don't use it)
+        if self.instance and self.instance.pk:
             if self.instance.input_type == 'AVB':
                 self.fields['origin_device_output'].widget = forms.HiddenInput()
-                self.fields['origin_device_output'].required = False
-            else:
-                # Make it optional - user might not have devices configured yet
                 self.fields['origin_device_output'].required = False
 
 

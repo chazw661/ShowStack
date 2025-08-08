@@ -1,5 +1,26 @@
 {% load custom_tags chunk_filters %}
 {% load i18n admin_urls static admin_modify chunk_filters %}
+<style>
+  .device-output-cell {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: center;
+  }
+  .device-output-cell .number {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  .device-output-cell .signal-name input {
+    width: 100%;
+    padding: 4px;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+  }
+  .device-output-cell .select {
+    margin-top: 5px;
+  }
+</style>
+
 <div class="js-inline-admin-formset inline-group">
   <div class="tabular inline-related">
     {{ inline_admin_formset.formset.management_form }}
@@ -12,17 +33,35 @@
           {% for form_chunk in inline_admin_formset.forms|chunk:8 %}
             <tr class="form-row">
               {% for form in form_chunk %}
-                <td class="cell">
+                <td class="device-output-cell">
                   {# hidden PK/FK fields etc. #}
                   {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
 
-                  {# channel number #}
-                  <div class="number">{{ form.initial.output_number }}</div>
+                  {# Output number - handle None values #}
+                  <div class="number">
+                    {% if form.instance.output_number %}
+                      Out {{ form.instance.output_number }}
+                    {% elif form.initial.output_number %}
+                      Out {{ form.initial.output_number }}
+                    {% else %}
+                      Out {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
+                    {% endif %}
+                  </div>
 
-                  {# match the input’s width #}
-                  <div class="select w-24">{{ form.console_output }}</div>
+                  {# Signal name field - THIS IS WHAT YOU NEED #}
+                  <div class="signal-name">
+                    {{ form.signal_name }}
+                    {% if form.signal_name.help_text %}
+                      <div class="help">{{ form.signal_name.help_text }}</div>
+                    {% endif %}
+                  </div>
+
+                  {# Console output dropdown #}
+                  <div class="select w-24">
+                    {{ form.console_output }}
+                  </div>
                 </td>
               {% endfor %}
             </tr>

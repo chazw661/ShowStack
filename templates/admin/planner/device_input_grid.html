@@ -1,28 +1,53 @@
 {% load custom_tags chunk_filters %}
 {% load i18n admin_urls static admin_modify chunk_filters %}
-<div class="js-inline-admin-formset inline‐group">
-  <div class="tabular inline‐related">
+<style>
+  .device-input-cell {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: center;
+  }
+  .device-input-cell .number {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  .device-input-cell .select {
+    margin-top: 5px;
+  }
+</style>
+
+<div class="js-inline-admin-formset inline-group">
+  <div class="tabular inline-related">
     {{ inline_admin_formset.formset.management_form }}
 
     <fieldset class="module {{ inline_admin_formset.classes }}">
       <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
 
-      <table class="dynamic‐deviceinput_set" width="100%" cellspacing="0">
+      <table class="dynamic-deviceinput_set" width="100%" cellspacing="0">
         <tbody>
           {% for form_chunk in inline_admin_formset.forms|chunk:8 %}
-            <tr class="form‐row">
+            <tr class="form-row">
               {% for form in form_chunk %}
-                <td class="cell">
+                <td class="device-input-cell">
                   {# hidden PK/FK fields etc. #}
                   {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
 
-                  {# channel number #}
-                  <div class="number">{{ form.initial.input_number }}</div>
+                  {# Input number - handle None values #}
+                  <div class="number">
+                    {% if form.instance.input_number %}
+                      In {{ form.instance.input_number }}
+                    {% elif form.initial.input_number %}
+                      In {{ form.initial.input_number }}
+                    {% else %}
+                      In {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
+                    {% endif %}
+                  </div>
 
-                  {# this is already correct #}
-                  <div class="select w-24">{{ form.console_input }}</div>
+                  {# Console input dropdown #}
+                  <div class="select w-24">
+                    {{ form.console_input }}
+                  </div>
                 </td>
               {% endfor %}
             </tr>

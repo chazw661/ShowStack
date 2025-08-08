@@ -51,10 +51,10 @@
                 {% endif %}
               </td>
               
-              <!-- Origin Device Output (editable for Analog/AES only) -->
+              <!-- Origin Device Output (editable for Analog/AES only, blank for AVB) -->
               <td class="field-origin_device_output">
-                {% if inline_admin_form.original.input_type == 'AVB' or inline_admin_form.form.instance.input_type == 'AVB' %}
-                  <span style="color: #999;">N/A for AVB</span>
+                {% if 'AVB' in inline_admin_form.form.instance.get_input_type_display or 'AVB' in inline_admin_form.original.get_input_type_display %}
+                  &nbsp;
                 {% else %}
                   {{ inline_admin_form.form.origin_device_output }}
                   {% if inline_admin_form.form.origin_device_output.errors %}

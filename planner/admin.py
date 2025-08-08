@@ -1,26 +1,38 @@
 # Make sure these imports are at the top of your admin.py file
 
+# At the TOP of admin.py, organize all imports together (lines 1-25):
+
+# Django imports
 from django.contrib import admin
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseRedirect
-from django.urls import reverse
-from django.urls import reverse, path 
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.urls import reverse, path
 from django.utils import timezone
 from django.utils.html import format_html
 from django import forms
 
-
-# Your existing model imports
+# Model imports
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import Location, Amp, AmpChannel
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 
-# Your existing form imports
+# Form imports (ALL forms in one place)
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
 from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
+
+#-----------PDF Creation Start------
+#-----------End PDF Creation
+
+
+# Then DELETE these duplicate imports around line 466-470:
+# DELETE THESE LINES:
+# from django import forms
+# from django.http import HttpResponseRedirect, JsonResponse  
+# from .models import P1Processor, P1Input, P1Output, DeviceOutput
+# from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 
 #-----------PDF Creation Start------
 
@@ -461,15 +473,6 @@ class SystemProcessorAdmin(admin.ModelAdmin):
 
 #--------P1 Processor----
 
-
-# Add these to your admin.py
-from django import forms
-from django.http import HttpResponseRedirect, JsonResponse
-from .models import P1Processor, P1Input, P1Output, DeviceOutput
-# Import P1 forms after your existing form imports
-from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
-
-# ========== P1 Processor Admin ==========
 
 
 # ========== P1 Processor Admin ==========
