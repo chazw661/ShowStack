@@ -2,16 +2,22 @@
 {% load i18n admin_urls static admin_modify chunk_filters %}
 <style>
   .device-input-cell {
-    padding: 10px;
+    padding: 5px;
     border: 1px solid #ddd;
     text-align: center;
+    width: 12.5%;  /* Force consistent width for 8 columns */
   }
   .device-input-cell .number {
     font-weight: bold;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
+    font-size: 13px;
   }
   .device-input-cell .select {
-    margin-top: 5px;
+    margin-top: 3px;
+  }
+  .device-input-cell select {
+    width: 100%;
+    font-size: 12px;
   }
 </style>
 
@@ -45,7 +51,7 @@
                   </div>
 
                   {# Console input dropdown #}
-                  <div class="select w-24">
+                  <div class="select">
                     {{ form.console_input }}
                   </div>
                 </td>

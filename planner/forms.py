@@ -723,24 +723,21 @@ class P1InputInlineForm(forms.ModelForm):
         
         # Configure the origin_device_output dropdown
         if 'origin_device_output' in self.fields:
-            # Get all DeviceOutputs that have meaningful signal_name populated
-            # Exclude null, empty strings, and the string 'None'
-            queryset = DeviceOutput.objects.exclude(
-                signal_name__isnull=True
-            ).exclude(
-                signal_name=''
-            ).exclude(
-                signal_name='None'  # Exclude the string 'None'
-            ).exclude(
-                signal_name='none'  # Also exclude lowercase variant
-            ).select_related('device').order_by('device__name', 'output_number')
+            # Get DeviceOutputs that have a console output selected (user has populated them)
+            queryset = DeviceOutput.objects.filter(
+                console_output__isnull=False  # Only show outputs with console outputs selected
+            ).select_related('device', 'console_output').order_by('device__name', 'output_number')
             
             # Set the queryset
             self.fields['origin_device_output'].queryset = queryset
             
-            # Create a nice label for each option
+            # Create clean label showing just device and output number
             def format_label(obj):
-                return f"{obj.device.name} - Out {obj.output_number}: {obj.signal_name}"
+                # Get the output number - should always exist
+                output_num = obj.output_number if obj.output_number else "?"
+                
+                # Clean format: Device name - Out #
+                return f"{obj.device.name} - Out {output_num}"
             
             self.fields['origin_device_output'].label_from_instance = format_label
             
@@ -758,7 +755,6 @@ class P1InputInlineForm(forms.ModelForm):
             if self.instance.input_type == 'AVB':
                 self.fields['origin_device_output'].widget = forms.HiddenInput()
                 self.fields['origin_device_output'].required = False
-
 
 class P1OutputInlineForm(forms.ModelForm):
     """Form for P1 Output inline admin"""

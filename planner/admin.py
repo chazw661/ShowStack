@@ -162,15 +162,19 @@ from .forms import DeviceForm, NameOnlyForm
 
 class DeviceInputInline(admin.TabularInline):
     model = DeviceInput
-    form     = DeviceInputInlineForm
+    form = DeviceInputInlineForm
     extra = 0  
     template = "admin/planner/device_input_grid.html"
 
-
     def get_formset(self, request, obj=None, **kwargs):
-        print("👉 DeviceInputInline.get_formset() called with obj=", obj) 
-        # show exactly obj.input_count extra blank rows
-        kwargs['extra'] = obj.input_count if obj else 0
+        # Calculate how many extra forms we need
+        if obj:
+            existing_inputs = obj.inputs.count()
+            needed = obj.input_count - existing_inputs
+            kwargs['extra'] = max(0, needed)  # Only add the difference, never negative
+        else:
+            kwargs['extra'] = 0
+            
         FormSet = super().get_formset(request, obj, **kwargs)
 
         class InitializingFormSet(FormSet):
@@ -181,19 +185,25 @@ class DeviceInputInline(admin.TabularInline):
                     if not form.instance.pk:
                         form.initial.setdefault('input_number', idx + 1)
 
-
         return InitializingFormSet
 
 
 class DeviceOutputInline(admin.TabularInline):
     model = DeviceOutput
-    form     = DeviceOutputInlineForm
+    form = DeviceOutputInlineForm
     extra = 0
+    fields = ['output_number', 'signal_name', 'console_output']
     template = "admin/planner/device_output_grid.html"
 
-
     def get_formset(self, request, obj=None, **kwargs):
-        kwargs['extra'] = obj.output_count if obj else 0
+        # Calculate how many extra forms we need
+        if obj:
+            existing_outputs = obj.outputs.count()
+            needed = obj.output_count - existing_outputs
+            kwargs['extra'] = max(0, needed)  # Only add the difference, never negative
+        else:
+            kwargs['extra'] = 0
+            
         FormSet = super().get_formset(request, obj, **kwargs)
 
         class InitializingFormSet(FormSet):
