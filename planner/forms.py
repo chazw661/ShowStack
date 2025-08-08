@@ -432,14 +432,17 @@ class DeviceOutputInlineForm(forms.ModelForm):
 
     class Meta:
         model = DeviceOutput
-        fields = ("output_number", "console_output")
+        fields = ("output_number", "signal_name", "console_output")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['output_number'].required = False
+        self.fields['signal_name'].required = False
+        
+        # Hide signal_name widget
+        self.fields['signal_name'].widget = forms.HiddenInput()
 
         grouped = []
-        # grab every Console and do Python‐side filtering on both Aux & Matrix outputs
         for console in Console.objects.prefetch_related(
             "consoleauxoutput_set", "consolematrixoutput_set"
         ):
@@ -448,9 +451,9 @@ class DeviceOutputInlineForm(forms.ModelForm):
             opts += [
                 (ao.pk, f"Aux {ao.aux_number}: {ao.name}")
                 for ao in console.consoleauxoutput_set.all()
-                if ao.name  # only non‐empty, non‐None names
+                if ao.name
             ]
-            # Matrix outputs
+            # Matrix outputs  
             opts += [
                 (mo.pk, f"Mat {mo.matrix_number}: {mo.name}")
                 for mo in console.consolematrixoutput_set.all()
@@ -462,9 +465,22 @@ class DeviceOutputInlineForm(forms.ModelForm):
 
         self.fields["console_output"].choices = [("", "---------")] + grouped
 
-        # if we're editing an existing DeviceOutput, preserve its current value
         if getattr(self, "instance", None) and self.instance.pk:
             self.fields["console_output"].initial = self.instance.console_output_id
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # Auto-populate signal_name from console_output
+        if instance.console_output:
+            if hasattr(instance.console_output, 'name'):
+                instance.signal_name = instance.console_output.name
+            else:
+                instance.signal_name = str(instance.console_output)
+        
+        if commit:
+            instance.save()
+        return instance
 
     def clean_console_output(self):
         """Convert the choice field value to the actual model instance"""

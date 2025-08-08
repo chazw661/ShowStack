@@ -10,12 +10,6 @@
     font-weight: bold;
     margin-bottom: 8px;
   }
-  .device-output-cell .signal-name input {
-    width: 100%;
-    padding: 4px;
-    margin-bottom: 8px;
-    box-sizing: border-box;
-  }
   .device-output-cell .select {
     margin-top: 5px;
   }
@@ -38,8 +32,13 @@
                   {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
+                  
+                  {# Hidden signal_name field #}
+                  <input type="hidden" name="{{ form.signal_name.html_name }}" 
+                         id="{{ form.signal_name.id_for_label }}" 
+                         value="{{ form.signal_name.value|default:'' }}">
 
-                  {# Output number - handle None values #}
+                  {# Output number #}
                   <div class="number">
                     {% if form.instance.output_number %}
                       Out {{ form.instance.output_number }}
@@ -47,14 +46,6 @@
                       Out {{ form.initial.output_number }}
                     {% else %}
                       Out {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
-                    {% endif %}
-                  </div>
-
-                  {# Signal name field - THIS IS WHAT YOU NEED #}
-                  <div class="signal-name">
-                    {{ form.signal_name }}
-                    {% if form.signal_name.help_text %}
-                      <div class="help">{{ form.signal_name.help_text }}</div>
                     {% endif %}
                   </div>
 
