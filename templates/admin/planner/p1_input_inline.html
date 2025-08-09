@@ -1,4 +1,55 @@
 {% load i18n admin_urls static admin_modify %}
+{% load custom_tags chunk_filters %}
+
+<style>
+  .p1-input-cell {
+    padding: 5px;
+    border: 1px solid #ddd;
+    text-align: center;
+    width: 12.5%;
+    vertical-align: top;
+  }
+  .p1-input-cell .type-label {
+    font-weight: bold;
+    font-size: 11px;
+    margin-bottom: 5px;
+  }
+  .p1-input-cell .label-field input {
+    width: 100%;
+    font-size: 11px;
+    padding: 2px;
+    margin-bottom: 5px;
+  }
+  /* Force dropdown to be taller and wrap text */
+  .p1-input-cell select {
+    width: 100%;
+    font-size: 9px;  /* Smaller font */
+    padding: 4px 2px;
+    height: 50px;  /* Tall enough for 2 lines */
+    line-height: 1.4;
+    word-wrap: break-word;
+    word-break: break-word;
+    white-space: pre-wrap;  /* Preserve wrapping */
+    text-align-last: center;  /* Center the selected text */
+  }
+  /* For Firefox */
+  .p1-input-cell select::-moz-focus-inner {
+    white-space: pre-wrap;
+  }
+  /* Make the text wrap at the dash */
+  .p1-input-cell select option {
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 2px;
+  }
+  .input-type-header {
+    background-color: #79aec8;
+    color: white;
+    padding: 5px;
+    font-weight: bold;
+    text-align: center;
+  }
+</style>
 
 <div class="js-inline-admin-formset inline-group" id="{{ inline_admin_formset.formset.prefix }}-group">
   <div class="tabular inline-related {{ inline_admin_formset.opts.classes }}">
@@ -7,63 +58,71 @@
     <fieldset class="module {{ inline_admin_formset.classes }}">
       <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
       
-      <table width="100%">
-        <thead>
-          <tr>
-            <th style="width: 150px;">Type</th>
-            <th style="width: 300px;">Label</th>
-            <th style="width: 350px;">Origin Device Output</th>
-          </tr>
-        </thead>
+      <table width="100%" cellspacing="0">
         <tbody>
-          {% for inline_admin_form in inline_admin_formset %}
-            <tr class="form-row {% cycle 'row1' 'row2' %}">
-              {% if inline_admin_form.form.non_field_errors %}
-                <td colspan="3">{{ inline_admin_form.form.non_field_errors }}</td>
-              {% endif %}
-              
-              <!-- FK field if exists -->
-              {% if inline_admin_form.fk_field %}
-                {{ inline_admin_form.fk_field.field }}
-              {% endif %}
-              
-              <!-- Hidden fields -->
-              {% for hidden in inline_admin_form.form.hidden_fields %}
-                {{ hidden }}
-              {% endfor %}
-              
-              <!-- Input Type with Channel Number (readonly) -->
-              <td class="field-input_type">
-                {% if inline_admin_form.original %}
-                  {{ inline_admin_form.original.get_input_type_display }} {{ inline_admin_form.original.channel_number }}
-                {% else %}
-                  {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}
-                {% endif %}
-                {{ inline_admin_form.form.input_type.as_hidden }}
-                {{ inline_admin_form.form.channel_number.as_hidden }}
-              </td>
-              
-              <!-- Label (editable) -->
-              <td class="field-label">
-                {{ inline_admin_form.form.label }}
-                {% if inline_admin_form.form.label.errors %}
-                  <ul class="errorlist">{{ inline_admin_form.form.label.errors }}</ul>
-                {% endif %}
-              </td>
-              
-              <!-- Origin Device Output (editable for Analog/AES only, blank for AVB) -->
-              <td class="field-origin_device_output">
-                {% if 'AVB' in inline_admin_form.form.instance.get_input_type_display or 'AVB' in inline_admin_form.original.get_input_type_display %}
-                  &nbsp;
-                {% else %}
-                  {{ inline_admin_form.form.origin_device_output }}
-                  {% if inline_admin_form.form.origin_device_output.errors %}
-                    <ul class="errorlist">{{ inline_admin_form.form.origin_device_output.errors }}</ul>
+          {# Row 1: AES/EBU 1-4 and Analog 1-4 #}
+          <tr>
+            <td colspan="8" class="input-type-header">AES/EBU (1-4) and Analog (1-4)</td>
+          </tr>
+          <tr class="form-row">
+            {% for inline_admin_form in inline_admin_formset %}
+              {% if 'AES' in inline_admin_form.form.instance.get_input_type_display or 'Analog' in inline_admin_form.form.instance.get_input_type_display %}
+                <td class="p1-input-cell">
+                  {# Hidden fields #}
+                  {% if inline_admin_form.fk_field %}
+                    {{ inline_admin_form.fk_field.field }}
                   {% endif %}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
+                  {% for hidden in inline_admin_form.form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                  
+                  <div class="type-label">
+                    {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}
+                  </div>
+                  
+                  <div class="label-field">
+                    {{ inline_admin_form.form.label }}
+                  </div>
+                  
+                  <div class="select">
+                    {{ inline_admin_form.form.origin_device_output }}
+                  </div>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+
+          {# Row 2: AVB 1-8 #}
+          <tr>
+            <td colspan="8" class="input-type-header">AVB (1-8)</td>
+          </tr>
+          <tr class="form-row">
+            {% for inline_admin_form in inline_admin_formset %}
+              {% if 'AVB' in inline_admin_form.form.instance.get_input_type_display %}
+                <td class="p1-input-cell">
+                  {# Hidden fields #}
+                  {% if inline_admin_form.fk_field %}
+                    {{ inline_admin_form.fk_field.field }}
+                  {% endif %}
+                  {% for hidden in inline_admin_form.form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                  
+                  <div class="type-label">
+                    {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}
+                  </div>
+                  
+                  <div class="label-field">
+                    {{ inline_admin_form.form.label }}
+                  </div>
+                  
+                  <div style="color: #666; font-size: 10px;">
+                    Network Stream
+                  </div>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
         </tbody>
       </table>
     </fieldset>
