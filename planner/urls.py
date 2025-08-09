@@ -19,4 +19,6 @@ urlpatterns = [
     # P1 Processor URLs
     path('p1/<int:p1_processor_id>/export/', views.p1_processor_export, name='p1_processor_export'),
     path('p1/<int:p1_processor_id>/summary/', views.p1_processor_summary, name='p1_processor_summary'),
+     path('galaxy/<int:galaxy_processor_id>/export/', views.galaxy_processor_export, name='galaxy_processor_export'),
+    path('galaxy/<int:galaxy_processor_id>/summary/', views.galaxy_processor_summary, name='galaxy_processor_summary'),
 ]

@@ -1,0 +1,196 @@
+{% load i18n admin_urls static admin_modify %}
+
+<style>
+  .galaxy-input-cell {
+    padding: 5px;
+    border: 1px solid #ddd;
+    text-align: center;
+    width: 12.5%;
+    vertical-align: top;
+  }
+  .galaxy-input-cell .type-label {
+    font-weight: bold;
+    font-size: 11px;
+    margin-bottom: 5px;
+    color: #0066cc;
+  }
+  .galaxy-input-cell .label-field input {
+    width: 100%;
+    font-size: 11px;
+    padding: 2px;
+    margin-bottom: 5px;
+  }
+  .galaxy-input-cell select {
+    width: 100%;
+    font-size: 9px;
+    padding: 4px 2px;
+    height: 50px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    word-break: break-word;
+    white-space: pre-wrap;
+    text-align-last: center;
+  }
+  .galaxy-input-cell select::-moz-focus-inner {
+    white-space: pre-wrap;
+  }
+  .galaxy-input-cell select option {
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 2px;
+  }
+  .input-type-header {
+    background-color: #0066cc;
+    color: white;
+    padding: 5px;
+    font-weight: bold;
+    text-align: center;
+  }
+  .network-stream-indicator {
+    color: #666;
+    font-size: 10px;
+    font-style: italic;
+  }
+</style>
+
+<div class="js-inline-admin-formset inline-group" id="{{ inline_admin_formset.formset.prefix }}-group">
+  <div class="tabular inline-related {{ inline_admin_formset.opts.classes }}">
+    {{ inline_admin_formset.formset.management_form }}
+    
+    <fieldset class="module {{ inline_admin_formset.classes }}">
+      <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }} - Meyer GALAXY Configuration</h2>
+      
+      <table width="100%" cellspacing="0">
+        <tbody>
+          {# Row 1: Analog 1-8 #}
+          <tr>
+            <td colspan="8" class="input-type-header">Analog Inputs (1-8)</td>
+          </tr>
+          <tr class="form-row">
+            {% for inline_admin_form in inline_admin_formset %}
+              {% if inline_admin_form.form.instance.input_type == 'ANALOG' %}
+                <td class="galaxy-input-cell">
+                  {# Hidden fields #}
+                  {% if inline_admin_form.fk_field %}
+                    {{ inline_admin_form.fk_field.field }}
+                  {% endif %}
+                  {% for hidden in inline_admin_form.form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                  
+                  <div class="type-label">
+                    Analog {{ inline_admin_form.form.instance.channel_number }}
+                  </div>
+                  
+                  <div class="label-field">
+                    {{ inline_admin_form.form.label }}
+                  </div>
+                  
+                  <div class="select">
+                    {{ inline_admin_form.form.origin_device_output }}
+                  </div>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+
+          {# Row 2: AES/EBU 1-8 #}
+          <tr>
+            <td colspan="8" class="input-type-header">AES/EBU Digital Inputs (1-8)</td>
+          </tr>
+          <tr class="form-row">
+            {% for inline_admin_form in inline_admin_formset %}
+              {% if inline_admin_form.form.instance.input_type == 'AES' %}
+                <td class="galaxy-input-cell">
+                  {# Hidden fields #}
+                  {% if inline_admin_form.fk_field %}
+                    {{ inline_admin_form.fk_field.field }}
+                  {% endif %}
+                  {% for hidden in inline_admin_form.form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                  
+                  <div class="type-label">
+                    AES {{ inline_admin_form.form.instance.channel_number }}
+                  </div>
+                  
+                  <div class="label-field">
+                    {{ inline_admin_form.form.label }}
+                  </div>
+                  
+                  <div class="select">
+                    {{ inline_admin_form.form.origin_device_output }}
+                  </div>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+
+          {# Row 3: AVB/Milan 1-8 #}
+          <tr>
+            <td colspan="8" class="input-type-header">AVB/Milan Network Inputs (1-8)</td>
+          </tr>
+          <tr class="form-row">
+            {% for inline_admin_form in inline_admin_formset %}
+              {% if inline_admin_form.form.instance.input_type == 'AVB' and inline_admin_form.form.instance.channel_number <= 8 %}
+                <td class="galaxy-input-cell">
+                  {# Hidden fields #}
+                  {% if inline_admin_form.fk_field %}
+                    {{ inline_admin_form.fk_field.field }}
+                  {% endif %}
+                  {% for hidden in inline_admin_form.form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                  
+                  <div class="type-label">
+                    AVB {{ inline_admin_form.form.instance.channel_number }}
+                  </div>
+                  
+                  <div class="label-field">
+                    {{ inline_admin_form.form.label }}
+                  </div>
+                  
+                  <div class="network-stream-indicator">
+                    Network Stream
+                  </div>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+
+          {# Row 4: AVB/Milan 9-16 #}
+          <tr>
+            <td colspan="8" class="input-type-header">AVB/Milan Network Inputs (9-16)</td>
+          </tr>
+          <tr class="form-row">
+            {% for inline_admin_form in inline_admin_formset %}
+              {% if inline_admin_form.form.instance.input_type == 'AVB' and inline_admin_form.form.instance.channel_number > 8 %}
+                <td class="galaxy-input-cell">
+                  {# Hidden fields #}
+                  {% if inline_admin_form.fk_field %}
+                    {{ inline_admin_form.fk_field.field }}
+                  {% endif %}
+                  {% for hidden in inline_admin_form.form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                  
+                  <div class="type-label">
+                    AVB {{ inline_admin_form.form.instance.channel_number }}
+                  </div>
+                  
+                  <div class="label-field">
+                    {{ inline_admin_form.form.label }}
+                  </div>
+                  
+                  <div class="network-stream-indicator">
+                    Network Stream
+                  </div>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </fieldset>
+  </div>
+</div>

@@ -23,6 +23,10 @@ from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 
+#Galaxy Proecessor
+from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
+from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
+
 #-----------PDF Creation Start------
 #-----------End PDF Creation
 
@@ -434,19 +438,27 @@ class SystemProcessorAdmin(admin.ModelAdmin):
     search_fields = ['name', 'ip_address']
 
     def configure_button(self, obj):
-        if obj.pk:  # Only show for saved objects
-            if obj.device_type == 'P1':
-                # Check if P1 config exists
-                try:
-                    p1 = obj.p1_config
-                    url = reverse('admin:planner_p1processor_change', args=[p1.pk])
-                    return format_html('<a class="button" href="{}">Configure P1</a>', url)
-                except P1Processor.DoesNotExist:
-                    # Create P1 config URL
-                    url = reverse('admin:planner_p1processor_add') + f'?system_processor={obj.pk}'
-                    return format_html('<a class="button" href="{}">Setup P1 Configuration</a>', url)
-            elif obj.device_type == 'GALAXY':
-                return format_html('<span style="color: #999;">Galaxy configuration coming soon</span>')
+     if obj.pk:  # Only show for saved objects
+        if obj.device_type == 'P1':
+            # Check if P1 config exists
+            try:
+                p1 = obj.p1_config
+                url = reverse('admin:planner_p1processor_change', args=[p1.pk])
+                return format_html('<a class="button" href="{}">Configure P1</a>', url)
+            except P1Processor.DoesNotExist:
+                # Create P1 config URL
+                url = reverse('admin:planner_p1processor_add') + f'?system_processor={obj.pk}'
+                return format_html('<a class="button" href="{}">Setup P1 Configuration</a>', url)
+        elif obj.device_type == 'GALAXY':
+            # Check if GALAXY config exists
+            try:
+                galaxy = obj.galaxy_config
+                url = reverse('admin:planner_galaxyprocessor_change', args=[galaxy.pk])
+                return format_html('<a class="button" href="{}">Configure GALAXY</a>', url)
+            except GalaxyProcessor.DoesNotExist:
+                # Create GALAXY config URL
+                url = reverse('admin:planner_galaxyprocessor_add') + f'?system_processor={obj.pk}'
+                return format_html('<a class="button" href="{}">Setup GALAXY Configuration</a>', url)
         return '-'
     configure_button.short_description = 'Configuration'
     configure_button.allow_tags = True
@@ -460,17 +472,46 @@ class SystemProcessorAdmin(admin.ModelAdmin):
         ]
         return custom_urls + urls
     
+    
     def configure_view(self, request, pk):
         """Redirect to appropriate configuration based on device type"""
         obj = self.get_object(request, pk)
         if obj.device_type == 'P1':
             p1, created = P1Processor.objects.get_or_create(system_processor=obj)
+            # If newly created and no channels exist, create them (same as P1ProcessorAdmin._create_default_channels)
+            if created and not p1.inputs.exists():
+                # Standard P1 channels
+                for i in range(1, 5):
+                    P1Input.objects.create(p1_processor=p1, input_type='ANALOG', channel_number=i, label='')
+                    P1Input.objects.create(p1_processor=p1, input_type='AES', channel_number=i, label='')
+                    P1Output.objects.create(p1_processor=p1, output_type='ANALOG', channel_number=i, label='')
+                    P1Output.objects.create(p1_processor=p1, output_type='AES', channel_number=i, label='')
+                for i in range(1, 9):
+                    P1Input.objects.create(p1_processor=p1, input_type='AVB', channel_number=i, label='')
+                    P1Output.objects.create(p1_processor=p1, output_type='AVB', channel_number=i, label='')
             return HttpResponseRedirect(
                 reverse('admin:planner_p1processor_change', args=[p1.pk])
             )
+        elif obj.device_type == 'GALAXY':
+            galaxy, created = GalaxyProcessor.objects.get_or_create(system_processor=obj)
+            # If newly created and no channels exist, create them (same as GalaxyProcessorAdmin._create_default_channels)
+            if created and not galaxy.inputs.exists():
+                # Standard GALAXY channels
+                for i in range(1, 9):
+                    GalaxyInput.objects.create(galaxy_processor=galaxy, input_type='ANALOG', channel_number=i, label='')
+                    GalaxyInput.objects.create(galaxy_processor=galaxy, input_type='AES', channel_number=i, label='')
+                    GalaxyOutput.objects.create(galaxy_processor=galaxy, output_type='ANALOG', channel_number=i, label='', destination='')
+                    GalaxyOutput.objects.create(galaxy_processor=galaxy, output_type='AES', channel_number=i, label='', destination='')
+                for i in range(1, 17):
+                    GalaxyInput.objects.create(galaxy_processor=galaxy, input_type='AVB', channel_number=i, label='')
+                    GalaxyOutput.objects.create(galaxy_processor=galaxy, output_type='AVB', channel_number=i, label='', destination='')
+            return HttpResponseRedirect(
+                reverse('admin:planner_galaxyprocessor_change', args=[galaxy.pk])
+            )
         messages.warning(request, f"Configuration for {obj.get_device_type_display()} not yet implemented.")
         return HttpResponseRedirect(reverse('admin:planner_systemprocessor_change', args=[pk]))
-    
+        
+
     def change_view(self, request, object_id, form_url='', extra_context=None):
         extra_context = extra_context or {}
         obj = self.get_object(request, object_id)
@@ -746,5 +787,265 @@ class P1ProcessorAdmin(admin.ModelAdmin):
             'all': ('admin/css/p1_processor_admin.css',)
         }
         js = ('admin/js/p1_input_admin.js',)
+
+
+        # ========== GALAXY Processor Admin ==========
+
+class GalaxyInputInline(admin.TabularInline):
+    model = GalaxyInput
+    form = GalaxyInputInlineForm
+    extra = 0
+    fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+    readonly_fields = ['input_type', 'channel_number']
+    can_delete = False
+    template = 'admin/planner/galaxy_input_inline.html'
+     
+    def has_add_permission(self, request, obj=None):
+        return False
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('origin_device_output__device').order_by('input_type', 'channel_number')
+    
+    class Media:
+        js = ('admin/js/galaxy_input_admin.js',)
+
+
+class GalaxyOutputInline(admin.TabularInline):
+    model = GalaxyOutput
+    form = GalaxyOutputInlineForm
+    extra = 0
+    fields = ['output_type', 'channel_number', 'label', 'assigned_bus', 'destination']
+    readonly_fields = ['output_type', 'channel_number']
+    can_delete = False
+    template = 'admin/planner/galaxy_output_inline.html'
+    
+    def has_add_permission(self, request, obj=None):
+        return False
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.order_by('output_type', 'channel_number')
+
+
+@admin.register(GalaxyProcessor)
+class GalaxyProcessorAdmin(admin.ModelAdmin):
+    form = GalaxyProcessorAdminForm
+    list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
+    list_filter = ['system_processor__location']
+    search_fields = ['system_processor__name', 'system_processor__ip_address']
+    actions = ['export_configurations']
+    inlines = [GalaxyInputInline, GalaxyOutputInline]
+    
+    # Hide from main admin index (like P1)
+    def has_module_permission(self, request):
+        return False
+    
+    def get_fieldsets(self, request, obj=None):
+        """Different fieldsets for add vs change forms"""
+        if obj is None:  # Add form
+            return (
+                ('Create GALAXY Configuration', {
+                    'fields': ('system_processor', 'notes'),
+                    'description': 'Select the system processor and add any initial notes. Channels will be auto-created after saving.'
+                }),
+            )
+        else:  # Change form
+            return (
+                ('System Processor', {
+                    'fields': ('system_processor',),
+                    'classes': ('collapse',),
+                    'description': 'This GALAXY configuration is linked to the system processor above.'
+                }),
+                ('GALAXY Configuration Notes', {
+                    'fields': ('notes',),
+                    'classes': ('wide',)
+                }),
+                ('Import Configuration', {
+                    'fields': ('import_config',),
+                    'classes': ('collapse',),
+                    'description': 'Optionally import configuration from Meyer Compass software'
+                }),
+            )
+    
+    def get_inline_instances(self, request, obj=None):
+        """Only show inlines on change form, not add form"""
+        if obj is None:
+            return []
+        return super().get_inline_instances(request, obj)
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj:  # Editing existing GALAXY
+            return ['system_processor']
+        return []
+    
+    def response_add(self, request, obj, post_url_continue=None):
+        """After adding, redirect to change form to show the inlines"""
+        change_url = reverse('admin:planner_galaxyprocessor_change', args=(obj.pk,))
+        messages.success(request, f'GALAXY Processor created with standard channel configuration (8 Analog, 8 AES, 16 AVB channels).')
+        return HttpResponseRedirect(change_url)
+    
+    def save_model(self, request, obj, form, change):
+        """Save the model and create channels if new"""
+        is_new = obj.pk is None
+        super().save_model(request, obj, form, change)
+        
+        if is_new:
+            # Auto-create standard GALAXY channels
+            self._create_default_channels(obj)
+            messages.info(request, 'Standard GALAXY channels have been created. You can now configure each channel.')
+    
+    def _create_default_channels(self, galaxy_processor):
+        """Create default GALAXY channels based on standard configuration"""
+        # Check if channels already exist to avoid duplicates
+        if galaxy_processor.inputs.exists() or galaxy_processor.outputs.exists():
+            return
+        
+        # Create Inputs - Meyer GALAXY typically has more channels
+        # 8 Analog inputs
+        for i in range(1, 9):
+            GalaxyInput.objects.create(
+                galaxy_processor=galaxy_processor,
+                input_type='ANALOG',
+                channel_number=i,
+                label=''
+            )
+        
+        # 8 AES inputs (4 stereo pairs)
+        for i in range(1, 9):
+            GalaxyInput.objects.create(
+                galaxy_processor=galaxy_processor,
+                input_type='AES',
+                channel_number=i,
+                label=''
+            )
+        
+        # 16 AVB/Milan inputs
+        for i in range(1, 17):
+            GalaxyInput.objects.create(
+                galaxy_processor=galaxy_processor,
+                input_type='AVB',
+                channel_number=i,
+                label=''
+            )
+        
+        # Create Outputs
+        # 8 Analog outputs
+        for i in range(1, 9):
+            GalaxyOutput.objects.create(
+                galaxy_processor=galaxy_processor,
+                output_type='ANALOG',
+                channel_number=i,
+                label='',
+                destination=''
+            )
+        
+        # 8 AES outputs
+        for i in range(1, 9):
+            GalaxyOutput.objects.create(
+                galaxy_processor=galaxy_processor,
+                output_type='AES',
+                channel_number=i,
+                label='',
+                destination=''
+            )
+        
+        # 16 AVB/Milan outputs
+        for i in range(1, 17):
+            GalaxyOutput.objects.create(
+                galaxy_processor=galaxy_processor,
+                output_type='AVB',
+                channel_number=i,
+                label='',
+                destination=''
+            )
+    
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj:
+            extra_context['title'] = f'GALAXY Configuration for {obj.system_processor.name}'
+            extra_context['subtitle'] = f'Location: {obj.system_processor.location.name} | IP: {obj.system_processor.ip_address}'
+            # Add back link to system processor
+            back_url = reverse('admin:planner_systemprocessor_change', args=[obj.system_processor.pk])
+            extra_context['back_link'] = format_html(
+                '<a href="{}">← Back to System Processor</a>',
+                back_url
+            )
+            extra_context['show_summary_link'] = True
+            extra_context['summary_url'] = f'/galaxy/{object_id}/summary/'
+        return super().change_view(request, object_id, form_url, extra_context)
+    
+    def add_view(self, request, form_url='', extra_context=None):
+        """Customize the add view"""
+        extra_context = extra_context or {}
+        extra_context['title'] = 'Create New GALAXY Processor Configuration'
+        
+        # If system_processor is in GET params, show which one
+        if 'system_processor' in request.GET:
+            try:
+                sp_id = request.GET['system_processor']
+                sp = SystemProcessor.objects.get(pk=sp_id)
+                extra_context['subtitle'] = f'For System Processor: {sp.name}'
+            except (SystemProcessor.DoesNotExist, ValueError):
+                pass
+        
+        return super().add_view(request, form_url, extra_context)
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Pre-populate system_processor if passed in URL
+        if 'system_processor' in request.GET and not obj:
+            form.base_fields['system_processor'].initial = request.GET['system_processor']
+        return form
+    
+    def get_location(self, obj):
+        return obj.system_processor.location.name
+    get_location.short_description = 'Location'
+    
+    def get_ip_address(self, obj):
+        return obj.system_processor.ip_address
+    get_ip_address.short_description = 'IP Address'
+    
+    def input_count(self, obj):
+        return obj.inputs.count()
+    input_count.short_description = 'Inputs'
+    
+    def output_count(self, obj):
+        return obj.outputs.count()
+    output_count.short_description = 'Outputs'
+    
+    def export_configurations(self, request, queryset):
+        """Export selected GALAXY configurations"""
+        if queryset.count() == 1:
+            # Single export - redirect to export view
+            return HttpResponseRedirect(f'/galaxy/{queryset.first().id}/export/')
+        else:
+            # Multiple export - create combined JSON
+            all_configs = []
+            for galaxy in queryset:
+                config = {
+                    'processor': {
+                        'name': galaxy.system_processor.name,
+                        'location': galaxy.system_processor.location.name,
+                        'ip_address': str(galaxy.system_processor.ip_address),
+                    },
+                    'inputs': list(galaxy.inputs.values()),
+                    'outputs': list(galaxy.outputs.values())
+                }
+                all_configs.append(config)
+            
+            response = JsonResponse({'configurations': all_configs}, json_dumps_params={'indent': 2})
+            response['Content-Disposition'] = 'attachment; filename="galaxy_configs.json"'
+            return response
+    
+    class Media:
+        css = {
+            'all': ('admin/css/galaxy_processor_admin.css',)
+        }
+        js = ('admin/js/galaxy_input_admin.js',)
+
+
+
 
 

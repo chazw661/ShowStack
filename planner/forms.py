@@ -816,3 +816,102 @@ class P1ProcessorAdminForm(forms.ModelForm):
             pass
         
         return instance
+    
+
+
+    #--------Galaxy Processor-----
+
+    # Add these to your forms.py file after the P1 processor forms
+
+from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
+
+class GalaxyInputInlineForm(forms.ModelForm):
+    """Form for GALAXY Input inline admin"""
+    class Meta:
+        model = GalaxyInput
+        fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+        widgets = {
+            'label': forms.TextInput(attrs={'class': 'vTextField'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Configure the origin_device_output dropdown
+        if 'origin_device_output' in self.fields:
+            # Get DeviceOutputs that have a console output selected
+            queryset = DeviceOutput.objects.filter(
+                console_output__isnull=False
+            ).select_related('device', 'console_output').order_by('device__name', 'output_number')
+            
+            # Set the queryset
+            self.fields['origin_device_output'].queryset = queryset
+            
+            # Create clean label showing just device and output number
+            def format_label(obj):
+                output_num = obj.output_number if obj.output_number else "?"
+                return f"{obj.device.name} - Out {output_num}"
+            
+            self.fields['origin_device_output'].label_from_instance = format_label
+            
+            # Set the empty option
+            self.fields['origin_device_output'].empty_label = "-- Select source --"
+            
+            # Make it optional
+            self.fields['origin_device_output'].required = False
+            
+            # Add CSS class for styling
+            self.fields['origin_device_output'].widget.attrs['class'] = 'vSelect'
+        
+        # Hide the origin_device_output field for AVB inputs (network streams)
+        if self.instance and self.instance.pk:
+            if self.instance.input_type == 'AVB':
+                self.fields['origin_device_output'].widget = forms.HiddenInput()
+                self.fields['origin_device_output'].required = False
+
+
+class GalaxyOutputInlineForm(forms.ModelForm):
+    """Form for GALAXY Output inline admin"""
+    class Meta:
+        model = GalaxyOutput
+        fields = ['output_type', 'channel_number', 'label', 'assigned_bus', 'destination']
+        widgets = {
+            'label': forms.TextInput(attrs={'class': 'vTextField'}),
+            'destination': forms.TextInput(attrs={'class': 'vTextField', 'placeholder': 'e.g., Amp 1 Ch 3'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Customize the bus dropdown
+        if 'assigned_bus' in self.fields:
+            self.fields['assigned_bus'].empty_label = "-- Not assigned --"
+            self.fields['assigned_bus'].required = False
+        
+        # Make destination field optional
+        if 'destination' in self.fields:
+            self.fields['destination'].required = False
+
+
+class GalaxyProcessorAdminForm(forms.ModelForm):
+    """Custom form for GALAXY Processor admin"""
+    class Meta:
+        model = GalaxyProcessor
+        fields = '__all__'
+    
+    import_config = forms.FileField(
+        required=False,
+        help_text="Optionally import configuration from Meyer Compass file",
+        widget=forms.FileInput(attrs={'accept': '.xml,.json,.compass,.txt'})
+    )
+    
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        
+        # Handle config import if provided
+        if self.cleaned_data.get('import_config'):
+            # TODO: Implement import logic based on Meyer Compass format
+            pass
+        
+        return instance 
+

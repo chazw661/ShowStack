@@ -470,7 +470,107 @@ class P1Output(models.Model):
     def __str__(self):
         bus_str = f" → Bus {self.assigned_bus}" if self.assigned_bus else ""
         return f"{self.get_output_type_display()} {self.channel_number} - {self.label or 'Unlabeled'}{bus_str}"
+    
 
+    #-------Galaxy Processor
+# Add these to your models.py file after the P1Processor models
+
+class GalaxyProcessor(models.Model):
+    """Meyer GALAXY processor configuration"""
+    system_processor = models.OneToOneField(
+        SystemProcessor,
+        on_delete=models.CASCADE,
+        related_name='galaxy_config'
+    )
+    notes = models.TextField(blank=True, help_text="Configuration notes")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "GALAXY Processor"
+        verbose_name_plural = "GALAXY Processors"
+    
+    def __str__(self):
+        return f"GALAXY - {self.system_processor.name}"
+    
+    def save(self, *args, **kwargs):
+        """Ensure this is only attached to GALAXY type processors"""
+        if self.system_processor.device_type != 'GALAXY':
+            self.system_processor.device_type = 'GALAXY'
+            self.system_processor.save()
+        super().save(*args, **kwargs)
+
+
+class GalaxyInput(models.Model):
+    """Input channel for Meyer GALAXY processor"""
+    INPUT_TYPE_CHOICES = [
+        ('ANALOG', 'Analog'),
+        ('AES', 'AES/EBU'),
+        ('AVB', 'AVB/Milan'),
+    ]
+    
+    galaxy_processor = models.ForeignKey(
+        GalaxyProcessor,
+        on_delete=models.CASCADE,
+        related_name='inputs'
+    )
+    input_type = models.CharField(max_length=10, choices=INPUT_TYPE_CHOICES)
+    channel_number = models.PositiveIntegerField()
+    label = models.CharField(max_length=100, blank=True, help_text="Channel label")
+    origin_device_output = models.ForeignKey(
+        'DeviceOutput',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='galaxy_inputs',
+        help_text="Source device output for this input"
+    )
+    
+    class Meta:
+        ordering = ['input_type', 'channel_number']
+        unique_together = [['galaxy_processor', 'input_type', 'channel_number']]
+        verbose_name = "GALAXY Input"
+        verbose_name_plural = "GALAXY Inputs"
+    
+    def __str__(self):
+        return f"{self.get_input_type_display()} {self.channel_number}"
+
+
+class GalaxyOutput(models.Model):
+    """Output channel for Meyer GALAXY processor"""
+    OUTPUT_TYPE_CHOICES = [
+        ('ANALOG', 'Analog'),
+        ('AES', 'AES/EBU'),
+        ('AVB', 'AVB/Milan'),
+    ]
+    
+    galaxy_processor = models.ForeignKey(
+        GalaxyProcessor,
+        on_delete=models.CASCADE,
+        related_name='outputs'
+    )
+    output_type = models.CharField(max_length=10, choices=OUTPUT_TYPE_CHOICES)
+    channel_number = models.PositiveIntegerField()
+    label = models.CharField(max_length=100, blank=True, help_text="Channel label")
+    assigned_bus = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Assigned bus number"
+    )
+    destination = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Output destination (e.g., amp name, speaker zone)"
+    )
+    
+    class Meta:
+        ordering = ['output_type', 'channel_number']
+        unique_together = [['galaxy_processor', 'output_type', 'channel_number']]
+        verbose_name = "GALAXY Output"
+        verbose_name_plural = "GALAXY Outputs"
+    
+    def __str__(self):
+        return f"{self.get_output_type_display()} {self.channel_number}"
             
 
 
