@@ -831,6 +831,7 @@ class GalaxyOutputInline(admin.TabularInline):
 @admin.register(GalaxyProcessor)
 class GalaxyProcessorAdmin(admin.ModelAdmin):
     form = GalaxyProcessorAdminForm
+    change_form_template = 'admin/planner/galaxyprocessor/change_form.html'
     list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
     list_filter = ['system_processor__location']
     search_fields = ['system_processor__name', 'system_processor__ip_address']

@@ -1,0 +1,14 @@
+<!-- templates/admin/planner/galaxyprocessor/change_form.html -->
+{% extends "admin/change_form.html" %}
+
+{% block content_title %}
+    {% if back_link %}
+        <div style="margin-bottom: 20px;">
+            {{ back_link }}
+        </div>
+    {% endif %}
+    {{ block.super }}
+    {% if subtitle %}
+        <p style="margin-top: -10px; color: #666; font-size: 14px;">{{ subtitle }}</p>
+    {% endif %}
+{% endblock %}
