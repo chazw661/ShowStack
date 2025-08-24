@@ -1,4 +1,6 @@
 from django.db import models
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 class Console(models.Model):
     name = models.CharField(max_length=100)
@@ -113,13 +115,15 @@ class DeviceOutput(models.Model):
     device = models.ForeignKey(Device, related_name="outputs", on_delete=models.CASCADE)
     output_number = models.IntegerField(blank=True, null=True) 
     signal_name = models.CharField(max_length=100, blank=True, null=True)
-    console_output = models.ForeignKey(
-        'ConsoleAuxOutput',  # You might need to create a base ConsoleOutput model
+    content_type = models.ForeignKey(
+        ContentType,
         on_delete=models.SET_NULL,
-        blank=True,
         null=True,
-        related_name='device_outputs'
+        blank=True,
+        limit_choices_to={'model__in': ('consoleauxoutput', 'consolematrixoutput')}
     )
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    console_output = GenericForeignKey('content_type', 'object_id')
 
     def __str__(self):
         return f"Output {self.output_number or 'N/A'}: {self.signal_name or 'No signal'}"

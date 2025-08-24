@@ -3,6 +3,7 @@
 
 from django import forms
 from django.forms import modelformset_factory
+from django.contrib.contenttypes.models import ContentType
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 
 
@@ -432,8 +433,8 @@ class DeviceOutputInlineForm(forms.ModelForm):
 
     class Meta:
         model = DeviceOutput
-        fields = ("output_number", "signal_name", "console_output")
-
+        fields = ("output_number", "signal_name")  # Remove console_output from here
+        
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['output_number'].required = False
@@ -448,51 +449,71 @@ class DeviceOutputInlineForm(forms.ModelForm):
         ):
             opts = []
             # Aux outputs
-            opts += [
-                (ao.pk, f"Aux {ao.aux_number}: {ao.name}")
-                for ao in console.consoleauxoutput_set.all()
-                if ao.name
-            ]
+            for ao in console.consoleauxoutput_set.all():
+                if ao.name:
+                    opts.append((f"aux_{ao.pk}", f"Aux {ao.aux_number}: {ao.name}"))
             # Matrix outputs  
-            opts += [
-                (mo.pk, f"Mat {mo.matrix_number}: {mo.name}")
-                for mo in console.consolematrixoutput_set.all()
-                if mo.name
-            ]
+            for mo in console.consolematrixoutput_set.all():
+                if mo.name:
+                    opts.append((f"matrix_{mo.pk}", f"Mat {mo.matrix_number}: {mo.name}"))
 
             if opts:
                 grouped.append((console.name, opts))
 
         self.fields["console_output"].choices = [("", "---------")] + grouped
 
-        if getattr(self, "instance", None) and self.instance.pk:
-            self.fields["console_output"].initial = self.instance.console_output_id
+        # Set initial value if editing
+        if self.instance and self.instance.pk and self.instance.console_output:
+            if isinstance(self.instance.console_output, ConsoleAuxOutput):
+                self.fields["console_output"].initial = f"aux_{self.instance.console_output.pk}"
+            elif isinstance(self.instance.console_output, ConsoleMatrixOutput):
+                self.fields["console_output"].initial = f"matrix_{self.instance.console_output.pk}"
+
+    def clean_console_output(self):
+        """Convert the choice field value to a dict with the object and its type"""
+        console_output_value = self.cleaned_data.get('console_output')
+        
+        if console_output_value and console_output_value != '':
+            # Parse the type and ID
+            output_type, output_id = console_output_value.split('_')
+            
+            if output_type == 'aux':
+                return {
+                    'object': ConsoleAuxOutput.objects.get(pk=output_id),
+                    'type': 'aux'
+                }
+            elif output_type == 'matrix':
+                return {
+                    'object': ConsoleMatrixOutput.objects.get(pk=output_id),
+                    'type': 'matrix'
+                }
+        return None
 
     def save(self, commit=True):
         instance = super().save(commit=False)
         
-        # Auto-populate signal_name from console_output
-        if instance.console_output:
-            if hasattr(instance.console_output, 'name'):
-                instance.signal_name = instance.console_output.name
-            else:
-                instance.signal_name = str(instance.console_output)
+        console_output_data = self.cleaned_data.get('console_output')
+        
+        if console_output_data:
+            console_output = console_output_data['object']
+            output_type = console_output_data['type']
+            
+            if output_type == 'aux':
+                instance.content_type = ContentType.objects.get_for_model(ConsoleAuxOutput)
+            elif output_type == 'matrix':
+                instance.content_type = ContentType.objects.get_for_model(ConsoleMatrixOutput)
+            
+            instance.object_id = console_output.pk
+            instance.signal_name = console_output.name
+        else:
+            instance.content_type = None
+            instance.object_id = None
+            instance.signal_name = ""
         
         if commit:
             instance.save()
         return instance
 
-    def clean_console_output(self):
-        """Convert the choice field value to the actual model instance"""
-        console_output_id = self.cleaned_data.get('console_output')
-        if console_output_id:
-            try:
-                from .models import ConsoleAuxOutput
-                return ConsoleAuxOutput.objects.get(pk=console_output_id)
-            except ConsoleAuxOutput.DoesNotExist:
-                return None
-        return None
-    
 
 
 
@@ -723,26 +744,34 @@ class P1InputInlineForm(forms.ModelForm):
         
         # Configure the origin_device_output dropdown
         if 'origin_device_output' in self.fields:
-            # Get DeviceOutputs that have a console output selected (user has populated them)
-            queryset = DeviceOutput.objects.filter(
-                console_output__isnull=False  # Only show outputs with console outputs selected
-            ).select_related('device', 'console_output').order_by('device__name', 'output_number')
+            # Build grouped choices
+            grouped = []
             
-            # Set the queryset
-            self.fields['origin_device_output'].queryset = queryset
-            
-            # Create clean label showing just device and output number
-            def format_label(obj):
-                # Get the output number - should always exist
-                output_num = obj.output_number if obj.output_number else "?"
+            # Get all devices that have outputs with console connections
+            from .models import Device
+            for device in Device.objects.prefetch_related('outputs').order_by('name'):
+                opts = []
+                # Filter outputs that have a console connection (using GenericForeignKey)
+                for output in device.outputs.filter(content_type__isnull=False, object_id__isnull=False).order_by('output_number'):
+                    # Use signal_name if available, otherwise show output number
+                    if output.signal_name:
+                        label = output.signal_name
+                    else:
+                        # Only show output number if we don't have a signal name
+                        output_num = output.output_number if output.output_number is not None else ""
+                        label = f"Output {output_num}" if output_num else "Unnamed Output"
+                    
+                    opts.append((output.pk, label))
                 
-                # Clean format: Device name - Out #
-                return f"{obj.device.name} - Out {output_num}"
+                if opts:
+                    grouped.append((device.name, opts))
             
-            self.fields['origin_device_output'].label_from_instance = format_label
+            # Set the choices with blank option first
+            self.fields['origin_device_output'].choices = [("", "-- Select source --")] + grouped
             
-            # Set the empty option
-            self.fields['origin_device_output'].empty_label = "-- Select source --"
+            # Set initial value if editing
+            if self.instance and self.instance.pk and self.instance.origin_device_output:
+                self.fields['origin_device_output'].initial = self.instance.origin_device_output.pk
             
             # Make it optional
             self.fields['origin_device_output'].required = False
@@ -839,23 +868,34 @@ class GalaxyInputInlineForm(forms.ModelForm):
         
         # Configure the origin_device_output dropdown
         if 'origin_device_output' in self.fields:
-            # Get DeviceOutputs that have a console output selected
-            queryset = DeviceOutput.objects.filter(
-                console_output__isnull=False
-            ).select_related('device', 'console_output').order_by('device__name', 'output_number')
+            # Build grouped choices
+            grouped = []
             
-            # Set the queryset
-            self.fields['origin_device_output'].queryset = queryset
+            # Get all devices that have outputs with console connections
+            from .models import Device
+            for device in Device.objects.prefetch_related('outputs').order_by('name'):
+                opts = []
+                # Filter outputs that have a console connection (using GenericForeignKey)
+                for output in device.outputs.filter(content_type__isnull=False, object_id__isnull=False).order_by('output_number'):
+                    # Use signal_name if available, otherwise show output number
+                    if output.signal_name:
+                        label = output.signal_name
+                    else:
+                        # Only show output number if we don't have a signal name
+                        output_num = output.output_number if output.output_number is not None else ""
+                        label = f"Output {output_num}" if output_num else "Unnamed Output"
+                    
+                    opts.append((output.pk, label))
+                
+                if opts:
+                    grouped.append((device.name, opts))
             
-            # Create clean label showing just device and output number
-            def format_label(obj):
-                output_num = obj.output_number if obj.output_number else "?"
-                return f"{obj.device.name} - Out {output_num}"
+            # Set the choices with blank option first
+            self.fields['origin_device_output'].choices = [("", "-- Select source --")] + grouped
             
-            self.fields['origin_device_output'].label_from_instance = format_label
-            
-            # Set the empty option
-            self.fields['origin_device_output'].empty_label = "-- Select source --"
+            # Set initial value if editing
+            if self.instance and self.instance.pk and self.instance.origin_device_output:
+                self.fields['origin_device_output'].initial = self.instance.origin_device_output.pk
             
             # Make it optional
             self.fields['origin_device_output'].required = False

@@ -3,6 +3,10 @@
 # At the TOP of admin.py, organize all imports together (lines 1-25):
 
 # Django imports
+# At the TOP of admin.py, organize all imports together (lines 1-25):
+
+# Django imports
+from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
 from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -23,20 +27,12 @@ from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 
-#Galaxy Proecessor
+#Galaxy Processor
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 
 #-----------PDF Creation Start------
 #-----------End PDF Creation
-
-
-# Then DELETE these duplicate imports around line 466-470:
-# DELETE THESE LINES:
-# from django import forms
-# from django.http import HttpResponseRedirect, JsonResponse  
-# from .models import P1Processor, P1Input, P1Output, DeviceOutput
-# from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 
 #-----------PDF Creation Start------
 
@@ -154,13 +150,6 @@ class ConsoleAdmin(admin.ModelAdmin):
 
 # ========== Device Admin ==========
 
-from django.contrib import admin
-from django.http import HttpResponseRedirect
-from django.urls import reverse
-
-from .models import Device, DeviceInput, DeviceOutput
-from .forms  import DeviceInputInlineForm, DeviceOutputInlineForm
-from .forms import DeviceForm, NameOnlyForm
 
 # ———— your inlines here ——————————————————————————————————
 
@@ -196,7 +185,7 @@ class DeviceOutputInline(admin.TabularInline):
     model = DeviceOutput
     form = DeviceOutputInlineForm
     extra = 0
-    fields = ['output_number', 'signal_name', 'console_output']
+    fields = ['output_number', 'signal_name']  
     template = "admin/planner/device_output_grid.html"
 
     def get_formset(self, request, obj=None, **kwargs):
