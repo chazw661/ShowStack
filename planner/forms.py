@@ -954,4 +954,139 @@ class GalaxyProcessorAdminForm(forms.ModelForm):
             pass
         
         return instance 
+    
 
+
+    #-----------PA Cable--------
+
+# Add these to your forms.py file
+
+# Add these to your forms.py file
+
+from .models import PACableSchedule, PAZone
+
+class PACableForm(forms.ModelForm):
+    """Form for PA Cable entry matching spreadsheet layout"""
+    
+    class Meta:
+        model = PACableSchedule
+        fields = [
+            'label', 'destination', 'count', 'cable', 
+            'count2', 'fan_out', 'notes', 'drawing_ref'
+        ]
+        
+        widgets = {
+            'label': forms.Select(attrs={
+                'class': 'form-control',
+                'style': 'width: 100px;'
+            }),
+            'destination': forms.TextInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 120px;',
+                'placeholder': 'KIVA - 1'
+            }),
+            'count': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 60px;',
+                'min': '1'
+            }),
+            'cable': forms.Select(attrs={
+                'class': 'form-control',
+                'style': 'width: 120px;'
+            }),
+            'count2': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 60px;',
+                'min': '0'
+            }),
+            'fan_out': forms.Select(attrs={
+                'class': 'form-control',
+                'style': 'width: 120px;'
+            }),
+            'notes': forms.TextInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 150px;',
+                'placeholder': 'Clr. 1 Top 2'
+            }),
+            'drawing_ref': forms.TextInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 80px;',
+                'placeholder': 'Dim ref'
+            })
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Set field labels to match spreadsheet
+        self.fields['label'].label = 'Label'
+        self.fields['destination'].label = 'Destination'
+        self.fields['count'].label = 'Count'
+        self.fields['cable'].label = 'Cable'
+        self.fields['count2'].label = 'Count'
+        self.fields['fan_out'].label = 'Fan Out'
+        self.fields['notes'].label = 'Notes'
+        self.fields['drawing_ref'].label = 'Drawing Ref'
+
+
+class PACableInlineForm(forms.ModelForm):
+    """Inline form for admin interface"""
+    
+    class Meta:
+        model = PACableSchedule
+        fields = [
+            'label', 'destination', 'count', 'cable', 
+            'count2', 'fan_out', 'notes', 'drawing_ref'
+        ]
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Customize field widgets for inline display
+        self.fields['destination'].widget.attrs['style'] = 'width: 120px;'
+        self.fields['count'].widget.attrs['style'] = 'width: 60px;'
+        self.fields['count2'].widget.attrs['style'] = 'width: 60px;'
+        self.fields['notes'].widget.attrs['style'] = 'width: 150px;'
+        self.fields['drawing_ref'].widget.attrs['style'] = 'width: 80px;'
+
+
+# Formset for bulk entry (like spreadsheet rows)
+PACableFormSet = forms.modelformset_factory(
+    PACableSchedule,
+    form=PACableForm,
+    extra=10,  # Show 10 empty rows by default
+    can_delete=True,
+    can_order=False
+)
+
+
+# Form for managing PA Zones
+class PAZoneForm(forms.ModelForm):
+    class Meta:
+        model = PAZone
+        fields = ['name', 'description', 'zone_type', 'sort_order', 'location']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 100px;',
+                'placeholder': 'HL'
+            }),
+            'description': forms.TextInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 200px;',
+                'placeholder': 'House Left'
+            }),
+            'zone_type': forms.Select(attrs={
+                'class': 'form-control',
+                'style': 'width: 150px;'
+            }),
+            'sort_order': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'style': 'width: 80px;',
+                'min': '1'
+            }),
+            'location': forms.Select(attrs={
+                'class': 'form-control',
+                'style': 'width: 200px;'
+            })
+        }

@@ -31,6 +31,9 @@ from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 
+#PA Cable
+import csv
+
 #-----------PDF Creation Start------
 #-----------End PDF Creation
 
@@ -1038,4 +1041,297 @@ class GalaxyProcessorAdmin(admin.ModelAdmin):
 
 
 
+#-----------P.A, Cable------
+
+
+# Add these to your admin.py file
+
+from .models import PACableSchedule, PAZone
+from .forms import PACableInlineForm, PAZoneForm
+
+class PACableInline(admin.TabularInline):
+    """Inline admin for PA cables - spreadsheet-like entry"""
+    model = PACableSchedule
+    form = PACableInlineForm
+    extra = 5
+    fields = [
+        'label', 'destination', 'count', 'cable', 
+        'count2', 'fan_out', 'notes', 'drawing_ref'
+    ]
+    
+    class Media:
+        css = {
+            'all': ('planner/css/pa_cable_admin.css',)
+        }
+        js = ('planner/js/pa_cable_calculations.js',)
+
+
+
+# First, register the PAZone admin
+@admin.register(PAZone)
+class PAZoneAdmin(admin.ModelAdmin):
+    form = PAZoneForm
+    list_display = ['name', 'description', 'zone_type', 'sort_order', 'location']
+    list_filter = ['zone_type', 'location']
+    search_fields = ['name', 'description']
+    list_editable = ['sort_order']
+    ordering = ['sort_order', 'name']
+    
+    actions = ['create_default_zones']
+    
+    def create_default_zones(self, request, queryset):
+        """Create standard L'Acoustics zones"""
+        PAZone.create_default_zones()
+        self.message_user(request, "Default zones have been created.")
+    create_default_zones.short_description = "Create default L'Acoustics zones"
+
+
+# PA Cable Admin
+@admin.register(PACableSchedule)
+class PACableAdmin(admin.ModelAdmin):
+    """Admin for PA Cable Schedule"""
+    form = PACableInlineForm
+    list_display = [
+        'label_display', 'destination', 'count', 
+        'cable_display', 'count2', 'fan_out_display', 
+        'notes', 'drawing_ref'
+    ]
+    list_filter = ['label', 'cable', 'fan_out']
+    search_fields = ['destination', 'notes', 'drawing_ref']
+    list_editable = ['count', 'count2']  # Changed from 'quantity' and 'length_per_run'
+    
+    change_list_template = 'admin/planner/pacableschedule/change_list.html'
+    
+    fieldsets = (
+        ('Cable Configuration', {
+            'fields': ('label', 'destination', 'count', 'cable')
+        }),
+        ('Fan Out Configuration', {
+            'fields': ('count2', 'fan_out'),
+            'description': 'Additional hardware/splitters'
+        }),
+        ('Documentation', {
+            'fields': ('notes', 'drawing_ref')
+        })
+    )
+    
+    actions = ['export_cable_schedule', 'generate_pull_sheet']
+    
+    def label_display(self, obj):
+        return f"{obj.label.name}" if obj.label else "-"
+    label_display.short_description = 'Label'
+    label_display.admin_order_field = 'label'
+    
+    def cable_display(self, obj):
+        return obj.get_cable_display()
+    cable_display.short_description = 'Cable'
+    cable_display.admin_order_field = 'cable'
+    
+    def fan_out_display(self, obj):
+        return obj.get_fan_out_display() if obj.fan_out else "-"
+    fan_out_display.short_description = 'Fan Out'
+    fan_out_display.admin_order_field = 'fan_out'
+    
+    def changelist_view(self, request, extra_context=None):
+        """Add cable summary to the list view"""
+        response = super().changelist_view(request, extra_context=extra_context)
+        
+        try:
+            qs = response.context_data['cl'].queryset
+        except (AttributeError, KeyError):
+            return response
+        
+        # Calculate cable summaries including fan outs
+        from django.db.models import Sum
+        cable_summary = {}
+        fan_out_summary = {}
+        
+        for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
+            cables = qs.filter(cable=cable_type[0])
+            if cables.exists():
+                total_length = sum(c.total_cable_length for c in cables)
+                if total_length > 0:
+                    cable_summary[cable_type[1]] = {
+                        'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
+                        'total_length': total_length,
+                        'with_20_percent': total_length * 1.2,
+                        'hundreds': int(total_length * 1.2 / 100),
+                        'twenty_fives': int((total_length * 1.2 % 100) / 25),
+                        'remainder': (total_length * 1.2) % 25,
+                        'couplers': int(total_length * 1.2 / 100) - 1 if total_length > 100 else 0,
+                    }
+        
+        # Calculate fan out totals
+        for fan_out_type in PACableSchedule.FAN_OUT_CHOICES:
+            if fan_out_type[0]:  # Skip empty choice
+                fan_outs = qs.filter(fan_out=fan_out_type[0])
+                if fan_outs.exists():
+                    total_fan_outs = fan_outs.aggregate(Sum('count2'))['count2__sum'] or 0
+                    if total_fan_outs > 0:
+                        fan_out_summary[fan_out_type[1]] = total_fan_outs
+        
+        response.context_data['cable_summary'] = cable_summary
+        response.context_data['fan_out_summary'] = fan_out_summary
+        response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
+        response.context_data['grand_total_with_overage'] = sum(s['with_20_percent'] for s in cable_summary.values())
+        
+        return response
+    
+    def export_cable_schedule(self, request, queryset):
+        """Export cable schedule to CSV with full calculations"""
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="pa_cable_schedule.csv"'
+        
+        writer = csv.writer(response)
+        
+        # Write header
+        writer.writerow(['L\'ACOUSTICS PA CABLE SCHEDULE'])
+        writer.writerow([f'Generated: {timezone.now().strftime("%Y-%m-%d %H:%M")}'])
+        writer.writerow([])
+        
+        writer.writerow([
+            'Label', 'Destination', 'Count', 'Cable', 
+            'Count2', 'Fan Out', 'Notes', 'Drawing Ref'
+        ])
+        
+        # Group by cable type for summary
+        cable_totals = {}
+        fan_out_totals = {}
+        
+        # Write data rows
+        for cable in queryset.order_by('label__sort_order', 'cable'):
+            writer.writerow([
+                cable.label.name if cable.label else '',
+                cable.destination,
+                cable.count,
+                cable.get_cable_display(),
+                cable.count2 if cable.count2 else '',
+                cable.get_fan_out_display() if cable.fan_out else '',
+                cable.notes or '',
+                cable.drawing_ref or ''
+            ])
+            
+            # Track cable totals
+            cable_type_name = cable.get_cable_display()
+            if cable_type_name not in cable_totals:
+                cable_totals[cable_type_name] = {
+                    'quantity': 0,
+                    'total_length': 0
+                }
+            cable_totals[cable_type_name]['quantity'] += cable.count
+            cable_totals[cable_type_name]['total_length'] += cable.total_cable_length
+            
+            # Track fan out totals
+            if cable.fan_out and cable.count2:
+                fan_out_name = cable.get_fan_out_display()
+                if fan_out_name not in fan_out_totals:
+                    fan_out_totals[fan_out_name] = 0
+                fan_out_totals[fan_out_name] += cable.count2
+        
+        # Write cable summary
+        writer.writerow([])
+        writer.writerow(['CABLE SUMMARY WITH ORDERING CALCULATIONS'])
+        writer.writerow([
+            'Cable Type', 'Total Runs', 'Total Length (ft)', 
+            '20% Overage', 'Total w/Overage',
+            '100\' Lengths', '25\' Lengths', 'Remainder (ft)', 'Couplers Needed'
+        ])
+        
+        grand_total = 0
+        grand_total_with_overage = 0
+        
+        for cable_type, totals in cable_totals.items():
+            total = totals['total_length']
+            overage = total * 0.2
+            total_with_overage = total * 1.2
+            
+            hundreds = int(total_with_overage / 100)
+            twenty_fives = int((total_with_overage % 100) / 25)
+            remainder = total_with_overage % 25
+            couplers = hundreds - 1 if hundreds > 1 else 0
+            
+            writer.writerow([
+                cable_type,
+                totals['quantity'],
+                f"{total:.1f}",
+                f"{overage:.1f}",
+                f"{total_with_overage:.1f}",
+                hundreds,
+                twenty_fives,
+                f"{remainder:.1f}",
+                couplers
+            ])
+            
+            grand_total += total
+            grand_total_with_overage += total_with_overage
+        
+        # Grand totals
+        writer.writerow([])
+        writer.writerow([
+            'GRAND TOTAL',
+            sum(t['quantity'] for t in cable_totals.values()),
+            f"{grand_total:.1f}",
+            f"{grand_total * 0.2:.1f}",
+            f"{grand_total_with_overage:.1f}",
+            '', '', '', ''
+        ])
+        
+        # Fan Out Summary
+        if fan_out_totals:
+            writer.writerow([])
+            writer.writerow(['FAN OUT SUMMARY'])
+            writer.writerow(['Type', 'Quantity'])
+            for fan_out_type, quantity in fan_out_totals.items():
+                writer.writerow([fan_out_type, quantity])
+        
+        return response
+    
+    export_cable_schedule.short_description = "Export Cable Schedule to CSV"
+    
+    def generate_pull_sheet(self, request, queryset):
+        """Generate cable pull sheet grouped by zone"""
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="cable_pull_sheet.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow(['L\'ACOUSTICS PA CABLE PULL SHEET'])
+        writer.writerow([f'Generated: {timezone.now().strftime("%Y-%m-%d %H:%M")}'])
+        writer.writerow([])
+        
+        # Group by zone
+        from itertools import groupby
+        
+        sorted_cables = sorted(queryset, key=lambda x: (x.label.sort_order if x.label else 999, x.label.name if x.label else ''))
+        
+        for label, cables in groupby(sorted_cables, key=lambda x: x.label):
+            if label:
+                cables_list = list(cables)
+                
+                writer.writerow([f'ZONE: {label.name} - {label.description}'])
+                writer.writerow(['Destination', 'Cable Type', 'Count', 'Fan Out', 'Count2', 'Notes'])
+                
+                zone_total = 0
+                for cable in cables_list:
+                    writer.writerow([
+                        cable.destination,
+                        cable.get_cable_display(),
+                        cable.count,
+                        cable.get_fan_out_display() if cable.fan_out else '',
+                        cable.count2 if cable.count2 else '',
+                        cable.notes or ''
+                    ])
+                    zone_total += cable.total_cable_length
+                
+                writer.writerow(['', '', f'Zone Total: {zone_total:.1f} ft', '', '', ''])
+                writer.writerow([])
+        
+        return response
+    
+    generate_pull_sheet.short_description = "Generate Cable Pull Sheet"
+    
+    class Media:
+        css = {
+            'all': ('planner/css/pa_cable_admin.css',)
+        }
+        js = ('planner/js/pa_cable_calculations.js',)
 

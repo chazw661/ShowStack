@@ -1,0 +1,167 @@
+/* staticfiles/planner/css/pa_cable_admin.css */
+
+/* Spreadsheet-like styling for PA Cable inline */
+.dynamic-pacableschedule_set .tabular td {
+    padding: 5px;
+    vertical-align: middle;
+}
+
+/* Compact dropdowns */
+.dynamic-pacableschedule_set select {
+    width: 140px !important;
+    font-size: 12px;
+}
+
+/* Number input fields */
+.dynamic-pacableschedule_set input[type="number"] {
+    width: 80px !important;
+    text-align: center;
+    font-size: 12px;
+}
+
+/* Text input fields */
+.dynamic-pacableschedule_set input[type="text"] {
+    font-size: 12px;
+}
+
+/* Calculated fields styling */
+.calculated-field {
+    background-color: #f5f5f5 !important;
+    font-weight: 500;
+    border: 1px solid #ddd !important;
+}
+
+.total-length {
+    background-color: #e8f4f8 !important;
+    font-weight: bold !important;
+    color: #0066cc;
+}
+
+/* Zone column highlighting */
+td.field-zone select {
+    background-color: #fff9e6;
+    font-weight: 500;
+}
+
+/* Cable type column */
+td.field-cable_type select {
+    background-color: #f0f8ff;
+}
+
+/* Highlight row on hover */
+.dynamic-pacableschedule_set tr:hover {
+    background-color: #f9f9f9;
+}
+
+/* Header styling */
+.dynamic-pacableschedule_set th {
+    background-color: #417690;
+    color: white;
+    font-size: 11px;
+    padding: 8px 5px;
+    white-space: nowrap;
+}
+
+/* Summary table styling */
+#cable-summary {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#cable-summary h3 {
+    margin-top: 0;
+    color: #417690;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+
+.cable-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.cable-summary-table th,
+.cable-summary-table td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.cable-summary-table th {
+    background-color: #417690;
+    color: white;
+    font-weight: bold;
+}
+
+.cable-summary-table tr.total-row {
+    background-color: #e8f4f8;
+    font-weight: bold;
+}
+
+.cable-summary-table tr.total-row td {
+    border-top: 2px solid #417690;
+}
+
+/* Service loop field - smaller width */
+td.field-service_loop input {
+    width: 60px !important;
+}
+
+/* From/To location fields */
+td.field-from_location input,
+td.field-to_location input {
+    width: 120px !important;
+}
+
+/* Drawing reference field */
+td.field-drawing_ref input {
+    width: 100px !important;
+}
+
+/* Notes field */
+td.field-notes input {
+    width: 200px !important;
+}
+
+/* Add visual separator between cable types */
+.dynamic-pacableschedule_set tbody tr {
+    border-left: 3px solid transparent;
+}
+
+.dynamic-pacableschedule_set tbody tr:nth-child(odd) {
+    background-color: #fafafa;
+}
+
+/* Delete checkbox styling */
+.delete input[type="checkbox"] {
+    margin-top: 5px;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 1400px) {
+    .dynamic-pacableschedule_set select {
+        width: 120px !important;
+    }
+    
+    .dynamic-pacableschedule_set input[type="text"] {
+        width: 100px !important;
+    }
+}
+
+/* Print styles */
+@media print {
+    #cable-summary {
+        page-break-before: always;
+    }
+    
+    .calculated-field,
+    .total-length {
+        background-color: white !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}

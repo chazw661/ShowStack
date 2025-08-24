@@ -577,6 +577,293 @@ class GalaxyOutput(models.Model):
         return f"{self.get_output_type_display()} {self.channel_number}"
             
 
+#-----------PA Cable-------
+
+     # Add these to your models.py file
+
+# Add these models to your models.py file
+
+class PAZone(models.Model):
+    """User-defined PA zones"""
+    name = models.CharField(
+        max_length=20, 
+        unique=True,
+        help_text="Short zone code (e.g., HL, HR, FF1)"
+    )
+    description = models.CharField(
+        max_length=100,
+        help_text="Full description (e.g., House Left, Front Fill 1)"
+    )
+    location = models.ForeignKey(
+        Location, 
+        on_delete=models.CASCADE, 
+        related_name='pa_zones',
+        blank=True,
+        null=True
+    )
+    sort_order = models.PositiveIntegerField(
+        default=100,
+        help_text="Order in dropdown (lower numbers appear first)"
+    )
+    
+    # Default zone types for reference
+    ZONE_TYPE_CHOICES = [
+        ('MAIN', 'Main Array'),
+        ('SUB', 'Subwoofer'),
+        ('FILL', 'Fill'),
+        ('DELAY', 'Delay'),
+        ('MONITOR', 'Monitor'),
+        ('CUSTOM', 'Custom'),
+    ]
+    zone_type = models.CharField(
+        max_length=20,
+        choices=ZONE_TYPE_CHOICES,
+        default='CUSTOM',
+        help_text="Category of zone"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = "PA Zone"
+        verbose_name_plural = "PA Zones"
+    
+    def __str__(self):
+        return f"{self.name} - {self.description}"
+    
+    @classmethod
+    def create_default_zones(cls):
+        """Create standard L'Acoustics zones - can be called from migration or admin"""
+        default_zones = [
+            ('HL', 'House Left', 'MAIN', 10),
+            ('HR', 'House Right', 'MAIN', 20),
+            ('HC', 'House Center', 'MAIN', 30),
+            ('SL', 'Sub Left', 'SUB', 40),
+            ('SR', 'Sub Right', 'SUB', 50),
+            ('SC', 'Sub Center', 'SUB', 60),
+            ('FF', 'Front Fill', 'FILL', 70),
+            ('FF1', 'Front Fill 1', 'FILL', 71),
+            ('FF2', 'Front Fill 2', 'FILL', 72),
+            ('OFL', 'Out Fill Left', 'FILL', 80),
+            ('OFR', 'Out Fill Right', 'FILL', 90),
+            ('D1', 'Delay 1', 'DELAY', 100),
+            ('D2', 'Delay 2', 'DELAY', 110),
+            ('D3', 'Delay 3', 'DELAY', 120),
+            ('LF', 'Lip Fill', 'FILL', 130),
+            ('UB', 'Under Balcony', 'FILL', 140),
+            ('BAL', 'Balcony', 'FILL', 150),
+        ]
+        
+        for name, desc, zone_type, order in default_zones:
+            cls.objects.get_or_create(
+                name=name,
+                defaults={
+                    'description': desc,
+                    'zone_type': zone_type,
+                    'sort_order': order
+                }
+            )
 
 
-           
+class PACableSchedule(models.Model):
+    """Simple PA Cable Schedule for L'Acoustics systems"""
+    
+    # Standard L'Acoustics cable types - matching spreadsheet with 150' added
+    CABLE_TYPE_CHOICES = [
+        ('NL4_JUMPER', 'NL4 Jumper'),
+        ('150_NL4', "150' NL4"),
+        ('100_NL4', "100' NL4"),
+        ('75_NL4', "75' NL4"),
+        ('50_NL4', "50' NL4"),
+        ('25_NL4', "25' NL4"),
+        ('15_NL4', "15' NL4"),
+        ('10_NL4', "10' NL4"),
+        ('5_NL4', "5' NL4"),
+        ('150_NL8', "150' NL8"),
+        ('100_NL8', "100' NL8"),
+        ('50_NL8', "50' NL8"),
+        ('25_NL8', "25' NL8"),
+        ('CA-COM', 'CA-COM'),
+        ('AES_XLR', 'AES/EBU XLR'),
+        ('L14-30', 'L14-30 Power'),
+    ]
+    
+    # Fan Out options
+    FAN_OUT_CHOICES = [
+        ('', 'None'),
+        ('NL4_Y', 'NL4 Y'),
+        ('NL4_COUPLER', 'NL4 Coupler'),
+        ('NL4_THRU', 'NL4 Thru'),
+        ('NL8_Y', 'NL8 Y'),
+        ('NL8_COUPLER', 'NL8 Coupler'),
+        ('NL4_TO_NL8', 'NL4 to NL8'),
+        ('NL8_TO_NL4', 'NL8 to NL4'),
+        ('CACOM_SPLIT', 'CA-COM Split'),
+    ]
+    
+    # Fields matching spreadsheet columns
+    label = models.ForeignKey(
+        PAZone,
+        on_delete=models.PROTECT,
+        verbose_name="Label",
+        help_text="Zone label",
+        related_name='cables',
+        null=True,  # Add this temporarily
+        blank=True,  # Add this temporarily
+    )
+    
+    destination = models.CharField(
+        max_length=50,
+        verbose_name="Destination",
+        help_text="e.g., 'KIVA - 1', 'K2 - Top'",
+        null=True,  # Add this temporarily
+        default="",  # Add this
+        
+    )
+    
+    count = models.PositiveIntegerField(
+        default=1, 
+        verbose_name="Count",
+        help_text="Number of cable runs"
+    )
+    
+    cable = models.CharField(
+        max_length=20, 
+        choices=CABLE_TYPE_CHOICES,
+        verbose_name="Cable",
+        default='100_NL4',
+    )
+    
+    # Second count field (for when using fan outs)
+    count2 = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Count 2",
+        help_text="Additional count (for fan outs)",
+        blank=True,
+    )
+    
+    fan_out = models.CharField(
+        max_length=20,
+        choices=FAN_OUT_CHOICES,
+        blank=True,
+        default='',
+        verbose_name="Fan Out"
+    )
+    
+    notes = models.CharField(
+        max_length=200, 
+        blank=True, 
+        null=True,
+        verbose_name="Notes",
+        help_text="e.g., 'Clr. 1 Top 2'"
+    )
+    
+    drawing_ref = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        verbose_name="Drawing Ref",
+        help_text="VWX drawing dimension reference"
+    )
+    
+    # Hidden compatibility fields (can be removed later)
+    zone = models.CharField(max_length=20, blank=True, null=True, editable=False)
+    cable_type = models.CharField(max_length=20, blank=True, null=True, editable=False)
+    quantity = models.PositiveIntegerField(default=1, editable=False)
+    length_per_run = models.DecimalField(max_digits=6, decimal_places=1, default=0, editable=False)
+    service_loop = models.DecimalField(max_digits=4, decimal_places=1, default=10.0, editable=False)
+    from_location = models.CharField(max_length=50, default="AMP RACK", editable=False)
+    to_location = models.CharField(max_length=50, blank=True, editable=False)
+    amp_location = models.ForeignKey(Location, on_delete=models.SET_NULL, blank=True, null=True, editable=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['label__sort_order', 'label__name', 'cable']
+        verbose_name = "PA Cable Entry"
+        verbose_name_plural = "PA Cable Entries"
+    
+    def save(self, *args, **kwargs):
+        # Auto-populate hidden fields for compatibility
+        if self.label:
+            self.zone = self.label.name
+        self.cable_type = self.cable
+        self.quantity = self.count
+        self.to_location = self.destination
+        
+        # Extract length from cable choice if it's a standard length
+        if self.cable:
+            if '150_' in self.cable:
+                self.length_per_run = 150
+            elif '100_' in self.cable:
+                self.length_per_run = 100
+            elif '75_' in self.cable:
+                self.length_per_run = 75
+            elif '50_' in self.cable:
+                self.length_per_run = 50
+            elif '25_' in self.cable:
+                self.length_per_run = 25
+            elif '15_' in self.cable:
+                self.length_per_run = 15
+            elif '10_' in self.cable:
+                self.length_per_run = 10
+            elif '5_' in self.cable:
+                self.length_per_run = 5
+            elif 'JUMPER' in self.cable:
+                self.length_per_run = 3  # Standard jumper length
+            else:
+                self.length_per_run = 0
+        
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        label_str = self.label.name if self.label else "No Zone"
+        fan_out_str = f" + {self.get_fan_out_display()}" if self.fan_out else ""
+        return f"{label_str} - {self.destination} - {self.get_cable_display()}{fan_out_str}"
+    
+    @property
+    def total_length_per_run(self):
+        """Length including service loop"""
+        return float(self.length_per_run) + float(self.service_loop)
+    
+    @property
+    def total_cable_length(self):
+        """Total cable needed for all runs"""
+        total = self.total_length_per_run * self.quantity
+        # Add additional length if using fan outs
+        if self.fan_out and self.count2:
+            total += self.count2 * 3  # Assume 3ft for fan out cables
+        return total
+    
+    @property
+    def total_fan_out_count(self):
+        """Total number of fan out items needed"""
+        if self.fan_out and self.count2:
+            return self.count2
+        return 0
+    
+    @property
+    def cable_weight_estimate(self):
+        """Rough weight estimate based on cable type (lbs)"""
+        weight_per_foot = {
+            'NL4_JUMPER': 0.15,
+            '150_NL4': 0.22,
+            '100_NL4': 0.22,
+            '75_NL4': 0.22,
+            '50_NL4': 0.22,
+            '25_NL4': 0.22,
+            '15_NL4': 0.22,
+            '10_NL4': 0.22,
+            '5_NL4': 0.22,
+            '150_NL8': 0.38,
+            '100_NL8': 0.38,
+            '50_NL8': 0.38,
+            '25_NL8': 0.38,
+            'CA-COM': 0.45,
+            'AES_XLR': 0.05,
+            'L14-30': 0.75,
+        }
+        return self.total_cable_length * weight_per_foot.get(self.cable, 0.2)      

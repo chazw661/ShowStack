@@ -1,0 +1,78 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block result_list %}
+{{ block.super }}
+
+{% if cable_summary %}
+<div style="margin-top: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+    <h2 style="color: #417690; margin-top: 0;">Cable Summary with Ordering Calculations</h2>
+    
+    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+        <thead>
+            <tr style="background: #417690; color: white;">
+                <th style="padding: 8px; text-align: left; border: 1px solid #356683;">Cable Type</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Total Runs</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Total Length (ft)</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">20% Overage</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Total w/Overage</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">100' Lengths</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">25' Lengths</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Remainder (ft)</th>
+                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Couplers</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cable_type, data in cable_summary.items %}
+            <tr style="background: white;">
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">{{ cable_type }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.total_runs }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.total_length|floatformat:1 }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.total_length|floatformat:1 }} × 20%</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; font-weight: bold; color: #0066cc;">{{ data.with_20_percent|floatformat:1 }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; background: #ffffcc;">{{ data.hundreds }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; background: #ffffcc;">{{ data.twenty_fives }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.remainder|floatformat:1 }}</td>
+                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; background: #ffeeee;">{{ data.couplers }}</td>
+            </tr>
+            {% endfor %}
+            
+            <!-- Grand Total Row -->
+            <tr style="background: #e8f4f8; font-weight: bold;">
+                <td style="padding: 8px; border: 2px solid #417690;">GRAND TOTAL</td>
+                <td style="padding: 8px; text-align: center; border: 2px solid #417690;">-</td>
+                <td style="padding: 8px; text-align: center; border: 2px solid #417690;">{{ grand_total|floatformat:1 }}</td>
+                <td style="padding: 8px; text-align: center; border: 2px solid #417690;">-</td>
+                <td style="padding: 8px; text-align: center; border: 2px solid #417690; color: #0066cc;">{{ grand_total_with_overage|floatformat:1 }}</td>
+                <td colspan="4" style="padding: 8px; border: 2px solid #417690;"></td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <!-- Ordering Summary Box -->
+    <div style="margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #417690;">
+        <h3 style="color: #417690; margin-top: 0;">Quick Order List</h3>
+        {% for cable_type, data in cable_summary.items %}
+        <div style="margin-bottom: 10px;">
+            <strong>{{ cable_type }}:</strong>
+            <ul style="margin: 5px 0;">
+                {% if data.hundreds > 0 %}
+                <li>Order {{ data.hundreds }} × 100' lengths</li>
+                {% endif %}
+                {% if data.twenty_fives > 0 %}
+                <li>Order {{ data.twenty_fives }} × 25' lengths</li>
+                {% endif %}
+                {% if data.couplers > 0 %}
+                <li>Order {{ data.couplers }} couplers</li>
+                {% endif %}
+                {% if data.dofill > 0 %}
+                <li>DOFill count: {{ data.dofill }}</li>
+                {% endif %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
