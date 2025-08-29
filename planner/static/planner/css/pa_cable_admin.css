@@ -1,0 +1,98 @@
+/* PA Cable Admin - Match Django Dark Theme */
+
+/* Main data table - dark theme */
+#result_list tbody tr {
+    background: #1e1e1e !important;
+}
+
+#result_list tbody td {
+    color: #f0f0f0 !important;
+    background: transparent !important;
+    border-color: #333 !important;
+}
+
+#result_list tbody tr:hover {
+    background: #2a2a2a !important;
+}
+
+/* Table headers */
+#result_list thead th {
+    background: #417690 !important;
+    color: white !important;
+}
+
+/* FIX: Summary table container - force dark background */
+.pa-cable-summary,
+div[style*="background-color: #f9f9f9"],
+div[style*="background"] {
+    background: #2a2a2a !important;
+    border: 1px solid #417690 !important;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+/* FIX: Summary table itself - dark background */
+.pa-cable-summary table,
+table[style*="border-collapse"] {
+    background: #1e1e1e !important;
+}
+
+/* FIX: All cells in summary table - light text on dark */
+.pa-cable-summary table td,
+.pa-cable-summary table th,
+table[style*="border-collapse"] td,
+table[style*="border-collapse"] th,
+div[style*="background"] td,
+div[style*="background"] th {
+    color: #f0f0f0 !important;
+    background: #1e1e1e !important;
+    border-color: #333 !important;
+}
+
+/* Summary table headers specifically */
+.pa-cable-summary thead th,
+table th {
+    background: #417690 !important;
+    color: white !important;
+    padding: 8px;
+}
+
+/* Quick Order List box */
+.quick-order-list {
+    background: #2a2a2a !important;
+    color: #f0f0f0 !important;
+    padding: 15px;
+    border: 1px solid #417690 !important;
+}
+
+.quick-order-list * {
+    color: #f0f0f0 !important;
+}
+
+/* Highlighted calculation cells - make them stand out in dark theme */
+td[style*="background-color: yellow"],
+td[style*="background-color: #ffff99"],
+td[style*="background: yellow"],
+td[style*="background: #ffff99"] {
+    background: #4a4a00 !important;
+    color: #ffff99 !important;
+}
+
+/* Input fields in the table */
+#result_list input[type="text"],
+#result_list input[type="number"] {
+    background: #333 !important;
+    color: #f0f0f0 !important;
+    border: 1px solid #555 !important;
+}
+
+/* Alternating row colors for better readability */
+#result_list tbody tr:nth-child(even) {
+    background: #252525 !important;
+}
+
+/* Grand Total row */
+tr:has(td:contains("GRAND TOTAL")) {
+    background: #333 !important;
+    font-weight: bold;
+}
