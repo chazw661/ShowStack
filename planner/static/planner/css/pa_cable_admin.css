@@ -50,8 +50,9 @@ div[style*="background"] th {
 }
 
 /* Summary table headers specifically */
+
 .pa-cable-summary thead th,
-table th {
+.cable-summary-section table th {  /* <-- PROPERLY SCOPED */
     background: #417690 !important;
     color: white !important;
     padding: 8px;
@@ -96,3 +97,6 @@ tr:has(td:contains("GRAND TOTAL")) {
     background: #333 !important;
     font-weight: bold;
 }
+
+
+

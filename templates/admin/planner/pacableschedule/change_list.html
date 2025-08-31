@@ -5,57 +5,155 @@
 {{ block.super }}
 
 {% if cable_summary %}
-<div style="margin-top: 20px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-    <h2 style="color: #417690; margin-top: 0;">Cable Summary with Ordering Calculations</h2>
+<!-- Add scoped styles that only affect cable summary tables -->
+<style>
+/* Scope all styles to cable-summary-section only */
+.cable-summary-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: #2a2a2a;  /* Dark background for container */
+    border: 1px solid #417690;
+    border-radius: 4px;
+}
+
+.cable-summary-section h2 {
+    color: #f0f0f0;
+    margin-top: 0;
+}
+
+.cable-summary-section table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    background: #1e1e1e;
+}
+
+.cable-summary-section thead tr {
+    background: #417690 !important;
+}
+
+.cable-summary-section thead th {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #356683;
+    color: white !important;
+    background: transparent;
+}
+
+.cable-summary-section thead th:first-child {
+    text-align: left;
+}
+
+.cable-summary-section tbody tr {
+    background: #1e1e1e;
+}
+
+.cable-summary-section tbody td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #333;
+    color: #f0f0f0;
+}
+
+.cable-summary-section tbody td:first-child {
+    text-align: left;
+    font-weight: bold;
+}
+
+.cable-summary-section .total-with-overage {
+    font-weight: bold;
+    color: #4a9eff !important;
+}
+
+.cable-summary-section .order-cells,
+.cable-summary-section .coupler-cells {
+    background: #4a4a00 !important;
+    color: #ffff99 !important;
+}
+
+.cable-summary-section .grand-total-row {
+    background: #333 !important;
+    font-weight: bold;
+}
+
+.cable-summary-section .grand-total-row td {
+    border: 2px solid #417690;
+}
+
+.cable-summary-section .quick-order-box {
+    margin-top: 20px;
+    padding: 10px;
+    background: #2a2a2a;
+    border: 1px solid #417690;
+    color: #f0f0f0;
+}
+
+.cable-summary-section .quick-order-box h3 {
+    color: #f0f0f0;
+    margin-top: 0;
+}
+
+.cable-summary-section .quick-order-box strong {
+    color: #4a9eff;
+}
+
+.cable-summary-section .quick-order-box ul {
+    margin: 5px 0;
+    color: #f0f0f0;
+}
+</style>
+
+<div class="cable-summary-section">
+    <h2>Cable Summary with Ordering Calculations</h2>
     
-    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+    <table>
         <thead>
-            <tr style="background: #417690; color: white;">
-                <th style="padding: 8px; text-align: left; border: 1px solid #356683;">Cable Type</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Total Runs</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Total Length (ft)</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">20% Overage</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Total w/Overage</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">100' Lengths</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">25' Lengths</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Remainder (ft)</th>
-                <th style="padding: 8px; text-align: center; border: 1px solid #356683;">Couplers</th>
+            <tr>
+                <th>Cable Type</th>
+                <th>Total Runs</th>
+                <th>Total Length (ft)</th>
+                <th>20% Overage</th>
+                <th>Total w/Overage</th>
+                <th>100' Lengths</th>
+                <th>25' Lengths</th>
+                <th>Remainder (ft)</th>
+                <th>Couplers</th>
             </tr>
         </thead>
         <tbody>
             {% for cable_type, data in cable_summary.items %}
-            <tr style="background: white;">
-                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">{{ cable_type }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.total_runs }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.total_length|floatformat:1 }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.total_length|floatformat:1 }} × 20%</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; font-weight: bold; color: #0066cc;">{{ data.with_20_percent|floatformat:1 }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; background: #ffffcc;">{{ data.hundreds }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; background: #ffffcc;">{{ data.twenty_fives }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">{{ data.remainder|floatformat:1 }}</td>
-                <td style="padding: 8px; text-align: center; border: 1px solid #ddd; background: #ffeeee;">{{ data.couplers }}</td>
+            <tr>
+                <td>{{ cable_type }}</td>
+                <td>{{ data.total_runs }}</td>
+                <td>{{ data.total_length|floatformat:1 }}</td>
+                <td>{{ data.total_length|floatformat:1 }} × 20%</td>
+                <td class="total-with-overage">{{ data.with_20_percent|floatformat:1 }}</td>
+                <td class="order-cells">{{ data.hundreds }}</td>
+                <td class="order-cells">{{ data.twenty_fives }}</td>
+                <td>{{ data.remainder|floatformat:1 }}</td>
+                <td class="coupler-cells">{{ data.couplers }}</td>
             </tr>
             {% endfor %}
             
             <!-- Grand Total Row -->
-            <tr style="background: #e8f4f8; font-weight: bold;">
-                <td style="padding: 8px; border: 2px solid #417690;">GRAND TOTAL</td>
-                <td style="padding: 8px; text-align: center; border: 2px solid #417690;">-</td>
-                <td style="padding: 8px; text-align: center; border: 2px solid #417690;">{{ grand_total|floatformat:1 }}</td>
-                <td style="padding: 8px; text-align: center; border: 2px solid #417690;">-</td>
-                <td style="padding: 8px; text-align: center; border: 2px solid #417690; color: #0066cc;">{{ grand_total_with_overage|floatformat:1 }}</td>
-                <td colspan="4" style="padding: 8px; border: 2px solid #417690;"></td>
+            <tr class="grand-total-row">
+                <td>GRAND TOTAL</td>
+                <td>-</td>
+                <td>{{ grand_total|floatformat:1 }}</td>
+                <td>-</td>
+                <td class="total-with-overage">{{ grand_total_with_overage|floatformat:1 }}</td>
+                <td colspan="4"></td>
             </tr>
         </tbody>
     </table>
     
     <!-- Ordering Summary Box -->
-    <div style="margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #417690;">
-        <h3 style="color: #417690; margin-top: 0;">Quick Order List</h3>
+    <div class="quick-order-box">
+        <h3>Quick Order List</h3>
         {% for cable_type, data in cable_summary.items %}
         <div style="margin-bottom: 10px;">
             <strong>{{ cable_type }}:</strong>
-            <ul style="margin: 5px 0;">
+            <ul>
                 {% if data.hundreds > 0 %}
                 <li>Order {{ data.hundreds }} × 100' lengths</li>
                 {% endif %}
