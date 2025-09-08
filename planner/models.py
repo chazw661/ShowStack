@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
@@ -736,21 +737,6 @@ class PACableSchedule(models.Model):
         default='100_NL4',
     )
     
-    # Second count field (for when using fan outs)
-    count2 = models.PositiveIntegerField(
-        default=0,
-        verbose_name="Count 2",
-        help_text="Additional count (for fan outs)",
-        blank=True,
-    )
-    
-    fan_out = models.CharField(
-        max_length=20,
-        choices=FAN_OUT_CHOICES,
-        blank=True,
-        default='',
-        verbose_name="Fan Out"
-    )
     
     notes = models.CharField(
         max_length=200, 
@@ -821,9 +807,8 @@ class PACableSchedule(models.Model):
     
     def __str__(self):
         label_str = self.label.name if self.label else "No Zone"
-        fan_out_str = f" + {self.get_fan_out_display()}" if self.fan_out else ""
-        return f"{label_str} - {self.destination} - {self.get_cable_display()}{fan_out_str}"
-    
+        return f"{label_str} - {self.destination} - {self.get_cable_display()}"
+        
     @property
     def total_length_per_run(self):
         """Length including service loop"""
@@ -832,18 +817,24 @@ class PACableSchedule(models.Model):
     @property
     def total_cable_length(self):
         """Total cable needed for all runs"""
-        total = self.total_length_per_run * self.quantity
-        # Add additional length if using fan outs
-        if self.fan_out and self.count2:
-            total += self.count2 * 3  # Assume 3ft for fan out cables
-        return total
-    
+        return self.total_length_per_run * self.quantity
+        
     @property
     def total_fan_out_count(self):
         """Total number of fan out items needed"""
-        if self.fan_out and self.count2:
-            return self.count2
-        return 0
+        total = 0
+        for fan_out in self.fan_outs.all():
+            total += fan_out.quantity
+        return total
+    
+    @property
+    def fan_out_summary(self):
+        """Get a summary of all fan outs for display"""
+        fan_outs = self.fan_outs.all()
+        if not fan_outs:
+            return ""
+        return ", ".join([f"{fo.get_fan_out_type_display()} x{fo.quantity}" 
+                        for fo in fan_outs])
     
     @property
     def cable_weight_estimate(self):
@@ -866,4 +857,28 @@ class PACableSchedule(models.Model):
             'AES_XLR': 0.05,
             'L14-30': 0.75,
         }
-        return self.total_cable_length * weight_per_foot.get(self.cable, 0.2)      
+        return self.total_cable_length * weight_per_foot.get(self.cable, 0.2)   
+
+
+class PAFanOut(models.Model):
+            """Individual fan out entry for a cable run"""
+            cable_schedule = models.ForeignKey(
+                'PACableSchedule',
+                on_delete=models.CASCADE,
+                related_name='fan_outs'
+            )
+            fan_out_type = models.CharField(
+                max_length=20,
+                choices=PACableSchedule.FAN_OUT_CHOICES,  # Reuse existing choices
+                blank=True
+            )
+            quantity = models.IntegerField(
+                default=1,
+                validators=[MinValueValidator(1)]
+            )
+            
+            class Meta:
+                ordering = ['id']
+            
+            def __str__(self):
+                return f"{self.get_fan_out_type_display()} x{self.quantity}"

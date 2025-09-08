@@ -1046,7 +1046,7 @@ class GalaxyProcessorAdmin(admin.ModelAdmin):
 
 # Add these to your admin.py file
 
-from .models import PACableSchedule, PAZone
+from .models import PACableSchedule, PAZone, PAFanOut
 from .forms import PACableInlineForm, PAZoneForm
 
 class PACableInline(admin.TabularInline):
@@ -1064,6 +1064,24 @@ class PACableInline(admin.TabularInline):
             'all': ('planner/css/pa_cable_admin.css',)
         }
         js = ('planner/js/pa_cable_calculations.js',)
+
+class PAFanOutInline(admin.TabularInline):
+        """Inline for managing multiple fan outs per cable run"""
+        model = PAFanOut
+        extra = 1
+        fields = ['fan_out_type', 'quantity']
+        
+        def get_formset(self, request, obj=None, **kwargs):
+            formset = super().get_formset(request, obj, **kwargs)
+            formset.form.base_fields['fan_out_type'].widget.attrs.update({
+                'style': 'width: 150px;'
+            })
+            formset.form.base_fields['quantity'].widget.attrs.update({
+                'style': 'width: 80px;',
+                'class': 'fan-out-quantity'
+            })
+            return formset
+
 
 
 
@@ -1087,18 +1105,37 @@ class PAZoneAdmin(admin.ModelAdmin):
 
 
 # PA Cable Admin
+
+class PAFanOutInline(admin.TabularInline):
+    """Inline for managing multiple fan outs per cable run"""
+    model = PAFanOut
+    extra = 1
+    fields = ['fan_out_type', 'quantity']
+    
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['fan_out_type'].widget.attrs.update({
+            'style': 'width: 150px;'
+        })
+        formset.form.base_fields['quantity'].widget.attrs.update({
+            'style': 'width: 80px;',
+            'class': 'fan-out-quantity'
+        })
+        return formset
+
 @admin.register(PACableSchedule)
 class PACableAdmin(admin.ModelAdmin):
     """Admin for PA Cable Schedule"""
     form = PACableInlineForm
+    inlines = [PAFanOutInline]  # Add this line
     list_display = [
-        'label_display', 'destination', 'count', 
-        'cable_display', 'count2', 'fan_out_display', 
-        'notes', 'drawing_ref'
-    ]
-    list_filter = ['label', 'cable', 'fan_out']
+    'label_display', 'destination', 'count',
+    'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
+    'notes', 'drawing_ref'
+]
+    list_filter = ['label', 'cable']
     search_fields = ['destination', 'notes', 'drawing_ref']
-    list_editable = ['count', 'count2']  # Changed from 'quantity' and 'length_per_run'
+    list_editable = ['count']  # Changed from 'quantity' and 'length_per_run'
     
     change_list_template = 'admin/planner/pacableschedule/change_list.html'
     
@@ -1106,10 +1143,8 @@ class PACableAdmin(admin.ModelAdmin):
         ('Cable Configuration', {
             'fields': ('label', 'destination', 'count', 'cable')
         }),
-        ('Fan Out Configuration', {
-            'fields': ('count2', 'fan_out'),
-            'description': 'Additional hardware/splitters'
-        }),
+      
+        
         ('Documentation', {
             'fields': ('notes', 'drawing_ref')
         })
@@ -1127,10 +1162,10 @@ class PACableAdmin(admin.ModelAdmin):
     cable_display.short_description = 'Cable'
     cable_display.admin_order_field = 'cable'
     
-    def fan_out_display(self, obj):
-        return obj.get_fan_out_display() if obj.fan_out else "-"
-    fan_out_display.short_description = 'Fan Out'
-    fan_out_display.admin_order_field = 'fan_out'
+    def fan_out_summary_display(self, obj):
+        """Display summary of all fan outs"""
+        return obj.fan_out_summary or "-"
+        fan_out_summary_display.short_description = 'Fan Outs'
     
     def changelist_view(self, request, extra_context=None):
         """Add cable summary to the list view"""
@@ -1145,6 +1180,15 @@ class PACableAdmin(admin.ModelAdmin):
         from django.db.models import Sum
         cable_summary = {}
         fan_out_summary = {}
+        for cable in qs.prefetch_related('fan_outs'):
+          for fan_out in cable.fan_outs.all():
+            if fan_out.fan_out_type:
+                fan_out_name = fan_out.get_fan_out_type_display()
+                if fan_out_name not in fan_out_summary:
+                    fan_out_summary[fan_out_name] = 0
+                fan_out_summary[fan_out_name] += fan_out.quantity
+    
+        response.context_data['fan_out_summary'] = fan_out_summary
         
         for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
             cables = qs.filter(cable=cable_type[0])
@@ -1161,14 +1205,15 @@ class PACableAdmin(admin.ModelAdmin):
                         'couplers': int(total_length * 1.2 / 100) - 1 if total_length > 100 else 0,
                     }
         
-        # Calculate fan out totals
-        for fan_out_type in PACableSchedule.FAN_OUT_CHOICES:
-            if fan_out_type[0]:  # Skip empty choice
-                fan_outs = qs.filter(fan_out=fan_out_type[0])
-                if fan_outs.exists():
-                    total_fan_outs = fan_outs.aggregate(Sum('count2'))['count2__sum'] or 0
-                    if total_fan_outs > 0:
-                        fan_out_summary[fan_out_type[1]] = total_fan_outs
+       # Calculate fan out totals across all cable runs
+        fan_out_summary = {}
+        for cable in qs.prefetch_related('fan_outs'):
+            for fan_out in cable.fan_outs.all():
+                if fan_out.fan_out_type:
+                    fan_out_name = fan_out.get_fan_out_type_display()
+                    if fan_out_name not in fan_out_summary:
+                        fan_out_summary[fan_out_name] = 0
+                    fan_out_summary[fan_out_name] += fan_out.quantity
         
         response.context_data['cable_summary'] = cable_summary
         response.context_data['fan_out_summary'] = fan_out_summary
@@ -1198,15 +1243,24 @@ class PACableAdmin(admin.ModelAdmin):
         cable_totals = {}
         fan_out_totals = {}
         
+        
         # Write data rows
-        for cable in queryset.order_by('label__sort_order', 'cable'):
+        for cable in queryset.prefetch_related('fan_outs').order_by('label__sort_order', 'cable'):
+            # Build fan out summary string for this cable
+            fan_out_display = ''
+            if cable.fan_outs.exists():
+                fan_out_items = []
+                for fan_out in cable.fan_outs.all():
+                    if fan_out.fan_out_type:
+                        fan_out_items.append(f'{fan_out.get_fan_out_type_display()} x{fan_out.quantity}')
+                fan_out_display = ', '.join(fan_out_items)
+            
             writer.writerow([
                 cable.label.name if cable.label else '',
                 cable.destination,
                 cable.count,
                 cable.get_cable_display(),
-                cable.count2 if cable.count2 else '',
-                cable.get_fan_out_display() if cable.fan_out else '',
+                fan_out_display,  # Changed: now shows all fan outs
                 cable.notes or '',
                 cable.drawing_ref or ''
             ])
@@ -1221,12 +1275,14 @@ class PACableAdmin(admin.ModelAdmin):
             cable_totals[cable_type_name]['quantity'] += cable.count
             cable_totals[cable_type_name]['total_length'] += cable.total_cable_length
             
-            # Track fan out totals
-            if cable.fan_out and cable.count2:
-                fan_out_name = cable.get_fan_out_display()
+            # Track fan out totals (lines 1279-1284 should be replaced with:)
+        for fan_out in cable.fan_outs.all():
+            if fan_out.fan_out_type:
+                fan_out_name = fan_out.get_fan_out_type_display()
                 if fan_out_name not in fan_out_totals:
                     fan_out_totals[fan_out_name] = 0
-                fan_out_totals[fan_out_name] += cable.count2
+                fan_out_totals[fan_out_name] += fan_out.quantity
+            
         
         # Write cable summary
         writer.writerow([])

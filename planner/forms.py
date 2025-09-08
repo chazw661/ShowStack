@@ -966,13 +966,11 @@ class GalaxyProcessorAdminForm(forms.ModelForm):
 from .models import PACableSchedule, PAZone
 
 class PACableForm(forms.ModelForm):
-    """Form for PA Cable entry matching spreadsheet layout"""
-    
     class Meta:
         model = PACableSchedule
         fields = [
             'label', 'destination', 'count', 'cable', 
-            'count2', 'fan_out', 'notes', 'drawing_ref'
+            'notes', 'drawing_ref'  # Removed count2 and fan_out
         ]
         
         widgets = {
@@ -994,15 +992,7 @@ class PACableForm(forms.ModelForm):
                 'class': 'form-control',
                 'style': 'width: 120px;'
             }),
-            'count2': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'style': 'width: 60px;',
-                'min': '0'
-            }),
-            'fan_out': forms.Select(attrs={
-                'class': 'form-control',
-                'style': 'width: 120px;'
-            }),
+           
             'notes': forms.TextInput(attrs={
                 'class': 'form-control',
                 'style': 'width: 150px;',
@@ -1036,7 +1026,7 @@ class PACableInlineForm(forms.ModelForm):
         model = PACableSchedule
         fields = [
             'label', 'destination', 'count', 'cable', 
-            'count2', 'fan_out', 'notes', 'drawing_ref'
+            'notes', 'drawing_ref'
         ]
     
     def __init__(self, *args, **kwargs):
@@ -1045,7 +1035,6 @@ class PACableInlineForm(forms.ModelForm):
         # Customize field widgets for inline display
         self.fields['destination'].widget.attrs['style'] = 'width: 120px;'
         self.fields['count'].widget.attrs['style'] = 'width: 60px;'
-        self.fields['count2'].widget.attrs['style'] = 'width: 60px;'
         self.fields['notes'].widget.attrs['style'] = 'width: 150px;'
         self.fields['drawing_ref'].widget.attrs['style'] = 'width: 80px;'
 

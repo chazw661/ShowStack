@@ -146,8 +146,33 @@
             </tr>
         </tbody>
     </table>
+
+    {% if fan_out_summary %}
+    <div class="fan-out-summary">
+        <h3>Fan Out Summary</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Fan Out Type</th>
+                    <th>Total Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fan_out_type, quantity in fan_out_summary.items %}
+                <tr>
+                    <td>{{ fan_out_type }}</td>
+                    <td>{{ quantity }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
     
     <!-- Ordering Summary Box -->
+     {% if cable_summary %}
     <div class="quick-order-box">
         <h3>Quick Order List</h3>
         {% for cable_type, data in cable_summary.items %}

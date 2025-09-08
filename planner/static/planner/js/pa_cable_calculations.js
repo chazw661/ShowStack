@@ -150,3 +150,92 @@ window.addEventListener('load', function() {
         
     })(django.jQuery);
 });
+
+
+// Add this to your existing pa_cable_calculations.js file
+
+(function($) {
+    'use strict';
+    
+    // Function to update fan out totals dynamically
+    function updateFanOutTotals() {
+        var fanOutTotals = {};
+        
+        // Find all fan out inline rows
+        $('.dynamic-pafanout_set .form-row:not(.empty-form)').each(function() {
+            var $row = $(this);
+            
+            // Skip if row is marked for deletion
+            if ($row.find('input[name$="-DELETE"]').is(':checked')) {
+                return;
+            }
+            
+            var fanOutType = $row.find('select[name$="-fan_out_type"] option:selected').text();
+            var quantity = parseInt($row.find('input[name$="-quantity"]').val()) || 0;
+            
+            if (fanOutType && fanOutType !== '---------' && quantity > 0) {
+                if (!fanOutTotals[fanOutType]) {
+                    fanOutTotals[fanOutType] = 0;
+                }
+                fanOutTotals[fanOutType] += quantity;
+            }
+        });
+        
+        // Update the display
+        updateFanOutDisplay(fanOutTotals);
+    }
+    
+    function updateFanOutDisplay(totals) {
+        // Create or update summary display
+        var $summary = $('#fan-out-inline-summary');
+        if (!$summary.length) {
+            $summary = $('<div id="fan-out-inline-summary" class="inline-summary" style="margin: 10px 0; padding: 10px; background: #2a2a2a; border: 1px solid #417690; color: #f0f0f0;"></div>');
+            // Place it after the fan out inline section
+            var $fanOutSection = $('.dynamic-pafanout_set');
+            if ($fanOutSection.length) {
+                $fanOutSection.after($summary);
+            }
+        }
+        
+        var html = '<strong>Fan Out Summary:</strong> ';
+        var items = [];
+        for (var type in totals) {
+            items.push(type + ' x' + totals[type]);
+        }
+        html += items.length ? items.join(', ') : 'None';
+        $summary.html(html);
+    }
+    
+    // Initialize on document ready
+    $(document).ready(function() {
+        // Only run if we're on a PA Cable change form
+        if ($('.model-pacableschedule.change-form').length) {
+            
+            // Initial calculation
+            updateFanOutTotals();
+            
+            // Update when fan out fields change
+            $(document).on('change input', '.dynamic-pafanout_set input, .dynamic-pafanout_set select', function() {
+                updateFanOutTotals();
+            });
+            
+            // Handle inline formset add/remove events
+            $(document).on('formset:added', '.dynamic-pafanout_set .form-row', function() {
+                updateFanOutTotals();
+            });
+            
+            $(document).on('formset:removed', '.dynamic-pafanout_set .form-row', function() {
+                setTimeout(updateFanOutTotals, 100); // Small delay to ensure DOM is updated
+            });
+            
+            // Also handle the add-row button click
+            $('.dynamic-pafanout_set .add-row a').on('click', function() {
+                setTimeout(updateFanOutTotals, 100);
+            });
+        }
+        
+        // Keep your existing cable calculations code here...
+        // (all your existing updateCableCalculations and updateGrandTotals functions)
+    });
+    
+})(django.jQuery);
