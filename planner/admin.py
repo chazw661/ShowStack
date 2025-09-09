@@ -33,6 +33,7 @@ from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcesso
 
 #PA Cable
 import csv
+import math
 
 #-----------PDF Creation Start------
 #-----------End PDF Creation
@@ -1205,15 +1206,23 @@ class PACableAdmin(admin.ModelAdmin):
                         'couplers': int(total_length * 1.2 / 100) - 1 if total_length > 100 else 0,
                     }
         
-       # Calculate fan out totals across all cable runs
+       # Calculate fan out totals across all cable runs with 20% overage
         fan_out_summary = {}
         for cable in qs.prefetch_related('fan_outs'):
             for fan_out in cable.fan_outs.all():
                 if fan_out.fan_out_type:
                     fan_out_name = fan_out.get_fan_out_type_display()
                     if fan_out_name not in fan_out_summary:
-                        fan_out_summary[fan_out_name] = 0
-                    fan_out_summary[fan_out_name] += fan_out.quantity
+                        fan_out_summary[fan_out_name] = {
+                            'total_quantity': 0,
+                            'with_overage': 0
+                        }
+                    fan_out_summary[fan_out_name]['total_quantity'] += fan_out.quantity
+
+        # Calculate 20% overage for each fan out type
+        for fan_out_type in fan_out_summary:
+            total = fan_out_summary[fan_out_type]['total_quantity']
+            fan_out_summary[fan_out_type]['with_overage'] = math.ceil(total * 1.2)
         
         response.context_data['cable_summary'] = cable_summary
         response.context_data['fan_out_summary'] = fan_out_summary
@@ -1332,13 +1341,20 @@ class PACableAdmin(admin.ModelAdmin):
             '', '', '', ''
         ])
         
-        # Fan Out Summary
+       
+        # Fan Out Summary with 20% Overage
         if fan_out_totals:
             writer.writerow([])
             writer.writerow(['FAN OUT SUMMARY'])
-            writer.writerow(['Type', 'Quantity'])
+            writer.writerow(['Type', 'Total Quantity', '20% Overage', 'Total w/Overage'])
             for fan_out_type, quantity in fan_out_totals.items():
-                writer.writerow([fan_out_type, quantity])
+                with_overage = math.ceil(quantity * 1.2)
+                writer.writerow([
+                    fan_out_type, 
+                    quantity,
+                    f"{quantity} × 20%",
+                    with_overage
+                ])
         
         return response
     

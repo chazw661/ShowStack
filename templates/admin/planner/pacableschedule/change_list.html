@@ -147,27 +147,30 @@
         </tbody>
     </table>
 
-    {% if fan_out_summary %}
-    <div class="fan-out-summary">
-        <h3>Fan Out Summary</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Fan Out Type</th>
-                    <th>Total Quantity</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for fan_out_type, quantity in fan_out_summary.items %}
-                <tr>
-                    <td>{{ fan_out_type }}</td>
-                    <td>{{ quantity }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+    <!-- Fan Out Summary Section -->
+<div class="results">
+    <table id="fan-out-summary">
+        <caption>Fan Out Summary</caption>
+        <thead>
+            <tr>
+                <th>FAN OUT TYPE</th>
+                <th>TOTAL QUANTITY</th>
+                <th>20% OVERAGE</th>
+                <th>TOTAL W/OVERAGE</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fan_out_type, data in fan_out_summary.items %}
+            <tr>
+                <td>{{ fan_out_type }}</td>
+                <td>{{ data.total_quantity }}</td>
+                <td>{{ data.total_quantity }} × 20%</td>
+                <td class="total-with-overage">{{ data.with_overage }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 </div>
 {% endif %}
     

@@ -186,25 +186,42 @@ window.addEventListener('load', function() {
     }
     
     function updateFanOutDisplay(totals) {
-        // Create or update summary display
-        var $summary = $('#fan-out-inline-summary');
-        if (!$summary.length) {
-            $summary = $('<div id="fan-out-inline-summary" class="inline-summary" style="margin: 10px 0; padding: 10px; background: #2a2a2a; border: 1px solid #417690; color: #f0f0f0;"></div>');
-            // Place it after the fan out inline section
-            var $fanOutSection = $('.dynamic-pafanout_set');
-            if ($fanOutSection.length) {
-                $fanOutSection.after($summary);
-            }
+    // Create or update summary display
+    var $summary = $('#fan-out-inline-summary');
+    if (!$summary.length) {
+        $summary = $('<div id="fan-out-inline-summary" class="inline-summary" style="margin: 10px 0; padding: 10px; background: #2a2a2a; border: 1px solid #417690; color: #f0f0f0;"></div>');
+        // Place it after the fan out inline section
+        var $fanOutSection = $('.dynamic-pafanout_set');
+        if ($fanOutSection.length) {
+            $fanOutSection.after($summary);
         }
-        
-        var html = '<strong>Fan Out Summary:</strong> ';
-        var items = [];
-        for (var type in totals) {
-            items.push(type + ' x' + totals[type]);
-        }
-        html += items.length ? items.join(', ') : 'None';
-        $summary.html(html);
     }
+    
+    var html = '<strong>Fan Out Summary:</strong><br>';
+    if (Object.keys(totals).length > 0) {
+        html += '<table style="margin-top: 5px; width: auto; border-collapse: collapse;">';
+        html += '<tr style="border-bottom: 1px solid #417690;">';
+        html += '<th style="padding: 5px; text-align: left;">Type</th>';
+        html += '<th style="padding: 5px;">Quantity</th>';
+        html += '<th style="padding: 5px;">w/ 20% Overage</th>';
+        html += '</tr>';
+        
+        for (var type in totals) {
+            var quantity = totals[type];
+            var withOverage = Math.ceil(quantity * 1.2);
+            html += '<tr>';
+            html += '<td style="padding: 5px;">' + type + '</td>';
+            html += '<td style="padding: 5px; text-align: center;">' + quantity + '</td>';
+            html += '<td style="padding: 5px; text-align: center; font-weight: bold; color: #90ee90;">' + withOverage + '</td>';
+            html += '</tr>';
+        }
+        html += '</table>';
+    } else {
+        html += 'None';
+    }
+    
+    $summary.html(html);
+}
     
     // Initialize on document ready
     $(document).ready(function() {
