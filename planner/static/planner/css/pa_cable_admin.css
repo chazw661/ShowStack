@@ -58,15 +58,34 @@ div[style*="background"] th {
     padding: 8px;
 }
 
-/* Quick Order List box */
-.quick-order-list {
+/* Quick Order List box - More specific selectors */
+#changelist .quick-order-list,
+.change-list .quick-order-list,
+body.change-list .quick-order-list {
     background: #2a2a2a !important;
     color: #f0f0f0 !important;
-    padding: 15px;
-    border: 1px solid #417690 !important;
+    padding: 20px !important;
+    border: 2px solid #417690 !important;
 }
 
-.quick-order-list * {
+#changelist .quick-order-list h3,
+body.change-list .quick-order-list h3 {
+    font-size: 20px !important;
+    font-weight: bold !important;
+    margin-bottom: 15px !important;
+}
+
+#changelist .quick-order-list ul,
+body.change-list .quick-order-list ul {
+    margin: 10px 0 !important;
+    padding-left: 20px !important;
+}
+
+#changelist .quick-order-list ul li,
+body.change-list .quick-order-list ul li {
+    font-size: 18px !important;
+    line-height: 1.8 !important;
+    margin: 8px 0 !important;
     color: #f0f0f0 !important;
 }
 

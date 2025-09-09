@@ -674,21 +674,14 @@ class PACableSchedule(models.Model):
     # Standard L'Acoustics cable types - matching spreadsheet with 150' added
     CABLE_TYPE_CHOICES = [
         ('NL4_JUMPER', 'NL4 Jumper'),
-        ('150_NL4', "150' NL4"),
-        ('100_NL4', "100' NL4"),
-        ('75_NL4', "75' NL4"),
-        ('50_NL4', "50' NL4"),
-        ('25_NL4', "25' NL4"),
-        ('15_NL4', "15' NL4"),
-        ('10_NL4', "10' NL4"),
-        ('5_NL4', "5' NL4"),
-        ('150_NL8', "150' NL8"),
-        ('100_NL8', "100' NL8"),
-        ('50_NL8', "50' NL8"),
-        ('25_NL8', "25' NL8"),
+        ('NL_4' , 'NL 4'),
         ('CA-COM', 'CA-COM'),
+        ('NL_8' , 'NL 8'),
+        ('XLR' , 'XLR'),
+        ('XLR_FAN' , 'XLR Fan'),
         ('AES_XLR', 'AES/EBU XLR'),
-        ('L14-30', 'L14-30 Power'),
+        ('L21-30', 'L21-30 Power'),
+        ('EDISON_20_AMP' , 'Edison 20amp'),
     ]
     
     # Fan Out options
@@ -696,12 +689,13 @@ class PACableSchedule(models.Model):
         ('', 'None'),
         ('NL4_Y', 'NL4 Y'),
         ('NL4_COUPLER', 'NL4 Coupler'),
-        ('NL4_THRU', 'NL4 Thru'),
+        ('DOFILL' , 'DOFill'),
+        ('DOSUB' , 'DOSub'),
+        ('CACOM COUPLER' , 'CACOM Coupler'),
         ('NL8_Y', 'NL8 Y'),
         ('NL8_COUPLER', 'NL8 Coupler'),
         ('NL4_TO_NL8', 'NL4 to NL8'),
-        ('NL8_TO_NL4', 'NL8 to NL4'),
-        ('CACOM_SPLIT', 'CA-COM Split'),
+        
     ]
     
     # Fields matching spreadsheet columns
@@ -752,6 +746,12 @@ class PACableSchedule(models.Model):
         null=True,
         verbose_name="Drawing Ref",
         help_text="VWX drawing dimension reference"
+    )
+
+    length = models.IntegerField(
+        default=0,
+        verbose_name="Length (ft)",
+        help_text="Cable length per run in feet"
     )
     
     # Hidden compatibility fields (can be removed later)
@@ -836,6 +836,12 @@ class PACableSchedule(models.Model):
         return ", ".join([f"{fo.get_fan_out_type_display()} x{fo.quantity}" 
                         for fo in fan_outs])
     
+    @property
+    def total_cable_length(self):
+        """Calculate total cable length needed"""
+        return self.count * self.length
+    
+
     @property
     def cable_weight_estimate(self):
         """Rough weight estimate based on cable type (lbs)"""

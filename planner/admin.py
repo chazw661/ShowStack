@@ -1130,19 +1130,19 @@ class PACableAdmin(admin.ModelAdmin):
     form = PACableInlineForm
     inlines = [PAFanOutInline]  # Add this line
     list_display = [
-    'label_display', 'destination', 'count',
+    'label_display', 'destination', 'count', 'length',
     'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
     'notes', 'drawing_ref'
 ]
     list_filter = ['label', 'cable']
     search_fields = ['destination', 'notes', 'drawing_ref']
-    list_editable = ['count']  # Changed from 'quantity' and 'length_per_run'
+    list_editable = ['count' ,'length']  
     
     change_list_template = 'admin/planner/pacableschedule/change_list.html'
     
     fieldsets = (
         ('Cable Configuration', {
-            'fields': ('label', 'destination', 'count', 'cable')
+            'fields': ('label', 'destination', 'count', 'length' , 'cable')
         }),
       
         
@@ -1169,7 +1169,7 @@ class PACableAdmin(admin.ModelAdmin):
         fan_out_summary_display.short_description = 'Fan Outs'
     
     def changelist_view(self, request, extra_context=None):
-        """Add cable summary to the list view"""
+        """Add cable and fan out summary to the list view"""
         response = super().changelist_view(request, extra_context=extra_context)
         
         try:
@@ -1177,19 +1177,9 @@ class PACableAdmin(admin.ModelAdmin):
         except (AttributeError, KeyError):
             return response
         
-        # Calculate cable summaries including fan outs
+        # Calculate cable summaries
         from django.db.models import Sum
         cable_summary = {}
-        fan_out_summary = {}
-        for cable in qs.prefetch_related('fan_outs'):
-          for fan_out in cable.fan_outs.all():
-            if fan_out.fan_out_type:
-                fan_out_name = fan_out.get_fan_out_type_display()
-                if fan_out_name not in fan_out_summary:
-                    fan_out_summary[fan_out_name] = 0
-                fan_out_summary[fan_out_name] += fan_out.quantity
-    
-        response.context_data['fan_out_summary'] = fan_out_summary
         
         for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
             cables = qs.filter(cable=cable_type[0])
@@ -1199,14 +1189,13 @@ class PACableAdmin(admin.ModelAdmin):
                     cable_summary[cable_type[1]] = {
                         'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
                         'total_length': total_length,
-                        'with_20_percent': total_length * 1.2,
-                        'hundreds': int(total_length * 1.2 / 100),
-                        'twenty_fives': int((total_length * 1.2 % 100) / 25),
-                        'remainder': (total_length * 1.2) % 25,
-                        'couplers': int(total_length * 1.2 / 100) - 1 if total_length > 100 else 0,
+                        'hundreds': int(total_length / 100),
+                        'twenty_fives': int((total_length % 100) / 25),
+                        'remainder': int(total_length % 25),
+                        'couplers': int(total_length / 100) - 1 if total_length > 100 else 0,
                     }
         
-       # Calculate fan out totals across all cable runs with 20% overage
+        # Calculate fan out totals with 20% overage
         fan_out_summary = {}
         for cable in qs.prefetch_related('fan_outs'):
             for fan_out in cable.fan_outs.all():
@@ -1218,16 +1207,16 @@ class PACableAdmin(admin.ModelAdmin):
                             'with_overage': 0
                         }
                     fan_out_summary[fan_out_name]['total_quantity'] += fan_out.quantity
-
+        
         # Calculate 20% overage for each fan out type
         for fan_out_type in fan_out_summary:
             total = fan_out_summary[fan_out_type]['total_quantity']
             fan_out_summary[fan_out_type]['with_overage'] = math.ceil(total * 1.2)
         
+        # Add to context
         response.context_data['cable_summary'] = cable_summary
         response.context_data['fan_out_summary'] = fan_out_summary
         response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
-        response.context_data['grand_total_with_overage'] = sum(s['with_20_percent'] for s in cable_summary.values())
         
         return response
     
