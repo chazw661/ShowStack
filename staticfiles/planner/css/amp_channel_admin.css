@@ -19,3 +19,32 @@
     font-weight: normal;
     color: #666;
 }
+
+/* Style the channel number display */
+.field-channel_number_display {
+    font-size: 24px !important;
+    font-weight: 900 !important;
+    color: #fff !important;
+}
+
+/* Or if it's rendered differently in your template */
+td.field-channel_number_display {
+    font-size: 24px !important;
+    font-weight: 900 !important;
+}
+
+/* Another possible selector */
+.channel-number-display {
+    font-size: 24px !important;
+    font-weight: 900 !important;
+}
+
+/* Hide the automatic row numbers in amp channels inline */
+.inline-group fieldset.module table tbody tr td:first-child,
+.inline-group fieldset.module table thead tr th:first-child {
+    width: 0;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    text-indent: -9999px;
+}

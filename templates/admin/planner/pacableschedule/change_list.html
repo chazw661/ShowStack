@@ -4,7 +4,7 @@
 {% block result_list %}
 {{ block.super }}
 
-{% if cable_summary %}
+
 <!-- Add scoped styles that only affect cable summary tables -->
 <style>
 /* Scope all styles to cable-summary-section only */
@@ -112,24 +112,29 @@
                 <th>Cable Type</th>
                 <th>Total Runs</th>
                 <th>Total Length (ft)</th>
-                <th>100' Lengths</th>
-                <th>25' Lengths</th>
-                <th>Remainder (ft)</th>
+                <th>100' QTY</th>
+                <th>50' QTY</th>
+                <th>25' QTY</th>
+                <th>10' QTY</th>
+                <th>5' QTY</th>
                 <th>Couplers</th>
-            </tr>
+                </tr>
         </thead>
         <tbody>
             {% for cable_type, data in cable_summary.items %}
             <tr>
                 <td>{{ cable_type }}</td>
                 <td>{{ data.total_runs }}</td>
-                <td>{{ data.total_length|floatformat:1 }}</td>
+                <td>{{ data.total_length }}</td>
                 <td>{{ data.hundreds }}</td>
+                <td>{{ data.fifties }}</td>
                 <td>{{ data.twenty_fives }}</td>
-                <td>{{ data.remainder|floatformat:1 }}</td>
+                <td>{{ data.tens }}</td>
+                <td>{{ data.fives }}</td>
                 <td>{{ data.couplers }}</td>
             </tr>
             {% endfor %}
+        </tbody>
             
             <!-- Grand Total Row -->
                 <td>-</td>
@@ -137,51 +142,72 @@
         </tbody>
     </table>
 
+    
     <!-- Fan Out Summary Section -->
-<div class="results">
-    <table id="fan-out-summary">
-        <caption>Fan Out Summary</caption>
-        <thead>
-            <tr>
-                <th>FAN OUT TYPE</th>
-                <th>TOTAL QUANTITY</th>
-                <th>20% OVERAGE</th>
-                <th>TOTAL W/OVERAGE</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for fan_out_type, data in fan_out_summary.items %}
-            <tr>
-                <td>{{ fan_out_type }}</td>
-                <td>{{ data.total_quantity }}</td>
-                <td>{{ data.total_quantity }} × 20%</td>
-                <td class="total-with-overage">{{ data.with_overage }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-</div>
-{% endif %}
+    {% if fan_out_summary %}
+    <div class="cable-summary-section">  <!-- Use same class as cable summary -->
+        <h2>Fan Out Summary</h2>  <!-- This will get the blue title bar -->
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>FAN OUT TYPE</th>
+                    <th>TOTAL QUANTITY</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fan_out_type, data in fan_out_summary.items %}
+                <tr>
+                    <td>{{ fan_out_type }}</td>
+                    <td>{{ data.total_quantity }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
     
    <!-- Ordering Summary Box -->
 {% if cable_summary %}
 <div class="quick-order-box">
     <h3 style="font-size: 20px; font-weight: bold;">Quick Order List</h3>
+    
+    <!-- Cable Orders -->
     {% for cable_type, data in cable_summary.items %}
     <div style="margin-bottom: 15px; font-size: 18px;">
-        <strong style="font-size: 18px;">{{ cable_type }}:</strong>
+        <strong style="font-size: 18px; color: #79aec8;">{{ cable_type }}:</strong>  <!-- Added color here -->
         <ul style="font-size: 16px; line-height: 1.8;">
             {% if data.hundreds > 0 %}
             <li style="font-size: 16px; margin: 5px 0;">Order {{ data.hundreds }} × 100' lengths</li>
             {% endif %}
-            {% if data.twenty_fives > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.twenty_fives }} × 25' lengths</li>
+            {% if data.fifties > 0 %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.fifties }} × 50' lengths</li>
             {% endif %}
-            <!-- etc. for other conditions -->
+            <!-- ... other cable lengths ... -->
         </ul>
     </div>
     {% endfor %}
+    
+    <!-- Fan Out Orders -->
+    {% if fan_out_summary %}
+    <div style="margin-top: 20px; margin-bottom: 15px;">
+        <strong style="font-size: 18px; color: #79aec8;">FAN OUTS:</strong>
+        <ul style="font-size: 16px; line-height: 1.8;">
+            {% for fan_out_type, data in fan_out_summary.items %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.with_overage }} × {{ fan_out_type }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <!-- Note about overage -->
+    {% if fan_out_summary %}
+    <div style="margin-top: 20px; padding: 10px; background-color: #2a3a2a; border-left: 3px solid #417690;">
+        <p style="font-size: 14px; color: #90ee90; margin: 0;">
+            <strong>Note:</strong> Fan out quantities in the summary above include a 20% safety margin.
+        </p>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 

@@ -1,167 +1,169 @@
-/* staticfiles/planner/css/pa_cable_admin.css */
+/* PA Cable Admin - Match Django Dark Theme */
 
-/* Spreadsheet-like styling for PA Cable inline */
-.dynamic-pacableschedule_set .tabular td {
-    padding: 5px;
-    vertical-align: middle;
+/* Main data table - dark theme */
+#result_list tbody tr {
+    background: #1e1e1e !important;
 }
 
-/* Compact dropdowns */
-.dynamic-pacableschedule_set select {
-    width: 140px !important;
-    font-size: 12px;
+#result_list tbody td {
+    color: #f0f0f0 !important;
+    background: transparent !important;
+    border-color: #333 !important;
 }
 
-/* Number input fields */
-.dynamic-pacableschedule_set input[type="number"] {
-    width: 80px !important;
-    text-align: center;
-    font-size: 12px;
+#result_list tbody tr:hover {
+    background: #2a2a2a !important;
 }
 
-/* Text input fields */
-.dynamic-pacableschedule_set input[type="text"] {
-    font-size: 12px;
+/* Table headers */
+#result_list thead th {
+    background: #417690 !important;
+    color: white !important;
 }
 
-/* Calculated fields styling */
-.calculated-field {
-    background-color: #f5f5f5 !important;
-    font-weight: 500;
-    border: 1px solid #ddd !important;
-}
-
-.total-length {
-    background-color: #e8f4f8 !important;
-    font-weight: bold !important;
-    color: #0066cc;
-}
-
-/* Zone column highlighting */
-td.field-zone select {
-    background-color: #fff9e6;
-    font-weight: 500;
-}
-
-/* Cable type column */
-td.field-cable_type select {
-    background-color: #f0f8ff;
-}
-
-/* Highlight row on hover */
-.dynamic-pacableschedule_set tr:hover {
-    background-color: #f9f9f9;
-}
-
-/* Header styling */
-.dynamic-pacableschedule_set th {
-    background-color: #417690;
-    color: white;
-    font-size: 11px;
-    padding: 8px 5px;
-    white-space: nowrap;
-}
-
-/* Summary table styling */
-#cable-summary {
-    margin-top: 20px;
+/* FIX: Summary table container - force dark background */
+.pa-cable-summary,
+div[style*="background-color: #f9f9f9"],
+div[style*="background"] {
+    background: #2a2a2a !important;
+    border: 1px solid #417690 !important;
     padding: 15px;
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    margin: 20px 0;
 }
 
-#cable-summary h3 {
+/* FIX: Summary table itself - dark background */
+.pa-cable-summary table,
+table[style*="border-collapse"] {
+    background: #1e1e1e !important;
+}
+
+/* FIX: All cells in summary table - light text on dark */
+.pa-cable-summary table td,
+.pa-cable-summary table th,
+table[style*="border-collapse"] td,
+table[style*="border-collapse"] th,
+div[style*="background"] td,
+div[style*="background"] th {
+    color: #f0f0f0 !important;
+    background: #1e1e1e !important;
+    border-color: #333 !important;
+}
+
+/* Summary table headers specifically */
+
+.pa-cable-summary thead th,
+.cable-summary-section table th {  /* <-- PROPERLY SCOPED */
+    background: #417690 !important;
+    color: white !important;
+    padding: 8px;
+}
+
+/* Quick Order List box - More specific selectors */
+#changelist .quick-order-list,
+.change-list .quick-order-list,
+body.change-list .quick-order-list {
+    background: #2a2a2a !important;
+    color: #f0f0f0 !important;
+    padding: 20px !important;
+    border: 2px solid #417690 !important;
+}
+
+#changelist .quick-order-list h3,
+body.change-list .quick-order-list h3 {
+    font-size: 20px !important;
+    font-weight: bold !important;
+    margin-bottom: 15px !important;
+}
+
+#changelist .quick-order-list ul,
+body.change-list .quick-order-list ul {
+    margin: 10px 0 !important;
+    padding-left: 20px !important;
+}
+
+#changelist .quick-order-list ul li,
+body.change-list .quick-order-list ul li {
+    font-size: 18px !important;
+    line-height: 1.8 !important;
+    margin: 8px 0 !important;
+    color: #f0f0f0 !important;
+}
+
+/* Highlighted calculation cells - make them stand out in dark theme */
+td[style*="background-color: yellow"],
+td[style*="background-color: #ffff99"],
+td[style*="background: yellow"],
+td[style*="background: #ffff99"] {
+    background: #4a4a00 !important;
+    color: #ffff99 !important;
+}
+
+/* Input fields in the table */
+#result_list input[type="text"],
+#result_list input[type="number"] {
+    background: #333 !important;
+    color: #f0f0f0 !important;
+    border: 1px solid #555 !important;
+}
+
+/* Alternating row colors for better readability */
+#result_list tbody tr:nth-child(even) {
+    background: #252525 !important;
+}
+
+/* Grand Total row */
+tr:has(td:contains("GRAND TOTAL")) {
+    background: #333 !important;
+    font-weight: bold;
+}
+
+
+/* Fan Out Summary Section - matching dark theme */
+.fan-out-summary {
+    background: #2a2a2a !important;
+    border: 1px solid #417690 !important;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.fan-out-summary h3 {
+    color: #f0f0f0 !important;
     margin-top: 0;
-    color: #417690;
-    font-size: 14px;
-    text-transform: uppercase;
 }
 
-.cable-summary-table {
+.fan-out-summary table {
+    background: #1e1e1e !important;
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
 }
 
-.cable-summary-table th,
-.cable-summary-table td {
+.fan-out-summary table th {
+    background: #417690 !important;
+    color: white !important;
     padding: 8px;
     text-align: left;
-    border-bottom: 1px solid #ddd;
+    border: 1px solid #333 !important;
 }
 
-.cable-summary-table th {
-    background-color: #417690;
-    color: white;
+.fan-out-summary table td {
+    color: #f0f0f0 !important;
+    background: #1e1e1e !important;
+    padding: 8px;
+    border: 1px solid #333 !important;
+}
+
+/* Highlight the Total w/Overage column */
+.fan-out-summary .total-with-overage {
+    background: #2a3a2a !important;
+    color: #90ee90 !important;
     font-weight: bold;
 }
 
-.cable-summary-table tr.total-row {
-    background-color: #e8f4f8;
-    font-weight: bold;
+/* Alternating rows for readability */
+.fan-out-summary tbody tr:nth-child(even) {
+    background: #252525 !important;
 }
 
-.cable-summary-table tr.total-row td {
-    border-top: 2px solid #417690;
-}
-
-/* Service loop field - smaller width */
-td.field-service_loop input {
-    width: 60px !important;
-}
-
-/* From/To location fields */
-td.field-from_location input,
-td.field-to_location input {
-    width: 120px !important;
-}
-
-/* Drawing reference field */
-td.field-drawing_ref input {
-    width: 100px !important;
-}
-
-/* Notes field */
-td.field-notes input {
-    width: 200px !important;
-}
-
-/* Add visual separator between cable types */
-.dynamic-pacableschedule_set tbody tr {
-    border-left: 3px solid transparent;
-}
-
-.dynamic-pacableschedule_set tbody tr:nth-child(odd) {
-    background-color: #fafafa;
-}
-
-/* Delete checkbox styling */
-.delete input[type="checkbox"] {
-    margin-top: 5px;
-}
-
-/* Responsive adjustments for smaller screens */
-@media (max-width: 1400px) {
-    .dynamic-pacableschedule_set select {
-        width: 120px !important;
-    }
-    
-    .dynamic-pacableschedule_set input[type="text"] {
-        width: 100px !important;
-    }
-}
-
-/* Print styles */
-@media print {
-    #cable-summary {
-        page-break-before: always;
-    }
-    
-    .calculated-field,
-    .total-length {
-        background-color: white !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
+.fan-out-summary tbody tr:hover {
+    background: #2a2a2a !important;
 }

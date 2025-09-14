@@ -279,147 +279,136 @@ class DeviceAdmin(admin.ModelAdmin):
 
 #--------Amps---------
 
-# Updated admin classes based on spreadsheet structure
-# Add these admin classes to your existing admin.py file
+from .models import AmpModel, Amp, AmpChannel
 
-from .models import Location, Amp, AmpChannel
+@admin.register(AmpModel)
+class AmpModelAdmin(admin.ModelAdmin):
+    list_display = ('manufacturer', 'model_name', 'channel_count', 
+                   'nl4_connector_count', 'cacom_output_count')
+    list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count')
+    search_fields = ('manufacturer', 'model_name')
+    
+    fieldsets = (
+        ('Model Information', {
+            'fields': ('manufacturer', 'model_name', 'channel_count')
+        }),
+        ('Input Configuration', {
+            'fields': ('has_analog_inputs', 'has_aes_inputs', 'has_avb_inputs'),
+            'classes': ('collapse',)
+        }),
+        ('Output Configuration', {
+            'fields': ('nl4_connector_count', 'cacom_output_count'),
+            'classes': ('collapse',)
+        }),
+    )
 
-# Update your admin.py file - replace the AmpChannelInline class with this:
+
+class AmpChannelInlineForm(forms.ModelForm):
+    class Meta:
+        model = AmpChannel
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.amp_id:
+            amp = self.instance.amp
+            # Show/hide input fields based on amp model capabilities
+            if not amp.amp_model.has_avb_inputs:
+                self.fields['avb_stream'].widget = forms.HiddenInput()
+            if not amp.amp_model.has_aes_inputs:
+                self.fields['aes_input'].widget = forms.HiddenInput()
+            if not amp.amp_model.has_analog_inputs:
+                self.fields['analog_input'].widget = forms.HiddenInput()
+
 
 class AmpChannelInline(admin.TabularInline):
     model = AmpChannel
+    form = AmpChannelInlineForm
     extra = 0
-    fields = ['channel_number', 'channel_name', 'avb_stream', 'analogue_input', 'aes_input', 'nl4_pair_1', 'nl4_pair_2', 'cacom_pair', 'is_active', 'notes']
-    ordering = ['channel_number']
-    template = 'admin/planner/amp_channel_inline.html'  
+    fields = ['channel_number', 'channel_name', 'avb_stream', 'aes_input', 'analog_input']
+    readonly_fields = ['channel_number']
     
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        
-        class ChannelFormSet(formset):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
+    def has_add_permission(self, request, obj=None):
+        return False  # Channels are auto-created
+    
+    def has_delete_permission(self, request, obj=None):
+        return False  # Prevent accidental deletion
+
+
+class AmpAdminForm(forms.ModelForm):
+    class Meta:
+        model = Amp
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'amp_model' in self.data:
+            try:
+                amp_model_id = int(self.data.get('amp_model'))
+                amp_model = AmpModel.objects.get(id=amp_model_id)
                 
-                # Auto-populate channel numbers based on amp's channel count
-                if obj and obj.channel_count:
-                    # Create the right number of forms for the amp's channels
-                    for i in range(obj.channel_count):
-                        if i < len(self.forms):
-                            form = self.forms[i]
-                            if not form.instance.pk:
-                                form.initial['channel_number'] = i + 1
-                                # Set default channel names based on common patterns
-                                channel_names = ['Left', 'Right', 'Center', 'Sub', 'Front Fill', 'Delay', 'Foldback', 'Monitor']
-                                if i < len(channel_names):
-                                    form.initial['channel_name'] = channel_names[i]
-        
-        return ChannelFormSet
-    
-    def get_extra(self, request, obj=None, **kwargs):
-        """Set extra forms based on amp's channel count"""
-        if obj and obj.channel_count:
-            existing_channels = obj.channels.count()
-            return max(0, obj.channel_count - existing_channels)
-        return 1
-
-
-
-
-class AmpInline(admin.TabularInline):
-    model = Amp
-    extra = 1
-    fields = ['name', 'ip_address', 'manufacturer', 'model_number', 'channel_count', 'avb_stream_input', 'preset_name']
-    ordering = ['ip_address']
-    
-def get_queryset(self, request):
-    """Custom queryset to sort amps by last octet of IP (SQLite compatible)"""
-    qs = super().get_queryset(request)
-    # For SQLite, we'll use Python sorting instead of SQL
-    return qs.order_by('ip_address')
-
-
-@admin.register(Location)
-class LocationAdmin(admin.ModelAdmin):
-    list_display = ['name', 'amp_count', 'total_channels', 'created_at']  # Removed location_type
-    list_filter = ['created_at']  # Removed location_type
-    search_fields = ['name', 'description']
-    inlines = [AmpInline]
-    
-    fieldsets = (
-        ('Location Information', {
-            'fields': ('name', 'description')
-        }),
-    )
-    
-    def amp_count(self, obj):
-        """Display count of amps in this location"""
-        return obj.amps.count()
-    amp_count.short_description = 'Amps'
-    
-    def total_channels(self, obj):
-        """Display total number of channels across all amps in location"""
-        return sum(amp.channel_count for amp in obj.amps.all())
-    total_channels.short_description = 'Total Channels'
-
-
+                # Hide NL4 fields if amp doesn't have NL4 connectors
+                if amp_model.nl4_connector_count == 0:
+                    for field in ['nl4_a_pair_1', 'nl4_a_pair_2', 'nl4_b_pair_1', 'nl4_b_pair_2']:
+                        self.fields[field].widget = forms.HiddenInput()
+                elif amp_model.nl4_connector_count == 1:
+                    for field in ['nl4_b_pair_1', 'nl4_b_pair_2']:
+                        self.fields[field].widget = forms.HiddenInput()
+                
+                # Hide Cacom fields if amp doesn't have Cacom outputs
+                if amp_model.cacom_output_count == 0:
+                    for field in ['cacom_1_assignment', 'cacom_2_assignment', 
+                                 'cacom_3_assignment', 'cacom_4_assignment']:
+                        self.fields[field].widget = forms.HiddenInput()
+                elif amp_model.cacom_output_count < 4:
+                    for i in range(amp_model.cacom_output_count + 1, 5):
+                        self.fields[f'cacom_{i}_assignment'].widget = forms.HiddenInput()
+                        
+            except (ValueError, AmpModel.DoesNotExist):
+                pass
 
 
 @admin.register(Amp)
 class AmpAdmin(admin.ModelAdmin):
-    list_display = ['name', 'location', 'ip_address', 'manufacturer', 'channel_count', 'created_at']
-    list_filter = ['location', 'manufacturer', 'channel_count', 'cacom_output', 'created_at']
-    search_fields = ['name', 'ip_address', 'model_number', 'manufacturer', 'preset_name']
-    list_select_related = ['location']
-    inlines = [AmpChannelInline]
-
-    class Media:
-        css = {'all': ('planner/css/amp_channel_admin.css',)
-    }
+    form = AmpAdminForm
+    list_display = ('name', 'location', 'amp_model', 'ip_address')
+    list_filter = ('location', 'amp_model__manufacturer', 'amp_model__model_name')
+    search_fields = ('name', 'ip_address')
+    ordering = ['location', 'name']
     
-    # Add the PDF export action
-    
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('location', 'name', 'ip_address')
-        }),
-        ('Hardware Configuration', {
-            'fields': ('manufacturer', 'model_number', 'channel_count'),
-        }),
-        ('Input Configuration', {
-        'fields': ('avb_stream', 'analogue_input', 'aes_input'),
-        'classes': ['collapse']
-        }),
-
-        ('Output Configuration', {
-             'fields': ('cacom_output',),  
-             'classes': ['collapse']
-        }),
-        ('Settings', {
-            'fields': ('preset_name', 'notes'),
-            'classes': ['collapse']
-        }),
-    )
-    
-    def get_queryset(self, request):
-        """Sort amps by location and IP address (SQLite compatible)"""
-        qs = super().get_queryset(request)
-        return qs.order_by('location', 'ip_address')
-    
-    def save_model(self, request, obj, form, change):
-        """Auto-create channels when amp is saved"""
-        super().save_model(request, obj, form, change)
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = [
+            ('Basic Information', {
+                'fields': ('location', 'amp_model', 'name', 'ip_address')
+            }),
+        ]
         
-        # Create channels if they don't exist
-        existing_channels = obj.channels.count()
-        if existing_channels < obj.channel_count:
-            for i in range(existing_channels + 1, obj.channel_count + 1):
-                from .models import AmpChannel  # Import here to avoid circular import
-                AmpChannel.objects.get_or_create(
-                    amp=obj,
-                    channel_number=i,
-                    defaults={'channel_name': f'Channel {i}'}
-                )
+        if obj and obj.amp_model.nl4_connector_count > 0:
+            nl4_fields = []
+            if obj.amp_model.nl4_connector_count >= 1:
+                nl4_fields.append(('nl4_a_pair_1', 'nl4_a_pair_2'))
+            if obj.amp_model.nl4_connector_count >= 2:
+                nl4_fields.append(('nl4_b_pair_1', 'nl4_b_pair_2'))
+            
+            fieldsets.append(('NL4 Connectors', {
+                'fields': nl4_fields,
+                'classes': ('collapse',)
+            }))
+        
+        if obj and obj.amp_model.cacom_output_count > 0:
+            cacom_fields = []
+            for i in range(1, min(obj.amp_model.cacom_output_count + 1, 5)):
+                cacom_fields.append(f'cacom_{i}_assignment')
+            
+            fieldsets.append(('Cacom Outputs', {
+                'fields': cacom_fields,
+                'classes': ('collapse',)
+            }))
+        
+        return fieldsets
+    
+    inlines = [AmpChannelInline]
+                
 
 
 
@@ -1186,13 +1175,42 @@ class PACableAdmin(admin.ModelAdmin):
             if cables.exists():
                 total_length = sum(c.total_cable_length for c in cables)
                 if total_length > 0:
+                    # Calculate standard cable quantities needed
+                    hundreds = int(total_length / 100)
+                    remaining = total_length % 100
+                    
+                    # Round up remaining to next standard length
+                    fifties = 0
+                    twenty_fives = 0
+                    tens = 0
+                    fives = 0
+                    
+                    if remaining > 0:
+                        if remaining > 50:
+                            # Need 1×100' for anything over 50'
+                            hundreds += 1
+                        elif remaining > 25:
+                            # Need 1×50' for 26-50'
+                            fifties = 1
+                        elif remaining > 10:
+                            # Need 1×25' for 11-25'
+                            twenty_fives = 1
+                        elif remaining > 5:
+                            # Need 1×10' for 6-10'
+                            tens = 1
+                        elif remaining > 0:
+                            # Need 1×5' for 1-5'
+                            fives = 1
+                    
                     cable_summary[cable_type[1]] = {
                         'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
                         'total_length': total_length,
-                        'hundreds': int(total_length / 100),
-                        'twenty_fives': int((total_length % 100) / 25),
-                        'remainder': int(total_length % 25),
-                        'couplers': int(total_length / 100) - 1 if total_length > 100 else 0,
+                        'hundreds': hundreds,
+                        'fifties': fifties,
+                        'twenty_fives': twenty_fives,
+                        'tens': tens,
+                        'fives': fives,
+                        'couplers': hundreds - 1 if hundreds > 1 else 0,
                     }
         
         # Calculate fan out totals with 20% overage

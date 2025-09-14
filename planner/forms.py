@@ -5,6 +5,7 @@ from django import forms
 from django.forms import modelformset_factory
 from django.contrib.contenttypes.models import ContentType
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
+from .models import P1Output
 
 
 
@@ -547,11 +548,12 @@ class LocationForm(forms.ModelForm):
 class AmpForm(forms.ModelForm):
     class Meta:
         model = Amp
-        fields = [
-            'location', 'name', 'ip_address', 'manufacturer', 'model_number', 'channel_count',
-            'avb_stream', 'analogue_input', 'aes_input',
-            'cacom_output', 'preset_name', 'notes'
-        ]
+        fields = ['location', 'amp_model', 'name', 'ip_address', 
+                  'nl4_a_pair_1', 'nl4_a_pair_2', 
+                  'nl4_b_pair_1', 'nl4_b_pair_2',
+                  'cacom_1_assignment', 'cacom_2_assignment',
+                  'cacom_3_assignment', 'cacom_4_assignment']
+        
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -641,16 +643,10 @@ class AmpForm(forms.ModelForm):
 
 
 
-class AmpChannelForm(forms.ModelForm):
+class AmpChannelInlineForm(forms.ModelForm):
     class Meta:
         model = AmpChannel
-        fields = [
-            'channel_number', 'channel_name', 'avb_stream', 
-            'analogue_input', 'aes_input',
-            'nl4_pair_1', 'nl4_pair_2',
-            'cacom_pair',  # Single field now
-            'is_active', 'notes'
-        ]
+        fields = ['channel_number', 'channel_name', 'avb_stream', 'aes_input', 'analog_input']
         
         widgets = {
             'channel_number': forms.NumberInput(attrs={
@@ -707,17 +703,72 @@ class AmpChannelForm(forms.ModelForm):
 
 
 # Inline form for use in admin
-class AmpChannelInlineForm(AmpChannelForm):
-    class Meta(AmpChannelForm.Meta):
-        fields = AmpChannelForm.Meta.fields
+class AmpChannelInlineForm(forms.ModelForm):
+    class Meta:
+        model = AmpChannel
+        fields = ['channel_number', 'channel_name', 'avb_stream', 'aes_input', 'analog_input']
         widgets = {
-            **AmpChannelForm.Meta.widgets,
-            # Make widgets more compact for inline use
-            'notes': forms.TextInput(attrs={
+            'channel_name': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'Notes'
+                'placeholder': 'Channel Name'
+            }),
+            'aes_input': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'AES Input'
+            }),
+            'analog_input': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Analog Input'
             }),
         }
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Make channel_number read-only since it's auto-generated
+        if 'channel_number' in self.fields:
+            self.fields['channel_number'].disabled = True
+        
+        # Customize the AVB Stream dropdown
+        if 'avb_stream' in self.fields:
+            # Get all P1 AVB outputs with their labels
+            avb_outputs = P1Output.objects.filter(
+                output_type='AVB'
+            ).select_related('p1_processor__system_processor').order_by('p1_processor__system_processor__name')
+            
+            # Create choices with formatted display
+            choices = [('', '--- Select AVB Stream ---')]
+            for output in avb_outputs:
+                # Format: "ProcessorName - AVB # - Label" or "ProcessorName - AVB #" if no label
+                processor_name = output.p1_processor.system_processor.name if output.p1_processor and output.p1_processor.system_processor else 'Unknown'
+                if output.label:
+                    display_text = f"{processor_name} - AVB {output.channel_number} - {output.label}"
+                else:
+                    display_text = f"{processor_name} - AVB {output.channel_number}"
+                choices.append((output.id, display_text))
+            
+            self.fields['avb_stream'].widget = forms.Select(choices=choices)
+            self.fields['avb_stream'].widget.attrs.update({
+                'class': 'avb-stream-select form-control',  # Keep form-control for consistency
+                'style': 'width: 100%; max-width: 300px;'
+            })
+        
+        # Hide input fields based on amp model capabilities (if we have an instance)
+        if self.instance and self.instance.amp_id:
+            try:
+                amp = self.instance.amp
+                if amp.amp_model:
+                    # Hide fields based on what the amp model supports
+                    if not amp.amp_model.has_avb_inputs:
+                        if 'avb_stream' in self.fields:
+                            self.fields['avb_stream'].widget = forms.HiddenInput()
+                    if not amp.amp_model.has_aes_inputs:
+                        if 'aes_input' in self.fields:
+                            self.fields['aes_input'].widget = forms.HiddenInput()
+                    if not amp.amp_model.has_analog_inputs:
+                        if 'analog_input' in self.fields:
+                            self.fields['analog_input'].widget = forms.HiddenInput()
+            except:
+                pass  # If there's any error, just show all fields
 
 
 #-------P1 Processor-----

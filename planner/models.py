@@ -158,125 +158,156 @@ class Location(models.Model):
         ordering = ['name']
 
 
-class Amp(models.Model):
-    """Individual amplifier units"""
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='amps')
-    name = models.CharField(max_length=100, help_text="Amp identifier or model name")
+class AmpModel(models.Model):
+    """Predefined amplifier models with specifications"""
+    manufacturer = models.CharField(max_length=100)
+    model_name = models.CharField(max_length=100)
+    channel_count = models.IntegerField()
     
-    # Network configuration
-    ip_address = models.GenericIPAddressField(help_text="Network IP address")
+    # Input types available
+    has_analog_inputs = models.BooleanField(default=True)
+    has_aes_inputs = models.BooleanField(default=False)
+    has_avb_inputs = models.BooleanField(default=False)
     
-    # Hardware details
-    manufacturer = models.CharField(max_length=50, blank=True, null=True)
-    model_number = models.CharField(max_length=50, blank=True, null=True)
-    channel_count = models.PositiveIntegerField(default=4, help_text="Number of output channels")
-    
-    
-   # Audio routing
-    avb_stream = models.CharField(
-        max_length=50, 
-        blank=True, 
-        null=True, 
-        verbose_name="AVB Stream",
-        help_text="AVB stream source"
-    )
-    analogue_input = models.ForeignKey(
-        'Device',
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        verbose_name="Analogue Input",
-        related_name='amps_using_as_analogue',
-        help_text="Analogue input source device"
-    )
-    aes_input = models.ForeignKey(
-        'Device',
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        verbose_name="AES Input",
-        related_name='amps_using_as_aes',
-        help_text="AES input source device"
+    # NL4 Configuration
+    nl4_connector_count = models.IntegerField(
+        default=0, 
+        choices=[(0, 'None'), (1, '1 NL4'), (2, '2 NL4')]
     )
     
-    # Output configuration
-    cacom_output = models.BooleanField(default=False, help_text="Has Cacom output")
-    
-    # Additional settings
-    preset_name = models.CharField(max_length=100, blank=True, null=True, help_text="Active preset")
-    notes = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"{self.name} ({self.ip_address}) - {self.location.name}"
-    
-    @property
-    def ip_last_octet(self):
-        """Extract last octet of IP address for sorting"""
-        try:
-            return int(self.ip_address.split('.')[-1])
-        except (ValueError, IndexError):
-            return 999
+    # Cacom configuration  
+    cacom_output_count = models.IntegerField(default=0)
     
     class Meta:
-        verbose_name = "Amp"
-        verbose_name_plural = "Amps"
-        ordering = ['location', 'ip_address']
-        unique_together = ['location', 'ip_address']
+        ordering = ['manufacturer', 'model_name']
+        unique_together = ['manufacturer', 'model_name']
+        verbose_name = "Amplifier Model"
+        verbose_name_plural = "Amplifier Models"
+    
+    def __str__(self):
+        return f"{self.manufacturer} {self.model_name}"
+
+
+class Amp(models.Model):
+    """Individual amplifier instance"""
+    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='amps')
+    amp_model = models.ForeignKey(AmpModel, on_delete=models.PROTECT, 
+        null=True,  
+        blank=True )
+       
+    name = models.CharField(
+        max_length=100, 
+        help_text="Unique identifier (e.g., 'LA12X-1', 'Stage Left 1')"
+    )
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    
+    # NL4 Connector A (if present)
+    nl4_a_pair_1 = models.CharField(
+        max_length=50, blank=True, 
+        verbose_name="NL4-A Pair 1 +/-",
+        help_text="e.g., 'Ch1/Ch2' or 'Left/Right'"
+    )
+    nl4_a_pair_2 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL4-A Pair 2 +/-", 
+        help_text="e.g., 'Ch3/Ch4' or 'Sub L/Sub R'"
+    )
+    
+    # NL4 Connector B (if present)
+    nl4_b_pair_1 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL4-B Pair 1 +/-",
+        help_text="e.g., 'Ch5/Ch6'"
+    )
+    nl4_b_pair_2 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL4-B Pair 2 +/-",
+        help_text="e.g., 'Ch7/Ch8'"
+    )
+    
+    # Cacom outputs (if present)
+    cacom_1_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 1")
+    cacom_2_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 2")
+    cacom_3_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 3")
+    cacom_4_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 4")
+    
+    class Meta:
+        ordering = ['location', 'ip_address', 'name']
+        verbose_name = "Amplifier"
+        verbose_name_plural = "Amplifiers"
+    
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        old_model = None
+        
+        if not is_new:
+            try:
+                old_amp = Amp.objects.get(pk=self.pk)
+                old_model = old_amp.amp_model
+            except Amp.DoesNotExist:
+                pass
+        
+        super().save(*args, **kwargs)
+        
+        # Auto-create/update channels when amp is created or model changes
+        if is_new or (old_model and old_model != self.amp_model):
+            self.setup_channels()
+    
+    def setup_channels(self):
+        """Create or adjust channels based on amp model"""
+        current_count = self.channels.count()
+        target_count = self.amp_model.channel_count
+        
+        if current_count < target_count:
+            # Add missing channels
+            for i in range(current_count + 1, target_count + 1):
+                AmpChannel.objects.create(
+                    amp=self,
+                    channel_number=i,
+                    channel_name=f"Ch {i}"
+                )
+        elif current_count > target_count:
+            # Remove extra channels
+            self.channels.filter(channel_number__gt=target_count).delete()
+    
+    def __str__(self):
+        return f"{self.name} - {self.amp_model}"
 
 
 class AmpChannel(models.Model):
-    """Individual channels within an amplifier"""
+    """Individual channel within an amplifier"""
     amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
-    channel_number = models.PositiveIntegerField()
+    channel_number = models.IntegerField()
+    channel_name = models.CharField(max_length=100, default="")
     
-    # Channel configuration
-    channel_name = models.CharField(max_length=100, blank=True, null=True, 
-                                   help_text="e.g., Left, Right, Center, Sub, Front Fill, Delay, Foldback")
-    
-    # Signal routing
-    avb_stream = models.CharField(max_length=50, blank=True, null=True)
-    analogue_input = models.CharField(max_length=50, blank=True, null=True)
-    aes_input = models.CharField(max_length=50, blank=True, null=True)
-    
-    # Output configuration  
-    # Output configuration
-    nl4_pair_1 = models.CharField(
-        max_length=50, 
-        blank=True, 
-        null=True, 
-        verbose_name="1 +/-",
-        help_text="NL4 connector pair 1 +/- assignment"
+    # Input source (only show relevant options based on amp model)
+    avb_stream = models.ForeignKey(
+        'P1Output',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        limit_choices_to={'output_type': 'AVB'},
+        verbose_name="AVB Stream",
+        related_name='amp_channels'
     )
-    nl4_pair_2 = models.CharField(
-        max_length=50, 
-        blank=True, 
-        null=True,
-        verbose_name="2 +/-", 
-        help_text="NL4 connector pair 2 +/- assignment"
+    aes_input = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="AES Input",
+        help_text="AES input assignment"
     )
-    
-    cacom_pair = models.CharField(
-    max_length=50, 
-    blank=True, 
-    null=True,
-    verbose_name="CA-COM Pair",
-    help_text="Which CA-COM pair (1-8) this channel routes to"
-)
-    
-    # Settings
-    is_active = models.BooleanField(default=True)
-    notes = models.TextField(blank=True, null=True)
-    
-    def __str__(self):
-        channel_display = self.channel_name or f"Channel {self.channel_number}"
-        return f"{self.amp.name} - {channel_display}"
+    analog_input = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="Analog Input",
+        help_text="Analog input assignment"
+    )
     
     class Meta:
-        verbose_name = "Amp Channel"
-        verbose_name_plural = "Amp Channels"
         ordering = ['amp', 'channel_number']
         unique_together = ['amp', 'channel_number']
+        verbose_name = "Amp Channel"
+        verbose_name_plural = "Amp Channels"
+    
+    def __str__(self):
+        return f"{self.amp.name} - Ch{self.channel_number}"
 
 
 
