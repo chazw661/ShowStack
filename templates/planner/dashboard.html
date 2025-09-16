@@ -1,0 +1,151 @@
+<!-- templates/planner/dashboard.html -->
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}System Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px;
+    }
+    .dashboard-card {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    .dashboard-card h3 {
+        margin-top: 0;
+        color: #79aec8;
+        border-bottom: 2px solid #444;
+        padding-bottom: 10px;
+    }
+    .stat-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #333;
+    }
+    .stat-value {
+        font-weight: bold;
+        color: #4fb2d8;
+    }
+    .warning {
+        background: #3a3a1a;
+        border: 1px solid #ffc107;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+    }
+    .quick-links {
+        margin-top: 10px;
+    }
+    .quick-links a {
+        display: inline-block;
+        margin: 5px;
+        padding: 8px 15px;
+        background: #417690;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+    }
+</style>
+
+<h1>Audio System Dashboard</h1>
+
+{% if needs_comm_setup or no_devices %}
+<div class="warning">
+    ⚠️ System Setup Required:
+    {% if needs_comm_setup %}<br>• No COMM positions configured{% endif %}
+    {% if no_devices %}<br>• No devices configured{% endif %}
+</div>
+{% endif %}
+
+<div class="dashboard-grid">
+    <!-- I/O Overview -->
+    <div class="dashboard-card">
+        <h3>I/O Configuration</h3>
+        <div class="stat-row">
+            <span>Consoles:</span>
+            <span class="stat-value">{{ console_count }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Devices:</span>
+            <span class="stat-value">{{ device_count }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Total Inputs:</span>
+            <span class="stat-value">{{ total_inputs }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Total Outputs:</span>
+            <span class="stat-value">{{ total_outputs }}</span>
+        </div>
+        <div class="quick-links">
+            <a href="{% url 'admin:planner_device_changelist' %}">Manage Devices</a>
+            <a href="{% url 'admin:planner_console_changelist' %}">Manage Consoles</a>
+        </div>
+    </div>
+
+    <!-- COMM System -->
+    <div class="dashboard-card">
+        <h3>COMM System</h3>
+        <div class="stat-row">
+            <span>Wireless Packs:</span>
+            <span class="stat-value">{{ wireless_beltpacks }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Hardwired Packs:</span>
+            <span class="stat-value">{{ hardwired_beltpacks }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Checked Out:</span>
+            <span class="stat-value">{{ checked_out }}</span>
+        </div>
+        <div class="quick-links">
+            <a href="{% url 'admin:planner_commbeltpack_changelist' %}">Manage Belt Packs</a>
+            {% if not positions_configured %}
+            <a href="{% url 'admin:planner_commposition_changelist' %}?setup=1" style="background: #ba2121;">
+                Setup Positions
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Processors -->
+    <div class="dashboard-card">
+        <h3>System Processors</h3>
+        <div class="stat-row">
+            <span>P1 Units:</span>
+            <span class="stat-value">{{ p1_processors }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Galaxy Units:</span>
+            <span class="stat-value">{{ galaxy_processors }}</span>
+        </div>
+        <div class="quick-links">
+            <a href="{% url 'admin:planner_systemprocessor_changelist' %}">Manage Processors</a>
+        </div>
+    </div>
+
+    <!-- Amplifiers -->
+    <div class="dashboard-card">
+        <h3>Amplifier System</h3>
+        <div class="stat-row">
+            <span>Total Amps:</span>
+            <span class="stat-value">{{ total_amps }}</span>
+        </div>
+        <div class="stat-row">
+            <span>Total Channels:</span>
+            <span class="stat-value">{{ total_amp_channels }}</span>
+        </div>
+        <div class="quick-links">
+            <a href="{% url 'admin:planner_amp_changelist' %}">Manage Amps</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+<div class="comm-summary">
+    <h3>Belt Pack Summary</h3>
+    
+    <div class="system-section wireless-section">
+        <h4>📻 Wireless System</h4>
+        <div class="stats">
+            <span class="stat">
+                <span class="stat-label">Total:</span>
+                <span class="stat-value">{{ wireless_total }}</span>
+            </span>
+            <span class="stat">
+                <span class="stat-label">Checked Out:</span>
+                <span class="stat-value">{{ wireless_checked }}</span>
+            </span>
+            <span class="stat">
+                <span class="stat-label">Available:</span>
+                <span class="stat-value">{{ wireless_available }}</span>
+            </span>
+        </div>
+        
+        {% if wireless_groups %}
+        <div class="group-stats">
+            <span class="stat-label">By Group:</span>
+            {% for group, count in wireless_groups.items %}
+            <span class="stat mini">
+                <span class="stat-label">{{ group }}:</span>
+                <span class="stat-value">{{ count }}</span>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="system-section hardwired-section">
+        <h4>🔌 Hardwired System</h4>
+        <div class="stats">
+            <span class="stat">
+                <span class="stat-label">Total:</span>
+                <span class="stat-value">{{ hardwired_total }}</span>
+            </span>
+            <span class="stat">
+                <span class="stat-label">Checked Out:</span>
+                <span class="stat-value">{{ hardwired_checked }}</span>
+            </span>
+            <span class="stat">
+                <span class="stat-label">Available:</span>
+                <span class="stat-value">{{ hardwired_available }}</span>
+            </span>
+        </div>
+        
+        {% if hardwired_groups %}
+        <div class="group-stats">
+            <span class="stat-label">By Group:</span>
+            {% for group, count in hardwired_groups.items %}
+            <span class="stat mini">
+                <span class="stat-label">{{ group }}:</span>
+                <span class="stat-value">{{ count }}</span>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{{ block.super }}
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+// Add visual separation and data attributes
+django.jQuery(document).ready(function($) {
+    $('#result_list tbody tr').each(function() {
+        var $row = $(this);
+        var systemType = $row.find('.field-system_type').text().trim();
+        var group = $row.find('.field-group').text().trim();
+        
+        if (systemType) {
+            $row.attr('data-system', systemType);
+            $row.addClass('system-' + systemType.toLowerCase());
+        }
+        if (group) {
+            $row.attr('data-group', group);
+        }
+    });
+    
+    // Add visual separators between system types
+    var lastSystem = null;
+    $('#result_list tbody tr').each(function() {
+        var currentSystem = $(this).attr('data-system');
+        if (lastSystem && lastSystem !== currentSystem) {
+            $(this).addClass('system-separator');
+        }
+        lastSystem = currentSystem;
+    });
+});
+</script>
+{% endblock %}

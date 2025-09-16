@@ -1,0 +1,11 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div style="margin: 20px;">
+    <a href="/dashboard/" class="button" 
+       style="background: #417690; color: white; padding: 15px 25px; font-size: 16px; text-decoration: none; display: inline-block; border-radius: 4px;">
+        📊 System Dashboard
+    </a>
+</div>
+{{ block.super }}
+{% endblock %}

@@ -220,19 +220,8 @@ tr[data-group="STAGE"] .field-group_display {
     display: block;
 }
 
-/* BP number display */
-.field-display_bp_number {
-    font-weight: bold;
-    font-size: 1.1em;
-}
 
-.field-display_bp_number::before {
-    content: "📻 ";
-}
 
-.system-hardwired .field-display_bp_number::before {
-    content: "🔌 ";
-}
 @media (prefers-color-scheme: dark) {
     .position-input,
     .name-input {

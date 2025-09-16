@@ -15,6 +15,12 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django import forms
 
+# ========== ADMIN SITE CONFIGURATION ==========
+admin.site.site_header = "Audio System Planner"
+admin.site.site_title = "Audio Planner"
+admin.site.index_title = "Welcome to Audio System Management"
+admin.site.enable_nav_sidebar = True
+
 # Model imports
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
@@ -31,7 +37,9 @@ from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 
-#PA Cable
+
+# ========== OTHER IMPORTS ==========
+from django.db.models import Count, Q, Max  # Add this line
 import csv
 import math
 
@@ -1441,16 +1449,70 @@ class CommChannelAdmin(admin.ModelAdmin):
 
 
 # Comm Position Admin
+
+# Add this BEFORE the CommPositionAdmin class
+@admin.action(description='Populate common positions')
+def populate_common_positions(modeladmin, request, queryset):
+    """Create common position options"""
+    positions = [
+        ('FOH Lights', 1),
+        ('FOH Audio', 2),
+        ('FOH Stage Manager', 3),
+        ('FOH Producer', 4),
+        ('Video Playback', 5),
+        ('Video Director', 6),
+        ('Video Switch', 7),
+        ('Video Shading', 8),
+        ('Video Record', 9),
+        ('A2', 10),
+        ('Graphics', 11),
+        ('BSM', 12),
+        ('LED', 13),
+        ('Dimmer Beach', 14),
+        ('TD', 15),
+    ]
+    
+    for name, order in positions:
+        CommPosition.objects.get_or_create(
+            name=name,
+            defaults={'order': order}
+        )
+    
+    modeladmin.message_user(request, "Common positions populated successfully.")
+
+
 @admin.register(CommPosition)
 class CommPositionAdmin(admin.ModelAdmin):
     list_display = ['name', 'order']
     list_editable = ['order']
     ordering = ['order', 'name']
     search_fields = ['name']
+    actions = [populate_common_positions]  # Make sure this is defined
     
-    def get_model_perms(self, request):
-        """Show in COMM section of admin"""
-        return super().get_model_perms(request)
+    def changelist_view(self, request, extra_context=None):
+        # Force show actions even when queryset is empty
+        if 'action' in request.POST:
+            # Process the action even if no items selected
+            action = self.get_actions(request)[request.POST['action']][0]
+            action(self, request, self.get_queryset(request).none())
+            return HttpResponseRedirect(request.get_full_path())
+        
+        # Always show the action form
+        extra_context = extra_context or {}
+        extra_context['has_filters'] = True  # Forces action dropdown to show
+        
+        return super().changelist_view(request, extra_context)
+    
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        # Ensure our populate action is always available
+        if 'populate_common_positions' not in actions:
+            actions['populate_common_positions'] = (
+                populate_common_positions,
+                'populate_common_positions',
+                'Populate common positions'
+            )
+        return actions
 
 
 # Comm Crew Name Admin
@@ -1718,9 +1780,15 @@ class CommBeltPackAdmin(admin.ModelAdmin):
     )
     
     def display_bp_number(self, obj):
-        """Display BP number with system type prefix"""
-        prefix = "W" if obj.system_type == "WIRELESS" else "H"
-        return f"{prefix}-{obj.bp_number}"
+        """Display BP number with system type prefix and icon"""
+        if obj.system_type == "WIRELESS":
+            icon = "📡"  # Antenna emoji
+            prefix = "W"
+        else:
+            icon = "🔗"  # Plug emoji  
+            prefix = "H"
+        return format_html("{} {}-{}", icon, prefix, obj.bp_number)
+
     display_bp_number.short_description = "BP #"
     display_bp_number.admin_order_field = 'bp_number'
 
@@ -1808,41 +1876,7 @@ def populate_default_channels(modeladmin, request, queryset):
 CommChannelAdmin.actions = [populate_default_channels]
 
 
-# Add a custom admin action to populate common positions
-@admin.action(description='Populate common positions')
-def populate_common_positions(modeladmin, request, queryset):
-    """Create common position options"""
-    positions = [
-        ('FOH', 1),
-        ('Monitor World', 2),
-        ('Stage Left', 3),
-        ('Stage Right', 4),
-        ('Spot 1', 5),
-        ('Spot 2', 6),
-        ('Spot 3', 7),
-        ('Spot 4', 8),
-        ('Truck', 9),
-        ('Backstage', 10),
-        ('Catering', 11),
-        ('Office', 12),
-        ('Rigging', 13),
-        ('Dimmer Beach', 14),
-        ('Video World', 15),
-    ]
-    
-    for name, order in positions:
-        CommPosition.objects.get_or_create(
-            name=name,
-            defaults={'order': order}
-        )
-    
-    modeladmin.message_user(request, "Common positions populated successfully.")
 
-
-# Add action to the CommPosition admin
-CommPositionAdmin.actions = [populate_common_positions]
-
-# Adding Comm Beltpacks Form
 
 
  

@@ -316,3 +316,203 @@ def galaxy_processor_summary(request, galaxy_processor_id):
     }
     
     return render(request, 'planner/galaxy_processor_summary.html', context)
+
+
+
+
+
+
+            #-------COMMS Page--------
+
+
+ # Add these to your planner/views.py file
+
+from django.http import JsonResponse, HttpResponse
+from django.contrib.admin.views.decorators import staff_member_required
+from django.db.models import Max
+import csv
+from .models import CommBeltPack, CommChannel, CommPosition, CommCrewName
+
+@staff_member_required
+def get_next_bp_number(request):
+    """Get the next available belt pack number for a specific system type"""
+    system_type = request.GET.get('system_type', 'WIRELESS')
+    max_bp = CommBeltPack.objects.filter(
+        system_type=system_type
+    ).aggregate(Max('bp_number'))['bp_number__max']
+    next_bp = (max_bp or 0) + 1
+    return JsonResponse({'next_bp_number': next_bp})
+
+
+@staff_member_required
+def export_comm_assignments(request):
+    """Export belt pack assignments to CSV"""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="comm_assignments.csv"'
+    
+    writer = csv.writer(response)
+    
+    # Write headers
+    writer.writerow([
+        'BP #', 'Position', 'Name', 'Headset', 
+        'CH A', 'CH B', 'CH C', 'CH D',
+        'Audio PGM', 'Group', 'Checked Out', 'Notes'
+    ])
+    
+    # Write data
+    for bp in CommBeltPack.objects.all().order_by('bp_number'):
+        writer.writerow([
+            bp.bp_number,
+            bp.position,
+            bp.name,
+            bp.get_headset_display() if bp.headset else '',
+            str(bp.channel_a) if bp.channel_a else '',
+            str(bp.channel_b) if bp.channel_b else '',
+            str(bp.channel_c) if bp.channel_c else '',
+            str(bp.channel_d) if bp.channel_d else '',
+            'Yes' if bp.audio_pgm else 'No',
+            bp.get_group_display() if bp.group else '',
+            'Yes' if bp.checked_out else 'No',
+            bp.notes
+        ])
+    
+    return response
+
+
+@staff_member_required
+def comm_channel_matrix(request):
+    """Display a matrix view of all belt pack channel assignments"""
+    from django.shortcuts import render
+    
+    belt_packs = CommBeltPack.objects.all().order_by('bp_number')
+    channels = CommChannel.objects.all().order_by('order')
+    
+    # Build matrix data
+    matrix = []
+    for bp in belt_packs:
+        row = {
+            'bp': bp,
+            'channels': []
+        }
+        for channel in channels:
+            assigned = False
+            assignment_type = ''
+            
+            if bp.channel_a == channel:
+                assigned = True
+                assignment_type = 'A'
+            elif bp.channel_b == channel:
+                assigned = True
+                assignment_type = 'B'
+            elif bp.channel_c == channel:
+                assigned = True
+                assignment_type = 'C'
+            elif bp.channel_d == channel:
+                assigned = True
+                assignment_type = 'D'
+            
+            row['channels'].append({
+                'assigned': assigned,
+                'type': assignment_type
+            })
+        matrix.append(row)
+    
+    context = {
+        'channels': channels,
+        'matrix': matrix,
+        'title': 'Comm Channel Matrix'
+    }
+    
+    return render(request, 'admin/planner/comm_matrix.html', context)
+
+
+@staff_member_required
+def import_comm_positions(request):
+    """Import positions from a text list"""
+    if request.method == 'POST':
+        positions_text = request.POST.get('positions', '')
+        lines = positions_text.strip().split('\n')
+        
+        created_count = 0
+        for i, line in enumerate(lines, 1):
+            position_name = line.strip()
+            if position_name:
+                _, created = CommPosition.objects.get_or_create(
+                    name=position_name,
+                    defaults={'order': i * 10}
+                )
+                if created:
+                    created_count += 1
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Created {created_count} new positions'
+        })
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request'})
+
+
+@staff_member_required
+def import_comm_names(request):
+    """Import crew names from a text list"""
+    if request.method == 'POST':
+        names_text = request.POST.get('names', '')
+        lines = names_text.strip().split('\n')
+        
+        created_count = 0
+        for line in lines:
+            crew_name = line.strip()
+            if crew_name:
+                _, created = CommCrewName.objects.get_or_create(name=crew_name)
+                if created:
+                    created_count += 1
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Created {created_count} new crew names'
+        })
+    
+    return JsonResponse({'success': False, 'message': 'Invalid request'})      
+
+
+#-----Comm Dashboard View------
+
+# planner/views.py (create this file if it doesn't exist)
+from django.shortcuts import render
+from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin
+from .models import (Console, Device, SystemProcessor, CommBeltPack, 
+                     CommPosition, Amp, PACableSchedule)
+
+class SystemDashboardView(LoginRequiredMixin, View):
+    def get(self, request):
+        context = {
+            # System Status Overview
+            'console_count': Console.objects.count(),
+            'device_count': Device.objects.count(),
+            'total_inputs': sum(d.input_count for d in Device.objects.all()),
+            'total_outputs': sum(d.output_count for d in Device.objects.all()),
+            
+            # Processor Status
+            'p1_processors': SystemProcessor.objects.filter(device_type='P1').count(),
+            'galaxy_processors': SystemProcessor.objects.filter(device_type='GALAXY').count(),
+            
+            # COMM System Status
+            'wireless_beltpacks': CommBeltPack.objects.filter(system_type='WIRELESS').count(),
+            'hardwired_beltpacks': CommBeltPack.objects.filter(system_type='HARDWIRED').count(),
+            'checked_out': CommBeltPack.objects.filter(checked_out=True).count(),
+            'positions_configured': CommPosition.objects.count() > 0,
+            
+            # Amp Status
+            'total_amps': Amp.objects.count(),
+            'total_amp_channels': sum(a.amp_model.channel_count for a in Amp.objects.select_related('amp_model')),
+            
+            # Cable Statistics
+            'total_cable_runs': PACableSchedule.objects.count(),
+            'total_cable_length': sum(c.total_cable_length for c in PACableSchedule.objects.all()),
+            
+            # Setup Warnings
+            'needs_comm_setup': CommPosition.objects.count() == 0,
+            'no_devices': Device.objects.count() == 0,
+        }
+        return render(request, 'planner/dashboard.html', context)
