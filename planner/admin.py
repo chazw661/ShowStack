@@ -1414,3 +1414,438 @@ class PACableAdmin(admin.ModelAdmin):
         }
         js = ('planner/js/pa_cable_calculations.js',)
 
+
+
+
+                #--------COMM Page-------
+
+# Add these to your planner/admin.py file
+
+from django.contrib import admin
+from django import forms
+from django.db.models import Count, Q, Max
+from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack
+from django.http import HttpResponseRedirect
+
+# Comm Channel Admin
+@admin.register(CommChannel)
+class CommChannelAdmin(admin.ModelAdmin):
+    list_display = ['channel_number', 'input_designation', 'name', 'abbreviation', 'channel_type', 'order']
+    list_editable = ['order']
+    ordering = ['order', 'channel_number']
+    search_fields = ['name', 'abbreviation', 'channel_number']
+    
+    def get_model_perms(self, request):
+        """Show in COMM section of admin"""
+        return super().get_model_perms(request)
+
+
+# Comm Position Admin
+@admin.register(CommPosition)
+class CommPositionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'order']
+    list_editable = ['order']
+    ordering = ['order', 'name']
+    search_fields = ['name']
+    
+    def get_model_perms(self, request):
+        """Show in COMM section of admin"""
+        return super().get_model_perms(request)
+
+
+# Comm Crew Name Admin
+@admin.register(CommCrewName)
+class CommCrewNameAdmin(admin.ModelAdmin):
+    list_display = ['name']
+    ordering = ['name']
+    search_fields = ['name']
+    
+    def get_model_perms(self, request):
+        """Show in COMM section of admin"""
+        return super().get_model_perms(request)
+
+
+# Custom form for CommBeltPack with dynamic dropdowns
+
+class CommBeltPackForm(forms.ModelForm):
+    # Custom widgets for position and name that combine dropdown + text input
+    position_select = forms.ModelChoiceField(
+        queryset=CommPosition.objects.all(),
+        required=False,
+        empty_label="-- Select Position --",
+        widget=forms.Select(attrs={'class': 'position-select'})
+    )
+    
+    name_select = forms.ModelChoiceField(
+        queryset=CommCrewName.objects.all(),
+        required=False,
+        empty_label="-- Select Name --",
+        widget=forms.Select(attrs={'class': 'name-select'})
+    )
+    
+    class Meta:
+        model = CommBeltPack
+        fields = '__all__'
+        widgets = {
+            'position': forms.TextInput(attrs={'class': 'position-input'}),
+            'name': forms.TextInput(attrs={'class': 'name-input'}),
+            'notes': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
+            'unit_location': forms.TextInput(attrs={'class': 'unit-location', 'placeholder': 'e.g., Unit #1 - FOH Rack'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Set initial values for select fields if instance exists
+        if self.instance and self.instance.pk:
+            # Try to match position with existing CommPosition
+            try:
+                pos = CommPosition.objects.get(name=self.instance.position)
+                self.fields['position_select'].initial = pos
+            except CommPosition.DoesNotExist:
+                pass
+            
+            # Try to match name with existing CommCrewName
+            try:
+                crew = CommCrewName.objects.get(name=self.instance.name)
+                self.fields['name_select'].initial = crew
+            except CommCrewName.DoesNotExist:
+                pass
+
+# Add this BEFORE the CommBeltPackAdmin class definition
+
+class CreateBeltPacksForm(forms.Form):
+    """Form to ask how many belt packs to create"""
+    count = forms.IntegerField(
+        min_value=1, 
+        max_value=100,
+        initial=20,
+        label="Number of belt packs to create"
+    )
+    starting_number = forms.IntegerField(
+        min_value=1,
+        initial=1,
+        label="Starting BP number"
+    )
+    unit_location = forms.CharField(
+        max_length=100,
+        required=False,
+        initial="Unit #1",
+        label="Unit Location (for wireless only)",
+        widget=forms.TextInput(attrs={'placeholder': 'e.g., Unit #1 - FOH Rack'})
+    )
+
+# Simpler action functions with different quantities
+def create_5_wireless_beltpacks(modeladmin, request, queryset):
+    """Create 5 wireless belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 6):
+        CommBeltPack.objects.create(
+            system_type='WIRELESS',
+            bp_number=max_bp + i,
+            unit_location='Unit #1'
+        )
+    
+    modeladmin.message_user(request, f"Created 5 wireless belt packs (BP #{max_bp+1} to #{max_bp+5})")
+create_5_wireless_beltpacks.short_description = 'Create 5 Wireless belt packs'
+
+def create_10_wireless_beltpacks(modeladmin, request, queryset):
+    """Create 10 wireless belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 11):
+        CommBeltPack.objects.create(
+            system_type='WIRELESS',
+            bp_number=max_bp + i,
+            unit_location='Unit #1'
+        )
+    
+    modeladmin.message_user(request, f"Created 10 wireless belt packs (BP #{max_bp+1} to #{max_bp+10})")
+create_10_wireless_beltpacks.short_description = 'Create 10 Wireless belt packs'
+
+def create_20_wireless_beltpacks(modeladmin, request, queryset):
+    """Create 20 wireless belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 21):
+        CommBeltPack.objects.create(
+            system_type='WIRELESS',
+            bp_number=max_bp + i,
+            unit_location='Unit #1'
+        )
+    
+    modeladmin.message_user(request, f"Created 20 wireless belt packs (BP #{max_bp+1} to #{max_bp+20})")
+create_20_wireless_beltpacks.short_description = 'Create 20 Wireless belt packs'
+
+def create_50_wireless_beltpacks(modeladmin, request, queryset):
+    """Create 50 wireless belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 51):
+        CommBeltPack.objects.create(
+            system_type='WIRELESS',
+            bp_number=max_bp + i,
+            unit_location='Unit #1'
+        )
+    
+    modeladmin.message_user(request, f"Created 50 wireless belt packs (BP #{max_bp+1} to #{max_bp+50})")
+create_50_wireless_beltpacks.short_description = 'Create 50 Wireless belt packs'
+
+# Hardwired versions
+def create_5_hardwired_beltpacks(modeladmin, request, queryset):
+    """Create 5 hardwired belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 6):
+        CommBeltPack.objects.create(
+            system_type='HARDWIRED',
+            bp_number=max_bp + i
+        )
+    
+    modeladmin.message_user(request, f"Created 5 hardwired belt packs (BP #{max_bp+1} to #{max_bp+5})")
+create_5_hardwired_beltpacks.short_description = 'Create 5 Hardwired belt packs'
+
+def create_10_hardwired_beltpacks(modeladmin, request, queryset):
+    """Create 10 hardwired belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 11):
+        CommBeltPack.objects.create(
+            system_type='HARDWIRED',
+            bp_number=max_bp + i
+        )
+    
+    modeladmin.message_user(request, f"Created 10 hardwired belt packs (BP #{max_bp+1} to #{max_bp+10})")
+create_10_hardwired_beltpacks.short_description = 'Create 10 Hardwired belt packs'
+
+def create_20_hardwired_beltpacks(modeladmin, request, queryset):
+    """Create 20 hardwired belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 21):
+        CommBeltPack.objects.create(
+            system_type='HARDWIRED',
+            bp_number=max_bp + i
+        )
+    
+    modeladmin.message_user(request, f"Created 20 hardwired belt packs (BP #{max_bp+1} to #{max_bp+20})")
+create_20_hardwired_beltpacks.short_description = 'Create 20 Hardwired belt packs'
+
+def create_50_hardwired_beltpacks(modeladmin, request, queryset):
+    """Create 50 hardwired belt packs"""
+    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
+        Max('bp_number'))['bp_number__max'] or 0
+    
+    for i in range(1, 51):
+        CommBeltPack.objects.create(
+            system_type='HARDWIRED',
+            bp_number=max_bp + i
+        )
+    
+    modeladmin.message_user(request, f"Created 50 hardwired belt packs (BP #{max_bp+1} to #{max_bp+50})")
+create_50_hardwired_beltpacks.short_description = 'Create 50 Hardwired belt packs'
+
+def clear_all_beltpacks(modeladmin, request, queryset):
+    """Delete ALL belt packs - use with caution"""
+    count = CommBeltPack.objects.all().count()
+    if count > 0:
+        CommBeltPack.objects.all().delete()
+        modeladmin.message_user(request, f"Deleted {count} belt packs", level=messages.WARNING)
+    else:
+        modeladmin.message_user(request, "No belt packs to delete")
+clear_all_beltpacks.short_description = '⚠️ DELETE all belt packs'
+
+@admin.register(CommBeltPack)
+class CommBeltPackAdmin(admin.ModelAdmin):
+    form = CommBeltPackForm
+    list_display = [
+        'display_bp_number', 'system_type', 'position', 'name', 'headset', 
+        'channel_a', 'channel_b', 'channel_c', 'channel_d',
+        'audio_pgm', 'group', 'checked_out'
+    ]
+    list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
+    search_fields = ['bp_number', 'position', 'name', 'unit_location']
+    ordering = ['system_type', 'bp_number']
+    actions = [
+    create_5_wireless_beltpacks,
+    create_10_wireless_beltpacks, 
+    create_20_wireless_beltpacks,
+    create_50_wireless_beltpacks,
+    create_5_hardwired_beltpacks,
+    create_10_hardwired_beltpacks,
+    create_20_hardwired_beltpacks,
+    create_50_hardwired_beltpacks,
+    clear_all_beltpacks
+]
+    
+    fieldsets = (
+        ('System Configuration', {
+            'fields': (
+                'system_type',
+                'unit_location',
+                'bp_number',
+            ),
+            'classes': ('system-config',),
+        }),
+        ('Assignment', {
+            'fields': (
+                ('position_select', 'position'),
+                ('name_select', 'name'),
+                'headset',
+            )
+        }),
+        ('Channel Assignments', {
+            'fields': (
+                ('channel_a', 'channel_b'),
+                ('channel_c', 'channel_d'),
+            ),
+            'classes': ('channel-grid',),
+        }),
+        ('Settings', {
+            'fields': (
+                ('audio_pgm', 'group', 'checked_out'),
+                'notes',
+            )
+        }),
+    )
+    
+    def display_bp_number(self, obj):
+        """Display BP number with system type prefix"""
+        prefix = "W" if obj.system_type == "WIRELESS" else "H"
+        return f"{prefix}-{obj.bp_number}"
+    display_bp_number.short_description = "BP #"
+    display_bp_number.admin_order_field = 'bp_number'
+
+     
+
+    
+    
+    class Media:
+        css = {
+            'all': ('planner/css/comm_admin.css',)
+        }
+        js = ('planner/js/comm_admin.js',)
+    
+    def changelist_view(self, request, extra_context=None):
+        """Add summary information grouped by system type"""
+        extra_context = extra_context or {}
+        
+        # Get counts by system type
+        wireless_total = CommBeltPack.objects.filter(system_type='WIRELESS').count()
+        wireless_checked = CommBeltPack.objects.filter(system_type='WIRELESS', checked_out=True).count()
+        hardwired_total = CommBeltPack.objects.filter(system_type='HARDWIRED').count()
+        hardwired_checked = CommBeltPack.objects.filter(system_type='HARDWIRED', checked_out=True).count()
+        
+        # Group counts by system
+        wireless_groups = {}
+        hardwired_groups = {}
+        
+        for choice_key, choice_name in CommBeltPack.GROUP_CHOICES:
+            if choice_key:
+                w_count = CommBeltPack.objects.filter(system_type='WIRELESS', group=choice_key).count()
+                h_count = CommBeltPack.objects.filter(system_type='HARDWIRED', group=choice_key).count()
+                
+                if w_count > 0:
+                    wireless_groups[choice_name] = w_count
+                if h_count > 0:
+                    hardwired_groups[choice_name] = h_count
+        
+        extra_context.update({
+            'wireless_total': wireless_total,
+            'wireless_checked': wireless_checked,
+            'wireless_available': wireless_total - wireless_checked,
+            'hardwired_total': hardwired_total,
+            'hardwired_checked': hardwired_checked,
+            'hardwired_available': hardwired_total - hardwired_checked,
+            'wireless_groups': wireless_groups,
+            'hardwired_groups': hardwired_groups,
+        })
+        
+        return super().changelist_view(request, extra_context)
+    
+
+
+# Add a custom admin action to populate default channels
+@admin.action(description='Populate default FS II channels')
+def populate_default_channels(modeladmin, request, queryset):
+    """Create the default 10 FS II channels"""
+    default_channels = [
+        ('1 4W', 'FS II - 1', 'Production', 'PROD', 1),
+        ('2 4W', 'FS II - 2', 'Audio', 'AUDIO', 2),
+        ('3 4W', 'FS II - 3', 'Video', 'VIDEO', 3),
+        ('4 4W', 'FS II - 4', 'Lights', 'LIGHTS', 4),
+        ('A 2W', 'FS II - 5', 'Camera', 'CAMS', 5),
+        ('B 2W', 'FS II - 6', 'Graphics', 'GFX', 6),
+        ('C 2W', 'FS II - 7', 'Stage Mgr', 'SM', 7),
+        ('D 2W', 'FS II - 8', 'Carps', 'CARP', 8),
+        ('', 'FS II - 9', 'ALL', 'ALL', 9),
+        ('', 'FS II - 10', 'Program', 'PGM', 10),
+    ]
+    
+    for input_des, channel_num, name, abbr, order in default_channels:
+        CommChannel.objects.get_or_create(
+            channel_number=channel_num,
+            defaults={
+                'input_designation': input_des,
+                'name': name,
+                'abbreviation': abbr,
+                'order': order
+            }
+        )
+    
+    modeladmin.message_user(request, "Default FS II channels populated successfully.")
+
+
+# Add action to the CommChannel admin
+CommChannelAdmin.actions = [populate_default_channels]
+
+
+# Add a custom admin action to populate common positions
+@admin.action(description='Populate common positions')
+def populate_common_positions(modeladmin, request, queryset):
+    """Create common position options"""
+    positions = [
+        ('FOH', 1),
+        ('Monitor World', 2),
+        ('Stage Left', 3),
+        ('Stage Right', 4),
+        ('Spot 1', 5),
+        ('Spot 2', 6),
+        ('Spot 3', 7),
+        ('Spot 4', 8),
+        ('Truck', 9),
+        ('Backstage', 10),
+        ('Catering', 11),
+        ('Office', 12),
+        ('Rigging', 13),
+        ('Dimmer Beach', 14),
+        ('Video World', 15),
+    ]
+    
+    for name, order in positions:
+        CommPosition.objects.get_or_create(
+            name=name,
+            defaults={'order': order}
+        )
+    
+    modeladmin.message_user(request, "Common positions populated successfully.")
+
+
+# Add action to the CommPosition admin
+CommPositionAdmin.actions = [populate_common_positions]
+
+# Adding Comm Beltpacks Form
+
+
+ 
+
+
+

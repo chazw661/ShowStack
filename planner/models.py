@@ -919,3 +919,208 @@ class PAFanOut(models.Model):
             
             def __str__(self):
                 return f"{self.get_fan_out_type_display()} x{self.quantity}"
+            
+
+
+            #--------COMMS Sheet--------
+
+            
+
+class CommChannel(models.Model):
+    """Defines available communication channels"""
+    CHANNEL_TYPE_CHOICES = [
+        ('4W', '4-Wire'),
+        ('2W', '2-Wire'),
+    ]
+    
+    input_designation = models.CharField(
+        max_length=10,
+        help_text="e.g., '1 4W', '2 4W', 'A 2W', 'B 2W'"
+    )
+    channel_type = models.CharField(max_length=2, choices=CHANNEL_TYPE_CHOICES)
+    channel_number = models.CharField(
+        max_length=20,
+        help_text="e.g., 'FS II - 1'"
+    )
+    name = models.CharField(
+        max_length=50,
+        help_text="Full channel name (e.g., 'Production', 'Audio')"
+    )
+    abbreviation = models.CharField(
+        max_length=10,
+        help_text="Short name (e.g., 'PROD', 'AUDIO')"
+    )
+    order = models.IntegerField(default=0, help_text="Display order")
+    
+    class Meta:
+        ordering = ['order', 'channel_number']
+        verbose_name = "Comm Channel"
+        verbose_name_plural = "Comm Channels"
+    
+    def __str__(self):
+        return f"{self.channel_number} - {self.name} ({self.abbreviation})"
+    
+    def save(self, *args, **kwargs):
+        # Auto-set channel type based on input designation
+        if '4W' in self.input_designation:
+            self.channel_type = '4W'
+        elif '2W' in self.input_designation:
+            self.channel_type = '2W'
+        super().save(*args, **kwargs)
+
+
+class CommPosition(models.Model):
+    """Predefined positions for crew members"""
+    name = models.CharField(max_length=100, unique=True)
+    order = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['order', 'name']
+        verbose_name = "Comm Position"
+        verbose_name_plural = "Comm Positions"
+    
+    def __str__(self):
+        return self.name
+
+
+class CommCrewName(models.Model):
+    """Predefined crew names for quick selection"""
+    name = models.CharField(max_length=100, unique=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = "Comm Crew Name"
+        verbose_name_plural = "Comm Crew Names"
+    
+    def __str__(self):
+        return self.name
+
+
+# Update the CommBeltPack model in your planner/models.py file
+
+class CommBeltPack(models.Model):
+    """Belt pack assignment and configuration"""
+    SYSTEM_TYPE_CHOICES = [
+        ('WIRELESS', 'Wireless'),
+        ('HARDWIRED', 'Hardwired'),
+    ]
+    
+    HEADSET_CHOICES = [
+        ('SM', 'Single Muff'),
+        ('DM', 'Double Muff'),
+        ('IE', 'In-Ear'),
+        ('SS', 'Speaker Station'),
+        ('HM', 'Handmic'),
+        ('', 'None'),
+    ]
+    
+    GROUP_CHOICES = [
+        ('PROD', 'Production'),
+        ('AUDIO', 'Audio'),
+        ('VIDEO', 'Video'),
+        ('LIGHTS', 'Lighting'),
+        ('STAGE', 'Stage'),
+        ('', 'None'),
+    ]
+    
+    # System type field - NEW
+    system_type = models.CharField(
+        max_length=10,
+        choices=SYSTEM_TYPE_CHOICES,
+        default='WIRELESS',
+        verbose_name="System Type"
+    )
+    
+    # Unit location for wireless systems - NEW
+    unit_location = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Location of wireless unit (e.g., 'Unit #1 - FOH Rack')"
+    )
+    
+    bp_number = models.IntegerField(verbose_name="BP #")
+    
+    # Position and Name can be either selected from dropdown or custom text
+    position = models.CharField(
+        max_length=100, 
+        blank=True,
+        help_text="Select from dropdown or enter custom"
+    )
+    name = models.CharField(
+        max_length=100, 
+        blank=True,
+        help_text="Crew member name"
+    )
+    
+    headset = models.CharField(
+        max_length=2, 
+        choices=HEADSET_CHOICES, 
+        blank=True,
+        verbose_name="Headset Type"
+    )
+    
+    # Channel assignments
+    channel_a = models.ForeignKey(
+        CommChannel, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='beltpack_channel_a',
+        verbose_name="CH A"
+    )
+    channel_b = models.ForeignKey(
+        CommChannel, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='beltpack_channel_b',
+        verbose_name="CH B"
+    )
+    channel_c = models.ForeignKey(
+        CommChannel, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='beltpack_channel_c',
+        verbose_name="CH C"
+    )
+    channel_d = models.ForeignKey(
+        CommChannel, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='beltpack_channel_d',
+        verbose_name="CH D"
+    )
+    
+    audio_pgm = models.BooleanField(
+        default=False, 
+        verbose_name="AUDIO PGM",
+        help_text="Receives audio program feed"
+    )
+    
+    group = models.CharField(
+        max_length=10, 
+        choices=GROUP_CHOICES, 
+        blank=True,
+        help_text="Department/Group assignment"
+    )
+    
+    checked_out = models.BooleanField(
+        default=False,
+        verbose_name="Checked Out"
+    )
+    
+    notes = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['system_type', 'bp_number']  # Order by system type first
+        verbose_name = "Comm Belt Pack"
+        verbose_name_plural = "Comm Belt Packs"
+        unique_together = ['system_type', 'bp_number']  # BP numbers can repeat across systems
+    
+    def __str__(self):
+        system_prefix = "W" if self.system_type == "WIRELESS" else "H"
+        if self.name:
+            return f"{system_prefix}-BP {self.bp_number}: {self.name}"
+        return f"{system_prefix}-BP {self.bp_number}"
