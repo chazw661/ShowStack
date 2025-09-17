@@ -1039,7 +1039,9 @@ class CommBeltPack(models.Model):
     )
     
     bp_number = models.IntegerField(verbose_name="BP #")
+    updated_at = models.DateTimeField(auto_now=True)
     
+
     # Position and Name can be either selected from dropdown or custom text
     position = models.CharField(
         max_length=100, 
@@ -1107,8 +1109,9 @@ class CommBeltPack(models.Model):
     )
     
     checked_out = models.BooleanField(
-        default=False,
-        verbose_name="Checked Out"
+    default=False,
+    help_text="Whether this belt pack has been checked out (Wireless only)"
+
     )
     
     notes = models.TextField(blank=True)
@@ -1124,3 +1127,20 @@ class CommBeltPack(models.Model):
         if self.name:
             return f"{system_prefix}-BP {self.bp_number}: {self.name}"
         return f"{system_prefix}-BP {self.bp_number}"
+    
+    def save(self, *args, **kwargs):
+    # Force checked_out to False for Hardwired beltpacks
+        if self.system_type == 'HARDWIRED':
+            self.checked_out = False
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        # Add validation to prevent checked_out for Hardwired
+        if self.system_type == 'HARDWIRED' and self.checked_out:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({
+                'checked_out': 'Hardwired belt packs cannot be checked out.'
+            })
+        super().clean()
+
+

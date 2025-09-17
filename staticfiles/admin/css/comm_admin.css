@@ -1,0 +1,23 @@
+/* Add these rules to your comm_admin.css file: */
+
+/* Hide checked_out column for hardwired rows in the list view */
+tr.row1.system-hardwired .field-checked_out,
+tr.row2.system-hardwired .field-checked_out {
+    color: #666;
+    font-style: italic;
+}
+
+/* Style for N/A text in checked out column */
+.field-checked_out span {
+    font-weight: bold;
+}
+
+/* Optional: Add visual indicator for system type in form */
+.form-row.field-system_type select[value="HARDWIRED"] {
+    background-color: #2a2a2a;
+}
+
+/* Hide checked out when Hardwired is selected - backup for JS */
+body.change-form .field-checked_out.hardwired-selected {
+    display: none !important;
+}

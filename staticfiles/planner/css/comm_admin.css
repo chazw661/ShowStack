@@ -1,0 +1,325 @@
+/* planner/static/planner/css/comm_admin.css */
+
+/* Channel grid layout */
+.channel-grid .form-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 10px;
+}
+
+.channel-grid .form-row > div {
+    flex: 1;
+}
+
+/* Position and Name field combinations */
+.field-position_select,
+.field-name_select {
+    margin-bottom: 5px !important;
+}
+
+.position-select,
+.name-select {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+.position-input,
+.name-input {
+    width: 100%;
+    background-color: #f9f9f9;
+}
+
+/* Quick fill buttons */
+#quick-fill-buttons {
+    padding: 10px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.quick-fill-btn {
+    padding: 5px 10px;
+    margin: 0 5px;
+    background-color: #417690;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.quick-fill-btn:hover {
+    background-color: #205067;
+}
+
+.quick-fill-btn[data-config="clear"] {
+    background-color: #ba2121;
+}
+
+.quick-fill-btn[data-config="clear"]:hover {
+    background-color: #8a1919;
+}
+
+/* Channel color coding */
+.channel-a {
+    border-left: 3px solid #4CAF50 !important;
+}
+
+.channel-b {
+    border-left: 3px solid #2196F3 !important;
+}
+
+.channel-c {
+    border-left: 3px solid #FF9800 !important;
+}
+
+.channel-d {
+    border-left: 3px solid #9C27B0 !important;
+}
+
+/* Channel type indicators */
+select[id^="id_channel_"] option.four-wire {
+    font-weight: bold;
+}
+
+select[id^="id_channel_"] option.two-wire {
+    font-style: italic;
+}
+
+/* Checked out status */
+form.checked-out {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+form.checked-out::before {
+    content: "⚠ CHECKED OUT";
+    display: block;
+    color: #856404;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+/* Belt Pack number field */
+#id_bp_number {
+    font-size: 1.2em;
+    font-weight: bold;
+    width: 100px;
+}
+
+/* Changelist summary */
+.comm-summary {
+    background-color: #e9ecef;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+}
+
+.comm-summary h3 {
+    margin-top: 0;
+    color: #495057;
+}
+
+.comm-summary .stat {
+    display: inline-block;
+    margin-right: 20px;
+    padding: 5px 10px;
+    background-color: white;
+    border-radius: 3px;
+}
+
+.comm-summary .stat-label {
+    font-weight: bold;
+    color: #6c757d;
+}
+
+.comm-summary .stat-value {
+    font-size: 1.2em;
+    color: #007bff;
+}
+
+/* Headset type icons */
+.field-headset select option[value="SM"]::before {
+    content: "🎧 ";
+}
+
+.field-headset select option[value="DM"]::before {
+    content: "🎧🎧 ";
+}
+
+.field-headset select option[value="IE"]::before {
+    content: "📻 ";
+}
+
+.field-headset select option[value="SS"]::before {
+    content: "📢 ";
+}
+
+.field-headset select option[value="HM"]::before {
+    content: "🎤 ";
+}
+
+/* Group color coding in list view */
+.field-group_display {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+tr[data-group="PROD"] .field-group_display {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+tr[data-group="AUDIO"] .field-group_display {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+tr[data-group="VIDEO"] .field-group_display {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+tr[data-group="LIGHTS"] .field-group_display {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+tr[data-group="STAGE"] .field-group_display {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+/* System type indicators in list */
+.system-wireless {
+    background-color: #d4edda !important;
+}
+
+.system-hardwired {
+    background-color: #fff3cd !important;
+}
+
+.system-separator {
+    border-top: 3px solid #495057 !important;
+}
+
+/* Unit location field */
+.unit-location {
+    width: 100%;
+    font-style: italic;
+}
+
+.system-config .field-unit_location {
+    display: none;
+}
+
+.system-config[data-system="WIRELESS"] .field-unit_location {
+    display: block;
+}
+
+
+
+@media (prefers-color-scheme: dark) {
+    .position-input,
+    .name-input {
+        background-color: #2a2a2a;
+        color: #e0e0e0;
+    }
+    
+    #quick-fill-buttons {
+        background-color: #1a1a1a;
+    }
+    
+    .comm-summary {
+        background-color: #2a2a2a;
+        color: #e0e0e0;
+    }
+    
+    .comm-summary .stat {
+        background-color: #1a1a1a;
+    }
+    
+    form.checked-out {
+        background-color: #3a3a2a;
+        border-color: #ffc107;
+    }
+}
+
+
+/* Make COMM page consistent with Django dark admin theme */
+/* Main result list table */
+#result_list {
+    background: #2a2a2a !important;
+}
+
+#result_list tbody tr {
+    background: #2a2a2a !important;
+}
+
+#result_list tbody tr:nth-child(even) {
+    background: #333 !important;
+}
+
+/* All table cells - white text on dark background */
+#result_list td,
+#result_list td a {
+    color: #f0f0f0 !important;
+}
+
+#result_list th {
+    background: #417690 !important;
+    color: white !important;
+}
+
+/* Specific field fixes */
+.field-display_bp_number,
+.field-system_type,
+.field-position,
+.field-name,
+.field-headset,
+.field-channel_a,
+.field-channel_b,
+.field-channel_c,
+.field-channel_d,
+.field-audio_pgm,
+.field-group,
+.field-checked_out {
+    color: #f0f0f0 !important;
+}
+
+/* Links in the BP column */
+th.field-display_bp_number a,
+td.field-display_bp_number a {
+    color: #79aec8 !important;  /* Light blue for links */
+}
+
+td.field-display_bp_number a:hover {
+    color: #4fb2d8 !important;
+}
+
+/* System type backgrounds - subtle dark colors */
+.system-wireless {
+    background-color: #1a3a1a !important;  /* Dark green */
+}
+
+.system-hardwired {
+    background-color: #3a3a1a !important;  /* Dark yellow */
+}
+
+/* Keep the summary boxes readable */
+.comm-summary {
+    background-color: #2a2a2a !important;
+    color: #f0f0f0 !important;
+}
+
+.comm-summary .stat {
+    background-color: #333 !important;
+    color: #f0f0f0 !important;
+}
+
+.comm-summary .stat-value {
+    color: #79aec8 !important;
+}

@@ -1429,7 +1429,7 @@ class PACableAdmin(admin.ModelAdmin):
 
 # Add these to your planner/admin.py file
 
-from django.contrib import admin
+
 from django import forms
 from django.db.models import Count, Q, Max
 from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack
@@ -1574,7 +1574,7 @@ class CommBeltPackForm(forms.ModelForm):
             except CommCrewName.DoesNotExist:
                 pass
 
-# Add this BEFORE the CommBeltPackAdmin class definition
+
 
 class CreateBeltPacksForm(forms.Form):
     """Form to ask how many belt packs to create"""
@@ -1725,59 +1725,107 @@ def clear_all_beltpacks(modeladmin, request, queryset):
         modeladmin.message_user(request, "No belt packs to delete")
 clear_all_beltpacks.short_description = '⚠️ DELETE all belt packs'
 
+
+
+
+
+from .models import CommBeltPack
+
+class CommBeltPackAdminForm(forms.ModelForm):
+    """Custom form to handle dynamic field display based on system type"""
+
+    position_select = forms.ModelChoiceField(
+        queryset=CommPosition.objects.all(),
+        required=False,
+        empty_label="-- Select Position --",
+        widget=forms.Select(attrs={'class': 'position-select'})
+    )
+    
+    name_select = forms.ModelChoiceField(
+        queryset=CommCrewName.objects.all(),
+        required=False,
+        empty_label="-- Select Name --",
+        widget=forms.Select(attrs={'class': 'name-select'})
+    )
+    
+    class Meta:
+        model = CommBeltPack
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.instance and self.instance.pk:
+            if self.instance.position:
+                try:
+                    pos = CommPosition.objects.get(name=self.instance.position)
+                    self.fields['position_select'].initial = pos
+                except CommPosition.DoesNotExist:
+                    pass
+            
+            if self.instance.name:
+                try:
+                    crew = CommCrewName.objects.get(name=self.instance.name)
+                    self.fields['name_select'].initial = crew
+                except CommCrewName.DoesNotExist:
+                    pass
+        
+        # Hide checked_out field for Hardwired beltpacks
+        if self.instance and self.instance.system_type == 'HARDWIRED':
+            if 'checked_out' in self.fields:
+                self.fields['checked_out'].widget = forms.HiddenInput()
+                self.fields['checked_out'].required = False
+        
+        # For new objects, add JavaScript to handle dynamic hiding
+        if not self.instance.pk:
+            if 'checked_out' in self.fields:
+                self.fields['checked_out'].help_text = "Whether this belt pack has been checked out (Wireless only)"
+
+    class Media:
+        js = ('admin/js/comm_beltpack_admin.js',)
+        css = {
+            'all': ('admin/css/comm_admin.css',)
+        }
+        
+
+
 @admin.register(CommBeltPack)
 class CommBeltPackAdmin(admin.ModelAdmin):
-    form = CommBeltPackForm
-    list_display = [
-        'display_bp_number', 'system_type', 'position', 'name', 'headset', 
-        'channel_a', 'channel_b', 'channel_c', 'channel_d',
-        'audio_pgm', 'group', 'checked_out'
-    ]
-    list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
-    search_fields = ['bp_number', 'position', 'name', 'unit_location']
-    ordering = ['system_type', 'bp_number']
-    actions = [
-    create_5_wireless_beltpacks,
-    create_10_wireless_beltpacks, 
-    create_20_wireless_beltpacks,
-    create_50_wireless_beltpacks,
-    create_5_hardwired_beltpacks,
-    create_10_hardwired_beltpacks,
-    create_20_hardwired_beltpacks,
-    create_50_hardwired_beltpacks,
-    clear_all_beltpacks
-]
+    form = CommBeltPackAdminForm
     
-    fieldsets = (
-        ('System Configuration', {
-            'fields': (
-                'system_type',
-                'unit_location',
-                'bp_number',
-            ),
-            'classes': ('system-config',),
-        }),
-        ('Assignment', {
-            'fields': (
-                ('position_select', 'position'),
-                ('name_select', 'name'),
-                'headset',
-            )
-        }),
-        ('Channel Assignments', {
-            'fields': (
-                ('channel_a', 'channel_b'),
-                ('channel_c', 'channel_d'),
-            ),
-            'classes': ('channel-grid',),
-        }),
-        ('Settings', {
-            'fields': (
-                ('audio_pgm', 'group', 'checked_out'),
-                'notes',
-            )
-        }),
-    )
+    list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
+    search_fields = ['bp_number', 'name', 'position', 'notes', 'unit_location']
+    ordering = ['system_type', 'bp_number']
+    
+    # Actions for checking in/out and bulk creation
+    actions = [
+        'check_out_beltpacks',
+        'check_in_beltpacks',
+        create_5_wireless_beltpacks,
+        create_10_wireless_beltpacks,
+        create_20_wireless_beltpacks,
+        create_50_wireless_beltpacks,
+        create_5_hardwired_beltpacks,
+        create_10_hardwired_beltpacks,
+        create_20_hardwired_beltpacks,
+        create_50_hardwired_beltpacks,
+        clear_all_beltpacks
+    ]
+    
+    def get_list_display(self, request):
+        """Dynamically adjust list display based on filters"""
+        base_display = ['display_bp_number', 'position', 'name', 'display_channels',
+                       'headset', 'audio_pgm', 'group']
+        
+        # Check if we're filtering by system type
+        system_type = request.GET.get('system_type__exact')
+        
+        # Only show checked_out column for wireless or when not filtering
+        if system_type != 'HARDWIRED':
+            base_display.append('display_checked_out')
+        
+        base_display.extend(['notes', 'updated_at'])
+        return base_display
     
     def display_bp_number(self, obj):
         """Display BP number with system type prefix and icon"""
@@ -1785,22 +1833,157 @@ class CommBeltPackAdmin(admin.ModelAdmin):
             icon = "📡"  # Antenna emoji
             prefix = "W"
         else:
-            icon = "🔗"  # Plug emoji  
+            icon = "🔌"  # Plug emoji
             prefix = "H"
         return format_html("{} {}-{}", icon, prefix, obj.bp_number)
-
     display_bp_number.short_description = "BP #"
     display_bp_number.admin_order_field = 'bp_number'
-
-     
-
     
+    def display_checked_out(self, obj):
+        """Display checked out status - only meaningful for wireless"""
+        if obj.system_type == 'HARDWIRED':
+            return format_html('<span style="color: #666;">—</span>')
+        elif obj.checked_out:
+            # When checked out = True, show green dot (it IS checked out to someone)
+            return format_html('<span style="color: green; font-size: 1.2em;">●</span>')
+        else:
+            # When checked out = False, show red dot (it's available/not checked out)
+            return format_html('<span style="color: red; font-size: 1.2em;">●</span>')
+    display_checked_out.short_description = "Checked Out"
+    display_checked_out.admin_order_field = 'checked_out'
+    
+    def display_channels(self, obj):
+        """Display assigned channels compactly"""
+        channels = []
+        if obj.channel_a:
+            channels.append(f"A:{obj.channel_a.abbreviation}")
+        if obj.channel_b:
+            channels.append(f"B:{obj.channel_b.abbreviation}")
+        if obj.channel_c:
+            channels.append(f"C:{obj.channel_c.abbreviation}")
+        if obj.channel_d:
+            channels.append(f"D:{obj.channel_d.abbreviation}")
+        return " | ".join(channels) if channels else "-"
+    display_channels.short_description = "Channels"
+    
+    def get_fieldsets(self, request, obj=None):
+        """Dynamic fieldsets based on system type"""
+        # Base fieldsets without checked_out
+        base_fieldsets = [
+            ('System Configuration', {
+                'fields': ('system_type', 'bp_number')
+            }),
+            ('Assignment', {
+                'fields': (('position_select', 'position'), ('name_select', 'name'), 'headset'),
+            }),
+            ('Channel Assignments', {
+                'fields': (
+                    ('channel_a', 'channel_b'),
+                    ('channel_c', 'channel_d'),
+                ),
+            }),
+        ]
+        
+        # Add Settings section with or without checked_out
+        if obj and obj.system_type == 'HARDWIRED':
+            # Hardwired: no checked_out field
+            base_fieldsets.append(
+                ('Settings', {
+                    'fields': ('audio_pgm', 'group'),
+                })
+            )
+        else:
+            # Wireless or new objects: include checked_out
+            base_fieldsets.append(
+                ('Settings', {
+                    'fields': ('audio_pgm', 'group', 'checked_out'),
+                })
+            )
+        
+        # Add Notes section
+        base_fieldsets.append(
+            ('Notes', {
+                'fields': ('notes',),
+                'classes': ('collapse',)
+            })
+        )
+        
+        return base_fieldsets
+    
+    @admin.action(description='Check out selected belt packs (Wireless only)')
+    def check_out_beltpacks(self, request, queryset):
+        """Mark selected belt packs as checked out (wireless only)"""
+        wireless_packs = queryset.filter(system_type='WIRELESS')
+        updated = wireless_packs.update(checked_out=True)
+        
+        hardwired_count = queryset.filter(system_type='HARDWIRED').count()
+        
+        if updated:
+            self.message_user(
+                request,
+                f'{updated} wireless belt pack(s) checked out.',
+                messages.SUCCESS
+            )
+        if hardwired_count > 0:
+            self.message_user(
+                request,
+                f'{hardwired_count} hardwired belt pack(s) skipped (cannot be checked out).',
+                messages.WARNING
+            )
+    
+    @admin.action(description='Check in selected belt packs')
+    def check_in_beltpacks(self, request, queryset):
+        """Mark selected belt packs as checked in (wireless only)"""
+        wireless_packs = queryset.filter(system_type='WIRELESS')
+        updated = wireless_packs.update(checked_out=False)
+        
+        if updated:
+            self.message_user(
+                request,
+                f'{updated} wireless belt pack(s) checked in.',
+                messages.SUCCESS
+            )
+    
+    def changelist_view(self, request, extra_context=None):
+        """Add summary information grouped by system type"""
+        extra_context = extra_context or {}
+        
+        # Get counts by system type
+        wireless_total = CommBeltPack.objects.filter(system_type='WIRELESS').count()
+        wireless_checked = CommBeltPack.objects.filter(system_type='WIRELESS', checked_out=True).count()
+        hardwired_total = CommBeltPack.objects.filter(system_type='HARDWIRED').count()
+        
+        # Group counts by system
+        wireless_groups = {}
+        hardwired_groups = {}
+        
+        for choice_key, choice_name in CommBeltPack.GROUP_CHOICES:
+            if choice_key:
+                w_count = CommBeltPack.objects.filter(system_type='WIRELESS', group=choice_key).count()
+                h_count = CommBeltPack.objects.filter(system_type='HARDWIRED', group=choice_key).count()
+                
+                if w_count > 0:
+                    wireless_groups[choice_name] = w_count
+                if h_count > 0:
+                    hardwired_groups[choice_name] = h_count
+        
+        extra_context.update({
+            'wireless_total': wireless_total,
+            'wireless_checked': wireless_checked,
+            'wireless_available': wireless_total - wireless_checked,
+            'hardwired_total': hardwired_total,
+            'hardwired_available': hardwired_total,  # Hardwired are always available
+            'wireless_groups': wireless_groups,
+            'hardwired_groups': hardwired_groups,
+        })
+        
+        return super().changelist_view(request, extra_context)
     
     class Media:
         css = {
-            'all': ('planner/css/comm_admin.css',)
+            'all': ('admin/css/comm_admin.css',)
         }
-        js = ('planner/js/comm_admin.js',)
+        js = ('admin/js/comm_beltpack_admin.js',)
     
     def changelist_view(self, request, extra_context=None):
         """Add summary information grouped by system type"""
