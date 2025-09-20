@@ -1144,3 +1144,266 @@ class CommBeltPack(models.Model):
         super().clean()
 
 
+#-------Mics Tracker-----
+
+
+
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+import json
+
+class ShowDay(models.Model):
+    """Represents a day in the show schedule"""
+    date = models.DateField(unique=True)
+    name = models.CharField(max_length=100, blank=True, help_text="Optional name for the day (e.g., 'Day 1 - Setup')")
+    is_collapsed = models.BooleanField(default=False, help_text="UI state: whether this day is collapsed in the view")
+    order = models.IntegerField(default=0, help_text="Display order for days")
+    
+    class Meta:
+        ordering = ['date', 'order']
+        verbose_name = "Show Day"
+        verbose_name_plural = "Show Days"
+    
+    def __str__(self):
+        if self.name:
+            return f"{self.date.strftime('%Y-%m-%d')} - {self.name}"
+        return self.date.strftime('%Y-%m-%d')
+    
+    def get_all_mics_status(self):
+        """Get a summary of all mics across all sessions for this day"""
+        sessions = self.sessions.all()
+        total_mics = 0
+        used_mics = 0
+        
+        for session in sessions:
+            assignments = session.mic_assignments.all()
+            total_mics += assignments.count()
+            used_mics += assignments.filter(is_micd=True).count()
+        
+        return {
+            'total': total_mics,
+            'used': used_mics,
+            'available': total_mics - used_mics
+        }
+
+class MicSession(models.Model):
+    """Represents a session within a show day"""
+    SESSION_TYPES = [
+        ('REHEARSAL', 'Rehearsal'),
+        ('KEYNOTE', 'Keynote'),
+        ('PANEL', 'Panel Discussion'),
+        ('BREAKOUT', 'Breakout Session'),
+        ('GENERAL', 'General Session'),
+        ('TECH_CHECK', 'Tech Check'),
+        ('OTHER', 'Other'),
+    ]
+    
+    day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='sessions')
+    name = models.CharField(max_length=200)
+    session_type = models.CharField(max_length=20, choices=SESSION_TYPES, default='GENERAL')
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    location = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True)
+    
+    # Configuration
+    num_mics = models.IntegerField(
+        default=16,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Number of mics available for this session"
+    )
+    
+    # Display settings
+    column_position = models.IntegerField(
+        default=0,
+        help_text="Position in the display grid (0-2 for 3-column layout)"
+    )
+    order = models.IntegerField(default=0, help_text="Display order within the day")
+    
+    class Meta:
+        ordering = ['day', 'order', 'start_time']
+        verbose_name = "Mic Session"
+        verbose_name_plural = "Mic Sessions"
+        unique_together = [['day', 'name']]
+    
+    def __str__(self):
+        return f"{self.day.date.strftime('%m/%d')} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        # Auto-create mic assignments if this is a new session
+        if is_new:
+            self.create_mic_assignments()
+    
+    def create_mic_assignments(self):
+        """Create the specified number of mic assignments for this session"""
+        existing_count = self.mic_assignments.count()
+        
+        if existing_count < self.num_mics:
+            # Add more assignments
+            for i in range(existing_count + 1, self.num_mics + 1):
+                MicAssignment.objects.create(
+                    session=self,
+                    rf_number=i
+                )
+        elif existing_count > self.num_mics:
+            # Remove excess assignments (from the end)
+            excess = self.mic_assignments.filter(rf_number__gt=self.num_mics)
+            excess.delete()
+    
+    def get_mic_usage_stats(self):
+        """Get statistics about mic usage in this session"""
+        assignments = self.mic_assignments.all()
+        return {
+            'total': assignments.count(),
+            'micd': assignments.filter(is_micd=True).count(),
+            'd_mic': assignments.filter(is_d_mic=True).count(),
+            'available': assignments.filter(is_micd=False).count(),
+            'shared': assignments.filter(shared_presenters__isnull=False).count()
+        }
+    
+    def duplicate_to_session(self, target_session):
+        """Duplicate all mic assignments to another session"""
+        for assignment in self.mic_assignments.all():
+            new_assignment = MicAssignment.objects.create(
+                session=target_session,
+                rf_number=assignment.rf_number,
+                mic_type=assignment.mic_type,
+                presenter_name=assignment.presenter_name,
+                is_micd=assignment.is_micd,
+                is_d_mic=assignment.is_d_mic,
+                notes=assignment.notes
+            )
+            # Copy shared presenters
+            if assignment.shared_presenters:
+                new_assignment.shared_presenters = assignment.shared_presenters
+                new_assignment.save()
+
+class MicAssignment(models.Model):
+    """Represents a single mic assignment within a session"""
+    MIC_TYPES = [
+        ('', '---'),
+        ('HH', 'Handheld'),
+        ('LAV', 'Lavalier'),
+        ('HEADSET', 'Headset'),
+        ('PODIUM', 'Podium'),
+        ('BOOM', 'Boom'),
+        ('BOUNDARY', 'Boundary'),
+        ('GOOSENECK', 'Gooseneck'),
+        ('COMBO', 'Combo Pack'),
+    ]
+    
+    session = models.ForeignKey(MicSession, on_delete=models.CASCADE, related_name='mic_assignments')
+    rf_number = models.IntegerField(validators=[MinValueValidator(1)])
+    
+    # Mic details
+    mic_type = models.CharField(max_length=20, choices=MIC_TYPES, blank=True)
+    presenter_name = models.CharField(max_length=200, blank=True)
+    
+    # Status checkboxes
+    is_micd = models.BooleanField(default=False, verbose_name="MIC'D")
+    is_d_mic = models.BooleanField(default=False, verbose_name="D-MIC")
+    
+    # Shared presenter functionality
+    shared_presenters = models.JSONField(
+        null=True, 
+        blank=True,
+        help_text="List of additional presenters sharing this mic"
+    )
+    
+    # Additional fields
+    notes = models.TextField(blank=True)
+    last_modified = models.DateTimeField(auto_now=True)
+    modified_by = models.ForeignKey(
+        'auth.User', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='mic_modifications'
+    )
+    
+    class Meta:
+        ordering = ['session', 'rf_number']
+        verbose_name = "Mic Assignment"
+        verbose_name_plural = "Mic Assignments"
+        unique_together = [['session', 'rf_number']]
+    
+    def __str__(self):
+        if self.presenter_name:
+            return f"RF{self.rf_number:02d} - {self.presenter_name}"
+        return f"RF{self.rf_number:02d}"
+    
+    def get_all_presenters(self):
+        """Return list of all presenters including shared ones"""
+        presenters = []
+        if self.presenter_name:
+            presenters.append(self.presenter_name)
+        if self.shared_presenters:
+            presenters.extend(self.shared_presenters)
+        return presenters
+    
+    @property
+    def presenter_count(self):
+        """Return the total number of presenters for this mic"""
+        count = 1 if self.presenter_name else 0
+        if self.shared_presenters:
+            count += len(self.shared_presenters)
+        return count
+    
+    @property
+    def display_presenters(self):
+        """Return a formatted string of all presenters"""
+        presenters = []
+        if self.presenter_name:
+            presenters.append(self.presenter_name)
+        if self.shared_presenters:
+            presenters.extend(self.shared_presenters)
+        
+        if len(presenters) == 0:
+            return ""
+        elif len(presenters) == 1:
+            return presenters[0]
+        elif len(presenters) == 2:
+            return f"{presenters[0]} / {presenters[1]}"
+        else:
+            return f"{presenters[0]} / +{len(presenters)-1} more"
+
+class MicShowInfo(models.Model):
+    """Singleton model to store show-level information"""
+    show_name = models.CharField(max_length=200, blank=True)
+    venue_name = models.CharField(max_length=200, blank=True)
+    ballroom_name = models.CharField(max_length=200, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    
+    # Default configurations
+    default_mics_per_session = models.IntegerField(default=16)
+    default_session_duration = models.IntegerField(default=60, help_text="Default session duration in minutes")
+    
+    class Meta:
+        verbose_name = "Mic Show Information"
+        verbose_name_plural = "Mic Show Information"
+    
+    def __str__(self):
+        if self.show_name:
+            return f"{self.show_name} - Mic Configuration"
+        return "Mic Show Configuration"
+    
+    def save(self, *args, **kwargs):
+        # Ensure only one instance exists
+        self.pk = 1
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_instance(cls):
+        instance, created = cls.objects.get_or_create(pk=1)
+        return instance
+    
+    @property
+    def duration_display(self):
+        if self.start_date and self.end_date:
+            return f"{self.start_date.strftime('%m/%d')}-{self.end_date.strftime('%m/%d')}"
+        return ""

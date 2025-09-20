@@ -18,10 +18,14 @@ from django.http import HttpResponse
 from django.contrib import admin
 from django.urls import path
 from django.urls import include
+from django.shortcuts import redirect  
+from django.views.generic import RedirectView
 
 urlpatterns = [
+    path('', RedirectView.as_view(url='/audiopatch/mic-tracker/', permanent=False)),
     path('admin/', admin.site.urls),
-    path('', include('planner.urls')),
+    path('audiopatch/', include('planner.urls')),
+    path('mic-tracker/', lambda request: redirect('/audiopatch/mic-tracker/', permanent=True)),
     path('test/', lambda request: HttpResponse("It works!")),
 ]
 

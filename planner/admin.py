@@ -1,8 +1,5 @@
-# Make sure these imports are at the top of your admin.py file
 
-# At the TOP of admin.py, organize all imports together (lines 1-25):
 
-# Django imports
 # At the TOP of admin.py, organize all imports together (lines 1-25):
 
 # Django imports
@@ -13,42 +10,38 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe  
+from django.shortcuts import render, redirect  
+from django.contrib.admin.views.decorators import staff_member_required  
+from django.views.decorators.http import require_POST  
 from django import forms
+from django.db.models import Count, Q, Max
 
-# ========== ADMIN SITE CONFIGURATION ==========
-admin.site.site_header = "Audio System Planner"
-admin.site.site_title = "Audio Planner"
-admin.site.index_title = "Welcome to Audio System Management"
-admin.site.enable_nav_sidebar = True
+# Python standard library imports
+import csv
+import math
+import json  
+from datetime import datetime, timedelta  
 
-# Model imports
+# Model imports (add the mic tracking models to your existing model imports)
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import Location, Amp, AmpChannel
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
+from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
+from .models import ShowDay, MicSession, MicAssignment, MicShowInfo 
 
-# Form imports (ALL forms in one place)
+# Form imports
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
 from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
-
-#Galaxy Processor
-from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 
 
-# ========== OTHER IMPORTS ==========
-from django.db.models import Count, Q, Max  # Add this line
-import csv
-import math
 
-#-----------PDF Creation Start------
-#-----------End PDF Creation
 
-#-----------PDF Creation Start------
-
-#-----------End PDF Creation
+#-----Console Page----
 
 
 class ConsoleInputInline(admin.TabularInline):
@@ -2057,6 +2050,168 @@ def populate_default_channels(modeladmin, request, queryset):
 
 # Add action to the CommChannel admin
 CommChannelAdmin.actions = [populate_default_channels]
+
+
+
+#--------Mic Tracking Sheet-----
+
+
+
+
+class MicAssignmentInline(admin.TabularInline):
+    model = MicAssignment
+    extra = 0
+    fields = ('rf_number', 'mic_type', 'presenter_name', 'is_micd', 'is_d_mic', 'shared_presenters', 'notes')
+    ordering = ['rf_number']
+    
+    def get_readonly_fields(self, request, obj=None):
+        if obj:  # Editing existing session
+            return ['rf_number']
+        return []
+
+@admin.register(ShowDay)
+class ShowDayAdmin(admin.ModelAdmin):
+    list_display = ('date', 'name', 'session_count', 'total_mics', 'mics_used', 'view_day_link')
+    list_filter = ('date',)
+    search_fields = ('name',)
+    ordering = ['date']
+    
+    def session_count(self, obj):
+        return obj.sessions.count()
+    session_count.short_description = "Sessions"
+    
+    def total_mics(self, obj):
+        stats = obj.get_all_mics_status()
+        return stats['total']
+    total_mics.short_description = "Total Mics"
+    
+    def mics_used(self, obj):
+        stats = obj.get_all_mics_status()
+        return f"{stats['used']}/{stats['total']}"
+    mics_used.short_description = "Mics Used"
+    
+    def view_day_link(self, obj):
+        url = f'/mic-tracker/?day={obj.id}'
+        return format_html('<a href="{}" class="button">View Day</a>', url)
+    view_day_link.short_description = "View"
+
+@admin.register(MicSession)
+class MicSessionAdmin(admin.ModelAdmin):
+    list_display = ('name', 'day', 'session_type', 'start_time', 'location', 'mic_usage', 'edit_mics_link')
+    list_filter = ('day', 'session_type')
+    search_fields = ('name', 'location')
+    ordering = ['day__date', 'order', 'start_time']
+    inlines = [MicAssignmentInline]
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('day', 'name', 'session_type', 'location')
+        }),
+        ('Schedule', {
+            'fields': ('start_time', 'end_time')
+        }),
+        ('Configuration', {
+            'fields': ('num_mics', 'column_position', 'order')
+        }),
+        ('Notes', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def mic_usage(self, obj):
+        stats = obj.get_mic_usage_stats()
+        return f"{stats['micd']}/{stats['total']}"
+    mic_usage.short_description = "Mics Used"
+    
+    def edit_mics_link(self, obj):
+        url = f'/mic-tracker/?session={obj.id}'
+        return format_html('<a href="{}" class="button">Quick Edit</a>', url)
+        edit_mics_link.short_description = "Quick Edit"
+    
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Update mic assignments if num_mics changed
+        if 'num_mics' in form.changed_data:
+            obj.create_mic_assignments()
+
+@admin.register(MicAssignment)
+class MicAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('rf_display', 'session', 'mic_type', 'presenter_display', 'is_micd', 'is_d_mic', 'last_modified')
+    list_filter = ('session__day', 'session', 'mic_type', 'is_micd', 'is_d_mic')
+    search_fields = ('presenter_name', 'session__name', 'notes')
+    list_editable = ('is_micd', 'is_d_mic')
+    ordering = ['session__day__date', 'session__order', 'rf_number']
+    
+    fieldsets = (
+        ('Assignment Details', {
+            'fields': ('session', 'rf_number', 'mic_type')
+        }),
+        ('Presenter Information', {
+            'fields': ('presenter_name', 'shared_presenters')
+        }),
+        ('Status', {
+            'fields': ('is_micd', 'is_d_mic')
+        }),
+        ('Additional Info', {
+            'fields': ('notes', 'modified_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def rf_display(self, obj):
+        return f"RF{obj.rf_number:02d}"
+    rf_display.short_description = "RF#"
+    rf_display.admin_order_field = 'rf_number'
+    
+    def presenter_display(self, obj):
+        return obj.display_presenters
+    presenter_display.short_description = "Presenter(s)"
+    
+    def save_model(self, request, obj, form, change):
+        obj.modified_by = request.user
+        super().save_model(request, obj, form, change)
+
+@admin.register(MicShowInfo)
+class MicShowInfoAdmin(admin.ModelAdmin):
+    fieldsets = (
+        ('Show Information', {
+            'fields': ('show_name', 'venue_name', 'ballroom_name')
+        }),
+        ('Schedule', {
+            'fields': ('start_date', 'end_date')
+        }),
+        ('Defaults', {
+            'fields': ('default_mics_per_session', 'default_session_duration')
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Only allow one instance
+        return not MicShowInfo.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+# ===== ADD TO planner/urls.py (or create if doesn't exist) =====
+
+from django.urls import path
+from . import views
+
+app_name = 'planner'
+
+urlpatterns = [
+    path('dashboard/', views.dashboard_view, name='dashboard'),
+    path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
+    path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
+    path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
+    path('api/session/duplicate/', views.duplicate_session, name='duplicate_session'),
+    path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
+    path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
+]
+
+
 
 
 

@@ -1,0 +1,289 @@
+<!-- planner/templates/planner/mic_tracker.html -->
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Mic Tracker - {{ show_info.show_name|default:"Audio Patch" }}{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/mic_tracker.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
+    <script src="{% static 'admin/js/jquery.init.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<div id="mic-tracker-container">
+    <!-- Header Section -->
+    <div class="mic-tracker-header">
+        <h1>Mic Assignment Tracker</h1>
+        
+        <div class="show-info">
+            <div class="info-row">
+                <span class="label">Show:</span>
+                <span class="value">{{ show_info.show_name|default:"--" }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Venue:</span>
+                <span class="value">{{ show_info.venue_name|default:"--" }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Ballroom:</span>
+                <span class="value">{{ show_info.ballroom_name|default:"--" }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Duration:</span>
+                <span class="value">{{ show_info.duration_display|default:"--" }}</span>
+            </div>
+        </div>
+        
+        <div class="tracker-actions">
+            <button class="btn btn-primary" onclick="addNewDay()">Add Day</button>
+            <button class="btn btn-secondary" onclick="expandAllDays()">Expand All</button>
+            <button class="btn btn-secondary" onclick="collapseAllDays()">Collapse All</button>
+            <a href="/audiopatch/mic-tracker/export/" class="btn btn-export">Export CSV</a>
+        </div>
+    </div>
+
+    <!-- Days Container -->
+    <div class="days-container">
+        {% for day_data in days_data %}
+        <div class="day-section" data-day-id="{{ day_data.day.id }}" data-collapsed="{{ day_data.day.is_collapsed|yesno:'true,false' }}">
+            <div class="day-header" onclick="toggleDay({{ day_data.day.id }})">
+                <span class="collapse-icon">{% if day_data.day.is_collapsed %}▶{% else %}▼{% endif %}</span>
+                <h2>{{ day_data.day }}</h2>
+                <div class="day-stats">
+                    {% with stats=day_data.day.get_all_mics_status %}
+                    <span class="stat">Sessions: {{ day_data.day.sessions.count }}</span>
+                    <span class="stat">Mics: {{ stats.used }}/{{ stats.total }}</span>
+                    <span class="stat">Available: {{ stats.available }}</span>
+                    {% endwith %}
+                </div>
+                <div class="day-actions">
+                    <button class="btn btn-sm" onclick="event.stopPropagation(); addSession({{ day_data.day.id }})">Add Session</button>
+                </div>
+            </div>
+            
+            <div class="day-content" {% if day_data.day.is_collapsed %}style="display: none;"{% endif %}>
+                <div class="sessions-grid">
+                    {% for session in day_data.sessions %}
+                        {% if forloop.counter0|divisibleby:3 %}
+                            {% if not forloop.first %}</div>{% endif %}
+                            <div class="session-row">
+                        {% endif %}
+                        
+                        <div class="session-column" data-session-id="{{ session.id }}">
+                            <div class="session-header">
+                                <div class="session-info">
+                                    <span class="session-date">{{ session.day.date|date:"m/d" }}</span>
+                                    <h3>{{ session.name }}</h3>
+                                    {% if session.location %}
+                                    <span class="session-location">{{ session.location }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="session-actions">
+                                    <button class="btn-icon" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
+                                    <button class="btn-icon" title="Settings" onclick="editSession({{ session.id }})">⚙️</button>
+                                    <div class="dropdown">
+                                        <button class="btn-icon" title="Bulk Actions">⋮</button>
+                                        <div class="dropdown-content">
+                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'check_all_micd'); return false;">Check All MIC'D</a>
+                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'uncheck_all_micd'); return false;">Uncheck All MIC'D</a>
+                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'check_all_dmic'); return false;">Check All D-MIC</a>
+                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'uncheck_all_dmic'); return false;">Uncheck All D-MIC</a>
+                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'clear_all'); return false;">Clear All</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mic-grid">
+                                <div class="mic-grid-header">
+                                    <div class="col-rf">RF#</div>
+                                    <div class="col-type">TYPE</div>
+                                    <div class="col-presenter">PRESENTER</div>
+                                    <div class="col-micd">MIC'D</div>
+                                    <div class="col-dmic">D-MIC</div>
+                                </div>
+                                
+                                {% for assignment in session.mic_assignments.all %}
+                                <div class="mic-row" data-assignment-id="{{ assignment.id }}">
+                                    <div class="col-rf">{{ assignment.rf_number|stringformat:"02d" }}</div>
+                                    
+                                    <div class="col-type">
+                                        <select class="mic-type-select" onchange="updateField({{ assignment.id }}, 'mic_type', this.value)">
+                                            <option value="">---</option>
+                                            {% for value, label in mic_types %}
+                                            {% if value %}
+                                            <option value="{{ value }}" {% if assignment.mic_type == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="col-presenter editable" data-field="presenter" data-id="{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
+                                        <div class="presenter-input-group">
+                                            <input type="text" 
+                                                   class="presenter-input" 
+                                                   value="{{ assignment.presenter_name }}"
+                                                   placeholder="Enter name..."
+                                                   onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
+                                                   title="Primary presenter">
+                                            <button type="button" 
+                                                    class="btn-share-presenter" 
+                                                    onclick="showSharedPresenterDialog({{ assignment.id }})"
+                                                    title="Manage shared presenters">
+                                                {% if assignment.presenter_count > 1 %}
+                                                <span class="share-count">+{{ assignment.presenter_count|add:"-1" }}</span>
+                                                {% else %}
+                                                <span class="share-icon">👥</span>
+                                                {% endif %}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-micd">
+                                        <input type="checkbox" 
+                                               class="mic-checkbox"
+                                               {% if assignment.is_micd %}checked{% endif %}
+                                               onchange="updateField({{ assignment.id }}, 'is_micd', this.checked)">
+                                    </div>
+                                    
+                                    <div class="col-dmic">
+                                        <input type="checkbox" 
+                                               class="mic-checkbox"
+                                               {% if assignment.is_d_mic %}checked{% endif %}
+                                               onchange="updateField({{ assignment.id }}, 'is_d_mic', this.checked)">
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="session-footer">
+                                {% with stats=session.get_mic_usage_stats %}
+                                <span class="session-stat">MIC'D: {{ stats.micd }}/{{ stats.total }}</span>
+                                <span class="session-stat">Available: {{ stats.total|add:stats.micd|stringformat:"-d" }}</span>
+                                {% if stats.shared > 0 %}
+                                <span class="session-stat">Shared: {{ stats.shared }}</span>
+                                {% endif %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                        
+                        {% if forloop.last %}</div>{% endif %}
+                    {% endfor %}
+                    
+                    {% if not day_data.sessions %}
+                        <div class="session-row">
+                            <div class="session-column empty">
+                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
+                                    + Add Session
+                                </button>
+                            </div>
+                            <div class="session-column empty">
+                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
+                                    + Add Session
+                                </button>
+                            </div>
+                            <div class="session-column empty">
+                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
+                                    + Add Session
+                                </button>
+                            </div>
+                        </div>
+                    {% elif day_data.sessions|length|divisibleby:3 %}
+                        <!-- Add empty slots to complete the row if needed -->
+                        <div class="session-row">
+                            <div class="session-column empty">
+                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
+                                    + Add Session
+                                </button>
+                            </div>
+                            <div class="session-column empty">
+                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
+                                    + Add Session
+                                </button>
+                            </div>
+                            <div class="session-column empty">
+                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
+                                    + Add Session
+                                </button>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        {% if not days_data %}
+        <div class="empty-state">
+            <p>No days have been created yet.</p>
+            <button class="btn btn-primary" onclick="addNewDay()">Create First Day</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Improved Shared Presenter Modal -->
+<div id="sharedPresenterModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Manage Shared Presenters</h2>
+            <span class="close" onclick="closeSharedPresenterModal()">&times;</span>
+        </div>
+        
+        <div class="modal-body">
+            <div class="presenter-info">
+                <strong>Main Presenter:</strong> 
+                <span id="modalMainPresenter"></span>
+            </div>
+            
+            <div class="shared-presenters-section">
+                <h3>Shared Presenters</h3>
+                <div id="sharedPresentersList" class="presenters-list">
+                    <!-- Dynamically populated -->
+                </div>
+                
+                <div class="add-presenter-form">
+                    <input 
+                        type="text" 
+                        id="newPresenterInput" 
+                        placeholder="Enter presenter name"
+                        class="presenter-input"
+                    />
+                    <button 
+                        type="button" 
+                        onclick="addSharedPresenter()" 
+                        class="add-btn"
+                    >
+                        Add Presenter
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button 
+                type="button" 
+                onclick="saveSharedPresenters()" 
+                class="save-btn"
+            >
+                Save Changes
+            </button>
+            <button 
+                type="button" 
+                onclick="closeSharedPresenterModal()" 
+                class="cancel-btn"
+            >
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'admin/js/mic_tracker.js' %}"></script>
+{% endblock %}
