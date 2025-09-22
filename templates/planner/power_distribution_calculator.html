@@ -1,0 +1,670 @@
+<!-- Create this file: planner/templates/planner/power_distribution_calculator.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Distribution Calculator - {{ plan.show_day }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .header-info {
+            display: flex;
+            gap: 30px;
+            color: #b0b0b0;
+        }
+        
+        .panel {
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3a3a3a;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #4a9eff;
+            box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            background: #4a9eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #3a8eef;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(74, 158, 255, 0.3);
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        .phase-display {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .phase-label {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .phase-current {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .phase-percentage {
+            font-size: 14px;
+            color: #888;
+        }
+        
+        .phase-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        
+        .phase-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4a9eff, #3a8eef);
+            transition: width 0.3s;
+        }
+        
+        .phase-bar-fill.warning {
+            background: linear-gradient(90deg, #ffc107, #ff9800);
+        }
+        
+        .phase-bar-fill.danger {
+            background: linear-gradient(90deg, #dc3545, #c82333);
+        }
+        
+        .imbalance-indicator {
+            text-align: center;
+            padding: 15px;
+            background: #1a1a1a;
+            border-radius: 8px;
+        }
+        
+        .imbalance-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .imbalance-good {
+            color: #28a745;
+        }
+        
+        .imbalance-warning {
+            color: #ffc107;
+        }
+        
+        .imbalance-bad {
+            color: #dc3545;
+        }
+        
+        .assignments-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .assignments-table th,
+        .assignments-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        
+        .assignments-table th {
+            background: #1a1a1a;
+            font-weight: 600;
+            color: #b0b0b0;
+        }
+        
+        .assignments-table tr:hover {
+            background: #333;
+        }
+        
+        .zone-group {
+            background: #1f1f1f;
+            border-left: 3px solid #4a9eff;
+            margin-bottom: 10px;
+        }
+        
+        .zone-header {
+            padding: 10px;
+            font-weight: bold;
+            background: #252525;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            position: relative;
+            background: #2a2a2a;
+            margin: 5% auto;
+            padding: 20px;
+            width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+        
+        .modal-header {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 28px;
+            cursor: pointer;
+            color: #888;
+        }
+        
+        .modal-close:hover {
+            color: #fff;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Power Distribution Calculator</h1>
+            <div class="header-info">
+                <span><strong>Show:</strong> {{ plan.show_day }}</span>
+                <span><strong>Venue:</strong> {{ plan.venue_name }}</span>
+                <span><strong>Date:</strong> {{ plan.show_day.date }}</span>
+            </div>
+        </div>
+        <div>
+            <a href="/admin/planner/powerdistributionplan/" class="btn">← Back to Power Distribution Plans</a>
+        </div>
+    </div>
+</div>
+
+        
+        <!-- Service Configuration Panel -->
+        <div class="panel">
+            <h2 class="panel-title">Service Configuration</h2>
+            <div class="grid-3">
+                <div class="form-group">
+                    <label>Service Type</label>
+                    <select id="service-type" onchange="updatePlanSettings()">
+                        {% for value, label in service_types %}
+                        <option value="{{ value }}" {% if plan.service_type == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Available Amps/Leg</label>
+                    <input type="number" id="available-amps" value="{{ plan.available_amperage_per_leg }}" 
+                           onchange="updatePlanSettings()">
+                </div>
+                <div class="form-group">
+                    <label>Voltage</label>
+                    <input type="text" value="{{ plan.get_voltage }}V" readonly style="background: #222;">
+                </div>
+            </div>
+            <div class="grid-3">
+                <div class="form-group">
+                    <label>Transient Headroom</label>
+                    <select id="transient-headroom" onchange="updatePlanSettings()">
+                        <option value="1.3" {% if plan.transient_headroom == 1.3 %}selected{% endif %}>30%</option>
+                        <option value="1.5" {% if plan.transient_headroom == 1.5 %}selected{% endif %}>50%</option>
+                        <option value="1.75" {% if plan.transient_headroom == 1.75 %}selected{% endif %}>75%</option>
+                        <option value="2.0" {% if plan.transient_headroom == 2.0 %}selected{% endif %}>100%</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Safety Margin</label>
+                    <select id="safety-margin" onchange="updatePlanSettings()">
+                        <option value="0.7" {% if plan.safety_margin == 0.7 %}selected{% endif %}>70%</option>
+                        <option value="0.8" {% if plan.safety_margin == 0.8 %}selected{% endif %}>80%</option>
+                        <option value="0.9" {% if plan.safety_margin == 0.9 %}selected{% endif %}>90%</option>
+                        <option value="1.0" {% if plan.safety_margin == 1.0 %}selected{% endif %}>100%</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Usable Amps/Leg</label>
+                    <input type="text" value="{{ plan.get_usable_amperage }}A" readonly style="background: #222;">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Phase Distribution Summary -->
+        <div class="panel">
+            <h2 class="panel-title">Phase Distribution Summary</h2>
+            <div class="grid-3">
+                <div class="phase-display">
+                    <div class="phase-label">L1</div>
+                    <div class="phase-current" id="l1-current">{{ phase_loads.phases.L1.current_rounded }}A</div>
+                    <div class="phase-percentage">{{ phase_loads.phases.L1.percentage|floatformat:1 }}% Used</div>
+                    <div class="phase-bar">
+                        <div class="phase-bar-fill" id="l1-bar" style="width: {{ phase_loads.phases.L1.percentage }}%"></div>
+                    </div>
+                </div>
+                <div class="phase-display">
+                    <div class="phase-label">L2</div>
+                    <div class="phase-current" id="l2-current">{{ phase_loads.phases.L2.current_rounded }}A</div>
+                    <div class="phase-percentage">{{ phase_loads.phases.L2.percentage|floatformat:1 }}% Used</div>
+                    <div class="phase-bar">
+                        <div class="phase-bar-fill" id="l2-bar" style="width: {{ phase_loads.phases.L2.percentage }}%"></div>
+                    </div>
+                </div>
+                <div class="phase-display">
+                    <div class="phase-label">L3</div>
+                    <div class="phase-current" id="l3-current">{{ phase_loads.phases.L3.current_rounded }}A</div>
+                    <div class="phase-percentage">{{ phase_loads.phases.L3.percentage|floatformat:1 }}% Used</div>
+                    <div class="phase-bar">
+                        <div class="phase-bar-fill" id="l3-bar" style="width: {{ phase_loads.phases.L3.percentage }}%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="imbalance-indicator">
+                <div class="imbalance-value {% if phase_loads.imbalance < 10 %}imbalance-good{% elif phase_loads.imbalance < 15 %}imbalance-warning{% else %}imbalance-bad{% endif %}">
+                    {{ phase_loads.imbalance }}%
+                </div>
+                <div>Phase Imbalance (Target &lt;10%)</div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ phase_loads.total_current|floatformat:0 }}A</div>
+                    <div class="stat-label">Total Current</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ assignments|length }}</div>
+                    <div class="stat-label">Amp Groups</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-amps">0</div>
+                    <div class="stat-label">Total Amplifiers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-power">0kW</div>
+                    <div class="stat-label">Peak Power</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Amplifier Assignments -->
+        <div class="panel">
+            <h2 class="panel-title">Amplifier Assignments</h2>
+            <button class="btn" onclick="showAddAmplifierModal()">+ Add Amplifier Group</button>
+            
+            <table class="assignments-table" style="margin-top: 20px;">
+                <thead>
+                    <tr>
+                        <th>Zone</th>
+                        <th>Position</th>
+                        <th>Amplifier</th>
+                        <th>Qty</th>
+                        <th>Duty Cycle</th>
+                        <th>Phase</th>
+                        <th>Current/Unit</th>
+                        <th>Total Current</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="assignments-tbody">
+                    {% for assignment in assignments %}
+                    <tr data-id="{{ assignment.id }}">
+                        <td>{{ assignment.zone }}</td>
+                        <td>{{ assignment.position|default:"-" }}</td>
+                        <td>{{ assignment.amplifier }}</td>
+                        <td>{{ assignment.quantity }}</td>
+                        <td>{{ assignment.get_duty_cycle_display }}</td>
+                        <td>{{ assignment.phase_assignment }}</td>
+                        <td>{{ assignment.calculated_current_per_unit|floatformat:1 }}A</td>
+                        <td><strong>{{ assignment.calculated_total_current|floatformat:1 }}A</strong></td>
+                        <td>
+                            <button class="btn btn-sm btn-secondary" onclick="editAssignment({{ assignment.id }})">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteAssignment({{ assignment.id }})">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Add Amplifier Modal -->
+    <div id="addAmplifierModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <h2 class="modal-header">Add Amplifier Group</h2>
+            
+            <div class="form-group">
+                <label>Amplifier Model</label>
+                <select id="modal-amplifier">
+                    {% for amp in amplifier_profiles %}
+                    <option value="{{ amp.id }}">{{ amp.manufacturer }} {{ amp.model }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" id="modal-quantity" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Zone</label>
+                    <input type="text" id="modal-zone" value="FOH" placeholder="e.g., FOH, Delays, Fills">
+                </div>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Position (Optional)</label>
+                    <input type="text" id="modal-position" placeholder="e.g., Stage Left, Tower 1">
+                </div>
+                <div class="form-group">
+                    <label>Duty Cycle</label>
+                    <select id="modal-duty">
+                        {% for value, label in duty_cycles %}
+                        <option value="{{ value }}" {% if value == 'heavy_music' %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button class="btn" onclick="addAmplifier()">Add Amplifier Group</button>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const planId = {{ plan.id }};
+        const csrfToken = '{{ csrf_token }}';
+        
+        // Update plan settings via AJAX
+        function updatePlanSettings() {
+            const data = {
+                service_type: document.getElementById('service-type').value,
+                available_amperage_per_leg: document.getElementById('available-amps').value,
+                transient_headroom: document.getElementById('transient-headroom').value,
+                safety_margin: document.getElementById('safety-margin').value,
+            };
+            
+            fetch(`/audiopatch/api/power/plan/${planId}/update/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updatePhaseDisplay(data.phase_loads);
+                    location.reload(); // Refresh to show recalculated values
+                }
+            });
+        }
+        
+        // Update phase display
+        function updatePhaseDisplay(phaseLoads) {
+            // Update current values
+            document.getElementById('l1-current').textContent = phaseLoads.phases.L1.current_rounded + 'A';
+            document.getElementById('l2-current').textContent = phaseLoads.phases.L2.current_rounded + 'A';
+            document.getElementById('l3-current').textContent = phaseLoads.phases.L3.current_rounded + 'A';
+            
+            // Update progress bars
+            updatePhaseBar('l1-bar', phaseLoads.phases.L1.percentage);
+            updatePhaseBar('l2-bar', phaseLoads.phases.L2.percentage);
+            updatePhaseBar('l3-bar', phaseLoads.phases.L3.percentage);
+        }
+        
+        function updatePhaseBar(barId, percentage) {
+            const bar = document.getElementById(barId);
+            bar.style.width = percentage + '%';
+            
+            // Update color based on percentage
+            bar.classList.remove('warning', 'danger');
+            if (percentage > 90) {
+                bar.classList.add('danger');
+            } else if (percentage > 70) {
+                bar.classList.add('warning');
+            }
+        }
+        
+        // Modal functions
+        function showAddAmplifierModal() {
+            document.getElementById('addAmplifierModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('addAmplifierModal').style.display = 'none';
+        }
+        
+        // Add amplifier
+        function addAmplifier() {
+            const data = {
+                amplifier_id: document.getElementById('modal-amplifier').value,
+                quantity: document.getElementById('modal-quantity').value,
+                zone: document.getElementById('modal-zone').value,
+                position: document.getElementById('modal-position').value,
+                duty_cycle: document.getElementById('modal-duty').value,
+            };
+            
+            fetch(`/audiopatch/api/power/plan/${planId}/add-amp/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeModal();
+                    location.reload(); // Refresh to show new assignment
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        }
+        
+        // Delete assignment
+        function deleteAssignment(assignmentId) {
+            if (!confirm('Are you sure you want to delete this amplifier assignment?')) {
+                return;
+            }
+            
+            fetch(`/audiopatch/api/power/assignment/${assignmentId}/delete/`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                }
+            });
+        }
+        
+        // Edit assignment (placeholder for future implementation)
+        function editAssignment(assignmentId) {
+            alert('Edit functionality coming soon!');
+        }
+        
+        // Calculate totals on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Calculate total amplifiers
+            let totalAmps = 0;
+            let totalPower = 0;
+            
+            {% for assignment in assignments %}
+            totalAmps += {{ assignment.quantity }};
+            totalPower += {{ assignment.get_power_details.total.peak_watts }};
+            {% endfor %}
+            
+            document.getElementById('total-amps').textContent = totalAmps;
+            document.getElementById('total-power').textContent = (totalPower / 1000).toFixed(1) + 'kW';
+        });
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('addAmplifierModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

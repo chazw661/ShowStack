@@ -16,6 +16,8 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.http import require_POST  
 from django import forms
 from django.db.models import Count, Q, Max
+from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment
+from django.db.models import Sum 
 
 # Python standard library imports
 import csv
@@ -2055,19 +2057,54 @@ CommChannelAdmin.actions = [populate_default_channels]
 
 #--------Mic Tracking Sheet-----
 
+# In planner/admin.py, simplify the MicAssignmentForm:
 
+from django import forms
+import json
 
+class MicAssignmentForm(forms.ModelForm):
+    class Meta:
+        model = MicAssignment
+        fields = '__all__'
+        widgets = {
+            'notes': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
+            'shared_presenters': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Format the initial value to hide empty displays
+        if 'shared_presenters' in self.fields:
+            widget = self.fields['shared_presenters'].widget
+            original_format_value = widget.format_value
+            
+            def custom_format_value(value):
+                if value in [None, [], '[]', '""', "''", 'null']:
+                    return ''
+                if isinstance(value, list):
+                    return '\n'.join(value)
+                if isinstance(value, str) and value in ['[]', '""', "''", 'null']:
+                    return ''
+                return original_format_value(value)
+            
+            widget.format_value = custom_format_value
+    
+    def clean_shared_presenters(self):
+        value = self.cleaned_data.get('shared_presenters', '')
+        if not value or value in ['[]', '""', "''", 'null']:
+            return []
+        if isinstance(value, str):
+            return [name.strip() for name in value.split('\n') if name.strip()]
+        return value if value else []
 
+# Keep the inline simple
 class MicAssignmentInline(admin.TabularInline):
     model = MicAssignment
+    form = MicAssignmentForm
     extra = 0
-    fields = ('rf_number', 'mic_type', 'presenter_name', 'is_micd', 'is_d_mic', 'shared_presenters', 'notes')
+    fields = ['rf_number', 'mic_type', 'presenter_name', 'is_micd', 'is_d_mic', 'shared_presenters', 'notes']
     ordering = ['rf_number']
-    
-    def get_readonly_fields(self, request, obj=None):
-        if obj:  # Editing existing session
-            return ['rf_number']
-        return []
+    readonly_fields = ['rf_number']
 
 @admin.register(ShowDay)
 class ShowDayAdmin(admin.ModelAdmin):
@@ -2212,6 +2249,351 @@ urlpatterns = [
 ]
 
 
+#--------Power Estimator---------
+
+@admin.register(AmplifierProfile)
+class AmplifierProfileAdmin(admin.ModelAdmin):
+    list_display = [
+        'manufacturer', 'model', 'channels', 'rated_power_watts', 
+        'nominal_voltage', 'rack_units'
+    ]
+    list_filter = ['manufacturer', 'nominal_voltage', 'channels']
+    search_fields = ['manufacturer', 'model', 'notes']
+    ordering = ['manufacturer', 'model']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('manufacturer', 'model', 'channels', 'rack_units', 'weight_kg')
+        }),
+        ('Power Specifications', {
+            'fields': (
+                'idle_power_watts', 'rated_power_watts', 
+                'peak_power_watts', 'max_power_watts'
+            ),
+            'description': 'Power values in watts. Rated power is 1/8 power (pink noise), typical for calculations.'
+        }),
+        ('Electrical Specifications', {
+            'fields': ('nominal_voltage', 'power_factor', 'efficiency')
+        }),
+        ('Additional Information', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+class AmplifierAssignmentInline(admin.TabularInline):
+    model = AmplifierAssignment
+    extra = 1
+    fields = [
+        'amplifier', 'quantity', 'zone', 'position', 
+        'duty_cycle', 'phase_assignment', 
+        'calculated_current_per_unit', 'calculated_total_current'
+    ]
+    readonly_fields = ['calculated_current_per_unit', 'calculated_total_current']
+    autocomplete_fields = ['amplifier']
+
+
+# Update your PowerDistributionPlanAdmin class in planner/admin.py
+
+@admin.register(PowerDistributionPlan)
+class PowerDistributionPlanAdmin(admin.ModelAdmin):
+    list_display = [
+        'show_day', 'venue_name', 'service_type', 
+        'available_amperage_per_leg', 'get_total_current', 'created_at', 'view_calculator_button',
+    ]
+    list_filter = ['service_type', 'created_at']
+    search_fields = ['venue_name', 'show_day__name', 'notes']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Show Information', {
+            'fields': ('show_day', 'venue_name')
+        }),
+        ('Electrical Service', {
+            'fields': ('service_type', 'available_amperage_per_leg')
+        }),
+        ('Safety Settings', {
+            'fields': ('transient_headroom', 'safety_margin'),
+            'description': 'Transient headroom accounts for audio peaks. Safety margin is the derating factor.'
+        }),
+        ('Additional Information', {
+            'fields': ('notes', 'created_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    # Remove get_summary_html from readonly_fields since it's not a real field
+    readonly_fields = ['created_by', 'created_at', 'updated_at', 'get_total_current']
+    
+    inlines = [AmplifierAssignmentInline]
+    
+
+    
+    def get_total_current(self, obj):
+        """Calculate total current for list display"""
+        if not obj.pk:
+            return '-'
+        total = obj.amplifier_assignments.aggregate(
+            total=Sum('calculated_total_current')
+        )['total'] or 0
+        return f"{total:.1f}A"
+    get_total_current.short_description = 'Total Current'
+    
+    def view_calculator_button(self, obj):
+        """Add button to view calculator in list display"""
+        if obj.pk:
+            url = f"/audiopatch/power-distribution/{obj.pk}/"
+            return format_html(
+                '<a class="button" href="{}" style="background:#4a9eff; color:white; padding:5px 10px; text-decoration:none; border-radius:4px;">View Calculator</a>',
+                url
+            )
+        return '-'
+    view_calculator_button.short_description = 'Power Calculator'
+    
+    def get_calculator_link(self, obj):
+        """Add large button to view calculator in change form"""
+        if obj.pk:
+            url = f"/audiopatch/power-distribution/{obj.pk}/"
+            return format_html(
+                '''
+                <div style="padding: 20px; background: #2a2a2a; border-radius: 8px; text-align: center;">
+                    <p style="color: #e0e0e0; margin-bottom: 15px;">
+                        View phase distribution, load balancing, and detailed power analysis
+                    </p>
+                    <a href="{}" class="button" style="
+                        display: inline-block;
+                        background: #4a9eff;
+                        color: white;
+                        padding: 12px 30px;
+                        text-decoration: none;
+                        border-radius: 4px;
+                        font-size: 16px;
+                        font-weight: bold;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    " target="_blank">
+                        📊 Open Power Distribution Calculator
+                    </a>
+                    <p style="color: #888; margin-top: 15px; font-size: 12px;">
+                        Opens in new tab with visual phase bars and imbalance monitoring
+                    </p>
+                </div>
+                ''',
+                url
+            )
+        return 'Save the plan first to access the calculator'
+    get_calculator_link.short_description = 'Visual Power Distribution Calculator'
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # Creating new object
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+        
+    def get_total_current(self, obj):
+        """Calculate total current for list display"""
+        if not obj.pk:
+            return '-'
+        total = obj.amplifier_assignments.aggregate(
+            total=Sum('calculated_total_current')
+        )['total'] or 0
+        return f"{total:.1f}A"
+    get_total_current.short_description = 'Total Current'
+    
+    def view_calculator_button(self, obj):
+        """Add button to view calculator in list display"""
+        if obj.pk:
+            url = f"/audiopatch/power-distribution/{obj.pk}/"
+            return format_html(
+                '<a class="button" href="{}" style="background:#4a9eff; color:white; padding:5px 10px; text-decoration:none; border-radius:4px;">View Calculator</a>',
+                url
+            )
+        return '-'
+    view_calculator_button.short_description = 'Power Calculator'
+    
+    def get_calculator_link(self, obj):
+        """Add large button to view calculator in change form"""
+        if obj.pk:
+            url = f"/audiopatch/power-distribution/{obj.pk}/"
+            return format_html(
+                '''
+                <div style="padding: 20px; background: #2a2a2a; border-radius: 8px; text-align: center;">
+                    <p style="color: #e0e0e0; margin-bottom: 15px;">
+                        View phase distribution, load balancing, and detailed power analysis
+                    </p>
+                    <a href="{}" class="button" style="
+                        display: inline-block;
+                        background: #4a9eff;
+                        color: white;
+                        padding: 12px 30px;
+                        text-decoration: none;
+                        border-radius: 4px;
+                        font-size: 16px;
+                        font-weight: bold;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    " target="_blank">
+                        📊 Open Power Distribution Calculator
+                    </a>
+                    <p style="color: #888; margin-top: 15px; font-size: 12px;">
+                        Opens in new tab with visual phase bars and imbalance monitoring
+                    </p>
+                </div>
+                ''',
+                url
+            )
+        return 'Save the plan first to access the calculator'
+    get_calculator_link.short_description = 'Visual Power Distribution Calculator'
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # Creating new object
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+    
+    
+    
+    def get_summary_html(self, obj):
+        """Generate HTML summary of power distribution"""
+        if not obj.pk:
+            return "Save the plan first to see summary"
+        
+        # [Keep all the existing get_summary_html code here - the same as before]
+        # Get all assignments
+        assignments = obj.amplifier_assignments.all()
+        
+        # Calculate totals by phase
+        phase_totals = {
+            'L1': 0,
+            'L2': 0,
+            'L3': 0,
+            'AUTO': 0
+        }
+        
+        total_amps = 0
+        total_current = 0
+        total_power = 0
+        
+        for assignment in assignments:
+            phase = assignment.phase_assignment
+            current = float(assignment.calculated_total_current or 0)
+            phase_totals[phase] += current
+            total_amps += assignment.quantity
+            total_current += current
+            
+            # Calculate power
+            power_details = assignment.get_power_details()
+            total_power += power_details['total']['peak_watts']
+        
+        # Auto-balance AUTO assignments
+        auto_current = phase_totals['AUTO']
+        if auto_current > 0:
+            # Distribute AUTO current evenly
+            per_phase = auto_current / 3
+            phase_totals['L1'] += per_phase
+            phase_totals['L2'] += per_phase
+            phase_totals['L3'] += per_phase
+        
+        # Calculate imbalance
+        max_phase = max(phase_totals['L1'], phase_totals['L2'], phase_totals['L3'])
+        min_phase = min(phase_totals['L1'], phase_totals['L2'], phase_totals['L3'])
+        if max_phase > 0:
+            imbalance = ((max_phase - min_phase) / max_phase) * 100
+        else:
+            imbalance = 0
+        
+        # Calculate percentages
+        usable = obj.get_usable_amperage()
+        
+        # Calculate total of all phases
+        phase_total_sum = phase_totals['L1'] + phase_totals['L2'] + phase_totals['L3']
+        
+        # Return the HTML
+        return f"""
+        <div style="background: #2a2a2a; padding: 15px; border-radius: 8px; color: #e0e0e0;">
+            <h3 style="margin-top: 0; color: #4a9eff;">System Totals</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
+                    <strong>Total Amplifiers:</strong><br>
+                    <span style="font-size: 24px; color: #4a9eff;">{total_amps}</span>
+                </div>
+                <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
+                    <strong>Total Current:</strong><br>
+                    <span style="font-size: 24px; color: #4a9eff;">{total_current:.1f}A</span>
+                </div>
+                <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
+                    <strong>Peak Power:</strong><br>
+                    <span style="font-size: 24px; color: #4a9eff;">{total_power/1000:.1f}kW</span>
+                </div>
+            </div>
+            
+            <h4 style="color: #4a9eff;">Phase Distribution</h4>
+            <table style="width: 100%; color: #e0e0e0; border-collapse: collapse;">
+                <tr style="border-bottom: 1px solid #444;">
+                    <th style="text-align: left; padding: 8px;">Phase</th>
+                    <th style="text-align: left; padding: 8px;">Current</th>
+                    <th style="text-align: left; padding: 8px;">% of {usable}A</th>
+                    <th style="text-align: left; padding: 8px;">Status</th>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>L1</strong></td>
+                    <td style="padding: 8px;">{phase_totals['L1']:.1f}A</td>
+                    <td style="padding: 8px;">{(phase_totals['L1']/usable*100):.1f}%</td>
+                    <td style="padding: 8px;">{'✓ Good' if phase_totals['L1']/usable*100 < 50 else '⚠️ Moderate' if phase_totals['L1']/usable*100 < 80 else '❌ High'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>L2</strong></td>
+                    <td style="padding: 8px;">{phase_totals['L2']:.1f}A</td>
+                    <td style="padding: 8px;">{(phase_totals['L2']/usable*100):.1f}%</td>
+                    <td style="padding: 8px;">{'✓ Good' if phase_totals['L2']/usable*100 < 50 else '⚠️ Moderate' if phase_totals['L2']/usable*100 < 80 else '❌ High'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>L3</strong></td>
+                    <td style="padding: 8px;">{phase_totals['L3']:.1f}A</td>
+                    <td style="padding: 8px;">{(phase_totals['L3']/usable*100):.1f}%</td>
+                    <td style="padding: 8px;">{'✓ Good' if phase_totals['L3']/usable*100 < 50 else '⚠️ Moderate' if phase_totals['L3']/usable*100 < 80 else '❌ High'}</td>
+                </tr>
+                <tr style="border-top: 2px solid #4a9eff; font-weight: bold; background: #1a1a1a;">
+                    <td style="padding: 8px;"><strong>TOTAL</strong></td>
+                    <td style="padding: 8px; color: #4a9eff;"><strong>{phase_total_sum:.1f}A</strong></td>
+                    <td style="padding: 8px;">-</td>
+                    <td style="padding: 8px;">3-Phase Total</td>
+                </tr>
+            </table>
+            
+            <div style="margin-top: 15px; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+                <strong>Phase Imbalance:</strong> 
+                <span style="color: {'#28a745' if imbalance < 10 else '#ffc107' if imbalance < 15 else '#dc3545'};">
+                    {imbalance:.1f}%
+                </span>
+                {' ✓' if imbalance < 10 else ' ⚠️ Target <10%'}
+            </div>
+            
+            <div style="margin-top: 15px; padding: 10px; background: #1a1a1a; border-radius: 4px;">
+                <strong>Average Load per Phase:</strong> {(phase_total_sum/3):.1f}A
+                <span style="color: #888; margin-left: 10px;">
+                    ({(phase_total_sum/3/usable*100):.1f}% of usable)
+                </span>
+            </div>
+            
+            <div style="margin-top: 10px; font-size: 12px; color: #888;">
+                Available: {obj.available_amperage_per_leg}A per leg<br>
+                Usable (with {int(obj.safety_margin*100)}% margin): {usable}A per leg<br>
+                Transient Headroom: {int((obj.transient_headroom-1)*100)}%
+            </div>
+        </div>
+        """
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # Creating new object
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(AmplifierAssignment)
+class AmplifierAssignmentAdmin(admin.ModelAdmin):
+    list_display = [
+        'distribution_plan', 'zone', 'amplifier', 'quantity', 
+        'duty_cycle', 'phase_assignment', 'calculated_total_current'
+    ]
 
 
 

@@ -48,5 +48,13 @@ urlpatterns = [
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
-   
+  # Power Distribution URLs
+     path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
+     path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),
+
+     # Power Distribution API endpoints (keep these as they are)
+     path('api/power/plan/<int:plan_id>/update/', views.update_plan_settings, name='update_plan_settings'),
+     path('api/power/plan/<int:plan_id>/add-amp/', views.add_amplifier_assignment, name='add_amplifier_assignment'),
+     path('api/power/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
+     path('api/power/assignment/<int:assignment_id>/delete/', views.delete_amplifier_assignment, name='delete_amplifier_assignment'),
 ]

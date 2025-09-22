@@ -2,6 +2,9 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
+from decimal import Decimal
+import math
 
 class Console(models.Model):
     name = models.CharField(max_length=100)
@@ -1308,11 +1311,19 @@ class MicAssignment(models.Model):
     is_d_mic = models.BooleanField(default=False, verbose_name="D-MIC")
     
     # Shared presenter functionality
+    # In models.py, change the shared_presenters field:
     shared_presenters = models.JSONField(
-        null=True, 
-        blank=True,
-        help_text="List of additional presenters sharing this mic"
-    )
+       default=list,  # Change from null=True to default=list
+       blank=True,
+       help_text="List of additional presenters sharing this mic"
+   )
+        
+    def save(self, *args, **kwargs):
+        # Convert None to empty list for shared_presenters
+        if self.shared_presenters is None:
+            self.shared_presenters = []
+        super().save(*args, **kwargs)
+    
     
     # Additional fields
     notes = models.TextField(blank=True)
@@ -1407,3 +1418,250 @@ class MicShowInfo(models.Model):
         if self.start_date and self.end_date:
             return f"{self.start_date.strftime('%m/%d')}-{self.end_date.strftime('%m/%d')}"
         return ""
+
+
+
+
+#-------Power Esimator--------
+
+
+
+# Add these models to your existing planner/models.py file
+
+class AmplifierProfile(models.Model):
+    """Stores amplifier specifications for power calculations"""
+    manufacturer = models.CharField(max_length=100)
+    model = models.CharField(max_length=100)
+    
+    # Power specifications (in watts)
+    idle_power_watts = models.IntegerField(
+        help_text="Idle/quiescent power draw in watts"
+    )
+    rated_power_watts = models.IntegerField(
+        help_text="1/8 power (pink noise) in watts - typical operating power"
+    )
+    peak_power_watts = models.IntegerField(
+        help_text="1/3 power (heavy program) in watts"
+    )
+    max_power_watts = models.IntegerField(
+        help_text="Maximum rated power in watts"
+    )
+    
+    # Electrical specifications
+    nominal_voltage = models.IntegerField(
+        choices=[(120, '120V'), (208, '208V'), (240, '240V')],
+        default=208
+    )
+    power_factor = models.DecimalField(
+        max_digits=3, decimal_places=2, default=0.95,
+        help_text="Power factor (typically 0.95 for modern amps)"
+    )
+    efficiency = models.DecimalField(
+        max_digits=3, decimal_places=2, default=0.90,
+        help_text="Amplifier efficiency (typically 0.85-0.95)"
+    )
+    
+    # Physical specifications
+    channels = models.IntegerField(default=4)
+    rack_units = models.IntegerField(default=2)
+    weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    
+    # Additional info
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['manufacturer', 'model']
+        unique_together = ['manufacturer', 'model']
+        
+    def __str__(self):
+        return f"{self.manufacturer} {self.model}"
+    
+    def calculate_current(self, duty_cycle='heavy_music', transient_factor=1.5):
+        """Calculate current draw based on duty cycle and transient requirements"""
+        duty_multipliers = {
+            'speech': 0.20,
+            'light_music': 0.35,
+            'heavy_music': 0.50,
+            'edm_concert': 0.70,
+            'test_tone': 1.00
+        }
+        
+        # Base calculation on 1/8 power (pink noise standard)
+        base_draw = self.rated_power_watts
+        
+        # Apply duty cycle
+        operational_draw = base_draw * duty_multipliers.get(duty_cycle, 0.50)
+        
+        # Add idle power (always present)
+        total_draw = self.idle_power_watts + operational_draw
+        
+        # Apply transient headroom
+        peak_capable_draw = total_draw * transient_factor
+        
+        # Convert to current (amps)
+        current = peak_capable_draw / (self.nominal_voltage * float(self.power_factor))
+        
+        return {
+            'continuous_watts': total_draw,
+            'peak_watts': peak_capable_draw,
+            'current_amps': round(current, 1),
+            'breaker_size': math.ceil(current * 1.25 / 10) * 10  # Next standard breaker size
+        }
+
+
+class PowerDistributionPlan(models.Model):
+    """Main power distribution planning for a show"""
+    show_day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='power_plans')
+    venue_name = models.CharField(max_length=200)
+    
+    SERVICE_TYPES = [
+        ('3phase_4wire_208', '3-Phase 4-Wire 208V'),
+        ('3phase_5wire_208', '3-Phase 5-Wire 208V'),
+        ('3phase_4wire_240', '3-Phase 4-Wire 240V'),
+        ('single_phase_120', 'Single Phase 120V'),
+        ('single_phase_240', 'Single Phase 240V'),
+    ]
+    service_type = models.CharField(max_length=50, choices=SERVICE_TYPES, default='3phase_4wire_208')
+    
+    available_amperage_per_leg = models.IntegerField(
+        default=400,
+        help_text="Total available amps per leg"
+    )
+    
+    # Safety factors
+    transient_headroom = models.DecimalField(
+        max_digits=3, decimal_places=2, default=1.50,
+        help_text="Multiplier for transient peaks (1.5 = 50% headroom)"
+    )
+    safety_margin = models.DecimalField(
+        max_digits=3, decimal_places=2, default=0.80,
+        help_text="Derating factor (0.8 = use only 80% of available)"
+    )
+    
+    # Additional info
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey('auth.User',  # Direct string reference to User model
+    on_delete=models.SET_NULL, 
+    null=True, 
+    blank=True,
+    related_name='power_plans_created'
+    )
+    class Meta:
+        ordering = ['-show_day__date']
+        
+    def __str__(self):
+        return f"{self.show_day} - {self.venue_name} Power Plan"
+    
+    def get_usable_amperage(self):
+        """Calculate usable amperage after applying safety margin"""
+        return int(self.available_amperage_per_leg * float(self.safety_margin))
+    
+    def get_voltage(self):
+        """Extract voltage from service type"""
+        if '208' in self.service_type:
+            return 208
+        elif '240' in self.service_type:
+            return 240
+        elif '120' in self.service_type:
+            return 120
+        return 208  # default
+
+
+class AmplifierAssignment(models.Model):
+    """Assignment of amplifiers to a power distribution plan"""
+    distribution_plan = models.ForeignKey(
+        PowerDistributionPlan, 
+        on_delete=models.CASCADE, 
+        related_name='amplifier_assignments'
+    )
+    amplifier = models.ForeignKey(AmplifierProfile, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=1)
+    
+    # Zone/location tracking
+    zone = models.CharField(
+        max_length=100,
+        help_text="Location (e.g., FOH, Delays, Fills)"
+    )
+    position = models.CharField(
+        max_length=100, 
+        blank=True,
+        help_text="Specific position within zone"
+    )
+    
+    # Power routing
+    PHASE_CHOICES = [
+        ('L1', 'Phase L1/A'),
+        ('L2', 'Phase L2/B'),
+        ('L3', 'Phase L3/C'),
+        ('AUTO', 'Auto-Balance'),
+    ]
+    phase_assignment = models.CharField(
+        max_length=10, 
+        choices=PHASE_CHOICES,
+        default='AUTO'
+    )
+    
+    # Operating mode
+    DUTY_CYCLES = [
+        ('speech', 'Speech/Vocal (20% duty)'),
+        ('light_music', 'Light Music (35% duty)'),
+        ('heavy_music', 'Heavy Music (50% duty)'),
+        ('edm_concert', 'EDM/Concert (70% duty)'),
+        ('test_tone', 'Test/Alignment (100% duty)'),
+    ]
+    duty_cycle = models.CharField(
+        max_length=50, 
+        choices=DUTY_CYCLES,
+        default='heavy_music'
+    )
+    
+    # Calculated values (cached for performance)
+    calculated_current_per_unit = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="Calculated current draw per amplifier"
+    )
+    calculated_total_current = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="Total current draw for all units"
+    )
+    
+    # Additional info
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['zone', 'position', 'amplifier']
+        
+    def __str__(self):
+        return f"{self.zone} - {self.amplifier} x{self.quantity}"
+    
+    def save(self, *args, **kwargs):
+        """Recalculate current draw on save"""
+        calc = self.amplifier.calculate_current(
+            duty_cycle=self.duty_cycle,
+            transient_factor=float(self.distribution_plan.transient_headroom)
+        )
+        self.calculated_current_per_unit = calc['current_amps']
+        self.calculated_total_current = calc['current_amps'] * self.quantity
+        super().save(*args, **kwargs)
+    
+    def get_power_details(self):
+        """Get detailed power calculations"""
+        calc = self.amplifier.calculate_current(
+            duty_cycle=self.duty_cycle,
+            transient_factor=float(self.distribution_plan.transient_headroom)
+        )
+        return {
+            'per_unit': calc,
+            'total': {
+                'continuous_watts': calc['continuous_watts'] * self.quantity,
+                'peak_watts': calc['peak_watts'] * self.quantity,
+                'current_amps': calc['current_amps'] * self.quantity,
+                'breaker_size': math.ceil(calc['current_amps'] * self.quantity * 1.25 / 10) * 10
+            }
+        }

@@ -14,6 +14,10 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 from .models import MicAssignment
 import json
+from decimal import Decimal
+from django.db.models import Sum, Q
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
 import csv
 
 
@@ -24,7 +28,8 @@ from .models import (
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
     Device, SystemProcessor, Amp, PACableSchedule,
-    ShowDay, MicSession, MicAssignment, MicShowInfo
+    ShowDay, MicSession, MicAssignment, MicShowInfo, PowerDistributionPlan, AmplifierProfile, 
+    AmplifierAssignment
 )
 
 def console_detail(request, console_id):
@@ -826,3 +831,274 @@ def get_assignment_details(request, assignment_id):
             'error': str(e)
         }, status=400)
 
+
+@login_required
+def power_distribution_calculator(request, plan_id=None):
+    """Main power distribution calculator view"""
+    
+    if plan_id:
+        plan = get_object_or_404(PowerDistributionPlan, id=plan_id)
+    else:
+        # Create new plan or get most recent
+        show_day_id = request.GET.get('show_day')
+        if show_day_id:
+            show_day = get_object_or_404(ShowDay, id=show_day_id)
+            plan, created = PowerDistributionPlan.objects.get_or_create(
+                show_day=show_day,
+                defaults={
+                    'venue_name': show_day.name,
+                    'created_by': request.user
+                }
+            )
+        else:
+            plan = PowerDistributionPlan.objects.first()
+            if not plan:
+                # Create a default plan
+                show_day = ShowDay.objects.first()
+                if show_day:
+                    plan = PowerDistributionPlan.objects.create(
+                        show_day=show_day,
+                        venue_name=show_day.name,
+                        created_by=request.user
+                    )
+                else:
+                    messages.warning(request, "Please create a ShowDay first")
+                    return redirect('admin:planner_showday_add')
+    
+    # Get all amplifier profiles
+    amplifier_profiles = AmplifierProfile.objects.all()
+    
+    # Get assignments for this plan
+    assignments = AmplifierAssignment.objects.filter(
+        distribution_plan=plan
+    ).select_related('amplifier').order_by('zone', 'position')
+    
+    # Calculate phase distribution
+    phase_loads = calculate_phase_distribution(plan)
+    
+    context = {
+        'plan': plan,
+        'amplifier_profiles': amplifier_profiles,
+        'assignments': assignments,
+        'phase_loads': phase_loads,
+        'duty_cycles': AmplifierAssignment.DUTY_CYCLES,
+        'service_types': PowerDistributionPlan.SERVICE_TYPES,
+    }
+    
+    return render(request, 'planner/power_distribution_calculator.html', context)
+
+
+def calculate_phase_distribution(plan):
+    """Calculate the current distribution across phases"""
+    assignments = plan.amplifier_assignments.all()
+    
+    # Initialize phase tracking
+    phases = {
+        'L1': {'assignments': [], 'total_current': 0},
+        'L2': {'assignments': [], 'total_current': 0},
+        'L3': {'assignments': [], 'total_current': 0},
+    }
+    
+    # Auto-balance assignments marked as AUTO
+    auto_assignments = []
+    
+    for assignment in assignments:
+        if assignment.phase_assignment == 'AUTO':
+            auto_assignments.append(assignment)
+        elif assignment.phase_assignment in phases:
+            phases[assignment.phase_assignment]['assignments'].append(assignment)
+            phases[assignment.phase_assignment]['total_current'] += float(
+                assignment.calculated_total_current or 0
+            )
+    
+    # Balance auto assignments
+    for assignment in sorted(auto_assignments, 
+                           key=lambda x: x.calculated_total_current or 0, 
+                           reverse=True):
+        # Find phase with lowest load
+        min_phase = min(phases.keys(), key=lambda x: phases[x]['total_current'])
+        
+        # Assign to that phase
+        assignment.phase_assignment = min_phase
+        assignment.save(update_fields=['phase_assignment'])
+        
+        phases[min_phase]['assignments'].append(assignment)
+        phases[min_phase]['total_current'] += float(
+            assignment.calculated_total_current or 0
+        )
+    
+    # Calculate summary statistics
+    total_current = sum(p['total_current'] for p in phases.values())
+    max_current = max(p['total_current'] for p in phases.values())
+    min_current = min(p['total_current'] for p in phases.values())
+    
+    # Calculate imbalance
+    if max_current > 0:
+        imbalance = ((max_current - min_current) / max_current) * 100
+    else:
+        imbalance = 0
+    
+    # Calculate usage percentages
+    usable_amperage = plan.get_usable_amperage()
+    
+    for phase_name, phase_data in phases.items():
+        phase_data['percentage'] = (
+            (phase_data['total_current'] / usable_amperage * 100) 
+            if usable_amperage > 0 else 0
+        )
+        phase_data['current_rounded'] = round(phase_data['total_current'], 1)
+    
+    return {
+        'phases': phases,
+        'imbalance': round(imbalance, 1),
+        'total_current': round(total_current, 1),
+        'usable_amperage': usable_amperage,
+        'available_amperage': plan.available_amperage_per_leg,
+    }
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_plan_settings(request, plan_id):
+    """AJAX endpoint to update plan settings"""
+    plan = get_object_or_404(PowerDistributionPlan, id=plan_id)
+    
+    try:
+        data = json.loads(request.body)
+        
+        # Update plan fields
+        if 'service_type' in data:
+            plan.service_type = data['service_type']
+        if 'available_amperage_per_leg' in data:
+            plan.available_amperage_per_leg = int(data['available_amperage_per_leg'])
+        if 'transient_headroom' in data:
+            plan.transient_headroom = Decimal(str(data['transient_headroom']))
+        if 'safety_margin' in data:
+            plan.safety_margin = Decimal(str(data['safety_margin']))
+        if 'venue_name' in data:
+            plan.venue_name = data['venue_name']
+        
+        plan.save()
+        
+        # Recalculate all assignments with new settings
+        for assignment in plan.amplifier_assignments.all():
+            assignment.save()  # This triggers recalculation in the model's save method
+        
+        # Get updated phase distribution
+        phase_loads = calculate_phase_distribution(plan)
+        
+        return JsonResponse({
+            'success': True,
+            'phase_loads': phase_loads,
+            'usable_amperage': plan.get_usable_amperage()
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def add_amplifier_assignment(request, plan_id):
+    """AJAX endpoint to add amplifier assignment"""
+    plan = get_object_or_404(PowerDistributionPlan, id=plan_id)
+    
+    try:
+        data = json.loads(request.body)
+        
+        amplifier = get_object_or_404(AmplifierProfile, id=data['amplifier_id'])
+        
+        assignment = AmplifierAssignment.objects.create(
+            distribution_plan=plan,
+            amplifier=amplifier,
+            quantity=int(data.get('quantity', 1)),
+            zone=data.get('zone', 'FOH'),
+            position=data.get('position', ''),
+            duty_cycle=data.get('duty_cycle', 'heavy_music'),
+            phase_assignment='AUTO'  # Let it auto-balance
+        )
+        
+        # Get updated phase distribution
+        phase_loads = calculate_phase_distribution(plan)
+        
+        # Get power details for the new assignment
+        power_details = assignment.get_power_details()
+        
+        return JsonResponse({
+            'success': True,
+            'assignment': {
+                'id': assignment.id,
+                'amplifier': str(assignment.amplifier),
+                'quantity': assignment.quantity,
+                'zone': assignment.zone,
+                'position': assignment.position,
+                'duty_cycle': assignment.get_duty_cycle_display(),
+                'phase': assignment.phase_assignment,
+                'current_per_unit': float(assignment.calculated_current_per_unit),
+                'total_current': float(assignment.calculated_total_current),
+                'power_details': power_details
+            },
+            'phase_loads': phase_loads
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_amplifier_assignment(request, assignment_id):
+    """AJAX endpoint to update amplifier assignment"""
+    assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+    
+    try:
+        data = json.loads(request.body)
+        
+        # Update assignment fields
+        if 'quantity' in data:
+            assignment.quantity = int(data['quantity'])
+        if 'zone' in data:
+            assignment.zone = data['zone']
+        if 'position' in data:
+            assignment.position = data['position']
+        if 'duty_cycle' in data:
+            assignment.duty_cycle = data['duty_cycle']
+        if 'phase_assignment' in data:
+            assignment.phase_assignment = data['phase_assignment']
+        
+        assignment.save()
+        
+        # Get updated phase distribution
+        phase_loads = calculate_phase_distribution(assignment.distribution_plan)
+        
+        return JsonResponse({
+            'success': True,
+            'current_per_unit': float(assignment.calculated_current_per_unit),
+            'total_current': float(assignment.calculated_total_current),
+            'phase_loads': phase_loads
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def delete_amplifier_assignment(request, assignment_id):
+    """AJAX endpoint to delete amplifier assignment"""
+    assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+    plan = assignment.distribution_plan
+    
+    try:
+        assignment.delete()
+        
+        # Get updated phase distribution
+        phase_loads = calculate_phase_distribution(plan)
+        
+        return JsonResponse({
+            'success': True,
+            'phase_loads': phase_loads
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
