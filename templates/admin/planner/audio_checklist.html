@@ -1,0 +1,755 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Dark theme styling matching your system */
+    #content {
+        background-color: #1a1a1a;
+        padding: 0;
+    }
+
+    .checklist-container {
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+        padding: 20px;
+        min-height: calc(100vh - 100px);
+    }
+
+    .checklist-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #444;
+    }
+
+    .checklist-header h1 {
+        color: #4a9eff;
+        margin: 0;
+        font-size: 1.8rem;
+    }
+
+    .back-link {
+        background-color: #333;
+        color: #4a9eff;
+        padding: 8px 16px;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+    }
+
+    .back-link:hover {
+        background-color: #444;
+        color: #6ab7ff;
+    }
+
+    .controls {
+        margin-bottom: 30px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .btn {
+        background-color: #4a9eff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.3s;
+    }
+
+    .btn:hover {
+        background-color: #3a8eef;
+        transform: translateY(-1px);
+    }
+
+    .btn.danger {
+        background-color: #f44336;
+    }
+
+    .btn.danger:hover {
+        background-color: #d32f2f;
+    }
+
+    select {
+        background-color: #333;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .checklist-section {
+        margin-bottom: 40px;
+        background-color: #2a2a2a;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+
+    .section-header {
+        background-color: #333;
+        padding: 15px;
+        margin: -20px -20px 20px -20px;
+        border-radius: 8px 8px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+        color: #4a9eff;
+        font-weight: 600;
+    }
+
+    .checklist-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .checklist-table th {
+        background-color: #333;
+        color: #4a9eff;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        border: 1px solid #444;
+    }
+
+    .checklist-table td {
+        padding: 10px;
+        border: 1px solid #444;
+        vertical-align: middle;
+    }
+
+    .task-input {
+        width: 100%;
+        padding: 6px;
+        background-color: #333;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        border-radius: 4px;
+    }
+
+    .task-input.status-not-started {
+        background-color: #2196F3;
+        color: white;
+    }
+
+    .task-input.status-in-progress {
+        background-color: #FFC107;
+        color: black;
+    }
+
+    .task-input.status-trouble-shooting {
+        background-color: #f44336;
+        color: white;
+    }
+
+    .task-input.status-complete {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+    .task-input.status-na {
+        background-color: #757575;
+        color: white;
+    }
+
+    .stage-select, .status-select {
+        width: 100%;
+        padding: 6px;
+        background-color: #333;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    tr.status-not-started {
+        background-color: rgba(244, 67, 54, 0.1);
+    }
+
+    tr.status-in-progress {
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+
+    tr.status-complete {
+        background-color: rgba(76, 175, 80, 0.1);
+    }
+
+    tr.status-na {
+        background-color: rgba(96, 125, 139, 0.1);
+    }
+
+    .delete-btn {
+        background-color: #f44336;
+        color: white;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .day-checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+    }
+
+    .day-checkbox:checked {
+        accent-color: #4CAF50;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="checklist-container">
+    <div class="checklist-header">
+        <h1>Audio Production Checklist</h1>
+        <a href="{% url 'admin:index' %}" class="back-link">← Back to Admin</a>
+    </div>
+    
+    <div class="controls">
+        <button class="btn" onclick="saveToLocalStorage()">💾 Save Progress</button>
+        <button class="btn" onclick="loadFromLocalStorage()">📂 Load Saved</button>
+        <button class="btn danger" onclick="resetAll()">🔄 Reset All</button>
+        <button class="btn" onclick="exportToCSV()">📊 Export to CSV</button>
+        <button class="btn" onclick="window.print()">🖨️ Print</button>
+        <select id="dayFilter" onchange="filterByDay()">
+            <option value="all">All Days</option>
+            <option value="day1">Day 1</option>
+            <option value="day2">Day 2</option>
+            <option value="day3">Day 3</option>
+            <option value="day4">Day 4</option>
+        </select>
+    </div>
+
+    <div id="checklistContainer"></div>
+    
+    <div class="export-section" style="margin-top: 30px; padding: 20px; background-color: #2a2a2a; border-radius: 8px; text-align: center;">
+        <h3 style="color: #4a9eff;">Quick Actions</h3>
+        <p>Progress is automatically saved in your browser. Use Export to share with team.</p>
+    </div>
+</div>
+
+<script>
+// Default checklist data
+const defaultChecklists = {
+    'FOH Check List': {
+        setup: [
+            { task: 'Load latest console file', stage: '' },
+            { task: 'Verify Dante Devices', stage: '' },
+            { task: 'Verify Dante Patch on console in & out', stage: '' },
+            { task: 'Verify Dante RF', stage: '' },
+            { task: 'Verify Analog RF', stage: '' },
+            { task: 'Verify PA zones', stage: '' },
+            { task: 'Verify Lobby feeds VO/Plybk/Mix', stage: '' },
+            { task: 'Verify Caption feed', stage: '' },
+            { task: 'Verify Translate feed', stage: '' },
+            { task: 'Primary FOH Audio PB I/O', stage: '' },
+            { task: 'Verify Smaaart I/O', stage: '' },
+            { task: 'Verify Reaper VOG I/O', stage: '' },
+            { task: 'Verify multitrack I/O', stage: '' },
+            { task: 'Backup Audio PB I/O', stage: '' },
+            { task: 'Rec LUFS Meter calibration', stage: '' },
+            { task: 'VOG mic', stage: '' },
+            { task: 'Ducker with VOG mic and VOs', stage: '' },
+            { task: 'Copy Comp Settings to Rec Plybck Buss', stage: '' },
+            { task: 'Set DANSE & 4045 in Record Groups', stage: '' },
+            { task: 'Upload and verify VOs and POs', stage: '' },
+            { task: 'Level out VOs & POs', stage: '' },
+            { task: 'Verify Audience Mics', stage: '' },
+            { task: 'Verify DS Spare Mic', stage: '' }
+        ],
+        daily: [
+            { task: 'PA Zone check', stage: '' },
+            { task: 'Verify FOH play backs', stage: '' },
+            { task: 'Verify Video play backs', stage: '' },
+            { task: 'Verify GFX lines', stage: '' },
+            { task: 'Verify REC feeds', stage: '' },
+            { task: 'Verify Streaming/Web feeds', stage: '' },
+            { task: 'Verify ASL feeds', stage: '' },
+            { task: 'Verify Translate feed', stage: '' },
+            { task: 'Verify Caption feed', stage: '' },
+            { task: 'Line check all RF', stage: '' },
+            { task: 'Line Check PODs', stage: '' },
+            { task: 'Line Check VOG', stage: '' },
+            { task: 'Line Check Audience mics', stage: '' },
+            { task: 'Line Check talent I/O', stage: '' },
+            { task: 'Verify multitrack I/O', stage: '' }
+        ]
+    },
+    'A2 Check List': {
+        setup: [
+            { task: 'RF input Analog', stage: '' },
+            { task: 'Frequency Coordination GS', stage: '' },
+            { task: 'Frequency Coordination event', stage: '' },
+            { task: 'RF set to +12', stage: '' },
+            { task: 'RF no offset', stage: '' },
+            { task: 'Verify RF Lavs have same capsules', stage: '' },
+            { task: 'Verify headsets have same capsule', stage: '' },
+            { task: 'Check LAV/HS connectors & cables', stage: '' },
+            { task: 'Have sufficient batteries', stage: '' },
+            { task: 'Comms wired and wireless', stage: '' },
+            { task: 'No latching on comms unless requested', stage: '' },
+            { task: 'Transceiver Firmware', stage: '' },
+            { task: 'Verify comm ISOs', stage: '' },
+            { task: 'Verify comms Stage Announce (SA)', stage: '' },
+            { task: 'Verify program (PGM) to comms', stage: '' },
+            { task: 'Camera Coms via Triax', stage: '' },
+            { task: 'Wireless amp control', stage: '' }
+        ],
+        daily: [
+            { task: 'Verify RF and Frequencies', stage: '' },
+            { task: 'Verify Comm Transceivers/system', stage: '' },
+            { task: 'Re-battery all RF', stage: '' },
+            { task: 'Verify session mic list', stage: '' },
+            { task: 'Verify Amp control', stage: '' },
+            { task: 'Verify Workbench control', stage: '' }
+        ]
+    },
+    'Video Check List': {
+        setup: [
+            { task: 'Verify all video inputs', stage: '' },
+            { task: 'Check SDI routing', stage: '' },
+            { task: 'Verify HDMI connections', stage: '' },
+            { task: 'Test all cameras', stage: '' },
+            { task: 'Configure streaming outputs', stage: '' },
+            { task: 'Set up confidence monitors', stage: '' },
+            { task: 'Verify recording devices', stage: '' },
+            { task: 'Check video sync', stage: '' },
+            { task: 'Test graphics systems', stage: '' },
+            { task: 'Verify projection mapping', stage: '' }
+        ],
+        daily: []
+    }
+};
+
+let checklists = JSON.parse(JSON.stringify(defaultChecklists));
+let statuses = {};
+
+function initializeStatuses() {
+    Object.keys(checklists).forEach(section => {
+        statuses[section] = {};
+        ['setup', 'daily'].forEach(type => {
+            statuses[section][type] = [];
+            checklists[section][type].forEach((item, index) => {
+                statuses[section][type][index] = {
+                    day1: 'not-started',
+                    day2: 'not-started',
+                    day3: 'not-started',
+                    day4: 'not-started'
+                };
+            });
+        });
+    });
+}
+
+function renderChecklists() {
+    const container = document.getElementById('checklistContainer');
+    container.innerHTML = '';
+
+    Object.keys(checklists).forEach(sectionName => {
+        const section = checklists[sectionName];
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'checklist-section';
+        
+        const header = document.createElement('div');
+        header.className = 'section-header';
+        header.innerHTML = `
+            <span class="section-title">${sectionName}</span>
+            <button class="btn" style="padding: 5px 15px; font-size: 12px;" onclick="addItem('${sectionName}')">+ Add Task</button>
+        `;
+        sectionDiv.appendChild(header);
+
+        // Create a two-column layout
+        const layoutDiv = document.createElement('div');
+        layoutDiv.style.display = 'flex';
+        layoutDiv.style.gap = '20px';
+
+        // Left column - Setup tasks (one-time)
+        if (section.setup && section.setup.length > 0) {
+            const setupDiv = document.createElement('div');
+            setupDiv.style.flex = '0 0 40%';
+            
+            const setupHeader = document.createElement('h4');
+            setupHeader.style.color = '#ffc107';
+            setupHeader.style.backgroundColor = '#333';
+            setupHeader.style.padding = '8px';
+            setupHeader.style.marginBottom = '10px';
+            setupHeader.style.borderRadius = '4px';
+            setupHeader.textContent = 'Setup Tasks (One-Time)';
+            setupDiv.appendChild(setupHeader);
+            
+            const setupTable = createSetupTable(sectionName, 'setup', section.setup);
+            setupDiv.appendChild(setupTable);
+            layoutDiv.appendChild(setupDiv);
+        }
+
+        // Right column - Daily tasks
+        if (section.daily && section.daily.length > 0) {
+            const dailyDiv = document.createElement('div');
+            dailyDiv.style.flex = '1';
+            
+            const dailyHeader = document.createElement('h4');
+            dailyHeader.style.color = '#ffc107';
+            dailyHeader.style.backgroundColor = '#333';
+            dailyHeader.style.padding = '8px';
+            dailyHeader.style.marginBottom = '10px';
+            dailyHeader.style.borderRadius = '4px';
+            dailyHeader.textContent = 'Daily Tasks';
+            dailyDiv.appendChild(dailyHeader);
+            
+            const dailyTable = createDailyTable(sectionName, 'daily', section.daily);
+            dailyDiv.appendChild(dailyTable);
+            layoutDiv.appendChild(dailyDiv);
+        }
+
+        sectionDiv.appendChild(layoutDiv);
+        container.appendChild(sectionDiv);
+    });
+}
+
+function createSetupTable(sectionName, type, tasks) {
+    const table = document.createElement('table');
+    table.className = 'checklist-table';
+    table.style.width = '100%';
+    
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headerRow.innerHTML = `
+        <th style="background-color: #ffc107; color: #000;">TASK</th>
+        <th style="background-color: #000; color: #fff; width: 130px;">STAGE</th>
+        <th style="background-color: #000; color: #fff; width: 120px;">STATUS</th>
+        <th style="width: 60px;">Actions</th>
+    `;
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    tasks.forEach((task, index) => {
+        const row = createSetupRow(sectionName, type, task, index);
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    return table;
+}
+
+function createDailyTable(sectionName, type, tasks) {
+    const table = document.createElement('table');
+    table.className = 'checklist-table';
+    table.style.width = '100%';
+    
+    const thead = document.createElement('thead');
+    
+    // Day headers row
+    const dayHeaderRow = document.createElement('tr');
+    dayHeaderRow.innerHTML = `
+        <th rowspan="2" style="background-color: #ffc107; color: #000; width: 300px;">TASK</th>
+        <th style="background-color: #ffc107; color: #000;">Day 1 ${sectionName.split(' ')[0]}</th>
+        <th style="background-color: #ffc107; color: #000;">Day 2 ${sectionName.split(' ')[0]}</th>
+        <th style="background-color: #ffc107; color: #000;">Day 3 ${sectionName.split(' ')[0]}</th>
+        <th style="background-color: #ffc107; color: #000;">Day 4 ${sectionName.split(' ')[0]}</th>
+        <th rowspan="2" style="width: 60px;">Actions</th>
+    `;
+    thead.appendChild(dayHeaderRow);
+    
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    tasks.forEach((task, index) => {
+        const row = createDailyRow(sectionName, type, task, index);
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    return table;
+}
+
+function createSetupRow(sectionName, type, task, index) {
+    const row = document.createElement('tr');
+    
+    // Get the single status for setup tasks (we'll use day1 as the storage)
+    const status = statuses[sectionName][type][index].day1;
+    
+    row.className = `status-${status}`;
+
+    row.innerHTML = `
+        <td>
+            <input type="text" class="task-input" value="${task.task}" 
+                   onchange="updateTask('${sectionName}', '${type}', ${index}, this.value)">
+        </td>
+        <td>
+            <select class="stage-select" 
+                    onchange="updateStage('${sectionName}', '${type}', ${index}, this.value)">
+                <option value="" ${task.stage === '' ? 'selected' : ''}>-</option>
+                <option value="Pre-Production" ${task.stage === 'Pre-Production' ? 'selected' : ''}>Pre-Production</option>
+                <option value="Load-In" ${task.stage === 'Load-In' ? 'selected' : ''}>Load-In</option>
+            </select>
+        </td>
+        <td>
+            <select class="status-select" 
+                    onchange="updateSetupStatus('${sectionName}', '${type}', ${index}, this.value, this)">
+                <option value="not-started" ${status === 'not-started' ? 'selected' : ''}>Not Started</option>
+                <option value="in-progress" ${status === 'in-progress' ? 'selected' : ''}>In Progress</option>
+                <option value="complete" ${status === 'complete' ? 'selected' : ''}>Complete</option>
+                <option value="na" ${status === 'na' ? 'selected' : ''}>N/A</option>
+            </select>
+        </td>
+        <td>
+            <button class="delete-btn" onclick="deleteTask('${sectionName}', '${type}', ${index})">×</button>
+        </td>
+    `;
+    
+    return row;
+}
+
+function createDailyRow(sectionName, type, task, index) {
+    const row = document.createElement('tr');
+    const taskStatuses = statuses[sectionName][type][index];
+    
+    row.innerHTML = `
+        <td>
+            <input type="text" class="task-input" value="${task.task}" 
+                   onchange="updateTask('${sectionName}', '${type}', ${index}, this.value)">
+        </td>
+        <td style="text-align: center;">
+            <input type="checkbox" class="day-checkbox" 
+                   ${taskStatuses.day1 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day1', this.checked)">
+        </td>
+        <td style="text-align: center;">
+            <input type="checkbox" class="day-checkbox"
+                   ${taskStatuses.day2 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day2', this.checked)">
+        </td>
+        <td style="text-align: center;">
+            <input type="checkbox" class="day-checkbox"
+                   ${taskStatuses.day3 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day3', this.checked)">
+        </td>
+        <td style="text-align: center;">
+            <input type="checkbox" class="day-checkbox"
+                   ${taskStatuses.day4 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day4', this.checked)">
+        </td>
+        <td>
+            <button class="delete-btn" onclick="deleteTask('${sectionName}', '${type}', ${index})">×</button>
+        </td>
+    `;
+    
+    return row;
+}
+
+function updateSetupStatus(sectionName, type, index, value, selectElement) {
+    // For setup tasks, update all days to the same status (for compatibility)
+    statuses[sectionName][type][index].day1 = value;
+    statuses[sectionName][type][index].day2 = value;
+    statuses[sectionName][type][index].day3 = value;
+    statuses[sectionName][type][index].day4 = value;
+    
+    const row = selectElement.closest('tr');
+    row.className = `status-${value}`;
+    saveToLocalStorage();
+}
+
+function updateDayStatus(sectionName, type, index, day, checked) {
+    statuses[sectionName][type][index][day] = checked ? 'complete' : 'not-started';
+    saveToLocalStorage();
+}
+
+function updateTask(sectionName, type, index, value) {
+    checklists[sectionName][type][index].task = value;
+    saveToLocalStorage();
+}
+
+function updateStage(sectionName, type, index, value) {
+    checklists[sectionName][type][index].stage = value;
+    saveToLocalStorage();
+}
+
+function updateStatus(sectionName, type, index, day, value, selectElement) {
+    statuses[sectionName][type][index][day] = value;
+    
+    const row = selectElement.closest('tr');
+    const taskStatuses = statuses[sectionName][type][index];
+    const statusCounts = {};
+    Object.values(taskStatuses).forEach(status => {
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    const majorityStatus = Object.keys(statusCounts).reduce((a, b) => 
+        statusCounts[a] > statusCounts[b] ? a : b
+    );
+    
+    row.className = `status-${majorityStatus}`;
+    saveToLocalStorage();
+}
+
+function addItem(sectionName) {
+    const taskName = prompt('Enter task name:');
+    if (taskName) {
+        const type = confirm('Is this a daily recurring task?') ? 'daily' : 'setup';
+        checklists[sectionName][type].push({ task: taskName, stage: '' });
+        statuses[sectionName][type].push({
+            day1: 'not-started',
+            day2: 'not-started',
+            day3: 'not-started',
+            day4: 'not-started'
+        });
+        renderChecklists();
+        saveToLocalStorage();
+    }
+}
+
+function deleteTask(sectionName, type, index) {
+    if (confirm('Are you sure you want to delete this task?')) {
+        checklists[sectionName][type].splice(index, 1);
+        statuses[sectionName][type].splice(index, 1);
+        renderChecklists();
+        saveToLocalStorage();
+    }
+}
+
+function saveToLocalStorage() {
+    const data = {
+        checklists: checklists,
+        statuses: statuses,
+        timestamp: new Date().toISOString()
+    };
+    localStorage.setItem('audioChecklist', JSON.stringify(data));
+    showNotification('Progress saved!');
+}
+
+function loadFromLocalStorage() {
+    const saved = localStorage.getItem('audioChecklist');
+    if (saved) {
+        const data = JSON.parse(saved);
+        checklists = data.checklists;
+        statuses = data.statuses;
+        renderChecklists();
+        showNotification('Loaded saved progress!');
+    } else {
+        showNotification('No saved data found');
+    }
+}
+
+function resetAll() {
+    if (confirm('This will reset all checklists to default. Are you sure?')) {
+        checklists = JSON.parse(JSON.stringify(defaultChecklists));
+        initializeStatuses();
+        renderChecklists();
+        localStorage.removeItem('audioChecklist');
+        showNotification('Reset to defaults');
+    }
+}
+
+function exportToCSV() {
+    let csv = 'Section,Type,Task,Stage,Day 1,Day 2,Day 3,Day 4\n';
+    
+    Object.keys(checklists).forEach(sectionName => {
+        const section = checklists[sectionName];
+        ['setup', 'daily'].forEach(type => {
+            section[type].forEach((task, index) => {
+                const taskStatuses = statuses[sectionName][type][index];
+                csv += `"${sectionName}","${type}","${task.task}","${task.stage || ''}",`;
+                csv += `"${taskStatuses.day1}","${taskStatuses.day2}","${taskStatuses.day3}","${taskStatuses.day4}"\n`;
+            });
+        });
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audio_checklist_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    showNotification('Exported to CSV');
+}
+
+function filterByDay() {
+    const filter = document.getElementById('dayFilter').value;
+    const tables = document.querySelectorAll('.checklist-table');
+    
+    tables.forEach(table => {
+        const headers = table.querySelectorAll('thead th');
+        const rows = table.querySelectorAll('tbody tr');
+        
+        if (filter === 'all') {
+            headers.forEach(th => th.style.display = '');
+            rows.forEach(row => {
+                row.querySelectorAll('td').forEach(td => td.style.display = '');
+            });
+        } else {
+            const dayNum = filter.replace('day', '');
+            headers.forEach((th, index) => {
+                if (index <= 1 || index === parseInt(dayNum) + 1 || index === 6) {
+                    th.style.display = '';
+                } else {
+                    th.style.display = 'none';
+                }
+            });
+            rows.forEach(row => {
+                row.querySelectorAll('td').forEach((td, index) => {
+                    if (index <= 1 || index === parseInt(dayNum) + 1 || index === 6) {
+                        td.style.display = '';
+                    } else {
+                        td.style.display = 'none';
+                    }
+                });
+            });
+        }
+    });
+}
+
+function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    initializeStatuses();
+    
+    const saved = localStorage.getItem('audioChecklist');
+    if (saved) {
+        const data = JSON.parse(saved);
+        checklists = data.checklists;
+        statuses = data.statuses;
+    }
+    
+    renderChecklists();
+});
+</script>
+{% endblock %}

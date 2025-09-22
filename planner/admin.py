@@ -39,6 +39,7 @@ from .forms import DeviceInputInlineForm, DeviceOutputInlineForm
 from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
+from .models import AudioChecklist
 
 
 
@@ -2595,6 +2596,27 @@ class AmplifierAssignmentAdmin(admin.ModelAdmin):
         'duty_cycle', 'phase_assignment', 'calculated_total_current'
     ]
 
+
+@admin.register(AudioChecklist)
+class AudioChecklistAdmin(admin.ModelAdmin):
+    """Admin interface for Audio Checklist"""
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
+    
+    def changelist_view(self, request, extra_context=None):
+        """Show our custom checklist instead of model list"""
+        context = {
+            'title': 'Audio Production Checklist',
+            'cl': self,
+            'opts': self.model._meta,
+            'has_filters': False,
+            'has_add_permission': False,
+        }
+        return render(request, 'admin/planner/audio_checklist.html', context)
 
 
 

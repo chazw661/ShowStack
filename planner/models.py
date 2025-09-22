@@ -1665,3 +1665,19 @@ class AmplifierAssignment(models.Model):
                 'breaker_size': math.ceil(calc['current_amps'] * self.quantity * 1.25 / 10) * 10
             }
         }
+    
+
+
+    #-------Audio Checklist----
+
+class AudioChecklist(models.Model):
+        """
+        Dummy model for Audio Checklist admin interface
+        This doesn't create a real table, just provides admin interface
+        """
+        class Meta:
+            managed = False  # Don't create/delete DB table
+            db_table = 'audio_checklist_dummy'  # Dummy table name
+            verbose_name = 'Audio Checklist'
+            verbose_name_plural = 'Audio Checklists'
+            app_label = 'planner'
