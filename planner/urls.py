@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from django.contrib import admin
 from planner.views import SystemDashboardView
+from django.urls import path, include
 
 app_name = 'planner'  
 
@@ -57,4 +58,9 @@ urlpatterns = [
      path('api/power/plan/<int:plan_id>/add-amp/', views.add_amplifier_assignment, name='add_amplifier_assignment'),
      path('api/power/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
      path('api/power/assignment/<int:assignment_id>/delete/', views.delete_amplifier_assignment, name='delete_amplifier_assignment'),
+     path('checklist/', views.audio_checklist, name='audio_checklist'),
+     path('predictions/', views.predictions_list, name='predictions_list'),
+     path('predictions/<int:pk>/', views.prediction_detail, name='prediction_detail'),
+     path('predictions/upload/', views.upload_prediction, name='upload_prediction'),
+     path('predictions/<int:pk>/export/', views.export_prediction_summary, name='export_prediction'),
 ]

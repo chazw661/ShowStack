@@ -18,6 +18,8 @@ from django import forms
 from django.db.models import Count, Q, Max
 from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment
 from django.db.models import Sum 
+from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
+from django.contrib import messages 
 
 # Python standard library imports
 import csv
@@ -2617,6 +2619,138 @@ class AudioChecklistAdmin(admin.ModelAdmin):
             'has_add_permission': False,
         }
         return render(request, 'admin/planner/audio_checklist.html', context)
+    
+
+
+
+    #--------Prediction Module-----
+
+
+class SpeakerCabinetInline(admin.TabularInline):
+    model = SpeakerCabinet
+    extra = 0
+    fields = ['position_number', 'speaker_model', 'angle_to_next', 'site_angle', 
+              'panflex_setting', 'top_z', 'bottom_z']
+    ordering = ['position_number']
+
+class SpeakerArrayInline(admin.StackedInline):
+    model = SpeakerArray
+    extra = 0
+    fields = (
+        ('source_name', 'configuration', 'bumper_type'),
+        ('position_x', 'position_y', 'position_z'),
+        ('site_angle', 'azimuth'),
+        ('num_motors', 'is_single_point', 'bumper_angle'),
+        ('front_motor_load_lb', 'rear_motor_load_lb', 'total_weight_lb'),
+        ('bottom_elevation', 'mbar_hole'),
+    )
+    readonly_fields = ['bumper_angle']
+
+@admin.register(SoundvisionPrediction)
+class SoundvisionPredictionAdmin(admin.ModelAdmin):
+    list_display = ['show_day', 'file_name', 'version', 'date_generated', 'created_at', 'array_summary']
+    list_filter = ['show_day', 'created_at', 'date_generated']
+    search_fields = ['file_name', 'notes']
+    readonly_fields = ['created_at', 'updated_at', 'parsed_data_display']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('show_day', 'file_name', 'version', 'date_generated')
+        }),
+        ('File Upload', {
+            'fields': ('pdf_file',),
+            'description': 'Upload L\'Acoustics Soundvision PDF report'
+        }),
+        ('Parsed Data', {
+            'fields': ('parsed_data_display',),
+            'classes': ('collapse',)
+        }),
+        ('Notes', {
+            'fields': ('notes',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    inlines = [SpeakerArrayInline]
+    
+    def array_summary(self, obj):
+        return f"{obj.speaker_arrays.count()} arrays"
+    array_summary.short_description = "Arrays"
+    
+    def parsed_data_display(self, obj):
+        if obj.raw_data:
+            return format_html('<pre style="background: #2a2a2a; padding: 10px; border-radius: 5px; color: #e0e0e0;">{}</pre>', 
+                             json.dumps(obj.raw_data, indent=2))
+        return "No data parsed yet"
+    parsed_data_display.short_description = "Raw Parsed Data"
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        
+        # If a PDF file was uploaded, parse it
+        if obj.pdf_file and ('pdf_file' in form.changed_data or not change):
+            try:
+                from .soundvision_parser import import_soundvision_prediction
+                import_soundvision_prediction(obj, obj.pdf_file)
+                messages.success(request, f'Successfully parsed {obj.file_name}')
+            except Exception as e:
+                messages.error(request, f'Error parsing PDF: {str(e)}')
+
+
+@admin.register(SpeakerArray)
+class SpeakerArrayAdmin(admin.ModelAdmin):
+    list_display = ['source_name', 'prediction', 'configuration', 'display_weight', 
+                   'display_trim', 'display_rigging', 'cabinet_count']
+    list_filter = ['configuration', 'bumper_type', 'num_motors']
+    search_fields = ['source_name', 'array_base_name']
+    readonly_fields = ['bumper_angle', 'total_motor_load', 'trim_height', 'cabinet_summary']
+    
+    inlines = [SpeakerCabinetInline]
+    
+    def display_weight(self, obj):
+        if obj.total_weight_lb:
+            return format_html('<strong>{:.0f} lb</strong>', obj.total_weight_lb)
+        return "-"
+    display_weight.short_description = "Weight"
+    
+    def display_trim(self, obj):
+        return obj.trim_height_display
+    display_trim.short_description = "Bottom Trim"
+    
+    def display_rigging(self, obj):
+        return obj.rigging_display
+    display_rigging.short_description = "Rigging"
+    
+    def cabinet_count(self, obj):
+        return obj.cabinets.count()
+    cabinet_count.short_description = "Cabinets"
+    
+    def cabinet_summary(self, obj):
+        cabinets = obj.cabinets.all().order_by('position_number')
+        if not cabinets:
+            return "No cabinets configured"
+        
+        summary_lines = []
+        for cab in cabinets:
+            angle_str = f"→ {cab.angle_to_next}°" if cab.angle_to_next else ""
+            panflex_str = f" [{cab.panflex_setting}]" if cab.panflex_setting else ""
+            line = f"#{cab.position_number}: {cab.speaker_model}{angle_str}{panflex_str}"
+            summary_lines.append(line)
+        
+        return format_html('<div style="font-family: monospace; white-space: pre-line; background: #2a2a2a; padding: 10px; border-radius: 5px;">{}</div>', 
+                          '\n'.join(summary_lines))
+    cabinet_summary.short_description = "Cabinet Configuration"
+
+@admin.register(SpeakerCabinet)
+class SpeakerCabinetAdmin(admin.ModelAdmin):
+    list_display = ['position_number', 'speaker_model', 'array', 'angle_to_next', 
+                   'site_angle', 'panflex_setting']
+    list_filter = ['speaker_model', 'panflex_setting']
+    search_fields = ['array__source_name', 'speaker_model']
+    ordering = ['array', 'position_number']    
 
 
 

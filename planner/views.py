@@ -18,6 +18,12 @@ from decimal import Decimal
 from django.db.models import Sum, Q
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.core.files.storage import default_storage
+from django.utils.text import slugify
+from collections import defaultdict
+from .models import SoundvisionPrediction, ShowDay
+from .soundvision_parser import import_soundvision_prediction
+from .models import SoundvisionPrediction, ShowDay, SpeakerArray
 import csv
 
 
@@ -1102,3 +1108,176 @@ def delete_amplifier_assignment(request, assignment_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
+
+
+    #-----Audio Checklist-----
+
+@login_required
+def audio_checklist(request):
+    """
+    Simple checklist view - no database required
+    All data is stored in browser localStorage
+    """
+    return render(request, 'planner/audio_checklist.html', {
+        'title': 'Audio Production Checklist',
+    })
+
+
+#-------Prediction Module---
+
+# Add to planner/views.py
+
+
+
+def predictions_list(request):
+    """List all predictions with filtering"""
+    show_day_filter = request.GET.get('show_day')
+    
+    predictions = SoundvisionPrediction.objects.all()
+    
+    if show_day_filter:
+        predictions = predictions.filter(show_day_id=show_day_filter)
+    
+    show_days = ShowDay.objects.all().order_by('name')
+    
+    context = {
+        'predictions': predictions,
+        'show_days': show_days,
+        'current_show_day': show_day_filter
+    }
+    
+    return render(request, 'planner/predictions_list.html', context)
+
+def prediction_detail(request, pk):
+    """Display detailed prediction with collapsible arrays grouped by base name"""
+    prediction = get_object_or_404(SoundvisionPrediction, pk=pk)
+    
+    # Group arrays by their base name
+    grouped_arrays = defaultdict(list)
+    total_weight = Decimal('0')
+    total_arrays = 0
+    
+    for array in prediction.speaker_arrays.all().order_by('array_base_name', 'position_x'):
+        grouped_arrays[array.array_base_name].append(array)
+        if array.total_weight_lb:
+            total_weight += array.total_weight_lb
+        total_arrays += 1
+    
+    # Sort the groups by name
+    grouped_arrays = dict(sorted(grouped_arrays.items()))
+    
+    context = {
+        'prediction': prediction,
+        'grouped_arrays': grouped_arrays,
+        'total_weight': total_weight,
+        'total_arrays': total_arrays,
+        'array_count': len(grouped_arrays),
+        'slugify': slugify  # Pass slugify to template
+    }
+    
+    return render(request, 'planner/prediction_detail.html', context)
+
+@require_POST
+def upload_prediction(request):
+    """Handle PDF upload and parsing"""
+    if 'pdf_file' not in request.FILES:
+        return JsonResponse({'error': 'No file uploaded'}, status=400)
+    
+    pdf_file = request.FILES['pdf_file']
+    show_day_id = request.POST.get('show_day')
+    
+    if not show_day_id:
+        return JsonResponse({'error': 'Show day is required'}, status=400)
+    
+    try:
+        show_day = ShowDay.objects.get(pk=show_day_id)
+        
+        # Create prediction object
+        prediction = SoundvisionPrediction.objects.create(
+            show_day=show_day,
+            file_name=pdf_file.name,
+            pdf_file=pdf_file
+        )
+        
+        # Parse the PDF
+        import_soundvision_prediction(prediction, pdf_file)
+        
+        messages.success(request, f'Successfully imported {pdf_file.name}')
+        
+        return JsonResponse({
+            'success': True,
+            'prediction_id': prediction.id,
+            'redirect': f'/planner/predictions/{prediction.id}/'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def export_prediction_summary(request, pk):
+    """Export prediction summary as CSV"""
+    import csv
+    
+    prediction = get_object_or_404(SoundvisionPrediction, pk=pk)
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="prediction_{prediction.show_day}_{prediction.id}.csv"'
+    
+    writer = csv.writer(response)
+    
+    # Headers
+    writer.writerow(['Array Name', 'Position', 'Weight (lb)', 'Trim Height', 'Rigging', 
+                    'Azimuth', 'Motors', 'Front Load (lb)', 'Rear Load (lb)', 
+                    'Cabinet Count', 'MBar', 'Configuration'])
+    
+    # Data grouped by array name
+    grouped = defaultdict(list)
+    for array in prediction.speaker_arrays.all().order_by('array_base_name', 'position_x'):
+        grouped[array.array_base_name].append(array)
+    
+    for base_name, arrays in sorted(grouped.items()):
+        for array in arrays:
+            # Position string
+            position = f"({array.position_x}, {array.position_y}, {array.position_z})"
+            
+            # Cabinet configuration summary
+            cabinet_angles = []
+            for cab in array.cabinets.all():
+                if cab.angle_to_next:
+                    cabinet_angles.append(f"{cab.angle_to_next}°")
+            config = " ".join(cabinet_angles) if cabinet_angles else "No angles"
+            
+            writer.writerow([
+                array.display_name,
+                position,
+                array.total_weight_lb or 0,
+                array.trim_height_display,
+                array.rigging_display,
+                array.azimuth or 0,
+                array.num_motors,
+                array.front_motor_load_lb or '',
+                array.rear_motor_load_lb or '',
+                array.cabinets.count(),
+                array.mbar_hole or '',
+                config
+            ])
+    
+    return response
+
+# URLs to add to planner/urls.py
+"""
+from django.urls import path
+from . import views
+
+app_name = 'planner'
+
+urlpatterns = [
+    # ... existing patterns ...
+    
+    # Predictions
+    path('predictions/', views.predictions_list, name='predictions_list'),
+    path('predictions/<int:pk>/', views.prediction_detail, name='prediction_detail'),
+    path('predictions/upload/', views.upload_prediction, name='upload_prediction'),
+    path('predictions/<int:pk>/export/', views.export_prediction_summary, name='export_prediction'),
+]
+"""

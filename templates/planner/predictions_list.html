@@ -1,0 +1,172 @@
+<!-- templates/planner/predictions_list.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soundvision Predictions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .action-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            background: #4a9eff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #3a8eef;
+        }
+        
+        .btn-secondary {
+            background: #555;
+        }
+        
+        .btn-secondary:hover {
+            background: #666;
+        }
+        
+        .predictions-table {
+            width: 100%;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .predictions-table th {
+            background: #323232;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #4a9eff;
+            border-bottom: 2px solid #3a3a3a;
+        }
+        
+        .predictions-table td {
+            padding: 12px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        
+        .predictions-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .predictions-table tr:hover {
+            background: #323232;
+        }
+        
+        .table-link {
+            color: #4a9eff;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .table-link:hover {
+            text-decoration: underline;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Soundvision Predictions</h1>
+        </div>
+        
+        <div class="action-bar">
+            <a href="/admin/planner/soundvisionprediction/add/" class="btn">+ Upload New Prediction</a>
+        </div>
+        
+        {% if predictions %}
+        <table class="predictions-table">
+            <thead>
+                <tr>
+                    <th>Show Day</th>
+                    <th>File Name</th>
+                    <th>Version</th>
+                    <th>Generated</th>
+                    <th>Arrays</th>
+                    <th>Uploaded</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prediction in predictions %}
+                <tr>
+                    <td>{{ prediction.show_day }}</td>
+                    <td>
+                        <a href="{% url 'planner:prediction_detail' prediction.id %}" class="table-link">
+                            {{ prediction.file_name }}
+                        </a>
+                    </td>
+                    <td>{{ prediction.version|default:"-" }}</td>
+                    <td>{{ prediction.date_generated|default:"-" }}</td>
+                    <td>{{ prediction.speaker_arrays.count }}</td>
+                    <td>{{ prediction.created_at|date:"M d, Y g:i A" }}</td>
+                    <td>
+                        <a href="{% url 'planner:export_prediction' prediction.id %}" class="table-link">
+                            Export CSV
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No predictions uploaded yet.</p>
+            <p>Click "Upload New Prediction" to get started.</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

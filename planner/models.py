@@ -1681,3 +1681,225 @@ class AudioChecklist(models.Model):
             verbose_name = 'Audio Checklist'
             verbose_name_plural = 'Audio Checklists'
             app_label = 'planner'
+
+
+
+            #--------Prediction Module----
+class SoundvisionPrediction(models.Model):
+    """Main prediction file from L'Acoustics Soundvision"""
+    show_day = models.ForeignKey('ShowDay', on_delete=models.CASCADE, related_name='predictions')
+    file_name = models.CharField(max_length=255)
+    version = models.CharField(max_length=50, blank=True)
+    date_generated = models.DateField(null=True, blank=True)
+    pdf_file = models.FileField(upload_to='predictions/', blank=True, null=True)
+    raw_data = models.JSONField(default=dict, blank=True)  # Store parsed data
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    notes = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.show_day} - {self.file_name}"
+    
+    @property
+    def unique_array_names(self):
+        """Get list of unique array base names (without symmetry suffixes)"""
+        names = set()
+        for array in self.speaker_arrays.all():
+            # Extract base name (e.g., "KIVA II 1" from "KIVA II 1_YZ Sym")
+            base_name = array.source_name.split('_')[0].strip()
+            names.add(base_name)
+        return sorted(list(names))
+
+class SpeakerArray(models.Model):
+    """Individual speaker array configuration"""
+    CONFIGURATION_TYPES = (
+        ('vertical_flown', 'Vertical, Flown Array'),
+        ('vertical_ground', 'Vertical, Ground Stack'),
+        ('horizontal_flown', 'Horizontal, Flown Array'),
+        ('horizontal_ground', 'Horizontal, Ground Stack'),
+    )
+    
+    BUMPER_TYPES = (
+        ('KIBU-SB', 'KIBU-SB'),
+        ('KIBU II', 'KIBU II'),
+        ('M-BUMP', 'M-BUMP'),
+        ('K1-BUMP', 'K1-BUMP'),
+        ('K2-BUMP', 'K2-BUMP'),
+        ('A-BUMP', 'A-BUMP'),
+        ('NONE', 'No Bumper'),
+    )
+    
+    prediction = models.ForeignKey(SoundvisionPrediction, on_delete=models.CASCADE, related_name='speaker_arrays')
+    source_name = models.CharField(max_length=100)  # Full name e.g., "KIVA II 1_YZ Sym"
+    array_base_name = models.CharField(max_length=100)  # Base name e.g., "KIVA II 1"
+    symmetry_type = models.CharField(max_length=50, blank=True)  # e.g., "YZ Sym", "YZ Sym_YZ Sym"
+    group_context = models.CharField(max_length=50, blank=True)  # Original group (MAINS, CENTER, etc) for reference
+    configuration = models.CharField(max_length=50, choices=CONFIGURATION_TYPES)
+    bumper_type = models.CharField(max_length=20, choices=BUMPER_TYPES)
+    
+    # Position data
+    position_x = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    position_y = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    position_z = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    
+    # Angles
+    site_angle = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    azimuth = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    top_site = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    bottom_site = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    
+    # Motor/Rigging data
+    num_motors = models.IntegerField(default=1)
+    front_pickup_position = models.CharField(max_length=100, blank=True)
+    rear_pickup_position = models.CharField(max_length=100, blank=True)
+    front_motor_load_lb = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    rear_motor_load_lb = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    
+    # Weight data
+    total_weight_lb = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    enclosure_weight_lb = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    
+    # Dimensions
+    bottom_elevation = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    spatial_dimensions = models.CharField(max_length=100, blank=True)  # "X; Y; Z"
+    
+    # For KARA - MBar hole position
+    mbar_hole = models.CharField(max_length=10, blank=True)  # "A" or "B"
+    
+    # Calculated fields
+    is_single_point = models.BooleanField(default=False)
+    bumper_angle = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['array_base_name', 'source_name']
+    
+    def __str__(self):
+        return f"{self.source_name} ({self.prediction.show_day})"
+    
+    @property
+    def display_name(self):
+        """Display name for the array"""
+        # If it has symmetry, show it
+        if self.symmetry_type:
+            position = "L" if self.position_x and self.position_x < 0 else "R"
+            return f"{self.array_base_name} - {position}"
+        return self.array_base_name
+    
+    @property
+    def trim_height(self):
+        """Bottom trim height in feet"""
+        return self.bottom_elevation if self.bottom_elevation else None
+    
+    @property
+    def trim_height_display(self):
+        """Formatted trim height display"""
+        if self.bottom_elevation:
+            feet = int(self.bottom_elevation)
+            inches = int((float(self.bottom_elevation) - feet) * 12)
+            return f"{feet}' {inches}\""
+        return "N/A"
+    
+    @property
+    def total_motor_load(self):
+        """Total motor load in pounds"""
+        if self.front_motor_load_lb and self.rear_motor_load_lb:
+            return self.front_motor_load_lb + self.rear_motor_load_lb
+        elif self.total_weight_lb:
+            return self.total_weight_lb
+        return None
+    
+    @property
+    def rigging_display(self):
+        """Display string for rigging configuration"""
+        if self.is_single_point:
+            if self.front_pickup_position:
+                # Extract hole number from position string
+                hole = self.front_pickup_position.split(':')[0] if ':' in self.front_pickup_position else self.front_pickup_position
+                return f"Hole {hole}"
+            return "Single Point"
+        else:
+            if self.bumper_angle is not None:
+                return f"Bumper {self.bumper_angle}°"
+            return "Dual Point"
+    
+    @property
+    def is_kara(self):
+        """Check if this is a KARA array"""
+        return 'KARA' in self.array_base_name.upper()
+    
+    def calculate_bumper_angle(self):
+        """Calculate bumper angle for dual-point rigging"""
+        if self.num_motors == 2 and self.top_site is not None:
+            # For dual-point, bumper angle is typically the negative of the array site angle
+            self.bumper_angle = -self.top_site
+        else:
+            self.bumper_angle = None
+        return self.bumper_angle
+    
+    def parse_array_name(self):
+        """Parse the source name to extract base name and symmetry"""
+        parts = self.source_name.split('_')
+        self.array_base_name = parts[0].strip()
+        if len(parts) > 1:
+            self.symmetry_type = '_'.join(parts[1:]).strip()
+        else:
+            self.symmetry_type = ''
+
+class SpeakerCabinet(models.Model):
+    """Individual speaker cabinet in an array"""
+    SPEAKER_MODELS = (
+        ('KIVA II', 'KIVA II'),
+        ('KARA II', 'KARA II'),
+        ('K1', 'K1'),
+        ('K2', 'K2'),
+        ('K3', 'K3'),
+        ('A10', 'A10 (Focus/Wide)'),
+        ('A15', 'A15 (Focus/Wide)'),
+        ('ARCS', 'ARCS (Focus/Wide)'),
+        ('SB15M', 'SB15M'),
+        ('SB18', 'SB18'),
+        ('SB28', 'SB28'),
+        ('KS21', 'KS21'),
+        ('KS28', 'KS28'),
+    )
+    
+    PANFLEX_OPTIONS = (
+        ('55/55', '55°/55°'),
+        ('55/35', '55°/35°'),
+        ('35/55', '35°/55°'),
+        ('35/35', '35°/35°'),
+        ('70/70', '70°/70°'),
+        ('110/110', '110°/110°'),
+        ('FOCUS', 'Focus'),
+        ('WIDE', 'Wide'),
+    )
+    
+    array = models.ForeignKey(SpeakerArray, on_delete=models.CASCADE, related_name='cabinets')
+    position_number = models.IntegerField()  # Position in array (1 = top)
+    speaker_model = models.CharField(max_length=20, choices=SPEAKER_MODELS)
+    
+    # Angles
+    angle_to_next = models.DecimalField(max_digits=5, decimal_places=1, default=0)  # Angle between this and next cabinet
+    site_angle = models.DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)  # Absolute site angle
+    
+    # Position
+    top_z = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    bottom_z = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    
+    # KARA specific
+    panflex_setting = models.CharField(max_length=10, choices=PANFLEX_OPTIONS, blank=True)
+    
+    class Meta:
+        ordering = ['array', 'position_number']
+        unique_together = [['array', 'position_number']]
+    
+    def __str__(self):
+        angle_str = f" ({self.angle_to_next}°)" if self.angle_to_next else ""
+        panflex_str = f" [{self.panflex_setting}]" if self.panflex_setting else ""
+        return f"#{self.position_number} {self.speaker_model}{angle_str}{panflex_str}"            
