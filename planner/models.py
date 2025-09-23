@@ -1763,7 +1763,7 @@ class SpeakerArray(models.Model):
     enclosure_weight_lb = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     
     # Dimensions
-    bottom_elevation = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    bottom_elevation = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, )
     spatial_dimensions = models.CharField(max_length=100, blank=True)  # "X; Y; Z"
     
     # For KARA - MBar hole position

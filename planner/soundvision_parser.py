@@ -278,11 +278,16 @@ def import_soundvision_prediction(prediction_obj, pdf_file):
     """Import a Soundvision PDF and create database objects"""
     from .models import SpeakerArray, SpeakerCabinet
     
+    # Clear existing arrays and cabinets for this prediction
+    prediction_obj.speaker_arrays.all().delete()  # This will cascade delete cabinets too
+    
     parser = SoundvisionParser()
     data = parser.parse_pdf_file(pdf_file)
     
     # Store raw parsed data
     prediction_obj.raw_data = data
+    
+    # ... rest of the function continues as before
     
     # Update metadata
     if 'metadata' in data:
@@ -365,10 +370,11 @@ def import_soundvision_prediction(prediction_obj, pdf_file):
         array.save()
         
         # Create cabinets
-        for cab_data in array_data.get('cabinets', []):
+        # Create cabinets
+        for i, cab_data in enumerate(array_data.get('cabinets', [])):  # Add enumerate here
             cabinet = SpeakerCabinet.objects.create(
                 array=array,
-                position_number=cab_data['position'],
+                position_number=i + 1,  # Now 'i' is defined from enumerate
                 speaker_model=cab_data['model'],
                 angle_to_next=Decimal(str(cab_data.get('angle', 0))),
                 site_angle=Decimal(str(cab_data.get('site', 0))),

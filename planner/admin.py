@@ -2700,6 +2700,8 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
                 messages.error(request, f'Error parsing PDF: {str(e)}')
 
 
+
+
 @admin.register(SpeakerArray)
 class SpeakerArrayAdmin(admin.ModelAdmin):
     list_display = ['source_name', 'prediction', 'configuration', 'display_weight', 
