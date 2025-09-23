@@ -2648,7 +2648,7 @@ class SpeakerArrayInline(admin.StackedInline):
 
 @admin.register(SoundvisionPrediction)
 class SoundvisionPredictionAdmin(admin.ModelAdmin):
-    list_display = ['show_day', 'file_name', 'version', 'date_generated', 'created_at', 'array_summary']
+    list_display = ['show_day', 'file_name', 'version', 'date_generated', 'created_at', 'array_summary', 'view_detail_link']
     list_filter = ['show_day', 'created_at', 'date_generated']
     search_fields = ['file_name', 'notes']
     readonly_fields = ['created_at', 'updated_at', 'parsed_data_display']
@@ -2679,6 +2679,13 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
     def array_summary(self, obj):
         return f"{obj.speaker_arrays.count()} arrays"
     array_summary.short_description = "Arrays"
+
+    def view_detail_link(self, obj):
+        from django.utils.html import format_html
+        from django.urls import reverse
+        url = reverse('planner:prediction_detail', kwargs={'pk': obj.pk})
+        return format_html('<a class="button" style="padding: 3px 10px; background: #417690; color: white; border-radius: 4px; text-decoration: none;" href="{}">View Details</a>', url)
+    view_detail_link.short_description = 'Actions'
     
     def parsed_data_display(self, obj):
         if obj.raw_data:

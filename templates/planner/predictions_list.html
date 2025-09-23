@@ -127,35 +127,26 @@
         </div>
         
         {% if predictions %}
-        <table class="predictions-table">
+        <table>
             <thead>
                 <tr>
                     <th>Show Day</th>
                     <th>File Name</th>
-                    <th>Version</th>
                     <th>Generated</th>
                     <th>Arrays</th>
-                    <th>Uploaded</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for prediction in predictions %}
                 <tr>
-                    <td>{{ prediction.show_day }}</td>
-                    <td>
-                        <a href="{% url 'planner:prediction_detail' prediction.id %}" class="table-link">
-                            {{ prediction.file_name }}
-                        </a>
-                    </td>
-                    <td>{{ prediction.version|default:"-" }}</td>
+                    <td><a href="{% url 'planner:prediction_detail' prediction.pk %}">{{ prediction.show_day }}</a></td>
+                    <td>{{ prediction.file_name }}</td>
                     <td>{{ prediction.date_generated|default:"-" }}</td>
                     <td>{{ prediction.speaker_arrays.count }}</td>
-                    <td>{{ prediction.created_at|date:"M d, Y g:i A" }}</td>
                     <td>
-                        <a href="{% url 'planner:export_prediction' prediction.id %}" class="table-link">
-                            Export CSV
-                        </a>
+                        <a href="{% url 'planner:prediction_detail' prediction.pk %}" class="btn">View</a>
+                        <a href="{% url 'planner:export_prediction' prediction.pk %}" class="btn">Export</a>
                     </td>
                 </tr>
                 {% endfor %}
