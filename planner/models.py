@@ -11,6 +11,11 @@ class Console(models.Model):
 
     def __str__(self):
         return self.name
+    
+    class Meta:
+        verbose_name = "Console"
+        verbose_name_plural = "Consoles"
+        ordering = ['name']  
 
 
 class ConsoleInput(models.Model):
@@ -94,6 +99,8 @@ class Device(models.Model):
     class Meta:
         verbose_name = "I/O Device"
         verbose_name_plural = "I/O Devices"
+        ordering = ['name']  # or ['id']
+
     
 
 class DeviceInput(models.Model):
@@ -157,8 +164,9 @@ class Location(models.Model):
     
     class Meta:
         verbose_name = "Location"
-        verbose_name_plural = "Locations"
-        ordering = ['name']
+        verbose_name_plural = "    ├─ Comm Locations"  # Child
+        ordering = ['name']  # or ['id']
+
 
 
 class AmpModel(models.Model):
@@ -182,10 +190,9 @@ class AmpModel(models.Model):
     cacom_output_count = models.IntegerField(default=0)
     
     class Meta:
-        ordering = ['manufacturer', 'model_name']
-        unique_together = ['manufacturer', 'model_name']
-        verbose_name = "Amplifier Model"
-        verbose_name_plural = "Amplifier Models"
+        verbose_name = "Amp Model Template"
+        verbose_name_plural = "    ├─ Amp Model Templates"  # Child
+        ordering = ['id']
     
     def __str__(self):
         return f"{self.manufacturer} {self.model_name}"
@@ -235,10 +242,12 @@ class Amp(models.Model):
     cacom_4_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 4")
     
     class Meta:
-        ordering = ['location', 'ip_address', 'name']
-        verbose_name = "Amplifier"
-        verbose_name_plural = "Amplifiers"
-    
+        verbose_name = "Amplifier Assignment"
+        verbose_name_plural = "    └─ Amplifier Assignments"  # PARENT
+        # UPDATE THIS: Use your actual field names
+        ordering = ['ip_address']
+
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         old_model = None
@@ -304,10 +313,10 @@ class AmpChannel(models.Model):
     )
     
     class Meta:
-        ordering = ['amp', 'channel_number']
-        unique_together = ['amp', 'channel_number']
         verbose_name = "Amp Channel"
-        verbose_name_plural = "Amp Channels"
+        verbose_name_plural = "    ├─ Amp Channels"
+        # UPDATE THIS: Likely fields are 'amp', 'channel_number'
+        ordering = ['id']
     
     def __str__(self):
         return f"{self.amp.name} - Ch{self.channel_number}"
@@ -352,6 +361,7 @@ class SystemProcessor(models.Model):
     class Meta:
         verbose_name = "System Processor"
         verbose_name_plural = "System Processors"
+        ordering = ['name']  # or ['id']
 
 
 # -------P1 Processor Models--------
@@ -661,9 +671,9 @@ class PAZone(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['sort_order', 'name']
         verbose_name = "PA Zone"
-        verbose_name_plural = "PA Zones"
+        verbose_name_plural = "PA Zones"  # Child
+        ordering = ['id']  # or ['id']
     
     def __str__(self):
         return f"{self.name} - {self.description}"
@@ -802,9 +812,9 @@ class PACableSchedule(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['label__sort_order', 'label__name', 'cable']
         verbose_name = "PA Cable Entry"
-        verbose_name_plural = "PA Cable Entries"
+        verbose_name_plural = "PA Cable Entries"  # PARENT
+        ordering = ['id']
     
     def save(self, *args, **kwargs):
         # Auto-populate hidden fields for compatibility
@@ -918,7 +928,10 @@ class PAFanOut(models.Model):
             )
             
             class Meta:
-                ordering = ['id']
+                verbose_name = "PA Fan Out"
+                verbose_name_plural = "    └─ PA Fan Outs"
+                ordering = ['id']  # SAFE DEFAULT
+                     
             
             def __str__(self):
                 return f"{self.get_fan_out_type_display()} x{self.quantity}"
@@ -956,9 +969,10 @@ class CommChannel(models.Model):
     order = models.IntegerField(default=0, help_text="Display order")
     
     class Meta:
-        ordering = ['order', 'channel_number']
         verbose_name = "Comm Channel"
-        verbose_name_plural = "Comm Channels"
+        verbose_name_plural = "    └─ Comm Channels"  # Child
+        ordering = ['id']  # or ['id']
+
     
     def __str__(self):
         return f"{self.channel_number} - {self.name} ({self.abbreviation})"
@@ -978,9 +992,9 @@ class CommPosition(models.Model):
     order = models.IntegerField(default=0)
     
     class Meta:
-        ordering = ['order', 'name']
         verbose_name = "Comm Position"
-        verbose_name_plural = "Comm Positions"
+        verbose_name_plural = "    ├─ Comm Positions"  # Child
+        ordering = ['name']  # or ['id']
     
     def __str__(self):
         return self.name
@@ -991,9 +1005,10 @@ class CommCrewName(models.Model):
     name = models.CharField(max_length=100, unique=True)
     
     class Meta:
-        ordering = ['name']
         verbose_name = "Comm Crew Name"
-        verbose_name_plural = "Comm Crew Names"
+        verbose_name_plural = "    ├─ Comm Crew Names"
+        # UPDATE THIS: Likely field is 'name'
+        ordering = ['id'] 
     
     def __str__(self):
         return self.name
@@ -1120,10 +1135,10 @@ class CommBeltPack(models.Model):
     notes = models.TextField(blank=True)
     
     class Meta:
-        ordering = ['system_type', 'bp_number']  # Order by system type first
         verbose_name = "Comm Belt Pack"
-        verbose_name_plural = "Comm Belt Packs"
-        unique_together = ['system_type', 'bp_number']  # BP numbers can repeat across systems
+        verbose_name_plural = "Comm Belt Packs"  # PARENT
+        # UPDATE THIS: Likely field is 'bp_number'
+        ordering = ['bp_number'] 
     
     def __str__(self):
         system_prefix = "W" if self.system_type == "WIRELESS" else "H"
@@ -1164,9 +1179,14 @@ class ShowDay(models.Model):
     order = models.IntegerField(default=0, help_text="Display order for days")
     
     class Meta:
-        ordering = ['date', 'order']
         verbose_name = "Show Day"
-        verbose_name_plural = "Show Days"
+        verbose_name_plural = "Show Days"  # PARENT
+        ordering = ['date'] 
+
+    class Meta:
+        verbose_name = "Show Day"
+        verbose_name_plural = "Show Days"  # PARENT
+        ordering = ['date']  # or      
     
     def __str__(self):
         if self.name:
@@ -1225,10 +1245,9 @@ class MicSession(models.Model):
     order = models.IntegerField(default=0, help_text="Display order within the day")
     
     class Meta:
-        ordering = ['day', 'order', 'start_time']
         verbose_name = "Mic Session"
-        verbose_name_plural = "Mic Sessions"
-        unique_together = [['day', 'name']]
+        verbose_name_plural = "    ├─ Mic Sessions"  # Child
+        ordering = ['day', 'order']  # or ['id']
     
     def __str__(self):
         return f"{self.day.date.strftime('%m/%d')} - {self.name}"
@@ -1337,10 +1356,9 @@ class MicAssignment(models.Model):
     )
     
     class Meta:
-        ordering = ['session', 'rf_number']
         verbose_name = "Mic Assignment"
-        verbose_name_plural = "Mic Assignments"
-        unique_together = [['session', 'rf_number']]
+        verbose_name_plural = "    ├─ Mic Assignments"  # Child
+        ordering = ['rf_number']  
     
     def __str__(self):
         if self.presenter_name:
@@ -1396,7 +1414,7 @@ class MicShowInfo(models.Model):
     
     class Meta:
         verbose_name = "Mic Show Information"
-        verbose_name_plural = "Mic Show Information"
+        verbose_name_plural = "    └─ Mic Show Information"
     
     def __str__(self):
         if self.show_name:
@@ -1472,8 +1490,10 @@ class AmplifierProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['manufacturer', 'model']
-        unique_together = ['manufacturer', 'model']
+        verbose_name = "Amplifier Profile"
+        verbose_name_plural = "    ├─ Amplifier Profiles"  # Child
+        ordering = ['manufacturer', 'model']  # or ['i fields are 'manufacturer', 'model'
+       
         
     def __str__(self):
         return f"{self.manufacturer} {self.model}"
@@ -1550,8 +1570,11 @@ class PowerDistributionPlan(models.Model):
     blank=True,
     related_name='power_plans_created'
     )
+    
     class Meta:
-        ordering = ['-show_day__date']
+        verbose_name = "Power Distribution Plan"
+        verbose_name_plural = "Power Distribution Plans"  # PARENT
+        ordering = ['-created_at']  # or ['id']
         
     def __str__(self):
         return f"{self.show_day} - {self.venue_name} Power Plan"
@@ -1635,7 +1658,10 @@ class AmplifierAssignment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['zone', 'position', 'amplifier']
+        verbose_name = "Amplifiers in Power Plan"
+        verbose_name_plural = "    ├─ Amplifiers in Power Plan"  # PARENT
+        ordering = ['id']  # SAFE DEFAULT - replace with your fields like 'zone', 'position', etc.
+
         
     def __str__(self):
         return f"{self.zone} - {self.amplifier} x{self.quantity}"
@@ -1698,7 +1724,8 @@ class SoundvisionPrediction(models.Model):
     notes = models.TextField(blank=True)
     
     class Meta:
-        ordering = ['-created_at']
+        verbose_name = "Soundvision Prediction"
+        verbose_name_plural = "Soundvision Predictions"    
     
     def __str__(self):
         return f"{self.show_day} - {self.file_name}"
@@ -1777,7 +1804,9 @@ class SpeakerArray(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['array_base_name', 'source_name']
+        verbose_name = "Speaker Array"
+        verbose_name_plural = "    ├─ Speaker Arrays"  # Child
+        ordering = ['prediction', 'array_base_name']  #
     
     def __str__(self):
         return f"{self.source_name} ({self.prediction.show_day})"
@@ -1896,8 +1925,9 @@ class SpeakerCabinet(models.Model):
     panflex_setting = models.CharField(max_length=10, choices=PANFLEX_OPTIONS, blank=True)
     
     class Meta:
-        ordering = ['array', 'position_number']
-        unique_together = [['array', 'position_number']]
+        verbose_name = "Speaker Cabinet"
+        verbose_name_plural = "    └─ Speaker Cabinets"  # Child
+        ordering = ['id']  #
     
     def __str__(self):
         angle_str = f" ({self.angle_to_next}°)" if self.angle_to_next else ""

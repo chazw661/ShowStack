@@ -1,0 +1,91 @@
+/* PARENT ITEMS - Make them stand out */
+#grp-navigation a[href*="showday"],
+#grp-navigation a[href*="commbeltpack"],
+#grp-navigation a[href*="console"],
+#grp-navigation a[href*="device"] {
+    font-size: 14px !important;
+    font-weight: bold !important;
+    background: rgba(255,255,255,0.05);
+    padding: 8px 12px !important;
+    margin: 2px 0 !important;
+    display: block;
+    border-left: 3px solid #4CAF50;
+}
+
+/* CHILD ITEMS - Visually nested under parents */
+#grp-navigation a[href*="micsession"],
+#grp-navigation a[href*="micassignment"] {
+    font-size: 12px !important;
+    font-weight: normal !important;
+    padding-left: 35px !important;
+    position: relative;
+    opacity: 0.85;
+}
+
+/* Add connecting lines for Show Days children */
+#grp-navigation a[href*="micsession"]:before,
+#grp-navigation a[href*="micassignment"]:before {
+    content: "└─";
+    position: absolute;
+    left: 15px;
+    color: #666;
+}
+
+/* Comm Belt Pack children */
+#grp-navigation a[href*="commposition"],
+#grp-navigation a[href*="commchannel"],
+#grp-navigation a[href*="commlocation"] {
+    font-size: 12px !important;
+    padding-left: 35px !important;
+    position: relative;
+    opacity: 0.85;
+}
+
+#grp-navigation a[href*="commposition"]:before,
+#grp-navigation a[href*="commchannel"]:before,
+#grp-navigation a[href*="commlocation"]:before {
+    content: "└─";
+    position: absolute;
+    left: 15px;
+    color: #666;
+}
+
+/* Amplifier Assignment children */
+#grp-navigation a[href*="amplifierprofile"],
+#grp-navigation a[href*="pazone"] {
+    font-size: 12px !important;
+    padding-left: 35px !important;
+    position: relative;
+    opacity: 0.85;
+}
+
+#grp-navigation a[href*="amplifierprofile"]:before,
+#grp-navigation a[href*="pazone"]:before {
+    content: "└─";
+    position: absolute;
+    left: 15px;
+    color: #666;
+}
+
+/* STANDALONE ITEMS - Regular styling */
+#grp-navigation a[href*="systemprocessor"],
+#grp-navigation a[href*="audiochecklist"],
+#grp-navigation a[href*="powerdistribution"],
+#grp-navigation a[href*="pacableentries"],
+#grp-navigation a[href*="soundvision"] {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 6px 12px !important;
+}
+
+/* Hover effects */
+#grp-navigation a:hover {
+    background: rgba(255,255,255,0.1) !important;
+    opacity: 1 !important;
+}
+
+/* Hide duplicates if they exist */
+#grp-navigation li:has(a[href*="amplifierassignment"]) ~ li:has(a[href*="amplifierassignment"]),
+#grp-navigation li:has(a[href*="commposition"]) ~ li:has(a[href*="commposition"]) {
+    display: none;
+}

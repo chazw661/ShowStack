@@ -19,7 +19,9 @@ from django.db.models import Count, Q, Max
 from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment
 from django.db.models import Sum 
 from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
+from django.contrib.admin import AdminSite
 from django.contrib import messages 
+from . import admin_ordering
 
 # Python standard library imports
 import csv
@@ -2764,7 +2766,9 @@ class SpeakerCabinetAdmin(admin.ModelAdmin):
 
 
 
- 
+ #----Custom Side Bar Ordering-----
+
+
 
 
 
