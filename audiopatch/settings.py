@@ -33,13 +33,14 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
+    'planner',
     'admin_interface',
     'colorfield',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'planner'
+    
 ]
 
 MIDDLEWARE = [
@@ -57,7 +58,9 @@ ROOT_URLCONF = 'audiopatch.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [ BASE_DIR /  'templates', ],
+        'DIRS': [ 
+            BASE_DIR / 'templates',
+            BASE_DIR / 'planner' / 'templates', ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

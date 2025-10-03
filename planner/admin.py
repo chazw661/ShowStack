@@ -154,7 +154,8 @@ class ConsoleAdmin(admin.ModelAdmin):
     ]
 
     class Media:
-        js = ['planner/js/mono_stereo_handler.js']
+        js = ['planner/js/mono_stereo_handler.js',
+              'planner/js/global_nav.js',]
         css = {
             'all': ['css/custom_admin.css']
         }
@@ -249,6 +250,8 @@ class DeviceAdmin(admin.ModelAdmin):
         # redirect into the change page so the inlines appear.
         change_url = reverse('admin:planner_device_change', args=(obj.pk,))
         return HttpResponseRedirect(change_url)
+    
+    
     
     
     def save_model(self, request, obj, form, change):

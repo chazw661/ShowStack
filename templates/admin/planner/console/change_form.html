@@ -1,0 +1,196 @@
+<!-- audiopatch/templates/admin/planner/console/change_form.html -->
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+
+    .historylink {
+    margin-top: 20px !important;
+    }
+    /* Quick override styles for this page */
+    .submit-row {
+        position: sticky !important;
+        bottom: 0;
+        background: #1a1a1a;
+        border-top: 2px solid #64B5F6;
+        padding: 15px !important;
+        margin: 20px -20px -20px -20px !important;
+        z-index: 100;
+    }
+    
+    /* Make status bar full width */
+    .spreadsheet-status-bar {
+        background: #2a2a2a;
+        padding: 10px 20px;
+        margin: 0 -20px 10px -20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #444;
+    }
+    
+    .spreadsheet-status-bar .shortcuts {
+        display: flex;
+        gap: 15px;
+    }
+    
+    .spreadsheet-status-bar .shortcut {
+        font-size: 11px;
+        color: #ddd;
+    }
+    
+    .spreadsheet-status-bar .shortcut kbd {
+        background: #333;
+        padding: 2px 4px;
+        border-radius: 3px;
+        border: 1px solid #555;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Spreadsheet Mode Indicator -->
+{% if spreadsheet_mode %}
+<div class="spreadsheet-indicator" id="spreadsheetIndicator">
+    Spreadsheet Mode Active
+</div>
+{% endif %}
+
+<!-- Datalists for Autocomplete -->
+<datalist id="manufacturers">
+    {% for manufacturer in manufacturers %}
+    <option value="{{ manufacturer }}">
+    {% endfor %}
+</datalist>
+
+<datalist id="models">
+    {% for model in models %}
+    <option value="{{ model }}">
+    {% endfor %}
+</datalist>
+
+<datalist id="locations">
+    {% for location in locations %}
+    <option value="{{ location }}">
+    {% endfor %}
+</datalist>
+
+<!-- Status Bar -->
+<div class="spreadsheet-status-bar" id="statusBar" style="display: none;">
+    <div class="current-field">
+        Field: <span id="currentFieldName">-</span>
+    </div>
+    <div class="shortcuts">
+        <div class="shortcut">
+            <kbd>Enter</kbd> Next Row ↓
+        </div>
+        <div class="shortcut">
+            <kbd>Shift+Enter</kbd> Previous Row ↑
+        </div>
+        <div class="shortcut">
+            <kbd>Tab</kbd> Next Field →
+        </div>
+        <div class="shortcut">
+            <kbd>Shift+Tab</kbd> Previous Field ←
+        </div>
+        <div class="shortcut">
+            <kbd>Ctrl+S</kbd> Save
+        </div>
+        <div class="shortcut">
+            <kbd>Esc</kbd> Clear Field
+        </div>
+    </div>
+</div>
+
+<!-- Quick Navigation Buttons -->
+<div class="spreadsheet-nav-buttons">
+    <button type="button" onclick="document.querySelector('[name=name]').focus();" title="Jump to Name">
+        ↖ First Field
+    </button>
+    <button type="button" onclick="document.querySelector('[name=_save]').focus();" title="Jump to Save">
+        💾 Save
+    </button>
+</div>
+
+{{ block.super }}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Show status bar
+    const statusBar = document.getElementById('statusBar');
+    if (statusBar) {
+        statusBar.style.display = 'flex';
+    }
+    
+    // Track current field
+    const inputs = document.querySelectorAll('input, textarea, select');
+    const currentFieldSpan = document.getElementById('currentFieldName');
+    
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            const label = this.closest('.form-row')?.querySelector('label');
+            if (label && currentFieldSpan) {
+                currentFieldSpan.textContent = label.textContent.replace(':', '');
+            }
+            
+            // Add active cell class
+            this.classList.add('active-cell');
+        });
+        
+        input.addEventListener('blur', function() {
+            this.classList.remove('active-cell');
+        });
+    });
+    
+    // Add quick save with Ctrl+S
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            const saveBtn = document.querySelector('input[name="_save"]');
+            if (saveBtn) {
+                saveBtn.click();
+            }
+        }
+        
+        // Ctrl+Shift+S for Save and continue
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+            e.preventDefault();
+            const continueBtn = document.querySelector('input[name="_continue"]');
+            if (continueBtn) {
+                continueBtn.click();
+            }
+        }
+        
+        // Alt+A for Save and add another
+        if (e.altKey && e.key === 'a') {
+            e.preventDefault();
+            const addAnotherBtn = document.querySelector('input[name="_addanother"]');
+            if (addAnotherBtn) {
+                addAnotherBtn.click();
+            }
+        }
+    });
+    
+    // Auto-hide indicator after 5 seconds
+    const indicator = document.getElementById('spreadsheetIndicator');
+    if (indicator) {
+        setTimeout(() => {
+            indicator.style.opacity = '0.3';
+        }, 5000);
+    }
+    
+    // Add field navigation hints
+    const formRows = document.querySelectorAll('.form-row');
+    formRows.forEach((row, index) => {
+        const input = row.querySelector('input, textarea, select');
+        if (input && !input.hasAttribute('tabindex')) {
+            input.setAttribute('tabindex', index + 1);
+        }
+    });
+    
+    console.log('📊 Console spreadsheet mode initialized');
+});
+</script>
+{% endblock %}
