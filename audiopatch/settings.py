@@ -31,11 +31,11 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+   
+    'colorfield',
     'django.contrib.admin',
     'django.contrib.auth',
     'planner',
-    'admin_interface',
-    'colorfield',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -51,6 +51,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
 ]
 
 ROOT_URLCONF = 'audiopatch.urls'
@@ -134,3 +135,29 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Allow more form fields in the admin (for consoles with many inputs/outputs)
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000000
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Audio Production Manager",
+    "site_header": "Audio Production Manager",
+    "site_brand": "Audio Production",
+    "site_logo": None,  # Path to logo in static folder
+    "welcome_sign": "Welcome to Audio Production Manager",
+    
+    # Theme
+    "theme": "darkly",  # Built-in dark theme
+    
+    # Colors
+    "custom_css": None,
+    "custom_js": None,
+    
+    # Show sidebar
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    
+    # Icons (Font Awesome)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+    },
+}

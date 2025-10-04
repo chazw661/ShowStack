@@ -157,7 +157,8 @@ class ConsoleAdmin(admin.ModelAdmin):
         js = ['planner/js/mono_stereo_handler.js',
               'planner/js/global_nav.js',]
         css = {
-            'all': ['css/custom_admin.css']
+            'all': ['css/custom_admin.css'] 
+            
         }
 
 
@@ -2769,8 +2770,19 @@ class SpeakerCabinetAdmin(admin.ModelAdmin):
 
 
 
- #----Custom Side Bar Ordering-----
+#-----Dark Theme-----
 
+class DarkThemeAdminMixin:
+    class Media:
+        css = {
+            'all': (
+                'admin/css/custom.css',  # Your existing custom CSS
+                'audiopatch/css/dark_theme.css',  # The new dark theme
+            )
+        }
+        js = (
+            'audiopatch/js/dark_theme.js',
+        )
 
 
 

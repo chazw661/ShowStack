@@ -1,0 +1,396 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" type="text/css" href="{% static 'admin/css/dark_admin.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+
+<style>
+/* Inline dark theme with maximum specificity */
+html, body {
+    background: #0a0a0a !important;
+}
+
+body, #container, #content, #content-main, .main, .content, .colMS, .colM {
+    background-color: #0a0a0a !important;
+    color: #e0e0e0 !important;
+}
+
+/* Header */
+#header {
+    background: #1a1a1a !important;
+    color: #e0e0e0 !important;
+}
+
+#branding h1, #branding h1 a:link, #branding h1 a:visited {
+    color: #00ff88 !important;
+}
+
+#user-tools a {
+    color: #e0e0e0 !important;
+    border-bottom-color: #333 !important;
+}
+
+/* Breadcrumbs */
+div.breadcrumbs {
+    background: #1a1a1a !important;
+    color: #e0e0e0 !important;
+}
+
+div.breadcrumbs a {
+    color: #00ff88 !important;
+}
+
+/* Modules and fieldsets */
+.module, fieldset, .inline-group {
+    background: #1a1a1a !important;
+    border: 1px solid #333 !important;
+}
+
+.module h2, .module caption, fieldset h2 {
+    background: #252525 !important;
+    color: #e0e0e0 !important;
+}
+
+/* Form inputs */
+input[type="text"], input[type="password"], input[type="email"], 
+input[type="url"], input[type="number"], input[type="tel"],
+select, textarea {
+    background-color: #000 !important;
+    color: #fff !important;
+    border: 1px solid #444 !important;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: #00ff88 !important;
+    outline: 2px solid #00ff88 !important;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3) !important;
+}
+
+/* Tables */
+#changelist, #result_list {
+    background: #0f0f0f !important;
+}
+
+#result_list thead th {
+    background: #1a1a1a !important;
+    color: #e0e0e0 !important;
+    border-bottom: 1px solid #333 !important;
+}
+
+#result_list tbody tr {
+    background: #0f0f0f !important;
+    border-bottom: 1px solid #222 !important;
+}
+
+#result_list tbody tr:nth-child(even) {
+    background: #1a1a1a !important;
+}
+
+#result_list tbody tr:hover {
+    background: #252525 !important;
+}
+
+#result_list tbody td, #result_list tbody th {
+    color: #e0e0e0 !important;
+    border-bottom: 1px solid #222 !important;
+}
+
+/* Sidebar */
+#changelist-filter {
+    background: #0f0f0f !important;
+    border-left: 1px solid #333 !important;
+}
+
+#changelist-filter h2, #changelist-filter h3 {
+    color: #e0e0e0 !important;
+}
+
+#changelist-filter li {
+    color: #e0e0e0 !important;
+}
+
+#changelist-filter a {
+    color: #4da6ff !important;
+}
+
+/* Buttons */
+.button, input[type="submit"], input[type="button"], 
+.submit-row input, a.button {
+    background: #2a9d8f !important;
+    color: #fff !important;
+    border: 1px solid #3db3a3 !important;
+    font-weight: bold !important;
+}
+
+.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+    background: #3db3a3 !important;
+    color: #fff !important;
+}
+
+.button.default, input[type="submit"].default {
+    background: #00ff88 !important;
+    color: #000 !important;
+    border: 2px solid #00ff88 !important;
+}
+
+/* Add/action buttons at top of pages */
+.addlink, .addlink:link, .addlink:visited,
+.object-tools a, .object-tools a:link {
+    background: #2a9d8f !important;
+    color: #fff !important;
+    border: 1px solid #3db3a3 !important;
+}
+
+.addlink:hover, .object-tools a:hover {
+    background: #3db3a3 !important;
+    color: #fff !important;
+}
+
+/* Clear field and other utility buttons */
+button[name="_clearfield"],
+input[name="_clearfield"],
+.clearable-file-input button,
+.related-widget-wrapper-link,
+input[value="Clear field"] {
+    background: #2a9d8f !important;
+    color: #fff !important;
+    border: 1px solid #3db3a3 !important;
+}
+
+button[name="_clearfield"]:hover,
+input[name="_clearfield"]:hover,
+input[value="Clear field"]:hover {
+    background: #3db3a3 !important;
+}
+
+/* Clear field and other utility buttons */
+button[name="_clearfield"],
+input[name="_clearfield"],
+.clearable-file-input button,
+.related-widget-wrapper-link,
+input[value="Clear field"] {
+    background: #2a9d8f !important;
+    color: #fff !important;
+    border: 1px solid #3db3a3 !important;
+}
+
+button[name="_clearfield"]:hover,
+input[name="_clearfield"]:hover,
+input[value="Clear field"]:hover {
+    background: #3db3a3 !important;
+}
+
+/* Fix sidebar layout - prevent text cutoff */
+#nav-sidebar {
+    background: #0f0f0f !important;
+}
+
+#nav-sidebar .current-app,
+#nav-sidebar .current-model {
+    background: #1a1a1a !important;
+}
+
+#nav-sidebar a {
+    color: #4da6ff !important;
+    padding-right: 50px !important; /* Space for Add button */
+}
+
+#nav-sidebar .addlink {
+    position: absolute !important;
+    right: 5px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    padding: 3px 8px !important;
+    font-size: 11px !important;
+    margin: 0 !important;
+}
+
+/* Ensure sidebar items have relative positioning for absolute Add buttons */
+#nav-sidebar li {
+    position: relative !important;
+}
+
+/* Delete buttons */
+.deletelink, .deletelink-box a {
+    background: #cc0000 !important;
+    color: #fff !important;
+}
+
+.deletelink:hover {
+    background: #ff3838 !important;
+}
+
+/* Messages */
+.messagelist li {
+    background: #1a1a1a !important;
+    color: #e0e0e0 !important;
+}
+
+.messagelist .success {
+    background: #1a4d1a !important;
+    border-color: #00ff88 !important;
+}
+
+.messagelist .warning {
+    background: #4d4d1a !important;
+}
+
+.messagelist .error {
+    background: #4d1a1a !important;
+}
+
+/* Links */
+a, a:link, a:visited {
+    color: #4da6ff !important;
+}
+
+a:hover {
+    color: #00ff88 !important;
+}
+
+a:focus, a:active {
+    color: #00ff88 !important;
+}
+
+/* General text */
+label, p, li, dt, dd, th, td, h1, h2, h3, h4, h5 {
+    color: #e0e0e0 !important;
+}
+
+.help, .helptext, .grp-description {
+    color: #999 !important;
+}
+
+/* Tabs */
+.module h2, .inline-group h2 {
+    cursor: pointer !important;
+}
+
+/* Checkboxes and radio buttons */
+input[type="checkbox"], input[type="radio"] {
+    filter: invert(1) hue-rotate(180deg) !important;
+}
+
+/* Calendar widget */
+.calendarbox, .clockbox {
+    background: #1a1a1a !important;
+    border: 1px solid #333 !important;
+}
+
+.calendar caption, .calendarbox h2 {
+    background: #252525 !important;
+    color: #e0e0e0 !important;
+}
+
+.calendar td, .calendar th {
+    background: #0f0f0f !important;
+    border: 1px solid #333 !important;
+}
+
+.calendar td a {
+    color: #4da6ff !important;
+}
+
+.calendar td.selected a {
+    background: #00ff88 !important;
+    color: #000 !important;
+}
+
+/* Object tools */
+.object-tools {
+    background: transparent !important;
+}
+
+.object-tools li {
+    background: transparent !important;
+    border: none !important;
+}
+
+.object-tools a {
+    color: #e0e0e0 !important;
+}
+
+/* History button visibility fix */
+.historylink, 
+a.historylink,
+input[name="_history"],
+.submit-row .historylink,
+.object-tools .historylink {
+    background: #444 !important;
+    color: #fff !important;
+    border: 1px solid #666 !important;
+}
+
+.historylink:hover,
+a.historylink:hover {
+    background: #666 !important;
+    color: #fff !important;
+}
+
+/* Remove green triangle artifacts */
+.historylink::before,
+.historylink::after {
+    display: none !important;
+}
+</style>
+
+<!-- Spreadsheet Navigation -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Spreadsheet navigation loading...');
+    
+    if (!document.body.classList.contains('change-form')) {
+        console.log('Not a change form, skipping navigation');
+        return;
+    }
+    
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && 
+                e.target.tagName !== 'TEXTAREA' &&
+                e.target.type !== 'submit' &&
+                e.target.type !== 'button') {
+                
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const inputs = Array.from(form.querySelectorAll(
+                    'input:not([type="hidden"]):not([readonly]):not([disabled]):not([type="submit"]):not([type="button"]), ' +
+                    'select:not([disabled]), ' +
+                    'textarea:not([readonly]):not([disabled])'
+                )).filter(el => el.offsetParent !== null);
+                
+                const current = inputs.indexOf(e.target);
+                if (current === -1) return false;
+                
+                let next;
+                if (e.shiftKey) {
+                    next = current - 1;
+                    if (next < 0) next = inputs.length - 1;
+                } else {
+                    next = current + 1;
+                    if (next >= inputs.length) next = 0;
+                }
+                
+                if (inputs[next]) {
+                    inputs[next].focus();
+                    if (inputs[next].select && inputs[next].type !== 'select-one') {
+                        setTimeout(() => inputs[next].select(), 10);
+                    }
+                }
+                
+                return false;
+            }
+        });
+    });
+    
+    console.log('✅ Spreadsheet navigation active - Enter: next, Shift+Enter: previous');
+});
+</script>
+{% endblock %}
