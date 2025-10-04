@@ -42,6 +42,7 @@ class ConsoleInput(models.Model):
 
 class ConsoleAuxOutput(models.Model):
     console = models.ForeignKey(Console, on_delete=models.CASCADE)
+    dante_number = models.IntegerField(null=True, blank=True) 
     aux_number = models.CharField(max_length=10)
     name = models.CharField(max_length=100, blank=True, null=True)
     mono_stereo = models.CharField(
@@ -58,13 +59,14 @@ class ConsoleAuxOutput(models.Model):
     )
     omni_in = models.CharField(max_length=100, blank=True)
     omni_out = models.CharField(max_length=100, blank=True)
-
+    
     def __str__(self):
         return f"Aux {self.aux_number} - {self.name}"
 
 
 class ConsoleMatrixOutput(models.Model):
     console = models.ForeignKey(Console, on_delete=models.CASCADE)
+    dante_number = models.IntegerField(null=True, blank=True) 
     matrix_number = models.CharField(max_length=10)
     name = models.CharField(max_length=100, blank=True, null=True)
     mono_stereo = models.CharField(
@@ -75,6 +77,7 @@ class ConsoleMatrixOutput(models.Model):
 )
     destination = models.CharField(max_length=100, blank=True, null=True)
     omni_out = models.CharField(max_length=100, blank=True, null=True)
+    
 
     def __str__(self):
         return f"Matrix {self.matrix_number} - {self.name}"

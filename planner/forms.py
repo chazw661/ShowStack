@@ -105,6 +105,7 @@ class ConsoleAuxOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleAuxOutput
         fields = [
+            'dante_number', 
             'aux_number',
             'name',
             'mono_stereo',
@@ -114,6 +115,10 @@ class ConsoleAuxOutputForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.fields['dante_number'].widget.attrs.update({
+            'class': 'block w-6 text-center align-middle bg-white text-black rounded-sm',
+        })
 
         self.fields['aux_number'].widget.attrs.update({
             'class': 'w-16 text-center align-middle bg-white text-black rounded-sm',
@@ -131,6 +136,7 @@ class ConsoleAuxOutputForm(forms.ModelForm):
         self.fields['omni_out'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
+        
 
 OutputFormSet = modelformset_factory(
     ConsoleAuxOutput,
@@ -145,6 +151,7 @@ class ConsoleMatrixOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleMatrixOutput
         fields = [
+            'dante_number', 
             'matrix_number',
             'name',
             'mono_stereo',
@@ -154,6 +161,10 @@ class ConsoleMatrixOutputForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.fields['dante_number'].widget.attrs.update({
+            'class': 'block w-6 text-center align-middle bg-white text-black rounded-sm',
+        })
 
         self.fields['matrix_number'].widget.attrs.update({
             'class': 'w-16 text-center align-middle bg-white text-black rounded-sm',
@@ -292,6 +303,7 @@ class ConsoleAuxOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleAuxOutput
         fields = [
+            'dante_number', 
             'aux_number',
             'name',
             'mono_stereo',
@@ -332,6 +344,7 @@ class ConsoleMatrixOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleMatrixOutput
         fields = [
+            'dante_number', 
             'matrix_number',
             'name',
             'mono_stereo',

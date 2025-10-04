@@ -114,6 +114,9 @@ class ConsoleAuxOutputInline(admin.TabularInline):
                     if not form.instance.pk:
                         form.initial['aux_number'] = index + 1
 
+        original_str = self.model.__str__
+        self.model.__str__ = lambda self: ""            
+
                 
         return PrepopulatedFormSet
 
@@ -139,6 +142,10 @@ class ConsoleMatrixOutputInline(admin.TabularInline):
                 for index, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial['matrix_number'] = index + 1
+
+        original_str = self.model.__str__
+        self.model.__str__ = lambda self: "" 
+                    
 
 
         return PrepopulatedFormSet
