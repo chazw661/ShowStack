@@ -9,14 +9,19 @@ from django import forms
 
 class Console(models.Model):
     name = models.CharField(max_length=100)
-
+    is_template = models.BooleanField(
+        default=False, 
+        help_text="Mark this console as a template for creating new consoles"
+    )
+    
     def __str__(self):
-        return self.name
+        template_prefix = "[TEMPLATE] " if self.is_template else ""
+        return f"{template_prefix}{self.name}"
     
     class Meta:
         verbose_name = "Console"
         verbose_name_plural = "Consoles"
-        ordering = ['name']  
+        ordering = ['-is_template', 'name']  # Templates first, then alphabetical
 
 
 class ConsoleInput(models.Model):

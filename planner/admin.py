@@ -182,9 +182,19 @@ class ConsoleStereoOutputInline(admin.TabularInline):
         return PrepopulatedFormSet   
 
 
+
+
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
-    list_display = ['name', 'export_yamaha_button']
+    list_display = ['name_with_template_badge', 'is_template', 'export_yamaha_button']
+    list_filter = ['is_template']
+    
+    fieldsets = (
+        ('Console Information', {
+            'fields': ('name', 'is_template')
+        }),
+    )
+    
     inlines = [
         ConsoleInputInline,
         ConsoleAuxOutputInline,
@@ -192,14 +202,87 @@ class ConsoleAdmin(admin.ModelAdmin):
         ConsoleStereoOutputInline,
     ]
     
-    actions = ['export_yamaha_rivage_csvs']  # ADD THIS
+    actions = ['export_yamaha_rivage_csvs', 'duplicate_console']
+    
+    def name_with_template_badge(self, obj):
+        if obj.is_template:
+            return format_html('<strong>📋 {}</strong>', obj.name)
+        return obj.name
+    name_with_template_badge.short_description = 'Name'
+    name_with_template_badge.admin_order_field = 'name'
+    
+    @admin.action(description='Duplicate selected console (with all inputs/outputs)')
+    def duplicate_console(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one console to duplicate.", level='ERROR')
+            return
+        
+        original = queryset.first()
+        
+        # Create new console
+        new_console = Console.objects.create(
+            name=f"{original.name} (Copy)",
+            is_template=False
+        )
+        
+        # Duplicate all related inputs
+        for input_obj in original.consoleinput_set.all():
+            ConsoleInput.objects.create(
+                console=new_console,
+                dante_number=input_obj.dante_number,
+                input_ch=input_obj.input_ch,
+                source=input_obj.source,
+                group=input_obj.group,
+                dca=input_obj.dca,
+                mute=input_obj.mute,
+                direct_out=input_obj.direct_out,
+                omni_in=input_obj.omni_in,
+                omni_out=input_obj.omni_out
+            )
+        
+        # Duplicate aux outputs
+        for aux in original.consoleauxoutput_set.all():
+            ConsoleAuxOutput.objects.create(
+                console=new_console,
+                dante_number=aux.dante_number,
+                aux_number=aux.aux_number,
+                name=aux.name,
+                mono_stereo=aux.mono_stereo,
+                bus_type=aux.bus_type,
+                omni_out=aux.omni_out
+            )
+        
+        # Duplicate matrix outputs
+        for matrix in original.consolematrixoutput_set.all():
+            ConsoleMatrixOutput.objects.create(
+                console=new_console,
+                dante_number=matrix.dante_number,
+                matrix_number=matrix.matrix_number,
+                name=matrix.name,
+                mono_stereo=matrix.mono_stereo,
+                destination=matrix.destination,
+                omni_out=matrix.omni_out
+            )
+        
+        # Duplicate stereo outputs
+        for stereo in original.consolestereooutput_set.all():
+            ConsoleStereoOutput.objects.create(
+                console=new_console,
+                stereo_type=stereo.stereo_type,
+                name=stereo.name,
+                dante_number=stereo.dante_number,
+                omni_out=stereo.omni_out
+            )
+        
+        self.message_user(request, f"Successfully duplicated '{original.name}' as '{new_console.name}'")
+        return redirect(f'/admin/planner/console/{new_console.id}/change/')
     
     def export_yamaha_button(self, obj):
         """Add export button in list view"""
         if obj.pk:
             url = f'/admin/planner/console/{obj.pk}/export-yamaha/'
             return format_html(
-                '<a class="button" href="{}" style="padding: 5px 10px; background: #417690; color: white; border-radius: 4px; text-decoration: none;">Export Yamaha CSVs</a>',
+                '<a class="button" href="{}" style="padding: 5px 10px; background: #417690; color: white; border-radius: 4px; text-decoration: none;">Export</a>',
                 url
             )
         return '-'
@@ -208,7 +291,7 @@ class ConsoleAdmin(admin.ModelAdmin):
     
     def export_yamaha_rivage_csvs(self, request, queryset):
         """Admin action to export Yamaha CSVs for selected consoles"""
-        if queryset.count() == 1:
+        if queryset.count() != 1:
             from .utils.yamaha_export import export_yamaha_csvs
             console = queryset.first()
             return export_yamaha_csvs(console)
@@ -221,7 +304,7 @@ class ConsoleAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         from django.urls import path
         custom_urls = [
-            path('<int:pk>/export-yamaha/', 
+            path('<int:pk>/export-yamaha/',
                  self.admin_site.admin_view(self.export_yamaha_view),
                  name='console-export-yamaha'),
         ]
@@ -237,8 +320,9 @@ class ConsoleAdmin(admin.ModelAdmin):
         js = ['planner/js/mono_stereo_handler.js',
               'planner/js/global_nav.js',]
         css = {
-            'all': ['css/custom_admin.css', 'planner/css/console_admin.css'] 
+            'all': ['css/custom_admin.css', 'planner/css/console_admin.css']
         }
+        
 
 
 # ========== Device Admin ==========
