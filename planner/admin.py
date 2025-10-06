@@ -22,6 +22,7 @@ from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
 from django.contrib import messages 
 from . import admin_ordering
+from .models import ConsoleStereoOutput
 
 # Python standard library imports
 import csv
@@ -44,6 +45,7 @@ from .forms import DeviceForm, NameOnlyForm
 from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 from .models import AudioChecklist
+from .forms import ConsoleStereoOutputForm
 
 
 
@@ -149,23 +151,93 @@ class ConsoleMatrixOutputInline(admin.TabularInline):
 
 
         return PrepopulatedFormSet
+    
+class ConsoleStereoOutputInline(admin.TabularInline):
+    model = ConsoleStereoOutput
+    form = ConsoleStereoOutputForm
+    extra = 3  # Changed from 4 to 3
+    can_delete = True
+    classes = ['collapse']
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+
+        class PrepopulatedFormSet(formset):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+
+                for form in self.forms:
+                    for field in form.fields.values():
+                        field.required = False
+
+                # Pre-populate stereo types if new
+                stereo_types = ['L', 'R', 'M']  # Changed from AL, AR, BL, BR
+                for index, form in enumerate(self.forms):
+                    if not form.instance.pk and index < len(stereo_types):
+                        form.initial['stereo_type'] = stereo_types[index]
+
+        original_str = self.model.__str__
+        self.model.__str__ = lambda self: ""
+        
+        return PrepopulatedFormSet   
 
 
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
-    list_display = ['name']
+    list_display = ['name', 'export_yamaha_button']
     inlines = [
         ConsoleInputInline,
         ConsoleAuxOutputInline,
         ConsoleMatrixOutputInline,
+        ConsoleStereoOutputInline,
     ]
-
+    
+    actions = ['export_yamaha_rivage_csvs']  # ADD THIS
+    
+    def export_yamaha_button(self, obj):
+        """Add export button in list view"""
+        if obj.pk:
+            url = f'/admin/planner/console/{obj.pk}/export-yamaha/'
+            return format_html(
+                '<a class="button" href="{}" style="padding: 5px 10px; background: #417690; color: white; border-radius: 4px; text-decoration: none;">Export Yamaha CSVs</a>',
+                url
+            )
+        return '-'
+    export_yamaha_button.short_description = 'Export'
+    export_yamaha_button.allow_tags = True
+    
+    def export_yamaha_rivage_csvs(self, request, queryset):
+        """Admin action to export Yamaha CSVs for selected consoles"""
+        if queryset.count() == 1:
+            from .utils.yamaha_export import export_yamaha_csvs
+            console = queryset.first()
+            return export_yamaha_csvs(console)
+        else:
+            self.message_user(request, "Please select exactly one console to export.", level='warning')
+    export_yamaha_rivage_csvs.short_description = "Export Yamaha Rivage CSVs"
+    
+    def get_urls(self):
+        """Add custom URL for export"""
+        urls = super().get_urls()
+        from django.urls import path
+        custom_urls = [
+            path('<int:pk>/export-yamaha/', 
+                 self.admin_site.admin_view(self.export_yamaha_view),
+                 name='console-export-yamaha'),
+        ]
+        return custom_urls + urls
+    
+    def export_yamaha_view(self, request, pk):
+        """View to handle Yamaha CSV export"""
+        from .utils.yamaha_export import export_yamaha_csvs
+        console = Console.objects.get(pk=pk)
+        return export_yamaha_csvs(console)
+    
     class Media:
         js = ['planner/js/mono_stereo_handler.js',
               'planner/js/global_nav.js',]
         css = {
-            'all': ['css/custom_admin.css'] 
-            
+            'all': ['css/custom_admin.css', 'planner/css/console_admin.css'] 
         }
 
 
@@ -2694,8 +2766,6 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
     array_summary.short_description = "Arrays"
 
     def view_detail_link(self, obj):
-        from django.utils.html import format_html
-        from django.urls import reverse
         url = reverse('planner:prediction_detail', kwargs={'pk': obj.pk})
         return format_html('<a class="button" style="padding: 3px 10px; background: #417690; color: white; border-radius: 4px; text-decoration: none;" href="{}">View Details</a>', url)
     view_detail_link.short_description = 'Actions'

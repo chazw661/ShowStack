@@ -6,6 +6,7 @@ from django.forms import modelformset_factory
 from django.contrib.contenttypes.models import ContentType
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
+from .models import  ConsoleStereoOutput
 
 
 
@@ -188,6 +189,20 @@ MatrixOutputFormSet = modelformset_factory(
     extra=10,
     can_delete=True
 )
+
+
+
+# ─── Stereo/Mono Output form ────────────────────────────────────────────────
+
+class ConsoleStereoOutputForm(forms.ModelForm):
+    class Meta:
+        model = ConsoleStereoOutput
+        fields = ['dante_number', 'stereo_type', 'name', 'omni_out']
+        widgets = {
+            'dante_number': forms.NumberInput(attrs={
+                'style': 'width: 20px !important; text-align: center;',
+            }),
+        }
 
 
 #----------Device dropdowns--------
@@ -378,6 +393,33 @@ MatrixOutputFormSet = modelformset_factory(
     can_delete=True
 )
 
+
+
+class ConsoleStereoOutputForm(forms.ModelForm):
+    class Meta:
+        model = ConsoleStereoOutput
+        fields = [
+            'dante_number',
+            'stereo_type',
+            'name',
+            'omni_out',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields['dante_number'].widget.attrs.update({
+            'class': 'block w-6 text-center align-middle bg-white text-black rounded-sm',
+        })
+        self.fields['stereo_type'].widget.attrs.update({
+            'class': 'w-24 text-center align-middle bg-white text-black rounded-sm',
+        })
+        self.fields['name'].widget.attrs.update({
+            'class': 'w-36 text-center align-middle bg-white text-black rounded-sm',
+        })
+        self.fields['omni_out'].widget.attrs.update({
+            'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
+        })
 
 #----------Device dropdowns--------
 from django import forms

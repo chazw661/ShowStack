@@ -1,0 +1,23 @@
+/* Stereo Output dante_number field - holds 3 digits */
+#consolestereooutput_set-group .field-dante_number input[type="number"],
+.inline-group#consolestereooutput_set-group .field-dante_number input {
+    width: 70px !important;
+    max-width: 70px !important;
+    min-width: 70px !important;
+    text-align: center !important;
+}
+
+/* Stereo Output omni_out field - holds single digit */
+#consolestereooutput_set-group .field-omni_out input[type="text"],
+#consolestereooutput_set-group .field-omni_out input,
+.inline-group#consolestereooutput_set-group .field-omni_out input {
+    width: 50px !important;
+    max-width: 50px !important;
+    min-width: 50px !important;
+    text-align: center !important;
+}
+
+/* Completely hide all Add buttons in sidebar */
+#nav-sidebar .addlink {
+    display: none !important;
+}

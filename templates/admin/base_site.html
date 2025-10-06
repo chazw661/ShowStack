@@ -3,8 +3,8 @@
 
 {% block extrastyle %}
 {{ block.super }}
-<link rel="stylesheet" type="text/css" href="{% static 'admin/css/dark_admin.css' %}">
 {% endblock %}
+
 
 {% block extrahead %}
 {{ block.super }}
@@ -121,14 +121,41 @@ input:focus, select:focus, textarea:focus {
 /* Buttons */
 .button, input[type="submit"], input[type="button"], 
 .submit-row input, a.button {
-    background: #2a9d8f !important;
+    background: #1a7a6f !important;
     color: #fff !important;
-    border: 1px solid #3db3a3 !important;
-    font-weight: bold !important;
+    border: 1px solid #2a9d8f !important;
+    font-weight: 600 !important;
+    padding: 4px 10px !important;  /* Even smaller padding */
+    font-size: 12px !important;  /* Smaller font */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
 }
 
 .button:hover, input[type="submit"]:hover, input[type="button"]:hover {
-    background: #3db3a3 !important;
+    background: #2a9d8f !important;
+    color: #fff !important;
+}
+
+/* Force white text on Export buttons specifically */
+td a.button,
+.field-export a.button {
+    color: #fff !important;
+}
+
+/* Force white text on Export buttons specifically */
+td a.button,
+.field-export a.button {
+    color: #fff !important;
+}
+}
+
+.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+    background: #2a9d8f !important;
+    color: #ffffff !important;  /* Keep white on hover */
+}
+
+
+.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+    background: #2a9d8f !important;
     color: #fff !important;
 }
 
@@ -141,16 +168,16 @@ input:focus, select:focus, textarea:focus {
 /* Add/action buttons at top of pages */
 .addlink, .addlink:link, .addlink:visited,
 .object-tools a, .object-tools a:link {
-    background: #2a9d8f !important;
-    color: #fff !important;
-    border: 1px solid #3db3a3 !important;
+    background: transparent !important;
+    color: #447e9b !important;
+    border: none !important;
+    padding: 2px 8px !important;
 }
 
 .addlink:hover, .object-tools a:hover {
-    background: #3db3a3 !important;
-    color: #fff !important;
+    background: #f5f5f5 !important;
+    color: #205067 !important;
 }
-
 /* Clear field and other utility buttons */
 button[name="_clearfield"],
 input[name="_clearfield"],
@@ -196,18 +223,24 @@ input[value="Clear field"]:hover {
 }
 
 #nav-sidebar a {
-    color: #4da6ff !important;
+    color: #ffffff !important;  /* White text */
     padding-right: 50px !important; /* Space for Add button */
 }
 
+#nav-sidebar a:hover {
+    color: #00ff88 !important;  /* Bright green on hover */
+}
+
+
+
+#nav-sidebar .addlink:hover {
+    background: #f5f5f5 !important;
+    color: #205067 !important;
+}
+
+/* COMPLETELY HIDE Add links in sidebar */
 #nav-sidebar .addlink {
-    position: absolute !important;
-    right: 5px !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    padding: 3px 8px !important;
-    font-size: 11px !important;
-    margin: 0 !important;
+    display: none !important;
 }
 
 /* Ensure sidebar items have relative positioning for absolute Add buttons */

@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from decimal import Decimal
 import math
+from django import forms
 
 class Console(models.Model):
     name = models.CharField(max_length=100)
@@ -81,6 +82,26 @@ class ConsoleMatrixOutput(models.Model):
 
     def __str__(self):
         return f"Matrix {self.matrix_number} - {self.name}"
+    
+class ConsoleStereoOutput(models.Model):
+    STEREO_CHOICES = [
+        ('L', 'Stereo Left'),
+        ('R', 'Stereo Right'),
+        ('M', 'Mono'),
+    ]
+    
+    console = models.ForeignKey(Console, on_delete=models.CASCADE)
+    stereo_type = models.CharField(max_length=2, choices=STEREO_CHOICES, verbose_name="Buss")
+    name = models.CharField(max_length=100, blank=True, null=True)
+    dante_number = models.IntegerField(null=True, blank=True)
+    omni_out = models.CharField(max_length=100, blank=True, null=True)
+    
+    def __str__(self):
+        return f"{self.get_stereo_type_display()} - {self.name}"
+    
+    class Meta:
+        ordering = ['stereo_type']   
+   
     
 
 
