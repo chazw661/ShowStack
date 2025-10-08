@@ -110,7 +110,7 @@
                                 </div>
                                 
                                 {% for assignment in session.mic_assignments.all %}
-                                <div class="mic-row" data-assignment-id="{{ assignment.id }}">
+                                <div class="mic-row {% if assignment.is_micd %}is-micd{% endif %}" data-assignment-id="{{ assignment.id }}">
                                     <div class="col-rf">{{ assignment.rf_number|stringformat:"02d" }}</div>
                                     
                                     <div class="col-type">
@@ -124,24 +124,87 @@
                                         </select>
                                     </div>
                                     
-                                    <div class="col-presenter editable" data-field="presenter" data-id="{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
-                                        <div class="presenter-input-group">
+                                    <div class="col-presenter">
+                                        <!-- Primary Presenter Row -->
+                                        <div class="presenter-row primary-presenter">
+                                            <span class="presenter-order">1°</span>
                                             <input type="text" 
-                                                   class="presenter-input" 
+                                                   class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
                                                    value="{{ assignment.presenter_name }}"
                                                    placeholder="Enter name..."
                                                    onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
                                                    title="Primary presenter">
+                                            {% if assignment.active_presenter_index == 0 %}
+                                            <span class="current-badge">CURRENT</span>
+                                            {% endif %}
+                                            
+                                            <!-- Expand/Collapse Button -->
+                                            {% if assignment.shared_presenters %}
                                             <button type="button" 
-                                                    class="btn-share-presenter" 
-                                                    onclick="showSharedPresenterDialog({{ assignment.id }})"
-                                                    title="Manage shared presenters">
-                                                {% if assignment.presenter_count > 1 %}
-                                                <span class="share-count">+{{ assignment.presenter_count|add:"-1" }}</span>
-                                                {% else %}
-                                                <span class="share-icon">👥</span>
-                                                {% endif %}
+                                                    class="btn-expand-presenters" 
+                                                    onclick="togglePresenters({{ assignment.id }})"
+                                                    title="Show shared presenters">
+                                                <span class="expand-icon">▶</span>
+                                                <span class="presenter-count">+{{ assignment.shared_presenters|length }}</span>
                                             </button>
+                                            {% else %}
+                                            <button type="button" 
+                                                    class="btn-add-presenter" 
+                                                    onclick="togglePresenters({{ assignment.id }})"
+                                                    title="Add shared presenter">
+                                                👥
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <!-- Shared Presenters Expandable Section -->
+                                        <div class="shared-presenters-container" style="display: none;" data-assignment-id="{{ assignment.id }}">
+                                            {% for shared in assignment.shared_presenters %}
+                                            <div class="presenter-row shared-presenter" data-presenter-name="{{ shared }}">
+                                                <span class="presenter-order">{{ forloop.counter|add:"1" }}°</span>
+                                                <input type="text" 
+                                                       class="presenter-input {% if assignment.active_presenter_index == forloop.counter %}active-presenter{% endif %}" 
+                                                       value="{{ shared }}"
+                                                       readonly
+                                                       title="Shared presenter #{{ forloop.counter|add:"1" }}">
+                                                {% if assignment.active_presenter_index == forloop.counter %}
+                                                <span class="current-badge">CURRENT</span>
+                                                {% endif %}
+                                                <button type="button" 
+                                                        class="btn-remove-presenter" 
+                                                        onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared }}')"
+                                                        title="Remove presenter">
+                                                    ×
+                                                </button>
+                                            </div>
+                                            {% endfor %}
+                                            
+                                            <!-- Add New Presenter Form -->
+                                            <div class="add-presenter-row">
+                                                <input type="text" 
+                                                       class="presenter-input add-presenter-input" 
+                                                       placeholder="Add presenter..."
+                                                       id="newPresenter_{{ assignment.id }}"
+                                                       onkeypress="if(event.key === 'Enter') addSharedPresenterInline({{ assignment.id }})">
+                                                <button type="button" 
+                                                        class="btn-add-inline" 
+                                                        onclick="addSharedPresenterInline({{ assignment.id }})"
+                                                        title="Add presenter">
+                                                    +
+                                                </button>
+                                            </div>
+                                            
+                                            <!-- Reset Button (only show if not on primary) -->
+                                            {% if assignment.active_presenter_index > 0 %}
+                                            <div class="reset-row">
+                                                <button type="button" 
+                                                        class="btn-reset-rotation" 
+                                                        onclick="resetPresenterRotation({{ assignment.id }})"
+                                                        title="Reset to primary presenter">
+                                                    ↺ Reset to Primary
+                                                </button>
+                                            </div>
+                                            {% endif %}
                                         </div>
                                     </div>
                                     
@@ -154,9 +217,9 @@
                                     
                                     <div class="col-dmic">
                                         <input type="checkbox" 
-                                               class="mic-checkbox"
-                                               {% if assignment.is_d_mic %}checked{% endif %}
-                                               onchange="updateField({{ assignment.id }}, 'is_d_mic', this.checked)">
+                                               class="mic-checkbox dmic-checkbox"
+                                               {% if assignment.is_dmic %}checked{% endif %}
+                                               onchange="handleDmicChange({{ assignment.id }}, this.checked)">
                                     </div>
                                 </div>
                                 {% endfor %}
@@ -225,63 +288,6 @@
             <button class="btn btn-primary" onclick="addNewDay()">Create First Day</button>
         </div>
         {% endif %}
-    </div>
-</div>
-
-<!-- Improved Shared Presenter Modal -->
-<div id="sharedPresenterModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>Manage Shared Presenters</h2>
-            <span class="close" onclick="closeSharedPresenterModal()">&times;</span>
-        </div>
-        
-        <div class="modal-body">
-            <div class="presenter-info">
-                <strong>Main Presenter:</strong> 
-                <span id="modalMainPresenter"></span>
-            </div>
-            
-            <div class="shared-presenters-section">
-                <h3>Shared Presenters</h3>
-                <div id="sharedPresentersList" class="presenters-list">
-                    <!-- Dynamically populated -->
-                </div>
-                
-                <div class="add-presenter-form">
-                    <input 
-                        type="text" 
-                        id="newPresenterInput" 
-                        placeholder="Enter presenter name"
-                        class="presenter-input"
-                    />
-                    <button 
-                        type="button" 
-                        onclick="addSharedPresenter()" 
-                        class="add-btn"
-                    >
-                        Add Presenter
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="modal-footer">
-            <button 
-                type="button" 
-                onclick="saveSharedPresenters()" 
-                class="save-btn"
-            >
-                Save Changes
-            </button>
-            <button 
-                type="button" 
-                onclick="closeSharedPresenterModal()" 
-                class="cancel-btn"
-            >
-                Cancel
-            </button>
-        </div>
     </div>
 </div>
 

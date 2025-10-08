@@ -41,6 +41,11 @@ urlpatterns = [
     path('dashboard/', SystemDashboardView.as_view(), name='system-dashboard'),
     
     # ADD THESE MIC TRACKER URLs
+   # NEW: Shared Presenter Management URLs
+    path('api/mic/add-shared-presenter/', views.add_shared_presenter, name='add_shared_presenter'),
+    path('api/mic/remove-shared-presenter/', views.remove_shared_presenter, name='remove_shared_presenter'),
+    path('api/mic/dmic-and-rotate/', views.dmic_and_rotate, name='dmic_and_rotate'),
+    path('api/mic/reset-rotation/', views.reset_presenter_rotation, name='reset_presenter_rotation'),
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker_view'),
     path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
     path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
@@ -48,7 +53,7 @@ urlpatterns = [
     path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
-    path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
+    
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
      path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),

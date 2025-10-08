@@ -804,6 +804,251 @@ def update_mic_assignment(request):
             'success': False,
             'error': str(e)
         }, status=400)
+    
+ # ============================================
+# Shared Presenter Management Views
+# ============================================
+
+@require_POST
+def add_shared_presenter(request):
+    """Add a new shared presenter to a mic assignment"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        presenter_name = data.get('presenter_name', '').strip()
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        if not presenter_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Presenter name cannot be empty'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        
+        # Initialize shared_presenters if it's None or not a list
+        if not isinstance(assignment.shared_presenters, list):
+            assignment.shared_presenters = []
+        
+        # Check for duplicates (case-insensitive)
+        existing_presenters_lower = [p.lower() for p in assignment.shared_presenters]
+        
+        if presenter_name.lower() in existing_presenters_lower:
+            return JsonResponse({
+                'success': False,
+                'error': 'This presenter is already in the shared list'
+            })
+        
+        # Check against main presenter only if it's not empty
+        if assignment.presenter_name and assignment.presenter_name.strip():
+            if presenter_name.lower() == assignment.presenter_name.strip().lower():
+                return JsonResponse({
+                    'success': False,
+                    'error': 'This is already the main presenter. Use the main presenter field instead.'
+                })
+        
+        # Add the new presenter
+        assignment.shared_presenters.append(presenter_name)
+        assignment.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Added {presenter_name} to shared presenters',
+            'shared_count': len(assignment.shared_presenters),  # FIXED: removed ()
+            'shared_presenters': assignment.shared_presenters
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        })
+
+
+@require_POST
+def remove_shared_presenter(request):
+    """Remove a shared presenter from a mic assignment"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        presenter_name = data.get('presenter_name', '').strip()
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        if not presenter_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing presenter name'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        
+        # Ensure shared_presenters is a list
+        if not isinstance(assignment.shared_presenters, list):
+            return JsonResponse({
+                'success': False,
+                'error': 'No shared presenters to remove'
+            })
+        
+        if len(assignment.shared_presenters) == 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'Shared presenters list is empty'
+            })
+        
+        # Find matching presenter (case-insensitive)
+        presenter_to_remove = None
+        for presenter in assignment.shared_presenters:
+            if presenter.lower() == presenter_name.lower():
+                presenter_to_remove = presenter
+                break
+        
+        if presenter_to_remove is None:
+            return JsonResponse({
+                'success': False,
+                'error': f'"{presenter_name}" not found in shared presenters list'
+            })
+        
+        # Remove the presenter (using the exact match from the list)
+        assignment.shared_presenters.remove(presenter_to_remove)
+        
+        # Adjust active_presenter_index if needed
+        if assignment.active_presenter_index > len(assignment.shared_presenters):
+            assignment.active_presenter_index = 0
+        
+        assignment.save()
+        
+        # Get the current presenter - try as property first, then as method
+        try:
+            current_pres = assignment.current_presenter() if callable(assignment.current_presenter) else assignment.current_presenter
+        except:
+            current_pres = assignment.presenter_name  # Fallback to main presenter
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Removed {presenter_to_remove} from shared presenters',
+            'shared_count': len(assignment.shared_presenters),
+            'shared_presenters': assignment.shared_presenters,
+            'current_presenter': current_pres  # FIXED: no longer assumes it's a method
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        import traceback
+        print(f"ERROR in remove_shared_presenter: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        })
+
+
+@require_POST
+def dmic_and_rotate(request):
+    """Handle D-MIC checkbox with automatic presenter rotation"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        
+        # Store previous presenter for notification
+        previous_presenter = assignment.current_presenter
+        
+        # Toggle D-MIC status
+        assignment.is_d_mic = not assignment.is_d_mic
+
+        if assignment.is_d_mic:
+            assignment.is_micd = False
+        
+        # If we're turning OFF d-mic and have shared presenters, rotate
+        if not assignment.is_d_mic and assignment.has_shared_presenters:
+            next_presenter = assignment.rotate_to_next_presenter()
+            message = f'{previous_presenter} D-MIC → {next_presenter} is now active'
+        else:
+            next_presenter = previous_presenter
+            message = f'{previous_presenter} {"D-MIC" if assignment.is_d_mic else "MIC"}'
+        
+        assignment.save()
+        
+        return JsonResponse({
+            'success': True,
+            'is_d_mic': assignment.is_d_mic,
+            'is_micd': assignment.is_micd,  # NEW: Include MIC'D status
+            'message': message,
+            'current_presenter': next_presenter,
+            'active_presenter_index': assignment.active_presenter_index,
+            'previous_presenter': previous_presenter
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@require_POST
+def reset_presenter_rotation(request):
+    """Reset the presenter rotation back to the primary presenter"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment.reset_presenter_rotation()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Reset to primary presenter',
+            'current_presenter': assignment.presenter_name
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })   
 
 @require_http_methods(["GET"])
 def get_assignment_details(request, assignment_id):

@@ -1364,7 +1364,11 @@ class MicAssignment(models.Model):
        default=list,  # Change from null=True to default=list
        blank=True,
        help_text="List of additional presenters sharing this mic"
-   )
+
+    )
+    active_presenter_index = models.IntegerField(default=0)
+    
+   
         
     def save(self, *args, **kwargs):
         # Convert None to empty list for shared_presenters
@@ -1410,6 +1414,69 @@ class MicAssignment(models.Model):
         if self.shared_presenters:
             count += len(self.shared_presenters)
         return count
+    
+    @property
+    def current_presenter(self):
+        """Get the name of the currently active presenter"""
+        if self.active_presenter_index == 0:
+            return self.presenter_name
+        elif self.active_presenter_index <= len(self.shared_presenters):
+            return self.shared_presenters[self.active_presenter_index - 1]
+        return ''
+    
+    @property
+    def all_presenters(self):
+        """Get list of all presenters (primary + shared)"""
+        presenters = []
+        if self.presenter_name:
+            presenters.append({
+                'name': self.presenter_name,
+                'index': 0,
+                'is_active': self.active_presenter_index == 0
+            })
+        
+        for idx, name in enumerate(self.shared_presenters, start=1):
+            if name:
+                presenters.append({
+                    'name': name,
+                    'index': idx,
+                    'is_active': self.active_presenter_index == idx
+                })
+        
+        return presenters
+    
+    @property
+    def has_shared_presenters(self):
+        """Check if this assignment has shared presenters"""
+        return bool(self.shared_presenters)
+    
+    @property
+    def shared_count(self):
+        """Count of shared presenters"""
+        return len([p for p in self.shared_presenters if p])
+    
+    def rotate_to_next_presenter(self):
+        """
+        Move to the next presenter in the list
+        Returns True if rotation successful, False if at end
+        """
+        total_presenters = 1 + len(self.shared_presenters)
+        
+        if self.active_presenter_index < total_presenters - 1:
+            self.active_presenter_index += 1
+            self.is_micd = False
+            self.save()
+            return True
+        
+        return False
+    
+    def reset_presenter_rotation(self):
+        """Reset back to primary presenter"""
+        self.active_presenter_index = 0
+        self.is_micd = False
+        self.is_d_mic = False
+        self.save()
+    
     
     @property
     def display_presenters(self):
