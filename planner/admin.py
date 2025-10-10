@@ -2229,47 +2229,66 @@ CommChannelAdmin.actions = [populate_default_channels]
 
 #--------Mic Tracking Sheet-----
 
-# In planner/admin.py, simplify the MicAssignmentForm:
 
-from django import forms
-import json
+
+# Around line 2233 in admin.py - REPLACE ENTIRE MicAssignmentForm:
+
+# REPLACE the entire MicAssignmentForm with this cleaner version:
 
 class MicAssignmentForm(forms.ModelForm):
+    """Form that accepts plain text for shared presenters"""
+    
     class Meta:
         model = MicAssignment
         fields = '__all__'
         widgets = {
             'notes': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
-            'shared_presenters': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
         }
     
     def __init__(self, *args, **kwargs):
+        # Extract the instance BEFORE calling super
+        instance = kwargs.get('instance')
+        
+        # If editing existing record with shared_presenters, convert to text
+        if instance and instance.pk and instance.shared_presenters:
+            if isinstance(instance.shared_presenters, list):
+                # Check for clean data only
+                if all(isinstance(x, str) and not x.startswith('[') for x in instance.shared_presenters):
+                    # Temporarily replace the list with text for display
+                    instance._original_shared = instance.shared_presenters
+                    instance.shared_presenters = '\n'.join(instance.shared_presenters)
+        
         super().__init__(*args, **kwargs)
-        # Format the initial value to hide empty displays
-        if 'shared_presenters' in self.fields:
-            widget = self.fields['shared_presenters'].widget
-            original_format_value = widget.format_value
-            
-            def custom_format_value(value):
-                if value in [None, [], '[]', '""', "''", 'null']:
-                    return ''
-                if isinstance(value, list):
-                    return '\n'.join(value)
-                if isinstance(value, str) and value in ['[]', '""', "''", 'null']:
-                    return ''
-                return original_format_value(value)
-            
-            widget.format_value = custom_format_value
+        
+        # Now customize the field
+        self.fields['shared_presenters'] = forms.CharField(
+            required=False,
+            widget=forms.Textarea(attrs={
+                'rows': 3,
+                'cols': 40,
+                'placeholder': 'Enter names separated by commas or new lines\nExample: Sue, Tom, Ben'
+            }),
+            help_text='Enter additional presenter names separated by commas or new lines',
+            label='Shared presenters'
+        )
+        
+        # Restore original if we modified it
+        if instance and hasattr(instance, '_original_shared'):
+            instance.shared_presenters = instance._original_shared
     
     def clean_shared_presenters(self):
-        value = self.cleaned_data.get('shared_presenters', '')
-        if not value or value in ['[]', '""', "''", 'null']:
+        """Convert text input to list"""
+        value = self.cleaned_data.get('shared_presenters', '').strip()
+        
+        if not value:
             return []
-        if isinstance(value, str):
-            return [name.strip() for name in value.split('\n') if name.strip()]
-        return value if value else []
-
-# Keep the inline simple
+        
+        # Simple split
+        if '\n' in value:
+            return [n.strip() for n in value.split('\n') if n.strip()]
+        else:
+            return [n.strip() for n in value.split(',') if n.strip()]
+    
 class MicAssignmentInline(admin.TabularInline):
     model = MicAssignment
     form = MicAssignmentForm
@@ -2346,6 +2365,7 @@ class MicSessionAdmin(admin.ModelAdmin):
 
 @admin.register(MicAssignment)
 class MicAssignmentAdmin(admin.ModelAdmin):
+    form = MicAssignmentForm
     list_display = ('rf_display', 'session', 'mic_type', 'presenter_display', 'is_micd', 'is_d_mic', 'last_modified')
     list_filter = ('session__day', 'session', 'mic_type', 'is_micd', 'is_d_mic')
     search_fields = ('presenter_name', 'session__name', 'notes')
