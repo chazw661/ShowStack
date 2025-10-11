@@ -88,12 +88,15 @@
     background: #666;
 }
 
-.btn-export {
-    background: #28a745;
-}
-
-.btn-export:hover {
-    background: #218838;
+/* Export button - darker green for better readability */
+a.btn-export,
+a.btn-export:link,
+a.btn-export:visited,
+a.btn-export:hover {
+    background: #28a745 !important;  /* Darker green instead of #00ff88 */
+    color: #fff !important;
+    border: 2px solid #28a745 !important;
+    text-decoration: none !important;
 }
 
 .btn-sm {
