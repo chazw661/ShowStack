@@ -20,12 +20,19 @@ from django.urls import path
 from django.urls import include
 from django.shortcuts import redirect  
 from django.views.generic import RedirectView
+from planner import views
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='/audiopatch/mic-tracker/', permanent=False)),
+    # Admin site
     path('admin/', admin.site.urls),
+    
+    # Dashboard at root level (accessible at /dashboard/)
+    path('dashboard/', views.dashboard, name='dashboard'),
+    
+    # Include all planner URLs under /audiopatch/ prefix
     path('audiopatch/', include('planner.urls')),
-    path('mic-tracker/', lambda request: redirect('/audiopatch/mic-tracker/', permanent=True)),
-    path('test/', lambda request: HttpResponse("It works!")),
+    
+    # Root redirect to mic tracker
+    path('', lambda request: redirect('/audiopatch/mic-tracker/')),
 ]
 

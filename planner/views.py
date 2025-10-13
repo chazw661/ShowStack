@@ -16,7 +16,6 @@ from .models import MicAssignment
 import json
 from decimal import Decimal
 from django.db.models import Sum, Q
-from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.core.files.storage import default_storage
 from django.utils.text import slugify
@@ -25,6 +24,7 @@ from .models import SoundvisionPrediction, ShowDay
 from .soundvision_parser import import_soundvision_prediction
 from .models import SoundvisionPrediction, ShowDay, SpeakerArray
 import csv
+from django.db.models import Count, Q
 
 
 # Model imports - all together
@@ -33,7 +33,7 @@ from .models import (
     GalaxyProcessor, GalaxyInput, GalaxyOutput,
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
-    Device, SystemProcessor, Amp, PACableSchedule,
+    Device, Device, SystemProcessor, Amp, Location, PACableSchedule, PAZone,
     ShowDay, MicSession, MicAssignment, MicShowInfo, PowerDistributionPlan, AmplifierProfile, 
     AmplifierAssignment
 )
@@ -378,7 +378,7 @@ def export_comm_assignments(request):
 @staff_member_required
 def comm_channel_matrix(request):
     """Display a matrix view of all belt pack channel assignments"""
-    from django.shortcuts import render
+    
     
     belt_packs = CommBeltPack.objects.all().order_by('bp_number')
     channels = CommChannel.objects.all().order_by('order')
@@ -474,11 +474,8 @@ def import_comm_names(request):
 #-----Comm Dashboard View------
 
 # planner/views.py (create this file if it doesn't exist)
-from django.shortcuts import render
-from django.views import View
-from django.contrib.auth.mixins import LoginRequiredMixin
-from .models import (Console, Device, SystemProcessor, CommBeltPack, 
-                     CommPosition, Amp, PACableSchedule)
+
+
 
 class SystemDashboardView(LoginRequiredMixin, View):
     def get(self, request):
@@ -1509,20 +1506,128 @@ def export_prediction_summary(request, pk):
     
     return response
 
-# URLs to add to planner/urls.py
-"""
-from django.urls import path
-from . import views
 
-app_name = 'planner'
+#-----------Dashboard Button-------
 
-urlpatterns = [
-    # ... existing patterns ...
+# Dashboard View
+
+
+
+@staff_member_required
+def dashboard(request):
+    """System Dashboard - Overview of all modules"""
     
-    # Predictions
-    path('predictions/', views.predictions_list, name='predictions_list'),
-    path('predictions/<int:pk>/', views.prediction_detail, name='prediction_detail'),
-    path('predictions/upload/', views.upload_prediction, name='upload_prediction'),
-    path('predictions/<int:pk>/export/', views.export_prediction_summary, name='export_prediction'),
-]
-"""
+    # Console Stats
+    
+  # Console Stats
+    console_stats = {
+        'total': Console.objects.count(),
+        'with_inputs': Console.objects.filter(consoleinput__isnull=False).distinct().count(),
+        'with_outputs': Console.objects.filter(
+            Q(consoleauxoutput__isnull=False) | Q(consolematrixoutput__isnull=False)
+        ).distinct().count(),
+}
+
+# Device Stats
+    device_stats = {
+        'total': Device.objects.count(),
+        'with_inputs': Device.objects.filter(inputs__isnull=False).distinct().count(),
+        'with_outputs': Device.objects.filter(outputs__isnull=False).distinct().count(),
+}
+    
+    # Processor Stats
+    processor_stats = {
+        'total': SystemProcessor.objects.count(),
+        'p1': SystemProcessor.objects.filter(device_type='P1').count(),
+        'galaxy': SystemProcessor.objects.filter(device_type='GALAXY').count(),
+    }
+
+    # Amp Stats
+    amp_stats = {
+        'total': Amp.objects.count(),
+        'locations': Location.objects.count(),
+        'channels': 0,
+    }
+  
+    # Power Distribution Stats
+    power_stats = {
+        'plans': PowerDistributionPlan.objects.count(),
+        'amps_in_plans': PowerDistributionPlan.objects.aggregate(
+            total=Count('amplifier_assignments')  # ← Must be 'amplifier_assignments' NOT 'amplifierinpowerplan'
+        )['total'] or 0,
+}
+
+    
+    # PA Cable Stats
+    pa_cable_stats = {
+        'cable_runs': PACableSchedule.objects.count(),
+        'zones': PAZone.objects.count(),
+        'total_cables': sum([
+            run.count for run in PACableSchedule.objects.all()
+        ]) if PACableSchedule.objects.exists() else 0,
+    }
+    
+    # Mic Tracker Stats
+    mic_stats = {
+        'show_days': ShowDay.objects.count(),
+        'sessions': MicSession.objects.count(),
+        'assignments': MicAssignment.objects.count(),
+        'micd': MicAssignment.objects.filter(is_micd=True).count(),
+        'shared': MicAssignment.objects.exclude(shared_presenters=[]).count(),
+    }
+    
+    # Comm Stats
+    comm_stats = {
+        'total_packs': CommBeltPack.objects.count(),
+        'wireless': CommBeltPack.objects.filter(system_type='Wireless').count(),
+        'hardwired': CommBeltPack.objects.filter(system_type='Hardwired').count(),
+        'checked_out': CommBeltPack.objects.filter(checked_out=True).count(),
+    }
+    
+    # Power Distribution Stats
+    power_stats = {
+        'plans': PowerDistributionPlan.objects.count(),
+        'amps_in_plans': PowerDistributionPlan.objects.aggregate(
+            total=Count('amplifier_assignments')
+        )['total'] or 0,
+    }
+    
+   # Soundvision Stats
+    soundvision_stats = {
+        'predictions': SoundvisionPrediction.objects.count(),
+        'arrays': SoundvisionPrediction.objects.aggregate(
+            total=Count('speaker_arrays')  # ← CORRECT (with underscore)
+        )['total'] or 0,
+}
+    
+    # Recent Activity - Last 10 changes across key models
+    recent_show_days = ShowDay.objects.order_by('-id')[:3]
+    recent_sessions = MicSession.objects.select_related('show_day').order_by('-id')[:5]
+    recent_cables = PACableSchedule.objects.order_by('-id')[:5]
+    
+    # Quick Status Checks
+    status_checks = {
+        'has_consoles': Console.objects.exists(),
+        'has_devices': Device.objects.exists(),
+        'has_amps': Amp.objects.exists(),
+        'has_show_days': ShowDay.objects.exists(),
+        'has_comm': CommBeltPack.objects.exists(),
+    }
+    
+    context = {
+        'console_stats': console_stats,
+        'device_stats': device_stats,
+        'processor_stats': processor_stats,
+        'amp_stats': amp_stats,
+        'pa_cable_stats': pa_cable_stats,
+        'mic_stats': mic_stats,
+        'comm_stats': comm_stats,
+        'power_stats': power_stats,
+        'soundvision_stats': soundvision_stats,
+        'recent_show_days': recent_show_days,
+        'recent_sessions': recent_sessions,
+        'recent_cables': recent_cables,
+        'status_checks': status_checks,
+    }
+    
+    return render(request, 'planner/dashboard.html', context)

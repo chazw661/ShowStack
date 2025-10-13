@@ -46,11 +46,12 @@ urlpatterns = [
     path('api/mic/remove-shared-presenter/', views.remove_shared_presenter, name='remove_shared_presenter'),
     path('api/mic/dmic-and-rotate/', views.dmic_and_rotate, name='dmic_and_rotate'),
     path('api/mic/reset-rotation/', views.reset_presenter_rotation, name='reset_presenter_rotation'),
-    path('mic-tracker/', views.mic_tracker_view, name='mic_tracker_view'),
+    
     path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
     path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
     path('api/session/duplicate/', views.duplicate_session, name='duplicate_session'),
     path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
+    path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     
@@ -68,4 +69,6 @@ urlpatterns = [
      path('predictions/<int:pk>/', views.prediction_detail, name='prediction_detail'),
      path('predictions/upload/', views.upload_prediction, name='upload_prediction'),
      path('predictions/<int:pk>/export/', views.export_prediction_summary, name='export_prediction'),
+
+   
 ]

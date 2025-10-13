@@ -5,11 +5,75 @@
 {{ block.super }}
 {% endblock %}
 
+{% block branding %}
+<div id="branding-wrapper" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 20px;">
+    <h1 id="site-name">
+        <a href="{% url 'admin:index' %}">Audio Patch Administration</a>
+    </h1>
+    <div class="dashboard-nav" style="display: flex; gap: 10px; align-items: center;">
+        <a href="{% url 'dashboard' %}" class="dashboard-button" style="
+            background: linear-gradient(135deg, #1a7a6f 0%, #0d5c54 100%);
+            color: #fff !important;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(26, 122, 111, 0.4);
+        ">
+            📊 Dashboard
+        </a>
+    </div>
+</div>
+
+<style>
+.dashboard-button {
+    color: #fff !important;
+}
+
+.dashboard-button:hover {
+    background: linear-gradient(135deg, #2a9d8f 0%, #1a7a6f 100%) !important;
+    box-shadow: 0 4px 12px rgba(42, 157, 143, 0.6) !important;
+    transform: translateY(-2px);
+    color: #fff !important;
+}
+
+.dashboard-button:link,
+.dashboard-button:visited,
+.dashboard-button:active {
+    color: #fff !important;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    #branding-wrapper {
+        flex-direction: column !important;
+        gap: 10px;
+    }
+    
+    .dashboard-nav {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}
 
 {% block extrahead %}
 {{ block.super }}
 
 <style>
+
+    /* Hide the System Dashboard button in the admin index */
+.object-tools a[href*="dashboard"],
+a[href*="system-dashboard"],
+a.button[href*="dashboard"] {
+    display: none !important;
+}
+
 /* Inline dark theme with maximum specificity */
 html, body {
     background: #0a0a0a !important;
@@ -125,8 +189,8 @@ input:focus, select:focus, textarea:focus {
     color: #fff !important;
     border: 1px solid #2a9d8f !important;
     font-weight: 600 !important;
-    padding: 4px 10px !important;  /* Even smaller padding */
-    font-size: 12px !important;  /* Smaller font */
+    padding: 4px 10px !important;
+    font-size: 12px !important;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
 }
 
@@ -135,37 +199,19 @@ input:focus, select:focus, textarea:focus {
     color: #fff !important;
 }
 
-/* Force white text on Export buttons specifically */
+/* Force white text on Export buttons */
 td a.button,
 .field-export a.button {
-    color: #fff !important;
-}
-
-/* Force white text on Export buttons specifically */
-td a.button,
-.field-export a.button {
-    color: #fff !important;
-}
-}
-
-.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
-    background: #2a9d8f !important;
-    color: #ffffff !important;  /* Keep white on hover */
-}
-
-
-.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
-    background: #2a9d8f !important;
     color: #fff !important;
 }
 
 .button.default, input[type="submit"].default {
     background: #00ff88 !important;
-    color: #000 !important;
+    color: #fff !important;
     border: 2px solid #00ff88 !important;
 }
 
-/* Add/action buttons at top of pages */
+/* Add/action buttons */
 .addlink, .addlink:link, .addlink:visited,
 .object-tools a, .object-tools a:link {
     background: transparent !important;
@@ -178,7 +224,8 @@ td a.button,
     background: #f5f5f5 !important;
     color: #205067 !important;
 }
-/* Clear field and other utility buttons */
+
+/* Clear field buttons */
 button[name="_clearfield"],
 input[name="_clearfield"],
 .clearable-file-input button,
@@ -195,24 +242,7 @@ input[value="Clear field"]:hover {
     background: #3db3a3 !important;
 }
 
-/* Clear field and other utility buttons */
-button[name="_clearfield"],
-input[name="_clearfield"],
-.clearable-file-input button,
-.related-widget-wrapper-link,
-input[value="Clear field"] {
-    background: #2a9d8f !important;
-    color: #fff !important;
-    border: 1px solid #3db3a3 !important;
-}
-
-button[name="_clearfield"]:hover,
-input[name="_clearfield"]:hover,
-input[value="Clear field"]:hover {
-    background: #3db3a3 !important;
-}
-
-/* Fix sidebar layout - prevent text cutoff */
+/* Sidebar */
 #nav-sidebar {
     background: #0f0f0f !important;
 }
@@ -223,27 +253,24 @@ input[value="Clear field"]:hover {
 }
 
 #nav-sidebar a {
-    color: #ffffff !important;  /* White text */
-    padding-right: 50px !important; /* Space for Add button */
+    color: #ffffff !important;
+    padding-right: 50px !important;
 }
 
 #nav-sidebar a:hover {
-    color: #00ff88 !important;  /* Bright green on hover */
+    color: #00ff88 !important;
 }
-
-
 
 #nav-sidebar .addlink:hover {
     background: #f5f5f5 !important;
     color: #205067 !important;
 }
 
-/* COMPLETELY HIDE Add links in sidebar */
+/* Hide Add links in sidebar */
 #nav-sidebar .addlink {
     display: none !important;
 }
 
-/* Ensure sidebar items have relative positioning for absolute Add buttons */
 #nav-sidebar li {
     position: relative !important;
 }
@@ -348,7 +375,7 @@ input[type="checkbox"], input[type="radio"] {
     color: #e0e0e0 !important;
 }
 
-/* History button visibility fix */
+/* History button */
 .historylink, 
 a.historylink,
 input[name="_history"],
@@ -365,7 +392,6 @@ a.historylink:hover {
     color: #fff !important;
 }
 
-/* Remove green triangle artifacts */
 .historylink::before,
 .historylink::after {
     display: none !important;
