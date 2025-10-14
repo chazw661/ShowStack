@@ -3,6 +3,29 @@
 
 {% block extrastyle %}
 {{ block.super }}
+<style>
+/* Override Django's link colors - loaded AFTER Django's CSS */
+:root,
+html[data-theme="dark"],
+html[data-theme="auto"] {
+    --link-fg: #ffffff !important;
+    --link-hover-color: #00ff88 !important;
+    --link-selected-fg: #00ff88 !important;
+}
+
+/* Admin index page - force white links */
+.app-list a,
+.app-list th a,
+#content-main a {
+    color: #ffffff !important;
+}
+
+.app-list a:hover,
+.app-list th a:hover,
+#content-main a:hover {
+    color: #00ff88 !important;
+}
+</style>
 {% endblock %}
 
 {% block branding %}
@@ -66,6 +89,15 @@
 {{ block.super }}
 
 <style>
+
+/* Override Django's CSS variables for links */
+:root,
+html[data-theme="dark"],
+html[data-theme="auto"] {
+    --link-fg: #ffffff !important;
+    --link-hover-color: #00ff88 !important;
+    --link-selected-fg: #00ff88 !important;
+}
 
     /* Hide the System Dashboard button in the admin index */
 .object-tools a[href*="dashboard"],
@@ -242,37 +274,117 @@ input[value="Clear field"]:hover {
     background: #3db3a3 !important;
 }
 
-/* Sidebar */
+/* ========================================
+   ADMIN INDEX PAGE - MODULE LINKS
+   ======================================== */
+
+/* Admin index module links - white text with maximum specificity */
+#content-main .app-list a,
+#content-main .app-list a:link,
+#content-main .app-list a:visited,
+.app-list table a,
+.app-list table a:link,
+.app-list table a:visited,
+.app-list tr th a,
+.app-list tr th a:link,
+.app-list tr th a:visited,
+.model-list a,
+.model-list a:link,
+.model-list a:visited,
+table.app-list th a,
+table.app-list th a:link,
+table.app-list th a:visited {
+    color: #ffffff !important;
+}
+
+#content-main .app-list a:hover,
+.app-list table a:hover,
+.app-list tr th a:hover,
+.model-list a:hover,
+table.app-list th a:hover {
+    color: #00ff88 !important;
+}
+
+/* Section titles on index page */
+.app-list .section h2,
+.module caption {
+    background: #252525 !important;
+    color: #f0f0f0 !important;
+}
+
+/* ========================================
+   NAVIGATION SIDEBAR - COMPREHENSIVE FIX
+   ======================================== */
+
+/* Sidebar container */
 #nav-sidebar {
     background: #0f0f0f !important;
 }
 
+/* Current app/model highlighting */
 #nav-sidebar .current-app,
 #nav-sidebar .current-model {
     background: #1a1a1a !important;
 }
 
-#nav-sidebar a {
+/* ALL sidebar links - white text */
+#nav-sidebar a,
+#nav-sidebar a:link,
+#nav-sidebar a:visited {
     color: #ffffff !important;
     padding-right: 50px !important;
 }
 
-#nav-sidebar a:hover {
+/* Sidebar links hover - bright green */
+#nav-sidebar a:hover,
+#nav-sidebar a:focus {
     color: #00ff88 !important;
 }
 
+/* Current/active page - bright green */
+#nav-sidebar .current a,
+#nav-sidebar .current a:link,
+#nav-sidebar .current a:visited {
+    color: #00ff88 !important;
+    font-weight: bold;
+}
+
+/* App labels and model labels */
+#nav-sidebar .app-label,
+#nav-sidebar .model-label {
+    color: #f0f0f0 !important;
+}
+
+/* Section headers in sidebar */
+#nav-sidebar .module th,
+#nav-sidebar .module caption,
+#nav-sidebar h2,
+#nav-sidebar h3 {
+    background: #1a1a1a !important;
+    color: #f0f0f0 !important;
+}
+
+/* Add links in sidebar - keep hidden */
+#nav-sidebar .addlink {
+    display: none !important;
+}
+
+/* Add link hover override */
 #nav-sidebar .addlink:hover {
     background: #f5f5f5 !important;
     color: #205067 !important;
 }
 
-/* Hide Add links in sidebar */
-#nav-sidebar .addlink {
-    display: none !important;
-}
-
+/* Sidebar list items */
 #nav-sidebar li {
     position: relative !important;
+    color: #e0e0e0 !important;
+}
+
+/* Sidebar text elements */
+#nav-sidebar span,
+#nav-sidebar .caption {
+    color: #e0e0e0 !important;
 }
 
 /* Delete buttons */
