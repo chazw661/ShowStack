@@ -583,6 +583,28 @@ class AmpAdmin(admin.ModelAdmin):
         return fieldsets
     
     inlines = [AmpChannelInline]
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    list_display = ['name', 'description', 'amp_count', 'processor_count']
+    search_fields = ['name', 'description']
+    ordering = ['name']
+    
+    fieldsets = (
+        ('Location Information', {
+            'fields': ('name', 'description')
+        }),
+    )
+    
+    def amp_count(self, obj):
+        """Show how many amps are in this location"""
+        return obj.amps.count()
+    amp_count.short_description = 'Amps'
+    
+    def processor_count(self, obj):
+        """Show how many processors are in this location"""
+        return obj.system_processors.count()
+    processor_count.short_description = 'Processors'
                 
 
 
@@ -1261,6 +1283,10 @@ class PAZoneAdmin(admin.ModelAdmin):
     ordering = ['sort_order', 'name']
     
     actions = ['create_default_zones']
+
+    # Hide from sidebar but still accessible via direct URL
+    def has_module_permission(self, request):
+        return False
     
     def create_default_zones(self, request, queryset):
         """Create standard L'Acoustics zones"""

@@ -11,30 +11,30 @@ def ordered_get_app_list(request, app_label=None):
     
     # Define the correct order with proper groupings
     order_map = {
-        # Main Equipment (1-3)
+        # Main Equipment (1-4)
         'console': 1,
         'device': 2,
-        'amp': 3,  # Amplifier Assignments - MOVED HERE
+        'amp': 3,  # Amplifier Assignments - PARENT
+        'location': 4,  # └─ Locations - CHILD of Amplifier Assignments
         
-        # Show Management (4-7)
-        'showday': 4,
-        'micsession': 5,
-        'micassignment': 6,
-        'micshowinfo': 7,
+        # System Processors (5)
+        'systemprocessor': 5,
         
-        # Communications (8-12)
+        # PA Cable System (6-7)
+        'pacableschedule': 6,  # PA Cable Entries - PARENT
+        'pafanout': 7,  # └─ PA Fan Outs - CHILD
+        
+        # Communications (8-11)
         'commbeltpack': 8,
-        'location': 9,  # Comm Locations
-        'commposition': 10,
-        'commcrewname': 11,
-        'commchannel': 12,
+        'commposition': 9,
+        'commcrewname': 10,
+        'commchannel': 11,
         
-        # System Processors (13)
-        'systemprocessor': 13,
-        
-        # PA Cable System (14-15)
-        'pacableschedule': 14,  # PA Cable Entries
-        'pafanout': 15,  # PA Fan Outs
+        # Show Mic Tracker (12-15)
+        'showday': 12,  # Show Mic Tracker - PARENT
+        'micsession': 13,
+        'micassignment': 14,
+        'micshowinfo': 15,
         
         # PA Zones (16) - standalone
         'pazone': 16,

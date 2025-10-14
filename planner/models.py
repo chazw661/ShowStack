@@ -193,7 +193,7 @@ class Location(models.Model):
     
     class Meta:
         verbose_name = "Location"
-        verbose_name_plural = "    ├─ Comm Locations"  # Child
+        verbose_name_plural = "    └─ Locations"  # Child
         ordering = ['name']  # or ['id']
 
 
@@ -1206,14 +1206,10 @@ class ShowDay(models.Model):
     order = models.IntegerField(default=0, help_text="Display order for days")
     
     class Meta:
-        verbose_name = "Show Day"
-        verbose_name_plural = "Show Days"  # PARENT
+        verbose_name = "Show Mic Tracker"
+        verbose_name_plural = "Show Mic Tracker"  # PARENT
         ordering = ['date'] 
 
-    class Meta:
-        verbose_name = "Show Day"
-        verbose_name_plural = "Show Days"  # PARENT
-        ordering = ['date']  # or      
     
     def __str__(self):
         if self.name:
