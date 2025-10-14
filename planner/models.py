@@ -220,7 +220,7 @@ class AmpModel(models.Model):
     
     class Meta:
         verbose_name = "Amp Model Template"
-        verbose_name_plural = "    ├─ Amp Model Templates"  # Child
+        verbose_name_plural = "    └─ Amp Model Templates"  # Child - End of tree
         ordering = ['id']
     
     def __str__(self):
@@ -272,10 +272,8 @@ class Amp(models.Model):
     
     class Meta:
         verbose_name = "Amplifier Assignment"
-        verbose_name_plural = "    └─ Amplifier Assignments"  # PARENT
-        # UPDATE THIS: Use your actual field names
+        verbose_name_plural = "Amplifier Assignments"  # PARENT - Standalone
         ordering = ['ip_address']
-
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None

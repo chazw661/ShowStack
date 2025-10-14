@@ -1,5 +1,5 @@
 # planner/admin_ordering.py
-# Complete file with CommCrewName positioned correctly under Communications
+# Updated to move Amplifier Assignments to position 3
 
 from django.contrib import admin
 
@@ -11,51 +11,50 @@ def ordered_get_app_list(request, app_label=None):
     
     # Define the correct order with proper groupings
     order_map = {
-        # Main Equipment (1-2)
+        # Main Equipment (1-3)
         'console': 1,
         'device': 2,
+        'amp': 3,  # Amplifier Assignments - MOVED HERE
         
-        # Show Management (3-6)
-        'showday': 3,
-        'micsession': 4,
-        'micassignment': 5,
-        'micshowinfo': 6,
+        # Show Management (4-7)
+        'showday': 4,
+        'micsession': 5,
+        'micassignment': 6,
+        'micshowinfo': 7,
         
-        # Communications (7-11) - Now includes CommCrewName
-        'commbeltpack': 7,
-        'location': 8,  # Comm Locations
-        'commposition': 9,
-        'commcrewname': 10,  # Moved here from bottom
-        'commchannel': 11,
+        # Communications (8-12)
+        'commbeltpack': 8,
+        'location': 9,  # Comm Locations
+        'commposition': 10,
+        'commcrewname': 11,
+        'commchannel': 12,
         
-        # System Processors (12)
-        'systemprocessor': 12,
+        # System Processors (13)
+        'systemprocessor': 13,
         
-        # PA Cable System (13-14)
-        'pacableschedule': 13,  # PA Cable Entries
-        'pafanout': 14,  # PA Fan Outs (if exists)
+        # PA Cable System (14-15)
+        'pacableschedule': 14,  # PA Cable Entries
+        'pafanout': 15,  # PA Fan Outs
         
-        # PA Zones (15) - standalone
-        'pazone': 15,
+        # PA Zones (16) - standalone
+        'pazone': 16,
         
-        # Soundvision (16-18)
-        'soundvisionprediction': 16,
-        'speakerarray': 17,
-        'speakercabinet': 18,
+        # Soundvision (17-19)
+        'soundvisionprediction': 17,
+        'speakerarray': 18,
+        'speakercabinet': 19,
         
-        # Power Distribution (19-23)
-        'powerdistributionplan': 19,
-        'amplifierassignment': 20,  # Child of Power Distribution
-        'amplifierprofile': 21,  # Child of Power Distribution
-        'ampmodel': 22,  # Amp Model Templates - child
-        'amp': 23,  # Individual amps if exists
+        # Power Distribution (20-23)
+        'powerdistributionplan': 20,
+        'amplifierassignment': 21,  # Child of Power Distribution (├─ Amplifiers in Power Plan)
+        'amplifierprofile': 22,  # Child of Power Distribution (├─ Amplifier Profiles)
+        'ampmodel': 23,  # Child of Power Distribution (└─ Amp Model Templates - LAST CHILD)
         
         # Audio Checklist (24)
         'audiochecklist': 24,
         
-        # Any other models that might exist (25+)
+        # Any other models (25+)
         'ampchannel': 25,
-        # Add any other models here if they exist
     }
     
     for app in app_list:
