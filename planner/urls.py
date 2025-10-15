@@ -70,5 +70,8 @@ urlpatterns = [
      path('predictions/upload/', views.upload_prediction, name='upload_prediction'),
      path('predictions/<int:pk>/export/', views.export_prediction_summary, name='export_prediction'),
 
+     #-----Console PDF Export-----
+     path('console/<int:console_id>/export-pdf/', views.console_pdf_export, name='console_pdf_export'),
+
    
 ]

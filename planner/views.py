@@ -25,6 +25,8 @@ from .soundvision_parser import import_soundvision_prediction
 from .models import SoundvisionPrediction, ShowDay, SpeakerArray
 import csv
 from django.db.models import Count, Q
+from planner.utils.pdf_exports.console_pdf import export_console_pdf
+from planner.models import Console
 
 
 # Model imports - all together
@@ -173,7 +175,16 @@ def p1_processor_export(request, p1_processor_id):
         
         response = JsonResponse(export_data, json_dumps_params={'indent': 2})
         response['Content-Disposition'] = f'attachment; filename="p1_config_{p1.id}.json"'
+
         return response
+
+def console_pdf_export(request, console_id):
+    """Export a console configuration as PDF"""
+    console = get_object_or_404(Console, id=console_id)
+    return export_console_pdf(console)
+
+        
+        
 
 
 @staff_member_required

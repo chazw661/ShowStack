@@ -186,7 +186,7 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
-    list_display = ['name_with_template_badge', 'is_template', 'export_yamaha_button']
+    list_display = ['name_with_template_badge', 'is_template', 'export_buttons']
     list_filter = ['is_template']
     
     fieldsets = (
@@ -210,6 +210,32 @@ class ConsoleAdmin(admin.ModelAdmin):
         return obj.name
     name_with_template_badge.short_description = 'Name'
     name_with_template_badge.admin_order_field = 'name'
+
+
+    def export_buttons(self, obj):
+        """Add PDF and Yamaha CSV export buttons"""
+        from django.urls import reverse
+        from django.utils.html import format_html
+        
+        # PDF export using the new URL pattern
+        pdf_url = reverse('planner:console_pdf_export', args=[obj.id])
+        
+        # Yamaha CSV export using the existing URL pattern
+        yamaha_url = f'/admin/planner/console/{obj.pk}/export-yamaha/'
+        
+        return format_html(
+            '<a class="button" href="{}" target="_blank" '
+            'style="padding: 6px 12px; background: #4a9eff; color: white; '
+            'text-decoration: none; border-radius: 4px; margin-right: 5px; '
+            'font-weight: 500;">📄 PDF</a>'
+            '<a class="button" href="{}" target="_blank" '
+            'style="padding: 6px 12px; background: #2a9d8f; color: white; '
+            'text-decoration: none; border-radius: 4px; font-weight: 500;">📊 Yamaha CSV</a>',
+            pdf_url,
+            yamaha_url
+    )
+
+    export_buttons.short_description = 'Exports'
     
     @admin.action(description='Duplicate selected console (with all inputs/outputs)')
     def duplicate_console(self, request, queryset):
