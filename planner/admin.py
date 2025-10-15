@@ -263,7 +263,7 @@ class ConsoleAdmin(admin.ModelAdmin):
                 mute=input_obj.mute,
                 direct_out=input_obj.direct_out,
                 omni_in=input_obj.omni_in,
-                omni_out=input_obj.omni_out
+                
             )
         
         # Duplicate aux outputs

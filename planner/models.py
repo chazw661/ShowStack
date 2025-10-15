@@ -34,7 +34,7 @@ class ConsoleInput(models.Model):
     mute = models.CharField(max_length=100, blank=True, null=True)
     direct_out = models.CharField(max_length=100, blank=True, null=True)
     omni_in = models.CharField(max_length=100, blank=True, null=True)
-    omni_out = models.CharField(max_length=100, blank=True, null=True)
+    
 
     def __str__(self):
         if self.dante_number:
@@ -391,10 +391,6 @@ class SystemProcessor(models.Model):
         ordering = ['name']  # or ['id']
 
 
-# -------P1 Processor Models--------
-
-# Update the P1Processor model in models.py
-# -------P1 Processor Models--------
 
 # -------P1 Processor Models--------
 

@@ -71,11 +71,11 @@ def export_console_pdf(console):
         story.append(Spacer(1, 0.1 * inch))
         
         # Build table data with all fields
-        data = [['Dante #', 'Input Ch', 'Source', 'Group', 'DCA', 'Mute', 'Direct Out', 'Omni In', 'Omni Out']]
+        data = [['Dante #', 'Input Ch', 'Source', 'Group', 'DCA', 'Mute', 'Direct Out', 'Omni In']]
         
         for inp in console.consoleinput_set.all().order_by('dante_number'):
             # Only include if at least one field has data
-            if inp.dante_number or inp.input_ch or inp.source or inp.group or inp.dca or inp.mute or inp.direct_out or inp.omni_in or inp.omni_out:
+            if inp.dante_number or inp.input_ch or inp.source or inp.group or inp.dca or inp.mute or inp.direct_out or inp.omni_in:
                 data.append([
                     str(inp.dante_number) if inp.dante_number else '',
                     inp.input_ch or '',
@@ -84,14 +84,13 @@ def export_console_pdf(console):
                     inp.dca or '',
                     inp.mute or '',
                     inp.direct_out or '',
-                    inp.omni_in or '',
-                    inp.omni_out or ''
+                    inp.omni_in or ''
                 ])
     
     # Only create the section if there's actual data
     if len(data) > 1:  # More than just the header row
         # Column widths for landscape page (11" wide minus margins = ~10" available)
-        col_widths = [0.6*inch, 0.7*inch, 2*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.8*inch, 0.8*inch, 0.8*inch]
+        col_widths = [0.6*inch, 0.7*inch, 2.2*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.9*inch, 0.9*inch]
         
         t = Table(data, colWidths=col_widths, repeatRows=1)
         t.setStyle(styles.get_compact_table_style())

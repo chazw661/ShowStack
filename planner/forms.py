@@ -58,7 +58,7 @@ class ConsoleInputForm(forms.ModelForm):
             'mute',
             'direct_out',
             'omni_in',
-            'omni_out',
+           
         ]
         
 
@@ -89,9 +89,7 @@ class ConsoleInputForm(forms.ModelForm):
         self.fields['omni_in'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
-        self.fields['omni_out'].widget.attrs.update({
-            'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
-        })
+       
 
 InputFormSet = modelformset_factory(
     ConsoleInput,
@@ -271,7 +269,7 @@ class ConsoleInputForm(forms.ModelForm):
             'mute',
             'direct_out',
             'omni_in',
-            'omni_out',
+            
         ]
 
     def __init__(self, *args, **kwargs):
@@ -301,9 +299,7 @@ class ConsoleInputForm(forms.ModelForm):
         self.fields['omni_in'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
-        self.fields['omni_out'].widget.attrs.update({
-            'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
-        })
+       
 
 InputFormSet = modelformset_factory(
     ConsoleInput,
