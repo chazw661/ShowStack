@@ -2371,7 +2371,7 @@ class ShowDayAdmin(admin.ModelAdmin):
     mics_used.short_description = "Mics Used"
     
     def view_day_link(self, obj):
-        url = f'/mic-tracker/?day={obj.id}'
+        url = reverse('planner:mic_tracker') + f'?day={obj.id}'
         return format_html('<a href="{}" class="button">View Day</a>', url)
     view_day_link.short_description = "View"
 
