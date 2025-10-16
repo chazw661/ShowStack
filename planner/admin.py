@@ -417,7 +417,7 @@ class DeviceOutputInline(admin.TabularInline):
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
     inlines = [DeviceInputInline, DeviceOutputInline]
-    list_display = ('name',)
+    list_display = ('name','device_actions', )
 
     def get_fields(self, request, obj=None):
         """
@@ -475,6 +475,30 @@ class DeviceAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)    
 
 
+
+
+
+    def changelist_view(self, request, extra_context=None):
+        """Add custom buttons to Device list view"""
+        extra_context = extra_context or {}
+        extra_context['export_all_devices_pdf_url'] = reverse('planner:all_devices_pdf_export')
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    def device_actions(self, obj):
+        """Custom column with PDF export button"""
+        from django.urls import reverse
+        from django.utils.html import format_html
+        
+        pdf_url = reverse('planner:device_pdf_export', args=[obj.id])
+        
+        return format_html(
+            '<a class="button" href="{}" target="_blank" '
+            'style="background-color: #4a9eff; color: white; padding: 5px 10px; '
+            'text-decoration: none; border-radius: 3px; font-size: 12px;">Export PDF</a>',
+            pdf_url
+        )
+    
+    device_actions.short_description = 'Actions'
 
 
 

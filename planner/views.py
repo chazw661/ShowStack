@@ -1642,3 +1642,20 @@ def dashboard(request):
     }
     
     return render(request, 'planner/dashboard.html', context)
+
+
+# Device I/O PDF Export
+def device_pdf_export(request, device_id):
+    """Export a single Device as PDF"""
+    from planner.models import Device
+    from planner.utils.pdf_exports.device_pdf import export_device_pdf
+    
+    device = Device.objects.get(id=device_id)
+    return export_device_pdf(device)
+
+
+def all_devices_pdf_export(request):
+    """Export ALL Devices as PDF (one device per page)"""
+    from planner.utils.pdf_exports.device_pdf import export_all_devices_pdf
+    
+    return export_all_devices_pdf()
