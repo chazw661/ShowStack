@@ -78,6 +78,9 @@ urlpatterns = [
     path('device/<int:device_id>/pdf/', views.device_pdf_export, name='device_pdf_export'),
     path('devices/all/pdf/', views.all_devices_pdf_export, name='all_devices_pdf_export'),
     path('devices/all/pdf/', views.all_devices_pdf_export, name='all_devices_pdf_export'),
+    # Amplifier PDF export
+    path('amps/all/pdf/', views.all_amps_pdf_export, name='all_amps_pdf_export'),
+    
 
    
 ]

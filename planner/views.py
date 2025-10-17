@@ -1659,3 +1659,16 @@ def all_devices_pdf_export(request):
     from planner.utils.pdf_exports.device_pdf import export_all_devices_pdf
     
     return export_all_devices_pdf()
+
+
+
+
+
+#-------Amplifier PDF Export----
+
+# Amplifier PDF Export
+def all_amps_pdf_export(request):
+    """Export ALL Amplifiers as PDF (grouped by location, ordered by IP)"""
+    from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
+    
+    return export_all_amps_pdf()

@@ -265,10 +265,10 @@ class Amp(models.Model):
     )
     
     # Cacom outputs (if present)
-    cacom_1_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 1")
-    cacom_2_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 2")
-    cacom_3_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 3")
-    cacom_4_assignment = models.CharField(max_length=100, blank=True, verbose_name="Cacom 4")
+    cacom_1_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 1")
+    cacom_2_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 2")
+    cacom_3_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 3")
+    cacom_4_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 4")
     
     class Meta:
         verbose_name = "Amplifier Assignment"
