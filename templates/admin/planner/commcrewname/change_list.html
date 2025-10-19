@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+    <!-- Import CSV Button -->
+    <li>
+        <a href="{% url 'planner:import_comm_crew_names_csv' %}" class="addlink">
+            Import CSV
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

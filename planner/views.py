@@ -27,6 +27,8 @@ import csv
 from django.db.models import Count, Q
 from planner.utils.pdf_exports.console_pdf import export_console_pdf
 from planner.models import Console
+from django.http import HttpResponse, HttpResponseRedirect
+from django.urls import reverse
 
 
 # Model imports - all together
@@ -1704,3 +1706,70 @@ def all_comm_beltpacks_pdf_export(request):
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="comm_beltpacks.pdf"'
     return response
+
+
+
+#----Import Comm Crew Names---
+
+def import_comm_crew_names_csv(request):
+    """Import Comm Crew Names from CSV (Column A only)."""
+    from planner.models import CommCrewName  # Move import to top
+    import csv
+    from io import TextIOWrapper
+    
+    if request.method == 'POST' and request.FILES.get('csv_file'):
+        csv_file = request.FILES['csv_file']
+        
+        # Decode the file
+        try:
+            file_data = TextIOWrapper(csv_file.file, encoding='utf-8')
+            csv_reader = csv.reader(file_data)
+            
+            imported = 0
+            skipped = 0
+            errors = []
+            
+            for row_num, row in enumerate(csv_reader, start=1):
+                # Skip empty rows
+                if not row or not row[0].strip():
+                    continue
+                
+                # Get name from Column A (first column)
+                name = row[0].strip()
+                
+                # Skip header row if it looks like a header
+                if row_num == 1 and name.lower() in ['name', 'crew name', 'crew', 'names']:
+                    continue
+                
+                # Try to create the crew name
+                try:
+                    CommCrewName.objects.get_or_create(name=name)
+                    imported += 1
+                except Exception as e:
+                    errors.append(f"Row {row_num}: {name} - {str(e)}")
+                    skipped += 1
+            
+            # Success message
+            if errors:
+                messages.warning(
+                    request,
+                    f"Import completed with issues. Imported: {imported}, Skipped: {skipped}. Errors: {', '.join(errors[:5])}"
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Successfully imported {imported} crew names. Skipped {skipped} duplicates."
+                )
+            
+        except Exception as e:
+            messages.error(request, f"Error reading CSV file: {str(e)}")
+        
+        return HttpResponseRedirect(reverse('admin:planner_commcrewname_changelist'))
+    
+    # GET request - show upload form
+    from django.template.response import TemplateResponse
+    context = {
+        'title': 'Import Comm Crew Names from CSV',
+        'opts': CommCrewName._meta,
+    }
+    return TemplateResponse(request, 'admin/planner/commcrewname/import_csv.html', context)

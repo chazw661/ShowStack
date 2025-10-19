@@ -1770,10 +1770,30 @@ class CommCrewNameAdmin(admin.ModelAdmin):
     ordering = ['name']
     search_fields = ['name']
     
+    def get_urls(self):
+        """Add custom URL for CSV import."""
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('import-csv/', self.admin_site.admin_view(self.import_csv_view), name='planner_commcrewname_import_csv'),
+        ]
+        return custom_urls + urls
+    
+    def import_csv_view(self, request):
+        """Redirect to the import view."""
+        from django.shortcuts import redirect
+        from django.urls import reverse
+        return redirect('planner:import_comm_crew_names_csv')
+    
+    def changelist_view(self, request, extra_context=None):
+        """Add import button to changelist."""
+        extra_context = extra_context or {}
+        extra_context['show_import_csv'] = True
+        return super().changelist_view(request, extra_context)
+    
     def get_model_perms(self, request):
         """Show in COMM section of admin"""
         return super().get_model_perms(request)
-
 
 # Custom form for CommBeltPack with dynamic dropdowns
 
@@ -2040,6 +2060,21 @@ class CommBeltPackAdminForm(forms.ModelForm):
 @admin.register(CommBeltPack)
 class CommBeltPackAdmin(admin.ModelAdmin):
     form = CommBeltPackAdminForm
+
+    def save_model(self, request, obj, form, change):
+        """Override to handle dropdown field transfers"""
+        
+        # Transfer position from dropdown to actual field
+        if form.cleaned_data.get('position_select'):
+            obj.position = form.cleaned_data['position_select'].name
+        
+        # Transfer name from dropdown to actual field  
+        if form.cleaned_data.get('name_select'):
+            obj.name = form.cleaned_data['name_select'].name
+        
+       
+        
+        super().save_model(request, obj, form, change)
     
     list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
     search_fields = ['bp_number', 'name', 'position', 'notes', 'unit_location']
@@ -2157,6 +2192,13 @@ class CommBeltPackAdmin(admin.ModelAdmin):
         )
         
         return base_fieldsets
+    
+
+    def changelist_view(self, request, extra_context=None):
+        """Add PDF export button to changelist."""
+        extra_context = extra_context or {}
+        extra_context['show_pdf_export'] = True
+        return super().changelist_view(request, extra_context)
     
     @admin.action(description='Check out selected belt packs (Wireless only)')
     def check_out_beltpacks(self, request, queryset):

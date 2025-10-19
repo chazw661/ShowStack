@@ -7,6 +7,7 @@ from django.contrib.contenttypes.models import ContentType
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
 from .models import  ConsoleStereoOutput
+from .models import PACableSchedule, PAZone, CommPosition, CommCrewName, CommBeltPack
 
 
 
@@ -1061,9 +1062,6 @@ class GalaxyProcessorAdminForm(forms.ModelForm):
 
     #-----------PA Cable--------
 
-# Add these to your forms.py file
-
-# Add these to your forms.py file
 
 from .models import PACableSchedule, PAZone
 
@@ -1181,3 +1179,71 @@ class PAZoneForm(forms.ModelForm):
                 'style': 'width: 200px;'
             })
         }
+
+
+
+        #-----Comm Beltpack form
+# Form for managing Comm Belt Packs with dynamic dropdowns
+class CommBeltPackAdminForm(forms.ModelForm):
+    """Custom form to handle dynamic field display based on system type"""
+    
+    position_select = forms.ModelChoiceField(
+        queryset=CommPosition.objects.all(),
+        required=False,
+        empty_label="-- Select Position --",
+        widget=forms.Select(attrs={'class': 'position-select'})
+    )
+    
+    name_select = forms.ModelChoiceField(
+        queryset=CommCrewName.objects.all(),
+        required=False,
+        empty_label="-- Select Name --",
+        widget=forms.Select(attrs={'class': 'name-select'})
+    )
+    
+    class Meta:
+        model = CommBeltPack
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Pre-populate dropdowns from saved values
+        if self.instance and self.instance.position:
+            try:
+                pos = CommPosition.objects.get(name=self.instance.position)
+                self.fields['position_select'].initial = pos
+            except CommPosition.DoesNotExist:
+                pass
+        
+        if self.instance and self.instance.name:
+            try:
+                crew = CommCrewName.objects.get(name=self.instance.name)
+                self.fields['name_select'].initial = crew
+            except CommCrewName.DoesNotExist:
+                pass
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # DEBUG: Print what we're getting
+        print(f"DEBUG position_select: {self.cleaned_data.get('position_select')}")
+        print(f"DEBUG name_select: {self.cleaned_data.get('name_select')}")
+        print(f"DEBUG instance.position before: {instance.position}")
+        print(f"DEBUG instance.name before: {instance.name}")
+        
+        # Explicitly set position from dropdown
+        if self.cleaned_data.get('position_select'):
+            instance.position = self.cleaned_data['position_select'].name
+        
+        # Explicitly set name from dropdown
+        if self.cleaned_data.get('name_select'):
+            instance.name = self.cleaned_data['name_select'].name
+        
+        print(f"DEBUG instance.position after: {instance.position}")
+        print(f"DEBUG instance.name after: {instance.name}")
+        
+        if commit:
+            instance.save()
+        
+        return instance
