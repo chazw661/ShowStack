@@ -81,6 +81,7 @@ urlpatterns = [
     # Amplifier PDF export
     path('amps/all/pdf/', views.all_amps_pdf_export, name='all_amps_pdf_export'),
     path('pa-cables/all/pdf/', views.all_pa_cables_pdf_export, name='all_pa_cables_pdf_export'),
+    path('comm-beltpacks/all/pdf/', views.all_comm_beltpacks_pdf_export, name='all_comm_beltpacks_pdf_export'),
     
 
    

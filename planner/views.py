@@ -1690,3 +1690,17 @@ def all_pa_cables_pdf_export(request):
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="pa_cable_schedule.pdf"'
     return response
+
+
+
+#--------Comm Beltpack PDF-----
+
+def all_comm_beltpacks_pdf_export(request):
+    """Export all Comm Belt Packs to PDF."""
+    from .utils.pdf_exports.comm_pdf import generate_comm_beltpacks_pdf
+    
+    pdf = generate_comm_beltpacks_pdf()
+    
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'inline; filename="comm_beltpacks.pdf"'
+    return response
