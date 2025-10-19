@@ -1672,3 +1672,21 @@ def all_amps_pdf_export(request):
     from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
     
     return export_all_amps_pdf()
+
+
+
+
+#-------PA Schedule PDF-------
+
+
+def all_pa_cables_pdf_export(request):
+    """Export all PA cables to PDF."""
+    from .models import PACableSchedule
+    from .utils.pdf_exports.pa_cable_pdf import generate_pa_cable_pdf
+    
+    queryset = PACableSchedule.objects.all()
+    pdf = generate_pa_cable_pdf(queryset)
+    
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'inline; filename="pa_cable_schedule.pdf"'
+    return response

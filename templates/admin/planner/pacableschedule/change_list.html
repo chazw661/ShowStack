@@ -2,7 +2,15 @@
 {% load static %}
 
 {% block result_list %}
-{{ block.super }}
+{% block object-tools-items %}
+    <!-- Export PDF Button -->
+    <li>
+        <a href="{% url 'planner:all_pa_cables_pdf_export' %}" class="viewlink" target="_blank">
+            Export PDF
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}
 
 
 <!-- Add scoped styles that only affect cable summary tables -->
@@ -65,6 +73,12 @@
     color: #4a9eff !important;
 }
 
+.cable-summary-section .safety-cells {
+    background: #2a4a2a !important;
+    color: #90ee90 !important;
+    font-weight: bold;
+}
+
 .cable-summary-section .order-cells,
 .cable-summary-section .coupler-cells {
     background: #4a4a00 !important;
@@ -109,16 +123,25 @@
     <table>
         <thead>
             <tr>
-                <th>Cable Type</th>
-                <th>Total Runs</th>
-                <th>Total Length (ft)</th>
-                <th>100' QTY</th>
-                <th>50' QTY</th>
-                <th>25' QTY</th>
-                <th>10' QTY</th>
-                <th>5' QTY</th>
-                <th>Couplers</th>
-                </tr>
+                <th rowspan="2">Cable Type</th>
+                <th rowspan="2">Total Runs</th>
+                <th rowspan="2">Total Length (ft)</th>
+                <th colspan="5">CABLES NEEDED</th>
+                <th colspan="5">ORDER QTY (+20% SAFETY)</th>
+                <th rowspan="2">Couplers</th>
+            </tr>
+            <tr>
+                <th>100'</th>
+                <th>50'</th>
+                <th>25'</th>
+                <th>10'</th>
+                <th>5'</th>
+                <th>100'</th>
+                <th>50'</th>
+                <th>25'</th>
+                <th>10'</th>
+                <th>5'</th>
+            </tr>
         </thead>
         <tbody>
             {% for cable_type, data in cable_summary.items %}
@@ -131,28 +154,29 @@
                 <td>{{ data.twenty_fives }}</td>
                 <td>{{ data.tens }}</td>
                 <td>{{ data.fives }}</td>
+                <td class="safety-cells">{{ data.hundreds_with_safety }}</td>
+                <td class="safety-cells">{{ data.fifties_with_safety }}</td>
+                <td class="safety-cells">{{ data.twenty_fives_with_safety }}</td>
+                <td class="safety-cells">{{ data.tens_with_safety }}</td>
+                <td class="safety-cells">{{ data.fives_with_safety }}</td>
                 <td>{{ data.couplers }}</td>
             </tr>
             {% endfor %}
-        </tbody>
-            
-            <!-- Grand Total Row -->
-                <td>-</td>
-            </tr>
         </tbody>
     </table>
 
     
     <!-- Fan Out Summary Section -->
     {% if fan_out_summary %}
-    <div class="cable-summary-section">  <!-- Use same class as cable summary -->
-        <h2>Fan Out Summary</h2>  <!-- This will get the blue title bar -->
+    <div class="cable-summary-section" style="margin-top: 20px;">
+        <h2>Fan Out Summary</h2>
         
         <table>
             <thead>
                 <tr>
                     <th>FAN OUT TYPE</th>
                     <th>TOTAL QUANTITY</th>
+                    <th>ORDER QTY (+20% SAFETY)</th>
                 </tr>
             </thead>
             <tbody>
@@ -160,6 +184,7 @@
                 <tr>
                     <td>{{ fan_out_type }}</td>
                     <td>{{ data.total_quantity }}</td>
+                    <td class="safety-cells">{{ data.with_overage }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -175,15 +200,23 @@
     <!-- Cable Orders -->
     {% for cable_type, data in cable_summary.items %}
     <div style="margin-bottom: 15px; font-size: 18px;">
-        <strong style="font-size: 18px; color: #79aec8;">{{ cable_type }}:</strong>  <!-- Added color here -->
+        <strong style="font-size: 18px; color: #79aec8;">{{ cable_type }}:</strong>
         <ul style="font-size: 16px; line-height: 1.8;">
-            {% if data.hundreds > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.hundreds }} × 100' lengths</li>
+            {% if data.hundreds_with_safety > 0 %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.hundreds_with_safety }} × 100' lengths</li>
             {% endif %}
-            {% if data.fifties > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.fifties }} × 50' lengths</li>
+            {% if data.fifties_with_safety > 0 %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.fifties_with_safety }} × 50' lengths</li>
             {% endif %}
-            <!-- ... other cable lengths ... -->
+            {% if data.twenty_fives_with_safety > 0 %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.twenty_fives_with_safety }} × 25' lengths</li>
+            {% endif %}
+            {% if data.tens_with_safety > 0 %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.tens_with_safety }} × 10' lengths</li>
+            {% endif %}
+            {% if data.fives_with_safety > 0 %}
+            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.fives_with_safety }} × 5' lengths</li>
+            {% endif %}
         </ul>
     </div>
     {% endfor %}
@@ -201,14 +234,13 @@
     {% endif %}
     
     <!-- Note about overage -->
-    {% if fan_out_summary %}
     <div style="margin-top: 20px; padding: 10px; background-color: #2a3a2a; border-left: 3px solid #417690;">
         <p style="font-size: 14px; color: #90ee90; margin: 0;">
-            <strong>Note:</strong> Fan out quantities in the summary above include a 20% safety margin.
+            <strong>Note:</strong> Cables and fan out quantities include a 20% safety margin.
         </p>
     </div>
-    {% endif %}
 </div>
 {% endif %}
+</div>
 
 {% endblock %}

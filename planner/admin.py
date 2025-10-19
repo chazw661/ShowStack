@@ -1457,10 +1457,15 @@ class PACableAdmin(admin.ModelAdmin):
                         'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
                         'total_length': total_length,
                         'hundreds': hundreds,
+                        'hundreds_with_safety': math.ceil(hundreds * 1.2),  # ADD THIS
                         'fifties': fifties,
+                        'fifties_with_safety': math.ceil(fifties * 1.2),     # ADD THIS
                         'twenty_fives': twenty_fives,
+                        'twenty_fives_with_safety': math.ceil(twenty_fives * 1.2),  # ADD THIS
                         'tens': tens,
+                        'tens_with_safety': math.ceil(tens * 1.2),           # ADD THIS
                         'fives': fives,
+                        'fives_with_safety': math.ceil(fives * 1.2),         # ADD THIS
                         'couplers': hundreds - 1 if hundreds > 1 else 0,
                     }
         
