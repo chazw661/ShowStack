@@ -1234,18 +1234,13 @@ class ShowDay(models.Model):
 # ========Presenters========
 
 class Presenter(models.Model):
-    """Person who presents/speaks using microphones"""
-    name = models.CharField(
-        max_length=200,
-        unique=True,
-        help_text="Full name of presenter"
-    )
-    notes = models.TextField(blank=True, help_text="Additional notes about this presenter")
+    name = models.CharField(max_length=200, unique=True)
+    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         verbose_name = "Presenter"
-        verbose_name_plural = "Presenters"
+        verbose_name_plural = "  ├─ Presenters"  # Child of Show Mic Tracker
         ordering = ['name']
     
     def __str__(self):

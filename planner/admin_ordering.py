@@ -30,31 +30,32 @@ def ordered_get_app_list(request, app_label=None):
         'commcrewname': 10,
         'commchannel': 11,
         
-        # Show Mic Tracker (12-15)
+        # Show Mic Tracker (12-16)
         'showday': 12,  # Show Mic Tracker - PARENT
         'micsession': 13,
         'micassignment': 14,
-        'micshowinfo': 15,
+        'presenter': 15,  # ← NEW: Added here
+        'micshowinfo': 16,  # Changed from 15 to 16
         
-        # PA Zones (16) - standalone
-        'pazone': 16,
+        # PA Zones (17) - standalone
+        'pazone': 17,  # Changed from 16
         
-        # Soundvision (17-19)
-        'soundvisionprediction': 17,
-        'speakerarray': 18,
-        'speakercabinet': 19,
+        # Soundvision (18-20)
+        'soundvisionprediction': 18,  # Changed from 17
+        'speakerarray': 19,  # Changed from 18
+        'speakercabinet': 20,  # Changed from 19
         
-        # Power Distribution (20-23)
-        'powerdistributionplan': 20,
-        'amplifierassignment': 21,  # Child of Power Distribution (├─ Amplifiers in Power Plan)
-        'amplifierprofile': 22,  # Child of Power Distribution (├─ Amplifier Profiles)
-        'ampmodel': 23,  # Child of Power Distribution (└─ Amp Model Templates - LAST CHILD)
+        # Power Distribution (21-24)
+        'powerdistributionplan': 21,  # Changed from 20
+        'amplifierassignment': 22,  # Changed from 21
+        'amplifierprofile': 23,  # Changed from 22
+        'ampmodel': 24,  # Changed from 23
         
-        # Audio Checklist (24)
-        'audiochecklist': 24,
+        # Audio Checklist (25)
+        'audiochecklist': 25,  # Changed from 24
         
-        # Any other models (25+)
-        'ampchannel': 25,
+        # Any other models (26+)
+        'ampchannel': 26,  # Changed from 25
     }
     
     for app in app_list:
