@@ -1773,3 +1773,21 @@ def import_comm_crew_names_csv(request):
         'opts': CommCrewName._meta,
     }
     return TemplateResponse(request, 'admin/planner/commcrewname/import_csv.html', context)
+
+
+
+
+#--------System Processor PDF Expport----
+
+"""
+Add this function to planner/views.py
+"""
+
+def export_system_processor_pdf(request):
+    """Export system processors as PDF."""
+    from planner.utils.pdf_exports.system_processor_pdf import generate_system_processor_pdf
+    
+    pdf = generate_system_processor_pdf()
+    response = HttpResponse(pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'inline; filename="system_processors.pdf"'
+    return response
