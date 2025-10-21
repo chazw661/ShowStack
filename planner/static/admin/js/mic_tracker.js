@@ -776,15 +776,29 @@ function showNotification(message, type = 'info') {
 
 // ============ SESSION MANAGEMENT FUNCTIONS ============
 
+
 // Add new day
 function addNewDay() {
-    const date = prompt('Enter date for new day (YYYY-MM-DD):');
-    if (!date) return;
+    const dateStr = prompt('Enter date for new day (MM/DD/YYYY):');
+    if (!dateStr) return;
+    
+    // Convert MM/DD/YYYY to YYYY-MM-DD for the backend
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) {
+        alert('Invalid date format. Please use MM/DD/YYYY');
+        return;
+    }
+    
+    const month = parts[0].padStart(2, '0');
+    const day = parts[1].padStart(2, '0');
+    const year = parts[2];
+    
+    const isoDate = `${year}-${month}-${day}`;
     
     const name = prompt('Enter optional name for this day:');
     
     // Redirect to admin to add new day
-    window.location.href = `/admin/planner/showday/add/?date=${date}&name=${encodeURIComponent(name || '')}`;
+    window.location.href = `/admin/planner/showday/add/?date=${isoDate}&name=${encodeURIComponent(name || '')}`;
 }
 
 // Add new session
@@ -966,3 +980,30 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('Mic Tracker initialized with inline shared presenter support');
 });
+
+
+/**
+ * Load presenters list for autocomplete
+ */
+async function loadPresentersList() {
+    try {
+        const response = await fetch('/audiopatch/api/presenters/list/');
+        const data = await response.json();
+        
+        if (data.presenters) {
+            const datalist = document.getElementById('presenters-datalist');
+            datalist.innerHTML = ''; // Clear existing options
+            
+            data.presenters.forEach(presenter => {
+                const option = document.createElement('option');
+                option.value = presenter.name;
+                datalist.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading presenters list:', error);
+    }
+}
+
+// Load presenters when page loads
+document.addEventListener('DOMContentLoaded', loadPresentersList);

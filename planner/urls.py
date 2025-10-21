@@ -54,6 +54,8 @@ urlpatterns = [
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
+    # In urls.py
+    path('api/presenters/list/', views.get_presenters_list, name='get_presenters_list'),
     
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
@@ -83,6 +85,10 @@ urlpatterns = [
     path('pa-cables/all/pdf/', views.all_pa_cables_pdf_export, name='all_pa_cables_pdf_export'),
     path('comm-beltpacks/all/pdf/', views.all_comm_beltpacks_pdf_export, name='all_comm_beltpacks_pdf_export'),
     path('comm-crew-names/import-csv/', views.import_comm_crew_names_csv, name='import_comm_crew_names_csv'),
+    path('export/system-processors-pdf/', views.export_system_processor_pdf, name='export_system_processor_pdf'),
+
+    #----Mic Tracker Presenter CSV Import---
+    path('api/presenters/import/', views.import_presenters_csv, name='import_presenters_csv'),
     
 
    

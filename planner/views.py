@@ -1,4 +1,4 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse
 from django.contrib.admin.views.decorators import staff_member_required
@@ -12,7 +12,6 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from datetime import datetime, date
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
-from .models import MicAssignment
 import json
 from decimal import Decimal
 from django.db.models import Sum, Q
@@ -29,6 +28,8 @@ from planner.utils.pdf_exports.console_pdf import export_console_pdf
 from planner.models import Console
 from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
+from planner.models import Presenter
+import csv
 
 
 # Model imports - all together
@@ -79,13 +80,12 @@ def console_detail(request, console_id):
 
 
 
-    # Add to your views.py
+    
 
 
 
 
-
-
+#-----Mic Tracer----
 
 
 
@@ -554,7 +554,8 @@ def mic_tracker_view(request):
         days = ShowDay.objects.all()
     
     days = days.prefetch_related(
-        'sessions__mic_assignments'
+    'sessions__mic_assignments__presenter',
+    'sessions__mic_assignments__shared_presenters'
     ).order_by('date')
     
 
@@ -625,6 +626,105 @@ def bulk_update_mics(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
+# Replace these functions in planner/views.py
+# Search for each function name and replace the entire function
+
+from planner.models import Presenter  # Add this to your imports at the top
+
+@staff_member_required
+def export_mic_tracker(request):
+    """Export mic tracker data as CSV"""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="mic_tracker_{date.today()}.csv"'
+    
+    writer = csv.writer(response)
+    
+    # Write header
+    show_info = MicShowInfo.get_instance()
+    writer.writerow(['Mic Assignment List'])
+    writer.writerow(['Show Name:', show_info.show_name])
+    writer.writerow(['Venue:', show_info.venue_name])
+    writer.writerow(['Ballroom:', show_info.ballroom_name])
+    writer.writerow(['Duration:', show_info.duration_display])
+    writer.writerow([])
+    
+    # Write days and sessions
+    for day in ShowDay.objects.all().order_by('date'):
+        writer.writerow([f"Day: {day}"])
+        
+        for session in day.sessions.all().order_by('order'):
+            writer.writerow([f"Session: {session.name}"])
+            writer.writerow(['RF#', 'Type', 'Presenter', "MIC'D", 'D-MIC', 'Notes'])
+            
+            for assignment in session.mic_assignments.all().order_by('rf_number'):
+                # Get presenter display
+                presenter_name = assignment.presenter.name if assignment.presenter else ''
+                
+                # Add shared presenters
+                shared_names = [p.name for p in assignment.shared_presenters.all()]
+                if shared_names:
+                    presenter_display = f"{presenter_name} +{len(shared_names)}"
+                else:
+                    presenter_display = presenter_name
+                
+                writer.writerow([
+                    assignment.rf_number,
+                    assignment.mic_type,
+                    presenter_display,
+                    'Yes' if assignment.is_micd else 'No',
+                    'Yes' if assignment.is_d_mic else 'No',
+                    assignment.notes or ''
+                ])
+            
+            writer.writerow([])
+    
+    return response
+
+@staff_member_required
+@require_POST
+def bulk_update_mics(request):
+    """AJAX endpoint for bulk mic updates"""
+    try:
+        data = json.loads(request.body)
+        session_id = data.get('session_id')
+        action = data.get('action')
+        
+        session = get_object_or_404(MicSession, id=session_id)
+        
+        with transaction.atomic():
+            if action == 'clear_all':
+                for assignment in session.mic_assignments.all():
+                    assignment.presenter = None
+                    assignment.is_micd = False
+                    assignment.is_d_mic = False
+                    assignment.mic_type = ''
+                    assignment.shared_presenters.clear()
+                    assignment.save()
+            elif action == 'check_all_micd':
+                session.mic_assignments.update(is_micd=True)
+            elif action == 'uncheck_all_micd':
+                session.mic_assignments.update(is_micd=False)
+            elif action == 'check_all_dmic':
+                session.mic_assignments.update(is_d_mic=True)
+            elif action == 'uncheck_all_dmic':
+                session.mic_assignments.update(is_d_mic=False)
+            else:
+                return JsonResponse({'success': False, 'error': 'Invalid action'})
+        
+        session_stats = session.get_mic_usage_stats()
+        day_stats = session.day.get_all_mics_status()
+        
+        return JsonResponse({
+            'success': True,
+            'session_stats': session_stats,
+            'day_stats': day_stats
+        })
+    
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+    
+# Add this function to views.py (around line 628, after bulk_update_mics)
+
 @staff_member_required
 @require_POST
 def duplicate_session(request):
@@ -654,17 +754,20 @@ def duplicate_session(request):
         })
     
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        return JsonResponse({'success': False, 'error': str(e)})  
 
-@staff_member_required
+
+
 @require_POST
+@staff_member_required
 def toggle_day_collapse(request):
-    """AJAX endpoint to toggle day collapse state"""
+    """Toggle the collapsed state of a day"""
     try:
-        data = json.loads(request.body)
-        day_id = data.get('day_id')
+        day_id = request.POST.get('day_id')
+        if not day_id:
+            return JsonResponse({'success': False, 'error': 'No day_id provided'})
         
-        day = get_object_or_404(ShowDay, id=day_id)
+        day = ShowDay.objects.get(id=day_id)
         day.is_collapsed = not day.is_collapsed
         day.save()
         
@@ -672,90 +775,13 @@ def toggle_day_collapse(request):
             'success': True,
             'is_collapsed': day.is_collapsed
         })
-    
+    except ShowDay.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Day not found'})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-@staff_member_required
-def export_mic_tracker(request):
-    """Export mic tracker data as CSV"""
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="mic_tracker_{date.today()}.csv"'
-    
-    writer = csv.writer(response)
-    
-    # Write header
-    show_info = MicShowInfo.get_instance()
-    writer.writerow(['Mic Assignment List'])
-    writer.writerow(['Show Name:', show_info.show_name])
-    writer.writerow(['Venue:', show_info.venue_name])
-    writer.writerow(['Ballroom:', show_info.ballroom_name])
-    writer.writerow(['Duration:', show_info.duration_display])
-    writer.writerow([])
-    
-    # Write days and sessions
-    for day in ShowDay.objects.all().order_by('date'):
-        writer.writerow([f"Day: {day}"])
-        
-        for session in day.sessions.all().order_by('order'):
-            writer.writerow([f"Session: {session.name}"])
-            writer.writerow(['RF#', 'Type', 'Presenter', "MIC'D", 'D-MIC', 'Notes'])
-            
-            for assignment in session.mic_assignments.all().order_by('rf_number'):
-                writer.writerow([
-                    assignment.rf_number,
-                    assignment.mic_type,
-                    assignment.display_presenters,
-                    'Yes' if assignment.is_micd else 'No',
-                    'Yes' if assignment.is_d_mic else 'No',
-                    assignment.notes
-                ])
-            
-            writer.writerow([])
-    
-    return response
+        return JsonResponse({'success': False, 'error': str(e)})      
 
 
-
-@staff_member_required
-def dashboard_view(request):
-    """Simple dashboard view function"""
-    context = {
-        # System Status Overview
-        'console_count': Console.objects.count(),
-        'device_count': Device.objects.count(),
-        'total_inputs': sum(d.input_count for d in Device.objects.all()),
-        'total_outputs': sum(d.output_count for d in Device.objects.all()),
-        
-        # Processor Status
-        'p1_processors': SystemProcessor.objects.filter(device_type='P1').count(),
-        'galaxy_processors': SystemProcessor.objects.filter(device_type='GALAXY').count(),
-        
-        # COMM System Status
-        'wireless_beltpacks': CommBeltPack.objects.filter(system_type='WIRELESS').count(),
-        'hardwired_beltpacks': CommBeltPack.objects.filter(system_type='HARDWIRED').count(),
-        'checked_out': CommBeltPack.objects.filter(checked_out=True).count(),
-        'positions_configured': CommPosition.objects.count() > 0,
-        
-        # Amp Status
-        'total_amps': Amp.objects.count(),
-        'total_amp_channels': sum(a.amp_model.channel_count for a in Amp.objects.select_related('amp_model')),
-        
-        # Cable Statistics
-        'total_cable_runs': PACableSchedule.objects.count(),
-        'total_cable_length': sum(c.total_cable_length for c in PACableSchedule.objects.all()),
-        
-        # Setup Warnings
-        'needs_comm_setup': CommPosition.objects.count() == 0,
-        'no_devices': Device.objects.count() == 0,
-    }
-    return render(request, 'planner/dashboard.html', context)
-
-
-
-
-
-@csrf_exempt  # Add this decorator
+@csrf_exempt
 @require_http_methods(["POST"])
 def update_mic_assignment(request):
     """Update a mic assignment field"""
@@ -768,23 +794,27 @@ def update_mic_assignment(request):
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
         
         # Handle different field types
-        if field == 'presenter_name':
-            assignment.presenter_name = value
+        if field == 'presenter' or field == 'presenter_name':  # Support both for compatibility
+            # Value should be a presenter ID or name
+            if value:
+                # Try to get existing presenter or create new one
+                presenter, created = Presenter.objects.get_or_create(name=value.strip())
+                assignment.presenter = presenter
+            else:
+                assignment.presenter = None
+                
         elif field == 'mic_type':
             assignment.mic_type = value
+            
         elif field == 'is_micd':
             assignment.is_micd = value if isinstance(value, bool) else value == 'true'
+            
         elif field == 'is_d_mic':
             assignment.is_d_mic = value if isinstance(value, bool) else value == 'true'
-        elif field == 'shared_presenters':
-            if isinstance(value, str):
-                try:
-                    value = json.loads(value)
-                except:
-                    pass
-            assignment.shared_presenters = value
+            
         elif field == 'notes':
             assignment.notes = value
+            
         else:
             return JsonResponse({
                 'success': False,
@@ -798,7 +828,7 @@ def update_mic_assignment(request):
         session_stats = {
             'micd': session.mic_assignments.filter(is_micd=True).count(),
             'total': session.mic_assignments.count(),
-            'shared': session.mic_assignments.exclude(shared_presenters__isnull=True).exclude(shared_presenters=[]).count()
+            'shared': session.mic_assignments.filter(shared_presenters__isnull=False).distinct().count()
         }
         
         return JsonResponse({
@@ -806,7 +836,7 @@ def update_mic_assignment(request):
             'session_stats': session_stats,
             'presenter_display': assignment.display_presenters,
             'presenter_count': assignment.presenter_count,
-            'day_stats': {}  # Add day stats if needed
+            'day_stats': {}
         })
         
     except Exception as e:
@@ -814,10 +844,7 @@ def update_mic_assignment(request):
             'success': False,
             'error': str(e)
         }, status=400)
-    
- # ============================================
-# Shared Presenter Management Views
-# ============================================
+
 
 @require_POST
 def add_shared_presenter(request):
@@ -841,36 +868,31 @@ def add_shared_presenter(request):
         
         assignment = MicAssignment.objects.get(id=assignment_id)
         
-        # Initialize shared_presenters if it's None or not a list
-        if not isinstance(assignment.shared_presenters, list):
-            assignment.shared_presenters = []
+        # Get or create the presenter
+        presenter, created = Presenter.objects.get_or_create(name=presenter_name)
         
-        # Check for duplicates (case-insensitive)
-        existing_presenters_lower = [p.lower() for p in assignment.shared_presenters]
+        # Check if presenter is already the main presenter
+        if assignment.presenter and assignment.presenter.id == presenter.id:
+            return JsonResponse({
+                'success': False,
+                'error': 'This is already the main presenter. Use the main presenter field instead.'
+            })
         
-        if presenter_name.lower() in existing_presenters_lower:
+        # Check if already in shared presenters
+        if assignment.shared_presenters.filter(id=presenter.id).exists():
             return JsonResponse({
                 'success': False,
                 'error': 'This presenter is already in the shared list'
             })
         
-        # Check against main presenter only if it's not empty
-        if assignment.presenter_name and assignment.presenter_name.strip():
-            if presenter_name.lower() == assignment.presenter_name.strip().lower():
-                return JsonResponse({
-                    'success': False,
-                    'error': 'This is already the main presenter. Use the main presenter field instead.'
-                })
-        
-        # Add the new presenter
-        assignment.shared_presenters.append(presenter_name)
-        assignment.save()
+        # Add the presenter
+        assignment.shared_presenters.add(presenter)
         
         return JsonResponse({
             'success': True,
             'message': f'Added {presenter_name} to shared presenters',
-            'shared_count': len(assignment.shared_presenters),  # FIXED: removed ()
-            'shared_presenters': assignment.shared_presenters
+            'shared_count': assignment.shared_presenters.count(),
+            'shared_presenters': [p.name for p in assignment.shared_presenters.all()]
         })
         
     except MicAssignment.DoesNotExist:
@@ -883,6 +905,200 @@ def add_shared_presenter(request):
             'success': False,
             'error': f'Unexpected error: {str(e)}'
         })
+
+
+@require_POST
+def remove_shared_presenter(request):
+    """Remove a shared presenter from a mic assignment"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        presenter_name = data.get('presenter_name', '').strip()
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        if not presenter_name:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing presenter name'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        
+        # Find the presenter by name
+        try:
+            presenter = Presenter.objects.get(name__iexact=presenter_name)
+        except Presenter.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Presenter "{presenter_name}" not found'
+            })
+        
+        # Check if presenter is in shared list
+        if not assignment.shared_presenters.filter(id=presenter.id).exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'"{presenter_name}" is not in the shared presenters list'
+            })
+        
+        # Remove the presenter
+        assignment.shared_presenters.remove(presenter)
+        
+        # Adjust active_presenter_index if needed
+        if assignment.active_presenter_index > assignment.shared_presenters.count():
+            assignment.active_presenter_index = 0
+            assignment.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Removed {presenter_name} from shared presenters',
+            'shared_count': assignment.shared_presenters.count(),
+            'shared_presenters': [p.name for p in assignment.shared_presenters.all()],
+            'current_presenter': assignment.current_presenter
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        import traceback
+        print(f"ERROR in remove_shared_presenter: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        })
+
+
+@require_POST
+def dmic_and_rotate(request):
+    """Handle D-MIC checkbox with automatic presenter rotation"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        
+        # Get current presenter name before any changes
+        current_name = assignment.get_current_presenter_name()
+        
+        # Toggle D-MIC status
+        assignment.is_d_mic = not assignment.is_d_mic
+        
+        # If turning ON D-MIC, turn off MIC'D and rotate to next presenter
+        if assignment.is_d_mic:
+            assignment.is_micd = False
+            # Rotate if there are shared presenters
+            if assignment.shared_presenters.exists():
+                assignment.rotate_to_next_presenter()
+                new_name = assignment.get_current_presenter_name()
+                message = f'{current_name} D-MIC → {new_name} is now active'
+            else:
+                new_name = current_name
+                message = f'{current_name} D-MIC'
+        else:
+            # Turning OFF D-MIC
+            new_name = current_name
+            message = f'{current_name} MIC'
+        
+        assignment.save()
+        
+        return JsonResponse({
+            'success': True,
+            'is_d_mic': assignment.is_d_mic,
+            'is_micd': assignment.is_micd,
+            'message': message,
+            'current_presenter': new_name,
+            'active_presenter_index': assignment.active_presenter_index,
+            'previous_presenter': current_name
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+@require_POST
+def reset_presenter_rotation(request):
+    """Reset the presenter rotation back to the primary presenter"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        
+        if not assignment_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing assignment ID'
+            })
+        
+        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment.reset_presenter_rotation()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Reset to primary presenter',
+            'current_presenter': assignment.presenter.name if assignment.presenter else ''
+        })
+        
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Assignment not found'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })   
+
+
+@require_http_methods(["GET"])
+def get_assignment_details(request, assignment_id):
+    """Fetch assignment details including shared presenters"""
+    try:
+        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        
+        # Get shared presenters as a list of names
+        shared_presenters = [p.name for p in assignment.shared_presenters.all()]
+        
+        return JsonResponse({
+            'success': True,
+            'assignment': {
+                'id': assignment.id,
+                'rf_number': assignment.rf_number,
+                'presenter': assignment.presenter.name if assignment.presenter else '',
+                'shared_presenters': shared_presenters,
+                'mic_type': assignment.mic_type or '',
+                'notes': assignment.notes or ''
+            }
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+    
+ # ============================================
+# Shared Presenter Management Views
+# ============================================
 
 
 @require_POST
@@ -1025,40 +1241,15 @@ def dmic_and_rotate(request):
             'success': False,
             'error': str(e)
         })
+    
+    #---Dropdown for presenters---
+@staff_member_required
+def get_presenters_list(request):
+    """Return all presenters for autocomplete"""
+    presenters = Presenter.objects.all().order_by('name').values('id', 'name')
+    return JsonResponse({'presenters': list(presenters)})
 
 
-@require_POST
-def reset_presenter_rotation(request):
-    """Reset the presenter rotation back to the primary presenter"""
-    try:
-        data = json.loads(request.body)
-        assignment_id = data.get('assignment_id')
-        
-        if not assignment_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'Missing assignment ID'
-            })
-        
-        assignment = MicAssignment.objects.get(id=assignment_id)
-        assignment.reset_presenter_rotation()
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Reset to primary presenter',
-            'current_presenter': assignment.presenter_name
-        })
-        
-    except MicAssignment.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Assignment not found'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })   
 
 @require_http_methods(["GET"])
 def get_assignment_details(request, assignment_id):
@@ -1471,7 +1662,6 @@ def upload_prediction(request):
 
 def export_prediction_summary(request, pk):
     """Export prediction summary as CSV"""
-    import csv
     
     prediction = get_object_or_404(SoundvisionPrediction, pk=pk)
     
@@ -1791,3 +1981,50 @@ def export_system_processor_pdf(request):
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="system_processors.pdf"'
     return response
+
+
+
+#-------<Mic Tracker Presenters .CSV Import---
+
+@staff_member_required
+def import_presenters_csv(request):
+    """Import presenters from CSV file"""
+    if request.method == 'POST' and request.FILES.get('csv_file'):
+        csv_file = request.FILES['csv_file']
+        
+        try:
+            # Read CSV file
+            decoded_file = csv_file.read().decode('utf-8')
+            csv_reader = csv.reader(decoded_file.splitlines())
+            
+            imported_count = 0
+            skipped_count = 0
+            
+            for row in csv_reader:
+                if row and row[0].strip():  # Check if Column A has data
+                    name = row[0].strip()
+                    
+                    # Skip header rows (common headers)
+                    if name.lower() in ['name', 'presenter', 'names', 'presenters']:
+                        continue
+                    
+                    # Get or create presenter
+                    presenter, created = Presenter.objects.get_or_create(name=name)
+                    
+                    if created:
+                        imported_count += 1
+                    else:
+                        skipped_count += 1
+            
+            messages.success(
+                request,
+                f'Successfully imported {imported_count} presenters. '
+                f'Skipped {skipped_count} duplicates.'
+            )
+            
+        except Exception as e:
+            messages.error(request, f'Error importing CSV: {str(e)}')
+        
+        return redirect('admin:planner_presenter_changelist')
+    
+    return render(request, 'admin/planner/presenter/import_csv.html')

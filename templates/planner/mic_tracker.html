@@ -129,23 +129,24 @@
                                         <div class="presenter-row primary-presenter">
                                             <span class="presenter-order">1°</span>
                                             <input type="text" 
-                                                   class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
-                                                   value="{{ assignment.presenter_name }}"
-                                                   placeholder="Enter name..."
-                                                   onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
-                                                   title="Primary presenter">
+                                                class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
+                                                value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
+                                                placeholder="Enter name..."
+                                                list="presenters-datalist"
+                                                onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
+                                                title="Primary presenter">
                                             {% if assignment.active_presenter_index == 0 %}
                                             <span class="current-badge">CURRENT</span>
                                             {% endif %}
                                             
                                             <!-- Expand/Collapse Button -->
-                                            {% if assignment.shared_presenters %}
+                                            {% if assignment.shared_presenters.exists %}
                                             <button type="button" 
                                                     class="btn-expand-presenters" 
                                                     onclick="togglePresenters({{ assignment.id }})"
                                                     title="Show shared presenters">
                                                 <span class="expand-icon">▶</span>
-                                                <span class="presenter-count">+{{ assignment.shared_presenters|length }}</span>
+                                                <span class="presenter-count">+{{ assignment.shared_presenters.count }}</span>
                                             </button>
                                             {% else %}
                                             <button type="button" 
@@ -159,12 +160,12 @@
                                         
                                         <!-- Shared Presenters Expandable Section -->
                                         <div class="shared-presenters-container" style="display: none;" data-assignment-id="{{ assignment.id }}">
-                                            {% for shared in assignment.shared_presenters %}
-                                            <div class="presenter-row shared-presenter" data-presenter-name="{{ shared }}">
+                                            {% for shared in assignment.shared_presenters.all %}
+                                            <div class="presenter-row shared-presenter" data-presenter-name="{{ shared.name }}">
                                                 <span class="presenter-order">{{ forloop.counter|add:"1" }}°</span>
                                                 <input type="text" 
                                                        class="presenter-input {% if assignment.active_presenter_index == forloop.counter %}active-presenter{% endif %}" 
-                                                       value="{{ shared }}"
+                                                       value="{{ shared.name }}"
                                                        readonly
                                                        title="Shared presenter #{{ forloop.counter|add:"1" }}">
                                                 {% if assignment.active_presenter_index == forloop.counter %}
@@ -172,7 +173,7 @@
                                                 {% endif %}
                                                 <button type="button" 
                                                         class="btn-remove-presenter" 
-                                                        onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared }}')"
+                                                        onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared.name }}')"
                                                         title="Remove presenter">
                                                     ×
                                                 </button>
@@ -182,10 +183,11 @@
                                             <!-- Add New Presenter Form -->
                                             <div class="add-presenter-row">
                                                 <input type="text" 
-                                                       class="presenter-input add-presenter-input" 
-                                                       placeholder="Add presenter..."
-                                                       id="newPresenter_{{ assignment.id }}"
-                                                       onkeypress="if(event.key === 'Enter') addSharedPresenterInline({{ assignment.id }})">
+                                                        class="presenter-input add-presenter-input" 
+                                                        placeholder="Add presenter..."
+                                                        id="newPresenter_{{ assignment.id }}"
+                                                        list="presenters-datalist"
+                                                        onkeypress="if(event.key === 'Enter') addSharedPresenterInline({{ assignment.id }})">
                                                 <button type="button" 
                                                         class="btn-add-inline" 
                                                         onclick="addSharedPresenterInline({{ assignment.id }})"
@@ -275,21 +277,17 @@
                                     + Add Session
                                 </button>
                             </div>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-        
-        {% if not days_data %}
-        <div class="empty-state">
-            <p>No days have been created yet.</p>
-            <button class="btn btn-primary" onclick="addNewDay()">Create First Day</button>
-        </div>
-        {% endif %}
-    </div>
-</div>
+                       </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}  
+<!-- Close the for day_data in days_data loop -->
 
-<script src="{% static 'admin/js/mic_tracker.js' %}"></script>
-{% endblock %}
+                <!-- Shared datalist for all presenter inputs -->
+                    <datalist id="presenters-datalist">
+                        <!-- Will be populated by JavaScript -->
+                    </datalist>
+
+                    <script src="{% static 'admin/js/mic_tracker.js' %}"></script>
+                    {% endblock %}
+            

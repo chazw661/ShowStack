@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Import Presenters from CSV{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto; padding: 20px;">
+    <h1>Import Presenters from CSV</h1>
+    
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+        <h3>Instructions:</h3>
+        <ul>
+            <li>Upload a CSV file with presenter names in <strong>Column A</strong></li>
+            <li>Put first and last names together in each cell (e.g., "John Smith")</li>
+            <li>Header row will be automatically skipped</li>
+            <li>Duplicate names will be skipped automatically</li>
+            <li>Empty rows will be ignored</li>
+        </ul>
+    </div>
+    
+    <form method="post" enctype="multipart/form-data" style="margin: 20px 0;">
+        {% csrf_token %}
+        <div style="margin-bottom: 20px;">
+            <label for="csv_file" style="display: block; margin-bottom: 10px; font-weight: bold;">
+                Select CSV File:
+            </label>
+            <input type="file" 
+                   name="csv_file" 
+                   id="csv_file" 
+                   accept=".csv" 
+                   required
+                   style="padding: 10px;">
+        </div>
+        
+        <button type="submit" 
+                class="button default" 
+                style="background: #417690; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer;">
+            Import Presenters
+        </button>
+        
+        <a href="{% url 'admin:planner_presenter_changelist' %}" 
+           class="button" 
+           style="margin-left: 10px; padding: 10px 20px; text-decoration: none;">
+            Cancel
+        </a>
+    </form>
+</div>
+{% endblock %}

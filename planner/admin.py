@@ -37,6 +37,7 @@ from .models import Location, Amp, AmpChannel
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo 
+from .models import Presenter
 
 # Form imports
 from planner.forms import ConsoleInputForm, ConsoleAuxOutputForm, ConsoleMatrixOutputForm
@@ -2354,9 +2355,7 @@ CommChannelAdmin.actions = [populate_default_channels]
 
 
 
-# Around line 2233 in admin.py - REPLACE ENTIRE MicAssignmentForm:
 
-# REPLACE the entire MicAssignmentForm with this cleaner version:
 
 class MicAssignmentForm(forms.ModelForm):
     """Form that accepts plain text for shared presenters"""
@@ -2416,7 +2415,7 @@ class MicAssignmentInline(admin.TabularInline):
     model = MicAssignment
     form = MicAssignmentForm
     extra = 0
-    fields = ['rf_number', 'mic_type', 'presenter_name', 'is_micd', 'is_d_mic', 'shared_presenters', 'notes']
+    fields = ['rf_number', 'mic_type', 'presenter', 'is_micd', 'is_d_mic', 'shared_presenters', 'notes']
     ordering = ['rf_number']
     readonly_fields = ['rf_number']
 
@@ -2445,6 +2444,22 @@ class ShowDayAdmin(admin.ModelAdmin):
         url = reverse('planner:mic_tracker') + f'?day={obj.id}'
         return format_html('<a href="{}" class="button">View Day</a>', url)
     view_day_link.short_description = "View"
+
+
+
+@admin.register(Presenter)
+class PresenterAdmin(admin.ModelAdmin):
+    list_display = ['name', 'created_at']
+    search_fields = ['name']
+    ordering = ['name']
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['import_url'] = '/audiopatch/api/presenters/import/'
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    # We'll add CSV import later
+
 
 @admin.register(MicSession)
 class MicSessionAdmin(admin.ModelAdmin):
@@ -2476,7 +2491,7 @@ class MicSessionAdmin(admin.ModelAdmin):
     mic_usage.short_description = "Mics Used"
     
     def edit_mics_link(self, obj):
-        url = f'/mic-tracker/?session={obj.id}'
+        url = f'/audiopatch/mic-tracker/?session={obj.id}'
         return format_html('<a href="{}" class="button">Quick Edit</a>', url)
         edit_mics_link.short_description = "Quick Edit"
     
@@ -2491,7 +2506,7 @@ class MicAssignmentAdmin(admin.ModelAdmin):
     form = MicAssignmentForm
     list_display = ('rf_display', 'session', 'mic_type', 'presenter_display', 'is_micd', 'is_d_mic', 'last_modified')
     list_filter = ('session__day', 'session', 'mic_type', 'is_micd', 'is_d_mic')
-    search_fields = ('presenter_name', 'session__name', 'notes')
+    search_fields = ('presenter__name', 'session__name', 'notes')
     list_editable = ('is_micd', 'is_d_mic')
     ordering = ['session__day__date', 'session__order', 'rf_number']
     
@@ -2500,7 +2515,7 @@ class MicAssignmentAdmin(admin.ModelAdmin):
             'fields': ('session', 'rf_number', 'mic_type')
         }),
         ('Presenter Information', {
-            'fields': ('presenter_name', 'shared_presenters')
+            'fields': ('presenter', 'shared_presenters')
         }),
         ('Status', {
             'fields': ('is_micd', 'is_d_mic')
@@ -2554,7 +2569,7 @@ from . import views
 app_name = 'planner'
 
 urlpatterns = [
-    path('dashboard/', views.dashboard_view, name='dashboard'),
+    path('dashboard/', views.dashboard, name='dashboard'),
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
     path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
     path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),

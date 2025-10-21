@@ -1228,6 +1228,28 @@ class ShowDay(models.Model):
             'used': used_mics,
             'available': total_mics - used_mics
         }
+    
+
+
+# ========Presenters========
+
+class Presenter(models.Model):
+    """Person who presents/speaks using microphones"""
+    name = models.CharField(
+        max_length=200,
+        unique=True,
+        help_text="Full name of presenter"
+    )
+    notes = models.TextField(blank=True, help_text="Additional notes about this presenter")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Presenter"
+        verbose_name_plural = "Presenters"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name    
 
 class MicSession(models.Model):
     """Represents a session within a show day"""
@@ -1342,29 +1364,29 @@ class MicAssignment(models.Model):
     
     # Mic details
     mic_type = models.CharField(max_length=20, choices=MIC_TYPES, blank=True)
-    presenter_name = models.CharField(max_length=200, blank=True)
+    presenter = models.ForeignKey(
+    Presenter,
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name='mic_assignments',
+    help_text="Primary presenter for this mic"
+)
+    
+    shared_presenters = models.ManyToManyField(
+        Presenter,
+        blank=True,
+        related_name='shared_mic_assignments',
+        help_text="Additional presenters sharing this mic"
+)
     
     # Status checkboxes
     is_micd = models.BooleanField(default=False, verbose_name="MIC'D")
     is_d_mic = models.BooleanField(default=False, verbose_name="D-MIC")
-    
-    # Shared presenter functionality
-    # In models.py, change the shared_presenters field:
-    shared_presenters = models.JSONField(
-       default=list,  # Change from null=True to default=list
-       blank=True,
-       help_text="List of additional presenters sharing this mic"
-
-    )
     active_presenter_index = models.IntegerField(default=0)
     
    
-        
-    def save(self, *args, **kwargs):
-        # Convert None to empty list for shared_presenters
-        if self.shared_presenters is None:
-            self.shared_presenters = []
-        super().save(*args, **kwargs)
+    
     
     
     # Additional fields
@@ -1383,74 +1405,91 @@ class MicAssignment(models.Model):
         verbose_name_plural = "    ├─ Mic Assignments"  # Child
         ordering = ['rf_number']  
     
+    # Replace the methods section in MicAssignment class (lines 1407-1440+)
+
     def __str__(self):
-        if self.presenter_name:
-            return f"RF{self.rf_number:02d} - {self.presenter_name}"
+        if self.presenter:
+            return f"RF{self.rf_number:02d} - {self.presenter.name}"
         return f"RF{self.rf_number:02d}"
     
     def get_all_presenters(self):
         """Return list of all presenters including shared ones"""
         presenters = []
-        if self.presenter_name:
-            presenters.append(self.presenter_name)
-        if self.shared_presenters:
-            presenters.extend(self.shared_presenters)
+        if self.presenter:
+            presenters.append(self.presenter.name)
+        if self.shared_presenters.exists():
+            presenters.extend([p.name for p in self.shared_presenters.all()])
         return presenters
     
     @property
     def presenter_count(self):
         """Return the total number of presenters for this mic"""
-        count = 1 if self.presenter_name else 0
-        if self.shared_presenters:
-            count += len(self.shared_presenters)
+        count = 1 if self.presenter else 0
+        if self.shared_presenters.exists():
+            count += self.shared_presenters.count()
         return count
     
     @property
     def current_presenter(self):
         """Get the name of the currently active presenter"""
         if self.active_presenter_index == 0:
-            return self.presenter_name
-        elif self.active_presenter_index <= len(self.shared_presenters):
-            return self.shared_presenters[self.active_presenter_index - 1]
+            return self.presenter.name if self.presenter else ''
+        elif self.active_presenter_index <= self.shared_presenters.count():
+            shared_list = list(self.shared_presenters.all())
+            return shared_list[self.active_presenter_index - 1].name
         return ''
     
     @property
     def all_presenters(self):
         """Get list of all presenters (primary + shared)"""
         presenters = []
-        if self.presenter_name:
+        if self.presenter:
             presenters.append({
-                'name': self.presenter_name,
+                'name': self.presenter.name,
                 'index': 0,
                 'is_active': self.active_presenter_index == 0
             })
         
-        for idx, name in enumerate(self.shared_presenters, start=1):
-            if name:
-                presenters.append({
-                    'name': name,
-                    'index': idx,
-                    'is_active': self.active_presenter_index == idx
-                })
+        for idx, presenter in enumerate(self.shared_presenters.all(), start=1):
+            presenters.append({
+                'name': presenter.name,
+                'index': idx,
+                'is_active': self.active_presenter_index == idx
+            })
         
         return presenters
     
     @property
     def has_shared_presenters(self):
         """Check if this assignment has shared presenters"""
-        return bool(self.shared_presenters)
+        return self.shared_presenters.exists()
     
     @property
     def shared_count(self):
         """Count of shared presenters"""
-        return len([p for p in self.shared_presenters if p])
+        return self.shared_presenters.count()
+    
+    def get_current_presenter_name(self):
+        """Get the name of the currently active presenter"""
+        if self.active_presenter_index == 0:
+            return self.presenter.name if self.presenter else ''
+
+    # Get shared presenters list
+        shared_list = list(self.shared_presenters.all())
+    
+    # active_presenter_index starts at 0 for primary, 1+ for shared
+        if 0 < self.active_presenter_index <= len(shared_list):
+            return shared_list[self.active_presenter_index - 1].name
+        
+        # Fallback to primary if index is out of range
+        return self.presenter.name if self.presenter else ''
     
     def rotate_to_next_presenter(self):
         """
         Move to the next presenter in the list
         Returns True if rotation successful, False if at end
         """
-        total_presenters = 1 + len(self.shared_presenters)
+        total_presenters = 1 + self.shared_presenters.count()
         
         if self.active_presenter_index < total_presenters - 1:
             self.active_presenter_index += 1
@@ -1467,15 +1506,14 @@ class MicAssignment(models.Model):
         self.is_d_mic = False
         self.save()
     
-    
     @property
     def display_presenters(self):
         """Return a formatted string of all presenters"""
         presenters = []
-        if self.presenter_name:
-            presenters.append(self.presenter_name)
-        if self.shared_presenters:
-            presenters.extend(self.shared_presenters)
+        if self.presenter:
+            presenters.append(self.presenter.name)
+        if self.shared_presenters.exists():
+            presenters.extend([p.name for p in self.shared_presenters.all()])
         
         if len(presenters) == 0:
             return ""
@@ -1485,6 +1523,8 @@ class MicAssignment(models.Model):
             return f"{presenters[0]} / {presenters[1]}"
         else:
             return f"{presenters[0]} / +{len(presenters)-1} more"
+    
+   
 
 class MicShowInfo(models.Model):
     """Singleton model to store show-level information"""
