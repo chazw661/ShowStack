@@ -2979,7 +2979,8 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
     list_filter = ['show_day', 'created_at', 'date_generated']
     search_fields = ['file_name', 'notes']
     readonly_fields = ['created_at', 'updated_at', 'parsed_data_display']
-    
+    change_form_template = 'admin/planner/soundvisionprediction/change_form.html'
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('show_day', 'file_name', 'version', 'date_generated')

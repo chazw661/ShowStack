@@ -342,11 +342,30 @@
         </div>
         
         <div class="action-bar">
-            <a href="{% url 'planner:predictions_list' %}" class="btn btn-secondary">← Back to List</a>
-            <a href="{% url 'planner:export_prediction' prediction.id %}" class="btn">Export CSV</a>
-            <button onclick="expandAll()" class="btn btn-secondary">Expand All</button>
-            <button onclick="collapseAll()" class="btn btn-secondary">Collapse All</button>
-        </div>
+            <a href="{% url 'admin:planner_soundvisionprediction_changelist' %}" 
+                style="background-color: #6c757d; 
+                        color: white; 
+                        padding: 10px 15px; 
+                        text-decoration: none; 
+                        border-radius: 4px; 
+                        display: inline-block;
+                        margin-right: 10px;">
+                    ← Back to List
+                </a>
+                <a href="{% url 'planner:export_soundvision_pdf' prediction.id %}" 
+                class="btn" 
+                target="_blank"
+                style="background-color: #4a9eff; 
+                        color: white; 
+                        padding: 10px 15px; 
+                        text-decoration: none; 
+                        border-radius: 4px; 
+                        display: inline-block;">
+                    Export PDF
+                </a>
+                            <button onclick="expandAll()" class="btn btn-secondary">Expand All</button>
+                            <button onclick="collapseAll()" class="btn btn-secondary">Collapse All</button>
+                        </div>
         
         <!-- Summary Panel -->
         <div class="summary-panel">

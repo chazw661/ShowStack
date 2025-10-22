@@ -89,6 +89,11 @@ urlpatterns = [
 
     #----Mic Tracker Presenter CSV Import---
     path('api/presenters/import/', views.import_presenters_csv, name='import_presenters_csv'),
+
+
+    #-----Soundvision PDF----
+
+    path('soundvision/<int:prediction_id>/pdf/', views.export_soundvision_pdf, name='export_soundvision_pdf'),
     
 
    

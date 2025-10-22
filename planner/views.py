@@ -2028,3 +2028,28 @@ def import_presenters_csv(request):
         return redirect('admin:planner_presenter_changelist')
     
     return render(request, 'admin/planner/presenter/import_csv.html')
+
+
+
+
+#-------SoundVidsion PDF Export----
+# Add this to planner/views.py
+# Add this to planner/views.py
+
+from django.contrib.admin.views.decorators import staff_member_required
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from .models import SoundvisionPrediction
+
+@staff_member_required
+def export_soundvision_pdf(request, prediction_id):
+    """Export Soundvision Prediction as PDF"""
+    from planner.utils.pdf_exports.soundvision_pdf import generate_soundvision_pdf
+    
+    prediction = get_object_or_404(SoundvisionPrediction, id=prediction_id)
+    pdf = generate_soundvision_pdf(prediction)
+    
+    response = HttpResponse(pdf, content_type='application/pdf')
+    filename = f"Soundvision_{prediction.file_name.replace(' ', '_')}.pdf"
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    return response

@@ -1,0 +1,23 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block submit_buttons_bottom %}
+    {{ block.super }}
+    
+    {% if original and original.pk %}
+        <div class="submit-row">
+            <a href="{% url 'planner:export_soundvision_pdf' original.pk %}" 
+               class="button" 
+               target="_blank"
+               style="background-color: #4a9eff; 
+                      color: white; 
+                      padding: 10px 15px; 
+                      margin-left: 10px;
+                      text-decoration: none;
+                      border-radius: 4px;
+                      display: inline-block;">
+                Export PDF
+            </a>
+        </div>
+    {% endif %}
+{% endblock %}
