@@ -1476,6 +1476,7 @@ def add_amplifier_assignment(request, plan_id):
         # Get power details for the new assignment
         power_details = assignment.get_power_details()
         
+        # Convert everything to JSON-serializable types
         return JsonResponse({
             'success': True,
             'assignment': {
@@ -1488,9 +1489,17 @@ def add_amplifier_assignment(request, plan_id):
                 'phase': assignment.phase_assignment,
                 'current_per_unit': float(assignment.calculated_current_per_unit),
                 'total_current': float(assignment.calculated_total_current),
-                'power_details': power_details
+                'power_details': {
+                    'continuous_watts': float(power_details.get('continuous_watts', 0)),
+                    'peak_watts': float(power_details.get('peak_watts', 0)),
+                    'current_amps': float(power_details.get('current_amps', 0)),
+                } if power_details else {}
             },
-            'phase_loads': phase_loads
+            'phase_loads': {
+                'L1': float(phase_loads.get('L1', 0)),
+                'L2': float(phase_loads.get('L2', 0)),
+                'L3': float(phase_loads.get('L3', 0)),
+            }
         })
         
     except Exception as e:
@@ -1554,6 +1563,154 @@ def delete_amplifier_assignment(request, assignment_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
+
+
+
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_amplifier_assignment(request, assignment_id):
+    """Get details of a specific amplifier assignment for editing"""
+    try:
+        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+        
+        return JsonResponse({
+            'success': True,
+            'assignment': {
+                'id': assignment.id,
+                'amplifier': str(assignment.amplifier),
+                'quantity': assignment.quantity,
+                'zone': assignment.zone,
+                'position': assignment.position,
+                'duty_cycle': assignment.duty_cycle,
+                'phase_assignment': assignment.phase_assignment,
+                'current_per_unit': float(assignment.calculated_current_per_unit),
+                'total_current': float(assignment.calculated_total_current),
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_amplifier_assignment(request, assignment_id):
+    """Update an existing amplifier assignment"""
+    try:
+        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+        data = json.loads(request.body)
+        
+        # Update the fields
+        assignment.quantity = int(data.get('quantity', assignment.quantity))
+        assignment.zone = data.get('zone', assignment.zone)
+        assignment.position = data.get('position', assignment.position)
+        assignment.duty_cycle = data.get('duty_cycle', assignment.duty_cycle)
+        assignment.phase_assignment = data.get('phase_assignment', assignment.phase_assignment)
+        
+        assignment.save()
+        
+        # Get updated phase distribution
+        plan = assignment.distribution_plan
+        phase_loads = calculate_phase_distribution(plan)
+        
+        return JsonResponse({
+            'success': True,
+            'assignment': {
+                'id': assignment.id,
+                'quantity': assignment.quantity,
+                'zone': assignment.zone,
+                'position': assignment.position,
+                'duty_cycle': assignment.get_duty_cycle_display(),
+                'phase_assignment': assignment.phase_assignment,
+                'current_per_unit': float(assignment.calculated_current_per_unit),
+                'total_current': float(assignment.calculated_total_current),
+            },
+            'phase_loads': {
+                'L1': float(phase_loads.get('L1', 0)),
+                'L2': float(phase_loads.get('L2', 0)),
+                'L3': float(phase_loads.get('L3', 0)),
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)    
+    
+
+# Add these two view functions to planner/views.py
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404
+import json
+
+@login_required
+@require_http_methods(["GET"])
+def get_amplifier_assignment(request, assignment_id):
+    """Get details of a specific amplifier assignment for editing"""
+    try:
+        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+        
+        return JsonResponse({
+            'success': True,
+            'assignment': {
+                'id': assignment.id,
+                'amplifier': str(assignment.amplifier),
+                'quantity': assignment.quantity,
+                'zone': assignment.zone,
+                'position': assignment.position,
+                'duty_cycle': assignment.duty_cycle,
+                'phase_assignment': assignment.phase_assignment,
+                'current_per_unit': float(assignment.calculated_current_per_unit),
+                'total_current': float(assignment.calculated_total_current),
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_amplifier_assignment(request, assignment_id):
+    """Update an existing amplifier assignment"""
+    try:
+        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+        data = json.loads(request.body)
+        
+        # Update the fields
+        assignment.quantity = int(data.get('quantity', assignment.quantity))
+        assignment.zone = data.get('zone', assignment.zone)
+        assignment.position = data.get('position', assignment.position)
+        assignment.duty_cycle = data.get('duty_cycle', assignment.duty_cycle)
+        assignment.phase_assignment = data.get('phase_assignment', assignment.phase_assignment)
+        
+        assignment.save()
+        
+        # Get updated phase distribution
+        plan = assignment.distribution_plan
+        phase_loads = calculate_phase_distribution(plan)
+        
+        return JsonResponse({
+            'success': True,
+            'assignment': {
+                'id': assignment.id,
+                'quantity': assignment.quantity,
+                'zone': assignment.zone,
+                'position': assignment.position,
+                'duty_cycle': assignment.get_duty_cycle_display(),
+                'phase_assignment': assignment.phase_assignment,
+                'current_per_unit': float(assignment.calculated_current_per_unit),
+                'total_current': float(assignment.calculated_total_current),
+            },
+            'phase_loads': {
+                'L1': float(phase_loads.get('L1', 0)),
+                'L2': float(phase_loads.get('L2', 0)),
+                'L3': float(phase_loads.get('L3', 0)),
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)    
     
 
 

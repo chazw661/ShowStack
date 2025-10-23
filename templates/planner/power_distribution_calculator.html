@@ -524,6 +524,71 @@
         </div>
     </div>
     
+    <!-- Edit Amplifier Modal - INSERT AFTER LINE 525 -->
+    <div id="editAmplifierModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeEditModal()">&times;</span>
+            <h2 class="modal-header">Edit Amplifier Assignment</h2>
+            
+            <input type="hidden" id="edit-assignment-id">
+            
+            <div class="form-group">
+                <label>Amplifier Model (Cannot be changed)</label>
+                <div id="edit-amplifier-name" style="
+                    padding: 10px;
+                    background: #1a1a1a;
+                    border: 1px solid #3a3a3a;
+                    border-radius: 4px;
+                    color: #999;
+                    margin-bottom: 15px;
+                "></div>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="edit-quantity">Quantity</label>
+                    <input type="number" id="edit-quantity" value="1" min="1">
+                </div>
+                
+                <div class="form-group">
+                    <label for="edit-zone">Zone</label>
+                    <input type="text" id="edit-zone" placeholder="e.g., FOH, Delays, Fills">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="edit-position">Position (Optional)</label>
+                <input type="text" id="edit-position" placeholder="e.g., Stage Left, Tower 1">
+            </div>
+            
+            <div class="form-group">
+                <label for="edit-duty">Duty Cycle</label>
+                <select id="edit-duty">
+                    <option value="speech">Speech/Vocal (20% duty)</option>
+                    <option value="light_music">Light Music (35% duty)</option>
+                    <option value="heavy_music">Heavy Music (50% duty)</option>
+                    <option value="edm_concert">EDM/Concert (70% duty)</option>
+                    <option value="test_tone">Test/Alignment (100% duty)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="edit-phase">Phase Assignment</label>
+                <select id="edit-phase">
+                    <option value="AUTO">Auto-Balance</option>
+                    <option value="L1">L1</option>
+                    <option value="L2">L2</option>
+                    <option value="L3">L3</option>
+                </select>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button class="btn" onclick="saveEdit()">Save Changes</button>
+                <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
     <script>
         const planId = {{ plan.id }};
         const csrfToken = '{{ csrf_token }}';
@@ -638,9 +703,87 @@
             });
         }
         
-        // Edit assignment (placeholder for future implementation)
+// Edit assignment - REPLACE LINES 641-644 WITH THIS
         function editAssignment(assignmentId) {
-            alert('Edit functionality coming soon!');
+            // Fetch the current assignment data
+            fetch(`/audiopatch/power-distribution/assignment/${assignmentId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Populate the edit modal with current values
+                        document.getElementById('edit-assignment-id').value = assignmentId;
+                        document.getElementById('edit-quantity').value = data.assignment.quantity;
+                        document.getElementById('edit-zone').value = data.assignment.zone;
+                        document.getElementById('edit-position').value = data.assignment.position || '';
+                        document.getElementById('edit-duty').value = data.assignment.duty_cycle;
+                        document.getElementById('edit-phase').value = data.assignment.phase_assignment;
+                        
+                        // Show the amplifier info (read-only)
+                        document.getElementById('edit-amplifier-name').textContent = data.assignment.amplifier;
+                        
+                        // Show the modal
+                        document.getElementById('editAmplifierModal').style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching assignment:', error);
+                    alert('Error loading assignment data');
+                });
+        }
+        
+        function closeEditModal() {
+            document.getElementById('editAmplifierModal').style.display = 'none';
+        }
+        
+        function saveEdit() {
+            const assignmentId = document.getElementById('edit-assignment-id').value;
+            const csrftoken = getCookie('csrftoken');
+            
+            const data = {
+                quantity: parseInt(document.getElementById('edit-quantity').value),
+                zone: document.getElementById('edit-zone').value,
+                position: document.getElementById('edit-position').value,
+                duty_cycle: document.getElementById('edit-duty').value,
+                phase_assignment: document.getElementById('edit-phase').value
+            };
+            
+            fetch(`/audiopatch/power-distribution/assignment/${assignmentId}/update/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeEditModal();
+                    location.reload();
+                } else {
+                    alert('Error updating assignment: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating assignment:', error);
+                alert('Error updating assignment');
+            });
+        }
+        
+        // Helper function to get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
         }
         
         // Calculate totals on page load
@@ -658,11 +801,17 @@
             document.getElementById('total-power').textContent = (totalPower / 1000).toFixed(1) + 'kW';
         });
         
-        // Close modal when clicking outside
+        
+// Close modal when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('addAmplifierModal');
-            if (event.target == modal) {
-                modal.style.display = 'none';
+            const addModal = document.getElementById('addAmplifierModal');
+            const editModal = document.getElementById('editAmplifierModal');
+            
+            if (event.target == addModal) {
+                addModal.style.display = 'none';
+            }
+            if (event.target == editModal) {
+                editModal.style.display = 'none';
             }
         }
     </script>

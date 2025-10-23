@@ -60,6 +60,12 @@ urlpatterns = [
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
      path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),
+     path('power-distribution/assignment/<int:assignment_id>/', views.get_amplifier_assignment, name='get_amplifier_assignment'),
+     path('power-distribution/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
+      path('power-distribution/assignment/<int:assignment_id>/', views.get_amplifier_assignment, name='get_amplifier_assignment'),
+      path('power-distribution/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
+     
+    
 
      # Power Distribution API endpoints (keep these as they are)
      path('api/power/plan/<int:plan_id>/update/', views.update_plan_settings, name='update_plan_settings'),
