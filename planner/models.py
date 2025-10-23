@@ -14,6 +14,8 @@ class Console(models.Model):
         help_text="Mark this console as a template for creating new consoles"
     )
     
+    ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="IP Address", help_text="Console IP address (optional)")
+    
     def __str__(self):
         template_prefix = "[TEMPLATE] " if self.is_template else ""
         return f"{template_prefix}{self.name}"

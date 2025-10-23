@@ -187,12 +187,12 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
-    list_display = ['name_with_template_badge', 'is_template', 'export_buttons']
+    list_display = ['name_with_template_badge', 'ip_address', 'is_template', 'export_buttons']
     list_filter = ['is_template']
     
     fieldsets = (
         ('Console Information', {
-            'fields': ('name', 'is_template')
+            'fields': ('name','ip_address', 'is_template')
         }),
     )
     
