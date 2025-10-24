@@ -14,8 +14,9 @@ class Console(models.Model):
         help_text="Mark this console as a template for creating new consoles"
     )
     
-    ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="IP Address", help_text="Console IP address (optional)")
-    
+    primary_ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="Primary IP Address", help_text="Primary console IP address (optional)")
+    secondary_ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="Secondary IP Address", help_text="Secondary console IP address (optional)")
+
     def __str__(self):
         template_prefix = "[TEMPLATE] " if self.is_template else ""
         return f"{template_prefix}{self.name}"
@@ -120,6 +121,9 @@ class Device(models.Model):
     name = models.CharField(max_length=200)
     input_count = models.PositiveIntegerField(default=0)
     output_count = models.PositiveIntegerField(default=0)
+    primary_ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="Primary IP Address", help_text="Primary device IP address (optional)")
+    secondary_ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="Secondary IP Address", help_text="Secondary device IP address (optional)")
+
     
     def __str__(self):
         return self.name

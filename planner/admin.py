@@ -187,12 +187,12 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 @admin.register(Console)
 class ConsoleAdmin(admin.ModelAdmin):
-    list_display = ['name_with_template_badge', 'ip_address', 'is_template', 'export_buttons']
+    list_display = ['name', 'primary_ip_address', 'secondary_ip_address', 'is_template']
     list_filter = ['is_template']
     
     fieldsets = (
         ('Console Information', {
-            'fields': ('name','ip_address', 'is_template')
+            'fields': ('name', 'primary_ip_address', 'secondary_ip_address', 'is_template')
         }),
     )
     
@@ -418,7 +418,7 @@ class DeviceOutputInline(admin.TabularInline):
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
     inlines = [DeviceInputInline, DeviceOutputInline]
-    list_display = ('name','device_actions', )
+    list_display = ['name', 'primary_ip_address', 'secondary_ip_address', 'device_actions',]
 
     def get_fields(self, request, obj=None):
         """
@@ -427,9 +427,8 @@ class DeviceAdmin(admin.ModelAdmin):
         so show no fields above the inlines.
         """
         if obj is None:
-            return ['name', 'input_count', 'output_count']
-        return []
-
+            return ['name', 'primary_ip_address', 'secondary_ip_address', 'input_count', 'output_count']
+        return ['name', 'primary_ip_address', 'secondary_ip_address']
     def get_form(self, request, obj=None, **kwargs):
         if obj is None:
             kwargs['form'] = NameOnlyForm
