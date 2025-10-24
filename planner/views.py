@@ -1928,12 +1928,18 @@ def dashboard(request):
     }
     
     # Mic Tracker Stats
+
+
+# ... in your dashboard function ...
+
     mic_stats = {
-        'show_days': ShowDay.objects.count(),
-        'sessions': MicSession.objects.count(),
-        'assignments': MicAssignment.objects.count(),
+        'total': MicAssignment.objects.count(),
         'micd': MicAssignment.objects.filter(is_micd=True).count(),
-        'shared': MicAssignment.objects.exclude(shared_presenters=[]).count(),
+        'd_mic': MicAssignment.objects.filter(is_d_mic=True).count(),
+        'available': MicAssignment.objects.filter(is_micd=False).count(),
+        'shared': MicAssignment.objects.annotate(
+            presenter_count=Count('shared_presenters')
+        ).filter(presenter_count__gt=0).count(),
     }
     
     # Comm Stats
@@ -1991,6 +1997,195 @@ def dashboard(request):
     }
     
     return render(request, 'planner/dashboard.html', context)
+
+
+
+
+#---------IP Address Module----
+
+
+@staff_member_required
+def ip_address_report(request):
+    """
+    Interactive IP Address Management page.
+    Displays all IP addresses across all modules with inline editing.
+    """
+    from .models import Console, Device, Amp, SystemProcessor, CommBeltPack
+    
+    # Get all records with IP addresses
+    consoles = Console.objects.all().order_by('name')
+    devices = Device.objects.all().order_by('name')
+    amps = Amp.objects.all().order_by('location__name', 'name')
+    processors = SystemProcessor.objects.all().order_by('device_type', 'name')
+    belt_packs = CommBeltPack.objects.filter(system_type='HARDWIRED').order_by('bp_number')
+    
+    # Organize data by module type
+    context = {
+        'title': 'IP Address Management',
+        'modules': [
+            {
+                'name': 'Mixing Consoles',
+                'model_name': 'console',
+                'app_label': 'planner',
+                'items': [
+                    {
+                        'id': console.id,
+                        'name': console.name,
+                        'primary_ip': console.primary_ip_address or '',
+                        'secondary_ip': console.secondary_ip_address or '',
+                        'has_dual_ip': True,
+                        'admin_url': f'/admin/planner/console/{console.id}/change/'
+                    }
+                    for console in consoles
+                ]
+            },
+            {
+                'name': 'I/O Devices',
+                'model_name': 'device',
+                'app_label': 'planner',
+                'items': [
+                    {
+                        'id': device.id,
+                        'name': device.name,
+                        'primary_ip': device.primary_ip_address or '',
+                        'secondary_ip': device.secondary_ip_address or '',
+                        'has_dual_ip': True,
+                        'admin_url': f'/admin/planner/device/{device.id}/change/'
+                    }
+                    for device in devices
+                ]
+            },
+            {
+                'name': 'Amplifiers',
+                'model_name': 'amp',
+                'app_label': 'planner',
+                'items': [
+                    {
+                        'id': amp.id,
+                        'name': amp.name,
+                        'location': amp.location.name if amp.location else 'No Location',
+                        'ip_address': amp.ip_address or '',
+                        'has_dual_ip': False,
+                        'admin_url': f'/admin/planner/amp/{amp.id}/change/'
+                    }
+                    for amp in amps
+                ]
+            },
+            {
+                'name': 'System Processors',
+                'model_name': 'systemprocessor',
+                'app_label': 'planner',
+                'items': [
+                    {
+                        'id': processor.id,
+                        'name': processor.name,
+                        'device_type': processor.get_device_type_display() if hasattr(processor, 'get_device_type_display') else processor.device_type,
+                        'ip_address': processor.ip_address or '',
+                        'has_dual_ip': False,
+                        'admin_url': f'/admin/planner/systemprocessor/{processor.id}/change/'
+                    }
+                    for processor in processors
+                ]
+            },
+            {
+                'name': 'COMM Belt Packs (Hardwired)',
+                'model_name': 'commbeltpack',
+                'app_label': 'planner',
+                'items': [
+                    {
+                        'id': bp.id,
+                        'name': f"BP{bp.bp_number}",
+                        'position': bp.position or '—',
+                        'crew_name': bp.name or '—',
+                        'ip_address': bp.ip_address or '',
+                        'has_dual_ip': False,
+                        'admin_url': f'/admin/planner/commbeltpack/{bp.id}/change/'
+                    }
+                    for bp in belt_packs
+                ]
+            },
+        ]
+    }
+    
+    return render(request, 'admin/planner/ip_address_report.html', context)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def save_ip_address(request):
+    """
+    AJAX endpoint to save IP address changes.
+    Handles both single and dual IP address fields.
+    """
+    try:
+        from .models import Console, Device, Amp, SystemProcessor, CommBeltPack
+        
+        data = json.loads(request.body)
+        model_name = data.get('model_name')
+        object_id = data.get('object_id')
+        field_name = data.get('field_name')  # 'primary_ip_address', 'secondary_ip_address', or 'ip_address'
+        ip_value = data.get('ip_value', '').strip()
+        
+        # Validate required fields
+        if not all([model_name, object_id, field_name]):
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required fields'
+            }, status=400)
+        
+        # Get the appropriate model
+        model_map = {
+            'console': Console,
+            'device': Device,
+            'amp': Amp,
+            'systemprocessor': SystemProcessor,
+            'commbeltpack': CommBeltPack,
+        }
+        
+        model = model_map.get(model_name.lower())
+        if not model:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid model: {model_name}'
+            }, status=400)
+        
+        # Get the object
+        try:
+            obj = model.objects.get(id=object_id)
+        except model.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'{model_name} with id {object_id} not found'
+            }, status=404)
+        
+        # Validate field name
+        if not hasattr(obj, field_name):
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid field: {field_name}'
+            }, status=400)
+        
+        # Set the IP address (empty string becomes None for the database)
+        setattr(obj, field_name, ip_value if ip_value else None)
+        obj.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'IP address updated successfully',
+            'ip_value': ip_value or '—'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
 
 
 # Device I/O PDF Export
@@ -2191,7 +2386,6 @@ def import_presenters_csv(request):
 
 #-------SoundVidsion PDF Export----
 # Add this to planner/views.py
-# Add this to planner/views.py
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse
@@ -2210,3 +2404,7 @@ def export_soundvision_pdf(request, prediction_id):
     filename = f"Soundvision_{prediction.file_name.replace(' ', '_')}.pdf"
     response['Content-Disposition'] = f'inline; filename="{filename}"'
     return response
+
+
+
+

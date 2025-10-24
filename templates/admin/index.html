@@ -1,11 +1,37 @@
 {% extends "admin/index.html" %}
 
 {% block content %}
+<!-- System Dashboard Button -->
 <div style="margin: 20px;">
-    <a href="/dashboard/" class="button" 
-       style="background: #417690; color: white; padding: 15px 25px; font-size: 16px; text-decoration: none; display: inline-block; border-radius: 4px;">
-        📊 System Dashboard
+    <a href="/dashboard/" class="button"
+       style="background: #417690; color: white; padding: 15px 25px; font-size: 16px; text-decoration: none; display: inline-block;">
+        🏠 System Dashboard
     </a>
 </div>
+
+<!-- IP Report Section -->
+<div style="margin: 20px;">
+    <div class="module" style="background: #2a2a2a; border: 1px solid #4a9eff; border-radius: 4px;">
+        <h2 style="background: #4a9eff; color: white; padding: 10px 15px; margin: 0; border-radius: 4px 4px 0 0;">
+            🌐 IP Report
+        </h2>
+        <table style="width: 100%;">
+            <tbody>
+                <tr>
+                    <td style="padding: 15px;">
+                        <a href="/audiopatch/ip-addresses/" 
+                           style="color: #4a9eff; text-decoration: none; font-weight: bold; font-size: 16px;">
+                            IP Address Management
+                        </a>
+                        <p style="color: #999; margin: 5px 0 0 0; font-size: 13px;">
+                            View and edit all IP addresses across Consoles, Devices, Amplifiers, Processors, and Belt Packs
+                        </p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
 {{ block.super }}
 {% endblock %}

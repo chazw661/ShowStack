@@ -1,0 +1,479 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}IP Address Management - {{ site_title }}{% endblock %}
+
+{% block extrastyle %}
+<style>
+    .ip-management-container {
+        padding: 20px;
+        background: #1a1a1a;
+        color: #fff;
+    }
+    
+    .page-header {
+        margin-bottom: 30px;
+        border-bottom: 2px solid #4a9eff;
+        padding-bottom: 15px;
+    }
+    
+    .page-header h1 {
+        color: #fff;
+        margin: 0;
+        font-size: 28px;
+    }
+    
+    .page-header p {
+        color: #ccc;
+        margin: 5px 0 0 0;
+        font-size: 14px;
+    }
+    
+    .module-section {
+        margin-bottom: 40px;
+        background: #2a2a2a;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .module-header {
+        background: #4a9eff;
+        color: white;
+        padding: 15px 20px;
+        font-size: 18px;
+        font-weight: bold;
+    }
+    
+    .module-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .module-table thead {
+        background: #333;
+    }
+    
+    .module-table th {
+        padding: 12px 15px;
+        text-align: left;
+        color: #fff;
+        font-weight: 600;
+        border-bottom: 2px solid #4a9eff;
+    }
+    
+    .module-table tbody tr {
+        border-bottom: 1px solid #3a3a3a;
+    }
+    
+    .module-table tbody tr:hover {
+        background: #353535;
+    }
+    
+    .module-table td {
+        padding: 12px 15px;
+        color: #ddd;
+    }
+    
+    .device-name {
+        font-weight: 600;
+        color: #fff;
+    }
+    
+    .device-info {
+        color: #999;
+        font-size: 13px;
+    }
+    
+    .ip-field-container {
+        position: relative;
+    }
+    
+    .ip-display {
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 4px;
+        transition: background 0.2s;
+        display: inline-block;
+        min-width: 120px;
+    }
+    
+    .ip-display:hover {
+        background: #4a4a4a;
+    }
+    
+    .ip-display.empty {
+        color: #888;
+        font-style: italic;
+    }
+    
+    .ip-input {
+        display: none;
+        padding: 6px 10px;
+        border: 2px solid #4a9eff;
+        border-radius: 4px;
+        background: #1a1a1a;
+        color: #fff;
+        font-family: monospace;
+        font-size: 14px;
+        width: 150px;
+    }
+    
+    .ip-input:focus {
+        outline: none;
+        border-color: #6abeff;
+    }
+    
+    .save-buttons {
+        display: none;
+        margin-top: 5px;
+    }
+    
+    .save-buttons button {
+        padding: 4px 12px;
+        margin-right: 5px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    
+    .btn-save {
+        background: #4a9eff;
+        color: white;
+    }
+    
+    .btn-save:hover {
+        background: #3a8eef;
+    }
+    
+    .btn-cancel {
+        background: #666;
+        color: white;
+    }
+    
+    .btn-cancel:hover {
+        background: #555;
+    }
+    
+    .status-message {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 4px;
+        color: white;
+        font-weight: 600;
+        z-index: 9999;
+        display: none;
+        animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .status-success {
+        background: #28a745;
+    }
+    
+    .status-error {
+        background: #dc3545;
+    }
+    
+    .admin-link {
+        color: #4a9eff;
+        text-decoration: none;
+        font-size: 12px;
+    }
+    
+    .admin-link:hover {
+        text-decoration: underline;
+    }
+    
+    .no-items {
+        padding: 30px;
+        text-align: center;
+        color: #888;
+        font-style: italic;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ip-management-container">
+    <div class="page-header">
+        <h1>🌐 IP Address Management</h1>
+        <p>Click any IP address to edit inline. Changes save automatically.</p>
+    </div>
+    
+    <!-- Status message toast -->
+    <div id="statusMessage" class="status-message"></div>
+    
+    {% for module in modules %}
+    <div class="module-section">
+        <div class="module-header">
+            {{ module.name }}
+            <span style="float: right; font-weight: normal; font-size: 14px;">
+                {{ module.items|length }} item{{ module.items|length|pluralize }}
+            </span>
+        </div>
+        
+        {% if module.items %}
+        <table class="module-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    {% if module.model_name == "amp" %}
+                        <th>Location</th>
+                    {% elif module.model_name == "systemprocessor" %}
+                        <th>Type</th>
+                    {% elif module.model_name == "commbeltpack" %}
+                        <th>Position</th>
+                        <th>Crew Name</th>
+                    {% endif %}
+                    
+                    {% if module.items.0.has_dual_ip %}
+                        <th>Primary IP Address</th>
+                        <th>Secondary IP Address</th>
+                    {% else %}
+                        <th>IP Address</th>
+                    {% endif %}
+                    <th style="width: 100px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in module.items %}
+                <tr>
+                    <td>
+                        <span class="device-name">{{ item.name }}</span>
+                    </td>
+                    
+                    {% if module.model_name == "amp" %}
+                        <td><span class="device-info">{{ item.location }}</span></td>
+                    {% elif module.model_name == "systemprocessor" %}
+                        <td><span class="device-info">{{ item.device_type }}</span></td>
+                    {% elif module.model_name == "commbeltpack" %}
+                        <td><span class="device-info">{{ item.position }}</span></td>
+                        <td><span class="device-info">{{ item.crew_name }}</span></td>
+                    {% endif %}
+                    
+                    {% if item.has_dual_ip %}
+                        <!-- Primary IP -->
+                        <td>
+                            <div class="ip-field-container">
+                                <span class="ip-display {% if not item.primary_ip %}empty{% endif %}" 
+                                      onclick="editIP(this, '{{ module.model_name }}', {{ item.id }}, 'primary_ip_address')">
+                                    {{ item.primary_ip|default:"Click to add IP" }}
+                                </span>
+                                <input type="text" class="ip-input" value="{{ item.primary_ip }}" 
+                                       data-original="{{ item.primary_ip }}"
+                                       placeholder="e.g. 192.168.1.100">
+                                <div class="save-buttons">
+                                    <button class="btn-save" onclick="saveIP(this)">Save</button>
+                                    <button class="btn-cancel" onclick="cancelEdit(this)">Cancel</button>
+                                </div>
+                            </div>
+                        </td>
+                        
+                        <!-- Secondary IP -->
+                        <td>
+                            <div class="ip-field-container">
+                                <span class="ip-display {% if not item.secondary_ip %}empty{% endif %}" 
+                                      onclick="editIP(this, '{{ module.model_name }}', {{ item.id }}, 'secondary_ip_address')">
+                                    {{ item.secondary_ip|default:"Click to add IP" }}
+                                </span>
+                                <input type="text" class="ip-input" value="{{ item.secondary_ip }}" 
+                                       data-original="{{ item.secondary_ip }}"
+                                       placeholder="e.g. 10.0.0.100">
+                                <div class="save-buttons">
+                                    <button class="btn-save" onclick="saveIP(this)">Save</button>
+                                    <button class="btn-cancel" onclick="cancelEdit(this)">Cancel</button>
+                                </div>
+                            </div>
+                        </td>
+                    {% else %}
+                        <!-- Single IP -->
+                        <td>
+                            <div class="ip-field-container">
+                                <span class="ip-display {% if not item.ip_address %}empty{% endif %}" 
+                                      onclick="editIP(this, '{{ module.model_name }}', {{ item.id }}, 'ip_address')">
+                                    {{ item.ip_address|default:"Click to add IP" }}
+                                </span>
+                                <input type="text" class="ip-input" value="{{ item.ip_address }}" 
+                                       data-original="{{ item.ip_address }}"
+                                       placeholder="e.g. 192.168.2.10">
+                                <div class="save-buttons">
+                                    <button class="btn-save" onclick="saveIP(this)">Save</button>
+                                    <button class="btn-cancel" onclick="cancelEdit(this)">Cancel</button>
+                                </div>
+                            </div>
+                        </td>
+                    {% endif %}
+                    
+                    <td>
+                        <a href="{{ item.admin_url }}" class="admin-link" target="_blank">Edit Details →</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="no-items">
+            No {{ module.name|lower }} defined yet.
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+// Get CSRF token for AJAX requests
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+// Edit IP address inline
+function editIP(displayElement, modelName, objectId, fieldName) {
+    const container = displayElement.parentElement;
+    const input = container.querySelector('.ip-input');
+    const buttons = container.querySelector('.save-buttons');
+    
+    // Hide display, show input and buttons
+    displayElement.style.display = 'none';
+    input.style.display = 'inline-block';
+    buttons.style.display = 'block';
+    
+    // Store context data on the input
+    input.dataset.modelName = modelName;
+    input.dataset.objectId = objectId;
+    input.dataset.fieldName = fieldName;
+    
+    // Focus the input
+    input.focus();
+    input.select();
+}
+
+// Cancel editing
+function cancelEdit(cancelButton) {
+    const container = cancelButton.closest('.ip-field-container');
+    const display = container.querySelector('.ip-display');
+    const input = container.querySelector('.ip-input');
+    const buttons = container.querySelector('.save-buttons');
+    
+    // Restore original value
+    input.value = input.dataset.original || '';
+    
+    // Show display, hide input and buttons
+    display.style.display = 'inline-block';
+    input.style.display = 'none';
+    buttons.style.display = 'none';
+}
+
+// Save IP address via AJAX
+function saveIP(saveButton) {
+    const container = saveButton.closest('.ip-field-container');
+    const display = container.querySelector('.ip-display');
+    const input = container.querySelector('.ip-input');
+    const buttons = container.querySelector('.save-buttons');
+    
+    const modelName = input.dataset.modelName;
+    const objectId = input.dataset.objectId;
+    const fieldName = input.dataset.fieldName;
+    const ipValue = input.value.trim();
+    
+    // Disable buttons during save
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saving...';
+    
+    // Send AJAX request
+    fetch('/audiopatch/ip-addresses/save/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({
+            model_name: modelName,
+            object_id: objectId,
+            field_name: fieldName,
+            ip_value: ipValue
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update display text
+            display.textContent = data.ip_value;
+            display.classList.toggle('empty', !ipValue);
+            
+            // Update original value
+            input.dataset.original = ipValue;
+            
+            // Hide input, show display
+            display.style.display = 'inline-block';
+            input.style.display = 'none';
+            buttons.style.display = 'none';
+            
+            // Show success message
+            showMessage('IP address updated successfully!', 'success');
+        } else {
+            showMessage('Error: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('Failed to save IP address', 'error');
+    })
+    .finally(() => {
+        // Re-enable button
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save';
+    });
+}
+
+// Show status message
+function showMessage(message, type) {
+    const messageEl = document.getElementById('statusMessage');
+    messageEl.textContent = message;
+    messageEl.className = 'status-message status-' + type;
+    messageEl.style.display = 'block';
+    
+    setTimeout(() => {
+        messageEl.style.display = 'none';
+    }, 3000);
+}
+
+// Handle Enter key to save
+document.addEventListener('keydown', function(e) {
+    if (e.target.classList.contains('ip-input')) {
+        if (e.key === 'Enter') {
+            const saveBtn = e.target.parentElement.querySelector('.btn-save');
+            saveIP(saveBtn);
+        } else if (e.key === 'Escape') {
+            const cancelBtn = e.target.parentElement.querySelector('.btn-cancel');
+            cancelEdit(cancelBtn);
+        }
+    }
+});
+</script>
+{% endblock %}
