@@ -1043,7 +1043,6 @@ class CommCrewName(models.Model):
         return self.name
 
 
-# Update the CommBeltPack model in your planner/models.py file
 
 class CommBeltPack(models.Model):
     """Belt pack assignment and configuration"""
@@ -1083,6 +1082,13 @@ class CommBeltPack(models.Model):
         max_length=100,
         blank=True,
         help_text="Location of wireless unit (e.g., 'Unit #1 - FOH Rack')"
+    )
+
+    ip_address = models.GenericIPAddressField(
+        blank=True,
+        null=True,
+        verbose_name="IP Address",
+        help_text="IP address for hardwired belt packs (optional)"
     )
     
     bp_number = models.IntegerField(verbose_name="BP #")

@@ -2077,7 +2077,7 @@ class CommBeltPackAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
     
     list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
-    search_fields = ['bp_number', 'name', 'position', 'notes', 'unit_location']
+    search_fields = ['bp_number', 'name', 'position', 'notes', 'unit_location', 'ip_address']
     ordering = ['system_type', 'bp_number']
     
     # Actions for checking in/out and bulk creation
@@ -2097,8 +2097,7 @@ class CommBeltPackAdmin(admin.ModelAdmin):
     
     def get_list_display(self, request):
         """Dynamically adjust list display based on filters"""
-        base_display = ['display_bp_number', 'position', 'name', 'display_channels',
-                       'headset', 'audio_pgm', 'group']
+        base_display = ['display_bp_number', 'position', 'name', 'display_channels', 'headset', 'audio_pgm', 'group', 'ip_address']
         
         # Check if we're filtering by system type
         system_type = request.GET.get('system_type__exact')
@@ -2154,7 +2153,7 @@ class CommBeltPackAdmin(admin.ModelAdmin):
         # Base fieldsets without checked_out
         base_fieldsets = [
             ('System Configuration', {
-                'fields': ('system_type', 'bp_number')
+                'fields': ('system_type', 'bp_number', 'unit_location', 'ip_address')
             }),
             ('Assignment', {
                 'fields': (('position_select', 'position'), ('name_select', 'name'), 'headset'),
