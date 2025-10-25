@@ -2407,4 +2407,157 @@ def export_soundvision_pdf(request, prediction_id):
 
 
 
+#------Ip Address Report PDF Export
 
+@staff_member_required
+def export_ip_address_report_pdf(request):
+    """
+    Export IP Address Report as PDF.
+    """
+    from .utils.pdf_exports.ip_address_report_pdf import generate_ip_address_report_pdf
+    from django.http import HttpResponse
+    
+    # Generate PDF
+    buf = generate_ip_address_report_pdf()
+    
+    # Return as download
+    response = HttpResponse(buf.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="IP_Address_Report.pdf"'
+    
+    return response
+
+
+#-----Ip Address CSV Export-----
+
+@staff_member_required
+def export_ip_address_report_csv(request):
+    """
+    Export IP Address Report as CSV for spreadsheet import.
+    """
+    import csv
+    from django.http import HttpResponse
+    from .models import Console, Device, Amp, SystemProcessor, CommBeltPack
+    
+    # Create the HttpResponse object with CSV header
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="IP_Address_Report.csv"'
+    
+    writer = csv.writer(response)
+    
+    # ==================== MIXING CONSOLES ====================
+    writer.writerow(['MIXING CONSOLES'])
+    writer.writerow(['Console Name', 'Primary IP Address', 'Secondary IP Address'])
+    
+    consoles = Console.objects.all().order_by('name')
+    if consoles.exists():
+        for console in consoles:
+            writer.writerow([
+                console.name,
+                console.primary_ip_address or '',
+                console.secondary_ip_address or ''
+            ])
+    else:
+        writer.writerow(['No consoles defined'])
+    
+    writer.writerow([])  # Blank line
+    
+    # ==================== I/O DEVICES ====================
+    writer.writerow(['I/O DEVICES'])
+    writer.writerow(['Device Name', 'Primary IP Address', 'Secondary IP Address'])
+    
+    devices = Device.objects.all().order_by('name')
+    if devices.exists():
+        for device in devices:
+            writer.writerow([
+                device.name,
+                device.primary_ip_address or '',
+                device.secondary_ip_address or ''
+            ])
+    else:
+        writer.writerow(['No I/O devices defined'])
+    
+    writer.writerow([])  # Blank line
+    
+    # ==================== AMPLIFIERS ====================
+    writer.writerow(['AMPLIFIERS'])
+    writer.writerow(['Amplifier Name', 'Location', 'IP Address (AVB Network)'])
+    
+    amps = Amp.objects.all().order_by('location__name', 'name')
+    if amps.exists():
+        for amp in amps:
+            writer.writerow([
+                amp.name,
+                amp.location.name if amp.location else 'No Location',
+                amp.ip_address or ''
+            ])
+    else:
+        writer.writerow(['No amplifiers defined'])
+    
+    writer.writerow([])  # Blank line
+    
+    # ==================== SYSTEM PROCESSORS ====================
+    writer.writerow(['SYSTEM PROCESSORS'])
+    writer.writerow(['Processor Name', 'Type', 'IP Address (AVB Network)'])
+    
+    processors = SystemProcessor.objects.all().order_by('device_type', 'name')
+    if processors.exists():
+        for processor in processors:
+            device_type = processor.get_device_type_display() if hasattr(processor, 'get_device_type_display') else processor.device_type
+            writer.writerow([
+                processor.name,
+                device_type,
+                processor.ip_address or ''
+            ])
+    else:
+        writer.writerow(['No system processors defined'])
+    
+    writer.writerow([])  # Blank line
+    
+    # ==================== COMM BELT PACKS (HARDWIRED) ====================
+    writer.writerow(['COMM BELT PACKS (HARDWIRED)'])
+    writer.writerow(['BP #', 'Position', 'Name', 'IP Address'])
+    
+    belt_packs = CommBeltPack.objects.filter(system_type='HARDWIRED').order_by('bp_number')
+    if belt_packs.exists():
+        for bp in belt_packs:
+            writer.writerow([
+                f"BP{bp.bp_number}",
+                bp.position or '',
+                bp.name or '',
+                bp.ip_address or ''
+            ])
+    else:
+        writer.writerow(['No hardwired belt packs defined'])
+    
+    writer.writerow([])  # Blank line
+    
+    # ==================== SUMMARY ====================
+    writer.writerow(['SUMMARY'])
+    writer.writerow(['Module', 'IP Addresses Assigned'])
+    
+    # Count IPs
+    console_ips = sum([
+        1 if c.primary_ip_address else 0 for c in consoles
+    ] + [
+        1 if c.secondary_ip_address else 0 for c in consoles
+    ])
+    
+    device_ips = sum([
+        1 if d.primary_ip_address else 0 for d in devices
+    ] + [
+        1 if d.secondary_ip_address else 0 for d in devices
+    ])
+    
+    amp_ips = sum([1 if a.ip_address else 0 for a in amps])
+    processor_ips = sum([1 if p.ip_address else 0 for p in processors])
+    bp_ips = sum([1 if bp.ip_address else 0 for bp in belt_packs])
+    total_ips = console_ips + device_ips + amp_ips + processor_ips + bp_ips
+    
+    writer.writerow(['Mixing Consoles', console_ips])
+    writer.writerow(['I/O Devices', device_ips])
+    writer.writerow(['Amplifiers', amp_ips])
+    writer.writerow(['System Processors', processor_ips])
+    writer.writerow(['COMM Belt Packs (Hardwired)', bp_ips])
+    writer.writerow(['TOTAL', total_ips])
+    
+    return response

@@ -209,9 +209,23 @@
 {% block content %}
 <div class="ip-management-container">
     <div class="page-header">
-        <h1>🌐 IP Address Management</h1>
-        <p>Click any IP address to edit inline. Changes save automatically.</p>
+    <h1>🌐 IP Address Management</h1>
+    <p>Click any IP address to edit inline. Changes save automatically.</p>
+    
+    <!-- Export Buttons -->
+    <div style="margin-top: 15px;">
+        <a href="{% url 'planner:export_ip_address_report_pdf' %}" 
+           class="button" 
+           style="background: #4a9eff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; margin-right: 10px;">
+            📄 Export PDF Report
+        </a>
+        <a href="{% url 'planner:export_ip_address_report_csv' %}" 
+           class="button" 
+           style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">
+            📊 Export CSV Spreadsheet
+        </a>
     </div>
+</div>
     
     <!-- Status message toast -->
     <div id="statusMessage" class="status-message"></div>

@@ -81,10 +81,12 @@ urlpatterns = [
      #-----Console PDF Export-----
      path('console/<int:console_id>/export-pdf/', views.console_pdf_export, name='console_pdf_export'),
 
-
+ #-------IP Address Module---
      path('ip-addresses/', views.ip_address_report, name='ip_address_report'),
      path('ip-addresses/save/', views.save_ip_address, name='save_ip_address'),
-     #-------IP Address Module---
+     path('ip-addresses/export-pdf/', views.export_ip_address_report_pdf, name='export_ip_address_report_pdf'),
+     path('ip-addresses/export-csv/', views.export_ip_address_report_csv, name='export_ip_address_report_csv'), 
+
 
      #-------Device PDF-----
      # Device PDF exports
