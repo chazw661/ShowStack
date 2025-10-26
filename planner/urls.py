@@ -4,6 +4,7 @@ from django.contrib import admin
 from planner.views import SystemDashboardView
 from django.urls import path, include
 from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_all_locations_pdf
+from planner.utils.pdf_exports.system_report import export_system_report
 
 app_name = 'planner'  
 
@@ -117,6 +118,13 @@ urlpatterns = [
 
     path('location/<int:location_id>/pdf/', export_location_pdf, name='location_pdf_export'),
     path('locations/export-all-pdf/', export_all_locations_pdf, name='export_all_locations_pdf'),
+
+    #-----Full System PDF Report----
+
+    path('system-report/pdf/', export_system_report, name='system_report_pdf'),
+
+
+
     
 
    
