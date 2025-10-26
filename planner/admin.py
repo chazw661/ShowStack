@@ -159,9 +159,15 @@ class BaseAdmin(admin.ModelAdmin):
 class ConsoleInputInline(admin.TabularInline):
     model = ConsoleInput
     form = ConsoleInputForm
-    extra = 144
+    extra = 0
     can_delete = True
     classes = ['collapse']
+
+    def get_extra(self, request, obj=None, **kwargs):
+        """Return 144 for new consoles, 0 for existing"""
+        if obj is None:  # Creating new console
+            return 144
+        return 0  # Editing existing console
 
     
 
@@ -200,9 +206,15 @@ class ConsoleInputInline(admin.TabularInline):
 class ConsoleAuxOutputInline(admin.TabularInline):
     model = ConsoleAuxOutput
     form = ConsoleAuxOutputForm
-    extra = 72
+    extra = 0
     can_delete = True
     classes = ['collapse']
+
+    def get_extra(self, request, obj=None, **kwargs):
+        """Return 48 for new consoles, 0 for existing"""
+        if obj is None:  # Creating new console
+            return 48
+        return 0  # Editing existing console
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
@@ -229,9 +241,15 @@ class ConsoleAuxOutputInline(admin.TabularInline):
 class ConsoleMatrixOutputInline(admin.TabularInline):
     model = ConsoleMatrixOutput
     form = ConsoleMatrixOutputForm
-    extra = 36
+    extra = 0
     can_delete = True
     classes = ['collapse']
+
+    def get_extra(self, request, obj=None, **kwargs):
+        """Return 24 for new consoles, 0 for existing"""
+        if obj is None:  # Creating new console
+            return 24
+        return 0  # Editing existing console
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
