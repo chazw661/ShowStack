@@ -3,6 +3,7 @@ from . import views
 from django.contrib import admin
 from planner.views import SystemDashboardView
 from django.urls import path, include
+from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_all_locations_pdf
 
 app_name = 'planner'  
 
@@ -107,6 +108,15 @@ urlpatterns = [
     #-----Soundvision PDF----
 
     path('soundvision/<int:prediction_id>/pdf/', views.export_soundvision_pdf, name='export_soundvision_pdf'),
+
+
+    #----Project Switcher----
+    path('switch-project/<int:project_id>/', views.switch_project, name='switch_project'),
+
+    #-----Locations PDF Export----
+
+    path('location/<int:location_id>/pdf/', export_location_pdf, name='location_pdf_export'),
+    path('locations/export-all-pdf/', export_all_locations_pdf, name='export_all_locations_pdf'),
     
 
    

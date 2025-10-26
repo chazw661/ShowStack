@@ -49,7 +49,109 @@ from .models import AudioChecklist
 from .forms import ConsoleStereoOutputForm
 
 
+#----User Admin----
 
+
+from django.contrib.auth.models import User
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+
+
+from .models import (
+    Project, UserProfile, ProjectMember,)
+# ==================== PROJECT SYSTEM ADMIN ====================
+
+@admin.register(Project)
+class ProjectAdmin(admin.ModelAdmin):
+    list_display = ['name', 'owner', 'show_date', 'venue', 'get_member_count', 'updated_at', 'is_archived']
+    list_filter = ['is_archived', 'show_date', 'owner']
+    search_fields = ['name', 'venue', 'client']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = [
+        ('Project Details', {
+            'fields': ['name', 'owner', 'show_date', 'venue', 'client']
+        }),
+        ('Notes', {
+            'fields': ['notes'],
+            'classes': ['collapse']
+        }),
+        ('Status', {
+            'fields': ['is_archived', 'created_at', 'updated_at']
+        }),
+    ]
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        # Show projects owned by user or where they're a member
+        return qs.filter(owner=request.user) | qs.filter(projectmember__user=request.user)
+
+
+class ProjectMemberInline(admin.TabularInline):
+    model = ProjectMember
+    extra = 1
+    fields = ['user', 'role', 'invited_at', 'invited_by']
+    readonly_fields = ['invited_at', 'invited_by']
+    
+    def save_model(self, request, obj, form, change):
+        if not obj.invited_by:
+            obj.invited_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+# Add inline to ProjectAdmin
+ProjectAdmin.inlines = [ProjectMemberInline]
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'account_type', 'can_create_projects', 'lifetime_discount_percent', 
+                    'subscription_start', 'subscription_end']
+    list_filter = ['account_type', 'can_create_projects']
+    search_fields = ['user__username', 'user__email', 'user__first_name', 'user__last_name']
+    
+    fieldsets = [
+        ('User', {
+            'fields': ['user']
+        }),
+        ('Account Settings', {
+            'fields': ['account_type', 'can_create_projects']
+        }),
+        ('Subscription Details', {
+            'fields': ['lifetime_discount_percent', 'subscription_start', 'subscription_end'],
+            'classes': ['collapse']
+        }),
+    ]
+
+
+# Inline UserProfile in Django's User admin
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    verbose_name_plural = 'Profile'
+    fields = ['account_type', 'can_create_projects', 'lifetime_discount_percent']
+
+
+# Extend Django's User admin
+class UserAdmin(BaseUserAdmin):
+    inlines = [UserProfileInline]
+
+
+# Re-register UserAdmin
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)
+
+
+
+
+
+class BaseAdmin(admin.ModelAdmin):
+    """Base admin class with dark theme CSS applied to all admin pages"""
+    class Media:
+        css = {
+            'all': ['planner/css/custom_admin.css']
+        }
 
 #-----Console Page----
 
@@ -186,13 +288,13 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 
 @admin.register(Console)
-class ConsoleAdmin(admin.ModelAdmin):
-    list_display = ['name', 'primary_ip_address', 'secondary_ip_address', 'is_template']
-    list_filter = ['is_template']
+class ConsoleAdmin(BaseAdmin):
+    list_display = ['name', 'location','primary_ip_address', 'secondary_ip_address', 'is_template']
+    list_filter = ['is_template', 'location']
     
     fieldsets = (
         ('Console Information', {
-            'fields': ('name', 'primary_ip_address', 'secondary_ip_address', 'is_template')
+            'fields': ('name', 'location', 'primary_ip_address', 'secondary_ip_address', 'is_template')
         }),
     )
     
@@ -215,8 +317,8 @@ class ConsoleAdmin(admin.ModelAdmin):
 
     def export_buttons(self, obj):
         """Add PDF and Yamaha CSV export buttons"""
-        from django.urls import reverse
-        from django.utils.html import format_html
+       
+        
         
         # PDF export using the new URL pattern
         pdf_url = reverse('planner:console_pdf_export', args=[obj.id])
@@ -347,10 +449,55 @@ class ConsoleAdmin(admin.ModelAdmin):
         js = ['planner/js/mono_stereo_handler.js',
               'planner/js/global_nav.js',]
         css = {
-            'all': ['css/custom_admin.css', 'planner/css/console_admin.css']
+            'all': ['admin/css/dark_mode.css', 'planner/css/custom_admin.css', 'planner/css/console_admin.css']
         }
-        
 
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options based on current project"""
+        if db_field.name == "location":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Location.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def get_queryset(self, request):
+        """Filter consoles by current project"""
+        # ... your existing code continues    
+        
+    def get_queryset(self, request):
+        """Filter consoles by current project"""
+        qs = super().get_queryset(request)
+        
+        # DEBUG - print what we see
+        print(f"🔍 DEBUG: hasattr current_project: {hasattr(request, 'current_project')}")
+        if hasattr(request, 'current_project'):
+            print(f"🔍 DEBUG: Current project: {request.current_project}")
+            print(f"🔍 DEBUG: Current project ID: {request.current_project.id if request.current_project else 'None'}")
+        
+        if hasattr(request, 'current_project') and request.current_project:
+            filtered_qs = qs.filter(project=request.current_project)
+            print(f"🔍 DEBUG: Total consoles: {qs.count()}, Filtered consoles: {filtered_qs.count()}")
+            return filtered_qs
+        
+        print(f"🔍 DEBUG: No project - returning empty queryset")
+        return qs.none()
+    
+
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project to new consoles"""
+        if not change:  # Only for new objects
+            if hasattr(request, 'current_project') and request.current_project:
+                obj.project = request.current_project
+            else:
+                # Fallback: get project from session
+                project_id = request.session.get('current_project_id')
+                if project_id:
+                    from .models import Project
+                    obj.project = Project.objects.get(id=project_id)
+        super().save_model(request, obj, form, change)
 
 # ========== Device Admin ==========
 
@@ -418,7 +565,10 @@ class DeviceOutputInline(admin.TabularInline):
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
     inlines = [DeviceInputInline, DeviceOutputInline]
-    list_display = ['name', 'primary_ip_address', 'secondary_ip_address', 'device_actions',]
+    list_display = ['name','primary_ip_address', 'secondary_ip_address', 'device_actions',]
+    #list_filter = ['location',]  
+    search_fields = ['name'] 
+
 
     def get_fields(self, request, obj=None):
         """
@@ -427,8 +577,8 @@ class DeviceAdmin(admin.ModelAdmin):
         so show no fields above the inlines.
         """
         if obj is None:
-            return ['name', 'primary_ip_address', 'secondary_ip_address', 'input_count', 'output_count']
-        return ['name', 'primary_ip_address', 'secondary_ip_address']
+            return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'input_count', 'output_count']
+        return ['name', 'location','primary_ip_address', 'secondary_ip_address']
     def get_form(self, request, obj=None, **kwargs):
         if obj is None:
             kwargs['form'] = NameOnlyForm
@@ -444,18 +594,7 @@ class DeviceAdmin(admin.ModelAdmin):
     
     
     
-    def save_model(self, request, obj, form, change):
-        print("=== SAVE_MODEL DEBUG ===")
-        print(f"Form is valid: {form.is_valid()}")
-        print(f"Form errors: {form.errors}")
-        print(f"Object data: {obj.__dict__}")
-        
-        if not form.is_valid():
-            print("FORM VALIDATION FAILED!")
-            for field, errors in form.errors.items():
-                print(f"Field '{field}': {errors}")
-    
-        super().save_model(request, obj, form, change)
+
     
     def save_formset(self, request, form, formset, change):
         # If you have inline formsets
@@ -468,12 +607,7 @@ class DeviceAdmin(admin.ModelAdmin):
             print(f"POST data: {request.POST}")
         return super().changeform_view(request, object_id, form_url, extra_context)
     
-    def save_model(self, request, obj, form, change):
-        print("=== SAVE_MODEL CALLED ===")
-        print(f"Form is valid: {form.is_valid()}")
-        print(f"Form errors: {form.errors}")
-        super().save_model(request, obj, form, change)    
-
+    
 
 
 
@@ -486,8 +620,8 @@ class DeviceAdmin(admin.ModelAdmin):
     
     def device_actions(self, obj):
         """Custom column with PDF export button"""
-        from django.urls import reverse
-        from django.utils.html import format_html
+        
+       
         
         pdf_url = reverse('planner:device_pdf_export', args=[obj.id])
         
@@ -501,7 +635,41 @@ class DeviceAdmin(admin.ModelAdmin):
     device_actions.short_description = 'Actions'
 
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options based on current project"""
+        if db_field.name == "location":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Location.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
 
+
+    def get_queryset(self, request):
+        """Filter consoles by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()  # No project selected = show nothing
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project to new devices"""
+        # Debug info (from your original)
+        print("=== SAVE_MODEL CALLED ===")
+        print(f"Form is valid: {form.is_valid()}")
+        print(f"Form errors: {form.errors}")
+        
+        if not form.is_valid():
+            print("FORM VALIDATION FAILED!")
+            for field, errors in form.errors.items():
+                print(f"Field '{field}': {errors}")
+        
+        # Project assignment
+        if not change and hasattr(request, 'current_project'):
+            obj.project = request.current_project
+        
+        super().save_model(request, obj, form, change)
 #--------Amps---------
 
 from .models import AmpModel, Amp, AmpChannel
@@ -629,14 +797,43 @@ class AmpAdmin(admin.ModelAdmin):
                 'fields': cacom_fields,
                 'classes': ('collapse',)
             }))
-        
+
         return fieldsets
     
     inlines = [AmpChannelInline]
 
+    #----Only show locations in this project--
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options based on current project"""
+        if db_field.name == "location":
+            # Only show locations from the current project
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Location.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    #----Only show Amps in this project
+
+
+    def get_queryset(self, request):
+            """Filter consoles by current project"""
+            qs = super().get_queryset(request)
+            if hasattr(request, 'current_project') and request.current_project:
+                return qs.filter(project=request.current_project)
+            return qs.none()  # No project selected = show nothing
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project to new consoles"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
+
+
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
-    list_display = ['name', 'description', 'amp_count', 'processor_count']
+    list_display = ['name', 'description', 'amp_count', 'processor_count', 'export_pdf_button']
     search_fields = ['name', 'description']
     ordering = ['name']
     
@@ -645,6 +842,16 @@ class LocationAdmin(admin.ModelAdmin):
             'fields': ('name', 'description')
         }),
     )
+
+    def export_pdf_button(self, obj):
+        """PDF export button for each location"""
+        url = reverse('planner:location_pdf_export', args=[obj.id])
+        return format_html(
+            '<a class="button" href="{}" target="_blank">📄 Export PDF</a>',
+            url
+        )
+    export_pdf_button.short_description = 'Export'
+    export_pdf_button.allow_tags = True
     
     def amp_count(self, obj):
         """Show how many amps are in this location"""
@@ -656,7 +863,18 @@ class LocationAdmin(admin.ModelAdmin):
         return obj.system_processors.count()
     processor_count.short_description = 'Processors'
                 
-
+    def get_queryset(self, request):
+        """Filter consoles by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()  # No project selected = show nothing
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project to new consoles"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
 
 
         #------------Processor------
@@ -665,6 +883,7 @@ class SystemProcessorAdmin(admin.ModelAdmin):
     list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at', 'configure_button']
     list_filter = ['device_type', 'location', 'created_at']
     search_fields = ['name', 'ip_address']
+    exclude = ['project']
 
     def configure_button(self, obj):
      if obj.pk:  # Only show for saved objects
@@ -749,9 +968,34 @@ class SystemProcessorAdmin(admin.ModelAdmin):
             extra_context['show_configure_button'] = True
             extra_context['configure_url'] = configure_url
         return super().change_view(request, object_id, form_url, extra_context)
+    
 
+    #----Only show Equip Locaions for this project---
 
-#--------P1 Processor----
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options based on current project"""
+        if db_field.name == "location":
+            # Only show locations from the current project
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Location.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    #-----Only show Processors for this project----
+    def get_queryset(self, request):
+        """Filter consoles by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()  # No project selected = show nothing
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project to new consoles"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
+
 
 
 
@@ -1671,7 +1915,18 @@ class PACableAdmin(admin.ModelAdmin):
         js = ('planner/js/pa_cable_calculations.js',)
 
 
-
+    def get_queryset(self, request):
+        """Filter by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
 
                 #--------COMM Page-------
 
@@ -1782,7 +2037,7 @@ class CommCrewNameAdmin(admin.ModelAdmin):
     def import_csv_view(self, request):
         """Redirect to the import view."""
         from django.shortcuts import redirect
-        from django.urls import reverse
+    
         return redirect('planner:import_comm_crew_names_csv')
     
     def changelist_view(self, request, extra_context=None):
@@ -2056,6 +2311,7 @@ class CommBeltPackAdminForm(forms.ModelForm):
         }
         
 
+        
 
 @admin.register(CommBeltPack)
 class CommBeltPackAdmin(admin.ModelAdmin):
@@ -2198,6 +2454,21 @@ class CommBeltPackAdmin(admin.ModelAdmin):
         extra_context = extra_context or {}
         extra_context['show_pdf_export'] = True
         return super().changelist_view(request, extra_context)
+    
+
+    def get_queryset(self, request):
+            """Filter by current project"""
+            qs = super().get_queryset(request)
+            if hasattr(request, 'current_project') and request.current_project:
+                return qs.filter(project=request.current_project)
+            return qs.none()
+        
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
+
     
     @admin.action(description='Check out selected belt packs (Wireless only)')
     def check_out_beltpacks(self, request, queryset):
@@ -2423,6 +2694,7 @@ class ShowDayAdmin(admin.ModelAdmin):
     list_filter = ('date',)
     search_fields = ('name',)
     ordering = ['date']
+    exclude = ['project']
     
     def session_count(self, obj):
         return obj.sessions.count()
@@ -2444,6 +2716,18 @@ class ShowDayAdmin(admin.ModelAdmin):
     view_day_link.short_description = "View"
 
 
+    def get_queryset(self, request):
+        """Filter by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
 
 @admin.register(Presenter)
 class PresenterAdmin(admin.ModelAdmin):
@@ -2915,6 +3199,19 @@ class PowerDistributionPlanAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
+    def get_queryset(self, request):
+        """Filter by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
+
 
 @admin.register(AmplifierAssignment)
 class AmplifierAssignmentAdmin(admin.ModelAdmin):
@@ -3031,6 +3328,18 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
                 messages.error(request, f'Error parsing PDF: {str(e)}')
 
 
+    def get_queryset(self, request):
+        """Filter by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(SpeakerArray)
@@ -3101,7 +3410,6 @@ class DarkThemeAdminMixin:
         js = (
             'audiopatch/js/dark_theme.js',
         )
-
 
 
 
