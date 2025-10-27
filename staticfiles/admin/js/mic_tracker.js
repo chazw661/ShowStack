@@ -228,13 +228,13 @@ function updateSharedPresentersList() {
         item.className = 'shared-presenter-item';
         item.innerHTML = `
             <span>${presenter}</span>
-            <button type="button" class="remove-btn" onclick="removeSharedPresenter(${index})" title="Remove">×</button>
+            <button type="button" class="remove-btn" onclick="removeSharedPresenterModal(${index})" title="Remove">×</button>
         `;
         listContainer.appendChild(item);
     });
 }
 
-// Add a new shared presenter
+// Add a new shared presenter (modal version)
 function addSharedPresenter() {
     const input = document.getElementById('newPresenterInput');
     if (!input) return;
@@ -265,8 +265,8 @@ function addSharedPresenter() {
     input.focus();
 }
 
-// Remove a shared presenter
-function removeSharedPresenter(index) {
+// Remove a shared presenter (modal version)
+function removeSharedPresenterModal(index) {
     if (index >= 0 && index < currentSharedPresenters.length) {
         const removedName = currentSharedPresenters[index];
         currentSharedPresenters.splice(index, 1);
@@ -419,6 +419,236 @@ function closeSharedPresenterModal() {
     }
 }
 
+// ============ INLINE SHARED PRESENTER FUNCTIONS ============
+
+/**
+ * Toggle the expandable shared presenters section
+ */
+function togglePresenters(assignmentId) {
+    const row = document.querySelector(`[data-assignment-id="${assignmentId}"]`);
+    if (!row) return;
+    
+    const container = row.querySelector('.shared-presenters-container');
+    const expandBtn = row.querySelector('.btn-expand-presenters, .btn-add-presenter');
+    
+    if (!container) return;
+    
+    const isVisible = container.style.display !== 'none';
+    
+    if (isVisible) {
+        // Collapse
+        container.style.display = 'none';
+        if (expandBtn && expandBtn.querySelector('.expand-icon')) {
+            expandBtn.querySelector('.expand-icon').textContent = '▶';
+        }
+    } else {
+        // Expand
+        container.style.display = 'block';
+        if (expandBtn && expandBtn.querySelector('.expand-icon')) {
+            expandBtn.querySelector('.expand-icon').textContent = '▼';
+        }
+        
+        // Focus on add input
+        const addInput = container.querySelector('.add-presenter-input');
+        if (addInput) {
+            setTimeout(() => addInput.focus(), 100);
+        }
+    }
+}
+
+/**
+ * Add a shared presenter inline (no modal)
+ */
+async function addSharedPresenterInline(assignmentId) {
+    const input = document.getElementById(`newPresenter_${assignmentId}`);
+    if (!input) return;
+    
+    const presenterName = input.value.trim();
+    
+    if (!presenterName) {
+        showNotification('Please enter a presenter name', 'warning');
+        input.focus();
+        return;
+    }
+    
+    try {
+        const response = await fetch('/audiopatch/api/mic/add-shared-presenter/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({
+                assignment_id: assignmentId,
+                presenter_name: presenterName
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            
+            // Clear input
+            input.value = '';
+            
+            // Reload the page to update the UI
+            // TODO: Could be optimized to update inline without reload
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showNotification(data.error || 'Failed to add presenter', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding shared presenter:', error);
+        showNotification('Error adding presenter', 'error');
+    }
+}
+
+/**
+ * Remove a shared presenter inline
+ */
+async function removeSharedPresenter(assignmentId, presenterName) {
+    if (!confirm(`Remove ${presenterName} from shared presenters?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/audiopatch/api/mic/remove-shared-presenter/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({
+                assignment_id: assignmentId,
+                presenter_name: presenterName
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            
+            // Reload the page to update the UI
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showNotification(data.error || 'Failed to remove presenter', 'error');
+        }
+    } catch (error) {
+        console.error('Error removing shared presenter:', error);
+        showNotification('Error removing presenter', 'error');
+    }
+}
+
+/**
+ * Handle D-MIC checkbox change with automatic presenter rotation
+ * IMPROVED VERSION - Prevents checkbox race conditions
+ */
+async function handleDmicChange(assignmentId, isChecked) {
+    // Get the checkbox element FIRST
+    const checkbox = document.querySelector(
+        `[data-assignment-id="${assignmentId}"] .dmic-checkbox`
+    );
+    
+    if (!checkbox) {
+        console.error('Checkbox not found for assignment:', assignmentId);
+        return;
+    }
+    
+    // Store the ACTUAL current state (before browser toggles it)
+    const currentState = checkbox.checked;
+    
+    // Since the browser already toggled it, we need to toggle it back
+    // and then let our code control it after the server responds
+    checkbox.checked = !currentState;
+    
+    try {
+        const response = await fetch('/audiopatch/api/mic/dmic-and-rotate/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({
+                assignment_id: assignmentId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            
+            // NOW update the checkbox to the server's state
+            checkbox.checked = data.is_d_mic;
+            
+            // NEW: Update the MIC'D checkbox too (mutually exclusive)
+            const micdCheckbox = document.querySelector(
+                `[data-assignment-id="${assignmentId}"] .mic-checkbox:not(.dmic-checkbox)`
+            );
+            if (micdCheckbox && data.is_micd !== undefined) {
+                micdCheckbox.checked = data.is_micd;
+            }
+            
+            // If presenter rotated, reload to show new current presenter
+            if (data.current_presenter !== data.previous_presenter) {
+                setTimeout(() => location.reload(), 800);
+            }
+        } else {
+            showNotification(data.error || 'Failed to update D-MIC status', 'error');
+            
+            // Revert checkbox to original state on error
+            checkbox.checked = currentState;
+        }
+    } catch (error) {
+        console.error('Error updating D-MIC:', error);
+        showNotification('Error updating D-MIC status', 'error');
+        
+        // Revert checkbox to original state on error
+        checkbox.checked = currentState;
+    }
+}
+
+            
+        
+
+/**
+ * Reset presenter rotation back to primary presenter
+ */
+async function resetPresenterRotation(assignmentId) {
+    if (!confirm('Reset to primary presenter?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/audiopatch/api/mic/reset-rotation/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({
+                assignment_id: assignmentId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            
+            // Reload to update UI
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showNotification(data.error || 'Failed to reset rotation', 'error');
+        }
+    } catch (error) {
+        console.error('Error resetting rotation:', error);
+        showNotification('Error resetting rotation', 'error');
+    }
+}
+
 // ============ UI UPDATE FUNCTIONS ============
 
 function updateSessionStats(assignmentId, stats) {
@@ -546,15 +776,29 @@ function showNotification(message, type = 'info') {
 
 // ============ SESSION MANAGEMENT FUNCTIONS ============
 
+
 // Add new day
 function addNewDay() {
-    const date = prompt('Enter date for new day (YYYY-MM-DD):');
-    if (!date) return;
+    const dateStr = prompt('Enter date for new day (MM/DD/YYYY):');
+    if (!dateStr) return;
+    
+    // Convert MM/DD/YYYY to YYYY-MM-DD for the backend
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) {
+        alert('Invalid date format. Please use MM/DD/YYYY');
+        return;
+    }
+    
+    const month = parts[0].padStart(2, '0');
+    const day = parts[1].padStart(2, '0');
+    const year = parts[2];
+    
+    const isoDate = `${year}-${month}-${day}`;
     
     const name = prompt('Enter optional name for this day:');
     
     // Redirect to admin to add new day
-    window.location.href = `/admin/planner/showday/add/?date=${date}&name=${encodeURIComponent(name || '')}`;
+    window.location.href = `/admin/planner/showday/add/?date=${isoDate}&name=${encodeURIComponent(name || '')}`;
 }
 
 // Add new session
@@ -734,5 +978,32 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.appendChild(style);
     }
     
-    console.log('Mic Tracker initialized with shared presenter support');
+    console.log('Mic Tracker initialized with inline shared presenter support');
 });
+
+
+/**
+ * Load presenters list for autocomplete
+ */
+async function loadPresentersList() {
+    try {
+        const response = await fetch('/audiopatch/api/presenters/list/');
+        const data = await response.json();
+        
+        if (data.presenters) {
+            const datalist = document.getElementById('presenters-datalist');
+            datalist.innerHTML = ''; // Clear existing options
+            
+            data.presenters.forEach(presenter => {
+                const option = document.createElement('option');
+                option.value = presenter.name;
+                datalist.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading presenters list:', error);
+    }
+}
+
+// Load presenters when page loads
+document.addEventListener('DOMContentLoaded', loadPresentersList);

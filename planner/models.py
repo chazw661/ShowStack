@@ -7,7 +7,99 @@ from decimal import Decimal
 import math
 from django import forms
 
+
+
+
+from django.contrib.auth.models import User
+from django.db import models
+
+# ==================== PROJECT SYSTEM MODELS ====================
+
+class Project(models.Model):
+    """Container for all show data - allows multi-tenancy"""
+    name = models.CharField(max_length=200, help_text="Show/Event name")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_projects')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Show details
+    show_date = models.DateField(blank=True, null=True)
+    venue = models.CharField(max_length=200, blank=True)
+    client = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True)
+    
+    # Status
+    is_archived = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['-updated_at']
+        
+    def __str__(self):
+        return self.name
+    
+    def get_member_count(self):
+        return self.projectmember_set.count() + 1  # +1 for owner
+
+
+class UserProfile(models.Model):
+    """Extended user profile for subscription management"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    
+    ACCOUNT_TYPES = [
+        ('super_user', 'Super User'),
+        ('beta', 'Beta Tester'),
+        ('paid', 'Paid Subscriber'),
+        ('free', 'Free Account'),
+    ]
+    
+    account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPES, default='free')
+    can_create_projects = models.BooleanField(default=False)
+    
+    # Subscription details
+    lifetime_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, 
+                                                     help_text="Discount % for lifetime (e.g., 50.00 for 50%)")
+    subscription_start = models.DateField(blank=True, null=True)
+    subscription_end = models.DateField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "User Profile"
+        verbose_name_plural = "User Profiles"
+    
+    def __str__(self):
+        return f"{self.user.username} ({self.get_account_type_display()})"
+
+
+class ProjectMember(models.Model):
+    """Users who have been invited to collaborate on a project"""
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    
+    ROLES = [
+        ('editor', 'Editor - Can view and edit'),
+        ('viewer', 'Viewer - Can only view'),
+    ]
+    
+    role = models.CharField(max_length=20, choices=ROLES, default='editor')
+    invited_at = models.DateTimeField(auto_now_add=True)
+    invited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, 
+                                    related_name='sent_invitations')
+    
+    class Meta:
+        unique_together = ['project', 'user']
+        verbose_name = "Project Member"
+        verbose_name_plural = "Project Members"
+    
+    def __str__(self):
+        return f"{self.user.username} → {self.project.name} ({self.role})"
+
+#-----Console Model----
+
 class Console(models.Model):
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
+    location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
+    location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='consoles') 
     name = models.CharField(max_length=100)
     is_template = models.BooleanField(
         default=False, 
@@ -97,7 +189,6 @@ class ConsoleStereoOutput(models.Model):
         ('R', 'Stereo Right'),
         ('M', 'Mono'),
     ]
-    
     console = models.ForeignKey(Console, on_delete=models.CASCADE)
     stereo_type = models.CharField(max_length=2, choices=STEREO_CHOICES, verbose_name="Buss")
     name = models.CharField(max_length=100, blank=True, null=True)
@@ -118,6 +209,8 @@ class ConsoleStereoOutput(models.Model):
 from django.db import models
 
 class Device(models.Model):
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
+    location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
     name = models.CharField(max_length=200)
     input_count = models.PositiveIntegerField(default=0)
     output_count = models.PositiveIntegerField(default=0)
@@ -190,6 +283,7 @@ class DeviceOutput(models.Model):
 
 class Location(models.Model):
     """Physical locations where amplifiers are deployed"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
     name = models.CharField(max_length=100, help_text="e.g., HL LA Racks, HR LA Racks, Monitor World")
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -198,14 +292,14 @@ class Location(models.Model):
         return self.name
     
     class Meta:
-        verbose_name = "Location"
-        verbose_name_plural = "    └─ Locations"  # Child
+        verbose_name_plural = "Equip Location"
+        verbose_name_plural = "Equip Locations"  # Child
         ordering = ['name']  # or ['id']
 
 
 
 class AmpModel(models.Model):
-    """Predefined amplifier models with specifications"""
+    """Predefined amplifier models with specifications"""  
     manufacturer = models.CharField(max_length=100)
     model_name = models.CharField(max_length=100)
     channel_count = models.IntegerField()
@@ -235,6 +329,7 @@ class AmpModel(models.Model):
 
 class Amp(models.Model):
     """Individual amplifier instance"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
     location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='amps')
     amp_model = models.ForeignKey(AmpModel, on_delete=models.PROTECT, 
         null=True,  
@@ -367,7 +462,8 @@ class SystemProcessor(models.Model):
         ('P1', "L'Acoustics P1"),
         ('GALAXY', 'Meyer GALAXY'),
     ]
-    
+
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
     name = models.CharField(max_length=200, help_text="Device name/identifier")
     device_type = models.CharField(
         max_length=20,
@@ -530,7 +626,7 @@ class P1Output(models.Model):
         ('AES', 'AES/EBU'),
         ('AVB', 'AVB'),
     ]
-    
+
     BUS_CHOICES = [(i, f'Bus {i}') for i in range(1, 9)]  # Bus 1-8
     
     p1_processor = models.ForeignKey(P1Processor, on_delete=models.CASCADE, related_name='outputs')
@@ -621,7 +717,7 @@ class GalaxyOutput(models.Model):
         ('AES', 'AES/EBU'),
         ('AVB', 'AVB/Milan'),
     ]
-    
+
     galaxy_processor = models.ForeignKey(
         GalaxyProcessor,
         on_delete=models.CASCADE,
@@ -659,6 +755,7 @@ class GalaxyOutput(models.Model):
 
 class PAZone(models.Model):
     """User-defined PA zones"""
+
     name = models.CharField(
         max_length=20, 
         unique=True,
@@ -771,6 +868,7 @@ class PACableSchedule(models.Model):
         
     ]
     
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
     # Fields matching spreadsheet columns
     label = models.ForeignKey(
         PAZone,
@@ -1069,6 +1167,8 @@ class CommBeltPack(models.Model):
         ('', 'None'),
     ]
     
+
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
     # System type field - NEW
     system_type = models.CharField(
         max_length=10,
@@ -1208,6 +1308,7 @@ import json
 
 class ShowDay(models.Model):
     """Represents a day in the show schedule"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE) 
     date = models.DateField(unique=True)
     name = models.CharField(max_length=100, blank=True, help_text="Optional name for the day (e.g., 'Day 1 - Setup')")
     is_collapsed = models.BooleanField(default=False, help_text="UI state: whether this day is collapsed in the view")
@@ -1580,7 +1681,7 @@ class MicShowInfo(models.Model):
 # Add these models to your existing planner/models.py file
 
 class AmplifierProfile(models.Model):
-    """Stores amplifier specifications for power calculations"""
+    """Stores amplifier specifications for power calculations""" 
     manufacturer = models.CharField(max_length=100)
     model = models.CharField(max_length=100)
     
@@ -1666,6 +1767,7 @@ class AmplifierProfile(models.Model):
 
 class PowerDistributionPlan(models.Model):
     """Main power distribution planning for a show"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE) 
     show_day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='power_plans')
     venue_name = models.CharField(max_length=200)
     
@@ -1846,6 +1948,7 @@ class AudioChecklist(models.Model):
             #--------Prediction Module----
 class SoundvisionPrediction(models.Model):
     """Main prediction file from L'Acoustics Soundvision"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE) 
     show_day = models.ForeignKey('ShowDay', on_delete=models.CASCADE, related_name='predictions')
     file_name = models.CharField(max_length=255)
     version = models.CharField(max_length=50, blank=True)

@@ -85,15 +85,19 @@
 }
 
 .btn-secondary:hover {
+    
     background: #666;
 }
 
-.btn-export {
-    background: #28a745;
-}
-
-.btn-export:hover {
-    background: #218838;
+/* Export button - darker green for better readability */
+a.btn-export,
+a.btn-export:link,
+a.btn-export:visited,
+a.btn-export:hover {
+    background: #28a745 !important;  /* Darker green instead of #00ff88 */
+    color: #fff !important;
+    border: 2px solid #28a745 !important;
+    text-decoration: none !important;
 }
 
 .btn-sm {
@@ -186,6 +190,7 @@
     border-radius: 6px;
     padding: 15px;
     min-height: 400px;
+    min-width: 650px;
 }
 
 .session-column.empty {
@@ -252,7 +257,7 @@
 
 .mic-grid-header {
     display: grid;
-    grid-template-columns: 50px 100px 1fr 60px 60px;
+    grid-template-columns: 50px 100px 2fr 60px 60px;
     gap: 10px;
     padding: 8px 5px;
     background: #333;
@@ -264,7 +269,7 @@
 
 .mic-row {
     display: grid;
-    grid-template-columns: 50px 100px 1fr 60px 60px;
+    grid-template-columns: 50px 100px 2fr 60px 60px;
     gap: 10px;
     padding: 5px;
     border-bottom: 1px solid #333;
@@ -561,8 +566,6 @@ body.dark .mic-grid-header {
     }
 }
 
-/* Add these styles to your planner/static/admin/css/mic_tracker.css file */
-
 /* Modal Styles */
 .modal {
     position: fixed;
@@ -769,8 +772,6 @@ body.dark .mic-grid-header {
     font-size: 0.9em;
 }
 
-/* Add these styles to your mic_tracker.css file */
-
 /* Presenter input group styling */
 .presenter-input-group {
     display: flex;
@@ -847,4 +848,369 @@ body.dark .mic-grid-header {
     content: "+";
     font-size: 18px;
     font-weight: bold;
+}
+
+/* ============================================
+   INLINE SHARED PRESENTER STYLES
+   ============================================ */
+
+/* Presenter Row Structure */
+.presenter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    transition: background-color 0.2s ease;
+}
+
+.presenter-row.primary-presenter {
+    margin-bottom: 4px;
+}
+
+.presenter-row.shared-presenter {
+    padding-left: 8px;
+    border-left: 2px solid #4a90e2;
+    margin: 4px 0;
+}
+
+.presenter-row.shared-presenter:hover {
+    background-color: rgba(74, 144, 226, 0.05);
+}
+
+/* Presenter Order Indicators */
+.presenter-order {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 22px;
+    background: linear-gradient(135deg, #4a90e2, #357abd);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+}
+
+.shared-presenter .presenter-order {
+    background: linear-gradient(135deg, #6b6b6b, #4a4a4a);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Active Presenter Styling */
+.presenter-input.active-presenter {
+    border-left: 3px solid #2ecc71 !important;
+    background-color: rgba(46, 204, 113, 0.08) !important;
+    font-weight: 500;
+}
+
+/* CURRENT Badge */
+.current-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: #fff;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    box-shadow: 0 2px 4px rgba(46, 204, 113, 0.4);
+    animation: pulse 2s ease-in-out infinite;
+    margin-left: 8px;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Expand/Collapse Button */
+.btn-expand-presenters,
+.btn-add-presenter {
+    background: #2b2b2b;
+    border: 1px solid #444;
+    color: #aaa;
+    padding: 4px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-expand-presenters:hover,
+.btn-add-presenter:hover {
+    background: #3a3a3a;
+    border-color: #4a90e2;
+    color: #4a90e2;
+}
+
+.btn-expand-presenters .expand-icon {
+    font-size: 10px;
+    transition: transform 0.2s ease;
+}
+
+.btn-expand-presenters .presenter-count {
+    font-weight: bold;
+    color: #4a90e2;
+}
+
+.btn-add-presenter {
+    font-size: 16px;
+    padding: 4px 10px;
+}
+
+/* Shared Presenters Container */
+.shared-presenters-container {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid #333;
+    border-radius: 6px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Add Presenter Row */
+.add-presenter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #333;
+}
+
+.add-presenter-input {
+    flex: 1;
+    padding: 6px 10px;
+    background: #1a1a1a;
+    border: 1px solid #444;
+    color: #e0e0e0;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.add-presenter-input:focus {
+    outline: none;
+    border-color: #4a90e2;
+    background: #222;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.1);
+}
+
+.add-presenter-input::placeholder {
+    color: #666;
+}
+
+.btn-add-inline {
+    background: linear-gradient(135deg, #4a90e2, #357abd);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+}
+
+.btn-add-inline:hover {
+    background: linear-gradient(135deg, #357abd, #2868a8);
+    transform: scale(1.05);
+    box-shadow: 0 3px 6px rgba(74, 144, 226, 0.4);
+}
+
+.btn-add-inline:active {
+    transform: scale(0.98);
+}
+
+/* Remove Presenter Button */
+.btn-remove-presenter {
+    background: #c44;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-remove-presenter:hover {
+    background: #e55;
+    transform: scale(1.1);
+}
+
+.btn-remove-presenter:active {
+    transform: scale(0.95);
+}
+
+/* Reset Button */
+.reset-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #333;
+    display: flex;
+    justify-content: center;
+}
+
+.btn-reset-rotation {
+    background: linear-gradient(135deg, #9b59b6, #8e44ad);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(155, 89, 182, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-reset-rotation:hover {
+    background: linear-gradient(135deg, #8e44ad, #7d3c98);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(155, 89, 182, 0.5);
+}
+
+.btn-reset-rotation:active {
+    transform: translateY(0);
+}
+
+/* Column Presenter Container Fix */
+.col-presenter {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+}
+
+/* Presenter Input Override for Shared Rows */
+.shared-presenter .presenter-input {
+    background: #2a2a2a;
+    border-color: #555;
+    cursor: default;
+}
+
+.shared-presenter .presenter-input:focus {
+    border-color: #555;
+    background: #2a2a2a;
+}
+
+/* Mic Row Visual Feedback */
+.mic-row.is-micd {
+    background: rgba(46, 204, 113, 0.05);
+}
+
+.mic-row.is-micd .presenter-input.active-presenter {
+    border-left-color: #2ecc71;
+}
+
+/* Responsive Adjustments for Shared Presenters */
+@media (max-width: 900px) {
+    .presenter-order {
+        min-width: 24px;
+        height: 20px;
+        font-size: 10px;
+    }
+    
+    .current-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+    
+    .btn-expand-presenters,
+    .btn-add-presenter {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+    
+    .shared-presenters-container {
+        padding: 6px;
+    }
+}
+
+/* Smooth Transitions */
+.presenter-row,
+.presenter-input,
+.btn-expand-presenters,
+.btn-add-presenter,
+.btn-remove-presenter,
+.btn-reset-rotation {
+    transition: all 0.2s ease;
+}
+
+/* Focus States */
+.btn-expand-presenters:focus,
+.btn-add-presenter:focus,
+.btn-add-inline:focus,
+.btn-remove-presenter:focus,
+.btn-reset-rotation:focus {
+    outline: 2px solid #4a90e2;
+    outline-offset: 2px;
+}
+
+/* Loading State for Buttons */
+.btn-add-inline:disabled,
+.btn-reset-rotation:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Visual Hierarchy */
+.primary-presenter {
+    position: relative;
+    z-index: 2;
+}
+
+.shared-presenter {
+    position: relative;
+    z-index: 1;
+}
+
+/* Scrollbar Styling for Shared Container (if many presenters) */
+.shared-presenters-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.shared-presenters-container::-webkit-scrollbar-track {
+    background: #1a1a1a;
+    border-radius: 3px;
+}
+
+.shared-presenters-container::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 3px;
+}
+
+.shared-presenters-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }

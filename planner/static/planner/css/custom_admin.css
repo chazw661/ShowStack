@@ -1,3 +1,27 @@
+/* Override Django's light theme with dark theme */
+:root {
+    --body-bg: #1a1a1a !important;
+    --body-fg: #f0f0f0 !important;
+    --darkened-bg: #2a2a2a !important;
+    --selected-bg: #333333 !important;
+    --border-color: #444 !important;
+    --hairline-color: #333 !important;
+}
+
+/* Force dark backgrounds on specific elements */
+body, #content-main, .module, #result_list tbody tr {
+    background-color: var(--body-bg) !important;
+    color: var(--body-fg) !important;
+}
+
+#result_list tbody tr:nth-child(even) {
+    background-color: var(--darkened-bg) !important;
+}
+
+
+
+
+
 select.mono_stereo-select,
 select.variable-select {
     padding: 2px 6px !important;

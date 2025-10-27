@@ -33,5 +33,31 @@
     </div>
 </div>
 
+<!-- System Report Section -->
+<div style="margin: 20px;">
+    <div class="module" style="background: #2a2a2a; border: 1px solid #4a9eff; border-radius: 4px;">
+        <h2 style="background: #4a9eff; color: white; padding: 10px 15px; margin: 0; border-radius: 4px 4px 0 0;">
+            📊 System Report
+        </h2>
+        <table style="width: 100%;">
+            <tbody>
+                <tr>
+                    <td style="padding: 15px;">
+                        <a href="{% url 'planner:system_report_pdf' %}"
+                           style="color: #4a9eff; text-decoration: none; font-weight: bold; font-size: 16px;">
+                            Generate Complete System Report PDF
+                        </a>
+                        <p style="color: #999; margin: 5px 0 0 0; font-size: 13px;">
+                            Comprehensive PDF report including Locations, IP Addresses, Consoles, Devices, Amplifiers, Processors, PA Cables, COMM, and Power Distribution
+                        </p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
 {{ block.super }}
 {% endblock %}
+

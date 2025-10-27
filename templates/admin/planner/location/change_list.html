@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'planner:export_all_locations_pdf' %}" class="button" style="background-color: #4a9eff; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px;">
+            📄 Export All Locations PDF
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

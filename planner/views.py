@@ -30,6 +30,8 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from planner.models import Presenter
 import csv
+from django.shortcuts import redirect
+from .models import Project
 
 
 # Model imports - all together
@@ -1639,11 +1641,9 @@ def update_amplifier_assignment(request, assignment_id):
 
 # Add these two view functions to planner/views.py
 
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404
-import json
+
+
+
 
 @login_required
 @require_http_methods(["GET"])
@@ -2387,10 +2387,8 @@ def import_presenters_csv(request):
 #-------SoundVidsion PDF Export----
 # Add this to planner/views.py
 
-from django.contrib.admin.views.decorators import staff_member_required
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
-from .models import SoundvisionPrediction
+
+
 
 @staff_member_required
 def export_soundvision_pdf(request, prediction_id):
@@ -2415,7 +2413,7 @@ def export_ip_address_report_pdf(request):
     Export IP Address Report as PDF.
     """
     from .utils.pdf_exports.ip_address_report_pdf import generate_ip_address_report_pdf
-    from django.http import HttpResponse
+
     
     # Generate PDF
     buf = generate_ip_address_report_pdf()
@@ -2435,7 +2433,7 @@ def export_ip_address_report_csv(request):
     Export IP Address Report as CSV for spreadsheet import.
     """
     import csv
-    from django.http import HttpResponse
+
     from .models import Console, Device, Amp, SystemProcessor, CommBeltPack
     
     # Create the HttpResponse object with CSV header
@@ -2561,3 +2559,28 @@ def export_ip_address_report_csv(request):
     writer.writerow(['TOTAL', total_ips])
     
     return response
+
+
+
+#-----Project Switcher View---
+
+
+@staff_member_required
+def switch_project(request, project_id):
+    """Switch the current active project"""
+    try:
+        project = Project.objects.get(id=project_id)
+        
+        # Verify user has access
+        if project.owner == request.user or \
+           project.projectmember_set.filter(user=request.user).exists():
+            request.session['current_project_id'] = project_id
+            request.session.modified = True 
+            
+            # Redirect back to where they came from, or admin home if no referrer
+            referer = request.META.get('HTTP_REFERER', '/admin/')
+            return redirect(referer)
+        else:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)

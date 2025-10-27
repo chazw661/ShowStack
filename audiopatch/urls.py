@@ -31,6 +31,15 @@ urlpatterns = [
     
     # Include all planner URLs under /audiopatch/ prefix
     path('audiopatch/', include('planner.urls')),
+
+
+    # Console Template Library
+    path('console-template-library/', 
+         lambda request: __import__('planner.admin', fromlist=['ConsoleAdmin']).ConsoleAdmin(
+             __import__('planner.models', fromlist=['Console']).Console, 
+             admin.site
+         ).console_template_library_view(request),
+         name='console_template_library'),
     
     # Root redirect to mic tracker
     path('', lambda request: redirect('/audiopatch/mic-tracker/')),

@@ -20,9 +20,9 @@ from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment
 from django.db.models import Sum 
 from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
-from django.contrib import messages 
 from . import admin_ordering
 from .models import ConsoleStereoOutput
+from django.urls import path
 
 # Python standard library imports
 import csv
@@ -47,6 +47,7 @@ from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 from .models import AudioChecklist
 from .forms import ConsoleStereoOutputForm
+
 
 
 #----User Admin----
@@ -323,7 +324,7 @@ class ConsoleAdmin(BaseAdmin):
         ConsoleStereoOutputInline,
     ]
     
-    actions = ['export_yamaha_rivage_csvs', 'duplicate_console']
+    actions = ['export_yamaha_rivage_csvs', 'duplicate_console',]
     
     def name_with_template_badge(self, obj):
         if obj.is_template:
@@ -365,6 +366,7 @@ class ConsoleAdmin(BaseAdmin):
             return
         
         original = queryset.first()
+
         
         # Create new console
         new_console = Console.objects.create(
@@ -424,6 +426,124 @@ class ConsoleAdmin(BaseAdmin):
         self.message_user(request, f"Successfully duplicated '{original.name}' as '{new_console.name}'")
         return redirect(f'/admin/planner/console/{new_console.id}/change/')
     
+
+    
+
+    def console_template_library_view(self, request):
+        """
+        Display all console templates from all projects.
+        Allow user to import template to current project.
+        """
+        # Get current project
+        current_project = getattr(request, 'current_project', None)
+        
+        if not current_project:
+            messages.error(request, "No project selected. Please select a project first.")
+            return redirect('admin:planner_console_changelist')
+        
+        # Handle template import POST request
+        if request.method == 'POST':
+            template_id = request.POST.get('template_id')
+            if template_id:
+                try:
+                    original = Console.objects.get(id=template_id, is_template=True)
+                    
+                    # Don't import if already in current project
+                    if original.project.id == current_project.id:
+                        messages.warning(request, f"Template '{original.name}' is already in this project.")
+                        return redirect('admin:console_template_library')
+                    
+                    # Create new console in current project
+                    new_console = Console.objects.create(
+                        project=current_project,
+                        name=f"{original.name} (from {original.project.name})",
+                        is_template=False,
+                        primary_ip_address=original.primary_ip_address,
+                        secondary_ip_address=original.secondary_ip_address,
+                    )
+                    
+                    # Duplicate all related inputs
+                    for input_obj in original.consoleinput_set.all():
+                        ConsoleInput.objects.create(
+                            console=new_console,
+                            dante_number=input_obj.dante_number,
+                            input_ch=input_obj.input_ch,
+                            source=input_obj.source,
+                            group=input_obj.group,
+                            dca=input_obj.dca,
+                            mute=input_obj.mute,
+                            direct_out=input_obj.direct_out,
+                            omni_in=input_obj.omni_in,
+                        )
+                    
+                    # Duplicate aux outputs
+                    for aux in original.consoleauxoutput_set.all():
+                        ConsoleAuxOutput.objects.create(
+                            console=new_console,
+                            dante_number=aux.dante_number,
+                            aux_number=aux.aux_number,
+                            name=aux.name,
+                            mono_stereo=aux.mono_stereo,
+                            bus_type=aux.bus_type,
+                            omni_in=aux.omni_in,
+                            omni_out=aux.omni_out,
+                        )
+                    
+                    # Duplicate matrix outputs
+                    for matrix in original.consolematrixoutput_set.all():
+                        ConsoleMatrixOutput.objects.create(
+                            console=new_console,
+                            dante_number=matrix.dante_number,
+                            matrix_number=matrix.matrix_number,
+                            name=matrix.name,
+                            mono_stereo=matrix.mono_stereo,
+                            destination=matrix.destination,
+                            omni_out=matrix.omni_out,
+                        )
+                    
+                    messages.success(
+                        request, 
+                        f"Successfully imported template '{original.name}' as '{new_console.name}'"
+                    )
+                    return redirect(f'/admin/planner/console/{new_console.id}/change/')
+                    
+                except Console.DoesNotExist:
+                    messages.error(request, "Template not found.")
+                    return redirect('admin:console_template_library')
+                except Exception as e:
+                    messages.error(request, f"Error importing template: {str(e)}")
+                    return redirect('admin:console_template_library')
+        
+        # GET request - show template library
+        all_templates = Console.objects.filter(is_template=True).select_related('project').annotate(
+            inputs_count=Count('consoleinput', distinct=True),
+            aux_count=Count('consoleauxoutput', distinct=True),
+            matrix_count=Count('consolematrixoutput', distinct=True),
+        ).order_by('project__name', 'name')
+        
+        # Group templates by project
+        templates_by_project = {}
+        for template in all_templates:
+            if template.project not in templates_by_project:
+                templates_by_project[template.project] = []
+            templates_by_project[template.project].append(template)
+        
+        context = {
+            'templates_by_project': templates_by_project,
+            'current_project': current_project,
+            'title': 'Console Template Library',
+        }
+        
+        return render(request, 'admin/planner/console_template_library.html', context)
+
+    
+
+    def changelist_view(self, request, extra_context=None):
+        """Add Template Library button to the console list page"""
+        extra_context = extra_context or {}
+        extra_context['template_library_url'] = '/console-template-library/'
+        return super().changelist_view(request, extra_context=extra_context)
+    
     def export_yamaha_button(self, obj):
         """Add export button in list view"""
         if obj.pk:
@@ -435,6 +555,8 @@ class ConsoleAdmin(BaseAdmin):
         return '-'
     export_yamaha_button.short_description = 'Export'
     export_yamaha_button.allow_tags = True
+
+
     
     def export_yamaha_rivage_csvs(self, request, queryset):
         """Admin action to export Yamaha CSVs for selected consoles"""
@@ -449,7 +571,6 @@ class ConsoleAdmin(BaseAdmin):
     def get_urls(self):
         """Add custom URL for export"""
         urls = super().get_urls()
-        from django.urls import path
         custom_urls = [
             path('<int:pk>/export-yamaha/',
                  self.admin_site.admin_view(self.export_yamaha_view),
@@ -1951,8 +2072,7 @@ class PACableAdmin(admin.ModelAdmin):
 # Add these to your planner/admin.py file
 
 
-from django import forms
-from django.db.models import Count, Q, Max
+
 from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack
 from django.http import HttpResponseRedirect
 
@@ -2045,7 +2165,7 @@ class CommCrewNameAdmin(admin.ModelAdmin):
     
     def get_urls(self):
         """Add custom URL for CSV import."""
-        from django.urls import path
+       
         urls = super().get_urls()
         custom_urls = [
             path('import-csv/', self.admin_site.admin_view(self.import_csv_view), name='planner_commcrewname_import_csv'),
@@ -2863,7 +2983,7 @@ class MicShowInfoAdmin(admin.ModelAdmin):
 
 # ===== ADD TO planner/urls.py (or create if doesn't exist) =====
 
-from django.urls import path
+
 from . import views
 
 app_name = 'planner'

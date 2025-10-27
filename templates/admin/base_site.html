@@ -83,12 +83,44 @@ html[data-theme="auto"] {
     }
 }
 </style>
+
 {% endblock %}
+
+{% block userlinks %}  <!-- ADD THIS NEW BLOCK -->
+    {% if request.current_project %}
+    <div style="display: inline-block; margin-right: 20px;">
+        <label for="project-switcher" style="color: #fff; margin-right: 10px;">📁 Project:</label>
+        <select id="project-switcher" style="padding: 5px 10px; background: #2a2a2a; color: #fff; border: 1px solid #4a9eff; border-radius: 4px; font-size: 14px;">
+            {% for project in user_projects %}
+                <option value="{{ project.id }}" {% if project.id == request.current_project.id %}selected{% endif %}>
+                    {{ project.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}
+
 
 {% block extrahead %}
 {{ block.super }}
 
+<!-- Force dark theme for all users -->
+<script>
+    // Run immediately to prevent flash of light theme
+    (function() {
+        document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+    
+    // Also set after DOM loads in case Django tries to override
+    document.addEventListener('DOMContentLoaded', function() {
+        document.documentElement.setAttribute('data-theme', 'dark');
+    });
+</script>
+
 <style>
+/* Your existing dark theme styles... */
 
 /* Override Django's CSS variables for links */
 :root,
@@ -564,4 +596,26 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ Spreadsheet navigation active - Enter: next, Shift+Enter: previous');
 });
 </script>
+
+<!-- Project Switcher -->
+<!-- Project Switcher -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Project switcher loaded');
+    const switcher = document.getElementById('project-switcher');
+    if (switcher) {
+        console.log('Switcher found, adding listener');
+        switcher.addEventListener('change', function() {
+            const newProjectId = this.value;
+            console.log('Switching to project:', newProjectId);
+            
+            // Simple direct navigation - let the view handle redirect
+            window.location.href = '/audiopatch/switch-project/' + newProjectId + '/';
+        });
+    } else {
+        console.log('Switcher NOT found');
+    }
+});
+</script>
+
 {% endblock %}

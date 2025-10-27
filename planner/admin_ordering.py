@@ -1,5 +1,5 @@
 # planner/admin_ordering.py
-# Updated to move Amplifier Assignments to position 3
+# Updated to move Location to position 3 as standalone item
 
 from django.contrib import admin
 
@@ -10,52 +10,57 @@ def ordered_get_app_list(request, app_label=None):
     app_list = original_get_app_list(request, app_label)
     
     # Define the correct order with proper groupings
+    # Define the correct order with proper groupings
     order_map = {
-        # Main Equipment (1-4)
-        'console': 1,
-        'device': 2,
-        'amp': 3,  # Amplifier Assignments - PARENT
-        'location': 4,  # └─ Locations - CHILD of Amplifier Assignments
+        # User/Project Management (1-2)
+        'userprofile': 1,  # User Profiles - TOP
+        'project': 2,  # Projects
         
-        # System Processors (5)
-        'systemprocessor': 5,
+        # Main Equipment (3-6)
+        'location': 3,  # Equip Locations
+        'console': 4,
+        'device': 5,
+        'amp': 6,  # Amplifier Assignments
         
-        # PA Cable System (6-7)
-        'pacableschedule': 6,  # PA Cable Entries - PARENT
-        'pafanout': 7,  # └─ PA Fan Outs - CHILD
+        # System Processors (7)
+        'systemprocessor': 7,
         
-        # Communications (8-11)
-        'commbeltpack': 8,
-        'commposition': 9,
-        'commcrewname': 10,
-        'commchannel': 11,
+        # PA Cable System (8-9)
+        'pacableschedule': 8,  # PA Cable Entries - PARENT
+        'pafanout': 9,  # └─ PA Fan Outs - CHILD
         
-        # Show Mic Tracker (12-16)
-        'showday': 12,  # Show Mic Tracker - PARENT
-        'micsession': 13,
-        'micassignment': 14,
-        'presenter': 15,  # ← NEW: Added here
-        'micshowinfo': 16,  # Changed from 15 to 16
+        # Communications (10-13)
+        'commbeltpack': 10,
+        'commposition': 11,
+        'commcrewname': 12,
+        'commchannel': 13,
         
-        # PA Zones (17) - standalone
-        'pazone': 17,  # Changed from 16
+        # Show Mic Tracker (14-18)
+        'showday': 14,  # Show Mic Tracker - PARENT
+        'micsession': 15,
+        'micassignment': 16,
+        'presenter': 17,
+        'micshowinfo': 18,
         
-        # Soundvision (18-20)
-        'soundvisionprediction': 18,  # Changed from 17
-        'speakerarray': 19,  # Changed from 18
-        'speakercabinet': 20,  # Changed from 19
+        # PA Zones (19) - standalone
+        'pazone': 19,
         
-        # Power Distribution (21-24)
-        'powerdistributionplan': 21,  # Changed from 20
-        'amplifierassignment': 22,  # Changed from 21
-        'amplifierprofile': 23,  # Changed from 22
-        'ampmodel': 24,  # Changed from 23
+        # Soundvision (20-22)
+        'soundvisionprediction': 20,
+        'speakerarray': 21,
+        'speakercabinet': 22,
         
-        # Audio Checklist (25)
-        'audiochecklist': 25,  # Changed from 24
+        # Power Distribution (23-26)
+        'powerdistributionplan': 23,
+        'amplifierassignment': 24,
+        'amplifierprofile': 25,
+        'ampmodel': 26,
         
-        # Any other models (26+)
-        'ampchannel': 26,  # Changed from 25
+        # Audio Checklist (27)
+        'audiochecklist': 27,
+        
+        # Any other models (28+)
+        'ampchannel': 28,
     }
     
     for app in app_list:

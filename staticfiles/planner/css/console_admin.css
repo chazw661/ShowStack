@@ -17,7 +17,19 @@
     text-align: center !important;
 }
 
+
+/* Console Input dante_number field - holds 3 digits */
+#consoleinput_set-group .field-dante_number input[type="number"],
+.inline-group#consoleinput_set-group .field-dante_number input {
+    width: 70px !important;
+    max-width: 70px !important;
+    min-width: 70px !important;
+    text-align: center !important;
+}
+
+
 /* Completely hide all Add buttons in sidebar */
 #nav-sidebar .addlink {
     display: none !important;
 }
+
