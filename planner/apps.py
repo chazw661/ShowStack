@@ -6,4 +6,8 @@ class PlannerConfig(AppConfig):
     name = 'planner'
 
     def ready(self):
-        import planner.signals  # Register signals
+        """
+        Import signals when the app is ready.
+        This ensures the signal receivers are registered.
+        """
+        import planner.signals

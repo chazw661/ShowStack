@@ -20,4 +20,4 @@ env/
 *.env
 
 # VSCode
-.vscode/
+.vscode/.env

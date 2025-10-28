@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project.name }} - ShowStack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo h1 {
+            font-size: 24px;
+            color: #4a9eff;
+            font-weight: 700;
+        }
+        
+        .header-right {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .btn-back {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .btn-admin {
+            padding: 8px 16px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .btn-invite {
+            padding: 8px 16px;
+            background: #4a9eff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 30px;
+        }
+        
+        .project-header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .project-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+        }
+        
+        .project-title h2 {
+            font-size: 32px;
+            color: #333;
+        }
+        
+        .access-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .badge-owner {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .badge-editor {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-viewer {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .project-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .info-value {
+            font-size: 16px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .messages {
+            margin-bottom: 20px;
+        }
+        
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .section h3 {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .access-info {
+            background: #fff3cd;
+            padding: 15px 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+            margin-bottom: 30px;
+        }
+        
+        .access-info p {
+            color: #856404;
+            line-height: 1.6;
+        }
+        
+        .access-info strong {
+            color: #333;
+        }
+        
+        .members-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .member-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .member-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .member-name {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .member-email {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .role-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .role-editor {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .role-viewer {
+            background: #e7f3ff;
+            color: #0066cc;
+        }
+        
+        .equipment-placeholder {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .equipment-placeholder p {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <h1>ShowStack</h1>
+        </div>
+        <div class="header-right">
+            <a href="{% url 'dashboard' %}" class="btn-back">← Back to Dashboard</a>
+            {% if is_owner and user.is_staff %}
+            <a href="/admin/planner/project/{{ project.id }}/change/" class="btn-admin">Admin Panel</a>
+            {% endif %}
+            {% if can_invite %}
+            <a href="{% url 'project_invitations' project.id %}" class="btn-invite">Manage Invitations</a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="container">
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <div class="project-header">
+            <div class="project-title">
+                <h2>{{ project.name }}</h2>
+                <span class="access-badge badge-{{ access_level }}">{{ access_level }}</span>
+            </div>
+            
+            <div class="project-info">
+                <div class="info-item">
+                    <span class="info-label">Show Date</span>
+                    <span class="info-value">{{ project.show_date|date:"F d, Y" }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Venue</span>
+                    <span class="info-value">{{ project.venue }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Project Owner</span>
+                    <span class="info-value">{{ project.owner.get_full_name|default:project.owner.username }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Your Access</span>
+                    <span class="info-value">
+                        {% if is_owner %}Full Access{% elif user_role == 'editor' %}Can Edit{% else %}View Only{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        {% if not can_edit %}
+        <div class="access-info">
+            <p><strong>Viewer Access:</strong> You can view all project details but cannot make changes. Contact {{ project.owner.get_full_name|default:project.owner.username }} if you need editor access.</p>
+        </div>
+        {% elif access_level == 'editor' %}
+        <div class="access-info">
+            <p><strong>Editor Access:</strong> You can edit existing equipment but cannot create new equipment or manage invitations. Only the project owner can add new equipment.</p>
+        </div>
+        {% endif %}
+        
+        <div class="section">
+            <h3>Team Members ({{ members.count|add:"1" }})</h3>
+            <div class="members-list">
+                <div class="member-card">
+                    <div class="member-info">
+                        <span class="member-name">{{ project.owner.get_full_name|default:project.owner.username }}</span>
+                        <span class="member-email">{{ project.owner.email }}</span>
+                    </div>
+                    <span class="access-badge badge-owner">Owner</span>
+                </div>
+
+
+
+                {% for membership in members %}
+                <div class="member-card">
+                    <div class="member-info">
+                        <span class="member-name">{{ membership.user.get_full_name|default:membership.user.username }}</span>
+                        <span class="member-email">{{ membership.user.email }}</span>
+                    </div>
+                    <span class="role-badge role-{{ membership.role }}">{{ membership.role }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>Equipment & Show Data</h3>
+            <div class="equipment-placeholder">
+                <p><strong>Equipment management coming soon!</strong></p>
+                <p>This is where you'll manage consoles, devices, amplifiers, cables, and all show equipment.</p>
+                {% if is_owner and user.is_staff %}
+                <p style="margin-top: 20px;">For now, use the <a href="/admin/planner/project/{{ project.id }}/change/" style="color: #4a9eff;">Admin Panel</a> to manage equipment.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

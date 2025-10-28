@@ -1,0 +1,253 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete {{ equipment_type }} | ShowStack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Navigation Bar */
+        .navbar {
+            background: #141824;
+            border-bottom: 2px solid #1e2436;
+            padding: 15px 0;
+            margin-bottom: 30px;
+        }
+        
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .nav-brand {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: #9ca3af;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .nav-links a:hover {
+            color: #60a5fa;
+        }
+        
+        /* Breadcrumbs */
+        .breadcrumbs {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #9ca3af;
+            flex-wrap: wrap;
+        }
+        
+        .breadcrumbs a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+        
+        .breadcrumbs span {
+            color: #4b5563;
+        }
+        
+        /* Warning Card */
+        .warning-card {
+            background: #141824;
+            border-radius: 8px;
+            padding: 30px;
+            border: 1px solid #1e2436;
+            text-align: center;
+        }
+        
+        .warning-icon {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+        
+        .warning-card h1 {
+            font-size: 1.8em;
+            color: #f3f4f6;
+            margin-bottom: 15px;
+        }
+        
+        .warning-card p {
+            color: #9ca3af;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .equipment-name {
+            color: #60a5fa;
+            font-weight: 600;
+            font-size: 1.2em;
+            margin: 20px 0;
+        }
+        
+        .warning-message {
+            background: #7f1d1d20;
+            border-left: 4px solid #dc2626;
+            color: #f87171;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .warning-message strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #fca5a5;
+        }
+        
+        /* Buttons */
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        
+        .btn-secondary {
+            background: #374151;
+            color: #e0e0e0;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .warning-card {
+                padding: 20px;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="{% url 'dashboard' %}" class="nav-brand">⚡ ShowStack</a>
+            <div class="nav-links">
+                <a href="{% url 'dashboard' %}">Dashboard</a>
+                <a href="{% url 'project_detail' project.id %}">Project</a>
+                <a href="{% url 'user_logout' %}">Logout</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <!-- Breadcrumbs -->
+        <div class="breadcrumbs">
+            <a href="{% url 'dashboard' %}">Dashboard</a>
+            <span>›</span>
+            <a href="{% url 'project_detail' project.id %}">{{ project.name }}</a>
+            <span>›</span>
+            <a href="{% url 'console_list' project.id %}">Consoles</a>
+            <span>›</span>
+            <span>Delete</span>
+        </div>
+        
+        <!-- Warning Card -->
+        <div class="warning-card">
+            <div class="warning-icon">⚠️</div>
+            <h1>Confirm Deletion</h1>
+            <p>Are you sure you want to delete this {{ equipment_type|lower }}?</p>
+            
+            <div class="equipment-name">
+                {{ console.name }}
+            </div>
+            
+            <div class="warning-message">
+                <strong>⚡ Warning:</strong>
+                This action cannot be undone. All information about this {{ equipment_type|lower }} will be permanently deleted.
+            </div>
+            
+            <form method="post">
+                {% csrf_token %}
+                <div class="form-actions">
+                    <a href="{% url 'console_detail' project.id console.id %}" class="btn btn-secondary">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-danger">
+                        Yes, Delete {{ equipment_type }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

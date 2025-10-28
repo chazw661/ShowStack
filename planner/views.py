@@ -34,6 +34,7 @@ from django.shortcuts import redirect
 from .models import Project
 
 
+
 # Model imports - all together
 from .models import (
     Console, ConsoleInput,
@@ -70,7 +71,7 @@ def console_detail(request, console_id):
     else:
         formset = InputFormSet(queryset=ConsoleInput.objects.filter(console=console))
 
-    consoles = Console.objects.all()
+        consoles = Console.objects.filter(project=project).order_by('name')
 
     return render(request, "planner/console_detail.html", {
         "formset": formset,
@@ -2584,3 +2585,6 @@ def switch_project(request, project_id):
             return JsonResponse({'error': 'Access denied'}, status=403)
     except Project.DoesNotExist:
         return JsonResponse({'error': 'Project not found'}, status=404)
+    
+
+  

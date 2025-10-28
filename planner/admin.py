@@ -58,7 +58,17 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 
 from .models import (
-    Project, UserProfile, ProjectMember,)
+    Project, UserProfile, ProjectMember,Invitation,)
+
+
+
+
+# ==================== SHOWSTACK BRANDING ====================
+admin.site.site_header = "ShowStack Audio Administration"
+admin.site.site_title = "ShowStack Audio"
+admin.site.index_title = "ShowStack Audio Management"
+
+
 # ==================== PROJECT SYSTEM ADMIN ====================
 
 @admin.register(Project)
@@ -127,6 +137,13 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 
 # Inline UserProfile in Django's User admin
+# Add this to your planner/admin.py
+
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
+from .models import UserProfile
+
+
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
     can_delete = False
@@ -134,12 +151,24 @@ class UserProfileInline(admin.StackedInline):
     fields = ['account_type', 'can_create_projects', 'lifetime_discount_percent']
 
 
-# Extend Django's User admin
 class UserAdmin(BaseUserAdmin):
-    inlines = [UserProfileInline]
+    """
+    Custom UserAdmin that shows UserProfile inline only when editing existing users,
+    not during creation (to avoid conflict with signal).
+    """
+    
+    def get_inline_instances(self, request, obj=None):
+        """
+        Only show inlines when editing existing user (obj is not None).
+        During user creation (obj is None), don't show any inlines.
+        This prevents conflict with the signal that creates UserProfile.
+        """
+        if obj is None:
+            return []
+        return super().get_inline_instances(request, obj)
 
 
-# Re-register UserAdmin
+# Unregister the default UserAdmin and register our custom one
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
 
@@ -3550,4 +3579,26 @@ class DarkThemeAdminMixin:
         )
 
 
+#-------Invitatoin Registration---
 
+@admin.register(Invitation)
+class InvitationAdmin(admin.ModelAdmin):
+    list_display = ('email', 'project', 'role', 'status', 'invited_by', 'invited_at')
+    list_filter = ('status', 'role', 'invited_at')
+    search_fields = ('email', 'project__name')
+    readonly_fields = ('token', 'invited_at', 'accepted_at')
+    
+    fieldsets = (
+        ('Invitation Details', {
+            'fields': ('project', 'email', 'role', 'invited_by')
+        }),
+        ('Status', {
+            'fields': ('status', 'token', 'invited_at', 'accepted_at')
+        }),
+    )
+    
+    def get_readonly_fields(self, request, obj=None):
+        """Make fields readonly after creation"""
+        if obj:  # Editing existing invitation
+            return self.readonly_fields + ('project', 'email', 'invited_by')
+        return self.readonly_fields

@@ -12,6 +12,8 @@ from django import forms
 
 from django.contrib.auth.models import User
 from django.db import models
+import uuid 
+
 
 # ==================== PROJECT SYSTEM MODELS ====================
 
@@ -83,8 +85,11 @@ class ProjectMember(models.Model):
     
     role = models.CharField(max_length=20, choices=ROLES, default='editor')
     invited_at = models.DateTimeField(auto_now_add=True)
-    invited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, 
-                                    related_name='sent_invitations')
+    invited_by = models.ForeignKey(
+    User,
+    on_delete=models.CASCADE,
+    related_name='invitations_sent'  # ← CHANGED TO UNIQUE NAME
+)
     
     class Meta:
         unique_together = ['project', 'user']
@@ -2169,3 +2174,101 @@ class SpeakerCabinet(models.Model):
         angle_str = f" ({self.angle_to_next}°)" if self.angle_to_next else ""
         panflex_str = f" [{self.panflex_setting}]" if self.panflex_setting else ""
         return f"#{self.position_number} {self.speaker_model}{angle_str}{panflex_str}"            
+    
+
+
+    #------Invitation Module----
+
+    import uuid
+from django.utils import timezone
+
+
+class Invitation(models.Model):
+    """
+    Stores project invitations sent to users via email.
+    Users click the unique link to accept and become ProjectMembers.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        ('expired', 'Expired'),
+    ]
+    
+    ROLE_CHOICES = [
+        ('editor', 'Editor'),
+        ('viewer', 'Viewer'),
+    ]
+    
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='invitations'
+    )
+    email = models.EmailField()
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='viewer')
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='members_invite'
+    )
+    invited_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-invited_at']
+        unique_together = [['project', 'email', 'status']]  # Prevent duplicate pending invites
+    
+    def __str__(self):
+        return f"{self.email} invited to {self.project.name} as {self.role}"
+    
+    def is_valid(self):
+        """Check if invitation is still valid (pending and not expired)"""
+        if self.status != 'pending':
+            return False
+        # Invitations expire after 7 days
+        expiry_date = self.invited_at + timezone.timedelta(days=7)
+        if timezone.now() > expiry_date:
+            self.status = 'expired'
+            self.save()
+            return False
+        return True
+    
+    def accept(self, user):
+        """Accept the invitation and create ProjectMember"""
+        if not self.is_valid():
+            return False
+        
+        # Check if user's email matches invitation
+        if user.email.lower() != self.email.lower():
+            return False
+        
+        # Check if already a member
+        if ProjectMember.objects.filter(project=self.project, user=user).exists():
+            self.status = 'accepted'
+            self.accepted_at = timezone.now()
+            self.save()
+            return True
+        
+        # Create ProjectMember
+        ProjectMember.objects.create(
+            project=self.project,
+            user=user,
+            role=self.role,
+            invited_by=self.invited_by
+        )
+        
+        # Mark invitation as accepted
+        self.status = 'accepted'
+        self.accepted_at = timezone.now()
+        self.save()
+        
+        return True
+    
+
+
+    
+

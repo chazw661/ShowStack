@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ShowStack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo h1 {
+            font-size: 24px;
+            color: #4a9eff;
+            font-weight: 700;
+        }
+        
+        .header-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .user-info {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .user-info strong {
+            color: #333;
+        }
+        
+        .btn-logout {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        
+        .btn-logout:hover {
+            background: #c82333;
+        }
+        
+        .btn-admin {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        
+        .btn-admin:hover {
+            background: #5a6268;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 30px;
+        }
+        
+        .dashboard-header {
+            margin-bottom: 30px;
+        }
+        
+        .dashboard-header h2 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .account-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .badge-free {
+            background: #e7f3ff;
+            color: #0066cc;
+        }
+        
+        .badge-beta {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge-paid {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge-super {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .messages {
+            margin-bottom: 20px;
+        }
+        
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .btn-create {
+            padding: 12px 24px;
+            background: #4a9eff;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 30px;
+            transition: background 0.3s;
+        }
+        
+        .btn-create:hover {
+            background: #3a8eef;
+        }
+        
+        .btn-disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .upgrade-notice {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .upgrade-notice p {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .section h3 {
+            font-size: 22px;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .project-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .project-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        
+        .project-card:hover {
+            border-color: #4a9eff;
+            box-shadow: 0 4px 12px rgba(74, 158, 255, 0.15);
+        }
+        
+        .project-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+        
+        .project-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .project-role {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .role-owner {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .role-editor {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .role-viewer {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .project-details {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .project-date {
+            font-weight: 500;
+            color: #4a9eff;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .empty-state p {
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <h1>ShowStack</h1>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <strong>{{ user.get_full_name|default:user.username }}</strong>
+                <span class="account-badge badge-{{ account_type }}">{{ account_type }} Account</span>
+            </div>
+            {% if user.is_staff %}
+            <a href="/admin/" class="btn-admin">Admin Panel</a>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="dashboard-header">
+            <h2>My Projects</h2>
+        </div>
+        
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% if not can_create_projects %}
+        <div class="upgrade-notice">
+            <p><strong>Free Account Limitations:</strong> You can view and collaborate on projects shared with you, but cannot create your own projects.</p>
+            <p>Upgrade to a premium account to create unlimited projects and invite your crew!</p>
+        </div>
+        {% endif %}
+        
+        {% if can_create_projects %}
+        <a href="/admin/planner/project/add/" class="btn-create">+ Create New Project</a>
+        {% else %}
+        <span class="btn-create btn-disabled">+ Create New Project (Upgrade Required)</span>
+        {% endif %}
+        
+        <!-- Owned Projects Section -->
+        {% if owned_projects %}
+        <div class="section">
+            <h3>Projects You Own ({{ owned_projects.count }})</h3>
+            <div class="project-list">
+                {% for project in owned_projects %}
+                <div class="project-card">
+                    <div class="project-header">
+                        <div onclick="window.location='{% url 'project_detail' project.id %}'" style="cursor: pointer; flex: 1;">
+                            <div class="project-name">{{ project.name }}</div>
+                            <div class="project-details">
+                                <div class="project-date">{{ project.show_date|date:"F d, Y" }}</div>
+                                <div>{{ project.venue }}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
+                            <span class="project-role role-owner">Owner</span>
+                            <a href="{% url 'project_invitations' project.id %}" 
+                            onclick="event.stopPropagation()" 
+                            style="padding: 6px 12px; background: #4a9eff; color: white; text-decoration: none; border-radius: 6px; font-size: 12px;">
+                                Manage Invitations
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Shared Projects Section -->
+        {% if member_projects %}
+        <div class="section">
+            <h3>Projects Shared With You ({{ member_projects.count }})</h3>
+            <div class="project-list">
+                {% for membership in member_projects %}
+                <div class="project-card">
+                <div class="project-header">
+                    <div onclick="window.location='/projects/{{ membership.project.id }}/'" style="cursor: pointer; flex: 1;">
+                        <div class="project-name">{{ membership.project.name }}</div>
+                        <div class="project-details">
+                            <div class="project-date">{{ membership.project.show_date|date:"F d, Y" }}</div>
+                            <div>{{ membership.project.venue }}</div>
+                            <div style="margin-top: 5px; font-size: 13px; color: #888;">
+                                Invited by {{ membership.invited_by.get_full_name|default:membership.invited_by.username }}
+                            </div>
+                        </div>
+                    </div>
+                    <span class="project-role role-{{ membership.role }}">{{ membership.role }}</span>
+                </div>
+            </div>
+       {% endfor %}
+        </div>
+    </div>
+{% endif %}
+        
+        <!-- Empty State -->
+        {% if not owned_projects and not member_projects %}
+        <div class="section">
+            <div class="empty-state">
+                <p>You don't have any projects yet.</p>
+                {% if can_create_projects %}
+                <p>Create your first project to get started!</p>
+                {% else %}
+                <p>Ask a project owner to invite you to collaborate on their show.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

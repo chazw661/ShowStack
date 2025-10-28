@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ console.name }} | ShowStack</title>
+    <title>Add {{ equipment_type }} | ShowStack</title>
     <style>
         * {
             margin: 0;
@@ -99,39 +99,6 @@
         .page-header h1 {
             font-size: 2em;
             color: #f3f4f6;
-            margin-bottom: 10px;
-        }
-        
-        .access-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-        
-        .access-badge.owner {
-            background: #10b981;
-            color: white;
-        }
-        
-        .access-badge.editor {
-            background: #3b82f6;
-            color: white;
-        }
-        
-        .access-badge.viewer {
-            background: #6b7280;
-            color: white;
-        }
-        
-        .readonly-notice {
-            background: #374151;
-            padding: 12px 20px;
-            border-radius: 6px;
-            margin-top: 10px;
-            color: #9ca3af;
-            font-size: 0.95em;
         }
         
         /* Messages */
@@ -143,12 +110,6 @@
             padding: 12px 20px;
             border-radius: 6px;
             margin-bottom: 10px;
-        }
-        
-        .alert-success {
-            background: #10b98120;
-            border-left: 4px solid #10b981;
-            color: #34d399;
         }
         
         .alert-error {
@@ -203,14 +164,6 @@
             background: #1e2436;
         }
         
-        .form-group input:disabled,
-        .form-group textarea:disabled {
-            background: #0f1219;
-            color: #6b7280;
-            cursor: not-allowed;
-            border-color: #1e2436;
-        }
-        
         .form-group textarea {
             min-height: 100px;
             resize: vertical;
@@ -245,7 +198,7 @@
             color: white;
         }
         
-        .btn-primary:hover:not(:disabled) {
+        .btn-primary:hover {
             background: #2563eb;
         }
         
@@ -256,15 +209,6 @@
         
         .btn-secondary:hover {
             background: #4b5563;
-        }
-        
-        .btn-danger {
-            background: #dc2626;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #b91c1c;
         }
         
         /* Responsive */
@@ -310,7 +254,7 @@
             <span>›</span>
             <a href="{% url 'console_list' project.id %}">Consoles</a>
             <span>›</span>
-            <span>{{ console.name }}</span>
+            <span>Add {{ equipment_type }}</span>
         </div>
         
         <!-- Messages -->
@@ -326,14 +270,7 @@
         
         <!-- Page Header -->
         <div class="page-header">
-            <h1>{{ console.name }}</h1>
-            <span class="access-badge {{ access_level }}">{{ access_level|title }}</span>
-            
-            {% if is_readonly %}
-            <div class="readonly-notice">
-                🔒 You have view-only access to this equipment. Contact the project owner to request edit permissions.
-            </div>
-            {% endif %}
+            <h1>Add {{ equipment_type }}</h1>
         </div>
         
         <!-- Form -->
@@ -348,9 +285,9 @@
                             type="text" 
                             id="name" 
                             name="name" 
-                            value="{{ console.name }}" 
                             required
-                            {% if is_readonly %}disabled{% endif %}
+                            placeholder="e.g., FOH Console"
+                            autofocus
                         >
                     </div>
                     
@@ -359,9 +296,7 @@
                         <input 
                             type="text" 
                             id="position" 
-                            name="position" 
-                            value="{{ console.position|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="position"
                             placeholder="e.g., FOH, MON, Broadcast"
                         >
                     </div>
@@ -373,9 +308,7 @@
                         <input 
                             type="text" 
                             id="manufacturer" 
-                            name="manufacturer" 
-                            value="{{ console.manufacturer|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="manufacturer"
                             placeholder="e.g., Avid, DiGiCo, Yamaha"
                         >
                     </div>
@@ -385,9 +318,7 @@
                         <input 
                             type="text" 
                             id="model" 
-                            name="model" 
-                            value="{{ console.model|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="model"
                             placeholder="e.g., SD7, CL5, Profile"
                         >
                     </div>
@@ -399,10 +330,9 @@
                         <input 
                             type="number" 
                             id="input_count" 
-                            name="input_count" 
-                            value="{{ console.input_count|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="input_count"
                             min="0"
+                            placeholder="0"
                         >
                     </div>
                     
@@ -411,10 +341,9 @@
                         <input 
                             type="number" 
                             id="output_count" 
-                            name="output_count" 
-                            value="{{ console.output_count|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="output_count"
                             min="0"
+                            placeholder="0"
                         >
                     </div>
                 </div>
@@ -425,10 +354,9 @@
                         <input 
                             type="number" 
                             id="aux_count" 
-                            name="aux_count" 
-                            value="{{ console.aux_count|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="aux_count"
                             min="0"
+                            placeholder="0"
                         >
                     </div>
                     
@@ -437,10 +365,9 @@
                         <input 
                             type="number" 
                             id="matrix_count" 
-                            name="matrix_count" 
-                            value="{{ console.matrix_count|default:'' }}"
-                            {% if is_readonly %}disabled{% endif %}
+                            name="matrix_count"
                             min="0"
+                            placeholder="0"
                         >
                     </div>
                 </div>
@@ -451,28 +378,18 @@
                         <textarea 
                             id="notes" 
                             name="notes"
-                            {% if is_readonly %}disabled{% endif %}
                             placeholder="Additional details, configurations, or special notes..."
-                        >{{ console.notes|default:'' }}</textarea>
+                        ></textarea>
                     </div>
                 </div>
                 
                 <div class="form-actions">
                     <a href="{% url 'console_list' project.id %}" class="btn btn-secondary">
-                        {% if is_readonly %}Back to List{% else %}Cancel{% endif %}
+                        Cancel
                     </a>
-                    
-                    {% if can_edit %}
                     <button type="submit" class="btn btn-primary">
-                        Save Changes
+                        Create {{ equipment_type }}
                     </button>
-                    {% endif %}
-                    
-                    {% if can_delete %}
-                    <a href="{% url 'console_delete' project.id console.id %}" class="btn btn-danger">
-                        Delete
-                    </a>
-                    {% endif %}
                 </div>
             </form>
         </div>

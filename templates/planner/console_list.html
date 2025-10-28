@@ -1,7 +1,376 @@
-{% extends "base.html" %}
-
-
-{% block content %}
-    <h1>Select a Console</h1>
-    <p>Choose a console from the sidebar to view its details.</p>
-{% endblock %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ equipment_type_plural }} - {{ project.name }} | ShowStack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Navigation Bar */
+        .navbar {
+            background: #141824;
+            border-bottom: 2px solid #1e2436;
+            padding: 15px 0;
+            margin-bottom: 30px;
+        }
+        
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .nav-brand {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: #9ca3af;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .nav-links a:hover {
+            color: #60a5fa;
+        }
+        
+        /* Breadcrumbs */
+        .breadcrumbs {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #9ca3af;
+        }
+        
+        .breadcrumbs a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+        
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+        
+        .breadcrumbs span {
+            color: #4b5563;
+        }
+        
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .page-header h1 {
+            font-size: 2em;
+            color: #f3f4f6;
+        }
+        
+        .access-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-left: 15px;
+        }
+        
+        .access-badge.owner {
+            background: #10b981;
+            color: white;
+        }
+        
+        .access-badge.editor {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .access-badge.viewer {
+            background: #6b7280;
+            color: white;
+        }
+        
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        
+        .btn-secondary {
+            background: #374151;
+            color: #e0e0e0;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        /* Messages */
+        .messages {
+            margin-bottom: 20px;
+        }
+        
+        .alert {
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        
+        .alert-success {
+            background: #10b98120;
+            border-left: 4px solid #10b981;
+            color: #34d399;
+        }
+        
+        .alert-error {
+            background: #ef444420;
+            border-left: 4px solid #ef4444;
+            color: #f87171;
+        }
+        
+        .alert-info {
+            background: #3b82f620;
+            border-left: 4px solid #3b82f6;
+            color: #60a5fa;
+        }
+        
+        /* Table */
+        .table-container {
+            background: #141824;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #1e2436;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        thead {
+            background: #1a1f2e;
+        }
+        
+        th {
+            text-align: left;
+            padding: 15px;
+            font-weight: 600;
+            color: #9ca3af;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        td {
+            padding: 15px;
+            border-top: 1px solid #1e2436;
+        }
+        
+        tbody tr {
+            transition: background 0.2s;
+        }
+        
+        tbody tr:hover {
+            background: #1a1f2e;
+        }
+        
+        .table-link {
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .table-link:hover {
+            text-decoration: underline;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+        
+        .empty-state-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .access-badge {
+                margin-left: 0;
+                margin-top: 8px;
+            }
+            
+            table {
+                font-size: 0.9em;
+            }
+            
+            th, td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="{% url 'dashboard' %}" class="nav-brand">⚡ ShowStack</a>
+            <div class="nav-links">
+                <a href="{% url 'dashboard' %}">Dashboard</a>
+                <a href="{% url 'project_detail' project.id %}">Project</a>
+                <a href="{% url 'logout' %}">Logout</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <!-- Breadcrumbs -->
+        <div class="breadcrumbs">
+            <a href="{% url 'dashboard' %}">Dashboard</a>
+            <span>›</span>
+            <a href="{% url 'project_detail' project.id %}">{{ project.name }}</a>
+            <span>›</span>
+            <span>{{ equipment_type_plural }}</span>
+        </div>
+        
+        <!-- Messages -->
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <h1>
+                    {{ equipment_type_plural }}
+                    <span class="access-badge {{ access_level }}">{{ access_level|title }}</span>
+                </h1>
+            </div>
+            {% if can_create %}
+            <a href="{% url 'console_create' project.id %}" class="btn btn-primary">
+                + Add {{ equipment_type }}
+            </a>
+            {% endif %}
+        </div>
+        
+        <!-- Consoles Table -->
+        <div class="table-container">
+            {% if consoles %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Position</th>
+                        <th>Name</th>
+                        <th>Manufacturer</th>
+                        <th>Model</th>
+                        <th>Inputs</th>
+                        <th>Outputs</th>
+                        <th>Aux</th>
+                        <th>Matrix</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for console in consoles %}
+                    <tr>
+                        <td>{{ console.position|default:"—" }}</td>
+                        <td>
+                            <a href="{% url 'console_detail' project.id console.id %}" class="table-link">
+                                {{ console.name }}
+                            </a>
+                        </td>
+                        <td>{{ console.manufacturer|default:"—" }}</td>
+                        <td>{{ console.model|default:"—" }}</td>
+                        <td>{{ console.input_count|default:"—" }}</td>
+                        <td>{{ console.output_count|default:"—" }}</td>
+                        <td>{{ console.aux_count|default:"—" }}</td>
+                        <td>{{ console.matrix_count|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">🎛️</div>
+                <h3>No {{ equipment_type_plural }} Yet</h3>
+                <p>
+                    {% if can_create %}
+                    Get started by adding your first {{ equipment_type|lower }}.
+                    {% else %}
+                    No {{ equipment_type_plural|lower }} have been added to this project yet.
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

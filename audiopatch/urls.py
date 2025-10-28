@@ -22,9 +22,12 @@ from django.shortcuts import redirect
 from django.views.generic import RedirectView
 from planner import views
 
+
+
 urlpatterns = [
     # Admin site
     path('admin/', admin.site.urls),
+    path('', include('accounts.urls')),
     
     # Dashboard at root level (accessible at /dashboard/)
     path('dashboard/', views.dashboard, name='dashboard'),
@@ -43,5 +46,7 @@ urlpatterns = [
     
     # Root redirect to mic tracker
     path('', lambda request: redirect('/audiopatch/mic-tracker/')),
-]
+
+    
+    ]
 
