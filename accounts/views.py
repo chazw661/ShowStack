@@ -11,6 +11,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from planner.models import Invitation
 from .invitation_forms import InviteUserForm
+from django.contrib.auth.models import Group
 
 def register(request):
     """
@@ -193,6 +194,19 @@ def accept_invitation(request, token):
     
     # Accept the invitation
     if invitation.accept(request.user):
+
+    # Auto-assign user to appropriate permission group
+        if invitation.role == 'editor':
+            editor_group, _ = Group.objects.get_or_create(name='Editor')
+            request.user.groups.add(editor_group)
+        elif invitation.role == 'viewer':
+            viewer_group, _ = Group.objects.get_or_create(name='Viewer')
+            request.user.groups.add(viewer_group)
+        
+        # Make user staff so they can access admin
+        if not request.user.is_staff:
+            request.user.is_staff = True
+            request.user.save()    
         messages.success(
             request,
             f'Welcome to {invitation.project.name}! You have been added as {invitation.get_role_display()}.'

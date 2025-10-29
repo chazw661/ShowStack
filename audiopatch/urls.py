@@ -21,12 +21,13 @@ from django.urls import include
 from django.shortcuts import redirect  
 from django.views.generic import RedirectView
 from planner import views
+from planner.admin_site import showstack_admin_site
 
 
 
 urlpatterns = [
     # Admin site
-    path('admin/', admin.site.urls),
+    path('admin/', showstack_admin_site.urls),
     path('', include('accounts.urls')),
     
     # Dashboard at root level (accessible at /dashboard/)

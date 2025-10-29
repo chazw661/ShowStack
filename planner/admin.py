@@ -50,15 +50,6 @@ from .forms import ConsoleStereoOutputForm
 
 
 
-#----User Admin----
-
-
-from django.contrib.auth.models import User
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-
-
-from .models import (
-    Project, UserProfile, ProjectMember,Invitation,)
 
 
 
@@ -69,111 +60,7 @@ admin.site.site_title = "ShowStack Audio"
 admin.site.index_title = "ShowStack Audio Management"
 
 
-# ==================== PROJECT SYSTEM ADMIN ====================
-
-@admin.register(Project)
-class ProjectAdmin(admin.ModelAdmin):
-    list_display = ['name', 'owner', 'show_date', 'venue', 'get_member_count', 'updated_at', 'is_archived']
-    list_filter = ['is_archived', 'show_date', 'owner']
-    search_fields = ['name', 'venue', 'client']
-    readonly_fields = ['created_at', 'updated_at']
-    
-    fieldsets = [
-        ('Project Details', {
-            'fields': ['name', 'owner', 'show_date', 'venue', 'client']
-        }),
-        ('Notes', {
-            'fields': ['notes'],
-            'classes': ['collapse']
-        }),
-        ('Status', {
-            'fields': ['is_archived', 'created_at', 'updated_at']
-        }),
-    ]
-    
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        # Show projects owned by user or where they're a member
-        return qs.filter(owner=request.user) | qs.filter(projectmember__user=request.user)
-
-
-class ProjectMemberInline(admin.TabularInline):
-    model = ProjectMember
-    extra = 1
-    fields = ['user', 'role', 'invited_at', 'invited_by']
-    readonly_fields = ['invited_at', 'invited_by']
-    
-    def save_model(self, request, obj, form, change):
-        if not obj.invited_by:
-            obj.invited_by = request.user
-        super().save_model(request, obj, form, change)
-
-
-# Add inline to ProjectAdmin
-ProjectAdmin.inlines = [ProjectMemberInline]
-
-
-@admin.register(UserProfile)
-class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'account_type', 'can_create_projects', 'lifetime_discount_percent', 
-                    'subscription_start', 'subscription_end']
-    list_filter = ['account_type', 'can_create_projects']
-    search_fields = ['user__username', 'user__email', 'user__first_name', 'user__last_name']
-    
-    fieldsets = [
-        ('User', {
-            'fields': ['user']
-        }),
-        ('Account Settings', {
-            'fields': ['account_type', 'can_create_projects']
-        }),
-        ('Subscription Details', {
-            'fields': ['lifetime_discount_percent', 'subscription_start', 'subscription_end'],
-            'classes': ['collapse']
-        }),
-    ]
-
-
-# Inline UserProfile in Django's User admin
-# Add this to your planner/admin.py
-
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.auth.models import User
-from .models import UserProfile
-
-
-class UserProfileInline(admin.StackedInline):
-    model = UserProfile
-    can_delete = False
-    verbose_name_plural = 'Profile'
-    fields = ['account_type', 'can_create_projects', 'lifetime_discount_percent']
-
-
-class UserAdmin(BaseUserAdmin):
-    """
-    Custom UserAdmin that shows UserProfile inline only when editing existing users,
-    not during creation (to avoid conflict with signal).
-    """
-    
-    def get_inline_instances(self, request, obj=None):
-        """
-        Only show inlines when editing existing user (obj is not None).
-        During user creation (obj is None), don't show any inlines.
-        This prevents conflict with the signal that creates UserProfile.
-        """
-        if obj is None:
-            return []
-        return super().get_inline_instances(request, obj)
-
-
-# Unregister the default UserAdmin and register our custom one
-admin.site.unregister(User)
-admin.site.register(User, UserAdmin)
-
-
-
+#
 
 
 class BaseAdmin(admin.ModelAdmin):
@@ -335,7 +222,7 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 
 
-@admin.register(Console)
+
 class ConsoleAdmin(BaseAdmin):
     list_display = ['name', 'location','primary_ip_address', 'secondary_ip_address', 'is_template']
     list_filter = ['is_template', 'location']
@@ -354,6 +241,30 @@ class ConsoleAdmin(BaseAdmin):
     ]
     
     actions = ['export_yamaha_rivage_csvs', 'duplicate_console',]
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
     
     def name_with_template_badge(self, obj):
         if obj.is_template:
@@ -730,7 +641,7 @@ class DeviceOutputInline(admin.TabularInline):
 
 
 
-@admin.register(Device)
+
 class DeviceAdmin(admin.ModelAdmin):
     inlines = [DeviceInputInline, DeviceOutputInline]
     list_display = ['name','primary_ip_address', 'secondary_ip_address', 'device_actions',]
@@ -838,11 +749,35 @@ class DeviceAdmin(admin.ModelAdmin):
             obj.project = request.current_project
         
         super().save_model(request, obj, form, change)
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 #--------Amps---------
 
 from .models import AmpModel, Amp, AmpChannel
 
-@admin.register(AmpModel)
+
 class AmpModelAdmin(admin.ModelAdmin):
     list_display = ('manufacturer', 'model_name', 'channel_count', 
                    'nl4_connector_count', 'cacom_output_count')
@@ -862,6 +797,30 @@ class AmpModelAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 class AmpChannelInlineForm(forms.ModelForm):
@@ -929,7 +888,7 @@ class AmpAdminForm(forms.ModelForm):
                 pass
 
 
-@admin.register(Amp)
+
 class AmpAdmin(admin.ModelAdmin):
     form = AmpAdminForm
     list_display = ('name', 'location', 'amp_model', 'ip_address')
@@ -998,8 +957,32 @@ class AmpAdmin(admin.ModelAdmin):
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
 
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
 
-@admin.register(Location)
+
+
 class LocationAdmin(admin.ModelAdmin):
     list_display = ['name', 'description', 'amp_count', 'processor_count', 'export_pdf_button']
     search_fields = ['name', 'description']
@@ -1044,9 +1027,33 @@ class LocationAdmin(admin.ModelAdmin):
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
 
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
+
 
         #------------Processor------
-@admin.register(SystemProcessor)
+
 class SystemProcessorAdmin(admin.ModelAdmin):
     list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at', 'configure_button']
     list_filter = ['device_type', 'location', 'created_at']
@@ -1165,6 +1172,31 @@ class SystemProcessorAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
+
+
 
 
 # ========== P1 Processor Admin ==========
@@ -1212,7 +1244,7 @@ try:
 except admin.sites.NotRegistered:
     pass
 
-@admin.register(P1Processor)
+
 class P1ProcessorAdmin(admin.ModelAdmin):
     form = P1ProcessorAdminForm
     change_form_template = 'admin/planner/p1processor/change_form.html'
@@ -1422,6 +1454,30 @@ class P1ProcessorAdmin(admin.ModelAdmin):
             response = JsonResponse({'configurations': all_configs}, json_dumps_params={'indent': 2})
             response['Content-Disposition'] = 'attachment; filename="p1_configs.json"'
             return response
+        
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
     
     class Media:
         css = {
@@ -1469,7 +1525,7 @@ class GalaxyOutputInline(admin.TabularInline):
         return qs.order_by('output_type', 'channel_number')
 
 
-@admin.register(GalaxyProcessor)
+
 class GalaxyProcessorAdmin(admin.ModelAdmin):
     form = GalaxyProcessorAdminForm
     change_form_template = 'admin/planner/galaxyprocessor/change_form.html'
@@ -1680,6 +1736,31 @@ class GalaxyProcessorAdmin(admin.ModelAdmin):
             response = JsonResponse({'configurations': all_configs}, json_dumps_params={'indent': 2})
             response['Content-Disposition'] = 'attachment; filename="galaxy_configs.json"'
             return response
+        
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
     
     class Media:
         css = {
@@ -1735,7 +1816,7 @@ class PAFanOutInline(admin.TabularInline):
 
 
 # First, register the PAZone admin
-@admin.register(PAZone)
+
 class PAZoneAdmin(admin.ModelAdmin):
     form = PAZoneForm
     list_display = ['name', 'description', 'zone_type', 'sort_order', 'location']
@@ -1757,6 +1838,31 @@ class PAZoneAdmin(admin.ModelAdmin):
     create_default_zones.short_description = "Create default L'Acoustics zones"
 
 
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
 # PA Cable Admin
 
 class PAFanOutInline(admin.TabularInline):
@@ -1776,7 +1882,7 @@ class PAFanOutInline(admin.TabularInline):
         })
         return formset
 
-@admin.register(PACableSchedule)
+
 class PACableAdmin(admin.ModelAdmin):
     """Admin for PA Cable Schedule"""
     form = PACableInlineForm
@@ -2075,6 +2181,31 @@ class PACableAdmin(admin.ModelAdmin):
         return response
     
     generate_pull_sheet.short_description = "Generate Cable Pull Sheet"
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
     
     class Media:
         css = {
@@ -2106,7 +2237,7 @@ from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack
 from django.http import HttpResponseRedirect
 
 # Comm Channel Admin
-@admin.register(CommChannel)
+
 class CommChannelAdmin(admin.ModelAdmin):
     list_display = ['channel_number', 'input_designation', 'name', 'abbreviation', 'channel_type', 'order']
     list_editable = ['order']
@@ -2116,6 +2247,32 @@ class CommChannelAdmin(admin.ModelAdmin):
     def get_model_perms(self, request):
         """Show in COMM section of admin"""
         return super().get_model_perms(request)
+    
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 # Comm Position Admin
@@ -2151,7 +2308,7 @@ def populate_common_positions(modeladmin, request, queryset):
     modeladmin.message_user(request, "Common positions populated successfully.")
 
 
-@admin.register(CommPosition)
+
 class CommPositionAdmin(admin.ModelAdmin):
     list_display = ['name', 'order']
     list_editable = ['order']
@@ -2183,10 +2340,35 @@ class CommPositionAdmin(admin.ModelAdmin):
                 'Populate common positions'
             )
         return actions
+    
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 # Comm Crew Name Admin
-@admin.register(CommCrewName)
+
 class CommCrewNameAdmin(admin.ModelAdmin):
     list_display = ['name']
     ordering = ['name']
@@ -2216,6 +2398,32 @@ class CommCrewNameAdmin(admin.ModelAdmin):
     def get_model_perms(self, request):
         """Show in COMM section of admin"""
         return super().get_model_perms(request)
+    
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 # Custom form for CommBeltPack with dynamic dropdowns
 
@@ -2480,7 +2688,7 @@ class CommBeltPackAdminForm(forms.ModelForm):
 
         
 
-@admin.register(CommBeltPack)
+
 class CommBeltPackAdmin(admin.ModelAdmin):
     form = CommBeltPackAdminForm
 
@@ -2706,6 +2914,31 @@ class CommBeltPackAdmin(admin.ModelAdmin):
         
         return super().changelist_view(request, extra_context)
     
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+    
     class Media:
         css = {
             'all': ('admin/css/comm_admin.css',)
@@ -2855,7 +3088,7 @@ class MicAssignmentInline(admin.TabularInline):
     ordering = ['rf_number']
     readonly_fields = ['rf_number']
 
-@admin.register(ShowDay)
+
 class ShowDayAdmin(admin.ModelAdmin):
     list_display = ('date', 'name', 'session_count', 'total_mics', 'mics_used', 'view_day_link')
     list_filter = ('date',)
@@ -2896,7 +3129,32 @@ class ShowDayAdmin(admin.ModelAdmin):
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
 
-@admin.register(Presenter)
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
+
+
 class PresenterAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_at']
     search_fields = ['name']
@@ -2907,10 +3165,35 @@ class PresenterAdmin(admin.ModelAdmin):
         extra_context['import_url'] = '/audiopatch/api/presenters/import/'
         return super().changelist_view(request, extra_context=extra_context)
     
-    # We'll add CSV import later
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+    
+   
 
 
-@admin.register(MicSession)
+
 class MicSessionAdmin(admin.ModelAdmin):
     list_display = ('name', 'day', 'session_type', 'start_time', 'location', 'mic_usage', 'edit_mics_link')
     list_filter = ('day', 'session_type')
@@ -2950,7 +3233,32 @@ class MicSessionAdmin(admin.ModelAdmin):
         if 'num_mics' in form.changed_data:
             obj.create_mic_assignments()
 
-@admin.register(MicAssignment)
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)        
+
+
 class MicAssignmentAdmin(admin.ModelAdmin):
     form = MicAssignmentForm
     list_display = ('rf_display', 'session', 'mic_type', 'presenter_display', 'is_micd', 'is_d_mic', 'last_modified')
@@ -2988,7 +3296,35 @@ class MicAssignmentAdmin(admin.ModelAdmin):
         obj.modified_by = request.user
         super().save_model(request, obj, form, change)
 
-@admin.register(MicShowInfo)
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
+
+
 class MicShowInfoAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Show Information', {
@@ -3007,7 +3343,35 @@ class MicShowInfoAdmin(admin.ModelAdmin):
         return not MicShowInfo.objects.exists()
     
     def has_delete_permission(self, request, obj=None):
+        
         return False
+    
+
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 # ===== ADD TO planner/urls.py (or create if doesn't exist) =====
@@ -3030,7 +3394,7 @@ urlpatterns = [
 
 #--------Power Estimator---------
 
-@admin.register(AmplifierProfile)
+
 class AmplifierProfileAdmin(admin.ModelAdmin):
     list_display = [
         'manufacturer', 'model', 'channels', 'rated_power_watts', 
@@ -3061,6 +3425,32 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
     )
 
 
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
 class AmplifierAssignmentInline(admin.TabularInline):
     model = AmplifierAssignment
     extra = 1
@@ -3075,7 +3465,7 @@ class AmplifierAssignmentInline(admin.TabularInline):
 
 # Update your PowerDistributionPlanAdmin class in planner/admin.py
 
-@admin.register(PowerDistributionPlan)
+
 class PowerDistributionPlanAdmin(admin.ModelAdmin):
     list_display = [
         'show_day', 'venue_name', 'service_type', 
@@ -3380,7 +3770,35 @@ class PowerDistributionPlanAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
-@admin.register(AmplifierAssignment)
+
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
+
+
+
 class AmplifierAssignmentAdmin(admin.ModelAdmin):
     list_display = [
         'distribution_plan', 'zone', 'amplifier', 'quantity', 
@@ -3388,7 +3806,31 @@ class AmplifierAssignmentAdmin(admin.ModelAdmin):
     ]
 
 
-@admin.register(AudioChecklist)
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
 class AudioChecklistAdmin(admin.ModelAdmin):
     """Admin interface for Audio Checklist"""
     
@@ -3408,6 +3850,32 @@ class AudioChecklistAdmin(admin.ModelAdmin):
             'has_add_permission': False,
         }
         return render(request, 'admin/planner/audio_checklist.html', context)
+    
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
     
 
 
@@ -3435,7 +3903,7 @@ class SpeakerArrayInline(admin.StackedInline):
     )
     readonly_fields = ['bumper_angle']
 
-@admin.register(SoundvisionPrediction)
+
 class SoundvisionPredictionAdmin(admin.ModelAdmin):
     list_display = ['show_day', 'file_name', 'version', 'date_generated', 'created_at', 'array_summary', 'view_detail_link']
     list_filter = ['show_day', 'created_at', 'date_generated']
@@ -3509,7 +3977,33 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
-@admin.register(SpeakerArray)
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)    
+
+
+
 class SpeakerArrayAdmin(admin.ModelAdmin):
     list_display = ['source_name', 'prediction', 'configuration', 'display_weight', 
                    'display_trim', 'display_rigging', 'cabinet_count']
@@ -3553,13 +4047,65 @@ class SpeakerArrayAdmin(admin.ModelAdmin):
                           '\n'.join(summary_lines))
     cabinet_summary.short_description = "Cabinet Configuration"
 
-@admin.register(SpeakerCabinet)
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
 class SpeakerCabinetAdmin(admin.ModelAdmin):
     list_display = ['position_number', 'speaker_model', 'array', 'angle_to_next', 
                    'site_angle', 'panflex_setting']
     list_filter = ['speaker_model', 'panflex_setting']
     search_fields = ['array__source_name', 'speaker_model']
-    ordering = ['array', 'position_number']    
+    ordering = ['array', 'position_number']   
+
+
+
+    def has_add_permission(self, request):
+        """Only editors and owners can add"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Only editors and owners can edit"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """Only editors and owners can delete"""
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj) 
 
 
 
@@ -3579,26 +4125,36 @@ class DarkThemeAdminMixin:
         )
 
 
-#-------Invitatoin Registration---
+    
 
-@admin.register(Invitation)
-class InvitationAdmin(admin.ModelAdmin):
-    list_display = ('email', 'project', 'role', 'status', 'invited_by', 'invited_at')
-    list_filter = ('status', 'role', 'invited_at')
-    search_fields = ('email', 'project__name')
-    readonly_fields = ('token', 'invited_at', 'accepted_at')
-    
-    fieldsets = (
-        ('Invitation Details', {
-            'fields': ('project', 'email', 'role', 'invited_by')
-        }),
-        ('Status', {
-            'fields': ('status', 'token', 'invited_at', 'accepted_at')
-        }),
-    )
-    
-    def get_readonly_fields(self, request, obj=None):
-        """Make fields readonly after creation"""
-        if obj:  # Editing existing invitation
-            return self.readonly_fields + ('project', 'email', 'invited_by')
-        return self.readonly_fields
+
+    # ==================== REGISTER ALL MODELS ====================
+from planner.admin_site import showstack_admin_site
+
+# Register all equipment admin classes
+showstack_admin_site.register(Console, ConsoleAdmin)
+showstack_admin_site.register(Device, DeviceAdmin)
+showstack_admin_site.register(AmpModel, AmpModelAdmin)
+showstack_admin_site.register(Amp, AmpAdmin)
+showstack_admin_site.register(Location, LocationAdmin)
+showstack_admin_site.register(SystemProcessor, SystemProcessorAdmin)
+showstack_admin_site.register(P1Processor, P1ProcessorAdmin)
+showstack_admin_site.register(GalaxyProcessor, GalaxyProcessorAdmin)
+showstack_admin_site.register(PAZone, PAZoneAdmin)
+showstack_admin_site.register(PACableSchedule, PACableAdmin)  
+showstack_admin_site.register(CommChannel, CommChannelAdmin)
+showstack_admin_site.register(CommPosition, CommPositionAdmin)
+showstack_admin_site.register(CommCrewName, CommCrewNameAdmin)
+showstack_admin_site.register(CommBeltPack, CommBeltPackAdmin)
+showstack_admin_site.register(ShowDay, ShowDayAdmin)
+showstack_admin_site.register(Presenter, PresenterAdmin)
+showstack_admin_site.register(MicSession, MicSessionAdmin)
+showstack_admin_site.register(MicAssignment, MicAssignmentAdmin)
+showstack_admin_site.register(MicShowInfo, MicShowInfoAdmin)
+showstack_admin_site.register(AmplifierProfile, AmplifierProfileAdmin)
+showstack_admin_site.register(PowerDistributionPlan, PowerDistributionPlanAdmin)
+showstack_admin_site.register(AmplifierAssignment, AmplifierAssignmentAdmin)
+showstack_admin_site.register(AudioChecklist, AudioChecklistAdmin)  
+showstack_admin_site.register(SoundvisionPrediction, SoundvisionPredictionAdmin)
+showstack_admin_site.register(SpeakerArray, SpeakerArrayAdmin)
+showstack_admin_site.register(SpeakerCabinet, SpeakerCabinetAdmin)

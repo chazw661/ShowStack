@@ -12,56 +12,67 @@ def ordered_get_app_list(request, app_label=None):
     # Define the correct order with proper groupings
     # Define the correct order with proper groupings
     order_map = {
-        # User/Project Management (1-2)
-        'userprofile': 1,  # User Profiles - TOP
-        'project': 2,  # Projects
-        
-        # Main Equipment (3-6)
-        'location': 3,  # Equip Locations
-        'console': 4,
-        'device': 5,
-        'amp': 6,  # Amplifier Assignments
-        
-        # System Processors (7)
-        'systemprocessor': 7,
-        
-        # PA Cable System (8-9)
-        'pacableschedule': 8,  # PA Cable Entries - PARENT
-        'pafanout': 9,  # └─ PA Fan Outs - CHILD
-        
-        # Communications (10-13)
-        'commbeltpack': 10,
-        'commposition': 11,
-        'commcrewname': 12,
-        'commchannel': 13,
-        
-        # Show Mic Tracker (14-18)
-        'showday': 14,  # Show Mic Tracker - PARENT
-        'micsession': 15,
-        'micassignment': 16,
-        'presenter': 17,
-        'micshowinfo': 18,
-        
-        # PA Zones (19) - standalone
-        'pazone': 19,
-        
-        # Soundvision (20-22)
-        'soundvisionprediction': 20,
-        'speakerarray': 21,
-        'speakercabinet': 22,
-        
-        # Power Distribution (23-26)
-        'powerdistributionplan': 23,
-        'amplifierassignment': 24,
-        'amplifierprofile': 25,
-        'ampmodel': 26,
-        
-        # Audio Checklist (27)
-        'audiochecklist': 27,
-        
-        # Any other models (28+)
-        'ampchannel': 28,
-    }
+    # Authentication & Authorization (0)
+    'user': 0,
+    'group': 0.5,
+    
+    # User/Project Management (1-4)
+    'userprofile': 1,  # User Profiles - TOP
+    'projectmember': 2,  # Project Members - moved up
+    'invitation': 3,  # Invitations - moved up
+    'project': 4,  # Projects
+    
+    # Main Equipment (5-8)
+    'location': 5,  # Equip Locations
+    'console': 6,
+    'device': 7,
+    'amp': 8,
+    
+    # System Processors (9)
+    'systemprocessor': 9,
+    
+    # PA Cable System (10-11)
+    'pacableschedule': 10,  # PA Cable Entries - PARENT
+    'pafanout': 11,  # └─ PA Fan Outs - CHILD
+    
+    # Communications (12-15)
+    'commbeltpack': 12,
+    'commposition': 13,
+    'commcrewname': 14,
+    'commchannel': 15,
+    
+    # Show Mic Tracker (16-20)
+    'showday': 16,  # Show Mic Tracker - PARENT
+    'micsession': 17,
+    'micassignment': 18,
+    'presenter': 19,
+    'micshowinfo': 20,
+    
+    # PA Zones (21) - standalone
+    'pazone': 21,
+    
+    # Soundvision (22-24)
+    'soundvisionprediction': 22,
+    'speakerarray': 23,
+    'speakercabinet': 24,
+    
+    # Amplifiers (25-27)
+    'amplifierprofile': 25,
+    'powerdistributionplan': 26,
+    'amplifierassignment': 27,
+    
+    # Standalone Models (28-29)
+    'ampmodel': 28,
+    'audiochecklist': 29,
+    
+    # P1 & Galaxy Processors (30-35)
+    'p1processor': 30,
+    'p1input': 31,
+    'p1output': 32,
+    'galaxyprocessor': 33,
+    'galaxyinput': 34,
+    'galaxyoutput': 35,
+}
     
     for app in app_list:
         if app['app_label'] == 'planner':
