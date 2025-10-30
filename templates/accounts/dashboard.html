@@ -303,18 +303,60 @@
         </div>
         {% endif %}
         
-        {% if not can_create_projects %}
+       {% if not can_create_projects %}
         <div class="upgrade-notice">
             <p><strong>Free Account Limitations:</strong> You can view and collaborate on projects shared with you, but cannot create your own projects.</p>
             <p>Upgrade to a premium account to create unlimited projects and invite your crew!</p>
         </div>
-        {% endif %}
+        {% endif %}  <!-- ← Make sure this is here! -->
         
         {% if can_create_projects %}
         <a href="/admin/planner/project/add/" class="btn-create">+ Create New Project</a>
         {% else %}
         <span class="btn-create btn-disabled">+ Create New Project (Upgrade Required)</span>
+        {% endif %}  <!-- ← Make sure this is here! -->
+
+
+
+        
+        <!-- ADD THIS ENTIRE SECTION -->
+        <!-- Pending Invitations Section -->
+        {% if pending_invitations %}
+        <div class="section" style="border: 2px solid #4a9eff; background: #f0f8ff;">
+            <h3 style="color: #4a9eff;">🎉 You Have Pending Invitations ({{ pending_invitations.count }})</h3>
+            <div class="project-list">
+                {% for invitation in pending_invitations %}
+                <div class="project-card" style="background: white; border-color: #4a9eff;">
+                    <div class="project-header">
+                        <div style="flex: 1;">
+                            <div class="project-name">{{ invitation.project.name }}</div>
+                            <div class="project-details">
+                                <div class="project-date">{{ invitation.project.show_date|date:"F d, Y" }}</div>
+                                <div>{{ invitation.project.venue }}</div>
+                                <div style="margin-top: 8px; font-size: 13px; color: #666;">
+                                    <strong>{{ invitation.invited_by.get_full_name|default:invitation.invited_by.username }}</strong> 
+                                    invited you as <strong>{{ invitation.get_role_display }}</strong>
+                                </div>
+                                <div style="margin-top: 5px; font-size: 12px; color: #999;">
+                                    Invited {{ invitation.invited_at|timesince }} ago
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <a href="{% url 'accept_invitation' invitation.token %}" 
+                               style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+                                Accept Invitation
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
         {% endif %}
+        <!-- END PENDING INVITATIONS SECTION -->
+        
+    
         
         <!-- Owned Projects Section -->
         {% if owned_projects %}

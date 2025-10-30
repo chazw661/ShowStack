@@ -30,6 +30,9 @@ import math
 import json  
 from datetime import datetime, timedelta  
 
+from planner.models import Project, ProjectMember
+from django.db import models
+
 # Model imports (add the mic tracking models to your existing model imports)
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
@@ -53,6 +56,130 @@ from .forms import ConsoleStereoOutputForm
 
 
 
+class BaseAdmin(admin.ModelAdmin):
+    """Base admin class that provides dark theme CSS"""
+    
+    class Media:
+        css = {
+            'all': ('css/dark-admin.css',)
+        }
+
+
+class BaseEquipmentAdmin(BaseAdmin):
+    """Base admin for equipment models with project filtering and role-based permissions"""
+    
+    def _is_premium_owner(self, request):
+        """Check if user is premium AND owns at least one project"""
+        if not hasattr(request.user, 'userprofile'):
+            return False
+        
+        profile = request.user.userprofile
+        is_premium = profile.account_type == 'premium'
+        owns_projects = Project.objects.filter(owner=request.user).exists()
+        
+        return is_premium and owns_projects
+    
+    def _get_user_role_for_project(self, request, project):
+        """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
+        if project.owner == request.user:
+            return 'owner'
+        
+        try:
+            member = ProjectMember.objects.get(user=request.user, project=project)
+            return member.role  # 'editor' or 'viewer'
+        except ProjectMember.DoesNotExist:
+            return None
+    
+    def _user_has_editor_access(self, request):
+        """Check if user has editor access to ANY project"""
+        return ProjectMember.objects.filter(
+            user=request.user,
+            role='editor'
+        ).exists()
+    
+    def get_queryset(self, request):
+        """Filter equipment to user's accessible projects"""
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        
+        # Get user's owned projects and projects they're members of
+        user_projects = Project.objects.filter(
+            models.Q(owner=request.user) | 
+            models.Q(projectmember__user=request.user)
+        ).values_list('id', flat=True)
+        
+        return qs.filter(project_id__in=user_projects)
+    
+    def has_module_permission(self, request):
+        """Show module if user has any accessible projects"""
+        if request.user.is_superuser:
+            return True
+        
+        # Check if user has any accessible projects
+        has_projects = Project.objects.filter(
+            models.Q(owner=request.user) | 
+            models.Q(projectmember__user=request.user)
+        ).exists()
+        
+        return has_projects
+    
+    def has_view_permission(self, request, obj=None):
+        """Allow view if user has access to the project"""
+        if request.user.is_superuser:
+            return True
+        
+        if obj is None:
+            return self.has_module_permission(request)
+        
+        # Check if user owns or is member of this project
+        return (obj.project.owner == request.user or 
+                ProjectMember.objects.filter(
+                    user=request.user, 
+                    project=obj.project
+                ).exists())
+    
+    def has_add_permission(self, request):
+        """Allow add if user is owner or editor (NOT viewer)"""
+        if request.user.is_superuser:
+            return True
+        
+        # Premium owners can add
+        if self._is_premium_owner(request):
+            return True
+        
+        # Editors can add (but NOT viewers)
+        return self._user_has_editor_access(request)
+    
+    def has_change_permission(self, request, obj=None):
+        """Allow change if user is owner or editor (NOT viewer)"""
+        if request.user.is_superuser:
+            return True
+        
+        if obj is None:
+            # For changelist view - show if has any editor access
+            return self._is_premium_owner(request) or self._user_has_editor_access(request)
+        
+        # Check specific object permission
+        role = self._get_user_role_for_project(request, obj.project)
+        return role in ['owner', 'editor']  # Viewers can't edit
+    
+    def has_delete_permission(self, request, obj=None):
+        """Allow delete if user is owner or editor (NOT viewer)"""
+        if request.user.is_superuser:
+            return True
+        
+        if obj is None:
+            return self._is_premium_owner(request) or self._user_has_editor_access(request)
+        
+        # Check specific object permission
+        role = self._get_user_role_for_project(request, obj.project)
+        return role in ['owner', 'editor']  # Viewers can't delete
+
+
+
+
+
 
 # ==================== SHOWSTACK BRANDING ====================
 admin.site.site_header = "ShowStack Audio Administration"
@@ -63,12 +190,7 @@ admin.site.index_title = "ShowStack Audio Management"
 #
 
 
-class BaseAdmin(admin.ModelAdmin):
-    """Base admin class with dark theme CSS applied to all admin pages"""
-    class Media:
-        css = {
-            'all': ['planner/css/custom_admin.css']
-        }
+
 
 #-----Console Page----
 
@@ -642,7 +764,7 @@ class DeviceOutputInline(admin.TabularInline):
 
 
 
-class DeviceAdmin(admin.ModelAdmin):
+class DeviceAdmin(BaseEquipmentAdmin):
     inlines = [DeviceInputInline, DeviceOutputInline]
     list_display = ['name','primary_ip_address', 'secondary_ip_address', 'device_actions',]
     #list_filter = ['location',]  
@@ -778,7 +900,7 @@ class DeviceAdmin(admin.ModelAdmin):
 from .models import AmpModel, Amp, AmpChannel
 
 
-class AmpModelAdmin(admin.ModelAdmin):
+class AmpModelAdmin(BaseEquipmentAdmin):
     list_display = ('manufacturer', 'model_name', 'channel_count', 
                    'nl4_connector_count', 'cacom_output_count')
     list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count')
@@ -889,7 +1011,7 @@ class AmpAdminForm(forms.ModelForm):
 
 
 
-class AmpAdmin(admin.ModelAdmin):
+class AmpAdmin(BaseEquipmentAdmin):
     form = AmpAdminForm
     list_display = ('name', 'location', 'amp_model', 'ip_address')
     list_filter = ('location', 'amp_model__manufacturer', 'amp_model__model_name')
@@ -983,7 +1105,7 @@ class AmpAdmin(admin.ModelAdmin):
 
 
 
-class LocationAdmin(admin.ModelAdmin):
+class LocationAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'description', 'amp_count', 'processor_count', 'export_pdf_button']
     search_fields = ['name', 'description']
     ordering = ['name']
@@ -1054,7 +1176,7 @@ class LocationAdmin(admin.ModelAdmin):
 
         #------------Processor------
 
-class SystemProcessorAdmin(admin.ModelAdmin):
+class SystemProcessorAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at', 'configure_button']
     list_filter = ['device_type', 'location', 'created_at']
     search_fields = ['name', 'ip_address']
@@ -1245,7 +1367,7 @@ except admin.sites.NotRegistered:
     pass
 
 
-class P1ProcessorAdmin(admin.ModelAdmin):
+class P1ProcessorAdmin(BaseEquipmentAdmin):
     form = P1ProcessorAdminForm
     change_form_template = 'admin/planner/p1processor/change_form.html'
     list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
@@ -1526,7 +1648,7 @@ class GalaxyOutputInline(admin.TabularInline):
 
 
 
-class GalaxyProcessorAdmin(admin.ModelAdmin):
+class GalaxyProcessorAdmin(BaseEquipmentAdmin):
     form = GalaxyProcessorAdminForm
     change_form_template = 'admin/planner/galaxyprocessor/change_form.html'
     list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
@@ -1817,7 +1939,7 @@ class PAFanOutInline(admin.TabularInline):
 
 # First, register the PAZone admin
 
-class PAZoneAdmin(admin.ModelAdmin):
+class PAZoneAdmin(BaseEquipmentAdmin):
     form = PAZoneForm
     list_display = ['name', 'description', 'zone_type', 'sort_order', 'location']
     list_filter = ['zone_type', 'location']
@@ -1883,7 +2005,7 @@ class PAFanOutInline(admin.TabularInline):
         return formset
 
 
-class PACableAdmin(admin.ModelAdmin):
+class PACableAdmin(BaseEquipmentAdmin):
     """Admin for PA Cable Schedule"""
     form = PACableInlineForm
     inlines = [PAFanOutInline]  # Add this line
@@ -2238,7 +2360,7 @@ from django.http import HttpResponseRedirect
 
 # Comm Channel Admin
 
-class CommChannelAdmin(admin.ModelAdmin):
+class CommChannelAdmin(BaseEquipmentAdmin):
     list_display = ['channel_number', 'input_designation', 'name', 'abbreviation', 'channel_type', 'order']
     list_editable = ['order']
     ordering = ['order', 'channel_number']
@@ -2309,7 +2431,7 @@ def populate_common_positions(modeladmin, request, queryset):
 
 
 
-class CommPositionAdmin(admin.ModelAdmin):
+class CommPositionAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'order']
     list_editable = ['order']
     ordering = ['order', 'name']
@@ -2369,7 +2491,7 @@ class CommPositionAdmin(admin.ModelAdmin):
 
 # Comm Crew Name Admin
 
-class CommCrewNameAdmin(admin.ModelAdmin):
+class CommCrewNameAdmin(BaseEquipmentAdmin):
     list_display = ['name']
     ordering = ['name']
     search_fields = ['name']
@@ -2689,7 +2811,7 @@ class CommBeltPackAdminForm(forms.ModelForm):
         
 
 
-class CommBeltPackAdmin(admin.ModelAdmin):
+class CommBeltPackAdmin(BaseEquipmentAdmin):
     form = CommBeltPackAdminForm
 
     def save_model(self, request, obj, form, change):
@@ -3089,7 +3211,7 @@ class MicAssignmentInline(admin.TabularInline):
     readonly_fields = ['rf_number']
 
 
-class ShowDayAdmin(admin.ModelAdmin):
+class ShowDayAdmin(BaseEquipmentAdmin):
     list_display = ('date', 'name', 'session_count', 'total_mics', 'mics_used', 'view_day_link')
     list_filter = ('date',)
     search_fields = ('name',)
@@ -3155,7 +3277,7 @@ class ShowDayAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj)    
 
 
-class PresenterAdmin(admin.ModelAdmin):
+class PresenterAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'created_at']
     search_fields = ['name']
     ordering = ['name']
@@ -3194,7 +3316,7 @@ class PresenterAdmin(admin.ModelAdmin):
 
 
 
-class MicSessionAdmin(admin.ModelAdmin):
+class MicSessionAdmin(BaseEquipmentAdmin):
     list_display = ('name', 'day', 'session_type', 'start_time', 'location', 'mic_usage', 'edit_mics_link')
     list_filter = ('day', 'session_type')
     search_fields = ('name', 'location')
@@ -3259,7 +3381,7 @@ class MicSessionAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj)        
 
 
-class MicAssignmentAdmin(admin.ModelAdmin):
+class MicAssignmentAdmin(BaseEquipmentAdmin):
     form = MicAssignmentForm
     list_display = ('rf_display', 'session', 'mic_type', 'presenter_display', 'is_micd', 'is_d_mic', 'last_modified')
     list_filter = ('session__day', 'session', 'mic_type', 'is_micd', 'is_d_mic')
@@ -3325,7 +3447,7 @@ class MicAssignmentAdmin(admin.ModelAdmin):
 
 
 
-class MicShowInfoAdmin(admin.ModelAdmin):
+class MicShowInfoAdmin(BaseEquipmentAdmin):
     fieldsets = (
         ('Show Information', {
             'fields': ('show_name', 'venue_name', 'ballroom_name')
@@ -3395,7 +3517,7 @@ urlpatterns = [
 #--------Power Estimator---------
 
 
-class AmplifierProfileAdmin(admin.ModelAdmin):
+class AmplifierProfileAdmin(BaseEquipmentAdmin):
     list_display = [
         'manufacturer', 'model', 'channels', 'rated_power_watts', 
         'nominal_voltage', 'rack_units'
@@ -3466,7 +3588,7 @@ class AmplifierAssignmentInline(admin.TabularInline):
 # Update your PowerDistributionPlanAdmin class in planner/admin.py
 
 
-class PowerDistributionPlanAdmin(admin.ModelAdmin):
+class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
     list_display = [
         'show_day', 'venue_name', 'service_type', 
         'available_amperage_per_leg', 'get_total_current', 'created_at', 'view_calculator_button',
@@ -3799,7 +3921,7 @@ class PowerDistributionPlanAdmin(admin.ModelAdmin):
 
 
 
-class AmplifierAssignmentAdmin(admin.ModelAdmin):
+class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
     list_display = [
         'distribution_plan', 'zone', 'amplifier', 'quantity', 
         'duty_cycle', 'phase_assignment', 'calculated_total_current'
@@ -3831,7 +3953,7 @@ class AmplifierAssignmentAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj)
 
 
-class AudioChecklistAdmin(admin.ModelAdmin):
+class AudioChecklistAdmin(BaseEquipmentAdmin):
     """Admin interface for Audio Checklist"""
     
     def has_add_permission(self, request):
@@ -3904,7 +4026,7 @@ class SpeakerArrayInline(admin.StackedInline):
     readonly_fields = ['bumper_angle']
 
 
-class SoundvisionPredictionAdmin(admin.ModelAdmin):
+class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
     list_display = ['show_day', 'file_name', 'version', 'date_generated', 'created_at', 'array_summary', 'view_detail_link']
     list_filter = ['show_day', 'created_at', 'date_generated']
     search_fields = ['file_name', 'notes']
@@ -4004,7 +4126,7 @@ class SoundvisionPredictionAdmin(admin.ModelAdmin):
 
 
 
-class SpeakerArrayAdmin(admin.ModelAdmin):
+class SpeakerArrayAdmin(BaseEquipmentAdmin):
     list_display = ['source_name', 'prediction', 'configuration', 'display_weight', 
                    'display_trim', 'display_rigging', 'cabinet_count']
     list_filter = ['configuration', 'bumper_type', 'num_motors']
@@ -4074,7 +4196,7 @@ class SpeakerArrayAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj)
 
 
-class SpeakerCabinetAdmin(admin.ModelAdmin):
+class SpeakerCabinetAdmin(BaseEquipmentAdmin):
     list_display = ['position_number', 'speaker_model', 'array', 'angle_to_next', 
                    'site_angle', 'panflex_setting']
     list_filter = ['speaker_model', 'panflex_setting']

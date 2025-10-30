@@ -77,6 +77,12 @@ def dashboard(request):
     member_projects = ProjectMember.objects.filter(
         user=user
     ).select_related('project').order_by('-project__show_date')
+
+    pending_invitations = Invitation.objects.filter(
+        email=user.email,
+        status='pending'
+    ).select_related('project', 'invited_by').order_by('-invited_at')
+
     
     # Check if user can create projects
     can_create_projects = False
@@ -86,6 +92,7 @@ def dashboard(request):
     context = {
         'owned_projects': owned_projects,
         'member_projects': member_projects,
+        'pending_invitations': pending_invitations,
         'can_create_projects': can_create_projects,
         'account_type': user.userprofile.account_type if hasattr(user, 'userprofile') else 'free',
     }
