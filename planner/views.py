@@ -557,13 +557,11 @@ def mic_tracker_view(request):
         days = ShowDay.objects.all()
     
     days = days.prefetch_related(
-    'sessions__mic_assignments__presenter',
-    'sessions__mic_assignments__shared_presenters'
+        'sessions__mic_assignments__presenter',
+        'sessions__mic_assignments__shared_presenters'
     ).order_by('date')
     
-
     # Organize sessions by columns for display
-
     days_data = []
     for day in days:
         all_sessions = list(day.sessions.all().order_by('order', 'start_time'))
@@ -572,16 +570,42 @@ def mic_tracker_view(request):
             'day': day,
             'sessions': all_sessions,  # Just pass all sessions as a flat list
         })
-
-        # This is inside the mic_tracker_view function
-        context = {
-            'show_info': show_info,
-            'days_data': days_data,
-            'current_date': date.today(),
-            'mic_types': MicAssignment.MIC_TYPES,
-            'session_types': MicSession.SESSION_TYPES,
-    }   # <-- This closing brace needs to be indented with 4 spaces, not at column 0
+    
+    # CHECK PERMISSIONS - Add this section
+    from planner.models import Project, ProjectMember
+    
+    is_viewer = False
+    if not request.user.is_superuser:
+        # Check if user is viewer for any projects with ShowDays
+        # For simplicity, check if user has ANY viewer memberships
+        viewer_memberships = ProjectMember.objects.filter(
+            user=request.user,
+            role='viewer'
+        )
+        
+        # If user has viewer memberships but no editor/owner roles, they're read-only
+        if viewer_memberships.exists():
+            editor_owner_memberships = ProjectMember.objects.filter(
+                user=request.user,
+                role='editor'
+            ).exists()
             
+            owns_projects = Project.objects.filter(owner=request.user).exists()
+            
+            # If ONLY viewer (no editor roles or owned projects), set read-only
+            if not editor_owner_memberships and not owns_projects:
+                is_viewer = True
+    
+    # This is inside the mic_tracker_view function
+    context = {
+        'show_info': show_info,
+        'days_data': days_data,
+        'current_date': date.today(),
+        'mic_types': MicAssignment.MIC_TYPES,
+        'session_types': MicSession.SESSION_TYPES,
+        'is_viewer': is_viewer,  # ADD THIS LINE
+    }  # ← This closing brace needs to be indented with 4 spaces, not at column 0
+    
     return render(request, 'planner/mic_tracker.html', context) 
 
 

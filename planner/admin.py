@@ -178,8 +178,77 @@ class BaseEquipmentAdmin(BaseAdmin):
 
 
 
-
-
+class BaseEquipmentInline(admin.TabularInline):
+    """Base inline class with viewer restrictions for equipment inlines"""
+    
+    def _user_is_viewer(self, request, obj):
+        """Check if user is a viewer for this object's project"""
+        if request.user.is_superuser:
+            return False
+        
+        if obj is None:
+            return False
+        
+        # Check if owner
+        try:
+            if obj.project.owner == request.user:
+                return False
+        except:
+            return False
+        
+        # Check if viewer
+        try:
+            member = ProjectMember.objects.get(user=request.user, project=obj.project)
+            return member.role == 'viewer'
+        except ProjectMember.DoesNotExist:
+            return True
+    
+    def has_add_permission(self, request, obj=None):
+        """Viewers cannot add"""
+        if request.user.is_superuser:
+            return True
+        
+        if self._user_is_viewer(request, obj):
+            return False
+        
+        return True
+    
+    def has_change_permission(self, request, obj=None):
+        """Viewers cannot change"""
+        if request.user.is_superuser:
+            return True
+            
+        if self._user_is_viewer(request, obj):
+            return False
+        
+        return True
+    
+    def has_delete_permission(self, request, obj=None):
+        """Viewers cannot delete"""
+        if request.user.is_superuser:
+            return True
+            
+        if self._user_is_viewer(request, obj):
+            return False
+        
+        return True
+    
+    def get_max_num(self, request, obj=None, **kwargs):
+        """Prevent adding new rows for viewers"""
+        if self._user_is_viewer(request, obj):
+            return 0
+        return super().get_max_num(request, obj, **kwargs)
+    
+    def get_formset(self, request, obj=None, **kwargs):
+        """Make form fields disabled for viewers"""
+        formset = super().get_formset(request, obj, **kwargs)
+        
+        if self._user_is_viewer(request, obj):
+            # Make all fields disabled
+            for field_name, field in formset.form.base_fields.items():
+                field.disabled = True
+        
+        return formset
 
 # ==================== SHOWSTACK BRANDING ====================
 admin.site.site_header = "ShowStack Audio Administration"
@@ -705,11 +774,12 @@ class ConsoleAdmin(BaseAdmin):
 
 # ———— your inlines here ——————————————————————————————————
 
-class DeviceInputInline(admin.TabularInline):
-    model = DeviceInput
+class DeviceInputInline(BaseEquipmentInline): 
+    model = DeviceInput 
     form = DeviceInputInlineForm
     extra = 0  
     template = "admin/planner/device_input_grid.html"
+    
 
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
@@ -733,7 +803,7 @@ class DeviceInputInline(admin.TabularInline):
         return InitializingFormSet
 
 
-class DeviceOutputInline(admin.TabularInline):
+class DeviceOutputInline(BaseEquipmentInline):
     model = DeviceOutput
     form = DeviceOutputInlineForm
     extra = 0
@@ -895,6 +965,10 @@ class DeviceAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+
+
+
 #--------Amps---------
 
 from .models import AmpModel, Amp, AmpChannel
@@ -3202,7 +3276,7 @@ class MicAssignmentForm(forms.ModelForm):
         else:
             return [n.strip() for n in value.split(',') if n.strip()]
     
-class MicAssignmentInline(admin.TabularInline):
+class MicAssignmentInline(BaseEquipmentInline):
     model = MicAssignment
     form = MicAssignmentForm
     extra = 0

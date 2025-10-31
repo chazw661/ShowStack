@@ -41,12 +41,13 @@
         </div>
         
         <div class="tracker-actions">
+            {% if not is_viewer %}
             <button class="btn btn-primary" onclick="addNewDay()">Add Day</button>
+            {% endif %}
             <button class="btn btn-secondary" onclick="expandAllDays()">Expand All</button>
             <button class="btn btn-secondary" onclick="collapseAllDays()">Collapse All</button>
             <a href="/audiopatch/mic-tracker/export/" class="btn btn-export">Export CSV</a>
         </div>
-    </div>
 
     <!-- Days Container -->
     <div class="days-container">
@@ -63,7 +64,9 @@
                     {% endwith %}
                 </div>
                 <div class="day-actions">
+                    {% if not is_viewer %}
                     <button class="btn btn-sm" onclick="event.stopPropagation(); addSession({{ day_data.day.id }})">Add Session</button>
+                    {% endif %}
                 </div>
             </div>
             
@@ -85,6 +88,7 @@
                                     {% endif %}
                                 </div>
                                 <div class="session-actions">
+                                    {% if not is_viewer %}
                                     <button class="btn-icon" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
                                     <button class="btn-icon" title="Settings" onclick="editSession({{ session.id }})">⚙️</button>
                                     <div class="dropdown">
@@ -97,8 +101,9 @@
                                             <a href="#" onclick="bulkUpdate({{ session.id }}, 'clear_all'); return false;">Clear All</a>
                                         </div>
                                     </div>
+                                    {% endif %}
                                 </div>
-                            </div>
+                            </div> 
                             
                             <div class="mic-grid">
                                 <div class="mic-grid-header">
@@ -114,7 +119,7 @@
                                     <div class="col-rf">{{ assignment.rf_number|stringformat:"02d" }}</div>
                                     
                                     <div class="col-type">
-                                        <select class="mic-type-select" onchange="updateField({{ assignment.id }}, 'mic_type', this.value)">
+                                        <select class="mic-type-select" onchange="updateField({{ assignment.id }}, 'mic_type', this.value)" {% if is_viewer %}disabled{% endif %}>
                                             <option value="">---</option>
                                             {% for value, label in mic_types %}
                                             {% if value %}
@@ -129,32 +134,32 @@
                                         <div class="presenter-row primary-presenter">
                                             <span class="presenter-order">1°</span>
                                             <input type="text" 
-                                                class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
-                                                value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
-                                                placeholder="Enter name..."
-                                                list="presenters-datalist"
-                                                onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
-                                                title="Primary presenter">
-                                            {% if assignment.active_presenter_index == 0 %}
-                                            <span class="current-badge">CURRENT</span>
-                                            {% endif %}
+                                                    class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
+                                                    value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
+                                                    placeholder="Enter name..."
+                                                    list="presenters-datalist"
+                                                    onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
+                                                    title="Primary presenter"
+                                                    {% if is_viewer %}readonly{% endif %}>
+                                            
                                             
                                             <!-- Expand/Collapse Button -->
                                             {% if assignment.shared_presenters.exists %}
+                                                <button type="button" 
+                                                        class="btn-expand-presenters" 
+                                                        onclick="togglePresenters({{ assignment.id }})"
+                                                        title="Show shared presenters">
+                                                    <span class="expand-icon">▶</span>
+                                                    <span class="presenter-count">+{{ assignment.shared_presenters.count }}</span>
+                                                </button>
+                                            {% if not is_viewer %}
                                             <button type="button" 
-                                                    class="btn-expand-presenters" 
-                                                    onclick="togglePresenters({{ assignment.id }})"
-                                                    title="Show shared presenters">
-                                                <span class="expand-icon">▶</span>
-                                                <span class="presenter-count">+{{ assignment.shared_presenters.count }}</span>
+                                                    class="btn-remove-presenter" 
+                                                    onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared.name }}')"
+                                                    title="Remove presenter">
+                                                ×
                                             </button>
-                                            {% else %}
-                                            <button type="button" 
-                                                    class="btn-add-presenter" 
-                                                    onclick="togglePresenters({{ assignment.id }})"
-                                                    title="Add shared presenter">
-                                                👥
-                                            </button>
+                                            {% endif %}
                                             {% endif %}
                                         </div>
                                         
@@ -181,6 +186,8 @@
                                             {% endfor %}
                                             
                                             <!-- Add New Presenter Form -->
+                                            {% if not is_viewer %}
+                                            <!-- Add New Presenter Form -->
                                             <div class="add-presenter-row">
                                                 <input type="text" 
                                                         class="presenter-input add-presenter-input" 
@@ -195,6 +202,7 @@
                                                     +
                                                 </button>
                                             </div>
+                                            {% endif %}
                                             
                                             <!-- Reset Button (only show if not on primary) -->
                                             {% if assignment.active_presenter_index > 0 %}
@@ -212,16 +220,18 @@
                                     
                                     <div class="col-micd">
                                         <input type="checkbox" 
-                                               class="mic-checkbox"
-                                               {% if assignment.is_micd %}checked{% endif %}
-                                               onchange="updateField({{ assignment.id }}, 'is_micd', this.checked)">
+                                            class="mic-checkbox"
+                                            {% if assignment.is_micd %}checked{% endif %}
+                                            onchange="updateField({{ assignment.id }}, 'is_micd', this.checked)"
+                                            {% if is_viewer %}disabled{% endif %}>
                                     </div>
-                                    
+
                                     <div class="col-dmic">
                                         <input type="checkbox" 
-                                               class="mic-checkbox dmic-checkbox"
-                                               {% if assignment.is_dmic %}checked{% endif %}
-                                               onchange="handleDmicChange({{ assignment.id }}, this.checked)">
+                                            class="mic-checkbox dmic-checkbox"
+                                            {% if assignment.is_dmic %}checked{% endif %}
+                                            onchange="handleDmicChange({{ assignment.id }}, this.checked)"
+                                            {% if is_viewer %}disabled{% endif %}>
                                     </div>
                                 </div>
                                 {% endfor %}
@@ -241,46 +251,53 @@
                         {% if forloop.last %}</div>{% endif %}
                     {% endfor %}
                     
-                    {% if not day_data.sessions %}
-                        <div class="session-row">
-                            <div class="session-column empty">
-                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
-                                    + Add Session
-                                </button>
+                    
+                    
+                    {% if not is_viewer %}
+                        {% if not day_data.sessions %}
+                            <div class="session-row">
+                                <div class="session-column empty">
+                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
+                                        + Add Session
+                                    </button>
+                                </div>
+                                <div class="session-column empty">
+                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
+                                        + Add Session
+                                    </button>
+                                </div>
+                                <div class="session-column empty">
+                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
+                                        + Add Session
+                                    </button>
+                                </div>
                             </div>
-                            <div class="session-column empty">
-                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
-                                    + Add Session
-                                </button>
+                        {% elif day_data.sessions|length|divisibleby:3 %}
+                            <div class="session-row">
+                                <div class="session-column empty">
+                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
+                                        + Add Session
+                                    </button>
+                                </div>
+                                <div class="session-column empty">
+                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
+                                        + Add Session
+                                    </button>
+                                </div>
+                                <div class="session-column empty">
+                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
+                                        + Add Session
+                                    </button>
+                                </div>
                             </div>
-                            <div class="session-column empty">
-                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
-                                    + Add Session
-                                </button>
-                            </div>
-                        </div>
-                    {% elif day_data.sessions|length|divisibleby:3 %}
-                        <!-- Add empty slots to complete the row if needed -->
-                        <div class="session-row">
-                            <div class="session-column empty">
-                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
-                                    + Add Session
-                                </button>
-                            </div>
-                            <div class="session-column empty">
-                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
-                                    + Add Session
-                                </button>
-                            </div>
-                            <div class="session-column empty">
-                                <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
-                                    + Add Session
-                                </button>
-                            </div>
-                       </div>
                         {% endif %}
-                    </div>
-                    {% endfor %}  
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
 <!-- Close the for day_data in days_data loop -->
 
                 <!-- Shared datalist for all presenter inputs -->
