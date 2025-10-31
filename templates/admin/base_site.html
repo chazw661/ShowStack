@@ -144,7 +144,43 @@ html[data-theme="auto"] {
     });
 </script>
 
+
+
+
+
+
+    
+
+    {% if user_role == 'viewer' %}
 <style>
+/* Disable child menu items for viewers */
+.model-commposition a,
+.model-commcrewname a,
+.model-commchannel a,
+.model-pafanout a,
+.model-micsession a,
+.model-micassignment a,
+.model-presenter a,
+.model-micshowinfo a,
+.model-speakerarray a,
+.model-speakercabinet a,
+.model-amplifierassignment a,
+.model-amplifierprofile a,
+.model-p1input a,
+.model-p1output a,
+.model-galaxyinput a,
+.model-galaxyoutput a {
+    pointer-events: none !important;
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    color: #666 !important;
+}
+</style>
+{% endif %}
+
+<style>
+
+
 /* Your existing dark theme styles... */
 
 /* Override Django's CSS variables for links */
