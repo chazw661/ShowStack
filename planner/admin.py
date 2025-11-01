@@ -108,17 +108,18 @@ class BaseEquipmentAdmin(BaseAdmin):
         current_project_id = request.current_project.id
         
         # Map child models to their parent field path
+        # Map child models to their parent field path
         child_model_paths = {
-            'CommChannel': 'commbeltpack__project_id',
-            'PAFanOut': 'pacableschedule__project_id',
-            'MicSession': 'showday__project_id',
-            'MicAssignment': 'showday__project_id',
-            'Presenter': 'showday__project_id',
-            'MicShowInfo': 'showday__project_id',
-            'SpeakerArray': 'soundvisionprediction__project_id',
-            'SpeakerCabinet': 'soundvisionprediction__project_id',
-            'AmplifierAssignment': 'powerdistributionplan__project_id',
-            'AmplifierProfile': 'powerdistributionplan__project_id',
+            'PAFanOut': 'cable_schedule__project_id',
+            'MicSession': 'day__project_id',
+            'MicAssignment': 'session__day__project_id',
+            # 'Presenter': REMOVED - now has direct project FK ✓
+            # 'MicShowInfo': REMOVED - now has direct project OneToOneField ✓
+            'SpeakerArray': 'prediction__project_id',
+            'SpeakerCabinet': 'array__prediction__project_id',
+            'AmplifierAssignment': 'distribution_plan__project_id',
+            'P1Processor': 'system_processor__project_id',
+            'GalaxyProcessor': 'system_processor__project_id',
             'P1Input': 'p1_processor__system_processor__project_id',
             'P1Output': 'p1_processor__system_processor__project_id',
             'GalaxyInput': 'galaxy_processor__system_processor__project_id',
@@ -1001,7 +1002,7 @@ class DeviceAdmin(BaseEquipmentAdmin):
 from .models import AmpModel, Amp, AmpChannel
 
 
-class AmpModelAdmin(BaseEquipmentAdmin):
+class AmpModelAdmin(admin.ModelAdmin):
     list_display = ('manufacturer', 'model_name', 'channel_count', 
                    'nl4_connector_count', 'cacom_output_count')
     list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count')
@@ -2854,16 +2855,17 @@ from .models import CommBeltPack
 
 class CommBeltPackAdminForm(forms.ModelForm):
     """Custom form to handle dynamic field display based on system type"""
-
+    
+    # Custom widgets for position and name that combine dropdown + text input
     position_select = forms.ModelChoiceField(
-        queryset=CommPosition.objects.all(),
+        queryset=CommPosition.objects.none(),  # Will be set in __init__
         required=False,
         empty_label="-- Select Position --",
         widget=forms.Select(attrs={'class': 'position-select'})
     )
     
     name_select = forms.ModelChoiceField(
-        queryset=CommCrewName.objects.all(),
+        queryset=CommCrewName.objects.none(),  # Will be set in __init__
         required=False,
         empty_label="-- Select Name --",
         widget=forms.Select(attrs={'class': 'name-select'})
@@ -2872,24 +2874,45 @@ class CommBeltPackAdminForm(forms.ModelForm):
     class Meta:
         model = CommBeltPack
         fields = '__all__'
+        widgets = {
+            'position': forms.TextInput(attrs={'class': 'position-input'}),
+            'name': forms.TextInput(attrs={'class': 'name-input'}),
+            'notes': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
+        }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        
+        # Filter dropdowns by current project
         if self.instance and self.instance.pk:
-            if self.instance.position:
-                try:
-                    pos = CommPosition.objects.get(name=self.instance.position)
-                    self.fields['position_select'].initial = pos
-                except CommPosition.DoesNotExist:
-                    pass
+            # Editing existing: use instance's project
+            project = self.instance.project
+        elif self.instance and hasattr(self.instance, 'project'):
+            # New with project pre-set
+            project = self.instance.project
+        else:
+            # Can't determine project - use none
+            project = None
+        
+        if project:
+            self.fields['position_select'].queryset = CommPosition.objects.filter(project=project)
+            self.fields['name_select'].queryset = CommCrewName.objects.filter(project=project)
+        
+        # Set initial values for select fields if instance exists
+        if self.instance and self.instance.pk:
+            # Try to match position with existing CommPosition
+            try:
+                pos = CommPosition.objects.get(name=self.instance.position, project=project)
+                self.fields['position_select'].initial = pos
+            except CommPosition.DoesNotExist:
+                pass
             
-            if self.instance.name:
-                try:
-                    crew = CommCrewName.objects.get(name=self.instance.name)
-                    self.fields['name_select'].initial = crew
-                except CommCrewName.DoesNotExist:
-                    pass
+            # Try to match name with existing CommCrewName
+            try:
+                crew = CommCrewName.objects.get(name=self.instance.name, project=project)
+                self.fields['name_select'].initial = crew
+            except CommCrewName.DoesNotExist:
+                pass
         
         # Hide checked_out field for Hardwired beltpacks
         if self.instance and self.instance.system_type == 'HARDWIRED':
@@ -2916,7 +2939,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     form = CommBeltPackAdminForm
 
     def save_model(self, request, obj, form, change):
-        """Override to handle dropdown field transfers"""
+        """Override to handle dropdown field transfers and auto-assign project"""
         
         # Transfer position from dropdown to actual field
         if form.cleaned_data.get('position_select'):
@@ -2926,7 +2949,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         if form.cleaned_data.get('name_select'):
             obj.name = form.cleaned_data['name_select'].name
         
-       
+        # Auto-assign current project for new records
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
         
         super().save_model(request, obj, form, change)
     
@@ -3061,11 +3086,6 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 return qs.filter(project=request.current_project)
             return qs.none()
         
-    def save_model(self, request, obj, form, change):
-        """Auto-assign current project"""
-        if not change and hasattr(request, 'current_project') and request.current_project:
-            obj.project = request.current_project
-        super().save_model(request, obj, form, change)
 
     
     @admin.action(description='Check out selected belt packs (Wireless only)')
@@ -3618,7 +3638,7 @@ urlpatterns = [
 #--------Power Estimator---------
 
 
-class AmplifierProfileAdmin(BaseEquipmentAdmin):
+class AmplifierProfileAdmin(admin.ModelAdmin):
     list_display = [
         'manufacturer', 'model', 'channels', 'rated_power_watts', 
         'nominal_voltage', 'rack_units'

@@ -1075,6 +1075,27 @@ class PAFanOut(models.Model):
             
 
 class CommChannel(models.Model):
+
+
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='comm_channels',
+        help_text="Project this channel belongs to"
+    )
+    
+    CHANNEL_TYPE_CHOICES = [
+        ('4W', '4-Wire'),
+        ('2W', '2-Wire'),
+    ]
+    
+    input_designation = models.CharField(
+        max_length=10,
+        help_text="e.g., '1 4W', '2 4W', 'A 2W', 'B 2W'"
+    )
+
+
+
     """Defines available communication channels"""
     CHANNEL_TYPE_CHOICES = [
         ('4W', '4-Wire'),
@@ -1355,6 +1376,16 @@ class ShowDay(models.Model):
 
 class Presenter(models.Model):
     name = models.CharField(max_length=200, unique=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='presenters',
+        help_text="Project this presenter belongs to"
+    )
+    name = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -1642,7 +1673,13 @@ class MicAssignment(models.Model):
    
 
 class MicShowInfo(models.Model):
-    """Singleton model to store show-level information"""
+    """Project-specific mic show configuration"""
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='mic_show_info',
+        help_text="Project this configuration belongs to"
+    )
     show_name = models.CharField(max_length=200, blank=True)
     venue_name = models.CharField(max_length=200, blank=True)
     ballroom_name = models.CharField(max_length=200, blank=True)
@@ -1660,17 +1697,7 @@ class MicShowInfo(models.Model):
     def __str__(self):
         if self.show_name:
             return f"{self.show_name} - Mic Configuration"
-        return "Mic Show Configuration"
-    
-    def save(self, *args, **kwargs):
-        # Ensure only one instance exists
-        self.pk = 1
-        super().save(*args, **kwargs)
-    
-    @classmethod
-    def get_instance(cls):
-        instance, created = cls.objects.get_or_create(pk=1)
-        return instance
+        return f"{self.project.name} - Mic Configuration"
     
     @property
     def duration_display(self):
