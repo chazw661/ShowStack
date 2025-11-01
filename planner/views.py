@@ -542,19 +542,25 @@ def mic_tracker_view(request):
     date_filter = request.GET.get('date')
     
     # Get show info
-    show_info = MicShowInfo.get_instance()
+    show_info, created = MicShowInfo.objects.get_or_create(
+    project=request.current_project,
+    defaults={
+        'default_mics_per_session': 16,
+        'default_session_duration': 60
+    }
+)
     
     # Build queryset
     if day_id:
-        days = ShowDay.objects.filter(id=day_id)
+        days = ShowDay.objects.filter(id=day_id, project=request.current_project)
     elif date_filter:
         try:
             filter_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
-            days = ShowDay.objects.filter(date=filter_date)
+            days = ShowDay.objects.filter(date=filter_date, project=request.current_project)
         except ValueError:
-            days = ShowDay.objects.all()
+            days = ShowDay.objects.filter(project=request.current_project)
     else:
-        days = ShowDay.objects.all()
+        days = ShowDay.objects.filter(project=request.current_project)
     
     days = days.prefetch_related(
         'sessions__mic_assignments__presenter',
@@ -667,7 +673,13 @@ def export_mic_tracker(request):
     writer = csv.writer(response)
     
     # Write header
-    show_info = MicShowInfo.get_instance()
+    show_info, created = MicShowInfo.objects.get_or_create(
+    project=request.current_project,
+    defaults={
+        'default_mics_per_session': 16,
+        'default_session_duration': 60
+    }
+)
     writer.writerow(['Mic Assignment List'])
     writer.writerow(['Show Name:', show_info.show_name])
     writer.writerow(['Venue:', show_info.venue_name])
