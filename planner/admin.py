@@ -4194,15 +4194,34 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
     parsed_data_display.short_description = "Raw Parsed Data"
 
     def save_model(self, request, obj, form, change):
+        """Auto-assign current project AND parse PDF if uploaded"""
+        
+        # Auto-assign project if new
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        
+        # Save the object first
         super().save_model(request, obj, form, change)
+        
+        # Debug output
+        print(f"DEBUG: pdf_file exists: {bool(obj.pdf_file)}")
+        print(f"DEBUG: pdf_file in changed_data: {'pdf_file' in form.changed_data}")
+        print(f"DEBUG: change value: {change}")
+        print(f"DEBUG: Condition met: {obj.pdf_file and ('pdf_file' in form.changed_data or not change)}")
         
         # If a PDF file was uploaded, parse it
         if obj.pdf_file and ('pdf_file' in form.changed_data or not change):
+            print("DEBUG: About to call parser...")
             try:
                 from .soundvision_parser import import_soundvision_prediction
+                print("DEBUG: Parser imported successfully")
                 import_soundvision_prediction(obj, obj.pdf_file)
+                print("DEBUG: Parser completed")
                 messages.success(request, f'Successfully parsed {obj.file_name}')
             except Exception as e:
+                print(f"DEBUG: Parser exception: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 messages.error(request, f'Error parsing PDF: {str(e)}')
 
 
@@ -4213,11 +4232,6 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
             return qs.filter(project=request.current_project)
         return qs.none()
     
-    def save_model(self, request, obj, form, change):
-        """Auto-assign current project"""
-        if not change and hasattr(request, 'current_project') and request.current_project:
-            obj.project = request.current_project
-        super().save_model(request, obj, form, change)
 
 
 
