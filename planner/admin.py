@@ -100,17 +100,44 @@ class BaseEquipmentAdmin(BaseAdmin):
     def get_queryset(self, request):
         """Filter equipment to user's accessible projects"""
         qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
         
-        # Get user's owned projects and projects they're members of
-        user_projects = Project.objects.filter(
-            models.Q(owner=request.user) | 
-            models.Q(projectmember__user=request.user)
-        ).values_list('id', flat=True)
+        # Filter by CURRENTLY SELECTED project, not all accessible projects
+        if not hasattr(request, 'current_project') or not request.current_project:
+            return qs.none()  # No project selected = show nothing
         
-        return qs.filter(project_id__in=user_projects)
-    
+        current_project_id = request.current_project.id
+        
+        # Map child models to their parent field path
+        child_model_paths = {
+            'CommChannel': 'commbeltpack__project_id',
+            'PAFanOut': 'pacableschedule__project_id',
+            'MicSession': 'showday__project_id',
+            'MicAssignment': 'showday__project_id',
+            'Presenter': 'showday__project_id',
+            'MicShowInfo': 'showday__project_id',
+            'SpeakerArray': 'soundvisionprediction__project_id',
+            'SpeakerCabinet': 'soundvisionprediction__project_id',
+            'AmplifierAssignment': 'powerdistributionplan__project_id',
+            'AmplifierProfile': 'powerdistributionplan__project_id',
+            'P1Input': 'p1_processor__system_processor__project_id',
+            'P1Output': 'p1_processor__system_processor__project_id',
+            'GalaxyInput': 'galaxy_processor__system_processor__project_id',
+            'GalaxyOutput': 'galaxy_processor__system_processor__project_id',
+        }
+        
+        # Get the model name
+        model_name = self.model.__name__
+        
+        # If this is a child model, filter through parent
+        if model_name in child_model_paths:
+            filter_path = child_model_paths[model_name]
+            filter_kwargs = {filter_path: current_project_id}
+            return qs.filter(**filter_kwargs)
+        
+        # Otherwise, filter directly by project_id
+        return qs.filter(project_id=current_project_id)
+            
+        
     def has_module_permission(self, request):
         """Show module if user has any accessible projects"""
         if request.user.is_superuser:
@@ -735,7 +762,7 @@ class ConsoleAdmin(BaseAdmin):
     
     def get_queryset(self, request):
         """Filter consoles by current project"""
-        # ... your existing code continues    
+         
         
     def get_queryset(self, request):
         """Filter consoles by current project"""
@@ -2513,17 +2540,17 @@ class CommPositionAdmin(BaseEquipmentAdmin):
     actions = [populate_common_positions]  # Make sure this is defined
     
     def changelist_view(self, request, extra_context=None):
-        # Force show actions even when queryset is empty
-        if 'action' in request.POST:
-            # Process the action even if no items selected
-            action = self.get_actions(request)[request.POST['action']][0]
-            action(self, request, self.get_queryset(request).none())
+        """Allow populate action to work on empty list"""
+        
+        # Special handling ONLY for populate action
+        if 'action' in request.POST and request.POST['action'] == 'populate_common_positions':
+            action = self.get_actions(request)['populate_common_positions'][0]
+            action(self, request, self.get_queryset(request))  # Use actual queryset
             return HttpResponseRedirect(request.get_full_path())
         
-        # Always show the action form
+        # For all other actions (including delete), use normal behavior
         extra_context = extra_context or {}
         extra_context['has_filters'] = True  # Forces action dropdown to show
-        
         return super().changelist_view(request, extra_context)
     
     def get_actions(self, request):

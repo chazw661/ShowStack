@@ -1122,6 +1122,7 @@ class CommPosition(models.Model):
     """Predefined positions for crew members"""
     name = models.CharField(max_length=100, unique=True)
     order = models.IntegerField(default=0)
+    project = models.ForeignKey('Project', on_delete=models.CASCADE) 
     
     class Meta:
         verbose_name = "Comm Position"
@@ -1135,6 +1136,7 @@ class CommPosition(models.Model):
 class CommCrewName(models.Model):
     """Predefined crew names for quick selection"""
     name = models.CharField(max_length=100, unique=True)
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
     
     class Meta:
         verbose_name = "Comm Crew Name"
