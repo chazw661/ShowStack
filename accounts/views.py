@@ -84,10 +84,14 @@ def dashboard(request):
     ).select_related('project', 'invited_by').order_by('-invited_at')
 
     
-    # Check if user can create projects
+        # Check if user can create projects
+    # Superusers, paid, and beta accounts can create projects
     can_create_projects = False
-    if hasattr(user, 'userprofile'):
-        can_create_projects = user.userprofile.can_create_projects
+    if user.is_superuser:
+        can_create_projects = True
+    elif hasattr(user, 'userprofile'):
+        account_type = user.userprofile.account_type
+        can_create_projects = account_type in ['paid', 'beta']
     
     context = {
         'owned_projects': owned_projects,
@@ -325,3 +329,72 @@ def project_detail(request, project_id):
     }
     
     return render(request, 'accounts/project_detail.html', context)
+
+
+
+#----Dashboard Page----
+
+@login_required
+def set_project(request, project_id):
+    """Set the current project in session and redirect to admin"""
+    from planner.models import Project, ProjectMember
+    from django.contrib import messages
+    
+    try:
+        # Check if user has access to this project
+        project = Project.objects.get(id=project_id)
+        
+        # Verify user is owner or member
+        is_owner = project.owner == request.user
+        is_member = ProjectMember.objects.filter(
+            project=project,
+            user=request.user
+        ).exists()
+        
+        if not is_owner and not is_member and not request.user.is_superuser:
+            messages.error(request, "You don't have access to this project.")
+            return redirect('dashboard')
+        
+        # Set the project in session
+        request.session['current_project_id'] = project_id
+        messages.success(request, f'Now viewing: {project.name}')
+        
+        # Redirect to admin panel
+        return redirect('/admin/')
+        
+    except Project.DoesNotExist:
+        messages.error(request, "Project not found.")
+        return redirect('dashboard')
+    
+@login_required
+def delete_project(request, project_id):
+    """Delete a project (owner only)"""
+    from planner.models import Project
+    from django.contrib import messages
+    
+    try:
+        project = Project.objects.get(id=project_id, owner=request.user)
+        project_name = project.name
+        project.delete()
+        messages.success(request, f'Successfully deleted project: {project_name}')
+    except Project.DoesNotExist:
+        messages.error(request, "Project not found or you don't have permission to delete it.")
+    
+    return redirect('dashboard')
+
+
+@login_required
+def leave_project(request, project_id):
+    """Leave a shared project (remove membership)"""
+    from planner.models import ProjectMember
+    from django.contrib import messages
+    
+    try:
+        membership = ProjectMember.objects.get(project_id=project_id, user=request.user)
+        project_name = membership.project.name
+        membership.delete()
+        messages.success(request, f'You have left: {project_name}')
+    except ProjectMember.DoesNotExist:
+        messages.error(request, "Project membership not found.")
+    
+    return redirect('dashboard')

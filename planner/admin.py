@@ -50,7 +50,7 @@ from .forms import P1InputInlineForm, P1OutputInlineForm, P1ProcessorAdminForm
 from .forms import GalaxyInputInlineForm, GalaxyOutputInlineForm, GalaxyProcessorAdminForm
 from .models import AudioChecklist
 from .forms import ConsoleStereoOutputForm
-
+from .admin_site import showstack_admin_site
 
 
 
@@ -67,28 +67,28 @@ class BaseAdmin(admin.ModelAdmin):
 
 class BaseEquipmentAdmin(BaseAdmin):
     """Base admin for equipment models with project filtering and role-based permissions"""
-    
-    def _is_premium_owner(self, request):
-        """Check if user is premium AND owns at least one project"""
-        if not hasattr(request.user, 'userprofile'):
-            return False
-        
-        profile = request.user.userprofile
-        is_premium = profile.account_type == 'premium'
-        owns_projects = Project.objects.filter(owner=request.user).exists()
-        
-        return is_premium and owns_projects
-    
+
+
     def _get_user_role_for_project(self, request, project):
         """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
         if project.owner == request.user:
             return 'owner'
         
         try:
+            from planner.models import ProjectMember
             member = ProjectMember.objects.get(user=request.user, project=project)
             return member.role  # 'editor' or 'viewer'
         except ProjectMember.DoesNotExist:
             return None
+    
+    def _is_premium_owner(self, request):
+        """Check if user is paid/beta (premium accounts)"""
+        if not hasattr(request.user, 'userprofile'):
+            return False
+        
+        profile = request.user.userprofile
+        # Paid and beta accounts are considered premium
+        return profile.account_type in ['paid', 'beta', 'premium']
     
     def _user_has_editor_access(self, request):
         """Check if user has editor access to ANY project"""
@@ -189,7 +189,9 @@ class BaseEquipmentAdmin(BaseAdmin):
             return self._is_premium_owner(request) or self._user_has_editor_access(request)
         
         # Check specific object permission
-        role = self._get_user_role_for_project(request, obj.project)
+       # Handle both Project and Equipment objects
+        project = obj if obj.__class__.__name__ == 'Project' else obj.project
+        role = self._get_user_role_for_project(request, project)
         return role in ['owner', 'editor']  # Viewers can't edit
     
     def has_delete_permission(self, request, obj=None):
@@ -201,8 +203,75 @@ class BaseEquipmentAdmin(BaseAdmin):
             return self._is_premium_owner(request) or self._user_has_editor_access(request)
         
         # Check specific object permission
-        role = self._get_user_role_for_project(request, obj.project)
+        # Handle both Project and Equipment objects
+        project = obj if obj.__class__.__name__ == 'Project' else obj.project
+        role = self._get_user_role_for_project(request, project)
         return role in ['owner', 'editor']  # Viewers can't delete
+    
+
+
+    @admin.register(Project, site=showstack_admin_site)
+    class ProjectAdmin(admin.ModelAdmin):
+        """Admin for Project model - doesn't use BaseEquipmentAdmin filtering"""
+        list_display = ['name', 'owner', 'show_date', 'venue', 'is_archived']
+        list_filter = ['is_archived', 'show_date']
+        search_fields = ['name', 'venue', 'client']
+        readonly_fields = ['owner', 'created_at', 'updated_at']  # <-- owner is readonly
+        exclude = []  # We'll set this dynamically
+        
+        def get_exclude(self, request, obj=None):
+            """Hide owner field on add form"""
+            if obj is None:  # Adding new project
+                return ['owner']  # Hide owner field
+            return []  # Show owner (readonly) on edit form
+        
+        fieldsets = (
+            ('Project Details', {
+                'fields': ('name', 'owner', 'show_date', 'venue', 'client')
+            }),
+            ('Notes', {
+                'fields': ('notes',),
+                'classes': ('collapse',)
+            }),
+            ('Status', {
+                'fields': ('is_archived',)
+            }),
+            ('Timestamps', {
+                'fields': ('created_at', 'updated_at'),
+                'classes': ('collapse',)
+            }),
+        )
+        
+        def get_queryset(self, request):
+            """Show user's own projects and projects they're members of"""
+            qs = super().get_queryset(request)
+            
+            if request.user.is_superuser:
+                return qs
+            
+            # Show projects user owns or is a member of
+            from planner.models import ProjectMember
+            member_project_ids = ProjectMember.objects.filter(
+                user=request.user
+            ).values_list('project_id', flat=True)
+            
+            return qs.filter(
+                Q(owner=request.user) | Q(id__in=member_project_ids)
+            )
+        
+        def has_add_permission(self, request):
+            """Paid/beta users can add projects"""
+            if request.user.is_superuser:
+                return True
+            if hasattr(request.user, 'userprofile'):
+                return request.user.userprofile.account_type in ['paid', 'beta', 'premium']
+            return False
+        
+        def save_model(self, request, obj, form, change):
+            """Set owner to current user if creating"""
+            if not change:  # New project
+                obj.owner = request.user
+            super().save_model(request, obj, form, change)
 
 
 

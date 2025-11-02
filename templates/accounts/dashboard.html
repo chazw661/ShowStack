@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - ShowStack</title>
-    <style>
+        <style>
         * {
             margin: 0;
             padding: 0;
@@ -13,17 +13,19 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: #f5f5f5;
+            background: #1a1a1a;
             min-height: 100vh;
+            color: #e0e0e0;
         }
         
         .header {
-            background: white;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background: #2a2a2a;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
             padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid #3a3a3a;
         }
         
         .logo h1 {
@@ -39,12 +41,12 @@
         }
         
         .user-info {
-            color: #666;
+            color: #b0b0b0;
             font-size: 14px;
         }
         
         .user-info strong {
-            color: #333;
+            color: #e0e0e0;
         }
         
         .btn-logout {
@@ -64,7 +66,7 @@
         
         .btn-admin {
             padding: 8px 16px;
-            background: #6c757d;
+            background: #4a9eff;
             color: white;
             text-decoration: none;
             border-radius: 6px;
@@ -74,7 +76,7 @@
         }
         
         .btn-admin:hover {
-            background: #5a6268;
+            background: #3a8eef;
         }
         
         .container {
@@ -89,7 +91,7 @@
         
         .dashboard-header h2 {
             font-size: 28px;
-            color: #333;
+            color: #e0e0e0;
             margin-bottom: 10px;
         }
         
@@ -103,23 +105,23 @@
         }
         
         .badge-free {
-            background: #e7f3ff;
-            color: #0066cc;
+            background: #1e3a5f;
+            color: #4a9eff;
         }
         
         .badge-beta {
-            background: #fff3cd;
-            color: #856404;
+            background: #4a3c1f;
+            color: #ffc107;
         }
         
         .badge-paid {
-            background: #d4edda;
-            color: #155724;
+            background: #1f3d2f;
+            color: #28a745;
         }
         
         .badge-super {
-            background: #d1ecf1;
-            color: #0c5460;
+            background: #1f3d3f;
+            color: #17a2b8;
         }
         
         .messages {
@@ -133,15 +135,15 @@
         }
         
         .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+            background: #1f3d2f;
+            color: #5cd97c;
+            border: 1px solid #28a745;
         }
         
         .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
+            background: #1f3d3f;
+            color: #5bc0de;
+            border: 1px solid #17a2b8;
         }
         
         .btn-create {
@@ -162,37 +164,39 @@
         }
         
         .btn-disabled {
-            background: #ccc;
+            background: #444;
             cursor: not-allowed;
+            color: #888;
         }
         
         .upgrade-notice {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
+            background: #3a3020;
+            border: 1px solid #5a4c30;
             padding: 15px 20px;
             border-radius: 8px;
             margin-bottom: 30px;
         }
         
         .upgrade-notice p {
-            color: #856404;
+            color: #ffc107;
             margin-bottom: 10px;
         }
         
         .section {
-            background: white;
+            background: #2a2a2a;
             border-radius: 12px;
             padding: 30px;
             margin-bottom: 30px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid #3a3a3a;
         }
         
         .section h3 {
             font-size: 22px;
-            color: #333;
+            color: #e0e0e0;
             margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #3a3a3a;
         }
         
         .project-list {
@@ -201,16 +205,16 @@
         }
         
         .project-card {
-            border: 2px solid #e0e0e0;
+            border: 2px solid #3a3a3a;
             border-radius: 8px;
             padding: 20px;
             transition: border-color 0.3s, box-shadow 0.3s;
-            cursor: pointer;
+            background: #242424;
         }
         
         .project-card:hover {
             border-color: #4a9eff;
-            box-shadow: 0 4px 12px rgba(74, 158, 255, 0.15);
+            box-shadow: 0 4px 12px rgba(74, 158, 255, 0.25);
         }
         
         .project-header {
@@ -223,7 +227,7 @@
         .project-name {
             font-size: 18px;
             font-weight: 600;
-            color: #333;
+            color: #e0e0e0;
             margin-bottom: 5px;
         }
         
@@ -236,22 +240,22 @@
         }
         
         .role-owner {
-            background: #d1ecf1;
-            color: #0c5460;
+            background: #1f3d3f;
+            color: #5bc0de;
         }
         
         .role-editor {
-            background: #d4edda;
-            color: #155724;
+            background: #1f3d2f;
+            color: #5cd97c;
         }
         
         .role-viewer {
-            background: #f8d7da;
-            color: #721c24;
+            background: #3d1f1f;
+            color: #f8a5aa;
         }
         
         .project-details {
-            color: #666;
+            color: #b0b0b0;
             font-size: 14px;
             line-height: 1.6;
         }
@@ -264,7 +268,7 @@
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: #999;
+            color: #666;
         }
         
         .empty-state p {
@@ -283,8 +287,8 @@
                 <strong>{{ user.get_full_name|default:user.username }}</strong>
                 <span class="account-badge badge-{{ account_type }}">{{ account_type }} Account</span>
             </div>
-            {% if user.is_staff %}
-            <a href="/admin/" class="btn-admin">Admin Panel</a>
+            {% if user.is_superuser or account_type == 'paid' or account_type == 'beta' %}
+            <a href="/admin/" class="btn-admin">Planner</a>
             {% endif %}
             <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
         </div>
@@ -319,7 +323,7 @@
 
 
         
-        <!-- ADD THIS ENTIRE SECTION -->
+        
         <!-- Pending Invitations Section -->
         {% if pending_invitations %}
         <div class="section" style="border: 2px solid #4a9eff; background: #f0f8ff;">
@@ -366,7 +370,7 @@
                 {% for project in owned_projects %}
                 <div class="project-card">
                     <div class="project-header">
-                        <div onclick="window.location='{% url 'project_detail' project.id %}'" style="cursor: pointer; flex: 1;">
+                        <div style="flex: 1;">
                             <div class="project-name">{{ project.name }}</div>
                             <div class="project-details">
                                 <div class="project-date">{{ project.show_date|date:"F d, Y" }}</div>
@@ -375,11 +379,18 @@
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
                             <span class="project-role role-owner">Owner</span>
+                            <a href="/set-project/{{ project.id }}/" 
+                            style="padding: 10px 20px; background: #4a9eff; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600; text-align: center; min-width: 120px;">
+                                Open Project
+                            </a>
                             <a href="{% url 'project_invitations' project.id %}" 
-                            onclick="event.stopPropagation()" 
-                            style="padding: 6px 12px; background: #4a9eff; color: white; text-decoration: none; border-radius: 6px; font-size: 12px;">
+                            style="padding: 6px 12px; background: #28a745; color: white; text-decoration: none; border-radius: 6px; font-size: 12px;">
                                 Manage Invitations
                             </a>
+                            <button onclick="if(confirm('Are you sure you want to delete {{ project.name }}? This will permanently delete all show data, equipment lists, and configurations. This action cannot be undone.')) { window.location.href='/delete-project/{{ project.id }}/'; }" 
+                                    style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500;">
+                                Delete Project
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -388,31 +399,41 @@
         </div>
         {% endif %}
         
-        <!-- Shared Projects Section -->
+       <!-- Shared Projects Section -->
         {% if member_projects %}
         <div class="section">
             <h3>Projects Shared With You ({{ member_projects.count }})</h3>
             <div class="project-list">
                 {% for membership in member_projects %}
                 <div class="project-card">
-                <div class="project-header">
-                    <div onclick="window.location='/projects/{{ membership.project.id }}/'" style="cursor: pointer; flex: 1;">
-                        <div class="project-name">{{ membership.project.name }}</div>
-                        <div class="project-details">
-                            <div class="project-date">{{ membership.project.show_date|date:"F d, Y" }}</div>
-                            <div>{{ membership.project.venue }}</div>
-                            <div style="margin-top: 5px; font-size: 13px; color: #888;">
-                                Invited by {{ membership.invited_by.get_full_name|default:membership.invited_by.username }}
+                    <div class="project-header">
+                        <div style="flex: 1;">
+                            <div class="project-name">{{ membership.project.name }}</div>
+                            <div class="project-details">
+                                <div class="project-date">{{ membership.project.show_date|date:"F d, Y" }}</div>
+                                <div>{{ membership.project.venue }}</div>
+                                <div style="margin-top: 5px; font-size: 13px; color: #888;">
+                                    Invited by {{ membership.invited_by.get_full_name|default:membership.invited_by.username }}
+                                </div>
                             </div>
                         </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
+                            <span class="project-role role-{{ membership.role }}">{{ membership.role }}</span>
+                            <a href="/set-project/{{ membership.project.id }}/" 
+                            style="padding: 10px 20px; background: #4a9eff; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600; text-align: center; min-width: 120px;">
+                                Open Project
+                            </a>
+                            <button onclick="if(confirm('Are you sure you want to leave {{ membership.project.name }}? You will no longer have access to this project unless invited again.')) { window.location.href='/leave-project/{{ membership.project.id }}/'; }" 
+                                    style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500;">
+                                Leave Project
+                            </button>
+                        </div>
                     </div>
-                    <span class="project-role role-{{ membership.role }}">{{ membership.role }}</span>
                 </div>
+                {% endfor %}
             </div>
-       {% endfor %}
         </div>
-    </div>
-{% endif %}
+        {% endif %}
         
         <!-- Empty State -->
         {% if not owned_projects and not member_projects %}

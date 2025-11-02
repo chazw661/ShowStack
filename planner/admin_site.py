@@ -176,7 +176,8 @@ class ShowStackAdminSite(admin.AdminSite):
         Check if user has permission to access admin.
         
         - Superusers: Always have access
-        - Staff users with UserProfile: Have access if they own or are members of projects
+        - Paid/Beta staff users: Always have access (can create projects)
+        - Free staff users: Have access if they are members of projects
         - Others: No access
         """
         if not request.user.is_active:
@@ -186,22 +187,24 @@ class ShowStackAdminSite(admin.AdminSite):
         if request.user.is_superuser:
             return True
         
-        # Staff users with projects have access
+        # Staff users with proper account access
         if request.user.is_staff:
+            if not hasattr(request.user, 'userprofile'):
+                return False
+            
+            # Paid and beta users can always access (they can create projects)
+            account_type = request.user.userprofile.account_type
+            if account_type in ['paid', 'beta']:
+                return True
+            
+            # Free users need to be members of at least one project
             from planner.models import Project, ProjectMember
-            # Check if user has UserProfile and owns or is member of projects
-            if hasattr(request.user, 'userprofile'):
-                
-                # Check if user owns any projects
-                owns_projects = Project.objects.filter(owner=request.user).exists()
-                
-                # Check if user is invited to any projects
-                member_of_projects = ProjectMember.objects.filter(user=request.user).exists()
-                
-                return owns_projects or member_of_projects
+            owns_projects = Project.objects.filter(owner=request.user).exists()
+            member_of_projects = ProjectMember.objects.filter(user=request.user).exists()
+            
+            return owns_projects or member_of_projects
         
         return False
-
 
 # Create the custom admin site instance
 showstack_admin_site = ShowStackAdminSite(name='showstack_admin')
