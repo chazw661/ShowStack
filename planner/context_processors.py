@@ -26,8 +26,8 @@ def user_projects(request):
     
     # Determine user role and project access
     if request.user.is_superuser:
-        # Superusers see all projects with dropdown
-        context['user_projects'] = Project.objects.all().order_by('-created_at')
+        # Superusers see only their own projects with dropdown
+        context['user_projects'] = Project.objects.filter(owner=request.user).order_by('-created_at')
         context['show_project_dropdown'] = True
         context['user_role'] = 'superuser'
     

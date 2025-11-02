@@ -97,6 +97,13 @@ class BaseEquipmentAdmin(BaseAdmin):
             role='editor'
         ).exists()
     
+    def get_exclude(self, request, obj=None):
+        """Hide project field on add/edit forms - auto-assigned from current_project"""
+        exclude = list(super().get_exclude(request, obj) or [])
+        if hasattr(self.model, 'project'):
+            exclude.append('project')
+        return exclude
+    
     def get_queryset(self, request):
         """Filter equipment to user's accessible projects"""
         qs = super().get_queryset(request)
@@ -511,7 +518,7 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 
 
-class ConsoleAdmin(BaseAdmin):
+class ConsoleAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'location','primary_ip_address', 'secondary_ip_address', 'is_template']
     list_filter = ['is_template', 'location']
     
