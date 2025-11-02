@@ -3,6 +3,11 @@
 from django.db import migrations
 
 def create_amp_models(apps, schema_editor):
+    # SKIP in production if no projects exist yet
+    Project = apps.get_model('planner', 'Project')
+    if not Project.objects.exists():
+        return  # Skip this migration
+
     AmpModel = apps.get_model('planner', 'AmpModel')
     
     amp_models = [

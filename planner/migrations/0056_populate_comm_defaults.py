@@ -3,6 +3,11 @@
 from django.db import migrations
 
 def populate_comm_defaults(apps, schema_editor):
+
+    # SKIP in production if no projects exist yet
+    Project = apps.get_model('planner', 'Project')
+    if not Project.objects.exists():
+        return  # Skip this migration
     CommChannel = apps.get_model('planner', 'CommChannel')
     CommPosition = apps.get_model('planner', 'CommPosition')
     
