@@ -44,3 +44,5 @@ soundvision_report_*
 venv/
 env/
 ENV/
+db.sqlite3
+db.sqlite3.backup
