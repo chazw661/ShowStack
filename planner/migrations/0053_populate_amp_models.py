@@ -4,9 +4,13 @@ from django.db import migrations
 
 def create_amp_models(apps, schema_editor):
     # SKIP in production if no projects exist yet
-    Project = apps.get_model('planner', 'Project')
-    if not Project.objects.exists():
-        return  # Skip this migration
+    try:
+        Project = apps.get_model('planner', 'Project')
+        if not Project.objects.exists():
+            return  # Skip this migration
+    except LookupError:
+        # Project model doesn't exist yet, skip this migration
+        return
 
     AmpModel = apps.get_model('planner', 'AmpModel')
     
