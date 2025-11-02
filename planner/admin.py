@@ -148,12 +148,15 @@ class BaseEquipmentAdmin(BaseAdmin):
         
     def has_module_permission(self, request):
         """Show module if user has any accessible projects"""
+        if not request.user.is_authenticated:
+            return super().has_module_permission(request)
+        
         if request.user.is_superuser:
             return True
         
         # Check if user has any accessible projects
         has_projects = Project.objects.filter(
-            models.Q(owner=request.user) | 
+            models.Q(owner=request.user) |
             models.Q(projectmember__user=request.user)
         ).exists()
         
