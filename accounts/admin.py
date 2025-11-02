@@ -189,7 +189,7 @@ showstack_admin_site.register(User, BaseUserAdmin)
 showstack_admin_site.register(Group, GroupAdmin)
 
 # Register accounts models with their admin classes
-showstack_admin_site.register(Project, ProjectAdmin)
+
 showstack_admin_site.register(ProjectMember, ProjectMemberAdmin)
 showstack_admin_site.register(Invitation, InvitationAdmin)
 showstack_admin_site.register(UserProfile, UserProfileAdmin)

@@ -1,23 +1,46 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
+# Python
 *.py[cod]
-*.pyo
-*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.pyc
 
-# SQLite database
-*.sqlite3
-db.sqlite3
-
-# Logs
+# Django
 *.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+db.sqlite3.backup
+/media
+/staticfiles
 
-# macOS system files
-.DS_Store
-
-# Environment
-.env/
-env/
+# Environment variables - CRITICAL!
+.env
+.env.*
 *.env
 
-# VSCode
-.vscode/.env
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sensitive
+secrets.json
+*.pem
+*.key
+
+# Reports
+predictions/
+soundvision_report_*
+
+# Virtual environment
+venv/
+env/
+ENV/
