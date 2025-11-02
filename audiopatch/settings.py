@@ -50,8 +50,14 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:8000',
-    # Add your production domain later: 'https://showstack.yourdomain.com'
+    'https://showstack-production.up.railway.app',
+    'https://*.railway.app',
 ]
+
+# CSRF settings for production
+if not DEBUG:
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
 
 
 # Application definition
