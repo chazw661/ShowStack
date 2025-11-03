@@ -79,7 +79,19 @@ class BaseEquipmentAdmin(BaseAdmin):
             member = ProjectMember.objects.get(user=request.user, project=project)
             return member.role  # 'editor' or 'viewer'
         except ProjectMember.DoesNotExist:
+            
             return None
+        
+
+
+
+    def save_model(self, request, obj, form, change):
+        """Automatically set project when creating new equipment"""
+        if not change:  # Only on creation, not on edit
+            current_project_id = request.session.get('current_project_id')
+            if current_project_id and not obj.project_id:
+                obj.project = Project.objects.get(id=current_project_id)
+        super().save_model(request, obj, form, change)     
     
     def _is_premium_owner(self, request):
         """Check if user is paid/beta (premium accounts)"""
