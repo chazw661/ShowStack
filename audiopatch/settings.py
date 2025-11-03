@@ -27,7 +27,14 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1', 
+    'showstack-production.up.railway.app',
+    '.railway.app',
+    'showstack.io',
+    'www.showstack.io',
+]
 
 # Security Headers for Production
 if not DEBUG:
@@ -47,11 +54,13 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
 # CSRF Protection
-CSRF_TRUSTED_ORIGINS = [
+CCSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:8000',
     'https://showstack-production.up.railway.app',
     'https://*.railway.app',
+    'https://showstack.io',
+    'https://www.showstack.io',
 ]
 
 # CSRF settings for production
