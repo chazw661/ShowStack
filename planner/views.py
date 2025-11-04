@@ -832,12 +832,23 @@ def update_mic_assignment(request):
         
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
         
+        # Get current project from session
+        current_project_id = request.session.get('current_project')
+        if not current_project_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'No project selected'
+            }, status=400)
+        
         # Handle different field types
         if field == 'presenter' or field == 'presenter_name':  # Support both for compatibility
-            # Value should be a presenter ID or name
+            # Value should be a presenter name
             if value:
-                # Try to get existing presenter or create new one
-                presenter, created = Presenter.objects.get_or_create(name=value.strip())
+                # Try to get existing presenter or create new one WITH PROJECT
+                presenter, created = Presenter.objects.get_or_create(
+                    name=value.strip(),
+                    project_id=current_project_id
+                )
                 assignment.presenter = presenter
             else:
                 assignment.presenter = None
@@ -867,18 +878,27 @@ def update_mic_assignment(request):
         session_stats = {
             'micd': session.mic_assignments.filter(is_micd=True).count(),
             'total': session.mic_assignments.count(),
-            'shared': session.mic_assignments.filter(shared_presenters__isnull=False).distinct().count()
+            'shared': session.mic_assignments.filter(shared_presenters__isnull=False).exclude(shared_presenters__name='').distinct().count()
         }
+        
+        # Get presenter display name
+        presenter_display = assignment.presenter.name if assignment.presenter else ''
+        presenter_count = 1 if assignment.presenter else 0
+        if assignment.shared_presenters.exists():
+            presenter_count += assignment.shared_presenters.count()
         
         return JsonResponse({
             'success': True,
             'session_stats': session_stats,
-            'presenter_display': assignment.display_presenters,
-            'presenter_count': assignment.presenter_count,
+            'presenter_display': presenter_display,
+            'presenter_count': presenter_count,
             'day_stats': {}
         })
         
     except Exception as e:
+        import traceback
+        print(f"ERROR in update_mic_assignment: {str(e)}")
+        print(traceback.format_exc())
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -907,8 +927,18 @@ def add_shared_presenter(request):
         
         assignment = MicAssignment.objects.get(id=assignment_id)
         
-        # Get or create the presenter
-        presenter, created = Presenter.objects.get_or_create(name=presenter_name)
+        # Get or create the presenter WITH PROJECT
+        current_project_id = request.session.get('current_project')
+        if not current_project_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'No project selected'
+            })
+
+        presenter, created = Presenter.objects.get_or_create(
+            name=presenter_name,
+            project_id=current_project_id
+)
         
         # Check if presenter is already the main presenter
         if assignment.presenter and assignment.presenter.id == presenter.id:
