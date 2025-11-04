@@ -3428,6 +3428,25 @@ class MicAssignmentInline(BaseEquipmentInline):
     readonly_fields = ['rf_number']
 
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter presenter dropdown by current project"""
+        if db_field.name == "presenter":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Presenter.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Presenter.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Filter shared presenters by current project"""
+        if db_field.name == "shared_presenters":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Presenter.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Presenter.objects.none()
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+
 class ShowDayAdmin(BaseEquipmentAdmin):
     list_display = ('date', 'name', 'session_count', 'total_mics', 'mics_used', 'view_day_link')
     list_filter = ('date',)
@@ -3498,6 +3517,19 @@ class PresenterAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'created_at']
     search_fields = ['name']
     ordering = ['name']
+    exclude = ['project']
+
+
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project when adding presenter"""
+        if not change:  # Only for new presenters
+            if hasattr(request, 'current_project') and request.current_project:
+                from planner.models import Project
+                try:
+                    obj.project = Project.objects.get(id=request.current_project)
+                except Project.DoesNotExist:
+                    pass
+        super().save_model(request, obj, form, change)
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
