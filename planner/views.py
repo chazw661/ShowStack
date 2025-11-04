@@ -561,11 +561,17 @@ def mic_tracker_view(request):
             days = ShowDay.objects.filter(project=request.current_project)
     else:
         days = ShowDay.objects.filter(project=request.current_project)
-    
-    days = days.prefetch_related(
-        'sessions__mic_assignments__presenter',
-        'sessions__mic_assignments__shared_presenters'
-    ).order_by('date')
+
+    if request.current_project:
+        request.session['current_project'] = request.current_project.id
+        request.session.modified = True
+
+        days = days.prefetch_related(
+            'sessions__mic_assignments__presenter',
+            'sessions__mic_assignments__shared_presenters'
+        ).order_by('date')
+
+
     
     # Organize sessions by columns for display
     days_data = []
