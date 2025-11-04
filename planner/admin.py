@@ -86,11 +86,14 @@ class BaseEquipmentAdmin(BaseAdmin):
 
 
     def save_model(self, request, obj, form, change):
-        """Automatically set project when creating new equipment"""
-        if not change:  # Only on creation, not on edit
-            current_project_id = request.session.get('current_project_id')
-            if current_project_id and not obj.project_id:
-                obj.project = Project.objects.get(id=current_project_id)
+        if not change:  # Only for new objects
+            current_project = request.session.get('current_project')
+            if current_project and not obj.project:  # ✅ Check obj.project, not obj.project_id
+                from planner.models import Project
+                try:
+                    obj.project = Project.objects.get(id=current_project)
+                except Project.DoesNotExist:
+                    pass
         super().save_model(request, obj, form, change)     
     
     def _is_premium_owner(self, request):
@@ -1376,28 +1379,28 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
     exclude = ['project']
 
     def configure_button(self, obj):
-     if obj.pk:  # Only show for saved objects
-        if obj.device_type == 'P1':
-            # Check if P1 config exists
-            try:
-                p1 = obj.p1_config
-                url = reverse('admin:planner_p1processor_change', args=[p1.pk])
-                return format_html('<a class="button" href="{}">Configure P1</a>', url)
-            except P1Processor.DoesNotExist:
-                # Create P1 config URL
-                url = reverse('admin:planner_p1processor_add') + f'?system_processor={obj.pk}'
-                return format_html('<a class="button" href="{}">Setup P1 Configuration</a>', url)
-        elif obj.device_type == 'GALAXY':
-            # Check if GALAXY config exists
-            try:
-                galaxy = obj.galaxy_config
-                url = reverse('admin:planner_galaxyprocessor_change', args=[galaxy.pk])
-                return format_html('<a class="button" href="{}">Configure GALAXY</a>', url)
-            except GalaxyProcessor.DoesNotExist:
-                # Create GALAXY config URL
-                url = reverse('admin:planner_galaxyprocessor_add') + f'?system_processor={obj.pk}'
-                return format_html('<a class="button" href="{}">Setup GALAXY Configuration</a>', url)
+        if obj.pk:  # Only show for saved objects
+            # ✅ ALWAYS use configure_view - it handles everything
+            url = reverse('admin:systemprocessor-configure', args=[obj.pk])
+            
+            if obj.device_type == 'P1':
+                try:
+                    obj.p1_config  # Check if exists
+                    button_text = 'Configure P1'
+                except P1Processor.DoesNotExist:
+                    button_text = 'Setup P1 Configuration'
+                return format_html('<a class="button" href="{}">{}</a>', url, button_text)
+            
+            elif obj.device_type == 'GALAXY':
+                try:
+                    obj.galaxy_config
+                    button_text = 'Configure GALAXY'
+                except GalaxyProcessor.DoesNotExist:
+                    button_text = 'Setup GALAXY Configuration'
+                return format_html('<a class="button" href="{}">{}</a>', url, button_text)
+        
         return '-'
+
     configure_button.short_description = 'Configuration'
     configure_button.allow_tags = True
     
@@ -1406,7 +1409,9 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path('<int:pk>/configure/', self.configure_view, name='systemprocessor-configure'),
+            path('<int:pk>/configure/', 
+                self.admin_site.admin_view(self.configure_view),  # ✅ Wrap with admin_view
+                name='systemprocessor-configure'),
         ]
         return custom_urls + urls
     
