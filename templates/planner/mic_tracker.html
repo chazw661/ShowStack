@@ -143,15 +143,6 @@
                                                     {% if is_viewer %}readonly{% endif %}>
 
 
-                                            <input type="text" 
-                                                    class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
-                                                    value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
-                                                    placeholder="Enter name..."
-                                                    list="presenters-datalist"
-                                                    onchange="updateField({{ assignment.id }}, 'presenter', this.value)"
-                                                    title="Primary presenter"
-                                                    {% if is_viewer %}readonly{% endif %}>
-
                                             {% if not is_viewer %}
                                             <!-- Add Shared Presenter Button -->
                                             <button type="button" 
