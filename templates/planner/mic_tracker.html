@@ -138,9 +138,29 @@
                                                     value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
                                                     placeholder="Enter name..."
                                                     list="presenters-datalist"
-                                                    onchange="updateField({{ assignment.id }}, 'presenter_name', this.value)"
+                                                    onchange="updateField({{ assignment.id }}, 'presenter', this.value)"
                                                     title="Primary presenter"
                                                     {% if is_viewer %}readonly{% endif %}>
+
+
+                                            <input type="text" 
+                                                    class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
+                                                    value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
+                                                    placeholder="Enter name..."
+                                                    list="presenters-datalist"
+                                                    onchange="updateField({{ assignment.id }}, 'presenter', this.value)"
+                                                    title="Primary presenter"
+                                                    {% if is_viewer %}readonly{% endif %}>
+
+                                            {% if not is_viewer %}
+                                            <!-- Add Shared Presenter Button -->
+                                            <button type="button" 
+                                                    class="btn-add-shared" 
+                                                    onclick="togglePresenters({{ assignment.id }})"
+                                                    title="Add shared presenter">
+                                                +
+                                            </button>
+                                            {% endif %}
                                             
                                             
                                             <!-- Expand/Collapse Button -->
@@ -229,7 +249,7 @@
                                     <div class="col-dmic">
                                         <input type="checkbox" 
                                             class="mic-checkbox dmic-checkbox"
-                                            {% if assignment.is_dmic %}checked{% endif %}
+                                            {% if assignment.is_d_mic %}checked{% endif %}
                                             onchange="handleDmicChange({{ assignment.id }}, this.checked)"
                                             {% if is_viewer %}disabled{% endif %}>
                                     </div>
