@@ -3528,7 +3528,11 @@ class PresenterAdmin(BaseEquipmentAdmin):
             if hasattr(request, 'current_project') and request.current_project:
                 from planner.models import Project
                 try:
-                    obj.project = Project.objects.get(id=request.current_project)
+                    # Check if it's already a Project object or if it's an ID
+                    if isinstance(request.current_project, Project):
+                        obj.project = request.current_project
+                    else:
+                        obj.project = Project.objects.get(id=request.current_project)
                 except Project.DoesNotExist:
                     pass
         super().save_model(request, obj, form, change)
