@@ -86,9 +86,11 @@ class BaseEquipmentAdmin(BaseAdmin):
 
 
     def save_model(self, request, obj, form, change):
+        """Auto-assign current project to new equipment"""
         if not change:  # Only for new objects
             current_project = request.session.get('current_project')
-            if current_project and not obj.project:  # ✅ Check obj.project, not obj.project_id
+            # Only try to set project if the model actually HAS a project field
+            if current_project and hasattr(obj, 'project') and not obj.project:
                 from planner.models import Project
                 try:
                     obj.project = Project.objects.get(id=current_project)
