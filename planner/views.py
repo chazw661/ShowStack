@@ -1009,34 +1009,35 @@ def remove_shared_presenter(request):
         
         assignment = MicAssignment.objects.get(id=assignment_id)
         
+        # Check if there are any shared presenters
+        if not assignment.shared_presenters.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'No shared presenters to remove'
+            })
+        
         # Find the presenter by name
         try:
-            presenter = Presenter.objects.get(name__iexact=presenter_name)
+            presenter = assignment.shared_presenters.get(name__iexact=presenter_name)
         except Presenter.DoesNotExist:
             return JsonResponse({
                 'success': False,
-                'error': f'Presenter "{presenter_name}" not found'
+                'error': f'Presenter "{presenter_name}" not found in shared list'
             })
         
-        # Check if presenter is in shared list
-        if not assignment.shared_presenters.filter(id=presenter.id).exists():
-            return JsonResponse({
-                'success': False,
-                'error': f'"{presenter_name}" is not in the shared presenters list'
-            })
-        
-        # Remove the presenter
+        # Remove the presenter from the ManyToMany relationship
         assignment.shared_presenters.remove(presenter)
         
         # Adjust active_presenter_index if needed
-        if assignment.active_presenter_index > assignment.shared_presenters.count():
+        remaining_count = assignment.shared_presenters.count()
+        if assignment.active_presenter_index > remaining_count:
             assignment.active_presenter_index = 0
             assignment.save()
         
         return JsonResponse({
             'success': True,
             'message': f'Removed {presenter_name} from shared presenters',
-            'shared_count': assignment.shared_presenters.count(),
+            'shared_count': remaining_count,
             'shared_presenters': [p.name for p in assignment.shared_presenters.all()],
             'current_presenter': assignment.current_presenter
         })
@@ -1176,95 +1177,7 @@ def get_assignment_details(request, assignment_id):
             'error': str(e)
         }, status=400)
     
- # ============================================
-# Shared Presenter Management Views
-# ============================================
-
-
-@require_POST
-def remove_shared_presenter(request):
-    """Remove a shared presenter from a mic assignment"""
-    try:
-        data = json.loads(request.body)
-        assignment_id = data.get('assignment_id')
-        presenter_name = data.get('presenter_name', '').strip()
-        
-        if not assignment_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'Missing assignment ID'
-            })
-        
-        if not presenter_name:
-            return JsonResponse({
-                'success': False,
-                'error': 'Missing presenter name'
-            })
-        
-        assignment = MicAssignment.objects.get(id=assignment_id)
-        
-        # Ensure shared_presenters is a list
-        if not isinstance(assignment.shared_presenters, list):
-            return JsonResponse({
-                'success': False,
-                'error': 'No shared presenters to remove'
-            })
-        
-        if len(assignment.shared_presenters) == 0:
-            return JsonResponse({
-                'success': False,
-                'error': 'Shared presenters list is empty'
-            })
-        
-        # Find matching presenter (case-insensitive)
-        presenter_to_remove = None
-        for presenter in assignment.shared_presenters:
-            if presenter.lower() == presenter_name.lower():
-                presenter_to_remove = presenter
-                break
-        
-        if presenter_to_remove is None:
-            return JsonResponse({
-                'success': False,
-                'error': f'"{presenter_name}" not found in shared presenters list'
-            })
-        
-        # Remove the presenter (using the exact match from the list)
-        assignment.shared_presenters.remove(presenter_to_remove)
-        
-        # Adjust active_presenter_index if needed
-        if assignment.active_presenter_index > len(assignment.shared_presenters):
-            assignment.active_presenter_index = 0
-        
-        assignment.save()
-        
-        # Get the current presenter - try as property first, then as method
-        try:
-            current_pres = assignment.current_presenter() if callable(assignment.current_presenter) else assignment.current_presenter
-        except:
-            current_pres = assignment.presenter_name  # Fallback to main presenter
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Removed {presenter_to_remove} from shared presenters',
-            'shared_count': len(assignment.shared_presenters),
-            'shared_presenters': assignment.shared_presenters,
-            'current_presenter': current_pres  # FIXED: no longer assumes it's a method
-        })
-        
-    except MicAssignment.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Assignment not found'
-        })
-    except Exception as e:
-        import traceback
-        print(f"ERROR in remove_shared_presenter: {str(e)}")
-        print(traceback.format_exc())
-        return JsonResponse({
-            'success': False,
-            'error': f'Unexpected error: {str(e)}'
-        })
+ 
 
 
 @require_POST
