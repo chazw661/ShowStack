@@ -575,7 +575,7 @@ def mic_tracker_view(request):
 
     days = days.prefetch_related(
         'sessions__mic_assignments__presenter',
-        'sessions__mic_assignments__shared_presenters__micassignment_set'
+        'sessions__mic_assignments__shared_presenters'
     ).order_by('date')  
 
 
@@ -605,7 +605,7 @@ def mic_tracker_view(request):
     for day in days:
         for session in day.sessions.all():
             for assignment in session.mic_assignments.all():
-                assignment._ordered_shared_presenters = presenters_by_assignment.get(assignment.id, [])
+                assignment.ordered_shared_presenters = presenters_by_assignment.get(assignment.id, [])
 
 
     
@@ -614,18 +614,6 @@ def mic_tracker_view(request):
     for day in days:
         sessions = day.sessions.all()
         
-        # Manually order shared presenters by through table ID for each assignment
-        for session in sessions:
-            for assignment in session.mic_assignments.all():
-                # Get the through table and order by ID (insertion order)
-                through_objects = assignment.shared_presenters.through.objects.filter(
-                    micassignment_id=assignment.id
-                ).order_by('id').select_related('presenter')
-                
-                # Create ordered list of presenters
-                assignment._ordered_shared_presenters = [
-                    through_obj.presenter for through_obj in through_objects
-                ]
         
         days_data.append({
             'day': day,
