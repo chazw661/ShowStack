@@ -570,15 +570,42 @@ def mic_tracker_view(request):
 
         from django.db.models import Prefetch
 
+    # Custom prefetch to order shared presenters by through table ID
+        from django.db.models import Prefetch
+
     days = days.prefetch_related(
         'sessions__mic_assignments__presenter',
-        Prefetch(
-            'sessions__mic_assignments__shared_presenters',
-            queryset=Presenter.objects.extra(
-                order_by=['planner_micassignment_shared_presenters.id']
-            )
-        )
-    ).order_by('date')
+        'sessions__mic_assignments__shared_presenters__micassignment_set'
+    ).order_by('date')  
+
+
+
+    # Pre-process shared presenters ordering for all assignments at once
+    all_assignment_ids = []
+    for day in days:
+        for session in day.sessions.all():
+            for assignment in session.mic_assignments.all():
+                all_assignment_ids.append(assignment.id)
+
+    # Fetch all through objects in one query
+    from planner.models import MicAssignment
+    ThroughModel = MicAssignment.shared_presenters.through
+
+    through_objects = ThroughModel.objects.filter(
+        micassignment_id__in=all_assignment_ids
+    ).order_by('micassignment_id', 'id').select_related('presenter')
+
+    # Group by assignment_id
+    from collections import defaultdict
+    presenters_by_assignment = defaultdict(list)
+    for through_obj in through_objects:
+        presenters_by_assignment[through_obj.micassignment_id].append(through_obj.presenter)
+
+    # Attach to assignments
+    for day in days:
+        for session in day.sessions.all():
+            for assignment in session.mic_assignments.all():
+                assignment._ordered_shared_presenters = presenters_by_assignment.get(assignment.id, [])
 
 
     
