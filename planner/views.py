@@ -566,9 +566,14 @@ def mic_tracker_view(request):
         request.session['current_project'] = request.current_project.id
         request.session.modified = True
 
+        from django.db.models import Prefetch
+
         days = days.prefetch_related(
             'sessions__mic_assignments__presenter',
-            'sessions__mic_assignments__shared_presenters'
+            Prefetch(
+                'sessions__mic_assignments__shared_presenters',
+                queryset=Presenter.objects.order_by('id')  # Order by ID = insertion order
+            )
         ).order_by('date')
 
 
