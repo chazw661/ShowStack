@@ -585,11 +585,24 @@ def mic_tracker_view(request):
     # Organize sessions by columns for display
     days_data = []
     for day in days:
-        all_sessions = list(day.sessions.all().order_by('order', 'start_time'))
+        sessions = day.sessions.all()
+        
+        # Manually order shared presenters by through table ID for each assignment
+        for session in sessions:
+            for assignment in session.mic_assignments.all():
+                # Get the through table and order by ID (insertion order)
+                through_objects = assignment.shared_presenters.through.objects.filter(
+                    micassignment_id=assignment.id
+                ).order_by('id').select_related('presenter')
+                
+                # Create ordered list of presenters
+                assignment._ordered_shared_presenters = [
+                    through_obj.presenter for through_obj in through_objects
+                ]
         
         days_data.append({
             'day': day,
-            'sessions': all_sessions,  # Just pass all sessions as a flat list
+            'sessions': sessions
         })
     
     # CHECK PERMISSIONS - Add this section

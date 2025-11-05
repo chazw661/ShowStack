@@ -176,7 +176,7 @@
                                         
                                         <!-- Shared Presenters Expandable Section -->
                                         <div class="shared-presenters-container" style="display: none;" data-assignment-id="{{ assignment.id }}">
-                                            {% for shared in assignment.shared_presenters.all %}
+                                            {% for shared in assignment._ordered_shared_presenters %}
                                             <div class="presenter-row shared-presenter" data-presenter-name="{{ shared.name }}">
                                                 <span class="presenter-order">{{ forloop.counter|add:"1" }}°</span>
                                                 <input type="text" 
