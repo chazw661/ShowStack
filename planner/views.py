@@ -568,13 +568,17 @@ def mic_tracker_view(request):
 
         from django.db.models import Prefetch
 
-        days = days.prefetch_related(
-            'sessions__mic_assignments__presenter',
-            Prefetch(
-                'sessions__mic_assignments__shared_presenters',
-                queryset=Presenter.objects.order_by('id')  # Order by ID = insertion order
+        from django.db.models import Prefetch
+
+    days = days.prefetch_related(
+        'sessions__mic_assignments__presenter',
+        Prefetch(
+            'sessions__mic_assignments__shared_presenters',
+            queryset=Presenter.objects.extra(
+                order_by=['planner_micassignment_shared_presenters.id']
             )
-        ).order_by('date')
+        )
+    ).order_by('date')
 
 
     
