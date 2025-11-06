@@ -2956,63 +2956,15 @@ from .models import CommBeltPack
 class CommBeltPackAdminForm(forms.ModelForm):
     """Custom form to handle dynamic field display based on system type"""
     
-    # Custom widgets for position and name that combine dropdown + text input
-    position_select = forms.ModelChoiceField(
-        queryset=CommPosition.objects.none(),  # Will be set in __init__
-        required=False,
-        empty_label="-- Select Position --",
-        widget=forms.Select(attrs={'class': 'position-select'})
-    )
-    
-    name_select = forms.ModelChoiceField(
-        queryset=CommCrewName.objects.none(),  # Will be set in __init__
-        required=False,
-        empty_label="-- Select Name --",
-        widget=forms.Select(attrs={'class': 'name-select'})
-    )
-    
     class Meta:
         model = CommBeltPack
         fields = '__all__'
         widgets = {
-            'position': forms.TextInput(attrs={'class': 'position-input'}),
-            'name': forms.TextInput(attrs={'class': 'name-input'}),
             'notes': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Filter dropdowns by current project
-        if self.instance and self.instance.pk:
-            # Editing existing: use instance's project
-            project = self.instance.project
-        elif self.instance and hasattr(self.instance, 'project'):
-            # New with project pre-set
-            project = self.instance.project
-        else:
-            # Can't determine project - use none
-            project = None
-        
-        if project:
-            self.fields['position_select'].queryset = CommPosition.objects.filter(project=project)
-            self.fields['name_select'].queryset = CommCrewName.objects.filter(project=project)
-        
-        # Set initial values for select fields if instance exists
-        if self.instance and self.instance.pk:
-            # Try to match position with existing CommPosition
-            try:
-                pos = CommPosition.objects.get(name=self.instance.position, project=project)
-                self.fields['position_select'].initial = pos
-            except CommPosition.DoesNotExist:
-                pass
-            
-            # Try to match name with existing CommCrewName
-            try:
-                crew = CommCrewName.objects.get(name=self.instance.name, project=project)
-                self.fields['name_select'].initial = crew
-            except CommCrewName.DoesNotExist:
-                pass
         
         # Hide checked_out field for Hardwired beltpacks
         if self.instance and self.instance.system_type == 'HARDWIRED':
@@ -3020,7 +2972,7 @@ class CommBeltPackAdminForm(forms.ModelForm):
                 self.fields['checked_out'].widget = forms.HiddenInput()
                 self.fields['checked_out'].required = False
         
-        # For new objects, add JavaScript to handle dynamic hiding
+        # For new objects, add help text
         if not self.instance.pk:
             if 'checked_out' in self.fields:
                 self.fields['checked_out'].help_text = "Whether this belt pack has been checked out (Wireless only)"
@@ -3037,34 +2989,16 @@ class CommBeltPackAdminForm(forms.ModelForm):
 
 class CommBeltPackAdmin(BaseEquipmentAdmin):
     form = CommBeltPackAdminForm
-
-    def save_model(self, request, obj, form, change):
-        """Override to handle dropdown field transfers and auto-assign project"""
+    
+    # Add autocomplete for better UX (optional but recommended)
+    autocomplete_fields = ['position', 'name', 'channel_a', 'channel_b', 'channel_c', 'channel_d']
+    
+    # No need for custom save_model anymore - BaseEquipmentAdmin handles project assignment
         
-        # Transfer position from dropdown to actual field
-        if form.cleaned_data.get('position_select'):
-            obj.position = form.cleaned_data['position_select'].name
         
-        # Transfer name from dropdown to actual field  
-        if form.cleaned_data.get('name_select'):
-            obj.name = form.cleaned_data['name_select'].name
-        
-        # ✅ Use the correct pattern
-        if not change:
-            if hasattr(request, 'current_project') and request.current_project:
-                from planner.models import Project
-                try:
-                    if isinstance(request.current_project, Project):
-                        obj.project = request.current_project
-                    else:
-                        obj.project = Project.objects.get(id=request.current_project)
-                except Project.DoesNotExist:
-                    pass
-        
-        super().save_model(request, obj, form, change)
     
     list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
-    search_fields = ['bp_number', 'name', 'position', 'notes', 'unit_location', 'ip_address']
+    search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location', 'ip_address']
     ordering = ['system_type', 'bp_number']
     
     # Actions for checking in/out and bulk creation
@@ -3143,7 +3077,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 'fields': ('system_type', 'bp_number', 'unit_location', 'ip_address')
             }),
             ('Assignment', {
-                'fields': (('position_select', 'position'), ('name_select', 'name'), 'headset'),
+                'fields': ('position', 'name', 'headset'),
             }),
             ('Channel Assignments', {
                 'fields': (

@@ -1224,14 +1224,21 @@ class CommBeltPack(models.Model):
     
 
     # Position and Name can be either selected from dropdown or custom text
-    position = models.CharField(
-        max_length=100, 
+   # Position and Name - ForeignKey to dedicated models
+    position = models.ForeignKey(
+        'CommPosition',
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text="Select from dropdown or enter custom"
+        related_name='beltpacks',
+        help_text="Position assignment"
     )
-    name = models.CharField(
-        max_length=100, 
+    name = models.ForeignKey(
+        'CommCrewName',
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
+        related_name='beltpacks',
         help_text="Crew member name"
     )
     
