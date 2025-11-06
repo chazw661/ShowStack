@@ -2275,12 +2275,25 @@ def all_comm_beltpacks_pdf_export(request):
 
 
 #----Import Comm Crew Names---
-
 def import_comm_crew_names_csv(request):
     """Import Comm Crew Names from CSV (Column A only)."""
-    from planner.models import CommCrewName  # Move import to top
+    from planner.models import CommCrewName, Project
     import csv
     from io import TextIOWrapper
+    
+    # Get current project
+    if not hasattr(request, 'current_project') or not request.current_project:
+        messages.error(request, "No project selected. Please select a project first.")
+        return HttpResponseRedirect(reverse('admin:planner_commcrewname_changelist'))
+    
+    if isinstance(request.current_project, Project):
+        project = request.current_project
+    else:
+        try:
+            project = Project.objects.get(id=request.current_project)
+        except Project.DoesNotExist:
+            messages.error(request, "Invalid project selected.")
+            return HttpResponseRedirect(reverse('admin:planner_commcrewname_changelist'))
     
     if request.method == 'POST' and request.FILES.get('csv_file'):
         csv_file = request.FILES['csv_file']
@@ -2308,7 +2321,10 @@ def import_comm_crew_names_csv(request):
                 
                 # Try to create the crew name
                 try:
-                    CommCrewName.objects.get_or_create(name=name)
+                    CommCrewName.objects.get_or_create(
+                        name=name,
+                        project=project  # ✅ Add project
+                    )
                     imported += 1
                 except Exception as e:
                     errors.append(f"Row {row_num}: {name} - {str(e)}")
@@ -2325,7 +2341,7 @@ def import_comm_crew_names_csv(request):
                     request,
                     f"Successfully imported {imported} crew names. Skipped {skipped} duplicates."
                 )
-            
+                
         except Exception as e:
             messages.error(request, f"Error reading CSV file: {str(e)}")
         
