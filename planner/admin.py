@@ -3013,7 +3013,7 @@ def create_20_hardwired_beltpacks(modeladmin, request, queryset):
         )
     
     modeladmin.message_user(request, f"Created 20 hardwired belt packs (BP #{max_bp+1} to #{max_bp+5})")
-create_5_hardwired_beltpacks.short_description = 'Create 20 Hardwired belt packs'
+create_20_hardwired_beltpacks.short_description = 'Create 20 Hardwired belt packs'
 
 def create_50_hardwired_beltpacks(modeladmin, request, queryset):
     """Create 50 hardwired belt packs"""
