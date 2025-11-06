@@ -1214,3 +1214,214 @@ body.dark .mic-grid-header {
 .shared-presenters-container::-webkit-scrollbar-thumb:hover {
     background: #555;
 }
+
+
+
+/* ========================================
+   Shared Presenter Buttons & Styles
+   ======================================== */
+
+/* Add Shared Presenter Button */
+.btn-add-shared {
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-left: 4px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.btn-add-shared:hover {
+    background: #357ab8;
+    transform: scale(1.1);
+}
+
+.btn-add-shared:active {
+    transform: scale(0.95);
+}
+
+/* Update presenter row to use flexbox */
+.presenter-row.primary-presenter {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+}
+
+/* Make presenter input flexible */
+.presenter-row.primary-presenter .presenter-input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Expand button styling */
+.btn-expand-presenters {
+    background: #666;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 4px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-expand-presenters:hover {
+    background: #555;
+}
+
+.btn-expand-presenters .expand-icon {
+    transition: transform 0.2s;
+}
+
+.btn-expand-presenters.expanded .expand-icon {
+    transform: rotate(90deg);
+}
+
+/* Shared presenters container */
+.shared-presenters-container {
+    margin-top: 4px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    border-left: 3px solid #4a90e2;
+}
+
+/* Shared presenter row */
+.presenter-row.shared-presenter {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+/* Presenter order indicator */
+.presenter-order {
+    background: #555;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 24px;
+    text-align: center;
+}
+
+/* Current badge */
+.current-badge {
+    background: #4caf50;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    margin-left: 4px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Active presenter highlight */
+.presenter-input.active-presenter {
+    border-color: #4caf50;
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+/* Remove presenter button */
+.btn-remove-presenter {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.btn-remove-presenter:hover {
+    background: #c0392b;
+    transform: scale(1.1);
+}
+
+/* Add presenter inline row */
+.add-presenter-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.add-presenter-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.btn-add-inline {
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.btn-add-inline:hover {
+    background: #357ab8;
+    transform: scale(1.1);
+}
+
+/* Reset rotation button */
+.reset-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-reset-rotation {
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.btn-reset-rotation:hover {
+    background: #f57c00;
+}

@@ -88,15 +88,17 @@ class BaseEquipmentAdmin(BaseAdmin):
     def save_model(self, request, obj, form, change):
         """Auto-assign current project to new equipment"""
         if not change:  # Only for new objects
-            current_project = request.session.get('current_project')
-            # Only try to set project if the model actually HAS a project field
-            if current_project and hasattr(obj, 'project') and not obj.project:
+            if hasattr(request, 'current_project') and request.current_project:
                 from planner.models import Project
                 try:
-                    obj.project = Project.objects.get(id=current_project)
+                    # Handle both Project objects and IDs
+                    if isinstance(request.current_project, Project):
+                        obj.project = request.current_project
+                    else:
+                        obj.project = Project.objects.get(id=request.current_project)
                 except Project.DoesNotExist:
                     pass
-        super().save_model(request, obj, form, change)     
+        super().save_model(request, obj, form, change)    
     
     def _is_premium_owner(self, request):
         """Check if user is paid/beta (premium accounts)"""
@@ -3047,9 +3049,17 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         if form.cleaned_data.get('name_select'):
             obj.name = form.cleaned_data['name_select'].name
         
-        # Auto-assign current project for new records
-        if not change and hasattr(request, 'current_project') and request.current_project:
-            obj.project = request.current_project
+        # ✅ Use the correct pattern
+        if not change:
+            if hasattr(request, 'current_project') and request.current_project:
+                from planner.models import Project
+                try:
+                    if isinstance(request.current_project, Project):
+                        obj.project = request.current_project
+                    else:
+                        obj.project = Project.objects.get(id=request.current_project)
+                except Project.DoesNotExist:
+                    pass
         
         super().save_model(request, obj, form, change)
     
