@@ -2376,10 +2376,25 @@ def export_system_processor_pdf(request):
 
 
 #-------<Mic Tracker Presenters .CSV Import---
-
 @staff_member_required
 def import_presenters_csv(request):
     """Import presenters from CSV file"""
+    from planner.models import Project
+    
+    # Get current project
+    if not hasattr(request, 'current_project') or not request.current_project:
+        messages.error(request, "No project selected. Please select a project first.")
+        return redirect('admin:planner_presenter_changelist')
+    
+    if isinstance(request.current_project, Project):
+        project = request.current_project
+    else:
+        try:
+            project = Project.objects.get(id=request.current_project)
+        except Project.DoesNotExist:
+            messages.error(request, "Invalid project selected.")
+            return redirect('admin:planner_presenter_changelist')
+    
     if request.method == 'POST' and request.FILES.get('csv_file'):
         csv_file = request.FILES['csv_file']
         
@@ -2399,8 +2414,11 @@ def import_presenters_csv(request):
                     if name.lower() in ['name', 'presenter', 'names', 'presenters']:
                         continue
                     
-                    # Get or create presenter
-                    presenter, created = Presenter.objects.get_or_create(name=name)
+                    # Get or create presenter with project
+                    presenter, created = Presenter.objects.get_or_create(
+                        name=name,
+                        project=project  # ✅ Add project
+                    )
                     
                     if created:
                         imported_count += 1
