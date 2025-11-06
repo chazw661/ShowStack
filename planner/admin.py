@@ -2597,14 +2597,46 @@ class CommChannelAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+
+
+def _get_current_project(modeladmin, request):
+    """Helper to get current project for admin actions"""
+    if not hasattr(request, 'current_project') or not request.current_project:
+        modeladmin.message_user(request, "No project selected", level=messages.ERROR)
+        return None
+    
+    from planner.models import Project
+    if isinstance(request.current_project, Project):
+        return request.current_project
+    else:
+        try:
+            return Project.objects.get(id=request.current_project)
+        except Project.DoesNotExist:
+            modeladmin.message_user(request, "Invalid project", level=messages.ERROR)
+            return None
 
 
 # Comm Position Admin
 
-# Add this BEFORE the CommPositionAdmin class
 @admin.action(description='Populate common positions')
 def populate_common_positions(modeladmin, request, queryset):
     """Create common position options"""
+    # Get current project
+    if not hasattr(request, 'current_project') or not request.current_project:
+        modeladmin.message_user(request, "No project selected", level=messages.ERROR)
+        return
+    
+    from planner.models import Project
+    if isinstance(request.current_project, Project):
+        project = request.current_project
+    else:
+        try:
+            project = Project.objects.get(id=request.current_project)
+        except Project.DoesNotExist:
+            modeladmin.message_user(request, "Invalid project", level=messages.ERROR)
+            return
+    
     positions = [
         ('FOH Lights', 1),
         ('FOH Audio', 2),
@@ -2621,11 +2653,16 @@ def populate_common_positions(modeladmin, request, queryset):
         ('LED', 13),
         ('Dimmer Beach', 14),
         ('TD', 15),
+        ('Cam 1',16),
+        ('Cam 2',17),
+        ('Cam 3',18),
+
     ]
     
     for name, order in positions:
         CommPosition.objects.get_or_create(
             name=name,
+            project=project,
             defaults={'order': order}
         )
     
@@ -2822,74 +2859,113 @@ class CreateBeltPacksForm(forms.Form):
 # Simpler action functions with different quantities
 def create_5_wireless_beltpacks(modeladmin, request, queryset):
     """Create 5 wireless belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='WIRELESS',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 6):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1'
+            unit_location='Unit #1',
+            project=project
         )
     
     modeladmin.message_user(request, f"Created 5 wireless belt packs (BP #{max_bp+1} to #{max_bp+5})")
 create_5_wireless_beltpacks.short_description = 'Create 5 Wireless belt packs'
 
+
 def create_10_wireless_beltpacks(modeladmin, request, queryset):
     """Create 10 wireless belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='WIRELESS',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 11):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1'
+            unit_location='Unit #1',
+            project=project
         )
     
-    modeladmin.message_user(request, f"Created 10 wireless belt packs (BP #{max_bp+1} to #{max_bp+10})")
+    modeladmin.message_user(request, f"Created 10 wireless belt packs (BP #{max_bp+1} to #{max_bp+5})")
 create_10_wireless_beltpacks.short_description = 'Create 10 Wireless belt packs'
 
 def create_20_wireless_beltpacks(modeladmin, request, queryset):
     """Create 20 wireless belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='WIRELESS',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 21):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1'
+            unit_location='Unit #1',
+            project=project
         )
     
-    modeladmin.message_user(request, f"Created 20 wireless belt packs (BP #{max_bp+1} to #{max_bp+20})")
+    modeladmin.message_user(request, f"Created 20 wireless belt packs (BP #{max_bp+1} to #{max_bp+5})")
 create_20_wireless_beltpacks.short_description = 'Create 20 Wireless belt packs'
+    
+    
 
 def create_50_wireless_beltpacks(modeladmin, request, queryset):
     """Create 50 wireless belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='WIRELESS').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='WIRELESS',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 51):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1'
+            unit_location='Unit #1',
+            project=project
         )
     
-    modeladmin.message_user(request, f"Created 50 wireless belt packs (BP #{max_bp+1} to #{max_bp+50})")
+    modeladmin.message_user(request, f"Created 50 wireless belt packs (BP #{max_bp+1} to #{max_bp+5})")
 create_50_wireless_beltpacks.short_description = 'Create 50 Wireless belt packs'
 
 # Hardwired versions
 def create_5_hardwired_beltpacks(modeladmin, request, queryset):
     """Create 5 hardwired belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='HARDWIRED',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 6):
         CommBeltPack.objects.create(
             system_type='HARDWIRED',
-            bp_number=max_bp + i
+            bp_number=max_bp + i,
+            project=project
+            # Note: NO unit_location for hardwired
         )
     
     modeladmin.message_user(request, f"Created 5 hardwired belt packs (BP #{max_bp+1} to #{max_bp+5})")
@@ -2897,51 +2973,79 @@ create_5_hardwired_beltpacks.short_description = 'Create 5 Hardwired belt packs'
 
 def create_10_hardwired_beltpacks(modeladmin, request, queryset):
     """Create 10 hardwired belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='HARDWIRED',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 11):
         CommBeltPack.objects.create(
             system_type='HARDWIRED',
-            bp_number=max_bp + i
+            bp_number=max_bp + i,
+            project=project
+            # Note: NO unit_location for hardwired
         )
     
-    modeladmin.message_user(request, f"Created 10 hardwired belt packs (BP #{max_bp+1} to #{max_bp+10})")
+    modeladmin.message_user(request, f"Created 10 hardwired belt packs (BP #{max_bp+1} to #{max_bp+5})")
 create_10_hardwired_beltpacks.short_description = 'Create 10 Hardwired belt packs'
 
 def create_20_hardwired_beltpacks(modeladmin, request, queryset):
     """Create 20 hardwired belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='HARDWIRED',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 21):
         CommBeltPack.objects.create(
             system_type='HARDWIRED',
-            bp_number=max_bp + i
+            bp_number=max_bp + i,
+            project=project
+            # Note: NO unit_location for hardwired
         )
     
-    modeladmin.message_user(request, f"Created 20 hardwired belt packs (BP #{max_bp+1} to #{max_bp+20})")
-create_20_hardwired_beltpacks.short_description = 'Create 20 Hardwired belt packs'
+    modeladmin.message_user(request, f"Created 20 hardwired belt packs (BP #{max_bp+1} to #{max_bp+5})")
+create_5_hardwired_beltpacks.short_description = 'Create 20 Hardwired belt packs'
 
 def create_50_hardwired_beltpacks(modeladmin, request, queryset):
     """Create 50 hardwired belt packs"""
-    max_bp = CommBeltPack.objects.filter(system_type='HARDWIRED').aggregate(
-        Max('bp_number'))['bp_number__max'] or 0
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    max_bp = CommBeltPack.objects.filter(
+        system_type='HARDWIRED',
+        project=project
+    ).aggregate(Max('bp_number'))['bp_number__max'] or 0
     
     for i in range(1, 51):
         CommBeltPack.objects.create(
             system_type='HARDWIRED',
-            bp_number=max_bp + i
+            bp_number=max_bp + i,
+            project=project
+            # Note: NO unit_location for hardwired
         )
     
-    modeladmin.message_user(request, f"Created 50 hardwired belt packs (BP #{max_bp+1} to #{max_bp+50})")
+    modeladmin.message_user(request, f"Created 50 hardwired belt packs (BP #{max_bp+1} to #{max_bp+5})")
 create_50_hardwired_beltpacks.short_description = 'Create 50 Hardwired belt packs'
 
 def clear_all_beltpacks(modeladmin, request, queryset):
-    """Delete ALL belt packs - use with caution"""
-    count = CommBeltPack.objects.all().count()
+    """Delete ALL belt packs in current project - use with caution"""
+    project = _get_current_project(modeladmin, request)
+    if not project:
+        return
+    
+    count = CommBeltPack.objects.filter(project=project).count()
     if count > 0:
-        CommBeltPack.objects.all().delete()
+        CommBeltPack.objects.filter(project=project).delete()
         modeladmin.message_user(request, f"Deleted {count} belt packs", level=messages.WARNING)
     else:
         modeladmin.message_user(request, "No belt packs to delete")
@@ -3273,6 +3377,21 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 @admin.action(description='Populate default FS II channels')
 def populate_default_channels(modeladmin, request, queryset):
     """Create the default 10 FS II channels"""
+    # Get current project
+    if not hasattr(request, 'current_project') or not request.current_project:
+        modeladmin.message_user(request, "No project selected", level=messages.ERROR)
+        return
+    
+    from planner.models import Project
+    if isinstance(request.current_project, Project):
+        project = request.current_project
+    else:
+        try:
+            project = Project.objects.get(id=request.current_project)
+        except Project.DoesNotExist:
+            modeladmin.message_user(request, "Invalid project", level=messages.ERROR)
+            return
+    
     default_channels = [
         ('1 4W', 'FS II - 1', 'Production', 'PROD', 1),
         ('2 4W', 'FS II - 2', 'Audio', 'AUDIO', 2),
@@ -3289,6 +3408,7 @@ def populate_default_channels(modeladmin, request, queryset):
     for input_des, channel_num, name, abbr, order in default_channels:
         CommChannel.objects.get_or_create(
             channel_number=channel_num,
+            project=project,
             defaults={
                 'input_designation': input_des,
                 'name': name,
