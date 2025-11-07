@@ -1103,7 +1103,7 @@ from .models import AmpModel, Amp, AmpChannel
 class AmpModelAdmin(admin.ModelAdmin):
     list_display = ('manufacturer', 'model_name', 'channel_count', 
                    'nl4_connector_count', 'cacom_output_count')
-    list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count')
+    list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count', 'nl8_connector_count')
     search_fields = ('manufacturer', 'model_name')
     
     fieldsets = (
@@ -1115,7 +1115,7 @@ class AmpModelAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Output Configuration', {
-            'fields': ('nl4_connector_count', 'cacom_output_count'),
+            'fields': ('nl4_connector_count', 'nl8_connector_count', 'cacom_output_count'),
             'classes': ('collapse',)
         }),
     )
@@ -1189,23 +1189,39 @@ class AmpAdminForm(forms.ModelForm):
                 amp_model_id = int(self.data.get('amp_model'))
                 amp_model = AmpModel.objects.get(id=amp_model_id)
                 
-                # Hide NL4 fields if amp doesn't have NL4 connectors
+               # Hide NL4 fields if amp doesn't have NL4 connectors
                 if amp_model.nl4_connector_count == 0:
                     for field in ['nl4_a_pair_1', 'nl4_a_pair_2', 'nl4_b_pair_1', 'nl4_b_pair_2']:
-                        self.fields[field].widget = forms.HiddenInput()
+                        if field in self.fields:  # ← Add this check
+                            self.fields[field].widget = forms.HiddenInput()
                 elif amp_model.nl4_connector_count == 1:
                     for field in ['nl4_b_pair_1', 'nl4_b_pair_2']:
-                        self.fields[field].widget = forms.HiddenInput()
+                        if field in self.fields:  # ← Add this check
+                            self.fields[field].widget = forms.HiddenInput()
                 
                 # Hide Cacom fields if amp doesn't have Cacom outputs
                 if amp_model.cacom_output_count == 0:
-                    for field in ['cacom_1_assignment', 'cacom_2_assignment', 
-                                 'cacom_3_assignment', 'cacom_4_assignment']:
-                        self.fields[field].widget = forms.HiddenInput()
+                    for field in ['cacom_1_assignment', 'cacom_2_assignment',
+                                'cacom_3_assignment', 'cacom_4_assignment']:
+                        if field in self.fields:  # ← Add this check
+                            self.fields[field].widget = forms.HiddenInput()
                 elif amp_model.cacom_output_count < 4:
                     for i in range(amp_model.cacom_output_count + 1, 5):
-                        self.fields[f'cacom_{i}_assignment'].widget = forms.HiddenInput()
-                        
+                        field = f'cacom_{i}_assignment'
+                        if field in self.fields:  # ← Add this check
+                            self.fields[field].widget = forms.HiddenInput()
+
+                # Hide NL8 fields if amp doesn't have NL8 connectors
+                if amp_model.nl8_connector_count == 0:
+                    for field in ['nl8_a_pair_1', 'nl8_a_pair_2', 'nl8_a_pair_3', 'nl8_a_pair_4',
+                                'nl8_b_pair_1', 'nl8_b_pair_2', 'nl8_b_pair_3', 'nl8_b_pair_4']:
+                        if field in self.fields:
+                            self.fields[field].widget = forms.HiddenInput()
+                elif amp_model.nl8_connector_count == 1:
+                    for field in ['nl8_b_pair_1', 'nl8_b_pair_2', 'nl8_b_pair_3', 'nl8_b_pair_4']:
+                        if field in self.fields:
+                            self.fields[field].widget = forms.HiddenInput()
+                    
             except (ValueError, AmpModel.DoesNotExist):
                 pass
 
@@ -1232,7 +1248,7 @@ class AmpAdmin(BaseEquipmentAdmin):
                 kwargs["queryset"] = Location.objects.filter(project=request.current_project)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
-    
+
     
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
@@ -1262,6 +1278,19 @@ class AmpAdmin(BaseEquipmentAdmin):
                 'fields': cacom_fields,
                 'classes': ('collapse',)
             }))
+
+
+        if obj and obj.amp_model.nl8_connector_count > 0:
+            nl8_fields = []
+            if obj.amp_model.nl8_connector_count >= 1:
+                nl8_fields.extend(['nl8_a_pair_1', 'nl8_a_pair_2', 'nl8_a_pair_3', 'nl8_a_pair_4'])
+            if obj.amp_model.nl8_connector_count >= 2:
+                nl8_fields.extend(['nl8_b_pair_1', 'nl8_b_pair_2', 'nl8_b_pair_3', 'nl8_b_pair_4'])
+            
+            fieldsets.append(('NL8 Connectors', {
+                'fields': nl8_fields,
+                'classes': ('collapse',)
+            }))    
 
         return fieldsets
     

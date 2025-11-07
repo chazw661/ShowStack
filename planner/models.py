@@ -320,6 +320,12 @@ class AmpModel(models.Model):
         choices=[(0, 'None'), (1, '1 NL4'), (2, '2 NL4')]
     )
     
+
+    nl8_connector_count = models.IntegerField(
+    default=0,
+    choices=[(0, 'None'), (1, '1 NL8'), (2, '2 NL8')]
+    )
+    
     # Cacom configuration  
     cacom_output_count = models.IntegerField(default=0)
     
@@ -367,6 +373,50 @@ class Amp(models.Model):
     nl4_b_pair_2 = models.CharField(
         max_length=50, blank=True,
         verbose_name="NL4-B Pair 2 +/-",
+        help_text="e.g., 'Ch7/Ch8'"
+    )
+
+    # NL8 Connector A (if present)
+    nl8_a_pair_1 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-A Pair 1 +/-",
+        help_text="e.g., 'Ch1/Ch2'"
+    )
+    nl8_a_pair_2 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-A Pair 2 +/-",
+        help_text="e.g., 'Ch3/Ch4'"
+    )
+    nl8_a_pair_3 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-A Pair 3 +/-",
+        help_text="e.g., 'Ch5/Ch6'"
+    )
+    nl8_a_pair_4 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-A Pair 4 +/-",
+        help_text="e.g., 'Ch7/Ch8'"
+    )
+    
+    # NL8 Connector B (if present)
+    nl8_b_pair_1 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-B Pair 1 +/-",
+        help_text="e.g., 'Ch1/Ch2'"
+    )
+    nl8_b_pair_2 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-B Pair 2 +/-",
+        help_text="e.g., 'Ch3/Ch4'"
+    )
+    nl8_b_pair_3 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-B Pair 3 +/-",
+        help_text="e.g., 'Ch5/Ch6'"
+    )
+    nl8_b_pair_4 = models.CharField(
+        max_length=50, blank=True,
+        verbose_name="NL8-B Pair 4 +/-",
         help_text="e.g., 'Ch7/Ch8'"
     )
     
