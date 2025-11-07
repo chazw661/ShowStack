@@ -2643,4 +2643,33 @@ def switch_project(request, project_id):
         return JsonResponse({'error': 'Project not found'}, status=404)
     
 
+
+    #-------Admin action to populate amp models in Railway Databae  for Amp Assignments
+
+
+
+from django.http import HttpResponse
+from django.core.management import call_command
+
+@staff_member_required
+def populate_amp_models_view(request):
+    """Admin view to populate amp models - only accessible by staff"""
+    try:
+        # Run the management command
+        call_command('populate_amp_models')
+        return HttpResponse("""
+            <h1>✓ Success!</h1>
+            <p>Amp models have been populated.</p>
+            <p><a href="/admin/planner/ampmodel/">View Amp Models</a></p>
+            <p><a href="/admin/">Back to Admin</a></p>
+        """)
+    except Exception as e:
+        return HttpResponse(f"""
+            <h1>✗ Error</h1>
+            <p>Error populating amp models: {e}</p>
+            <p><a href="/admin/">Back to Admin</a></p>
+        """, status=500)
+
+    
+
   

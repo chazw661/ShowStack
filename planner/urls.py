@@ -5,6 +5,7 @@ from planner.views import SystemDashboardView
 from django.urls import path, include
 from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_all_locations_pdf
 from planner.utils.pdf_exports.system_report import export_system_report
+from .views import populate_amp_models_view
 
 app_name = 'planner'  
 
@@ -122,6 +123,10 @@ urlpatterns = [
     #-----Full System PDF Report----
 
     path('system-report/pdf/', export_system_report, name='system_report_pdf'),
+
+    #----Railway Database fix for missing Amp Models.
+
+    path('admin/populate-amp-models/', populate_amp_models_view, name='populate_amp_models'),
 
 
 
