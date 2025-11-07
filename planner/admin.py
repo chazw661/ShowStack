@@ -1217,6 +1217,22 @@ class AmpAdmin(BaseEquipmentAdmin):
     list_filter = ('location', 'amp_model__manufacturer', 'amp_model__model_name')
     search_fields = ('name', 'ip_address')
     ordering = ['location', 'name']
+
+
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Override to handle global vs project-specific ForeignKeys"""
+        if db_field.name == "amp_model":
+            # AmpModel is global - don't filter by project
+            kwargs["queryset"] = AmpModel.objects.all()
+        elif db_field.name == "location":
+            # Location is project-specific - filter by current project
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    
     
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
