@@ -2,6 +2,7 @@
 # Updated to hide child models for viewers
 from django.contrib import admin
 from planner.models import ProjectMember, Project
+from planner.admin_site import showstack_admin_site
 
 # TEST - print on import
 print("=" * 50)
@@ -9,10 +10,16 @@ print("ADMIN_ORDERING.PY LOADED")
 print("=" * 50)
 
 # Store the original get_app_list
-original_get_app_list = admin.site.get_app_list
+# Store the original get_app_list from showstack_admin_site
+original_get_app_list = showstack_admin_site.get_app_list
+
+
+
 
 def ordered_get_app_list(request, app_label=None):
+    print("*** FUNCTION CALLED ***")
     app_list = original_get_app_list(request, app_label)
+    app_list = [app for app in app_list if app['app_label'] != 'admin_interface']
     
     # Check if user is a viewer (no editor/owner roles)
     is_viewer = False
@@ -50,6 +57,7 @@ def ordered_get_app_list(request, app_label=None):
         'speakerarray',       # Child of Soundvision Predictions
         'speakercabinet',     # Child of Soundvision Predictions
         'amplifierassignment',# Child of Power Distribution Plans
+        'ampmodel',           # Child of Amplifier Assignments 
         'amplifierprofile',   # Child of Amplifier Profiles
         'p1input',            # Child of P1 Processor
         'p1output',           # Child of P1 Processor
@@ -74,6 +82,7 @@ def ordered_get_app_list(request, app_label=None):
         'console': 6,
         'device': 7,
         'amp': 8,
+        'ampmodel': 8.5,
         
         # System Processors (9)
         'systemprocessor': 9,
@@ -105,11 +114,12 @@ def ordered_get_app_list(request, app_label=None):
         
         # Amplifiers (25-27)
         'powerdistributionplan': 25,
-        'amplifierprofile': 26,
-        'amplifierassignment': 27,
+        'amplifierassignment': 25.5,
+        'amplifierprofile': 25.6,
+
+    
         
         # Standalone Models (28-29)
-        'ampmodel': 28,
         'audiochecklist': 29,
         
         # P1 & Galaxy Processors (30-35)
@@ -139,11 +149,15 @@ def ordered_get_app_list(request, app_label=None):
                 
                 app['models'] = filtered_models
                 print(f"Models after filtering: {[m['object_name'] for m in app['models']]}")  # DEBUG
-            
+
             # Sort remaining models
-            app['models'].sort(key=lambda x: order_map.get(x['object_name'].lower(), 999))
-    
-    return app_list
+        
+                print(f"DEBUG - Models before sort: {[(m['object_name'], order_map.get(m['object_name'].lower(), 999)) for m in app['models']]}")
+            app['models'].sort(key=lambda x: order_map.get(x['object_name'].lower(), 999))    
+                            
+            
+        
+            return app_list
 
 # Apply the monkey patch
-admin.site.get_app_list = ordered_get_app_list
+showstack_admin_site.get_app_list = ordered_get_app_list

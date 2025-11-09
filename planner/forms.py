@@ -601,10 +601,12 @@ class AmpForm(forms.ModelForm):
     class Meta:
         model = Amp
         fields = ['location', 'amp_model', 'name', 'ip_address', 
-                  'nl4_a_pair_1', 'nl4_a_pair_2', 
-                  'nl4_b_pair_1', 'nl4_b_pair_2',
-                  'cacom_1_assignment', 'cacom_2_assignment',
-                  'cacom_3_assignment', 'cacom_4_assignment']
+          'nl4_a_pair_1', 'nl4_a_pair_2', 
+          'nl4_b_pair_1', 'nl4_b_pair_2',
+          'cacom_1_ch1', 'cacom_1_ch2', 'cacom_1_ch3', 'cacom_1_ch4',
+          'cacom_2_ch1', 'cacom_2_ch2', 'cacom_2_ch3', 'cacom_2_ch4',
+          'cacom_3_ch1', 'cacom_3_ch2', 'cacom_3_ch3', 'cacom_3_ch4',
+          'cacom_4_ch1', 'cacom_4_ch2', 'cacom_4_ch3', 'cacom_4_ch4']
         
         widgets = {
             'name': forms.TextInput(attrs={

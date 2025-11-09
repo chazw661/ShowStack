@@ -1199,17 +1199,20 @@ class AmpAdminForm(forms.ModelForm):
                         if field in self.fields:  # ← Add this check
                             self.fields[field].widget = forms.HiddenInput()
                 
-                # Hide Cacom fields if amp doesn't have Cacom outputs
-                if amp_model.cacom_output_count == 0:
-                    for field in ['cacom_1_assignment', 'cacom_2_assignment',
-                                'cacom_3_assignment', 'cacom_4_assignment']:
-                        if field in self.fields:  # ← Add this check
-                            self.fields[field].widget = forms.HiddenInput()
-                elif amp_model.cacom_output_count < 4:
-                    for i in range(amp_model.cacom_output_count + 1, 5):
-                        field = f'cacom_{i}_assignment'
-                        if field in self.fields:  # ← Add this check
-                            self.fields[field].widget = forms.HiddenInput()
+               # Hide CaCom fields based on cacom_output_count
+                cacom_fields = {
+                    1: ['cacom_1_ch1', 'cacom_1_ch2', 'cacom_1_ch3', 'cacom_1_ch4'],
+                    2: ['cacom_2_ch1', 'cacom_2_ch2', 'cacom_2_ch3', 'cacom_2_ch4'],
+                    3: ['cacom_3_ch1', 'cacom_3_ch2', 'cacom_3_ch3', 'cacom_3_ch4'],
+                    4: ['cacom_4_ch1', 'cacom_4_ch2', 'cacom_4_ch3', 'cacom_4_ch4'],
+                }
+
+                # Hide CaCom connectors not available
+                for connector_num, fields in cacom_fields.items():
+                    if connector_num > amp_model.cacom_output_count:
+                        for field in fields:
+                            if field in self.fields:
+                                self.fields[field].widget = forms.HiddenInput()
 
                 # Hide NL8 fields if amp doesn't have NL8 connectors
                 if amp_model.nl8_connector_count == 0:
@@ -1272,9 +1275,15 @@ class AmpAdmin(BaseEquipmentAdmin):
         if obj and obj.amp_model.cacom_output_count > 0:
             cacom_fields = []
             for i in range(1, min(obj.amp_model.cacom_output_count + 1, 5)):
-                cacom_fields.append(f'cacom_{i}_assignment')
+                # Each CaCom has 4 channels
+                cacom_fields.extend([
+                    f'cacom_{i}_ch1',
+                    f'cacom_{i}_ch2',
+                    f'cacom_{i}_ch3',
+                    f'cacom_{i}_ch4'
+                ])
             
-            fieldsets.append(('Cacom Outputs', {
+            fieldsets.append(('CaCom Outputs', {
                 'fields': cacom_fields,
                 'classes': ('collapse',)
             }))

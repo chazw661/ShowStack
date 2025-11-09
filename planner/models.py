@@ -421,10 +421,30 @@ class Amp(models.Model):
     )
     
     # Cacom outputs (if present)
-    cacom_1_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 1")
-    cacom_2_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 2")
-    cacom_3_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 3")
-    cacom_4_assignment = models.CharField(max_length=100, blank=True, verbose_name="Ch 4")
+  # CaCom outputs - 4 channels per connector
+    # CaCom 1 (Channels 1-4)
+    cacom_1_ch1 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 1 - Ch1")
+    cacom_1_ch2 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 1 - Ch2")
+    cacom_1_ch3 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 1 - Ch3")
+    cacom_1_ch4 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 1 - Ch4")
+
+    # CaCom 2 (Channels 5-8)
+    cacom_2_ch1 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 2 - Ch5")
+    cacom_2_ch2 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 2 - Ch6")
+    cacom_2_ch3 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 2 - Ch7")
+    cacom_2_ch4 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 2 - Ch8")
+
+    # CaCom 3 (Channels 9-12)
+    cacom_3_ch1 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 3 - Ch9")
+    cacom_3_ch2 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 3 - Ch10")
+    cacom_3_ch3 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 3 - Ch11")
+    cacom_3_ch4 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 3 - Ch12")
+
+    # CaCom 4 (Channels 13-16)
+    cacom_4_ch1 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch13")
+    cacom_4_ch2 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch14")
+    cacom_4_ch3 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch15")
+    cacom_4_ch4 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch16")
     
     class Meta:
         verbose_name = "Amplifier Assignment"
@@ -1816,7 +1836,7 @@ class AmplifierProfile(models.Model):
     
     class Meta:
         verbose_name = "Amplifier Profile"
-        verbose_name_plural = "    ├─ Amplifier Profiles"  # Child
+        verbose_name_plural = "    └─ Amplifier Profiles"  # Child
         ordering = ['manufacturer', 'model']  # or ['i fields are 'manufacturer', 'model'
        
         

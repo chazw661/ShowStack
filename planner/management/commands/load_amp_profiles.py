@@ -51,6 +51,22 @@ class Command(BaseCommand):
                 'weight_kg': 15.9,
                 'notes': '4 channels, 3300W @ 2.7Ω per channel, flagship model'
             },
+
+            {
+                'manufacturer': "L-Acoustics",
+                'model': 'LA7.16i',
+                'idle_power_watts': 100,
+                'rated_power_watts': 700,
+                'peak_power_watts': 1400,
+                'max_power_watts': 5600,
+                'nominal_voltage': 208,
+                'power_factor': 0.94,
+                'efficiency': 0.92,
+                'channels': 7,
+                'rack_units': 2,
+                'weight_kg': 8.5,
+                'notes': '7 channels, 800W @ 4Ω per channel, touring grade'
+            },
         ]
         
         created_count = 0
