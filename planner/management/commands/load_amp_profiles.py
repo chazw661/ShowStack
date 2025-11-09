@@ -1,10 +1,30 @@
 from django.core.management.base import BaseCommand
 from planner.models import AmplifierProfile
 
+
 class Command(BaseCommand):
     help = 'Load L\'Acoustics amplifier profiles into the database'
+    
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            help='Force reload even if profiles already exist',
+        )
 
     def handle(self, *args, **options):
+        # Check if profiles already exist
+        existing_count = AmplifierProfile.objects.count()
+        
+        if existing_count > 0 and not options['force']:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Amplifier profiles already loaded ({existing_count} profiles exist). '
+                    'Use --force to reload.'
+                )
+            )
+            return
+        
         amplifiers = [
             {
                 'manufacturer': "L'Acoustics",
@@ -51,7 +71,6 @@ class Command(BaseCommand):
                 'weight_kg': 15.9,
                 'notes': '4 channels, 3300W @ 2.7Ω per channel, flagship model'
             },
-
             {
                 'manufacturer': "L-Acoustics",
                 'model': 'LA7.16i',
@@ -68,10 +87,10 @@ class Command(BaseCommand):
                 'notes': '7 channels, 800W @ 4Ω per channel, touring grade'
             },
         ]
-        
+
         created_count = 0
         updated_count = 0
-        
+
         for amp_data in amplifiers:
             amp, created = AmplifierProfile.objects.update_or_create(
                 manufacturer=amp_data['manufacturer'],
@@ -89,7 +108,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.WARNING(f'Updated: {amp.manufacturer} {amp.model}')
                 )
-        
+
         self.stdout.write(
             self.style.SUCCESS(
                 f'\nSummary: {created_count} created, {updated_count} updated'
