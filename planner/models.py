@@ -6,7 +6,7 @@ from django.conf import settings
 from decimal import Decimal
 import math
 from django import forms
-
+from django.db import models, transaction
 
 
 
@@ -41,6 +41,394 @@ class Project(models.Model):
     
     def get_member_count(self):
         return self.projectmember_set.count() + 1  # +1 for owner
+    
+    
+    def duplicate(self, new_name=None, duplicate_for_user=None):
+        """
+        Create a complete copy of this project and all related data.
+        """
+        
+        
+        from django.db import transaction
+        
+        # Set defaults
+        if new_name is None:
+            new_name = f"Copy of {self.name}"
+        if duplicate_for_user is None:
+            duplicate_for_user = self.owner
+        
+        try:
+            with transaction.atomic():
+               
+                # Create new project
+                new_project = Project.objects.create(
+                    name=new_name,
+                    owner=duplicate_for_user,
+                    show_date=self.show_date,
+                    venue=self.venue,
+                    client=self.client,
+                    notes=self.notes,
+                    is_archived=False
+                )
+               
+                
+               
+               
+                
+                return new_project
+                
+        except Exception as e:
+            
+            raise  # Re-raise the exception
+    
+    # ... rest of your duplicate method
+        
+        with transaction.atomic():
+            # Create new project
+            new_project = Project.objects.create(
+                name=new_name,
+                owner=duplicate_for_user,
+                show_date=self.show_date,
+                venue=self.venue,
+                client=self.client,
+                notes=self.notes,
+                is_archived=False  # Always create as active
+            )
+            
+            # Track old_id -> new_object mappings for relationships
+            location_map = {}
+            console_map = {}
+            amp_map = {}
+            
+            # 1. Duplicate Locations (needed for other models)
+            for location in self.location_set.all():
+                new_location = Location.objects.create(
+                    project=new_project,
+                    name=location.name,
+                    description=location.description
+                )
+                location_map[location.id] = new_location
+            
+            # 2. Duplicate Consoles and their related objects
+            for console in self.console_set.all():
+                # Get the location if it exists
+                new_location = location_map.get(console.location_id) if console.location_id else None
+                
+                new_console = Console.objects.create(
+                    project=new_project,
+                    location=new_location,
+                    name=console.name,
+                    is_template=console.is_template,
+                    primary_ip_address=console.primary_ip_address,
+                    secondary_ip_address=console.secondary_ip_address
+                )
+                console_map[console.id] = new_console
+                
+                # Duplicate Console Inputs
+                for input_obj in console.consoleinput_set.all():
+                    ConsoleInput.objects.create(
+                        console=new_console,
+                        dante_number=input_obj.dante_number,
+                        input_ch=input_obj.input_ch,
+                        source=input_obj.source,
+                        group=input_obj.group,
+                        dca=input_obj.dca,
+                        mute=input_obj.mute,
+                        direct_out=input_obj.direct_out,
+                        omni_in=input_obj.omni_in
+                    )
+                
+                # Duplicate Console Aux Outputs
+                for aux in console.consoleauxoutput_set.all():
+                    ConsoleAuxOutput.objects.create(
+                        console=new_console,
+                        dante_number=aux.dante_number,
+                        aux_number=aux.aux_number,
+                        name=aux.name,
+                        mono_stereo=aux.mono_stereo,
+                        bus_type=aux.bus_type,
+                        omni_in=aux.omni_in,
+                        omni_out=aux.omni_out
+                    )
+                
+                # Duplicate Console Matrix Outputs
+                for matrix in console.consolematrixoutput_set.all():
+                    ConsoleMatrixOutput.objects.create(
+                        console=new_console,
+                        dante_number=matrix.dante_number,
+                        matrix_number=matrix.matrix_number,
+                        name=matrix.name,
+                        mono_stereo=matrix.mono_stereo,
+                        destination=matrix.destination,
+                        omni_out=matrix.omni_out
+                    )
+                
+                # Duplicate Console Stereo Outputs
+                for stereo in console.consolestereooutput_set.all():
+                    ConsoleStereoOutput.objects.create(
+                        console=new_console,
+                        stereo_type=stereo.stereo_type,
+                        name=stereo.name,
+                        dante_number=stereo.dante_number,
+                        omni_out=stereo.omni_out
+                    )
+            
+            # 3. Duplicate Devices (I/O Devices)
+            for device in self.device_set.all():
+                new_location = location_map.get(device.location_id) if device.location_id else None
+                
+                new_device = Device.objects.create(
+                    project=new_project,
+                    location=new_location,
+                    name=device.name,
+                    input_count=device.input_count,
+                    output_count=device.output_count,
+                    rio_card_count=device.rio_card_count,
+                    notes=device.notes,
+                    ip_address=device.ip_address
+                )
+                
+                # Duplicate Device Inputs
+                for device_input in device.deviceinput_set.all():
+                    DeviceInput.objects.create(
+                        device=new_device,
+                        input_number=device_input.input_number,
+                        source=device_input.source
+                    )
+                
+                # Duplicate Device Outputs
+                for device_output in device.deviceoutput_set.all():
+                    DeviceOutput.objects.create(
+                        device=new_device,
+                        output_number=device_output.output_number,
+                        destination=device_output.destination
+                    )
+            
+            # 4. Duplicate Amplifiers
+            for amp in self.amp_set.all():
+                new_location = location_map.get(amp.location_id) if amp.location_id else None
+                
+                new_amp = Amp.objects.create(
+                    project=new_project,
+                    location=new_location,
+                    amp_model=amp.amp_model,
+                    name=amp.name,
+                    notes=amp.notes,
+                    ip_address=amp.ip_address
+                )
+                amp_map[amp.id] = new_amp
+                
+                # Duplicate Amp Channels
+                for channel in amp.ampchannel_set.all():
+                    AmpChannel.objects.create(
+                        amp=new_amp,
+                        channel_number=channel.channel_number,
+                        speaker_load=channel.speaker_load,
+                        notes=channel.notes
+                    )
+                
+                # Duplicate NL4 Connectors
+                for nl4 in amp.nl4connector_set.all():
+                    NL4Connector.objects.create(
+                        amp=new_amp,
+                        connector_number=nl4.connector_number,
+                        ch1_plus=nl4.ch1_plus,
+                        ch1_minus=nl4.ch1_minus,
+                        ch2_plus=nl4.ch2_plus,
+                        ch2_minus=nl4.ch2_minus
+                    )
+                
+                # Duplicate NL8 Connectors
+                for nl8 in amp.nl8connector_set.all():
+                    NL8Connector.objects.create(
+                        amp=new_amp,
+                        connector_number=nl8.connector_number,
+                        ch1_plus=nl8.ch1_plus,
+                        ch1_minus=nl8.ch1_minus,
+                        ch2_plus=nl8.ch2_plus,
+                        ch2_minus=nl8.ch2_minus,
+                        ch3_plus=nl8.ch3_plus,
+                        ch3_minus=nl8.ch3_minus,
+                        ch4_plus=nl8.ch4_plus,
+                        ch4_minus=nl8.ch4_minus
+                    )
+                
+                # Duplicate CaCom Outputs
+                for cacom in amp.cacomoutput_set.all():
+                    CacomOutput.objects.create(
+                        amp=new_amp,
+                        output_number=cacom.output_number,
+                        ch1=cacom.ch1,
+                        ch2=cacom.ch2,
+                        ch3=cacom.ch3,
+                        ch4=cacom.ch4,
+                        ch5=cacom.ch5,
+                        ch6=cacom.ch6,
+                        ch7=cacom.ch7,
+                        ch8=cacom.ch8,
+                        ch9=cacom.ch9,
+                        ch10=cacom.ch10,
+                        ch11=cacom.ch11,
+                        ch12=cacom.ch12,
+                        ch13=cacom.ch13,
+                        ch14=cacom.ch14,
+                        ch15=cacom.ch15,
+                        ch16=cacom.ch16
+                    )
+            
+            # 5. Duplicate COMM System
+            # Duplicate CommChannels
+            for channel in self.commchannel_set.all():
+                CommChannel.objects.create(
+                    project=new_project,
+                    channel_number=channel.channel_number,
+                    name=channel.name
+                )
+            
+            # Duplicate CommPositions
+            for position in self.commposition_set.all():
+                CommPosition.objects.create(
+                    project=new_project,
+                    position_number=position.position_number,
+                    name=position.name
+                )
+            
+            # Duplicate CommCrewNames
+            for crew in self.commcrewname_set.all():
+                CommCrewName.objects.create(
+                    project=new_project,
+                    name=crew.name,
+                    position_number=crew.position_number
+                )
+            
+            # Duplicate CommBeltPacks
+            for beltpack in self.commbeltpack_set.all():
+                CommBeltPack.objects.create(
+                    project=new_project,
+                    beltpack_number=beltpack.beltpack_number,
+                    assigned_to=beltpack.assigned_to,
+                    position=beltpack.position,
+                    channel_assignments=beltpack.channel_assignments
+                )
+            
+            # 6. Duplicate Mic Tracker System
+            # Duplicate Presenters first (needed for sessions)
+            presenter_map = {}
+            for presenter in self.presenter_set.all():
+                new_presenter = Presenter.objects.create(
+                    project=new_project,
+                    name=presenter.name,
+                    title=presenter.title,
+                    organization=presenter.organization
+                )
+                presenter_map[presenter.id] = new_presenter
+            
+            # Duplicate ShowDays
+            showday_map = {}
+            for showday in self.showday_set.all():
+                new_showday = ShowDay.objects.create(
+                    project=new_project,
+                    day_number=showday.day_number,
+                    date=showday.date,
+                    name=showday.name
+                )
+                showday_map[showday.id] = new_showday
+            
+            # Duplicate MicSessions
+            for session in self.micsession_set.all():
+                new_showday = showday_map.get(session.show_day_id) if session.show_day_id else None
+                
+                new_session = MicSession.objects.create(
+                    project=new_project,
+                    show_day=new_showday,
+                    session_number=session.session_number,
+                    session_name=session.session_name,
+                    start_time=session.start_time,
+                    end_time=session.end_time
+                )
+                
+                # Duplicate the many-to-many presenters relationship
+                for presenter in session.presenters.all():
+                    new_presenter = presenter_map.get(presenter.id)
+                    if new_presenter:
+                        new_session.presenters.add(new_presenter)
+                
+                # Duplicate MicAssignments
+                for assignment in session.micassignment_set.all():
+                    MicAssignment.objects.create(
+                        session=new_session,
+                        mic_number=assignment.mic_number,
+                        mic_type=assignment.mic_type,
+                        assigned_to=assignment.assigned_to,
+                        notes=assignment.notes
+                    )
+            
+            # Duplicate MicShowInformation
+            for mic_info in self.micshowinformation_set.all():
+                MicShowInformation.objects.create(
+                    project=new_project,
+                    show_name=mic_info.show_name,
+                    venue=mic_info.venue,
+                    dates=mic_info.dates,
+                    production_company=mic_info.production_company,
+                    audio_company=mic_info.audio_company
+                )
+            
+            # 7. Duplicate Soundvision/PA System
+            # Duplicate Speaker Arrays
+            array_map = {}
+            for array in self.speakerarray_set.all():
+                new_location = location_map.get(array.location_id) if array.location_id else None
+                
+                new_array = SpeakerArray.objects.create(
+                    project=new_project,
+                    location=new_location,
+                    name=array.name,
+                    array_type=array.array_type,
+                    notes=array.notes
+                )
+                array_map[array.id] = new_array
+                
+                # Duplicate Speaker Cabinets
+                for cabinet in array.speakercabinet_set.all():
+                    SpeakerCabinet.objects.create(
+                        array=new_array,
+                        model=cabinet.model,
+                        quantity=cabinet.quantity,
+                        position=cabinet.position,
+                        angle=cabinet.angle
+                    )
+            
+            # Duplicate Soundvision Predictions
+            for prediction in self.soundvisionprediction_set.all():
+                SoundvisionPrediction.objects.create(
+                    project=new_project,
+                    name=prediction.name,
+                    file=prediction.file,
+                    notes=prediction.notes,
+                    created_at=prediction.created_at
+                )
+            
+            # 8. Duplicate Power Distribution Plans
+            for power_plan in self.powerdistributionplan_set.all():
+                new_location = location_map.get(power_plan.location_id) if power_plan.location_id else None
+                
+                PowerDistributionPlan.objects.create(
+                    project=new_project,
+                    location=new_location,
+                    name=power_plan.name,
+                    total_amps_available=power_plan.total_amps_available,
+                    voltage=power_plan.voltage,
+                    notes=power_plan.notes
+                )
+            
+            # NOTE: We intentionally do NOT duplicate:
+            # - ProjectMember (team members)
+            # - Invitations
+            # - created_at/updated_at timestamps (automatically set to now)
+            
+            return new_project
+
 
 
 class UserProfile(models.Model):

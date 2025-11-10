@@ -52,6 +52,8 @@ from .models import AudioChecklist
 from .forms import ConsoleStereoOutputForm
 from .admin_site import showstack_admin_site
 
+from django.contrib import admin, messages
+
 
 
 
@@ -239,68 +241,187 @@ class BaseEquipmentAdmin(BaseAdmin):
     
 
 
-    @admin.register(Project, site=showstack_admin_site)
-    class ProjectAdmin(admin.ModelAdmin):
-        """Admin for Project model - doesn't use BaseEquipmentAdmin filtering"""
-        list_display = ['name', 'owner', 'show_date', 'venue', 'is_archived']
-        list_filter = ['is_archived', 'show_date']
-        search_fields = ['name', 'venue', 'client']
-        readonly_fields = ['owner', 'created_at', 'updated_at']  # <-- owner is readonly
-        exclude = []  # We'll set this dynamically
+#------Duplicate Project Admin
+
+# Add this to your planner/admin.py file
+
+class DuplicateProjectForm(forms.Form):
+    """Form for renaming a project during duplication"""
+    new_name = forms.CharField(
+        max_length=200,
+        label="New Project Name",
+        widget=forms.TextInput(attrs={
+            'class': 'vTextField',
+            'style': 'width: 100%;',
+            'autofocus': True
+        })
+    )
+    
+    def __init__(self, *args, original_name=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if original_name:
+            self.fields['new_name'].initial = f"Copy of {original_name}"
+
+
+@admin.action(description="Duplicate selected project")
+def duplicate_project_action(modeladmin, request, queryset):
+    """
+    Admin action to duplicate a project with all related data.
+    Shows an intermediate page to rename the project.
+    """
+    
+    # Only allow duplicating one project at a time
+    if queryset.count() != 1:
         
-        def get_exclude(self, request, obj=None):
-            """Hide owner field on add form"""
-            if obj is None:  # Adding new project
-                return ['owner']  # Hide owner field
-            return []  # Show owner (readonly) on edit form
-        
-        fieldsets = (
-            ('Project Details', {
-                'fields': ('name', 'owner', 'show_date', 'venue', 'client')
-            }),
-            ('Notes', {
-                'fields': ('notes',),
-                'classes': ('collapse',)
-            }),
-            ('Status', {
-                'fields': ('is_archived',)
-            }),
-            ('Timestamps', {
-                'fields': ('created_at', 'updated_at'),
-                'classes': ('collapse',)
-            }),
+        modeladmin.message_user(
+            request,
+            "Please select exactly one project to duplicate.",
+            level=messages.ERROR
         )
+        return
+    
+    project = queryset.first()
+   
+    
+    # If this is a POST request, we're coming back from the form
+    if request.POST.get('confirm_duplicate'):
+       
+        form = DuplicateProjectForm(request.POST, original_name=project.name)
         
-        def get_queryset(self, request):
-            """Show user's own projects and projects they're members of"""
-            qs = super().get_queryset(request)
-            
-            if request.user.is_superuser:
-                return qs
-            
-            # Show projects user owns or is a member of
-            from planner.models import ProjectMember
-            member_project_ids = ProjectMember.objects.filter(
-                user=request.user
-            ).values_list('project_id', flat=True)
-            
-            return qs.filter(
-                Q(owner=request.user) | Q(id__in=member_project_ids)
-            )
+        if form.is_valid():
+           
+            new_name = form.cleaned_data['new_name']
+           
+            try:
+                user = request.user
+                if not user.is_authenticated:
+                    print("❌ User not authenticated")
+                    modeladmin.message_user(
+                        request,
+                        'You must be logged in to duplicate projects.',
+                        level=messages.ERROR
+                    )
+                    return
+                
+               
+                
+                # Duplicate the project
+                new_project = project.duplicate(
+                    new_name=new_name,
+                    duplicate_for_user=user
+                )
+                
+                print(f"✅ SUCCESS! New project created: {new_project.name}")
+                
+                # ... rest of success handling
+                
+                modeladmin.message_user(
+                    request,
+                    f'Successfully created "{new_project.name}" as a copy of "{project.name}".',
+                    level=messages.SUCCESS
+                )
+                
+                # Redirect to the new project's change page
+                from django.urls import reverse
+                url = reverse('admin:planner_project_change', args=[new_project.id])
+                return redirect(url)
+                
+            except Exception as e:
+                modeladmin.message_user(
+                    request,
+                    f'Error duplicating project: {str(e)}',
+                    level=messages.ERROR
+                )
+                return
+    else:
+        form = DuplicateProjectForm(original_name=project.name)
+    
+   # Show the intermediate page
+    context = {
+        'form': form,
+        'project': project,
+        'projects': [project],  # Add this
+        'queryset': queryset,    # Add this
+        'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,  # Add this
+        'opts': modeladmin.model._meta,
+        'title': f'Duplicate Project: {project.name}',
+        'site_title': modeladmin.admin_site.site_title,
+        'site_header': modeladmin.admin_site.site_header,
+    }
+    
+    return render(request, 'admin/planner/duplicate_project.html', context)
+    
+    return render(request, 'admin/planner/duplicate_project.html', context)
+
+@admin.action(description="TEST - Just a test action")
+def test_action(modeladmin, request, queryset):
+    modeladmin.message_user(request, "Test action works!", level=messages.SUCCESS)
+
+
+
+@admin.register(Project, site=showstack_admin_site)
+class ProjectAdmin(admin.ModelAdmin):
+    """Admin for Project model - doesn't use BaseEquipmentAdmin filtering"""
+    list_display = ['name', 'owner', 'show_date', 'venue', 'is_archived']
+    list_filter = ['is_archived', 'show_date']
+    search_fields = ['name', 'venue', 'client']
+    actions = [duplicate_project_action]
+    readonly_fields = ['owner', 'created_at', 'updated_at']  # <-- owner is readonly
+    exclude = []  # We'll set this dynamically
+    
+    def get_exclude(self, request, obj=None):
+        """Hide owner field on add form"""
+        if obj is None:  # Adding new project
+            return ['owner']  # Hide owner field
+        return []  # Show owner (readonly) on edit form
+    
+    fieldsets = (
+        ('Project Details', {
+            'fields': ('name', 'owner', 'show_date', 'venue', 'client')
+        }),
+        ('Notes', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+        ('Status', {
+            'fields': ('is_archived',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        """Show user's own projects and projects they're members of"""
+        qs = super().get_queryset(request)
         
-        def has_add_permission(self, request):
-            """Paid/beta users can add projects"""
-            if request.user.is_superuser:
-                return True
-            if hasattr(request.user, 'userprofile'):
-                return request.user.userprofile.account_type in ['paid', 'beta', 'premium']
-            return False
+        if request.user.is_superuser:
+            return qs
         
-        def save_model(self, request, obj, form, change):
-            """Set owner to current user if creating"""
-            if not change:  # New project
-                obj.owner = request.user
-            super().save_model(request, obj, form, change)
+        # Show projects user owns or is a member of
+        from planner.models import ProjectMember
+        member_project_ids = ProjectMember.objects.filter(
+            user=request.user
+        ).values_list('project_id', flat=True)
+        
+        return qs.filter(
+            Q(owner=request.user) | Q(id__in=member_project_ids)
+        )
+    
+    def has_add_permission(self, request):
+        """Paid/beta users can add projects"""
+        if request.user.is_superuser:
+            return True
+        if hasattr(request.user, 'userprofile'):
+            return request.user.userprofile.account_type in ['paid', 'beta', 'premium']
+        return False
+    
+    def save_model(self, request, obj, form, change):
+        """Set owner to current user if creating"""
+        if not change:  # New project
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
 
 
 
@@ -4631,7 +4752,14 @@ class DarkThemeAdminMixin:
         }
         js = (
             'audiopatch/js/dark_theme.js',
+            
         )
+
+
+
+
+
+
 
 
     

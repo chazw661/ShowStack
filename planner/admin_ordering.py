@@ -21,9 +21,9 @@ def ordered_get_app_list(request, app_label=None):
     app_list = original_get_app_list(request, app_label)
     app_list = [app for app in app_list if app['app_label'] != 'admin_interface']
     
-    # Check if user is a viewer (no editor/owner roles)
+   # Check if user is a viewer (no editor/owner roles)
     is_viewer = False
-    if not request.user.is_superuser:
+    if request.user.is_authenticated and not request.user.is_superuser:
         viewer_memberships = ProjectMember.objects.filter(
             user=request.user,
             role='viewer'

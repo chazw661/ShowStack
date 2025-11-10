@@ -1,0 +1,221 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    body {
+        background: #1a1a1a;
+        color: #e0e0e0;
+    }
+    
+    .duplicate-project-form {
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 30px;
+        background: #2b2b2b;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    .duplicate-project-form h2 {
+        margin-top: 0;
+        color: #ffffff;
+        border-bottom: 2px solid #417690;
+        padding-bottom: 15px;
+    }
+    
+    .project-info {
+        background: #1a1a1a;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 20px 0;
+    }
+    
+    .project-info dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 10px;
+    }
+    
+    .project-info dt {
+        font-weight: 600;
+        color: #999;
+    }
+    
+    .project-info dd {
+        margin: 0;
+        color: #ffffff;
+    }
+    
+    .form-row {
+        margin: 25px 0;
+    }
+    
+    .form-row label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #ffffff;
+    }
+    
+    .form-row input[type="text"] {
+        width: 100%;
+        padding: 10px;
+        font-size: 14px;
+        border: 1px solid #555;
+        border-radius: 4px;
+        box-sizing: border-box;
+        background: #1a1a1a;
+        color: #ffffff;
+    }
+    
+    .form-row input[type="text"]:focus {
+        outline: none;
+        border-color: #417690;
+        box-shadow: 0 0 0 3px rgba(65, 118, 144, 0.3);
+    }
+    
+    .button-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #444;
+    }
+    
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-primary {
+        background: #417690;
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background: #305d72;
+    }
+    
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+    
+    .btn-secondary:hover {
+        background: #545b62;
+    }
+    
+    .help-text {
+        margin-top: 20px;
+        padding: 15px;
+        background: #3a3a2a;
+        border-left: 4px solid #ffc107;
+        border-radius: 4px;
+        color: #ffffff;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    
+    .help-text strong {
+        display: block;
+        margin-bottom: 8px;
+        color: #ffc107;
+    }
+    
+    .help-text ul {
+        margin: 8px 0 0 0;
+        padding-left: 20px;
+        color: #e0e0e0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="duplicate-project-form">
+    <h2>🔄 Duplicate Project</h2>
+    
+    <div class="project-info">
+        <dl>
+            <dt>Original Project:</dt>
+            <dd><strong>{{ project.name }}</strong></dd>
+            
+            <dt>Owner:</dt>
+            <dd>{{ project.owner.get_full_name|default:project.owner.username }}</dd>
+            
+            <dt>Show Date:</dt>
+            <dd>{{ project.show_date|date:"F d, Y"|default:"Not set" }}</dd>
+            
+            <dt>Venue:</dt>
+            <dd>{{ project.venue|default:"Not set" }}</dd>
+        </dl>
+    </div>
+    
+    <form method="post">
+        {% csrf_token %}
+
+        <input type="hidden" name="action" value="duplicate_project_action">
+    {% if action_checkbox_name %}
+        {% for obj in projects %}
+            <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+        {% endfor %}
+    {% endif %}
+
+        
+        
+        <div class="form-row">
+            {{ form.new_name.label_tag }}
+            {{ form.new_name }}
+            {% if form.new_name.errors %}
+                <p class="errornote">{{ form.new_name.errors }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="help-text">
+            <strong>What will be duplicated:</strong>
+            <ul>
+                <li>All project settings and show information</li>
+                <li>All consoles and their configurations</li>
+                <li>All I/O devices and assignments</li>
+                <li>All amplifiers and channel configurations</li>
+                <li>Complete COMM system setup</li>
+                <li>Mic tracker sessions and assignments</li>
+                <li>Speaker arrays and Soundvision data</li>
+                <li>Power distribution plans</li>
+            </ul>
+            <strong style="margin-top: 10px;">What will NOT be duplicated:</strong>
+            <ul>
+                <li>Team members and invitations (project will only have you as owner)</li>
+            </ul>
+        </div>
+        
+        <div class="button-row">
+            <button type="submit" name="confirm_duplicate" value="yes" class="btn btn-primary">
+                ✓ Duplicate Project
+            </button>
+            <a href="{% url 'admin:planner_project_changelist' %}" class="btn btn-secondary">
+                ✗ Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+```
+
+**Save this as:** `templates/admin/planner/duplicate_project.html`
+
+Make sure the directory structure exists:
+```
+audiopatch/
+  templates/
+    admin/
+      planner/
+        duplicate_project.html  ← Create this file with the code above
