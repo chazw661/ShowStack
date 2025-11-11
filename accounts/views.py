@@ -268,7 +268,7 @@ def send_invitation_email(invitation, request):
     
     try:
         params = {
-           "from": "ShowStack <onboarding@resend.dev>",
+           "from": "ShowStack <noreply@showstack.io>",
             "to": [invitation.email],
             "subject": subject,
             "html": message,
