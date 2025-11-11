@@ -32,6 +32,9 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
+import hashlib
+
+
 
 
 
@@ -2671,5 +2674,37 @@ def populate_amp_models_view(request):
         """, status=500)
 
     
+#------Auto Refresh for Mic Tracker------
 
+
+@login_required
+@require_http_methods(["GET"])
+def mic_tracker_checksum(request):
+    """
+    Return a checksum of mic tracker data to detect changes.
+    """
+    project_id = request.session.get('current_project_id')
+    if not project_id:
+        return JsonResponse({'checksum': None})
+    
+    # Get all mic sessions and assignments for this project
+    sessions = MicSession.objects.filter(project_id=project_id).values(
+        'id', 'session_name', 'start_time', 'end_time', 'updated_at'
+    ).order_by('id')
+    
+    assignments = MicAssignment.objects.filter(
+        session__project_id=project_id
+    ).values(
+        'id', 'mic_number', 'mic_type', 'assigned_to', 'notes', 'updated_at'
+    ).order_by('id')
+    
+    # Create a hash of the data
+    data_string = json.dumps({
+        'sessions': list(sessions),
+        'assignments': list(assignments)
+    }, default=str)
+    
+    checksum = hashlib.md5(data_string.encode()).hexdigest()
+    
+    return JsonResponse({'checksum': checksum})
   

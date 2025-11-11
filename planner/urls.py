@@ -128,6 +128,11 @@ urlpatterns = [
 
     path('admin/populate-amp-models/', populate_amp_models_view, name='populate_amp_models'),
 
+    #------Auto Refresh for Mic Trackser---
+
+    path('api/mic-tracker-checksum/', views.mic_tracker_checksum, name='mic_tracker_checksum'),
+
+
 
 
     

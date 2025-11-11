@@ -3872,7 +3872,11 @@ class MicSessionAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
-        return super().has_delete_permission(request, obj)        
+        return super().has_delete_permission(request, obj)    
+
+
+    class Media:
+        js = ('admin/js/mic_tracker_auto_refresh.js',)    
 
 
 class MicAssignmentAdmin(BaseEquipmentAdmin):
