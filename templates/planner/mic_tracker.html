@@ -316,6 +316,141 @@
                         <!-- Will be populated by JavaScript -->
                     </datalist>
 
-                    <script src="{% static 'admin/js/mic_tracker.js' %}"></script>
-                    {% endblock %}
+                   <script src="{% static 'admin/js/mic_tracker.js' %}"></script>
+        
+        <!-- Auto-refresh for collaborative editing -->
+        <script>
+        (function() {
+            'use strict';
+            
+            let lastChecksum = null;
+            let lastActivity = Date.now();
+            let hasUnseenUpdates = false;
+            const CHECK_INTERVAL = 5000; // 5 seconds
+            const IDLE_THRESHOLD = 30000; // 30 seconds
+            
+            // Track user activity
+            function updateActivity() {
+                lastActivity = Date.now();
+                hideUpdateBanner();
+            }
+            
+            // Listen for user interactions
+            document.addEventListener('click', updateActivity);
+            document.addEventListener('keypress', updateActivity);
+            document.addEventListener('input', updateActivity);
+            document.addEventListener('change', updateActivity);
+            
+            // Create update banner
+            function createBanner() {
+                const banner = document.createElement('div');
+                banner.id = 'mic-tracker-update-banner';
+                banner.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    background: #4a9eff;
+                    color: white;
+                    padding: 12px;
+                    text-align: center;
+                    z-index: 99999;
+                    display: none;
+                    font-size: 14px;
+                    font-weight: 500;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                `;
+                banner.innerHTML = `
+                    <strong>🔄 Updates Available!</strong> Another user has made changes.
+                    <button onclick="location.reload()" style="
+                        margin-left: 15px;
+                        background: white;
+                        color: #4a9eff;
+                        border: none;
+                        padding: 8px 20px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-weight: bold;
+                        font-size: 13px;
+                    ">Refresh Now</button>
+                    <button onclick="document.getElementById('mic-tracker-update-banner').style.display='none'" style="
+                        margin-left: 8px;
+                        background: transparent;
+                        color: white;
+                        border: 1px solid white;
+                        padding: 8px 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 13px;
+                    ">Dismiss</button>
+                `;
+                document.body.insertBefore(banner, document.body.firstChild);
+                return banner;
+            }
+            
+            function showUpdateBanner() {
+                let banner = document.getElementById('mic-tracker-update-banner');
+                if (!banner) {
+                    banner = createBanner();
+                }
+                banner.style.display = 'block';
+                hasUnseenUpdates = true;
+            }
+            
+            function hideUpdateBanner() {
+                const banner = document.getElementById('mic-tracker-update-banner');
+                if (banner) {
+                    banner.style.display = 'none';
+                }
+                hasUnseenUpdates = false;
+            }
+            
+            function isUserIdle() {
+                return (Date.now() - lastActivity) > IDLE_THRESHOLD;
+            }
+            
+            async function checkForUpdates() {
+                try {
+                    const response = await fetch('/api/mic-tracker-checksum/');
+                    if (!response.ok) {
+                        console.error('Mic Tracker: Checksum endpoint error', response.status);
+                        return;
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (!data.checksum) {
+                        return;
+                    }
+                    
+                    if (lastChecksum === null) {
+                        lastChecksum = data.checksum;
+                        console.log('Mic Tracker: Initial checksum stored');
+                        return;
+                    }
+                    
+                    if (data.checksum !== lastChecksum) {
+                        console.log('Mic Tracker: Changes detected!');
+                        lastChecksum = data.checksum;
+                        
+                        if (isUserIdle() && !hasUnseenUpdates) {
+                            console.log('Mic Tracker: Auto-refreshing (user idle)');
+                            location.reload();
+                        } else {
+                            console.log('Mic Tracker: Showing update banner');
+                            showUpdateBanner();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Mic Tracker: Error checking for updates', error);
+                }
+            }
+            
+            console.log('🔄 Mic Tracker: Live updates enabled (checking every 5 seconds)');
+            setInterval(checkForUpdates, CHECK_INTERVAL);
+            setTimeout(checkForUpdates, CHECK_INTERVAL);
+        })();
+        </script>
+        
+    {% endblock %}
             
