@@ -2688,16 +2688,15 @@ def mic_tracker_checksum(request):
         return JsonResponse({'checksum': None})
     
     # Get all mic sessions and assignments for this project
-    # MicSession fields: id, name, start_time, end_time
     sessions = MicSession.objects.filter(day__project_id=project_id).values(
         'id', 'name', 'start_time', 'end_time'
     ).order_by('id')
     
-    # MicAssignment fields: id, mic_number, mic_type, assigned_to, notes
+    # MicAssignment actual fields: rf_number, mic_type, presenter, notes
     assignments = MicAssignment.objects.filter(
         session__day__project_id=project_id
     ).values(
-        'id', 'mic_number', 'mic_type', 'assigned_to', 'notes'
+        'id', 'rf_number', 'mic_type', 'presenter', 'notes', 'is_d_mic', 'is_next'
     ).order_by('id')
     
     # Create a hash of the data
