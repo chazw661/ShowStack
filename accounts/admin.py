@@ -104,6 +104,12 @@ class InvitationAdmin(BaseEquipmentAdmin):
         }),
     ]
 
+
+
+    def has_add_permission(self, request):
+        """Hide the 'Add Invitation' button - use dashboard invite flow instead"""
+        return False
+
     def has_module_permission(self, request):
         """Only show Projects section to premium users who own projects"""
         if request.user.is_superuser:
