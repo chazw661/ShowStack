@@ -449,13 +449,12 @@ class DeviceInputInlineForm(forms.ModelForm):
         grouped = []
         
         # Get project_id from the device or request
+        # Get project_id from formset.request (passed from inline admin)
         project_id = None
-        if hasattr(self, 'instance') and self.instance.pk and self.instance.device:
-            project_id = self.instance.device.project_id
-        elif 'initial' in kwargs and 'device' in kwargs['initial']:
-            device = kwargs['initial']['device']
-            if hasattr(device, 'project_id'):
-                project_id = device.project_id
+        if hasattr(self, '_formset') and hasattr(self._formset, 'request'):
+            project_id = self._formset.request.session.get('current_project_id')
+        elif hasattr(self, '_formset') and hasattr(self._formset, 'parent_obj') and self._formset.parent_obj:
+            project_id = self._formset.parent_obj.project_id
         
         # Filter consoles to current project only
         console_qs = Console.objects.prefetch_related("consoleinput_set")
@@ -514,13 +513,12 @@ class DeviceOutputInlineForm(forms.ModelForm):
         grouped = []
         
         # Get project_id from the device or request
+        # Get project_id from formset.request (passed from inline admin)
         project_id = None
-        if hasattr(self, 'instance') and self.instance.pk and self.instance.device:
-            project_id = self.instance.device.project_id
-        elif 'initial' in kwargs and 'device' in kwargs['initial']:
-            device = kwargs['initial']['device']
-            if hasattr(device, 'project_id'):
-                project_id = device.project_id
+        if hasattr(self, '_formset') and hasattr(self._formset, 'request'):
+            project_id = self._formset.request.session.get('current_project_id')
+        elif hasattr(self, '_formset') and hasattr(self._formset, 'parent_obj') and self._formset.parent_obj:
+            project_id = self._formset.parent_obj.project_id
         
         # Filter consoles to current project only
         console_qs = Console.objects.prefetch_related(

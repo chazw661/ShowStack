@@ -1039,6 +1039,9 @@ class DeviceInputInline(BaseEquipmentInline):
             
         FormSet = super().get_formset(request, obj, **kwargs)
 
+        FormSet.request = request
+        FormSet.parent_obj = obj
+
         class InitializingFormSet(FormSet):
             def __init__(self, *args, **kw):
                 super().__init__(*args, **kw)
@@ -1067,6 +1070,9 @@ class DeviceOutputInline(BaseEquipmentInline):
             kwargs['extra'] = 0
             
         FormSet = super().get_formset(request, obj, **kwargs)
+
+        FormSet.request = request
+        FormSet.parent_obj = obj
 
         class InitializingFormSet(FormSet):
             def __init__(self, *args, **kw):
