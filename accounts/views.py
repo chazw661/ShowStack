@@ -260,13 +260,24 @@ If you don't have a ShowStack account yet, you'll be prompted to create one.
 ShowStack - Professional Audio Production Management
 """
     
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'noreply@showstack.com',
-        [invitation.email],
-        fail_silently=False,
-    )
+   # Send email using Resend API
+import resend
+import os
+
+resend.api_key = os.environ.get('RESEND_API_KEY')
+
+try:
+    params = {
+        "from": "ShowStack <noreply@showstack.app>",
+        "to": [invitation.email],
+        "subject": subject,
+        "html": message,
+    }
+    email = resend.Emails.send(params)
+except Exception as e:
+    print(f"Error sending email: {e}")
+    # Don't fail silently so user knows something went wrong
+    raise
 
 
 
