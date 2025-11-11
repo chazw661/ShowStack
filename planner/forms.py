@@ -498,7 +498,7 @@ class DeviceOutputInlineForm(forms.ModelForm):
 
         grouped = []
         for console in Console.objects.prefetch_related(
-            "consoleauxoutput_set", "consolematrixoutput_set"
+            "consoleauxoutput_set", "consolematrixoutput_set", "consolestereooutput_set"
         ):
             opts = []
             # Aux outputs
@@ -509,6 +509,10 @@ class DeviceOutputInlineForm(forms.ModelForm):
             for mo in console.consolematrixoutput_set.all():
                 if mo.name:
                     opts.append((f"matrix_{mo.pk}", f"Mat {mo.matrix_number}: {mo.name}"))
+
+            for so in console.consolestereooutput_set.all():
+                if so.name:
+                    opts.append((f"stereo_{so.pk}", f"{so.get_stereo_type_display()}: {so.name}"))        
 
             if opts:
                 grouped.append((console.name, opts))
@@ -538,7 +542,16 @@ class DeviceOutputInlineForm(forms.ModelForm):
             elif output_type == 'matrix':
                 return {
                     'object': ConsoleMatrixOutput.objects.get(pk=output_id),
-                    'type': 'matrix'
+                    'type': 'matrix'    
+                }
+            
+
+
+
+            elif output_type == 'stereo':
+                return {
+                    'object': ConsoleStereoOutput.objects.get(pk=output_id),
+                    'type': 'stereo'
                 }
         return None
 
