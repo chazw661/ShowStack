@@ -447,8 +447,23 @@ class DeviceInputInlineForm(forms.ModelForm):
         self.fields['input_number'].required = False
 
         grouped = []
-        # grab every Console and do Python‐side filtering
-        for console in Console.objects.prefetch_related("consoleinput_set"):
+        
+        # Get project_id from the device or request
+        project_id = None
+        if hasattr(self, 'instance') and self.instance.pk and self.instance.device:
+            project_id = self.instance.device.project_id
+        elif 'initial' in kwargs and 'device' in kwargs['initial']:
+            device = kwargs['initial']['device']
+            if hasattr(device, 'project_id'):
+                project_id = device.project_id
+        
+        # Filter consoles to current project only
+        console_qs = Console.objects.prefetch_related("consoleinput_set")
+        if project_id:
+            console_qs = console_qs.filter(project_id=project_id)
+        
+        # For every Console and do Python-side filtering
+        for console in console_qs:
             opts = [
                 (ci.pk, f"{ci.input_ch}: {ci.source}")
                 for ci in console.consoleinput_set.all()
@@ -497,9 +512,24 @@ class DeviceOutputInlineForm(forms.ModelForm):
         self.fields['signal_name'].widget = forms.HiddenInput()
 
         grouped = []
-        for console in Console.objects.prefetch_related(
+        
+        # Get project_id from the device or request
+        project_id = None
+        if hasattr(self, 'instance') and self.instance.pk and self.instance.device:
+            project_id = self.instance.device.project_id
+        elif 'initial' in kwargs and 'device' in kwargs['initial']:
+            device = kwargs['initial']['device']
+            if hasattr(device, 'project_id'):
+                project_id = device.project_id
+        
+        # Filter consoles to current project only
+        console_qs = Console.objects.prefetch_related(
             "consoleauxoutput_set", "consolematrixoutput_set", "consolestereooutput_set"
-        ):
+        )
+        if project_id:
+            console_qs = console_qs.filter(project_id=project_id)
+        
+        for console in console_qs:
             opts = []
             # Aux outputs
             for ao in console.consoleauxoutput_set.all():
