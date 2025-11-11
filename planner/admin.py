@@ -1021,31 +1021,29 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 
 # ———— your inlines here ——————————————————————————————————
 
-class DeviceInputInline(BaseEquipmentInline): 
-    model = DeviceInput 
+class DeviceInputInline(BaseEquipmentInline):
+    model = DeviceInput
     form = DeviceInputInlineForm
-    extra = 0  
+    extra = 0
     template = "admin/planner/device_input_grid.html"
     
-
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
         if obj:
             existing_inputs = obj.inputs.count()
             needed = obj.input_count - existing_inputs
-            kwargs['extra'] = max(0, needed)  # Only add the difference, never negative
+            kwargs['extra'] = max(0, needed)
         else:
             kwargs['extra'] = 0
-            
+
+        # Pass project_id to all forms via form_kwargs
+        kwargs['form_kwargs'] = {'project_id': request.session.get('current_project_id')}
+        
         FormSet = super().get_formset(request, obj, **kwargs)
-
-        FormSet.request = request
-        FormSet.parent_obj = obj
-
+        
         class InitializingFormSet(FormSet):
             def __init__(self, *args, **kw):
                 super().__init__(*args, **kw)
-                # auto-populate input_number for new rows
                 for idx, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial.setdefault('input_number', idx + 1)
@@ -1057,27 +1055,26 @@ class DeviceOutputInline(BaseEquipmentInline):
     model = DeviceOutput
     form = DeviceOutputInlineForm
     extra = 0
-    fields = ['output_number', 'signal_name']  
+    fields = ['output_number', 'signal_name']
     template = "admin/planner/device_output_grid.html"
-
+    
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
         if obj:
             existing_outputs = obj.outputs.count()
             needed = obj.output_count - existing_outputs
-            kwargs['extra'] = max(0, needed)  # Only add the difference, never negative
+            kwargs['extra'] = max(0, needed)
         else:
             kwargs['extra'] = 0
-            
+
+        # Pass project_id to all forms via form_kwargs
+        kwargs['form_kwargs'] = {'project_id': request.session.get('current_project_id')}
+        
         FormSet = super().get_formset(request, obj, **kwargs)
-
-        FormSet.request = request
-        FormSet.parent_obj = obj
-
+        
         class InitializingFormSet(FormSet):
             def __init__(self, *args, **kw):
                 super().__init__(*args, **kw)
-                # auto-populate output_number for new rows
                 for idx, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial.setdefault('output_number', idx + 1)

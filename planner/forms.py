@@ -443,18 +443,13 @@ class DeviceInputInlineForm(forms.ModelForm):
         fields = ("input_number", "console_input")
 
     def __init__(self, *args, **kwargs):
+        # Extract project_id from kwargs
+        project_id = kwargs.pop('project_id', None)
+        
         super().__init__(*args, **kwargs)
         self.fields['input_number'].required = False
 
         grouped = []
-        
-        # Get project_id from the device or request
-        # Get project_id from formset.request (passed from inline admin)
-        project_id = None
-        if hasattr(self, '_formset') and hasattr(self._formset, 'request'):
-            project_id = self._formset.request.session.get('current_project_id')
-        elif hasattr(self, '_formset') and hasattr(self._formset, 'parent_obj') and self._formset.parent_obj:
-            project_id = self._formset.parent_obj.project_id
         
         # Filter consoles to current project only
         console_qs = Console.objects.prefetch_related("consoleinput_set")
@@ -503,22 +498,17 @@ class DeviceOutputInlineForm(forms.ModelForm):
         fields = ("output_number", "signal_name")  # Remove console_output from here
         
     def __init__(self, *args, **kwargs):
+        # Extract project_id from kwargs
+        project_id = kwargs.pop('project_id', None)
+        
         super().__init__(*args, **kwargs)
         self.fields['output_number'].required = False
         self.fields['signal_name'].required = False
-        
+
         # Hide signal_name widget
         self.fields['signal_name'].widget = forms.HiddenInput()
 
         grouped = []
-        
-        # Get project_id from the device or request
-        # Get project_id from formset.request (passed from inline admin)
-        project_id = None
-        if hasattr(self, '_formset') and hasattr(self._formset, 'request'):
-            project_id = self._formset.request.session.get('current_project_id')
-        elif hasattr(self, '_formset') and hasattr(self._formset, 'parent_obj') and self._formset.parent_obj:
-            project_id = self._formset.parent_obj.project_id
         
         # Filter consoles to current project only
         console_qs = Console.objects.prefetch_related(
