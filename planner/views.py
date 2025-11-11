@@ -2692,11 +2692,11 @@ def mic_tracker_checksum(request):
         'id', 'name', 'start_time', 'end_time'
     ).order_by('id')
     
-    # MicAssignment actual fields: rf_number, mic_type, presenter, notes
+    # MicAssignment fields (excluding relations and auto fields)
     assignments = MicAssignment.objects.filter(
         session__day__project_id=project_id
     ).values(
-        'id', 'rf_number', 'mic_type', 'presenter', 'notes', 'is_d_mic', 'is_next'
+        'id', 'rf_number', 'mic_type', 'presenter', 'notes', 'is_d_mic', 'active_presenter_index'
     ).order_by('id')
     
     # Create a hash of the data
