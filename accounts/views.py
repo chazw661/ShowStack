@@ -230,9 +230,11 @@ def accept_invitation(request, token):
 
 def send_invitation_email(invitation, request):
     """
-    Send invitation email with acceptance link.
-    For now, this will print to console (EMAIL_BACKEND = console).
+    Send invitation email with acceptance link using Resend API.
     """
+    import resend
+    import os
+    
     accept_url = request.build_absolute_uri(
         f'/invitations/accept/{invitation.token}/'
     )
@@ -240,44 +242,42 @@ def send_invitation_email(invitation, request):
     subject = f'Invitation to join {invitation.project.name} on ShowStack'
     
     message = f"""
-Hi there!
+<h2>You've been invited to collaborate!</h2>
 
-{invitation.invited_by.get_full_name() or invitation.invited_by.username} has invited you to collaborate on their ShowStack project:
+<p><strong>{invitation.invited_by.get_full_name() or invitation.invited_by.username}</strong> has invited you to collaborate on their ShowStack project:</p>
 
-Project: {invitation.project.name}
-Role: {invitation.get_role_display()}
-Show Date: {invitation.project.show_date}
-Venue: {invitation.project.venue}
+<ul>
+    <li><strong>Project:</strong> {invitation.project.name}</li>
+    <li><strong>Role:</strong> {invitation.get_role_display()}</li>
+    <li><strong>Show Date:</strong> {invitation.project.show_date or 'Not set'}</li>
+    <li><strong>Venue:</strong> {invitation.project.venue or 'Not set'}</li>
+</ul>
 
-Click the link below to accept this invitation:
-{accept_url}
+<p><a href="{accept_url}" style="display: inline-block; padding: 12px 24px; background-color: #4a9eff; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">Accept Invitation</a></p>
 
-This invitation will expire in 7 days.
+<p><small>This invitation will expire in 7 days.</small></p>
 
-If you don't have a ShowStack account yet, you'll be prompted to create one.
+<p><small>If you don't have a ShowStack account yet, you'll be prompted to create one.</small></p>
 
----
-ShowStack - Professional Audio Production Management
+<hr>
+<p><small>ShowStack - Professional Audio Production Management</small></p>
 """
     
-   # Send email using Resend API
-import resend
-import os
-
-resend.api_key = os.environ.get('RESEND_API_KEY')
-
-try:
-    params = {
-        "from": "ShowStack <noreply@showstack.app>",
-        "to": [invitation.email],
-        "subject": subject,
-        "html": message,
-    }
-    email = resend.Emails.send(params)
-except Exception as e:
-    print(f"Error sending email: {e}")
-    # Don't fail silently so user knows something went wrong
-    raise
+    # Send email using Resend API
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    
+    try:
+        params = {
+            "from": "ShowStack <noreply@showstack.app>",
+            "to": [invitation.email],
+            "subject": subject,
+            "html": message,
+        }
+        email = resend.Emails.send(params)
+        print(f"✅ Email sent successfully to {invitation.email}")
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+        raise
 
 
 
