@@ -1036,10 +1036,8 @@ class DeviceInputInline(BaseEquipmentInline):
         else:
             kwargs['extra'] = 0
 
-        # Pass project_id to all forms via form_kwargs
-        kwargs['form_kwargs'] = {'project_id': request.session.get('current_project_id')}
-        
         FormSet = super().get_formset(request, obj, **kwargs)
+        FormSet.request = request  # Store request on formset
         
         class InitializingFormSet(FormSet):
             def __init__(self, *args, **kw):
@@ -1047,6 +1045,13 @@ class DeviceInputInline(BaseEquipmentInline):
                 for idx, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial.setdefault('input_number', idx + 1)
+            
+            def get_form_kwargs(self, index):
+                """Pass project_id to each form"""
+                kwargs = super().get_form_kwargs(index)
+                if hasattr(self, 'request'):
+                    kwargs['project_id'] = self.request.session.get('current_project_id')
+                return kwargs
 
         return InitializingFormSet
 
@@ -1067,10 +1072,8 @@ class DeviceOutputInline(BaseEquipmentInline):
         else:
             kwargs['extra'] = 0
 
-        # Pass project_id to all forms via form_kwargs
-        kwargs['form_kwargs'] = {'project_id': request.session.get('current_project_id')}
-        
         FormSet = super().get_formset(request, obj, **kwargs)
+        FormSet.request = request  # Store request on formset
         
         class InitializingFormSet(FormSet):
             def __init__(self, *args, **kw):
@@ -1078,6 +1081,13 @@ class DeviceOutputInline(BaseEquipmentInline):
                 for idx, form in enumerate(self.forms):
                     if not form.instance.pk:
                         form.initial.setdefault('output_number', idx + 1)
+            
+            def get_form_kwargs(self, index):
+                """Pass project_id to each form"""
+                kwargs = super().get_form_kwargs(index)
+                if hasattr(self, 'request'):
+                    kwargs['project_id'] = self.request.session.get('current_project_id')
+                return kwargs
 
         return InitializingFormSet
 
