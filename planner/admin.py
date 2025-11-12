@@ -787,7 +787,6 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                 matrix_number=matrix.matrix_number,
                 name=matrix.name,
                 mono_stereo=matrix.mono_stereo,
-                destination=matrix.destination,
                 omni_out=matrix.omni_out
             )
         
