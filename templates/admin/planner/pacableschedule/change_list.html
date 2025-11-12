@@ -1,7 +1,7 @@
 {% extends "admin/change_list.html" %}
 {% load static %}
 
-{% block result_list %}
+
 {% block object-tools-items %}
     <!-- Export PDF Button -->
     <li>
@@ -12,6 +12,10 @@
     {{ block.super }}
 {% endblock %}
 
+
+{% block result_list %}
+
+{{ block.super }}
 
 <!-- Add scoped styles that only affect cable summary tables -->
 <style>
