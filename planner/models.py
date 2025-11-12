@@ -1042,6 +1042,11 @@ class P1Processor(models.Model):
         verbose_name = "P1 Processor"
         verbose_name_plural = "P1 Processors"
 
+    @property
+    def project(self):
+        """Access project through SystemProcessor"""
+        return self.system_processor.project    
+
 
 class P1Input(models.Model):
     """P1 Input channel configuration"""
@@ -1136,6 +1141,11 @@ class GalaxyProcessor(models.Model):
             self.system_processor.device_type = 'GALAXY'
             self.system_processor.save()
         super().save(*args, **kwargs)
+
+    @property
+    def project(self):
+        """Access project through SystemProcessor"""
+        return self.system_processor.project
 
 
 class GalaxyInput(models.Model):
