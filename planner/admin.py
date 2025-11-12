@@ -678,7 +678,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         ConsoleStereoOutputInline,
     ]
     
-    actions = ['export_yamaha_rivage_csvs', 'duplicate_console',]
+    actions = ['export_yamaha_rivage_csvs',]
 
     def has_add_permission(self, request):
         """Only editors and owners can add"""
@@ -737,71 +737,71 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 
     export_buttons.short_description = 'Exports'
     
-    @admin.action(description='Duplicate selected console (with all inputs/outputs)')
-    def duplicate_console(self, request, queryset):
-        if queryset.count() != 1:
-            self.message_user(request, "Please select exactly one console to duplicate.", level='ERROR')
-            return
+    # @admin.action(description='Duplicate selected console (with all inputs/outputs)')
+    # def duplicate_console(self, request, queryset):
+    #     if queryset.count() != 1:
+    #         self.message_user(request, "Please select exactly one console to duplicate.", level='ERROR')
+    #         return
         
-        original = queryset.first()
+    #     original = queryset.first()
 
         
-        # Create new console
-        new_console = Console.objects.create(
-            name=f"{original.name} (Copy)",
-            is_template=False
-        )
+    #     # Create new console
+    #     new_console = Console.objects.create(
+    #         name=f"{original.name} (Copy)",
+    #         is_template=False
+    #     )
         
-        # Duplicate all related inputs
-        for input_obj in original.consoleinput_set.all():
-            ConsoleInput.objects.create(
-                console=new_console,
-                dante_number=input_obj.dante_number,
-                input_ch=input_obj.input_ch,
-                source=input_obj.source,
-                group=input_obj.group,
-                dca=input_obj.dca,
-                mute=input_obj.mute,
-                direct_out=input_obj.direct_out,
-                omni_in=input_obj.omni_in,
+    #     # Duplicate all related inputs
+    #     for input_obj in original.consoleinput_set.all():
+    #         ConsoleInput.objects.create(
+    #             console=new_console,
+    #             dante_number=input_obj.dante_number,
+    #             input_ch=input_obj.input_ch,
+    #             source=input_obj.source,
+    #             group=input_obj.group,
+    #             dca=input_obj.dca,
+    #             mute=input_obj.mute,
+    #             direct_out=input_obj.direct_out,
+    #             omni_in=input_obj.omni_in,
                 
-            )
+    #         )
         
-        # Duplicate aux outputs
-        for aux in original.consoleauxoutput_set.all():
-            ConsoleAuxOutput.objects.create(
-                console=new_console,
-                dante_number=aux.dante_number,
-                aux_number=aux.aux_number,
-                name=aux.name,
-                mono_stereo=aux.mono_stereo,
-                bus_type=aux.bus_type,
-                omni_out=aux.omni_out
-            )
+    #     # Duplicate aux outputs
+    #     for aux in original.consoleauxoutput_set.all():
+    #         ConsoleAuxOutput.objects.create(
+    #             console=new_console,
+    #             dante_number=aux.dante_number,
+    #             aux_number=aux.aux_number,
+    #             name=aux.name,
+    #             mono_stereo=aux.mono_stereo,
+    #             bus_type=aux.bus_type,
+    #             omni_out=aux.omni_out
+    #         )
         
-        # Duplicate matrix outputs
-        for matrix in original.consolematrixoutput_set.all():
-            ConsoleMatrixOutput.objects.create(
-                console=new_console,
-                dante_number=matrix.dante_number,
-                matrix_number=matrix.matrix_number,
-                name=matrix.name,
-                mono_stereo=matrix.mono_stereo,
-                omni_out=matrix.omni_out
-            )
+    #     # Duplicate matrix outputs
+    #     for matrix in original.consolematrixoutput_set.all():
+    #         ConsoleMatrixOutput.objects.create(
+    #             console=new_console,
+    #             dante_number=matrix.dante_number,
+    #             matrix_number=matrix.matrix_number,
+    #             name=matrix.name,
+    #             mono_stereo=matrix.mono_stereo,
+    #             omni_out=matrix.omni_out
+    #         )
         
-        # Duplicate stereo outputs
-        for stereo in original.consolestereooutput_set.all():
-            ConsoleStereoOutput.objects.create(
-                console=new_console,
-                stereo_type=stereo.stereo_type,
-                name=stereo.name,
-                dante_number=stereo.dante_number,
-                omni_out=stereo.omni_out
-            )
+    #     # Duplicate stereo outputs
+    #     for stereo in original.consolestereooutput_set.all():
+    #         ConsoleStereoOutput.objects.create(
+    #             console=new_console,
+    #             stereo_type=stereo.stereo_type,
+    #             name=stereo.name,
+    #             dante_number=stereo.dante_number,
+    #             omni_out=stereo.omni_out
+    #         )
         
-        self.message_user(request, f"Successfully duplicated '{original.name}' as '{new_console.name}'")
-        return redirect(f'/admin/planner/console/{new_console.id}/change/')
+    #     self.message_user(request, f"Successfully duplicated '{original.name}' as '{new_console.name}'")
+    #     return redirect(f'/admin/planner/console/{new_console.id}/change/')
     
 
     
