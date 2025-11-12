@@ -937,7 +937,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     
     def export_yamaha_rivage_csvs(self, request, queryset):
         """Admin action to export Yamaha CSVs for selected consoles"""
-        if queryset.count() != 1:
+        if queryset.count() == 1:
             from .utils.yamaha_export import export_yamaha_csvs
             console = queryset.first()
             return export_yamaha_csvs(console)
