@@ -1,6 +1,7 @@
 # planner/utils/pdf_exports/amplifier_pdf.py
 """
 Amplifier Assignments PDF Export - Grouped by Location, ordered by IP address
+One amp per page for better readability
 """
 
 from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, PageBreak
@@ -43,8 +44,24 @@ def export_all_amps_pdf():
     story.append(Paragraph(header_text, styles.get_header_style()))
     story.append(Spacer(1, 0.2 * inch))
     
-    # Get all amps with their locations
+    # Get all amps - less aggressive filtering
+    # Get all amps - exclude test/temporary amps
     amps = Amp.objects.select_related('location', 'amp_model').prefetch_related('channels').all()
+
+    # Filter out test amps
+    amps = amps.exclude(name__icontains='test').exclude(name__iexact='kara')
+    
+    # Optional: filter out obvious test amps only
+    # amps = amps.exclude(name__icontains='test')
+    
+    # Check if we have any amps
+    if not amps:
+        story.append(Paragraph("No amplifiers found in the system.", styles.get_normal_style()))
+        doc.build(story)
+        buffer.seek(0)
+        response = HttpResponse(buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="Amplifier_Assignments.pdf"'
+        return response
     
     # Group amps by location
     location_groups = defaultdict(list)
@@ -66,19 +83,39 @@ def export_all_amps_pdf():
     
     sorted_locations = sorted(location_groups.keys(), key=get_location_min_ip)
     
+    # Track if this is the first page
+    first_page = True
+    
     # Process each location
     for loc_idx, location in enumerate(sorted_locations):
         # Location header
         location_name = location.name if location else "No Location"
-        story.append(Paragraph(f"<b>{location_name}</b>", styles.get_section_style()))
-        story.append(Spacer(1, 0.15 * inch))
         
         # Sort amps within location by IP address
         location_amps = location_groups[location]
-        location_amps.sort(key=lambda a: ipaddress.ip_address(a.ip_address) if a.ip_address else ipaddress.ip_address('255.255.255.255'))
+        
+        # Sort with safe handling of missing IPs
+        def get_ip_for_sort(amp):
+            if amp.ip_address:
+                try:
+                    return ipaddress.ip_address(amp.ip_address)
+                except:
+                    return ipaddress.ip_address('255.255.255.255')
+            return ipaddress.ip_address('255.255.255.255')
+        
+        location_amps.sort(key=get_ip_for_sort)
         
         # Process each amp in this location
         for amp_idx, amp in enumerate(location_amps):
+            # Page break for all except the very first amp
+            if not first_page:
+                story.append(PageBreak())
+            first_page = False
+            
+            # Add location header on each page
+            story.append(Paragraph(f"<b>{location_name}</b>", styles.get_section_style()))
+            story.append(Spacer(1, 0.1 * inch))
+            
             # Amp name and model header
             amp_header = f"<b>{amp.name}</b>"
             if amp.amp_model:
@@ -86,7 +123,7 @@ def export_all_amps_pdf():
             if amp.ip_address:
                 amp_header += f" ({amp.ip_address})"
             
-            story.append(Paragraph(amp_header, styles.get_section_style()))
+            story.append(Paragraph(amp_header, styles.get_subsection_style()))
             story.append(Spacer(1, 0.15 * inch))
             
             # SECTION 1: Amp Channels (Inputs) - AT THE TOP
@@ -97,10 +134,8 @@ def export_all_amps_pdf():
                 channel_data = [['Ch', 'Name', 'AVB Stream', 'AES Input', 'Analog Input']]
                 
                 for ch in channels:
-                    # Format AVB stream reference
-                    avb_ref = ''
-                    if ch.avb_stream:
-                        avb_ref = f"AVB {ch.avb_stream.output_number}" if ch.avb_stream.output_number else str(ch.avb_stream)
+                    # Format AVB stream reference - it's now just a string
+                    avb_ref = str(ch.avb_stream) if ch.avb_stream else ''
                     
                     channel_data.append([
                         str(ch.channel_number),
@@ -158,15 +193,15 @@ def export_all_amps_pdf():
                 story.append(t)
                 story.append(Spacer(1, 0.15 * inch))
             
-            # SECTION 3: Cacom Outputs Section (if present) - NOW AT BOTTOM
+            # SECTION 3: Cacom Outputs Section (if present)
             if amp.amp_model and amp.amp_model.cacom_output_count > 0:
                 cacom_data = [['Cacom Outputs (Ch1-Ch4)']]
                 cacom_data.append(['Ch1', 'Ch2', 'Ch3', 'Ch4'])
                 cacom_data.append([
-                    amp.cacom_1_assignment or '----------',
-                    amp.cacom_2_assignment or '----------',
-                    amp.cacom_3_assignment or '----------',
-                    amp.cacom_4_assignment or '----------'
+                    amp.cacom_1_ch1 or '----------',
+                    amp.cacom_1_ch2 or '----------',
+                    amp.cacom_1_ch3 or '----------',
+                    amp.cacom_1_ch4 or '----------'
                 ])
                 
                 col_widths = [1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch]
@@ -185,11 +220,9 @@ def export_all_amps_pdf():
                     ('BOTTOMPADDING', (0, 0), (3, -1), 6),
                 ])
                 story.append(t)
-            
-            # Page break after EVERY amp (one amp per page)
-            story.append(PageBreak())
+                story.append(Spacer(1, 0.15 * inch))
     
-    # Build PDF (remove last page break if needed)
+    # Build PDF
     doc.build(story, onFirstPage=styles.add_page_number, onLaterPages=styles.add_page_number)
     
     buffer.seek(0)
