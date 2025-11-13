@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  console.log('mono_stereo_handler.js loaded');
+  console.log('mono_stereo_handler.js loaded - stereo pair styling version');
 
   const selects = document.querySelectorAll('select[id$="mono_stereo"]');
 
@@ -8,55 +8,70 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!match) return;
 
     const index = parseInt(match[1]);
-    const isEvenRow = (index + 1) % 2 === 0;
+    const rowNumber = index + 1;  // The actual aux/matrix number
+    const isEvenRow = rowNumber % 2 === 0;
 
-    // ✅ Remove even-numbered dropdowns
+    // REMOVE stereo dropdown from even-numbered rows
     if (isEvenRow) {
       const td = select.closest('td');
       if (td) {
-        td.innerHTML = ''; // safest to just wipe the dropdown cell
-        console.log(`Removed dropdown from even row ${index + 1}`);
+        td.innerHTML = ''; // Remove the dropdown completely
+        console.log(`Removed stereo dropdown from even row ${rowNumber}`);
       }
-      return; // skip attaching event listener
+      return; // Skip attaching event listener
     }
 
-    // ✅ Attach change handler only to odd-numbered dropdowns
+    // Only odd rows have the stereo dropdown
     select.addEventListener('change', function () {
       const value = select.value.trim().toUpperCase();
-      const evenRow = select.closest('tr')?.nextElementSibling;
+      const currentRow = select.closest('tr');
+      const evenRow = currentRow?.nextElementSibling;
+      
       if (!evenRow) return;
 
-      const evenIndexMatch = evenRow.id.match(/-(\d+)$/);
-      const evenIndex = evenIndexMatch ? parseInt(evenIndexMatch[1]) : null;
-
       if (value === 'STEREO' || value === 'ST') {
-        evenRow.style.display = 'none';
-        console.log(`Hiding even row: ${evenRow.id}`);
-
-        const inputs = evenRow.querySelectorAll('input, select, textarea');
-        inputs.forEach(input => {
-          if (input.type === 'checkbox' || input.type === 'radio') {
-            input.checked = false;
-          } else {
-            input.value = '';
-          }
-        });
-      } else {
-        evenRow.style.display = '';
-        console.log(`Showing even row: ${evenRow.id}`);
-
-        if (evenIndex !== null) {
-          const numberInput = evenRow.querySelector('input[name$="aux_number"], input[name$="matrix_number"]');
-          if (numberInput && numberInput.value.trim() === '') {
-            const restoredValue = evenIndex + 1; // This is the true visible number
-            numberInput.value = restoredValue;
-            console.log(`Restored even number: ${restoredValue}`);
-          }
+        // Apply stereo styling
+        currentRow.classList.add('stereo-pair-odd');
+        evenRow.classList.add('stereo-pair-even');
+        
+        // Hide or modify the even row's number
+        const evenNumberField = evenRow.querySelector('input[name$="aux_number"], input[name$="matrix_number"]');
+        if (evenNumberField) {
+          evenNumberField.style.visibility = 'hidden'; // Hide the number
+          // Or alternatively, change it to show pairing:
+          // evenNumberField.value = `↑${rowNumber}`;
         }
+        
+        // Add L/R indicators
+        const oddNumberField = currentRow.querySelector('input[name$="aux_number"], input[name$="matrix_number"]');
+        if (oddNumberField) {
+          oddNumberField.classList.add('stereo-left');
+        }
+        
+        console.log(`Created stereo pair: ${rowNumber}-${rowNumber + 1}`);
+      } else {
+        // MONO - remove stereo styling
+        currentRow.classList.remove('stereo-pair-odd');
+        evenRow.classList.remove('stereo-pair-even');
+        
+        // Restore the even row's number
+        const evenNumberField = evenRow.querySelector('input[name$="aux_number"], input[name$="matrix_number"]');
+        if (evenNumberField) {
+          evenNumberField.style.visibility = 'visible';
+          evenNumberField.value = rowNumber + 1; // Restore the original number
+        }
+        
+        // Remove L indicator
+        const oddNumberField = currentRow.querySelector('input[name$="aux_number"], input[name$="matrix_number"]');
+        if (oddNumberField) {
+          oddNumberField.classList.remove('stereo-left');
+        }
+        
+        console.log(`Removed stereo styling from rows ${rowNumber}-${rowNumber + 1}`);
       }
     });
 
-    // Trigger change once on load
+    // Trigger change once on load to apply initial state
     select.dispatchEvent(new Event('change'));
   });
 });
