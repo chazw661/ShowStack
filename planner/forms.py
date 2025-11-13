@@ -650,37 +650,23 @@ class AmpChannelInlineForm(forms.ModelForm):
                 'placeholder': 'Analog Input'
             }),
         }
+
+
+
+
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Make channel_number read-only since it's auto-generated
         if 'channel_number' in self.fields:
             self.fields['channel_number'].disabled = True
         
-        # Customize the AVB Stream dropdown
-        if 'avb_stream' in self.fields:
-            # Get all P1 AVB outputs with their labels
-            avb_outputs = P1Output.objects.filter(
-                output_type='AVB'
-            ).select_related('p1_processor__system_processor').order_by('p1_processor__system_processor__name')
-            
-            # Create choices with formatted display
-            choices = [('', '--- Select AVB Stream ---')]
-            for output in avb_outputs:
-                # Format: "ProcessorName - AVB # - Label" or "ProcessorName - AVB #" if no label
-                processor_name = output.p1_processor.system_processor.name if output.p1_processor and output.p1_processor.system_processor else 'Unknown'
-                if output.label:
-                    display_text = f"{processor_name} - AVB {output.channel_number} - {output.label}"
-                else:
-                    display_text = f"{processor_name} - AVB {output.channel_number}"
-                choices.append((output.id, display_text))
-            
-            self.fields['avb_stream'].widget = forms.Select(choices=choices)
-            self.fields['avb_stream'].widget.attrs.update({
-                'class': 'avb-stream-select form-control',  # Keep form-control for consistency
-                'style': 'width: 100%; max-width: 300px;'
-            })
-        
+        # Remove all the AVB customization - let Django use the model's choices
+        # Delete the entire "if 'avb_stream' in self.fields:" section
+
+
+
+
         # Hide input fields based on amp model capabilities (if we have an instance)
         if self.instance and self.instance.amp_id:
             try:

@@ -882,15 +882,17 @@ class AmpChannel(models.Model):
     amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
     channel_number = models.IntegerField()
     channel_name = models.CharField(max_length=100, default="")
+    AVB_CHOICES = [(f'AVB {i}', f'AVB {i}') for i in range(1, 17)]
+    AVB_CHOICES.insert(0, ('', '---------'))
     
     # Input source (only show relevant options based on amp model)
-    avb_stream = models.ForeignKey(
-        'P1Output',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        limit_choices_to={'output_type': 'AVB'},
+    avb_stream = models.CharField(
+        max_length=10,
+        choices=AVB_CHOICES,
+        blank=True,
+        null=True,
         verbose_name="AVB Stream",
-        related_name='amp_channels'
+        help_text="AVB stream assignment"
     )
     aes_input = models.CharField(
         max_length=50, blank=True,

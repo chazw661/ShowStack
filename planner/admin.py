@@ -1284,6 +1284,9 @@ class AmpChannelInlineForm(forms.ModelForm):
     class Meta:
         model = AmpChannel
         fields = '__all__'
+
+
+           
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1310,6 +1313,20 @@ class AmpChannelInline(admin.TabularInline):
     
     def has_delete_permission(self, request, obj=None):
         return False  # Prevent accidental deletion
+    
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        
+        # Pass the amp (parent) to each form for project context
+        class FormSetWithParent(formset):
+            def _construct_form(self, i, **kwargs):
+                form = super()._construct_form(i, **kwargs)
+                if obj:  # obj is the Amp instance
+                    form.parent_instance = obj
+                return form
+        
+        return FormSetWithParent
 
 
 class AmpAdminForm(forms.ModelForm):
