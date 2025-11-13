@@ -2,6 +2,7 @@
 """
 Amplifier Assignments PDF Export - Grouped by Location, ordered by IP address
 One amp per page for better readability
+FILTERED BY CURRENT PROJECT FOR MULTI-TENANCY
 """
 
 from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, PageBreak
@@ -15,14 +16,28 @@ import ipaddress
 from .pdf_styles import PDFStyles, LANDSCAPE_PAGE, MARGIN, BRAND_BLUE, DARK_GRAY
 
 
-def export_all_amps_pdf():
+def export_all_amps_pdf(current_project):
     """
-    Generate PDF export for ALL amplifiers grouped by Location, ordered by IP
+    Generate PDF export for amplifiers in CURRENT PROJECT ONLY
     
+    Args:
+        current_project: The project to filter by (REQUIRED for multi-tenancy)
+        
     Returns:
         HttpResponse with PDF content
     """
     from planner.models import Amp, Location
+    
+    # Safety check - must have a project
+    if not current_project:
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=LANDSCAPE_PAGE)
+        story = [Paragraph("ERROR: No project selected", PDFStyles().get_header_style())]
+        doc.build(story)
+        buffer.seek(0)
+        response = HttpResponse(buffer.read(), content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="Error.pdf"'
+        return response
     
     buffer = BytesIO()
     
@@ -40,23 +55,21 @@ def export_all_amps_pdf():
     styles = PDFStyles()
     
     # Main header
-    header_text = "<b>Amplifier Assignments</b>"
+    header_text = f"<b>Amplifier Assignments - {current_project.name}</b>"
     story.append(Paragraph(header_text, styles.get_header_style()))
     story.append(Spacer(1, 0.2 * inch))
     
-    # Get all amps - less aggressive filtering
-    # Get all amps - exclude test/temporary amps
-    amps = Amp.objects.select_related('location', 'amp_model').prefetch_related('channels').all()
-
+    # CRITICAL: Filter by current project ONLY
+    amps = Amp.objects.filter(
+        project=current_project  # MUST FILTER BY PROJECT
+    ).select_related('location', 'amp_model').prefetch_related('channels')
+    
     # Filter out test amps
     amps = amps.exclude(name__icontains='test').exclude(name__iexact='kara')
     
-    # Optional: filter out obvious test amps only
-    # amps = amps.exclude(name__icontains='test')
-    
     # Check if we have any amps
     if not amps:
-        story.append(Paragraph("No amplifiers found in the system.", styles.get_normal_style()))
+        story.append(Paragraph(f"No amplifiers found in project: {current_project.name}", styles.get_normal_style()))
         doc.build(story)
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')

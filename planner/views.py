@@ -2238,10 +2238,17 @@ def all_devices_pdf_export(request):
 
 # Amplifier PDF Export
 def all_amps_pdf_export(request):
-    """Export ALL Amplifiers as PDF (grouped by location, ordered by IP)"""
+    """Export all amplifiers to PDF - filtered by current project"""
+    
+    # Get current project - CRITICAL for multi-tenancy
+    if not hasattr(request, 'current_project') or not request.current_project:
+        return HttpResponse("No project selected. Please select a project first.", status=403)
+    
+    # Import and call the PDF export with current project
     from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
     
-    return export_all_amps_pdf()
+    # PASS THE CURRENT PROJECT to the export function
+    return export_all_amps_pdf(request.current_project)
 
 
 
