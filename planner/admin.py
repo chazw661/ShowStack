@@ -962,13 +962,13 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         return export_yamaha_csvs(console)
     
     class Media:
-        js = ['planner/js/mono_stereo_handler.js?v=20241112',  # Add version
+        js = ['planner/js/mono_stereo_handler.js',
             'planner/js/global_nav.js',]
         css = {
             'all': ['admin/css/dark_mode.css', 
                     'planner/css/custom_admin.css', 
-                    'planner/css/console_admin.css?v=20241112']  # Add version
-    }
+                    'planner/css/console_admin.css']
+        }
 
 
 
