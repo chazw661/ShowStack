@@ -2215,21 +2215,37 @@ def save_ip_address(request):
 
 
 # Device I/O PDF Export
-def device_pdf_export(request, device_id):
-    """Export a single Device as PDF"""
-    from planner.models import Device
-    from planner.utils.pdf_exports.device_pdf import export_device_pdf
-    
-    device = Device.objects.get(id=device_id)
-    return export_device_pdf(device)
-
+# Add/Update these functions in your planner/views.py file
 
 def all_devices_pdf_export(request):
-    """Export ALL Devices as PDF (one device per page)"""
+    """Export all devices to PDF - filtered by current project"""
+    
+    # Get current project - CRITICAL for multi-tenancy
+    if not hasattr(request, 'current_project') or not request.current_project:
+        return HttpResponse("No project selected. Please select a project first.", status=403)
+    
+    # Import and call the PDF export with current project
     from planner.utils.pdf_exports.device_pdf import export_all_devices_pdf
     
-    return export_all_devices_pdf()
+    # PASS THE CURRENT PROJECT to the export function
+    return export_all_devices_pdf(request.current_project)
 
+
+def device_pdf_export(request, device_id):
+    """Export single device to PDF"""
+    from planner.models import Device
+    from planner.utils.pdf_exports.device_pdf import export_device_pdf
+    from django.shortcuts import get_object_or_404
+    
+    # Get device and ensure it belongs to current project
+    device = get_object_or_404(Device, id=device_id)
+    
+    # Security check - ensure device belongs to current project
+    if hasattr(request, 'current_project') and request.current_project:
+        if device.project != request.current_project:
+            return HttpResponse("Access denied - device not in current project", status=403)
+    
+    return export_device_pdf(device)
 
 
 
