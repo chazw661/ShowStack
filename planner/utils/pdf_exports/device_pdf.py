@@ -52,7 +52,7 @@ def export_device_pdf(device):
     device_inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
     
     if device_inputs.exists():
-        input_data = [['#', 'Input', 'Signal Name', 'Console Source']]
+        input_data = [['#', 'Input', 'Console Source']]
         
         for inp in device_inputs:
             # Get input assignment from console_input.source field
@@ -70,11 +70,10 @@ def export_device_pdf(device):
             input_data.append([
                 str(inp.input_number),
                 input_label,
-                inp.signal_name or '',
                 console_source
             ])
         
-        col_widths = [0.5*inch, 1.5*inch, 2*inch, 5*inch]
+        col_widths = [0.5*inch, 2*inch, 6.5*inch]
         input_table = Table(input_data, colWidths=col_widths)
         input_table.setStyle([
             ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
@@ -228,7 +227,7 @@ def export_all_devices_pdf(current_project):
                 story.append(Paragraph("<b>INPUTS</b>", styles.get_subsection_style()))
                 story.append(Spacer(1, 0.1 * inch))
                 
-                input_data = [['#', 'Input', 'Signal', 'Console Source']]
+                input_data = [['#', 'Input', 'Console Source']]
                 
                 for inp in device_inputs:
                     input_label = ''
@@ -242,11 +241,10 @@ def export_all_devices_pdf(current_project):
                     input_data.append([
                         str(inp.input_number),
                         input_label,
-                        inp.signal_name or '',
                         console_source
                     ])
                 
-                col_widths = [0.5*inch, 1.5*inch, 2*inch, 5*inch]
+                col_widths = [0.5*inch, 2*inch, 6.5*inch]
                 input_table = Table(input_data, colWidths=col_widths)
                 input_table.setStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
