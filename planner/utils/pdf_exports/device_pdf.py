@@ -363,4 +363,4 @@ def export_device_pdf(device):
     response = HttpResponse(buffer.read(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="Device_{device.name}.pdf"'
     
-    return response
+    return response# Deployed Sat Nov 15 10:37:25 EST 2025
