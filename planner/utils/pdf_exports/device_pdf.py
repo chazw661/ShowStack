@@ -1,31 +1,27 @@
 # planner/utils/pdf_exports/device_pdf.py
 """
-Device I/O PDF Export - Compact 2-column layout showing input/output numbers and assignments
+Device I/O PDF Export - Fixed with correct field names and multi-tenancy
 """
 
 from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, PageBreak
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
 from django.http import HttpResponse
 
-# Import what we need from pdf_styles
-try:
-    from .pdf_styles import LANDSCAPE_PAGE, MARGIN, BRAND_BLUE, DARK_GRAY
-except ImportError:
-    # Define defaults if pdf_styles is not available
-    LANDSCAPE_PAGE = landscape(letter)
-    MARGIN = 0.5 * inch
-    BRAND_BLUE = colors.HexColor('#4a9eff')
-    DARK_GRAY = colors.HexColor('#333333')
+from .pdf_styles import PDFStyles, LANDSCAPE_PAGE, MARGIN, BRAND_BLUE
 
 
 def export_all_devices_pdf(current_project):
     """
     Generate PDF export for ALL devices - filtered by current project
+    
+    Args:
+        current_project: The project to filter by (REQUIRED for multi-tenancy)
+        
+    Returns:
+        HttpResponse with PDF content
     """
     from planner.models import Device
     
@@ -46,20 +42,11 @@ def export_all_devices_pdf(current_project):
     )
     
     story = []
-    styles = getSampleStyleSheet()
+    styles = PDFStyles()
     
-    # Header style
-    header_style = ParagraphStyle(
-        'DeviceHeader',
-        parent=styles['Heading1'],
-        fontSize=14,
-        textColor=BRAND_BLUE,
-        spaceAfter=12,
-    )
-    
-    # Page header
-    story.append(Paragraph(f"<b>All I/O Devices - {current_project.name}</b>", header_style))
-    story.append(Spacer(1, 0.2 * inch))
+    # Header
+    story.append(Paragraph(f"<b>All I/O Devices - {current_project.name}</b>", styles.get_header_style()))
+    story.append(Spacer(1, 0.3 * inch))
     
     # CRITICAL: Filter by project and prefetch all relationships
     devices = Device.objects.filter(
@@ -69,159 +56,156 @@ def export_all_devices_pdf(current_project):
     ).prefetch_related(
         'inputs',
         'outputs',
-        'inputs__console_input',
-        'outputs__console_output'
+        'inputs__console_input',  # Based on your field names
+        'inputs__console_input__console',  # Get the console too
+        'outputs__console_output',
+        'outputs__console_output__console'
     ).order_by('name')
     
     if not devices:
-        story.append(Paragraph("No devices found in this project", styles['Normal']))
+        story.append(Paragraph("No devices found in this project", styles.get_normal_style()))
     else:
         for idx, device in enumerate(devices):
-            if idx > 0:  # Add page break between devices
+            if idx > 0:  # Add page break between devices (except first)
                 story.append(PageBreak())
             
             # Device Title
             device_title = f"<b>Device: {device.name}</b>"
             if device.location:
                 device_title += f" - Location: {device.location.name}"
-            story.append(Paragraph(device_title, header_style))
-            story.append(Spacer(1, 0.15 * inch))
+            story.append(Paragraph(device_title, styles.get_header_style()))
+            story.append(Spacer(1, 0.2 * inch))
             
-            # Create 2-column layout for inputs and outputs
-            # Get inputs and outputs
-            device_inputs = list(device.inputs.all().order_by('input_number'))
-            device_outputs = list(device.outputs.all().order_by('output_number'))
+            # INPUTS SECTION
+            story.append(Paragraph("<b>INPUTS</b>", styles.get_section_style()))
+            story.append(Spacer(1, 0.1 * inch))
             
-            # Determine max rows needed
-            max_rows = max(len(device_inputs), len(device_outputs))
+            # Get inputs ordered by input_number
+            device_inputs = device.inputs.all().order_by('input_number')
             
-            if max_rows > 0:
-                # Build the combined table data
-                combined_data = []
+            if device_inputs:
+                # Build input table with grid format
+                # Create header row
+                input_data = [['Input', 'Signal Name', 'Source']]
                 
-                # Header row
-                combined_data.append([
-                    Paragraph("<b>INPUTS</b>", styles['Heading3']),
-                    '',
-                    '',  # Spacer column
-                    Paragraph("<b>OUTPUTS</b>", styles['Heading3']),
-                    ''
-                ])
-                
-                # Sub-header row
-                combined_data.append([
-                    Paragraph("<b>Input</b>", styles['Normal']),
-                    Paragraph("<b>Assignment</b>", styles['Normal']),
-                    '',  # Spacer column
-                    Paragraph("<b>Output</b>", styles['Normal']),
-                    Paragraph("<b>Assignment</b>", styles['Normal'])
-                ])
-                
-                # Data rows
-                for i in range(max_rows):
-                    row = []
+                for inp in device_inputs:
+                    # Build source description from console_input
+                    source = ''
+                    if inp.console_input and inp.console_input.console:
+                        # ConsoleInput has 'input_ch' field (as shown in Django shell)
+                        console_input_num = getattr(inp.console_input, 'input_ch', '')
+                        source = f"{inp.console_input.console.name} - Input {console_input_num}"
                     
-                    # Input columns
-                    if i < len(device_inputs):
-                        inp = device_inputs[i]
-                        # Use input_number if available, otherwise use position + 1
-                        if inp.input_number:
-                            input_num = f"In {inp.input_number}"
-                        else:
-                            input_num = f"In {i + 1}"
-                        
-                        # Get the assignment from console_input.source
-                        input_assignment = ''
-                        if inp.console_input and hasattr(inp.console_input, 'source'):
-                            input_assignment = inp.console_input.source or ''
-                        
-                        row.append(input_num)
-                        row.append(input_assignment)
+                    # Get the input assignment from console_input.source field
+                    # The ConsoleInput.source field contains values like "wless", "podium", "Vid L", etc.
+                    input_assignment = ''
+                    if inp.console_input and hasattr(inp.console_input, 'source'):
+                        input_assignment = inp.console_input.source or f"In {inp.input_number}"
                     else:
-                        row.append('')
-                        row.append('')
+                        input_assignment = f"In {inp.input_number}"
                     
-                    # Spacer column
-                    row.append('')
-                    
-                    # Output columns
-                    if i < len(device_outputs):
-                        out = device_outputs[i]
-                        # Use output_number if available, otherwise use position + 1
-                        if out.output_number:
-                            output_num = f"Out {out.output_number}"
-                        else:
-                            output_num = f"Out {i + 1}"
-                        
-                        # Get the assignment from signal_name
-                        output_assignment = out.signal_name or ''
-                        
-                        row.append(output_num)
-                        row.append(output_assignment)
-                    else:
-                        row.append('')
-                        row.append('')
-                    
-                    combined_data.append(row)
+                    input_data.append([
+                        input_assignment,  # Show "wless", "podium", etc.
+                        inp.signal_name or '',
+                        source
+                    ])
                 
-                # Create the combined table
-                col_widths = [1.2*inch, 2.3*inch, 0.5*inch, 1.2*inch, 2.3*inch]
-                combined_table = Table(combined_data, colWidths=col_widths)
-                
-                # Style the table
-                table_style = [
-                    # Main headers
-                    ('BACKGROUND', (0, 0), (1, 0), BRAND_BLUE),
-                    ('BACKGROUND', (3, 0), (4, 0), BRAND_BLUE),
-                    ('TEXTCOLOR', (0, 0), (1, 0), colors.white),
-                    ('TEXTCOLOR', (3, 0), (4, 0), colors.white),
+                # Create input table with grid styling
+                col_widths = [1*inch, 3*inch, 4*inch]
+                input_table = Table(input_data, colWidths=col_widths)
+                input_table.setStyle([
+                    # Header row styling
+                    ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 11),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
                     
-                    # Sub-headers
-                    ('BACKGROUND', (0, 1), (1, 1), colors.HexColor('#e0e0e0')),
-                    ('BACKGROUND', (3, 1), (4, 1), colors.HexColor('#e0e0e0')),
-                    ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 1), (-1, 1), 9),
-                    
-                    # Data rows
-                    ('FONTNAME', (0, 2), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 2), (-1, -1), 9),
-                    
-                    # Alignment
-                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-                    ('ALIGN', (3, 0), (3, -1), 'CENTER'),
-                    ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-                    ('ALIGN', (4, 0), (4, -1), 'LEFT'),
+                    # Data rows styling
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),  # Center input numbers
+                    ('ALIGN', (1, 0), (-1, -1), 'LEFT'),   # Left align text
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     
-                    # Grid for input and output sections only
-                    ('GRID', (0, 1), (1, -1), 0.5, colors.grey),
-                    ('GRID', (3, 1), (4, -1), 0.5, colors.grey),
-                    
-                    # Padding
-                    ('TOPPADDING', (0, 0), (-1, -1), 4),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-                ]
-                
-                # Add alternating row colors for data rows
-                for i in range(2, len(combined_data)):
-                    if i % 2 == 0:
-                        table_style.append(('BACKGROUND', (0, i), (1, i), colors.white))
-                        table_style.append(('BACKGROUND', (3, i), (4, i), colors.white))
-                    else:
-                        table_style.append(('BACKGROUND', (0, i), (1, i), colors.HexColor('#f5f5f5')))
-                        table_style.append(('BACKGROUND', (3, i), (4, i), colors.HexColor('#f5f5f5')))
-                
-                combined_table.setStyle(table_style)
-                story.append(combined_table)
+                    # Grid and alternating colors
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('ROWBACKGROUND', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+                ])
+                story.append(input_table)
             else:
-                story.append(Paragraph("No inputs or outputs configured", styles['Normal']))
+                story.append(Paragraph("No inputs configured", styles.get_normal_style()))
+            
+            story.append(Spacer(1, 0.2 * inch))
+            
+            # OUTPUTS SECTION
+            story.append(Paragraph("<b>OUTPUTS</b>", styles.get_section_style()))
+            story.append(Spacer(1, 0.1 * inch))
+            
+            # Get outputs ordered by output_number
+            device_outputs = device.outputs.all().order_by('output_number')
+            
+            if device_outputs:
+                # Build output table with grid format
+                output_data = [['Output', 'Destination']]
+                
+                for out in device_outputs:
+                    # Build destination from console_output
+                    destination = ''
+                    if out.console_output and out.console_output.console:
+                        # Determine output type - check for different field names
+                        output_type = 'Output'
+                        if hasattr(out.console_output, 'aux_number'):
+                            output_type = f"Aux {out.console_output.aux_number}"
+                        elif hasattr(out.console_output, 'matrix_number'):
+                            output_type = f"Matrix {out.console_output.matrix_number}"
+                        elif hasattr(out.console_output, 'output_number'):
+                            output_type = f"Output {out.console_output.output_number}"
+                        elif hasattr(out.console_output, 'number'):
+                            output_type = f"Output {out.console_output.number}"
+                        
+                        destination = f"{out.console_output.console.name} - {output_type}"
+                    
+                    # For outputs, show the signal name in the first column
+                    # Based on your screenshot, signal_name contains "FB", "Lobby", "Left", etc.
+                    output_label = ''
+                    if out.signal_name:
+                        output_label = out.signal_name
+                    else:
+                        # Fall back to output number if no signal name
+                        output_label = f"Out {out.output_number}"
+                    
+                    output_data.append([
+                        output_label,  # Show signal name like "FB", "Lobby", "Left"
+                        destination
+                    ])
+                
+                # Create output table with grid styling (2 columns now)
+                col_widths = [2*inch, 6*inch]
+                output_table = Table(output_data, colWidths=col_widths)
+                output_table.setStyle([
+                    # Header row styling
+                    ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    
+                    # Data rows styling
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),  # Center output numbers
+                    ('ALIGN', (1, 0), (-1, -1), 'LEFT'),   # Left align text
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    
+                    # Grid and alternating colors
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('ROWBACKGROUND', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+                ])
+                story.append(output_table)
+            else:
+                story.append(Paragraph("No outputs configured", styles.get_normal_style()))
     
-    # Build PDF
-    doc.build(story)
+    # Build PDF with page numbers
+    doc.build(story, onFirstPage=styles.add_page_number, onLaterPages=styles.add_page_number)
     
     buffer.seek(0)
     response = HttpResponse(buffer.read(), content_type='application/pdf')
@@ -232,7 +216,13 @@ def export_all_devices_pdf(current_project):
 
 def export_device_pdf(device):
     """
-    Generate PDF export for a SINGLE device - compact 2-column layout
+    Generate PDF export for a SINGLE device
+    
+    Args:
+        device: Device model instance
+        
+    Returns:
+        HttpResponse with PDF content
     """
     buffer = BytesIO()
     
@@ -247,153 +237,127 @@ def export_device_pdf(device):
     )
     
     story = []
-    styles = getSampleStyleSheet()
-    
-    header_style = ParagraphStyle(
-        'DeviceHeader',
-        parent=styles['Heading1'],
-        fontSize=14,
-        textColor=BRAND_BLUE,
-        spaceAfter=12,
-    )
+    styles = PDFStyles()
     
     # Device Title
     device_title = f"<b>Device I/O Configuration - {device.name}</b>"
     if device.location:
         device_title += f" - Location: {device.location.name}"
-    story.append(Paragraph(device_title, header_style))
-    story.append(Spacer(1, 0.15 * inch))
+    story.append(Paragraph(device_title, styles.get_header_style()))
+    story.append(Spacer(1, 0.3 * inch))
     
-    # Create 2-column layout
-    device_inputs = list(device.inputs.all().order_by('input_number'))
-    device_outputs = list(device.outputs.all().order_by('output_number'))
+    # INPUTS SECTION - Using correct field names
+    story.append(Paragraph("<b>INPUTS</b>", styles.get_section_style()))
+    story.append(Spacer(1, 0.1 * inch))
     
-    max_rows = max(len(device_inputs), len(device_outputs))
+    device_inputs = device.inputs.all().order_by('input_number')
     
-    if max_rows > 0:
-        combined_data = []
+    if device_inputs:
+        input_data = [['Input', 'Signal Name', 'Source']]
         
-        # Header row
-        combined_data.append([
-            Paragraph("<b>INPUTS</b>", styles['Heading3']),
-            '',
-            '',  # Spacer column
-            Paragraph("<b>OUTPUTS</b>", styles['Heading3']),
-            ''
-        ])
-        
-        # Sub-header row
-        combined_data.append([
-            Paragraph("<b>Input</b>", styles['Normal']),
-            Paragraph("<b>Assignment</b>", styles['Normal']),
-            '',  # Spacer column
-            Paragraph("<b>Output</b>", styles['Normal']),
-            Paragraph("<b>Assignment</b>", styles['Normal'])
-        ])
-        
-        # Data rows
-        for i in range(max_rows):
-            row = []
+        for inp in device_inputs:
+            # Build source from console_input
+            source = ''
+            if inp.console_input and inp.console_input.console:
+                # ConsoleInput has 'input_ch' field (as shown in Django shell)
+                console_input_num = getattr(inp.console_input, 'input_ch', '')
+                source = f"{inp.console_input.console.name} - Input {console_input_num}"
             
-            # Input columns
-            if i < len(device_inputs):
-                inp = device_inputs[i]
-                # Use input_number if available, otherwise use position + 1
-                if inp.input_number:
-                    input_num = f"In {inp.input_number}"
-                else:
-                    input_num = f"In {i + 1}"
-                
-                input_assignment = ''
-                if inp.console_input and hasattr(inp.console_input, 'source'):
-                    input_assignment = inp.console_input.source or ''
-                
-                row.append(input_num)
-                row.append(input_assignment)
+            # Get the input assignment from console_input.source field
+            # The ConsoleInput.source field contains values like "wless", "podium", "Vid L", etc.
+            input_assignment = ''
+            if inp.console_input and hasattr(inp.console_input, 'source'):
+                input_assignment = inp.console_input.source or f"In {inp.input_number}"
             else:
-                row.append('')
-                row.append('')
+                input_assignment = f"In {inp.input_number}"
             
-            # Spacer column
-            row.append('')
-            
-            # Output columns
-            if i < len(device_outputs):
-                out = device_outputs[i]
-                # Use output_number if available, otherwise use position + 1
-                if out.output_number:
-                    output_num = f"Out {out.output_number}"
-                else:
-                    output_num = f"Out {i + 1}"
-                    
-                output_assignment = out.signal_name or ''
-                
-                row.append(output_num)
-                row.append(output_assignment)
-            else:
-                row.append('')
-                row.append('')
-            
-            combined_data.append(row)
+            input_data.append([
+                input_assignment,  # Show "wless", "podium", etc.
+                inp.signal_name or '',
+                source
+            ])
         
-        # Create table
-        col_widths = [1.2*inch, 2.3*inch, 0.5*inch, 1.2*inch, 2.3*inch]
-        combined_table = Table(combined_data, colWidths=col_widths)
-        
-        # Style the table
-        table_style = [
-            # Headers
-            ('BACKGROUND', (0, 0), (1, 0), BRAND_BLUE),
-            ('BACKGROUND', (3, 0), (4, 0), BRAND_BLUE),
-            ('TEXTCOLOR', (0, 0), (1, 0), colors.white),
-            ('TEXTCOLOR', (3, 0), (4, 0), colors.white),
+        col_widths = [1*inch, 3*inch, 4*inch]
+        input_table = Table(input_data, colWidths=col_widths)
+        input_table.setStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            
-            # Sub-headers
-            ('BACKGROUND', (0, 1), (1, 1), colors.HexColor('#e0e0e0')),
-            ('BACKGROUND', (3, 1), (4, 1), colors.HexColor('#e0e0e0')),
-            ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 1), (-1, 1), 9),
-            
-            # Data
-            ('FONTNAME', (0, 2), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 2), (-1, -1), 9),
-            
-            # Alignment
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
             ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('ALIGN', (3, 0), (3, -1), 'CENTER'),
-            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-            ('ALIGN', (4, 0), (4, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            
-            # Grid
-            ('GRID', (0, 1), (1, -1), 0.5, colors.grey),
-            ('GRID', (3, 1), (4, -1), 0.5, colors.grey),
-            
-            # Padding
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ]
-        
-        # Alternating row colors
-        for i in range(2, len(combined_data)):
-            if i % 2 == 0:
-                table_style.append(('BACKGROUND', (0, i), (1, i), colors.white))
-                table_style.append(('BACKGROUND', (3, i), (4, i), colors.white))
-            else:
-                table_style.append(('BACKGROUND', (0, i), (1, i), colors.HexColor('#f5f5f5')))
-                table_style.append(('BACKGROUND', (3, i), (4, i), colors.HexColor('#f5f5f5')))
-        
-        combined_table.setStyle(table_style)
-        story.append(combined_table)
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUND', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ])
+        story.append(input_table)
     else:
-        story.append(Paragraph("No inputs or outputs configured", styles['Normal']))
+        story.append(Paragraph("No inputs configured", styles.get_normal_style()))
+    
+    story.append(Spacer(1, 0.2 * inch))
+    
+    # OUTPUTS SECTION - Using correct field names
+    story.append(Paragraph("<b>OUTPUTS</b>", styles.get_section_style()))
+    story.append(Spacer(1, 0.1 * inch))
+    
+    device_outputs = device.outputs.all().order_by('output_number')
+    
+    if device_outputs:
+        output_data = [['Output', 'Destination']]
+        
+        for out in device_outputs:
+            # Build destination from console_output
+            destination = ''
+            if out.console_output and out.console_output.console:
+                # Check for different field names
+                output_type = 'Output'
+                if hasattr(out.console_output, 'aux_number'):
+                    output_type = f"Aux {out.console_output.aux_number}"
+                elif hasattr(out.console_output, 'matrix_number'):
+                    output_type = f"Matrix {out.console_output.matrix_number}"
+                elif hasattr(out.console_output, 'output_number'):
+                    output_type = f"Output {out.console_output.output_number}"
+                elif hasattr(out.console_output, 'number'):
+                    output_type = f"Output {out.console_output.number}"
+                
+                destination = f"{out.console_output.console.name} - {output_type}"
+            
+            # For outputs, show the signal name in the first column
+            output_label = ''
+            if out.signal_name:
+                output_label = out.signal_name
+            else:
+                # Fall back to output number if no signal name
+                output_label = f"Out {out.output_number}"
+            
+            output_data.append([
+                output_label,  # Show signal name like "FB", "Lobby", "Left"
+                destination
+            ])
+        
+        col_widths = [2*inch, 6*inch]
+        output_table = Table(output_data, colWidths=col_widths)
+        output_table.setStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUND', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ])
+        story.append(output_table)
+    else:
+        story.append(Paragraph("No outputs configured", styles.get_normal_style()))
     
     # Build PDF
-    doc.build(story)
+    doc.build(story, onFirstPage=styles.add_page_number, onLaterPages=styles.add_page_number)
     
     buffer.seek(0)
     response = HttpResponse(buffer.read(), content_type='application/pdf')
