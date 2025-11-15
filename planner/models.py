@@ -636,6 +636,20 @@ class DeviceInput(models.Model):
         related_name='device_inputs'
     )
 
+    def save(self, *args, **kwargs):
+        # Auto-populate input_number if not set
+        if self.input_number is None:
+            # Find the highest existing input_number for this device
+            existing_inputs = DeviceInput.objects.filter(device=self.device)
+            if existing_inputs.exists():
+                max_number = existing_inputs.aggregate(models.Max('input_number'))['input_number__max']
+                self.input_number = (max_number or 0) + 1
+            else:
+                self.input_number = 1
+        
+        super().save(*args, **kwargs)
+
+
     def __str__(self):
      return f"Input {self.input_number or 'N/A'}: {self.signal_name or 'No signal'}"
     
@@ -656,6 +670,25 @@ class DeviceOutput(models.Model):
     )
     object_id = models.PositiveIntegerField(null=True, blank=True)
     console_output = GenericForeignKey('content_type', 'object_id')
+
+
+
+
+    def save(self, *args, **kwargs):
+        # Auto-populate output_number if not set
+        if self.output_number is None:
+            # Find the highest existing output_number for this device
+            existing_outputs = DeviceOutput.objects.filter(device=self.device)
+            if existing_outputs.exists():
+                max_number = existing_outputs.aggregate(models.Max('output_number'))['output_number__max']
+                self.output_number = (max_number or 0) + 1
+            else:
+                self.output_number = 1
+        
+        super().save(*args, **kwargs)
+
+
+
 
     def __str__(self):
         return f"Output {self.output_number or 'N/A'}: {self.signal_name or 'No signal'}"
