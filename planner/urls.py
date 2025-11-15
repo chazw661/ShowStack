@@ -133,6 +133,9 @@ urlpatterns = [
     path('api/mic-tracker-checksum/', views.mic_tracker_checksum, name='mic_tracker_checksum'),
 
 
+    path('debug-device-ordering/', views.debug_device_ordering, name='debug_device_ordering'),
+
+
 
 
     

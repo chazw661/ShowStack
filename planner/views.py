@@ -2732,3 +2732,61 @@ def mic_tracker_checksum(request):
     
     return JsonResponse({'checksum': checksum})
   
+
+
+
+
+
+
+
+  #----Temporaty debug
+
+
+
+
+  # Add this to planner/views.py temporarily
+
+from django.http import HttpResponse
+from planner.models import Device
+
+def debug_device_ordering(request):
+    """
+    Temporary debug view to check device input/output ordering
+    Access at: /audiopatch/debug-device-ordering/
+    """
+    html = ["<html><body><pre>"]
+    html.append("<h1>Device Ordering Debug</h1>")
+    
+    # Get first 3 devices
+    devices = Device.objects.all()[:3]
+    
+    for device in devices:
+        html.append(f"\n{'='*60}")
+        html.append(f"Device: {device.name}")
+        html.append(f"{'='*60}\n")
+        
+        html.append("\nINPUTS (no ORDER BY):")
+        for inp in device.inputs.all()[:10]:
+            html.append(f"  ID: {inp.id:3d} | input_number: {inp.input_number} | signal: {inp.signal_name or 'None'}")
+        
+        html.append("\n\nINPUTS (with ORDER BY input_number):")
+        for inp in device.inputs.all().order_by('input_number')[:10]:
+            html.append(f"  ID: {inp.id:3d} | input_number: {inp.input_number} | signal: {inp.signal_name or 'None'}")
+        
+        html.append("\n\nOUTPUTS (no ORDER BY):")
+        for out in device.outputs.all()[:10]:
+            html.append(f"  ID: {out.id:3d} | output_number: {out.output_number} | signal: {out.signal_name or 'None'}")
+        
+        html.append("\n\nOUTPUTS (with ORDER BY output_number):")
+        for out in device.outputs.all().order_by('output_number')[:10]:
+            html.append(f"  ID: {out.id:3d} | output_number: {out.output_number} | signal: {out.signal_name or 'None'}")
+        
+        html.append("\n\n")
+    
+    html.append("</pre></body></html>")
+    
+    return HttpResponse('\n'.join(html))
+
+
+# Also add this URL pattern to planner/urls.py:
+# path('debug-device-ordering/', views.debug_device_ordering, name='debug_device_ordering'),
