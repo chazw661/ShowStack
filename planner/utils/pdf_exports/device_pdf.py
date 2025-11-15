@@ -1,7 +1,6 @@
 # planner/utils/pdf_exports/device_pdf.py
 """
-Device I/O PDF Export - FIXED for PostgreSQL/Railway compatibility
-CRITICAL: Explicit .order_by() on ALL queries to ensure consistent ordering
+Device I/O PDF Export - Clean version that relies on populated input_number/output_number fields
 """
 
 from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, PageBreak
@@ -41,40 +40,41 @@ def export_device_pdf(device):
     
     # Header
     story.append(Paragraph(f"<b>Device I/O - {device.name}</b>", styles.get_header_style()))
+    if device.location:
+        story.append(Paragraph(f"Location: {device.location.name}", styles.get_subsection_style()))
     story.append(Spacer(1, 0.3 * inch))
     
-    # CRITICAL: Must use .order_by('input_number') for consistent ordering
-    device_inputs = device.inputs.all().order_by('input_number')
+    # INPUTS Section
+    story.append(Paragraph("<b>INPUTS</b>", styles.get_section_style()))
+    story.append(Spacer(1, 0.1 * inch))
+    
+    # CRITICAL: Order by input_number (now that they're populated!)
+    device_inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
     
     if device_inputs.exists():
-        # INPUTS Section
-        story.append(Paragraph("<b>INPUTS</b>", styles.get_section_style()))
-        story.append(Spacer(1, 0.1 * inch))
-        
-        input_data = [['Input', 'Signal Name', 'Source']]
+        input_data = [['#', 'Input', 'Signal Name', 'Console Source']]
         
         for inp in device_inputs:
             # Get input assignment from console_input.source field
-            input_assignment = ''
-            source = ''
+            input_label = ''
+            console_source = ''
             
             if inp.console_input:
                 # ConsoleInput.source contains dropdown values like "wless", "podium", "Vid L"
-                input_assignment = inp.console_input.source or f"In {inp.input_number}"
+                input_label = inp.console_input.source or ''
                 
                 if inp.console_input.console:
                     console_input_num = inp.console_input.input_ch
-                    source = f"{inp.console_input.console.name} - Input {console_input_num}"
-            else:
-                input_assignment = f"In {inp.input_number}"
+                    console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
             
             input_data.append([
-                input_assignment,
+                str(inp.input_number),
+                input_label,
                 inp.signal_name or '',
-                source
+                console_source
             ])
         
-        col_widths = [2*inch, 3*inch, 4*inch]
+        col_widths = [0.5*inch, 1.5*inch, 2*inch, 5*inch]
         input_table = Table(input_data, colWidths=col_widths)
         input_table.setStyle([
             ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
@@ -83,7 +83,8 @@ def export_device_pdf(device):
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
@@ -94,22 +95,22 @@ def export_device_pdf(device):
     
     story.append(Spacer(1, 0.3 * inch))
     
-    # CRITICAL: Must use .order_by('output_number') for consistent ordering
-    device_outputs = device.outputs.all().order_by('output_number')
+    # OUTPUTS Section
+    story.append(Paragraph("<b>OUTPUTS</b>", styles.get_section_style()))
+    story.append(Spacer(1, 0.1 * inch))
+    
+    # CRITICAL: Order by output_number (now that they're populated!)
+    device_outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
     
     if device_outputs.exists():
-        # OUTPUTS Section
-        story.append(Paragraph("<b>OUTPUTS</b>", styles.get_section_style()))
-        story.append(Spacer(1, 0.1 * inch))
-        
-        output_data = [['Output', 'Destination']]
+        output_data = [['#', 'Output', 'Console Destination']]
         
         for out in device_outputs:
             # For outputs, use signal_name (contains "FB", "Lobby", "Left", "Right", etc.)
-            output_label = out.signal_name or f"Out {out.output_number}"
+            output_label = out.signal_name or ''
             
             # Build destination from console_output
-            destination = ''
+            console_dest = ''
             if out.console_output and out.console_output.console:
                 output_type = 'Output'
                 if hasattr(out.console_output, 'aux_number'):
@@ -117,14 +118,15 @@ def export_device_pdf(device):
                 elif hasattr(out.console_output, 'matrix_number'):
                     output_type = f"Matrix {out.console_output.matrix_number}"
                 
-                destination = f"{out.console_output.console.name} - {output_type}"
+                console_dest = f"{out.console_output.console.name} - {output_type}"
             
             output_data.append([
+                str(out.output_number),
                 output_label,
-                destination
+                console_dest
             ])
         
-        col_widths = [2*inch, 7*inch]
+        col_widths = [0.5*inch, 2*inch, 6.5*inch]
         output_table = Table(output_data, colWidths=col_widths)
         output_table.setStyle([
             ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
@@ -133,7 +135,8 @@ def export_device_pdf(device):
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
@@ -155,10 +158,9 @@ def export_device_pdf(device):
 def export_all_devices_pdf(current_project):
     """
     Generate PDF export for ALL devices in current project
-    CRITICAL: Filter by current_project for multi-tenancy security
     
     Args:
-        current_project: The project to filter by (REQUIRED)
+        current_project: The project to filter by (REQUIRED for multi-tenancy)
         
     Returns:
         HttpResponse with PDF content
@@ -198,7 +200,10 @@ def export_all_devices_pdf(current_project):
     # CRITICAL: Filter by current project AND order by name
     devices = Device.objects.filter(
         project=current_project
-    ).select_related('location').prefetch_related('inputs', 'outputs').order_by('name')
+    ).select_related('location').prefetch_related(
+        'inputs__console_input__console',
+        'outputs__console_output'
+    ).order_by('name')
     
     if not devices.exists():
         story.append(Paragraph("No devices found in this project", styles.get_subsection_style()))
@@ -216,36 +221,32 @@ def export_all_devices_pdf(current_project):
                 story.append(Paragraph(f"Location: {device.location.name}", styles.get_subsection_style()))
             story.append(Spacer(1, 0.2 * inch))
             
-            # CRITICAL: Use .order_by('input_number') for consistent ordering
-            device_inputs = device.inputs.all().order_by('input_number')
+            # INPUTS
+            device_inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
             
             if device_inputs.exists():
-                # INPUTS
                 story.append(Paragraph("<b>INPUTS</b>", styles.get_subsection_style()))
                 story.append(Spacer(1, 0.1 * inch))
                 
-                input_data = [['Input', 'Signal Name', 'Source']]
+                input_data = [['#', 'Input', 'Signal', 'Console Source']]
                 
                 for inp in device_inputs:
-                    input_assignment = ''
-                    source = ''
+                    input_label = ''
+                    console_source = ''
                     
                     if inp.console_input:
-                        input_assignment = inp.console_input.source or f"In {inp.input_number}"
-                        
+                        input_label = inp.console_input.source or ''
                         if inp.console_input.console:
-                            console_input_num = inp.console_input.input_ch
-                            source = f"{inp.console_input.console.name} - Input {console_input_num}"
-                    else:
-                        input_assignment = f"In {inp.input_number}"
+                            console_source = f"{inp.console_input.console.name} - In {inp.console_input.input_ch}"
                     
                     input_data.append([
-                        input_assignment,
+                        str(inp.input_number),
+                        input_label,
                         inp.signal_name or '',
-                        source
+                        console_source
                     ])
                 
-                col_widths = [2*inch, 3*inch, 4*inch]
+                col_widths = [0.5*inch, 1.5*inch, 2*inch, 5*inch]
                 input_table = Table(input_data, colWidths=col_widths)
                 input_table.setStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
@@ -254,7 +255,8 @@ def export_all_devices_pdf(current_project):
                     ('FONTSIZE', (0, 0), (-1, 0), 9),
                     ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 1), (-1, -1), 8),
-                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                    ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
@@ -262,20 +264,19 @@ def export_all_devices_pdf(current_project):
                 story.append(input_table)
                 story.append(Spacer(1, 0.2 * inch))
             
-            # CRITICAL: Use .order_by('output_number') for consistent ordering
-            device_outputs = device.outputs.all().order_by('output_number')
+            # OUTPUTS
+            device_outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
             
             if device_outputs.exists():
-                # OUTPUTS
                 story.append(Paragraph("<b>OUTPUTS</b>", styles.get_subsection_style()))
                 story.append(Spacer(1, 0.1 * inch))
                 
-                output_data = [['Output', 'Destination']]
+                output_data = [['#', 'Output', 'Console Destination']]
                 
                 for out in device_outputs:
-                    output_label = out.signal_name or f"Out {out.output_number}"
+                    output_label = out.signal_name or ''
                     
-                    destination = ''
+                    console_dest = ''
                     if out.console_output and out.console_output.console:
                         output_type = 'Output'
                         if hasattr(out.console_output, 'aux_number'):
@@ -283,14 +284,15 @@ def export_all_devices_pdf(current_project):
                         elif hasattr(out.console_output, 'matrix_number'):
                             output_type = f"Matrix {out.console_output.matrix_number}"
                         
-                        destination = f"{out.console_output.console.name} - {output_type}"
+                        console_dest = f"{out.console_output.console.name} - {output_type}"
                     
                     output_data.append([
+                        str(out.output_number),
                         output_label,
-                        destination
+                        console_dest
                     ])
                 
-                col_widths = [2*inch, 7*inch]
+                col_widths = [0.5*inch, 2*inch, 6.5*inch]
                 output_table = Table(output_data, colWidths=col_widths)
                 output_table.setStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
@@ -299,7 +301,8 @@ def export_all_devices_pdf(current_project):
                     ('FONTSIZE', (0, 0), (-1, 0), 9),
                     ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 1), (-1, -1), 8),
-                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+                    ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
