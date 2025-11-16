@@ -1644,7 +1644,7 @@ class CommChannel(models.Model):
 
 class CommPosition(models.Model):
     """Predefined positions for crew members"""
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
     order = models.IntegerField(default=0)
     project = models.ForeignKey('Project', on_delete=models.CASCADE) 
     
@@ -1652,6 +1652,7 @@ class CommPosition(models.Model):
         verbose_name = "Comm Position"
         verbose_name_plural = "    ├─ Comm Positions"  # Child
         ordering = ['name']  # or ['id']
+        unique_together = [['name', 'project']]
     
     def __str__(self):
         return self.name
