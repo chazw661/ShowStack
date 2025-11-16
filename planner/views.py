@@ -2386,15 +2386,20 @@ def import_comm_crew_names_csv(request):
 
 #--------System Processor PDF Expport----
 
-"""
-Add this function to planner/views.py
-"""
+# Update this function in planner/views.py
 
 def export_system_processor_pdf(request):
-    """Export system processors as PDF."""
+    """Export system processors as PDF - filtered by current project"""
+    
+    # Get current project - CRITICAL for multi-tenancy
+    if not hasattr(request, 'current_project') or not request.current_project:
+        return HttpResponse("No project selected. Please select a project first.", status=403)
+    
     from planner.utils.pdf_exports.system_processor_pdf import generate_system_processor_pdf
     
-    pdf = generate_system_processor_pdf()
+    # PASS THE CURRENT PROJECT to the export function
+    pdf = generate_system_processor_pdf(request.current_project)
+    
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="system_processors.pdf"'
     return response
