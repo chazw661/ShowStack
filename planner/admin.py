@@ -3578,10 +3578,11 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         return super().has_delete_permission(request, obj)
     
     class Media:
-        css = {
-            'all': ('admin/css/comm_admin.css',)
-        }
-        js = ('admin/js/comm_beltpack_admin.js',)
+        class Media:
+            css = {
+                'all': ('admin/css/comm_admin_v2.css',)
+            }
+            js = ('admin/js/comm_beltpack_admin.js',)
     
     def changelist_view(self, request, extra_context=None):
         """Add summary information grouped by system type"""
