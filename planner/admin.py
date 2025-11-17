@@ -3288,10 +3288,10 @@ class CommBeltPackAdminForm(forms.ModelForm):
                 self.fields['checked_out'].help_text = "Whether this belt pack has been checked out (Wireless only)"
 
     class Media:
-        js = ('admin/js/comm_beltpack_admin.js',)
         css = {
             'all': ('admin/css/comm_admin.css',)
         }
+        js = ('admin/js/comm_beltpack_admin.js',) 
         
 
         
@@ -3301,10 +3301,50 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     form = CommBeltPackAdminForm
     
     # Add autocomplete for better UX (optional but recommended)
-    autocomplete_fields = ['position', 'name', 'channel_a', 'channel_b', 'channel_c', 'channel_d']
+    #autocomplete_fields = ['position', 'name', 'channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']
     
-    # No need for custom save_model anymore - BaseEquipmentAdmin handles project assignment
-        
+    # Right after autocomplete_fields, add:
+    list_display = [
+        'display_bp_number',
+        'position',
+        'name',
+        'channel_a',
+        'channel_b',
+        'channel_c',
+        'channel_d',
+        'channel_e',
+        'channel_f',
+        'headset',
+        'audio_pgm',
+        'group',
+        'ip_address',
+        'checked_out',
+        'notes',
+        'updated_at',
+    ]
+
+
+
+
+      # ← Line 3324 - end of list_display
+    
+    # ADD THIS RIGHT HERE:
+    list_editable = [
+        'position',
+        'name',
+        'channel_a',
+        'channel_b',
+        'channel_c',
+        'channel_d',
+        'channel_e',
+        'channel_f',
+        'headset',
+        'audio_pgm',
+        'group',
+        'ip_address',
+        'checked_out',
+    ]
+    
         
     
     list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
@@ -3326,19 +3366,17 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         clear_all_beltpacks
     ]
     
-    def get_list_display(self, request):
-        """Dynamically adjust list display based on filters"""
-        base_display = ['display_bp_number', 'position', 'name', 'display_channels', 'headset', 'audio_pgm', 'group', 'ip_address']
+
+
+                         
+
         
-        # Check if we're filtering by system type
-        system_type = request.GET.get('system_type__exact')
         
-        # Only show checked_out column for wireless or when not filtering
-        if system_type != 'HARDWIRED':
-            base_display.append('display_checked_out')
-        
-        base_display.extend(['notes', 'updated_at'])
-        return base_display
+
+
+
+
+    
     
     def display_bp_number(self, obj):
         """Display BP number with system type prefix and icon"""
@@ -3376,6 +3414,10 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
             channels.append(f"C:{obj.channel_c.abbreviation}")
         if obj.channel_d:
             channels.append(f"D:{obj.channel_d.abbreviation}")
+        if obj.channel_e:
+            channels.append(f"E:{obj.channel_e.abbreviation}")
+        if obj.channel_f:
+            channels.append(f"F:{obj.channel_f.abbreviation}")
         return " | ".join(channels) if channels else "-"
     display_channels.short_description = "Channels"
     
@@ -3393,6 +3435,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 'fields': (
                     ('channel_a', 'channel_b'),
                     ('channel_c', 'channel_d'),
+                    ('channel_e', 'channel_f'),
                 ),
             }),
         ]

@@ -1786,6 +1786,25 @@ class CommBeltPack(models.Model):
         related_name='beltpack_channel_d',
         verbose_name="CH D"
     )
+
+
+    channel_e = models.ForeignKey(
+        'CommChannel',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='beltpack_channel_e',
+        verbose_name="CH E"
+    )
+    
+    channel_f = models.ForeignKey(
+        'CommChannel',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='beltpack_channel_f',
+        verbose_name="CH F"
+    )
     
     audio_pgm = models.BooleanField(
         default=False, 
