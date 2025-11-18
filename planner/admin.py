@@ -3286,6 +3286,25 @@ class CommBeltPackAdminForm(forms.ModelForm):
         if not self.instance.pk:
             if 'checked_out' in self.fields:
                 self.fields['checked_out'].help_text = "Whether this belt pack has been checked out (Wireless only)"
+        
+        # ========================================
+        # FIX MULTI-TENANCY: Filter querysets by project
+        # ========================================
+        if self.instance and self.instance.project_id:
+            project = self.instance.project
+            
+            # Filter position dropdown to current project only
+            if 'position' in self.fields:
+                self.fields['position'].queryset = CommPosition.objects.filter(project=project).order_by('name')
+            
+            # Filter name dropdown to current project only
+            if 'name' in self.fields:
+                self.fields['name'].queryset = CommCrewName.objects.filter(project=project).order_by('name')
+            
+            # Filter all 6 channel dropdowns to current project only
+            for channel_field in ['channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']:
+                if channel_field in self.fields:
+                    self.fields[channel_field].queryset = CommChannel.objects.filter(project=project).order_by('input_designation')
 
     class Media:
         css = {
@@ -3377,6 +3396,30 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         }
         js = ('admin/js/comm_beltpack_admin.js',)
 
+
+
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options by current project for multi-tenancy"""
+        
+        # Get the current project from the request
+        current_project = getattr(request, 'current_project', None)
+        
+        if current_project:
+            # Filter position dropdown
+            if db_field.name == "position":
+                kwargs["queryset"] = CommPosition.objects.filter(project=current_project).order_by('name')
+            
+            # Filter name dropdown
+            elif db_field.name == "name":
+                kwargs["queryset"] = CommCrewName.objects.filter(project=current_project).order_by('name')
+            
+            # Filter channel dropdowns (all 6 channels)
+            elif db_field.name in ['channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']:
+                kwargs["queryset"] = CommChannel.objects.filter(project=current_project).order_by('input_designation')
+        
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 
