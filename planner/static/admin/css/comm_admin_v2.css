@@ -4,41 +4,40 @@
    FORCE TABLE LAYOUT TO RESPECT COLUMN WIDTHS
    ======================================== */
 
-/* This is the KEY - forces the table to respect our width settings */
 #changelist-form table {
     table-layout: fixed !important;
     width: 100% !important;
 }
 
 /* ========================================
-   COLUMN WIDTH SPECIFICATIONS
+   COLUMN WIDTH SPECIFICATIONS - ALL 17 COLUMNS
    ======================================== */
 
-/* Checkbox column (narrow) */
+/* Column 1: Checkbox */
 #changelist-form table th:nth-child(1),
 #changelist-form table td:nth-child(1) {
     width: 40px !important;
 }
 
-/* BP # column */
+/* Column 2: BP # */
 #changelist-form table th:nth-child(2),
 #changelist-form table td:nth-child(2) {
     width: 80px !important;
 }
 
-/* POSITION column */
+/* Column 3: POSITION */
 #changelist-form table th:nth-child(3),
 #changelist-form table td:nth-child(3) {
     width: 200px !important;
 }
 
-/* NAME column - SAME WIDTH AS POSITION */
+/* Column 4: NAME */
 #changelist-form table th:nth-child(4),
 #changelist-form table td:nth-child(4) {
     width: 200px !important;
 }
 
-/* Channel columns CH A through CH F (all same width) */
+/* Columns 5-10: CH A through CH F */
 #changelist-form table th:nth-child(5),
 #changelist-form table td:nth-child(5),
 #changelist-form table th:nth-child(6),
@@ -54,11 +53,52 @@
     width: 180px !important;
 }
 
+/* Column 11: HEADSET */
+#changelist-form table th:nth-child(11),
+#changelist-form table td:nth-child(11) {
+    width: 150px !important;
+}
+
+/* Column 12: AUDIO PGM */
+#changelist-form table th:nth-child(12),
+#changelist-form table td:nth-child(12) {
+    width: 120px !important;
+}
+
+/* Column 13: GROUP */
+#changelist-form table th:nth-child(13),
+#changelist-form table td:nth-child(13) {
+    width: 120px !important;
+}
+
+/* Column 14: IP ADDRESS */
+#changelist-form table th:nth-child(14),
+#changelist-form table td:nth-child(14) {
+    width: 150px !important;
+}
+
+/* Column 15: CHECKED OUT */
+#changelist-form table th:nth-child(15),
+#changelist-form table td:nth-child(15) {
+    width: 120px !important;
+}
+
+/* Column 16: NOTES */
+#changelist-form table th:nth-child(16),
+#changelist-form table td:nth-child(16) {
+    width: 200px !important;
+}
+
+/* Column 17: UPDATED AT */
+#changelist-form table th:nth-child(17),
+#changelist-form table td:nth-child(17) {
+    width: 180px !important;
+}
+
 /* ========================================
    FIX NESTED DIVS IN SORTABLE COLUMNS
    ======================================== */
 
-/* Force nested divs in sortable headers to not constrain width */
 #changelist-form table th .sortoptions,
 #changelist-form table th .text {
     width: 100% !important;
@@ -69,13 +109,24 @@
    DROPDOWN STYLING
    ======================================== */
 
-/* Make dropdowns fill their cells properly */
 #changelist-form table select {
     width: 100% !important;
     box-sizing: border-box !important;
 }
 
-/* Ensure dropdown buttons display horizontally */
 #changelist-form table td select {
     display: block !important;
+}
+
+
+
+/* Extra spacing between IP ADDRESS and CHECKED OUT */
+#changelist-form table th:nth-child(14),
+#changelist-form table td:nth-child(14) {
+    padding-right: 20px !important;
+}
+
+#changelist-form table th:nth-child(15),
+#changelist-form table td:nth-child(15) {
+    padding-left: 15px !important;
 }
