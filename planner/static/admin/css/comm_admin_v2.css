@@ -74,7 +74,7 @@
 /* Column 14: IP ADDRESS */
 #changelist-form table th:nth-child(14),
 #changelist-form table td:nth-child(14) {
-    width: 150px !important;
+    width: 100px !important;
 }
 
 /* Column 15: CHECKED OUT */
