@@ -3515,9 +3515,65 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     
 
     def changelist_view(self, request, extra_context=None):
-        """Add PDF export button to changelist."""
+        """Add summary information grouped by system type"""
         extra_context = extra_context or {}
-        extra_context['show_pdf_export'] = True
+        
+        # Get current project
+        current_project = getattr(request, 'current_project', None)
+        
+        if current_project:
+            # Get counts by system type - FILTERED BY PROJECT
+            wireless_total = CommBeltPack.objects.filter(
+                project=current_project, 
+                system_type='WIRELESS'
+            ).count()
+            wireless_checked = CommBeltPack.objects.filter(
+                project=current_project,
+                system_type='WIRELESS', 
+                checked_out=True
+            ).count()
+            hardwired_total = CommBeltPack.objects.filter(
+                project=current_project,
+                system_type='HARDWIRED'
+            ).count()
+            hardwired_checked = CommBeltPack.objects.filter(
+                project=current_project,
+                system_type='HARDWIRED', 
+                checked_out=True
+            ).count()
+            
+            # Group counts by system
+            wireless_groups = {}
+            hardwired_groups = {}
+            
+            for choice_key, choice_name in CommBeltPack.GROUP_CHOICES:
+                if choice_key:
+                    w_count = CommBeltPack.objects.filter(
+                        project=current_project,
+                        system_type='WIRELESS', 
+                        group=choice_key
+                    ).count()
+                    h_count = CommBeltPack.objects.filter(
+                        project=current_project,
+                        system_type='HARDWIRED', 
+                        group=choice_key
+                    ).count()
+                    
+                    if w_count > 0:
+                        wireless_groups[choice_name] = w_count
+                    if h_count > 0:
+                        hardwired_groups[choice_name] = h_count
+            
+            extra_context.update({
+                'wireless_total': wireless_total,
+                'wireless_checked': wireless_checked,
+                'wireless_available': wireless_total - wireless_checked,
+                'hardwired_total': hardwired_total,
+                'hardwired_available': hardwired_total - hardwired_checked,
+                'wireless_groups': wireless_groups,
+                'hardwired_groups': hardwired_groups,
+            })
+        
         return super().changelist_view(request, extra_context)
     
 
@@ -3564,40 +3620,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 messages.SUCCESS
             )
     
-    def changelist_view(self, request, extra_context=None):
-        """Add summary information grouped by system type"""
-        extra_context = extra_context or {}
-        
-        # Get counts by system type
-        wireless_total = CommBeltPack.objects.filter(system_type='WIRELESS').count()
-        wireless_checked = CommBeltPack.objects.filter(system_type='WIRELESS', checked_out=True).count()
-        hardwired_total = CommBeltPack.objects.filter(system_type='HARDWIRED').count()
-        
-        # Group counts by system
-        wireless_groups = {}
-        hardwired_groups = {}
-        
-        for choice_key, choice_name in CommBeltPack.GROUP_CHOICES:
-            if choice_key:
-                w_count = CommBeltPack.objects.filter(system_type='WIRELESS', group=choice_key).count()
-                h_count = CommBeltPack.objects.filter(system_type='HARDWIRED', group=choice_key).count()
-                
-                if w_count > 0:
-                    wireless_groups[choice_name] = w_count
-                if h_count > 0:
-                    hardwired_groups[choice_name] = h_count
-        
-        extra_context.update({
-            'wireless_total': wireless_total,
-            'wireless_checked': wireless_checked,
-            'wireless_available': wireless_total - wireless_checked,
-            'hardwired_total': hardwired_total,
-            'hardwired_available': hardwired_total,  # Hardwired are always available
-            'wireless_groups': wireless_groups,
-            'hardwired_groups': hardwired_groups,
-        })
-        
-        return super().changelist_view(request, extra_context)
+   
     
 
     def has_add_permission(self, request):
@@ -3626,42 +3649,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     
 
     
-    def changelist_view(self, request, extra_context=None):
-        """Add summary information grouped by system type"""
-        extra_context = extra_context or {}
-        
-        # Get counts by system type
-        wireless_total = CommBeltPack.objects.filter(system_type='WIRELESS').count()
-        wireless_checked = CommBeltPack.objects.filter(system_type='WIRELESS', checked_out=True).count()
-        hardwired_total = CommBeltPack.objects.filter(system_type='HARDWIRED').count()
-        hardwired_checked = CommBeltPack.objects.filter(system_type='HARDWIRED', checked_out=True).count()
-        
-        # Group counts by system
-        wireless_groups = {}
-        hardwired_groups = {}
-        
-        for choice_key, choice_name in CommBeltPack.GROUP_CHOICES:
-            if choice_key:
-                w_count = CommBeltPack.objects.filter(system_type='WIRELESS', group=choice_key).count()
-                h_count = CommBeltPack.objects.filter(system_type='HARDWIRED', group=choice_key).count()
-                
-                if w_count > 0:
-                    wireless_groups[choice_name] = w_count
-                if h_count > 0:
-                    hardwired_groups[choice_name] = h_count
-        
-        extra_context.update({
-            'wireless_total': wireless_total,
-            'wireless_checked': wireless_checked,
-            'wireless_available': wireless_total - wireless_checked,
-            'hardwired_total': hardwired_total,
-            'hardwired_checked': hardwired_checked,
-            'hardwired_available': hardwired_total - hardwired_checked,
-            'wireless_groups': wireless_groups,
-            'hardwired_groups': hardwired_groups,
-        })
-        
-        return super().changelist_view(request, extra_context)
+    
     
 
 
