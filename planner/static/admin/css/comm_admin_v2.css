@@ -97,21 +97,7 @@
     width: 180px !important;
 }
 
-/* ========================================
-   EXTRA SPACING BETWEEN IP ADDRESS AND CHECKED OUT
-   ======================================== */
 
-/* Add padding to IP ADDRESS column */
-#changelist-form table th:nth-child(14),
-#changelist-form table td:nth-child(14) {
-    padding-right: 25px !important;
-}
-
-/* Add padding to CHECKED OUT column */
-#changelist-form table th:nth-child(15),
-#changelist-form table td:nth-child(15) {
-    padding-left: 20px !important;
-}
 
 
 
