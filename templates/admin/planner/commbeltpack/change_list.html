@@ -46,22 +46,14 @@
     </div>
     
     <div class="system-section hardwired-section">
-        <h4>🔌 Hardwired System</h4>
-        <div class="stats">
-            <span class="stat">
-                <span class="stat-label">Total:</span>
-                <span class="stat-value">{{ hardwired_total }}</span>
-            </span>
-            <span class="stat">
-                <span class="stat-label">Checked Out:</span>
-                <span class="stat-value">{{ hardwired_checked }}</span>
-            </span>
-            <span class="stat">
-                <span class="stat-label">Available:</span>
-                <span class="stat-value">{{ hardwired_available }}</span>
-            </span>
-        </div>
-        
+    <h4>🔌 Hardwired System</h4>
+    <div class="stats">
+        <span class="stat">
+            <span class="stat-label">Total:</span>
+            <span class="stat-value">{{ hardwired_total }}</span>
+        </span>
+    </div>
+    
         {% if hardwired_groups %}
         <div class="group-stats">
             <span class="stat-label">By Group:</span>
