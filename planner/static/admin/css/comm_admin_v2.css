@@ -74,16 +74,35 @@
 /* Column 14: IP ADDRESS */
 #changelist-form table th:nth-child(14),
 #changelist-form table td:nth-child(14) {
-    width: 100px !important;
-    padding-right: 120px !important; 
+    width: 150px !important;
+    padding-right: 20px !important; 
 }
 
 /* Column 15: CHECKED OUT */
 #changelist-form table th:nth-child(15),
 #changelist-form table td:nth-child(15) {
     width: 120px !important;
-    padding-left: 120px !important;
+    padding-left: 20px !important;
 }
+
+
+
+/* ========================================
+   FIX: CONSTRAIN INPUT FIELDS THEMSELVES
+   ======================================== */
+
+/* Limit the IP ADDRESS input field width */
+#changelist-form table td:nth-child(14) input {
+    max-width: 100px !important;
+    width: 100px !important;
+}
+
+/* Add margin to the CHECKED OUT checkbox */
+#changelist-form table td:nth-child(15) input[type="checkbox"] {
+    margin-left: 40px !important;
+}
+
+
 
 /* Column 16: NOTES */
 #changelist-form table th:nth-child(16),
