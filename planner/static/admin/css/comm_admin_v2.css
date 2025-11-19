@@ -75,7 +75,7 @@
 #changelist-form table th:nth-child(14),
 #changelist-form table td:nth-child(14) {
     width: 120px !important;
-    padding-right: 100px !important; 
+    padding-right: 20px !important; 
 }
 
 /* Column 15: CHECKED OUT */
