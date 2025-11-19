@@ -74,14 +74,14 @@
 /* Column 14: IP ADDRESS */
 #changelist-form table th:nth-child(14),
 #changelist-form table td:nth-child(14) {
-    width: 150px !important;
-    padding-right: 60px !important; 
+    width: 120px !important;
+    padding-right: 100px !important; 
 }
 
 /* Column 15: CHECKED OUT */
 #changelist-form table th:nth-child(15),
 #changelist-form table td:nth-child(15) {
-    width: 120px !important;
+    width: 60px !important;
     padding-left: 40px !important;
 }
 
