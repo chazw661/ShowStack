@@ -75,14 +75,14 @@
 #changelist-form table th:nth-child(14),
 #changelist-form table td:nth-child(14) {
     width: 120px !important;
-    padding-right: 20px !important; 
+    padding-right: 80px !important; 
 }
 
 /* Column 15: CHECKED OUT */
 #changelist-form table th:nth-child(15),
 #changelist-form table td:nth-child(15) {
-    width: 60px !important;
-    padding-left: 40px !important;
+    width: 120px !important;
+    padding-left: 80px !important;
 }
 
 /* Column 16: NOTES */
