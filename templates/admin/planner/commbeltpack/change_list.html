@@ -73,31 +73,144 @@
 
 {% block extrahead %}
 {{ block.super }}
+<style>
+/* Collapsible group headers */
+.system-group-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 12px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    border-left: 4px solid #3498db;
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+}
+
+.system-group-header.wireless {
+    border-left-color: #3498db;
+}
+
+.system-group-header.hardwired {
+    border-left-color: #e67e22;
+}
+
+.system-group-header:hover {
+    background: linear-gradient(135deg, #34495e 0%, #3d566e 100%);
+}
+
+.system-group-header .toggle-icon {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+}
+
+.system-group-header.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.system-group-header .count-badge {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+/* Hide collapsed rows */
+tr.system-row.hidden {
+    display: none !important;
+}
+</style>
+
 <script>
-// Add visual separation and data attributes
 django.jQuery(document).ready(function($) {
-    $('#result_list tbody tr').each(function() {
+    var $table = $('#result_list');
+    var $tbody = $table.find('tbody');
+    
+    // Group rows by system type
+    var wirelessRows = [];
+    var hardwiredRows = [];
+    
+    $tbody.find('tr').each(function() {
         var $row = $(this);
-        var systemType = $row.find('.field-system_type').text().trim();
-        var group = $row.find('.field-group').text().trim();
+        // Check all cells for the BP number indicator
+        var rowText = $row.text();
         
-        if (systemType) {
-            $row.attr('data-system', systemType);
-            $row.addClass('system-' + systemType.toLowerCase());
-        }
-        if (group) {
-            $row.attr('data-group', group);
+        // Look for wireless indicators (W- or antenna emoji)
+        if (rowText.indexOf('W-') !== -1 || rowText.indexOf('📡') !== -1) {
+            wirelessRows.push($row);
+            $row.addClass('system-row wireless-row');
+        } 
+        // Look for hardwired indicators (H- or plug emoji)
+        else if (rowText.indexOf('H-') !== -1 || rowText.indexOf('🔌') !== -1) {
+            hardwiredRows.push($row);
+            $row.addClass('system-row hardwired-row');
         }
     });
     
-    // Add visual separators between system types
-    var lastSystem = null;
-    $('#result_list tbody tr').each(function() {
-        var currentSystem = $(this).attr('data-system');
-        if (lastSystem && lastSystem !== currentSystem) {
-            $(this).addClass('system-separator');
+    console.log('Found wireless rows:', wirelessRows.length);
+    console.log('Found hardwired rows:', hardwiredRows.length);
+    
+    // Only proceed if we found rows
+    if (wirelessRows.length === 0 && hardwiredRows.length === 0) {
+        console.log('No rows detected, skipping grouping');
+        return;
+    }
+    
+    // Create group headers
+    function createGroupHeader(title, type, count) {
+        var $header = $('<tr class="system-group-header-row ' + type + '">')
+            .html(
+                '<td colspan="20" style="padding: 0; border: none;">' +
+                    '<div class="system-group-header ' + type + '" data-group="' + type + '">' +
+                        '<span>' +
+                            '<span class="toggle-icon">▼</span> ' +
+                            title +
+                            '<span class="count-badge">' + count + '</span>' +
+                        '</span>' +
+                    '</div>' +
+                '</td>'
+            );
+        return $header;
+    }
+    
+    // Clear tbody and rebuild with groups
+    $tbody.empty();
+    
+    // Add Wireless group
+    if (wirelessRows.length > 0) {
+        var $wirelessHeader = createGroupHeader('📡 Wireless System', 'wireless', wirelessRows.length);
+        $tbody.append($wirelessHeader);
+        $.each(wirelessRows, function(i, row) {
+            $tbody.append(row);
+        });
+    }
+    
+    // Add Hardwired group
+    if (hardwiredRows.length > 0) {
+        var $hardwiredHeader = createGroupHeader('🔌 Hardwired System', 'hardwired', hardwiredRows.length);
+        $tbody.append($hardwiredHeader);
+        $.each(hardwiredRows, function(i, row) {
+            $tbody.append(row);
+        });
+    }
+    
+    // Toggle functionality
+    $tbody.on('click', '.system-group-header', function() {
+        var $header = $(this);
+        var groupType = $header.data('group');
+        var $rows = $tbody.find('tr.' + groupType + '-row');
+        
+        $header.toggleClass('collapsed');
+        
+        if ($header.hasClass('collapsed')) {
+            $rows.addClass('hidden');
+        } else {
+            $rows.removeClass('hidden');
         }
-        lastSystem = currentSystem;
     });
 });
 </script>
