@@ -111,37 +111,48 @@ def generate_comm_beltpacks_pdf():
                 'CH B',
                 'CH C',
                 'CH D',
+                'CH E',      # NEW
+                'CH F',      # NEW
+                'IP ADDR',   # NEW
                 'GROUP',
+               
             ]]
             
+            # Add data rows with Paragraph objects for text wrapping
             # Add data rows with Paragraph objects for text wrapping
             for bp in bps:
                 data.append([
                     Paragraph(str(bp.bp_number) if bp.bp_number else '', cell_style_center),
-                    Paragraph(bp.position or '', cell_style),
-                    Paragraph(bp.name or '', cell_style),
+                    Paragraph(str(bp.position) if bp.position else '', cell_style),
+                    Paragraph(str(bp.name) if bp.name else '', cell_style),
                     Paragraph(bp.get_headset_display() if bp.headset else '', cell_style_center),
                     Paragraph(get_channel_abbrev(bp.channel_a), cell_style_center),
                     Paragraph(get_channel_abbrev(bp.channel_b), cell_style_center),
                     Paragraph(get_channel_abbrev(bp.channel_c), cell_style_center),
                     Paragraph(get_channel_abbrev(bp.channel_d), cell_style_center),
+                    Paragraph(get_channel_abbrev(bp.channel_e), cell_style_center),  # NEW
+                    Paragraph(get_channel_abbrev(bp.channel_f), cell_style_center),  # NEW
+                    Paragraph(str(bp.ip_address) if bp.ip_address else '', cell_style_center),  # NEW
                     Paragraph(bp.get_group_display() if bp.group else '', cell_style_center),
                 ])
-            
-            # Column widths for portrait
-            # Column widths for portrait
-                col_widths = [
-                    0.5*inch,   # UNIT
-                    1.0*inch,   # POSITION
-                    1.8*inch,   # NAME (reduced from 2.5)
-                    0.8*inch,   # HEADSET
-                    0.6*inch,   # CH A (wider from 0.4)
-                    0.6*inch,   # CH B (wider from 0.4)
-                    0.6*inch,   # CH C (wider from 0.4)
-                    0.6*inch,   # CH D (wider from 0.4)
-                    0.7*inch,   # GROUP
-                ]
-# Total = 7.6 inches (fits well in 8" available portrait width)
+                        
+           
+           # Column widths for portrait - adjusted to fit all columns
+            col_widths = [
+                0.4*inch,   # BP #
+                0.9*inch,   # POSITION
+                1.5*inch,   # NAME
+                0.6*inch,   # HEADSET
+                0.5*inch,   # CH A
+                0.5*inch,   # CH B
+                0.5*inch,   # CH C
+                0.5*inch,   # CH D
+                0.5*inch,   # CH E (NEW)
+                0.5*inch,   # CH F (NEW)
+                0.9*inch,   # IP ADDR (NEW)
+                0.6*inch,   # GROUP
+            ]
+            # Total = 7.9 inches (fits in 8" available portrait width)
             
             t = Table(data, colWidths=col_widths, repeatRows=1)
             t.setStyle(compact_style)
