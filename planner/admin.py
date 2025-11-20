@@ -1108,6 +1108,12 @@ class DeviceAdmin(BaseEquipmentAdmin):
     search_fields = ['name'] 
 
 
+    class Media:
+        css = {
+            'all': ('admin/css/device_list_buttons.css',)
+        }
+
+
     def get_fields(self, request, obj=None):
         """
         On the add form (obj is None) show name + counts.
@@ -1261,6 +1267,8 @@ class AmpModelAdmin(admin.ModelAdmin):
         }),
     )
 
+
+
     def has_add_permission(self, request):
         """Only editors and owners can add"""
         if request.user.is_superuser:
@@ -1394,6 +1402,13 @@ class AmpAdmin(BaseEquipmentAdmin):
     list_filter = ('location', 'amp_model__manufacturer', 'amp_model__model_name')
     search_fields = ('name', 'ip_address')
     ordering = ['location', 'name']
+
+    class Media:
+        css = {
+            'all': ('admin/css/amp_list_buttons.css',)
+        }
+
+    
 
 
 
@@ -4543,6 +4558,7 @@ class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
         'distribution_plan', 'zone', 'amplifier', 'quantity', 
         'duty_cycle', 'phase_assignment', 'calculated_total_current'
     ]
+
 
 
     def has_add_permission(self, request):
