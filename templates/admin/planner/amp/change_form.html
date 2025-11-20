@@ -1,0 +1,27 @@
+bashcat > templates/admin/planner/amp/change_form.html << 'EOF'
+{% extends "admin/change_form.html" %}
+
+{% block field_sets %}
+    {# Render only Basic Information fieldset first #}
+    {% for fieldset in adminform %}
+        {% if "Basic Information" in fieldset.name %}
+            {% include "admin/includes/fieldset.html" %}
+        {% endif %}
+    {% endfor %}
+    
+    {# Then render AMP CHANNELS inline #}
+    {% for inline_admin_formset in inline_admin_formsets %}
+        {% include inline_admin_formset.opts.template %}
+    {% endfor %}
+    
+    {# Then render remaining fieldsets (outputs) #}
+    {% for fieldset in adminform %}
+        {% if "Basic Information" not in fieldset.name %}
+            {% include "admin/includes/fieldset.html" %}
+        {% endif %}
+    {% endfor %}
+{% endblock %}
+
+{% block inline_field_sets %}
+    {# Empty - we already rendered inlines above #}
+{% endblock %}

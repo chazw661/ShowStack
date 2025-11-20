@@ -1411,9 +1411,7 @@ class AmpAdmin(BaseEquipmentAdmin):
         css = {
             'all': ('admin/css/amp_list_buttons.css',)
         }
-
-    
-        js = ('admin/js/amp_row_colors.js',)  # ADD THIS
+        js = ('admin/js/amp_row_colors.js',)  # Keep this one for row coloring
             
     def color_preview(self, obj):
         """Show a small color preview in the list"""
@@ -1456,7 +1454,7 @@ class AmpAdmin(BaseEquipmentAdmin):
             
             fieldsets.append(('NL4 Connectors', {
                 'fields': nl4_fields,
-                'classes': ('collapse',)
+                
             }))
         
         if obj and obj.amp_model.cacom_output_count > 0:
@@ -1472,7 +1470,7 @@ class AmpAdmin(BaseEquipmentAdmin):
             
             fieldsets.append(('CaCom Outputs', {
                 'fields': cacom_fields,
-                'classes': ('collapse',)
+                
             }))
 
 
@@ -1520,6 +1518,8 @@ class AmpAdmin(BaseEquipmentAdmin):
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
 
+
+
     def has_add_permission(self, request):
         """Only editors and owners can add"""
         if request.user.is_superuser:
@@ -1566,6 +1566,24 @@ class AmpAdmin(BaseEquipmentAdmin):
             'action': 'assign_color_to_amps',
             'queryset': queryset
         })
+    
+    def render_change_form(self, request, context, *args, **kwargs):
+        """Override to reorder inline formsets"""
+        # Call parent to get the context
+        context = super().render_change_form(request, context, *args, **kwargs)
+        
+        # Check if we have inline_admin_formsets in context
+        if 'inline_admin_formsets' in context and context['inline_admin_formsets']:
+            # Store the inline formsets
+            inlines = context['inline_admin_formsets']
+            
+            # We'll inject custom ordering flag
+            context['show_inputs_first'] = True
+            context['amp_channel_inline'] = inlines
+        
+        return context
+
+
 
 class LocationAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'description', 'amp_count', 'processor_count', 'export_pdf_button']
