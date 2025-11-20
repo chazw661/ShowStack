@@ -970,9 +970,10 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         js = ['planner/js/mono_stereo_handler.js',
             'planner/js/global_nav.js',]
         css = {
-            'all': ['admin/css/dark_mode.css', 
-                    'planner/css/custom_admin.css', 
-                    'planner/css/console_admin.css']
+            'all': ['admin/css/dark_mode.css',
+                    'planner/css/custom_admin.css',
+                    'planner/css/console_admin.css',
+                    'admin/css/console_list_buttons.css']  # ADD THIS LINE
         }
 
 
@@ -1526,6 +1527,14 @@ class LocationAdmin(BaseEquipmentAdmin):
             'fields': ('name', 'description')
         }),
     )
+
+
+    class Media:
+        css = {
+            'all': ('admin/css/location_admin.css',)
+        }
+    
+    
 
     def export_pdf_button(self, obj):
         """PDF export button for each location"""

@@ -1,0 +1,40 @@
+/* planner/static/admin/css/console_list_buttons.css */
+
+/* Container for the top buttons */
+.object-tools {
+    display: flex !important;
+    gap: 15px !important;
+    align-items: center !important;
+}
+
+/* Make ADD CONSOLE button bigger and more prominent */
+.object-tools li.addlink a {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    padding: 12px 24px !important;
+    background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
+    color: white !important;
+    border-radius: 6px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    box-shadow: 0 4px 12px rgba(0, 153, 255, 0.3) !important;
+    transition: all 0.3s ease !important;
+}
+
+.object-tools li.addlink a:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(0, 153, 255, 0.4) !important;
+    background: linear-gradient(135deg, #00e4ff 0%, #00aaff 100%) !important;
+}
+
+.object-tools li:not(.addlink) a {
+    font-size: 13px !important;
+    padding: 8px 16px !important;
+    background: #417690 !important;
+    color: white !important;
+    border-radius: 4px !important;
+}
+
+.object-tools li:not(.addlink) a:hover {
+    background: #5b8ba6 !important;
+}
