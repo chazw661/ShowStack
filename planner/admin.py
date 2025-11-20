@@ -1347,6 +1347,9 @@ class AmpAdminForm(forms.ModelForm):
     class Meta:
         model = Amp
         fields = '__all__'
+        widgets = {
+            'color': forms.TextInput(attrs={'type': 'color', 'value': '#FFFFFF'}),
+        }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1398,10 +1401,11 @@ class AmpAdminForm(forms.ModelForm):
 
 class AmpAdmin(BaseEquipmentAdmin):
     form = AmpAdminForm
-    list_display = ('name', 'location', 'amp_model', 'ip_address')
+    list_display = ('name', 'location', 'amp_model', 'ip_address', 'color_preview')
     list_filter = ('location', 'amp_model__manufacturer', 'amp_model__model_name')
     search_fields = ('name', 'ip_address')
     ordering = ['location', 'name']
+    actions = ['assign_color_to_amps']
 
     class Media:
         css = {
@@ -1409,7 +1413,17 @@ class AmpAdmin(BaseEquipmentAdmin):
         }
 
     
-
+        js = ('admin/js/amp_row_colors.js',)  # ADD THIS
+            
+    def color_preview(self, obj):
+        """Show a small color preview in the list"""
+        if obj.color:
+            return format_html(
+                '<div style="width: 30px; height: 20px; background-color: {}; border: 1px solid #000;"></div>',
+                obj.color
+            )
+        return '-'
+    color_preview.short_description = 'Color'
 
 
 
@@ -1429,7 +1443,7 @@ class AmpAdmin(BaseEquipmentAdmin):
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
             ('Basic Information', {
-                'fields': ('location', 'amp_model', 'name', 'ip_address')
+                'fields': ('location', 'amp_model', 'name', 'ip_address', 'color')
             }),
         ]
         
@@ -1530,7 +1544,28 @@ class AmpAdmin(BaseEquipmentAdmin):
             return False
         return super().has_delete_permission(request, obj)    
 
-
+    @admin.action(description='Assign color to selected amps')
+    def assign_color_to_amps(self, request, queryset):
+        """Bulk assign color to selected amps"""
+        if 'apply' in request.POST:
+            # Get the color from the form
+            color = request.POST.get('color')
+            # Get the amp IDs from hidden fields
+            amp_ids = request.POST.getlist('_selected_action')
+            
+            if color and amp_ids:
+                # Reconstruct the queryset from the IDs
+                amps = Amp.objects.filter(id__in=amp_ids)
+                count = amps.update(color=color)
+                self.message_user(request, f'Color {color} assigned to {count} amp(s).', messages.SUCCESS)
+                return HttpResponseRedirect(request.get_full_path())
+        
+        # Show intermediate page with color picker
+        return render(request, 'admin/assign_amp_color.html', {
+            'amps': queryset,
+            'action': 'assign_color_to_amps',
+            'queryset': queryset
+        })
 
 class LocationAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'description', 'amp_count', 'processor_count', 'export_pdf_button']

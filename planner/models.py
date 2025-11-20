@@ -772,6 +772,14 @@ class Amp(models.Model):
         help_text="Unique identifier (e.g., 'LA12X-1', 'Stage Left 1')"
     )
     ip_address = models.GenericIPAddressField(blank=True, null=True)
+
+    color = models.CharField(
+        max_length=7,
+        blank=True,
+        null=True,
+        default='#FFFFFF',
+        help_text="Background color for this amp in lists (hex code, e.g., #FF5733)"
+    )
     
     # NL4 Connector A (if present)
     nl4_a_pair_1 = models.CharField(
