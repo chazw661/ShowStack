@@ -391,6 +391,11 @@ class ProjectAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    class Media:
+        css = {
+            'all': ('admin/css/project_list_buttons.css',)
+        }
     
     def get_queryset(self, request):
         """Show user's own projects and projects they're members of"""

@@ -29,6 +29,7 @@ class ProjectAdmin(BaseEquipmentAdmin):
         }),
     ]
     
+    
     def has_module_permission(self, request):
         """Only show Projects section to premium users who own projects"""
         if request.user.is_superuser:
@@ -50,6 +51,8 @@ class ProjectAdmin(BaseEquipmentAdmin):
             return qs
         # Show projects owned by user or where they're a member
         return qs.filter(owner=request.user) | qs.filter(projectmember__user=request.user)
+    
+    
 
 
 class ProjectMemberInline(admin.TabularInline):
@@ -64,6 +67,11 @@ class ProjectMemberAdmin(BaseEquipmentAdmin):
     list_display = ['project', 'user', 'role', 'invited_by', 'invited_at']
     list_filter = ['role', 'invited_at']
     search_fields = ['project__name', 'user__username', 'user__email']
+
+    class Media:
+        css = {
+            'all': ('admin/css/project_member_admin.css',)
+        }
 
     def has_module_permission(self, request):
         """Only show Projects section to premium users who own projects"""
