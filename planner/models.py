@@ -908,7 +908,7 @@ class Amp(models.Model):
                 AmpChannel.objects.create(
                     amp=self,
                     channel_number=i,
-                    channel_name=f"Ch {i}"
+                    channel_name=""
                 )
         elif current_count > target_count:
             # Remove extra channels

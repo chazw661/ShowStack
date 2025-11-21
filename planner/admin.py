@@ -1321,6 +1321,20 @@ class AmpChannelInline(admin.TabularInline):
     extra = 0
     fields = ['channel_number', 'channel_name', 'avb_stream', 'aes_input', 'analog_input']
     readonly_fields = ['channel_number']
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == 'channel_name':
+            kwargs['widget'] = forms.TextInput(attrs={
+                'placeholder': "e.g., 'PA', 'LF', 'HF', 'SUB'",
+                'style': 'font-size: 0.85em;'  # Makes it smaller
+            })
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+
+    
+
+
+    
     
     def has_add_permission(self, request, obj=None):
         return False  # Channels are auto-created
