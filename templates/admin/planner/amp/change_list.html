@@ -1,14 +1,266 @@
 {% extends "admin/change_list.html" %}
 {% load i18n admin_urls static %}
 
-{% block object-tools-items %}
+{% block extrahead %}
     {{ block.super }}
-    <li>
-        <a href="{% url 'planner:all_amps_pdf_export' %}" 
-           class="button" 
-           style="background-color: #4a9eff; color: white; padding: 8px 15px; text-decoration: none; border-radius: 3px;">
-            Export All Amps PDF
-        </a>
-    </li>
+    <style>
+        .expandable-row {
+            cursor: pointer;
+        }
+        .expandable-row:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .expand-icon {
+            display: inline-block;
+            transition: transform 0.2s;
+            margin-right: 8px;
+            vertical-align: middle;
+            cursor: pointer;
+        }
+        .expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+        /* Ensure checkbox and arrow are on same line */
+        #result_list tbody tr td:first-child {
+            white-space: nowrap;
+        }
+        #result_list tbody tr input[name="_selected_action"] {
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+        .amp-details {
+            display: none;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-top: 1px solid #444;
+        }
+        .amp-details.show {
+            display: block;
+        }
+        .collapse-all-btn {
+            margin-left: 10px;
+            padding: 8px 15px;
+            background-color: #417690;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .collapse-all-btn:hover {
+            background-color: #5b8ba6;
+        }
+        .amp-inline-form {
+            max-width: 1200px;
+        }
+        .amp-inline-form .submit-row {
+            padding: 10px 0;
+        }
+        .amp-details form {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .amp-details .form-row {
+            margin-bottom: 15px;
+        }
+        .save-amp-btn {
+            background: #417690 !important;
+            color: white !important;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .save-amp-btn:hover {
+            background: #5b8ba6 !important;
+        }
+    </style>
 {% endblock %}
 
+{% block object-tools-items %}
+    <li>
+        <button type="button" class="collapse-all-btn" onclick="collapseAllAmps()">
+            Collapse All
+        </button>
+    </li>
+    {{ block.super }}
+{% endblock %}
+
+{% block result_list %}
+    {{ block.super }}
+    <script>
+        (function($) {
+            $(document).ready(function() {
+                // Add expand icons to rows
+                $('#result_list tbody tr').each(function() {
+                    var $row = $(this);
+                    var $checkbox = $row.find('input[name="_selected_action"]');
+                    var ampId = $checkbox.val();
+                    
+                    if (ampId) {
+                        // Insert arrow before the checkbox
+                        $checkbox.before('<span class="expand-icon">▶</span>');
+                        $row.addClass('expandable-row');
+                        $row.attr('data-amp-id', ampId);
+                    }
+                });
+                
+                // Click handler for expand/collapse
+                $('.expandable-row').on('click', function(e) {
+                    // Don't trigger if clicking on checkbox, links, or form elements
+                    if ($(e.target).is('a, input[type="checkbox"], select')) {
+                        return;
+                    }
+                    
+                    var $row = $(this);
+                    var ampId = $row.attr('data-amp-id');
+                    var $icon = $row.find('.expand-icon');
+                    var $detailsRow = $('#amp-details-' + ampId);
+                    
+                    if ($detailsRow.length) {
+                        // Toggle existing details
+                        if ($detailsRow.hasClass('show')) {
+                            $detailsRow.removeClass('show').find('.amp-details').slideUp(200);
+                            $icon.removeClass('expanded');
+                        } else {
+                            $detailsRow.addClass('show').find('.amp-details').slideDown(200);
+                            $icon.addClass('expanded');
+                        }
+                    } else {
+                        // Load details via AJAX
+                        $icon.addClass('expanded');
+                        var $newRow = $('<tr id="amp-details-' + ampId + '" class="amp-details-row show"><td colspan="100"></td></tr>');
+                        var $detailsDiv = $('<div class="amp-details" style="display:none;">Loading...</div>');
+                        $newRow.find('td').append($detailsDiv);
+                        $row.after($newRow);
+                        $detailsDiv.slideDown(200);
+                        
+                        // Load the form
+                        $.ajax({
+                            url: '/admin/planner/amp/' + ampId + '/change/',
+                            type: 'GET',
+                            success: function(html) {
+                                var $html = $('<div>').html(html);
+                                var $form = $html.find('form');
+                                
+                                if ($form.length) {
+                                    // Remove the original submit buttons
+                                    $form.find('.submit-row').remove();
+                                    
+                                    // Add our custom save button
+                                    $form.append('<div class="submit-row"><button type="submit" class="save-amp-btn">Save Changes</button></div>');
+                                    
+                                    // Set the form action
+                                    $form.attr('action', '/admin/planner/amp/' + ampId + '/change/');
+                                    
+                                    $detailsDiv.html($form);
+                                    
+                                    // Handle form submission via AJAX
+                                    $detailsDiv.find('form').on('submit', function(e) {
+                                        e.preventDefault();
+                                        saveAmpForm($(this), ampId, $detailsRow);
+                                    });
+                                } else {
+                                    $detailsDiv.html('<p style="color: #ff6b6b;">Error loading form. Please try again.</p>');
+                                }
+                            },
+                            error: function(xhr, status, error) {
+                                $detailsDiv.html('<p style="color: #ff6b6b;">Error loading form: ' + error + '</p>');
+                                console.error('Error loading form:', error);
+                            }
+                        });
+                    }
+                });
+            });
+            
+            // Collapse all function
+            window.collapseAllAmps = function() {
+                $('.amp-details-row').removeClass('show').find('.amp-details').slideUp(200);
+                $('.expand-icon').removeClass('expanded');
+            };
+            
+            // Get CSRF token from cookie
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+            
+            // Save amp form via AJAX
+            function saveAmpForm($form, ampId, $detailsRow) {
+                // Get CSRF token
+                var csrftoken = getCookie('csrftoken');
+                
+                // Create FormData to properly handle all form fields
+                var formData = new FormData($form[0]);
+                
+                // CRITICAL: Add the save button to trigger Django's save logic
+                formData.append('_save', 'Save');
+                
+                // Debug logging
+                console.log('Submitting form for amp:', ampId);
+                console.log('Form action:', $form.attr('action'));
+                
+                $.ajax({
+                    url: $form.attr('action'),
+                    type: 'POST',
+                    data: formData,
+                    processData: false,  // CRITICAL: Don't process the data
+                    contentType: false,  // CRITICAL: Don't set contentType
+                    headers: {
+                        'X-CSRFToken': csrftoken,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    success: function(response, status, xhr) {
+                        // Check if Django returned errors
+                        if (xhr.status === 200) {
+                            var $response = $('<div>').html(response);
+                            var hasErrors = $response.find('.errorlist, .errornote').length > 0;
+                            
+                            console.log('Response received. Has errors:', hasErrors);
+                            
+                            if (!hasErrors) {
+                                alert('Amp saved successfully!');
+                                location.reload();
+                            } else {
+                                // Show errors in the form
+                                var $newForm = $response.find('form');
+                                if ($newForm.length) {
+                                    $newForm.find('.submit-row').remove();
+                                    $newForm.append('<div class="submit-row"><button type="submit" class="save-amp-btn">Save Changes</button></div>');
+                                    $detailsRow.find('.amp-details').html($newForm);
+                                    
+                                    // Re-attach submit handler
+                                    $newForm.on('submit', function(e) {
+                                        e.preventDefault();
+                                        saveAmpForm($(this), ampId, $detailsRow);
+                                    });
+                                }
+                                alert('Please correct the errors in the form.');
+                            }
+                        } else {
+                            alert('Amp saved successfully!');
+                            location.reload();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error saving amp:', error);
+                        console.error('Status:', status);
+                        console.error('Response:', xhr.responseText);
+                        alert('Error saving amp: ' + error + '. Check console for details.');
+                    }
+                });
+            }
+        })(django.jQuery);
+    </script>
+{% endblock %}
