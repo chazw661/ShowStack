@@ -79,12 +79,19 @@
 {% endblock %}
 
 {% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="{% url 'planner:all_amps_pdf_export' %}" 
+           class="button" 
+           style="background-color: #4a9eff; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px;">
+            Export Amps to PDF
+        </a>
+    </li>
     <li>
         <button type="button" class="collapse-all-btn" onclick="collapseAllAmps()">
             Collapse All
         </button>
     </li>
-    {{ block.super }}
 {% endblock %}
 
 {% block result_list %}
