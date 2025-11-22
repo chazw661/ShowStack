@@ -2869,7 +2869,7 @@ from django.http import HttpResponseRedirect
 # Comm Channel Admin
 
 class CommChannelAdmin(BaseEquipmentAdmin):
-    list_display = ['channel_number', 'input_designation', 'name', 'abbreviation', 'channel_type', 'order']
+    list_display = ['channel_number', 'name', 'abbreviation', 'channel_type', 'order']
     list_editable = ['order']
     ordering = ['order', 'channel_number']
     search_fields = ['name', 'abbreviation', 'channel_number']
@@ -3754,7 +3754,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
 
 # Add a custom admin action to populate default channels
-@admin.action(description='Populate default FS II channels')
+@admin.action(description='Populate default channels')
 def populate_default_channels(modeladmin, request, queryset):
     """Create the default 10 FS II channels"""
     # Get current project
@@ -3773,16 +3773,16 @@ def populate_default_channels(modeladmin, request, queryset):
             return
     
     default_channels = [
-        ('1 4W', 'FS II - 1', 'Production', 'PROD', 1),
-        ('2 4W', 'FS II - 2', 'Audio', 'AUDIO', 2),
-        ('3 4W', 'FS II - 3', 'Video', 'VIDEO', 3),
-        ('4 4W', 'FS II - 4', 'Lights', 'LIGHTS', 4),
-        ('A 2W', 'FS II - 5', 'Camera', 'CAMS', 5),
-        ('B 2W', 'FS II - 6', 'Graphics', 'GFX', 6),
-        ('C 2W', 'FS II - 7', 'Stage Mgr', 'SM', 7),
-        ('D 2W', 'FS II - 8', 'Carps', 'CARP', 8),
-        ('', 'FS II - 9', 'ALL', 'ALL', 9),
-        ('', 'FS II - 10', 'Program', 'PGM', 10),
+        ('1 4W', '1', 'Production', 'PROD', 1),
+        ('2 4W', '2', 'Audio', 'AUDIO', 2),
+        ('3 4W', '3', 'Video', 'VIDEO', 3),
+        ('4 4W', '4', 'Lights', 'LIGHTS', 4),
+        ('A 2W', '5', 'Camera', 'CAMS', 5),
+        ('B 2W', '6', 'Graphics', 'GFX', 6),
+        ('C 2W', '7', 'Stage Mgr', 'SM', 7),
+        ('D 2W', '8', 'Carps', 'CARP', 8),
+        ('', '9', 'ALL', 'ALL', 9),
+        ('', '10', 'Program', 'PGM', 10),
     ]
     
     for input_des, channel_num, name, abbr, order in default_channels:

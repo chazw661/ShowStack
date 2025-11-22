@@ -1599,11 +1599,6 @@ class CommChannel(models.Model):
         ('4W', '4-Wire'),
         ('2W', '2-Wire'),
     ]
-    
-    input_designation = models.CharField(
-        max_length=10,
-        help_text="e.g., '1 4W', '2 4W', 'A 2W', 'B 2W'"
-    )
 
 
 
@@ -1690,12 +1685,11 @@ class CommBeltPack(models.Model):
     ]
     
     HEADSET_CHOICES = [
-        ('SM', 'Single Muff'),
-        ('DM', 'Double Muff'),
-        ('IE', 'In-Ear'),
-        ('SS', 'Speaker Station'),
-        ('HM', 'Handmic'),
-        ('', 'None'),
+        ('lw_single', 'LW Single'),
+        ('hw_single', 'HW Single'),
+        ('hw_double', 'HW Double'),
+        ('personal', 'Personal'),
+    
     ]
     
     GROUP_CHOICES = [
@@ -1755,7 +1749,7 @@ class CommBeltPack(models.Model):
     )
     
     headset = models.CharField(
-        max_length=2, 
+        max_length=20, 
         choices=HEADSET_CHOICES, 
         blank=True,
         verbose_name="Headset Type"
