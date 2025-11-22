@@ -2568,48 +2568,52 @@ class PACableAdmin(BaseEquipmentAdmin):
         for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
             cables = qs.filter(cable=cable_type[0])
             if cables.exists():
-                total_length = sum(c.total_cable_length for c in cables)
+                # Initialize counters FIRST - at this indentation level
+                hundreds = 0
+                fifties = 0
+                twenty_fives = 0
+                tens = 0
+                fives = 0
+                total_length = 0  # ← Must be here, BEFORE the loop
+                
+                # Process each cable individually
+                for cable in cables:
+                    cable_length = cable.total_cable_length
+                    total_length += cable_length
+                    
+                    # Round THIS cable to standard lengths
+                    remaining = cable_length
+                    
+                    # Count 100' cables for this run
+                    while remaining > 50:
+                        hundreds += 1
+                        remaining -= 100
+                    
+                    # Count remaining
+                    if remaining > 25:
+                        fifties += 1
+                    elif remaining > 10:
+                        twenty_fives += 1
+                    elif remaining > 5:
+                        tens += 1
+                    elif remaining > 0:
+                        fives += 1
+                
+                # AFTER the loop, check and add to summary
                 if total_length > 0:
-                    # Calculate standard cable quantities needed
-                    hundreds = int(total_length / 100)
-                    remaining = total_length % 100
-                    
-                    # Round up remaining to next standard length
-                    fifties = 0
-                    twenty_fives = 0
-                    tens = 0
-                    fives = 0
-                    
-                    if remaining > 0:
-                        if remaining > 50:
-                            # Need 1×100' for anything over 50'
-                            hundreds += 1
-                        elif remaining > 25:
-                            # Need 1×50' for 26-50'
-                            fifties = 1
-                        elif remaining > 10:
-                            # Need 1×25' for 11-25'
-                            twenty_fives = 1
-                        elif remaining > 5:
-                            # Need 1×10' for 6-10'
-                            tens = 1
-                        elif remaining > 0:
-                            # Need 1×5' for 1-5'
-                            fives = 1
-                    
                     cable_summary[cable_type[1]] = {
                         'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
                         'total_length': total_length,
                         'hundreds': hundreds,
-                        'hundreds_with_safety': math.ceil(hundreds * 1.2),  # ADD THIS
+                        'hundreds_with_safety': math.ceil(hundreds * 1.2),
                         'fifties': fifties,
-                        'fifties_with_safety': math.ceil(fifties * 1.2),     # ADD THIS
+                        'fifties_with_safety': math.ceil(fifties * 1.2),
                         'twenty_fives': twenty_fives,
-                        'twenty_fives_with_safety': math.ceil(twenty_fives * 1.2),  # ADD THIS
+                        'twenty_fives_with_safety': math.ceil(twenty_fives * 1.2),
                         'tens': tens,
-                        'tens_with_safety': math.ceil(tens * 1.2),           # ADD THIS
+                        'tens_with_safety': math.ceil(tens * 1.2),
                         'fives': fives,
-                        'fives_with_safety': math.ceil(fives * 1.2),         # ADD THIS
+                        'fives_with_safety': math.ceil(fives * 1.2),
                         'couplers': hundreds - 1 if hundreds > 1 else 0,
                     }
         

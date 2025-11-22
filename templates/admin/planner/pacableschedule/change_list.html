@@ -1,15 +1,62 @@
 {% extends "admin/change_list.html" %}
 {% load static %}
 
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        /* Style the ADD PA CABLE ENTRY button */
+        .object-tools li .addlink,
+        .object-tools a[href*="add"] {
+            background-color: #417690 !important;
+            color: white !important;
+            padding: 12px 24px !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            border: none !important;
+            border-radius: 6px !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+            text-decoration: none !important;
+            transition: all 0.2s !important;
+        }
+        
+        .object-tools li .addlink:hover,
+        .object-tools a[href*="add"]:hover {
+            background-color: #5b8ba6 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+            transform: translateY(-1px) !important;
+        }
+        
+        /* Style the Export PDF button - smaller */
+        .export-pdf-btn {
+            background-color: #417690 !important;
+            color: white !important;
+            padding: 8px 16px !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            text-decoration: none !important;
+            display: inline-block !important;
+            transition: all 0.2s !important;
+        }
+        
+        .export-pdf-btn:hover {
+            background-color: #5b8ba6 !important;
+            transform: translateY(-1px) !important;
+        }
+    </style>
+{% endblock %}
 
 {% block object-tools-items %}
-    <!-- Export PDF Button -->
+    {{ block.super }}
     <li>
-        <a href="{% url 'planner:all_pa_cables_pdf_export' %}" class="viewlink" target="_blank">
-            Export PDF
+        <a href="{% url 'planner:all_pa_cables_pdf_export' %}" 
+           class="export-pdf-btn"
+           target="_blank"
+           style="background-color: #417690 !important; color: white !important; padding: 10px 20px !important;">
+            EXPORT PA CABLES TO PDF
         </a>
     </li>
-    {{ block.super }}
 {% endblock %}
 
 
