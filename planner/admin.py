@@ -3508,63 +3508,36 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     manufacturer_display.admin_order_field = 'manufacturer'
 
     def channel_summary(self, obj):
-        """Display summary of assigned channels with visual badges (2 per row)"""
-        from django.utils.html import format_html
+        """Display summary of assigned channels with visual badges (3 per row)"""
         from django.utils.safestring import mark_safe
         
         channels = obj.channels.all()
         if not channels:
             return mark_safe('<span style="color: #666;">No channels</span>')
         
-        # Create visual badges for each channel
+        # Initialize badges list
         badges = []
+        
+        # Create visual badges for each channel
         for ch in channels[:12]:  # Show first 12
             if ch.channel:
+                # Get channel info
+                ch_num = ch.channel_number
+                ch_abbrev = ch.channel.abbreviation if hasattr(ch.channel, 'abbreviation') and ch.channel.abbreviation else ch.channel.name[:4]
+                
                 # Create a colored badge
-                badge = f'''<span style="
-                    display: inline-block;
-                    background: #14b8a6;
-                    color: #000;
-                    padding: 2px 8px;
-                    margin: 2px;
-                    border-radius: 3px;
-                    font-size: 11px;
-                    font-weight: 500;
-                    white-space: nowrap;
-                    min-width: 60px;
-                    text-align: center;
-                ">{ch.channel_number}: {ch.channel.abbreviation or ch.channel.name[:4]}</span>'''
+                badge = f'''<span style="display: inline-block; background: #14b8a6; color: #000; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; font-weight: 500; white-space: nowrap; min-width: 75px; text-align: center;">{ch_num}: {ch_abbrev}</span>'''
                 badges.append(badge)
             else:
                 # Empty channel badge
-                badge = f'''<span style="
-                    display: inline-block;
-                    background: #333;
-                    color: #666;
-                    padding: 2px 8px;
-                    margin: 2px;
-                    border-radius: 3px;
-                    font-size: 11px;
-                    white-space: nowrap;
-                    min-width: 60px;
-                    text-align: center;
-                ">{ch.channel_number}: —</span>'''
+                badge = f'''<span style="display: inline-block; background: #333; color: #666; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; white-space: nowrap; min-width: 75px; text-align: center;">{ch.channel_number}: —</span>'''
                 badges.append(badge)
         
-        # Wrap in a container that forces 2 per row
-        result = f'''<div style="
-            display: grid;
-            grid-template-columns: repeat(2, auto);
-            gap: 2px;
-            max-width: 160px;
-        ">{''.join(badges)}</div>'''
+        # Wrap in a container that displays 3 per row
+        result = f'''<div style="display: grid; grid-template-columns: repeat(3, auto); gap: 3px; max-width: 280px; justify-items: start;">{''.join(badges)}</div>'''
         
         if channels.count() > 12:
-            result += f'''<span style="
-                color: #14b8a6;
-                font-size: 11px;
-                margin-left: 5px;
-            ">+{channels.count() - 12} more</span>'''
+            result += f'''<span style="color: #14b8a6; font-size: 11px; margin-left: 5px;">+{channels.count() - 12} more</span>'''
         
         return mark_safe(result)
 

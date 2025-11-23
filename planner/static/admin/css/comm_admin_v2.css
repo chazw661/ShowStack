@@ -1,133 +1,104 @@
 /* planner/static/admin/css/comm_admin_v2.css */
 
 /* ========================================
-   FORCE TABLE LAYOUT TO RESPECT COLUMN WIDTHS
+   FORCE TABLE LAYOUT TO AUTO FOR FLEXIBILITY
    ======================================== */
 
 #changelist-form table {
-    table-layout: fixed !important;
+    table-layout: auto !important;
     width: 100% !important;
 }
 
 /* ========================================
-   COLUMN WIDTH SPECIFICATIONS - ALL 17 COLUMNS
+   NEW COLUMN WIDTH SPECIFICATIONS
    ======================================== */
 
 /* Column 1: Checkbox */
 #changelist-form table th:nth-child(1),
 #changelist-form table td:nth-child(1) {
     width: 40px !important;
+    min-width: 40px !important;
 }
 
 /* Column 2: BP # */
 #changelist-form table th:nth-child(2),
 #changelist-form table td:nth-child(2) {
-    width: 80px !important;
+    width: 60px !important;
+    min-width: 60px !important;
 }
 
-/* Column 3: POSITION */
+/* Column 3: TYPE (icon) */
 #changelist-form table th:nth-child(3),
 #changelist-form table td:nth-child(3) {
-    width: 200px !important;
+    width: 50px !important;
+    min-width: 50px !important;
+    text-align: center !important;
 }
 
-/* Column 4: NAME */
+/* Column 4: SYSTEM (manufacturer) */
 #changelist-form table th:nth-child(4),
 #changelist-form table td:nth-child(4) {
-    width: 200px !important;
+    width: 180px !important;
+    min-width: 180px !important;
 }
 
-/* Columns 5-10: CH A through CH F */
+/* Column 5: POSITION */
 #changelist-form table th:nth-child(5),
-#changelist-form table td:nth-child(5),
+#changelist-form table td:nth-child(5) {
+    width: 200px !important;
+    min-width: 200px !important;
+}
+
+/* Column 6: NAME */
 #changelist-form table th:nth-child(6),
-#changelist-form table td:nth-child(6),
+#changelist-form table td:nth-child(6) {
+    width: 200px !important;
+    min-width: 200px !important;
+}
+
+/* Column 7: CHANNELS (badge column) - WIDER */
 #changelist-form table th:nth-child(7),
-#changelist-form table td:nth-child(7),
+#changelist-form table td:nth-child(7) {
+    width: 320px !important;
+    min-width: 320px !important;
+    vertical-align: top !important;
+}
+
+/* Column 8: HEADSET TYPE */
 #changelist-form table th:nth-child(8),
-#changelist-form table td:nth-child(8),
+#changelist-form table td:nth-child(8) {
+    width: 120px !important;
+    min-width: 120px !important;
+}
+
+/* Column 9: IP ADDRESS */
 #changelist-form table th:nth-child(9),
-#changelist-form table td:nth-child(9),
+#changelist-form table td:nth-child(9) {
+    width: 130px !important;
+    min-width: 130px !important;
+}
+
+/* Column 10: CHECKED OUT */
 #changelist-form table th:nth-child(10),
 #changelist-form table td:nth-child(10) {
-    width: 180px !important;
+    width: 100px !important;
+    min-width: 100px !important;
+    text-align: center !important;
 }
-
-/* Column 11: HEADSET */
-#changelist-form table th:nth-child(11),
-#changelist-form table td:nth-child(11) {
-    width: 150px !important;
-}
-
-/* Column 12: AUDIO PGM */
-#changelist-form table th:nth-child(12),
-#changelist-form table td:nth-child(12) {
-    width: 120px !important;
-}
-
-/* Column 13: GROUP */
-#changelist-form table th:nth-child(13),
-#changelist-form table td:nth-child(13) {
-    width: 120px !important;
-}
-
-/* Column 14: IP ADDRESS */
-#changelist-form table th:nth-child(14),
-#changelist-form table td:nth-child(14) {
-    width: 150px !important;
-    padding-right: 20px !important; 
-}
-
-/* Column 15: CHECKED OUT */
-#changelist-form table th:nth-child(15),
-#changelist-form table td:nth-child(15) {
-    width: 120px !important;
-    padding-left: 20px !important;
-}
-
-
 
 /* ========================================
-   FIX: CONSTRAIN INPUT FIELDS THEMSELVES
+   FIX: CONSTRAIN INPUT FIELDS
    ======================================== */
 
 /* Limit the IP ADDRESS input field width */
-#changelist-form table td:nth-child(14) input {
-    max-width: 100px !important;
-    width: 100px !important;
+#changelist-form table td:nth-child(9) input {
+    max-width: 120px !important;
+    width: 120px !important;
 }
 
-/* Add margin to the CHECKED OUT checkbox */
-#changelist-form table td:nth-child(15) input[type="checkbox"] {
-    margin-left: 40px !important;
-}
-
-
-
-/* Column 16: NOTES */
-#changelist-form table th:nth-child(16),
-#changelist-form table td:nth-child(16) {
-    width: 200px !important;
-}
-
-/* Column 17: UPDATED AT */
-#changelist-form table th:nth-child(17),
-#changelist-form table td:nth-child(17) {
-    width: 180px !important;
-}
-
-
-
-
-
-
-/* ========================================
-   FIX NESTED DIVS IN SORTABLE COLUMNS
-   ======================================== */
-
-#changelist-form table th .sortoptions,
-#changelist-form table th .text {
-    width: 100% !important;
+/* Center the CHECKED OUT checkbox */
+#changelist-form table td:nth-child(10) input[type="checkbox"] {
+    margin: 0 auto !important;
     display: block !important;
 }
 
@@ -144,20 +115,18 @@
     display: block !important;
 }
 
+/* ========================================
+   TABLE OVERFLOW
+   ======================================== */
 
-
-/* Extra spacing between IP ADDRESS and CHECKED OUT */
-#changelist-form table th:nth-child(14),
-#changelist-form table td:nth-child(14) {
-    padding-right: 20px !important;
+#changelist {
+    overflow-x: auto;
 }
 
-#changelist-form table th:nth-child(15),
-#changelist-form table td:nth-child(15) {
-    padding-left: 15px !important;
+#result_list {
+    width: auto !important;
+    min-width: 100%;
 }
-
-
 
 /* ========================================
    SWAP BUTTON POSITIONS AND STYLE ADD BUTTON
@@ -166,7 +135,7 @@
 /* Container for the top buttons */
 .object-tools {
     display: flex !important;
-    flex-direction: row-reverse !important;  /* Reverses order */
+    flex-direction: row-reverse !important;
     gap: 15px !important;
     align-items: center !important;
 }
