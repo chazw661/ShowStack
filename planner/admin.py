@@ -55,6 +55,10 @@ from .admin_site import showstack_admin_site
 from django.contrib import admin, messages
 
 
+from .models import CommBeltPack, CommBeltPackChannel
+
+
+
 
 
 
@@ -3361,7 +3365,25 @@ clear_all_beltpacks.short_description = '⚠️ DELETE all belt packs'
 
 
 
-from .models import CommBeltPack
+
+
+
+
+class CommBeltPackChannelInline(admin.TabularInline):
+    """Inline for managing belt pack channels"""
+    model = CommBeltPackChannel
+    extra = 0  # Don't show empty forms by default
+    fields = ['channel_number', 'channel']
+    ordering = ['channel_number']
+    
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        # Set help text
+        formset.form.base_fields['channel_number'].help_text = 'Channel number'
+        formset.form.base_fields['channel'].help_text = 'Channel assignment'
+        return formset
+    
+
 
 class CommBeltPackAdminForm(forms.ModelForm):
     """Custom form to handle dynamic field display based on system type"""
@@ -3424,22 +3446,15 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     
     # Right after autocomplete_fields, add:
     list_display = [
-        'display_bp_number',
+        'bp_number',
+        'system_type_icon',  # NEW - we'll create this method
+        'manufacturer_display',  # NEW - we'll create this method  
         'position',
         'name',
-        'channel_a',
-        'channel_b',
-        'channel_c',
-        'channel_d',
-        'channel_e',
-        'channel_f',
+        'channel_summary',
         'headset',
-        'audio_pgm',
-        'group',
         'ip_address',
-        'checked_out',
-        'notes',
-        'updated_at',
+        'checked_out'
     ]
 
 
@@ -3451,27 +3466,21 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     list_editable = [
         'position',
         'name',
-        'channel_a',
-        'channel_b',
-        'channel_c',
-        'channel_d',
-        'channel_e',
-        'channel_f',
         'headset',
-        'audio_pgm',
-        'group',
         'ip_address',
-        'checked_out',
+        'checked_out'
     ]
     
         
     
-    list_filter = ['system_type', 'checked_out', 'group', 'headset', 'audio_pgm']
+    list_filter = ['system_type', 'manufacturer', 'checked_out']  # Added manufacturer
+    inlines = [CommBeltPackChannelInline]
     search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location', 'ip_address']
     ordering = ['system_type', 'bp_number']
     
     # Actions for checking in/out and bulk creation
     actions = [
+        'duplicate_beltpacks',
         'check_out_beltpacks',
         'check_in_beltpacks',
         create_5_wireless_beltpacks,
@@ -3485,10 +3494,121 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         clear_all_beltpacks
     ]
     
+    def system_type_icon(self, obj):
+        """Display icon for system type"""
+        if obj.system_type == 'WIRELESS':
+            return '📡'
+        return '🔌'
+    system_type_icon.short_description = 'Type'
+
+    def manufacturer_display(self, obj):
+        """Display manufacturer name"""
+        return obj.get_manufacturer_display()
+    manufacturer_display.short_description = 'System'
+    manufacturer_display.admin_order_field = 'manufacturer'
+
+    def channel_summary(self, obj):
+        """Display summary of assigned channels with visual badges (2 per row)"""
+        from django.utils.html import format_html
+        from django.utils.safestring import mark_safe
+        
+        channels = obj.channels.all()
+        if not channels:
+            return mark_safe('<span style="color: #666;">No channels</span>')
+        
+        # Create visual badges for each channel
+        badges = []
+        for ch in channels[:12]:  # Show first 12
+            if ch.channel:
+                # Create a colored badge
+                badge = f'''<span style="
+                    display: inline-block;
+                    background: #14b8a6;
+                    color: #000;
+                    padding: 2px 8px;
+                    margin: 2px;
+                    border-radius: 3px;
+                    font-size: 11px;
+                    font-weight: 500;
+                    white-space: nowrap;
+                    min-width: 60px;
+                    text-align: center;
+                ">{ch.channel_number}: {ch.channel.abbreviation or ch.channel.name[:4]}</span>'''
+                badges.append(badge)
+            else:
+                # Empty channel badge
+                badge = f'''<span style="
+                    display: inline-block;
+                    background: #333;
+                    color: #666;
+                    padding: 2px 8px;
+                    margin: 2px;
+                    border-radius: 3px;
+                    font-size: 11px;
+                    white-space: nowrap;
+                    min-width: 60px;
+                    text-align: center;
+                ">{ch.channel_number}: —</span>'''
+                badges.append(badge)
+        
+        # Wrap in a container that forces 2 per row
+        result = f'''<div style="
+            display: grid;
+            grid-template-columns: repeat(2, auto);
+            gap: 2px;
+            max-width: 160px;
+        ">{''.join(badges)}</div>'''
+        
+        if channels.count() > 12:
+            result += f'''<span style="
+                color: #14b8a6;
+                font-size: 11px;
+                margin-left: 5px;
+            ">+{channels.count() - 12} more</span>'''
+        
+        return mark_safe(result)
+
+    channel_summary.short_description = 'Channels'
 
 
-                         
 
+    def duplicate_beltpacks(self, request, queryset):
+        """Duplicate selected belt packs with all their channels"""
+        project = request.current_project
+        duplicated_count = 0
+        
+        for original_pack in queryset:
+            # Get the highest bp_number for this project to assign new numbers
+            max_bp = CommBeltPack.objects.filter(project=project).aggregate(
+                models.Max('bp_number')
+            )['bp_number__max'] or 0
+            
+            # Store the original channels before duplicating
+            original_channels = list(original_pack.channels.all())
+            
+            # Duplicate the belt pack
+            original_pack.pk = None  # This will create a new record
+            original_pack.bp_number = max_bp + 1
+            original_pack.checked_out = False  # Reset checked out status
+            original_pack.save()
+            
+            # Duplicate all channels
+            for channel in original_channels:
+                CommBeltPackChannel.objects.create(
+                    beltpack=original_pack,
+                    channel_number=channel.channel_number,
+                    channel=channel.channel
+                )
+            
+            duplicated_count += 1
+        
+        self.message_user(
+            request,
+            f"Successfully duplicated {duplicated_count} belt pack(s) with all channels.",
+            messages.SUCCESS
+        )
+                            
+    duplicate_beltpacks.short_description = "Duplicate selected belt packs"
         
     class Media:
         css = {
@@ -3573,18 +3693,13 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         # Base fieldsets without checked_out
         base_fieldsets = [
             ('System Configuration', {
-                'fields': ('system_type', 'bp_number', 'unit_location', 'ip_address')
+                'fields': ('system_type', 'manufacturer', 'bp_number', 'unit_location', 'ip_address')
             }),
             ('Assignment', {
                 'fields': ('position', 'name', 'headset'),
             }),
-            ('Channel Assignments', {
-                'fields': (
-                    ('channel_a', 'channel_b'),
-                    ('channel_c', 'channel_d'),
-                    ('channel_e', 'channel_f'),
-                ),
-            }),
+            
+        
         ]
         
         # Add Settings section with or without checked_out

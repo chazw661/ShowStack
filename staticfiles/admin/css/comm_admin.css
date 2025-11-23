@@ -1,4 +1,4 @@
-/* Add these rules to your comm_admin.css file: */
+/* planner/static/admin/css/comm_admin.css - COMPLETE FILE */
 
 /* Hide checked_out column for hardwired rows in the list view */
 tr.row1.system-hardwired .field-checked_out,
@@ -20,4 +20,85 @@ tr.row2.system-hardwired .field-checked_out {
 /* Hide checked out when Hardwired is selected - backup for JS */
 body.change-form .field-checked_out.hardwired-selected {
     display: none !important;
+}
+
+/* Fix NAME column width in belt pack list view */
+#changelist-form table th:nth-child(4),  /* NAME header */
+#changelist-form table td:nth-child(4) {  /* NAME data cells */
+    min-width: 200px !important;
+    width: 200px !important;
+}
+
+/* Make all channel columns consistent width */
+#changelist-form table th:nth-child(5),  /* CH A */
+#changelist-form table th:nth-child(6),  /* CH B */
+#changelist-form table th:nth-child(7),  /* CH C */
+#changelist-form table th:nth-child(8),  /* CH D */
+#changelist-form table th:nth-child(9),  /* CH E */
+#changelist-form table th:nth-child(10), /* CH F */
+#changelist-form table td:nth-child(5),
+#changelist-form table td:nth-child(6),
+#changelist-form table td:nth-child(7),
+#changelist-form table td:nth-child(8),
+#changelist-form table td:nth-child(9),
+#changelist-form table td:nth-child(10) {
+    min-width: 180px !important;
+    width: 180px !important;
+}
+
+/* Make POSITION column consistent */
+#changelist-form table th:nth-child(3),  /* POSITION header */
+#changelist-form table td:nth-child(3) {  /* POSITION data cells */
+    min-width: 200px !important;
+    width: 200px !important;
+}
+
+/* Ensure the select dropdowns don't overflow */
+#changelist-form table select {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* ========================================
+   VISUAL DIVIDERS BETWEEN SYSTEM TYPES
+   ======================================== */
+
+/* Light background tint for wireless packs */
+#result_list tbody tr[data-system-type="WIRELESS"] {
+    background-color: rgba(33, 150, 243, 0.08) !important;
+    border-left: 3px solid #2196F3;
+}
+
+/* Light background tint for hardwired packs */
+#result_list tbody tr[data-system-type="HARDWIRED"] {
+    background-color: rgba(255, 152, 0, 0.08) !important;
+    border-left: 3px solid #FF9800;
+}
+
+/* PROMINENT DIVIDER before first hardwired pack */
+#result_list tbody tr.first-hardwired-pack td {
+    border-top: 6px double #FFB74D !important;
+    padding-top: 15px !important;
+    position: relative;
+}
+
+/* Add a label above the divider */
+#result_list tbody tr.first-hardwired-pack td:first-child::before {
+    content: "HARDWIRED SYSTEM";
+    position: absolute;
+    top: -20px;
+    left: 0;
+    font-weight: bold;
+    font-size: 11px;
+    color: #FF9800;
+    letter-spacing: 1px;
+}
+
+/* Hover effects */
+#result_list tbody tr[data-system-type="WIRELESS"]:hover {
+    background-color: rgba(33, 150, 243, 0.15) !important;
+}
+
+#result_list tbody tr[data-system-type="HARDWIRED"]:hover {
+    background-color: rgba(255, 152, 0, 0.15) !important;
 }

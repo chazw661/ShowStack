@@ -1608,10 +1608,7 @@ class CommChannel(models.Model):
         ('2W', '2-Wire'),
     ]
     
-    input_designation = models.CharField(
-        max_length=10,
-        help_text="e.g., '1 4W', '2 4W', 'A 2W', 'B 2W'"
-    )
+    
     channel_type = models.CharField(max_length=2, choices=CHANNEL_TYPE_CHOICES)
     channel_number = models.CharField(
         max_length=20,
@@ -1702,6 +1699,20 @@ class CommBeltPack(models.Model):
     ]
     
 
+    MANUFACTURER_CHOICES = [
+        # Hardwired
+        ('clearcom_helixnet', 'Clear-Com HelixNet'),
+        ('rts_partyline', 'RTS Partyline'),
+        ('rts_odin', 'RTS ODIN Matrix'),
+        ('riedel_performer', 'Riedel Performer'),
+        
+        # Wireless
+        ('clearcom_freespeak', 'Clear-Com FreeSpeak Edge/Icon'),
+        ('riedel_bolero', 'Riedel Bolero'),
+        ('rad_uv1g', 'Radio Active Designs RAD'),
+    ]
+
+
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
     # System type field - NEW
     system_type = models.CharField(
@@ -1716,6 +1727,15 @@ class CommBeltPack(models.Model):
         max_length=100,
         blank=True,
         help_text="Location of wireless unit (e.g., 'Unit #1 - FOH Rack')"
+    )
+
+    # Manufacturer/System - NEW
+    manufacturer = models.CharField(
+        max_length=50,
+        choices=MANUFACTURER_CHOICES,
+        default='clearcom_helixnet',
+        verbose_name="System/Manufacturer",
+        help_text="Belt pack system manufacturer"
     )
 
     ip_address = models.GenericIPAddressField(
@@ -1755,58 +1775,7 @@ class CommBeltPack(models.Model):
         verbose_name="Headset Type"
     )
     
-    # Channel assignments
-    channel_a = models.ForeignKey(
-        CommChannel, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='beltpack_channel_a',
-        verbose_name="CH A"
-    )
-    channel_b = models.ForeignKey(
-        CommChannel, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='beltpack_channel_b',
-        verbose_name="CH B"
-    )
-    channel_c = models.ForeignKey(
-        CommChannel, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='beltpack_channel_c',
-        verbose_name="CH C"
-    )
-    channel_d = models.ForeignKey(
-        CommChannel, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='beltpack_channel_d',
-        verbose_name="CH D"
-    )
-
-
-    channel_e = models.ForeignKey(
-        'CommChannel',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='beltpack_channel_e',
-        verbose_name="CH E"
-    )
     
-    channel_f = models.ForeignKey(
-        'CommChannel',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='beltpack_channel_f',
-        verbose_name="CH F"
-    )
     
     audio_pgm = models.BooleanField(
         default=False, 
@@ -1833,7 +1802,7 @@ class CommBeltPack(models.Model):
         verbose_name = "Comm Belt Pack"
         verbose_name_plural = "Comm Belt Packs"  # PARENT
         # UPDATE THIS: Likely field is 'bp_number'
-        ordering = ['bp_number'] 
+        ordering = ['system_type', 'manufacturer', 'bp_number'] 
     
     def __str__(self):
         system_prefix = "W" if self.system_type == "WIRELESS" else "H"
@@ -1855,6 +1824,55 @@ class CommBeltPack(models.Model):
                 'checked_out': 'Hardwired belt packs cannot be checked out.'
             })
         super().clean()
+
+    def get_channel_count(self):
+        """Return number of available channels based on manufacturer"""
+        channel_map = {
+            'clearcom_helixnet': 24,  # Can be 4, 12, or 24
+            'rts_partyline': 2,
+            'rts_odin': 8,
+            'riedel_performer': 4,
+            'clearcom_freespeak': 8,  # Edge and Icon
+            'riedel_bolero': 6,
+            'rad_uv1g': 6,
+        }
+        return channel_map.get(self.manufacturer, 6)
+    
+
+
+class CommBeltPackChannel(models.Model):
+    """Individual channel assignment for a belt pack"""
+    beltpack = models.ForeignKey(
+        'CommBeltPack',
+        on_delete=models.CASCADE,
+        related_name='channels'
+    )
+    
+    channel_number = models.PositiveIntegerField(
+        verbose_name="Channel #",
+        help_text="Channel number (1, 2, 3, etc.)"
+    )
+    
+    channel = models.ForeignKey(
+        'CommChannel',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Assignment"
+    )
+    
+    class Meta:
+        ordering = ['channel_number']
+        unique_together = ['beltpack', 'channel_number']
+        verbose_name = "Belt Pack Channel"
+        verbose_name_plural = "Belt Pack Channels"
+    
+    def __str__(self):
+        if self.channel:
+            return f"Ch {self.channel_number}: {self.channel}"
+        return f"Ch {self.channel_number}: (unassigned)"
+
+
 
 
 #-------Mics Tracker-----
