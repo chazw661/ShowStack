@@ -1660,14 +1660,15 @@ class CommPosition(models.Model):
 
 class CommCrewName(models.Model):
     """Predefined crew names for quick selection"""
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
     
     class Meta:
         verbose_name = "Comm Crew Name"
         verbose_name_plural = "    ├─ Comm Crew Names"
         # UPDATE THIS: Likely field is 'name'
-        ordering = ['id'] 
+        ordering = ['name'] 
+        unique_together = ['name', 'project']
     
     def __str__(self):
         return self.name
