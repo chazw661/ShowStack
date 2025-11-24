@@ -3376,11 +3376,27 @@ class CommBeltPackChannelInline(admin.TabularInline):
     fields = ['channel_number', 'channel']
     ordering = ['channel_number']
     
+    def has_add_permission(self, request, obj=None):
+        """Allow users with change permission on parent to add channels"""
+        if request.user.is_superuser:
+            return True
+        # Check if user has permission to edit the parent belt pack
+        return request.user.has_perm('planner.change_commbeltpack')
+    
+    def has_change_permission(self, request, obj=None):
+        """Allow users with change permission on parent to edit channels"""
+        if request.user.is_superuser:
+            return True
+        return request.user.has_perm('planner.change_commbeltpack')
+    
+    def has_delete_permission(self, request, obj=None):
+        """Allow users with change permission on parent to delete channels"""
+        if request.user.is_superuser:
+            return True
+        return request.user.has_perm('planner.change_commbeltpack')
+    
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
-        # Set help text
-        formset.form.base_fields['channel_number'].help_text = 'Channel number'
-        formset.form.base_fields['channel'].help_text = 'Channel assignment'
         return formset
     
 
