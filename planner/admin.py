@@ -3036,6 +3036,13 @@ class CommPositionAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/comm_position_buttons.css',)
+        }
+    
+    
 
 
 # Comm Crew Name Admin
