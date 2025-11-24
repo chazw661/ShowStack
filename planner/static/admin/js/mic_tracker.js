@@ -864,6 +864,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+   
     
     // Add event listener for Enter key in the shared presenter input field
     const input = document.getElementById('newPresenterInput');

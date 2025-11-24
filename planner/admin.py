@@ -4080,7 +4080,12 @@ class ShowDayAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
-        return super().has_delete_permission(request, obj)    
+        return super().has_delete_permission(request, obj)  
+
+    class Media:
+        css = {
+            'all': ('admin/css/show_mic_tracker_buttons.css',)
+        }  
 
 
 class PresenterAdmin(BaseEquipmentAdmin):

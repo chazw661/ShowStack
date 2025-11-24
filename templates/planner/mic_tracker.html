@@ -44,8 +44,7 @@
             {% if not is_viewer %}
             <button class="btn btn-primary" onclick="addNewDay()">Add Day</button>
             {% endif %}
-            <button class="btn btn-secondary" onclick="expandAllDays()">Expand All</button>
-            <button class="btn btn-secondary" onclick="collapseAllDays()">Collapse All</button>
+
             <a href="/audiopatch/mic-tracker/export/" class="btn btn-export">Export CSV</a>
         </div>
 
@@ -153,29 +152,13 @@
                                             </button>
                                             {% endif %}
                                             
-                                            
-                                            <!-- Expand/Collapse Button -->
-                                            {% if assignment.shared_presenters.exists %}
-                                                <button type="button" 
-                                                        class="btn-expand-presenters" 
-                                                        onclick="togglePresenters({{ assignment.id }})"
-                                                        title="Show shared presenters">
-                                                    <span class="expand-icon">▶</span>
-                                                    <span class="presenter-count">+{{ assignment.shared_presenters.count }}</span>
-                                                </button>
-                                            {% if not is_viewer %}
-                                            <button type="button" 
-                                                    class="btn-remove-presenter" 
-                                                    onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared.name }}')"
-                                                    title="Remove presenter">
-                                                ×
-                                            </button>
-                                            {% endif %}
-                                            {% endif %}
+                                        
+                                        
                                         </div>
                                         
-                                        <!-- Shared Presenters Expandable Section -->
-                                        <div class="shared-presenters-container" style="display: none;" data-assignment-id="{{ assignment.id }}">
+                                        <!-- Shared Presenters Section - Only show if there are shared presenters -->
+                                        {% if assignment.shared_presenters.exists %}
+                                        <div class="shared-presenters-container" data-assignment-id="{{ assignment.id }}">
                                             {% for shared in assignment.ordered_shared_presenters %}
                                             <div class="presenter-row shared-presenter" data-presenter-name="{{ shared.name }}">
                                                 <span class="presenter-order">{{ forloop.counter|add:"1" }}°</span>
@@ -187,18 +170,19 @@
                                                 {% if assignment.active_presenter_index == forloop.counter %}
                                                 <span class="current-badge">CURRENT</span>
                                                 {% endif %}
+                                                {% if not is_viewer %}
                                                 <button type="button" 
                                                         class="btn-remove-presenter" 
                                                         onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared.name }}')"
                                                         title="Remove presenter">
                                                     ×
                                                 </button>
+                                                {% endif %}
                                             </div>
                                             {% endfor %}
                                             
                                             <!-- Add New Presenter Form -->
                                             {% if not is_viewer %}
-                                            <!-- Add New Presenter Form -->
                                             <div class="add-presenter-row">
                                                 <input type="text" 
                                                         class="presenter-input add-presenter-input" 
@@ -227,6 +211,10 @@
                                             </div>
                                             {% endif %}
                                         </div>
+                                        {% endif %}
+                                            
+                                           
+                                        
                                     </div>
                                     
                                     <div class="col-micd">
