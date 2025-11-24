@@ -2908,6 +2908,11 @@ class CommChannelAdmin(BaseEquipmentAdmin):
             return False
         return super().has_delete_permission(request, obj)
     
+    class Media:
+        css = {
+            'all': ('admin/css/comm_channel_buttons.css',)
+        }
+        
 
 
 def _get_current_project(modeladmin, request):
@@ -2925,6 +2930,9 @@ def _get_current_project(modeladmin, request):
         except Project.DoesNotExist:
             modeladmin.message_user(request, "Invalid project", level=messages.ERROR)
             return None
+        
+
+
 
 
 # Comm Position Admin
@@ -3102,6 +3110,11 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/comm_crew_name_buttons.css',)
+        }
 
 # Custom form for CommBeltPack with dynamic dropdowns
 
