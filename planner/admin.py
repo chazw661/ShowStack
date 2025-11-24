@@ -4140,6 +4140,11 @@ class PresenterAdmin(BaseEquipmentAdmin):
             return False
         return super().has_delete_permission(request, obj)
     
+    class Media:
+        css = {
+            'all': ('admin/css/presenter_buttons.css',)
+        }
+    
    
 
 
@@ -4208,9 +4213,11 @@ class MicSessionAdmin(BaseEquipmentAdmin):
             return False
         return super().has_delete_permission(request, obj)    
 
-
     class Media:
-        js = ('admin/js/mic_tracker_auto_refresh.js',)    
+        css = {
+            'all': ('admin/css/mic_session_buttons.css',)
+        }
+        js = ('admin/js/mic_tracker_auto_refresh.js',)
 
 
 class MicAssignmentAdmin(BaseEquipmentAdmin):
@@ -4275,6 +4282,11 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/mic_assignment_buttons.css',)
+        }
 
 
 
@@ -4299,6 +4311,11 @@ class MicShowInfoAdmin(BaseEquipmentAdmin):
     def has_delete_permission(self, request, obj=None):
         
         return False
+    
+    class Media:
+        css = {
+            'all': ('admin/css/mic_show_info_buttons.css',)
+        }
     
 
 
