@@ -2038,12 +2038,24 @@ def ip_address_report(request):
     """
     from .models import Console, Device, Amp, SystemProcessor, CommBeltPack
     
-    # Get all records with IP addresses
-    consoles = Console.objects.all().order_by('name')
-    devices = Device.objects.all().order_by('name')
-    amps = Amp.objects.all().order_by('location__name', 'name')
-    processors = SystemProcessor.objects.all().order_by('device_type', 'name')
-    belt_packs = CommBeltPack.objects.filter(system_type='HARDWIRED').order_by('bp_number')
+    # Get current project from session/middleware
+    current_project = getattr(request, 'current_project', None)
+    
+    # If no project selected, show empty or redirect
+    if not current_project:
+        context = {
+            'title': 'IP Address Management',
+            'modules': [],
+            'no_project': True,
+        }
+        return render(request, 'admin/planner/ip_address_report.html', context)
+    
+    # Get all records with IP addresses - FILTERED BY PROJECT
+    consoles = Console.objects.filter(project=current_project).order_by('name')
+    devices = Device.objects.filter(project=current_project).order_by('name')
+    amps = Amp.objects.filter(project=current_project).order_by('location__name', 'name')
+    processors = SystemProcessor.objects.filter(project=current_project).order_by('device_type', 'name')
+    belt_packs = CommBeltPack.objects.filter(project=current_project, system_type='HARDWIRED').order_by('bp_number')
     
     # Organize data by module type
     context = {
