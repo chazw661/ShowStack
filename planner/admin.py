@@ -4189,6 +4189,19 @@ class MicSessionAdmin(BaseEquipmentAdmin):
             obj.create_mic_assignments()
 
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter foreign key dropdowns by current project"""
+        if db_field.name == "day":
+            current_project = getattr(request, 'current_project', None)
+            if current_project:
+                from .models import ShowDay
+                kwargs["queryset"] = ShowDay.objects.filter(project=current_project)
+            else:
+                from .models import ShowDay
+                kwargs["queryset"] = ShowDay.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
     def has_add_permission(self, request):
         """Only editors and owners can add"""
         if request.user.is_superuser:
