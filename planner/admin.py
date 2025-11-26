@@ -4420,6 +4420,11 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/amplifier_profile_buttons.css',)
+        }
 
 
 class AmplifierAssignmentInline(admin.TabularInline):
@@ -4766,7 +4771,12 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
-        return super().has_delete_permission(request, obj)    
+        return super().has_delete_permission(request, obj)   
+
+    class Media:
+        css = {
+            'all': ('admin/css/power_distribution_buttons.css',)
+        } 
 
 
 
@@ -4801,6 +4811,11 @@ class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/amplifier_power_plan_buttons.css',)
+    }
 
 
 class AudioChecklistAdmin(BaseEquipmentAdmin):
@@ -4986,9 +5001,15 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
-        return super().has_delete_permission(request, obj)    
+        return super().has_delete_permission(request, obj)   
 
+    
+     
 
+    class Media:
+        css = {
+            'all': ('admin/css/soundvision_prediction_buttons.css',)
+        }
 
 class SpeakerArrayAdmin(BaseEquipmentAdmin):
     list_display = ['source_name', 'prediction', 'configuration', 'display_weight', 
@@ -5058,6 +5079,11 @@ class SpeakerArrayAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    class Media:
+        css = {
+            'all': ('admin/css/speaker_array_buttons.css',)
+        }
 
 
 class SpeakerCabinetAdmin(BaseEquipmentAdmin):
@@ -5092,6 +5118,12 @@ class SpeakerCabinetAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj) 
+    
+
+    class Media:
+        css = {
+            'all': ('admin/css/speaker_cabinet_buttons.css',)
+        }
 
 
 

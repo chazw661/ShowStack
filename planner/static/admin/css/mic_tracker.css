@@ -1427,31 +1427,3 @@ body.dark .mic-grid-header {
 }
 
 
-/* ========================================
-   Always Show Shared Presenters - No Collapse
-   ======================================== */
-
-/* Force shared presenters container to always be visible */
-.shared-presenters-container {
-    display: block !important;
-}
-
-/* Hide the expand/collapse icon since we don't need it anymore */
-.btn-expand-presenters .expand-icon,
-.btn-add-presenter .expand-icon {
-    display: none !important;
-}
-
-/* Adjust the expand button to just show the count */
-.btn-expand-presenters,
-.btn-add-presenter {
-    pointer-events: none;  /* Disable clicking since it's always expanded */
-    opacity: 0.7;
-}
-
-
-/* Hide Expand All / Collapse All buttons - no longer needed */
-button[onclick="expandAllDays()"],
-button[onclick="collapseAllDays()"] {
-    display: none !important;
-}
