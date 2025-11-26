@@ -4964,7 +4964,17 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
             'classes': ('collapse',)
         })
     )
-    
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter show_day dropdown to current project only"""
+        if db_field.name == "show_day":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = ShowDay.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = ShowDay.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        
     inlines = [SpeakerArrayInline]
     
     def array_summary(self, obj):
