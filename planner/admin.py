@@ -2457,6 +2457,25 @@ class PAZoneAdmin(BaseEquipmentAdmin):
     
     actions = ['create_default_zones']
 
+    def get_queryset(self, request):
+        """Filter zones by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            from django.db.models import Q
+            return qs.filter(
+                Q(project=request.current_project) | 
+                Q(project__isnull=True)
+            )
+        return qs.none()
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
+    
+    # ... rest of existing code ...
+
     # Hide from sidebar but still accessible via direct URL
     def has_module_permission(self, request):
         return False
@@ -2539,7 +2558,21 @@ class PACableAdmin(BaseEquipmentAdmin):
         })
     )
     
-    actions = ['export_cable_schedule', 'generate_pull_sheet']
+    actions = ['export_cable_schedule']
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter label dropdown to current project only"""
+        if db_field.name == "label":
+            if hasattr(request, 'current_project') and request.current_project:
+                from django.db.models import Q
+                kwargs["queryset"] = PAZone.objects.filter(
+                    Q(project=request.current_project) | 
+                    Q(project__isnull=True)  # Include global defaults
+                )
+            else:
+                kwargs["queryset"] = PAZone.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def label_display(self, obj):
         return f"{obj.label.name}" if obj.label else "-"

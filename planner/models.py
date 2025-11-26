@@ -1272,6 +1272,13 @@ class GalaxyOutput(models.Model):
 class PAZone(models.Model):
     """User-defined PA zones"""
 
+    project = models.ForeignKey(
+        'Project',
+        on_delete=models.CASCADE,
+        null=True,  # Allow null for legacy/default zones
+        blank=True
+    )
+
     name = models.CharField(
         max_length=20, 
         unique=True,
