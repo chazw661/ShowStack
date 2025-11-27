@@ -5078,7 +5078,7 @@ class SpeakerArrayAdmin(BaseEquipmentAdmin):
     
     def display_weight(self, obj):
         if obj.total_weight_lb:
-            return format_html('<strong>{:.0f} lb</strong>', obj.total_weight_lb)
+            return format_html('<strong>{} lb</strong>', int(obj.total_weight_lb))
         return "-"
     display_weight.short_description = "Weight"
     
