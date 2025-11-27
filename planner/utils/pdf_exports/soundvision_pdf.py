@@ -7,6 +7,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
+from decimal import Decimal
 
 try:
     from .pdf_styles import PDFStyles, MARGIN, BRAND_BLUE, DARK_GRAY
@@ -203,6 +204,12 @@ def generate_soundvision_pdf(prediction):
             if position_parts:
                 info_lines.append(f"<b>Position:</b> {', '.join(position_parts)}")
             
+            # Bottom trim height
+            if array.bottom_elevation is not None:
+                feet = int(array.bottom_elevation)
+                inches = int((float(array.bottom_elevation) - feet) * 12)
+                info_lines.append(f"<b>Bottom Trim Height:</b> {feet}' {inches}\"")
+            
             # Display array info
             for line in info_lines:
                 elements.append(Paragraph(line, info_style))
@@ -272,12 +279,11 @@ def generate_soundvision_pdf(prediction):
                             display_value = getattr(cabinet, get_display_method)()
                             value = display_value if display_value else value
                         
-                        # Format numeric values
-                        if isinstance(value, (int, float)) and value is not None:
-                            if field_name in ['inter_cabinet_angle', 'angle', 'angle_to_next', 'site_angle']:
-                                row.append(f"{value}°")
-                            else:
-                                row.append(str(value))
+                        # Format numeric values - handle Decimal, int, float
+                        if value is not None and field_name in ['inter_cabinet_angle', 'angle', 'angle_to_next', 'site_angle']:
+                            row.append(f"{value}°")
+                        elif isinstance(value, (int, float, Decimal)) and value is not None:
+                            row.append(str(value))
                         else:
                             row.append(str(value) if value else '')
                     
