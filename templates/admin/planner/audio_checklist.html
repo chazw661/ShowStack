@@ -395,7 +395,10 @@ function renderChecklists() {
         header.className = 'section-header';
         header.innerHTML = `
             <span class="section-title">${sectionName}</span>
-            <button class="btn" style="padding: 5px 15px; font-size: 12px;" onclick="addItem('${sectionName}')">+ Add Task</button>
+            <div>
+                <button class="btn" style="padding: 5px 15px; font-size: 12px; margin-right: 10px;" onclick="addSetupTask('${sectionName}')">+ Setup Task</button>
+                <button class="btn" style="padding: 5px 15px; font-size: 12px;" onclick="addDailyTask('${sectionName}')">+ Daily Task</button>
+            </div>
         `;
         sectionDiv.appendChild(header);
 
@@ -623,12 +626,11 @@ function updateStatus(sectionName, type, index, day, value, selectElement) {
     saveToLocalStorage();
 }
 
-function addItem(sectionName) {
-    const taskName = prompt('Enter task name:');
+function addSetupTask(sectionName) {
+    const taskName = prompt('Enter setup task name:');
     if (taskName) {
-        const type = confirm('Is this a daily recurring task?') ? 'daily' : 'setup';
-        checklists[sectionName][type].push({ task: taskName, stage: '' });
-        statuses[sectionName][type].push({
+        checklists[sectionName].setup.push({ task: taskName, stage: '' });
+        statuses[sectionName].setup.push({
             day1: 'not-started',
             day2: 'not-started',
             day3: 'not-started',
@@ -639,6 +641,20 @@ function addItem(sectionName) {
     }
 }
 
+function addDailyTask(sectionName) {
+    const taskName = prompt('Enter daily task name:');
+    if (taskName) {
+        checklists[sectionName].daily.push({ task: taskName, stage: '' });
+        statuses[sectionName].daily.push({
+            day1: 'not-started',
+            day2: 'not-started',
+            day3: 'not-started',
+            day4: 'not-started'
+        });
+        renderChecklists();
+        saveToLocalStorage();
+    }
+}
 function deleteTask(sectionName, type, index) {
     if (confirm('Are you sure you want to delete this task?')) {
         checklists[sectionName][type].splice(index, 1);
