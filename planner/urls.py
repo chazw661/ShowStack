@@ -7,6 +7,16 @@ from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_a
 from planner.utils.pdf_exports.system_report import export_system_report
 from .views import populate_amp_models_view
 
+from .views import (
+     audio_checklist_view,
+     audio_checklist_data,
+     audio_checklist_update_task,
+     audio_checklist_update_status,
+     audio_checklist_add_task,
+     audio_checklist_delete_task,
+     audio_checklist_reset,
+     )
+
 app_name = 'planner'  
 
 urlpatterns = [
@@ -135,6 +145,15 @@ urlpatterns = [
 
     path('debug-device-ordering/', views.debug_device_ordering, name='debug_device_ordering'),
 
+    #-------Checklist------
+
+     path('audiochecklist/', audio_checklist_view, name='audio_checklist'),
+     path('audiochecklist/data/', audio_checklist_data, name='audio_checklist_data'),
+     path('audiochecklist/update-task/', audio_checklist_update_task, name='audio_checklist_update_task'),
+     path('audiochecklist/update-status/', audio_checklist_update_status, name='audio_checklist_update_status'),
+     path('audiochecklist/add-task/', audio_checklist_add_task, name='audio_checklist_add_task'),
+     path('audiochecklist/delete-task/', audio_checklist_delete_task, name='audio_checklist_delete_task'),
+     path('audiochecklist/reset/', audio_checklist_reset, name='audio_checklist_reset'),
 
 
 

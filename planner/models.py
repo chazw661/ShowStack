@@ -2857,5 +2857,186 @@ class Invitation(models.Model):
     
 
 
+ # Add these models to your models.py file
+
+class AudioChecklist(models.Model):
+    """Audio checklist section (FOH, A2, Video) linked to a project"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='audio_checklists')
+    name = models.CharField(max_length=100)  # e.g., "FOH Check List", "A2 Check List"
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
+    class Meta:
+        verbose_name = "Audio Checklist"
+        verbose_name_plural = "Audio Checklists"
+        unique_together = ['project', 'name']
+        ordering = ['name']
+    
+    def __str__(self):
+        return f"{self.project.name} - {self.name}"
+    
+    @classmethod
+    def create_default_checklists(cls, project):
+        """Create default checklists with pre-populated tasks for a project"""
+        default_data = {
+            'FOH Check List': {
+                'setup': [
+                    'Load latest console file',
+                    'Verify Dante Devices',
+                    'Verify Dante Patch on console in & out',
+                    'Verify Dante RF',
+                    'Verify Analog RF',
+                    'Verify PA zones',
+                    'Verify Lobby feeds VO/Plybk/Mix',
+                    'Verify Caption feed',
+                    'Verify Translate feed',
+                    'Primary FOH Audio PB I/O',
+                    'Verify Smaaart I/O',
+                    'Verify Reaper VOG I/O',
+                    'Verify multitrack I/O',
+                    'Backup Audio PB I/O',
+                    'Rec LUFS Meter calibration',
+                    'VOG mic',
+                    'Ducker with VOG mic and VOs',
+                    'Copy Comp Settings to Rec Plybck Buss',
+                    'Set DANSE & 4045 in Record Groups',
+                    'Upload and verify VOs and POs',
+                    'Level out VOs & POs',
+                    'Verify Audience Mics',
+                    'Verify DS Spare Mic',
+                ],
+                'daily': [
+                    'PA Zone check',
+                    'Verify FOH play backs',
+                    'Verify Video play backs',
+                    'Verify GFX lines',
+                    'Verify REC feeds',
+                    'Verify Streaming/Web feeds',
+                    'Verify ASL feeds',
+                    'Verify Translate feed',
+                    'Verify Caption feed',
+                    'Line check all RF',
+                    'Line Check PODs',
+                    'Line Check VOG',
+                    'Line Check Audience mics',
+                    'Line Check talent I/O',
+                    'Verify multitrack I/O',
+                ],
+            },
+            'A2 Check List': {
+                'setup': [
+                    'RF input Analog',
+                    'Frequency Coordination GS',
+                    'Frequency Coordination event',
+                    'RF set to +12',
+                    'RF no offset',
+                    'Verify RF Lavs have same capsules',
+                    'Verify headsets have same capsule',
+                    'Check LAV/HS connectors & cables',
+                    'Have sufficient batteries',
+                    'Comms wired and wireless',
+                    'No latching on comms unless requested',
+                    'Transceiver Firmware',
+                    'Verify comm ISOs',
+                    'Verify comms Stage Announce (SA)',
+                    'Verify program (PGM) to comms',
+                    'Camera Coms via Triax',
+                    'Wireless amp control',
+                ],
+                'daily': [
+                    'Verify RF and Frequencies',
+                    'Verify Comm Transceivers/system',
+                    'Re-battery all RF',
+                    'Verify session mic list',
+                    'Verify Amp control',
+                    'Verify Workbench control',
+                ],
+            },
+            'Video Check List': {
+                'setup': [
+                    'Verify all video inputs',
+                    'Check SDI routing',
+                    'Verify HDMI connections',
+                    'Test all cameras',
+                    'Configure streaming outputs',
+                    'Set up confidence monitors',
+                    'Verify recording devices',
+                    'Check video sync',
+                    'Test graphics systems',
+                    'Verify projection mapping',
+                ],
+                'daily': [],
+            },
+        }
+        
+        for checklist_name, tasks in default_data.items():
+            checklist, created = cls.objects.get_or_create(
+                project=project,
+                name=checklist_name
+            )
+            
+            if created:
+                # Add setup tasks
+                for order, task_name in enumerate(tasks['setup']):
+                    AudioChecklistTask.objects.create(
+                        checklist=checklist,
+                        task=task_name,
+                        task_type='setup',
+                        sort_order=order
+                    )
+                
+                # Add daily tasks
+                for order, task_name in enumerate(tasks['daily']):
+                    AudioChecklistTask.objects.create(
+                        checklist=checklist,
+                        task=task_name,
+                        task_type='daily',
+                        sort_order=order
+                    )
+        
+        return cls.objects.filter(project=project)
+
+
+class AudioChecklistTask(models.Model):
+    """Individual task in an audio checklist"""
+    TASK_TYPE_CHOICES = [
+        ('setup', 'Setup (One-Time)'),
+        ('daily', 'Daily'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('not-started', 'Not Started'),
+        ('in-progress', 'In Progress'),
+        ('complete', 'Complete'),
+        ('na', 'N/A'),
+    ]
+    
+    STAGE_CHOICES = [
+        ('', '-'),
+        ('Pre-Production', 'Pre-Production'),
+        ('Load-In', 'Load-In'),
+    ]
+    
+    checklist = models.ForeignKey(AudioChecklist, on_delete=models.CASCADE, related_name='tasks')
+    task = models.CharField(max_length=255)
+    task_type = models.CharField(max_length=10, choices=TASK_TYPE_CHOICES, default='setup')
+    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default='', blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    
+    # Status for each day (for setup tasks, only day1 is used)
+    day1_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
+    day2_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
+    day3_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
+    day4_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Audio Checklist Task"
+        verbose_name_plural = "Audio Checklist Tasks"
+        ordering = ['checklist', 'task_type', 'sort_order']
+    
+    def __str__(self):
+        return f"{self.checklist.name} - {self.task}"   
 

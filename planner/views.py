@@ -35,6 +35,8 @@ from .models import Project
 import hashlib
 
 
+from .models import AudioChecklist, AudioChecklistTask, Project, ProjectMember
+
 
 
 
@@ -2805,5 +2807,267 @@ def debug_device_ordering(request):
     return HttpResponse('\n'.join(html))
 
 
-# Also add this URL pattern to planner/urls.py:
-# path('debug-device-ordering/', views.debug_device_ordering, name='debug_device_ordering'),
+#------Checklist---
+
+
+# Add these views to your views.py file
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST, require_GET
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_protect
+import json
+
+from .models import AudioChecklist, AudioChecklistTask
+
+
+@login_required
+def audio_checklist_view(request):
+    """Main audio checklist page"""
+    # Get current project from session
+    current_project_id = request.session.get('current_project_id')
+    if not current_project_id:
+        messages.warning(request, "Please select a project first.")
+        return redirect('admin:index')
+    
+    try:
+        project = Project.objects.get(id=current_project_id)
+    except Project.DoesNotExist:
+        messages.error(request, "Project not found.")
+        return redirect('admin:index')
+    
+    # Check user has access to this project
+    if not request.user.is_superuser:
+        if not ProjectMember.objects.filter(project=project, user=request.user).exists():
+            if project.owner != request.user:
+                messages.error(request, "You don't have access to this project.")
+                return redirect('admin:index')
+    
+    # Create default checklists if they don't exist
+    if not AudioChecklist.objects.filter(project=project).exists():
+        AudioChecklist.create_default_checklists(project)
+    
+    context = {
+        'title': 'Audio Production Checklist',
+        'project': project,
+    }
+    
+    return render(request, 'admin/planner/audio_checklist.html', context)
+
+
+@login_required
+@require_GET
+def audio_checklist_data(request):
+    """API endpoint to get checklist data for current project"""
+    current_project_id = request.session.get('current_project_id')
+    if not current_project_id:
+        return JsonResponse({'error': 'No project selected'}, status=400)
+    
+    try:
+        project = Project.objects.get(id=current_project_id)
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)
+    
+    # Create default checklists if they don't exist
+    if not AudioChecklist.objects.filter(project=project).exists():
+        AudioChecklist.create_default_checklists(project)
+    
+    # Build checklist data structure
+    checklists = {}
+    statuses = {}
+    
+    for checklist in AudioChecklist.objects.filter(project=project).prefetch_related('tasks'):
+        checklist_name = checklist.name
+        checklists[checklist_name] = {'setup': [], 'daily': []}
+        statuses[checklist_name] = {'setup': [], 'daily': []}
+        
+        for task in checklist.tasks.all().order_by('task_type', 'sort_order'):
+            task_data = {
+                'id': task.id,
+                'task': task.task,
+                'stage': task.stage,
+            }
+            status_data = {
+                'id': task.id,
+                'day1': task.day1_status,
+                'day2': task.day2_status,
+                'day3': task.day3_status,
+                'day4': task.day4_status,
+            }
+            
+            checklists[checklist_name][task.task_type].append(task_data)
+            statuses[checklist_name][task.task_type].append(status_data)
+    
+    return JsonResponse({
+        'checklists': checklists,
+        'statuses': statuses,
+        'project_name': project.name,
+    })
+
+
+@login_required
+@require_POST
+@csrf_protect
+def audio_checklist_update_task(request):
+    """API endpoint to update a task's text or stage"""
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        field = data.get('field')  # 'task' or 'stage'
+        value = data.get('value')
+        
+        task = AudioChecklistTask.objects.get(id=task_id)
+        
+        # Verify user has access to this project
+        current_project_id = request.session.get('current_project_id')
+        if task.checklist.project_id != current_project_id:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        if field == 'task':
+            task.task = value
+        elif field == 'stage':
+            task.stage = value
+        
+        task.save()
+        
+        return JsonResponse({'success': True})
+    except AudioChecklistTask.DoesNotExist:
+        return JsonResponse({'error': 'Task not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@csrf_protect
+def audio_checklist_update_status(request):
+    """API endpoint to update a task's status for a specific day"""
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        day = data.get('day')  # 'day1', 'day2', 'day3', 'day4'
+        status = data.get('status')  # 'not-started', 'in-progress', 'complete', 'na'
+        
+        task = AudioChecklistTask.objects.get(id=task_id)
+        
+        # Verify user has access to this project
+        current_project_id = request.session.get('current_project_id')
+        if task.checklist.project_id != current_project_id:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Update the appropriate day status
+        if day == 'day1':
+            task.day1_status = status
+        elif day == 'day2':
+            task.day2_status = status
+        elif day == 'day3':
+            task.day3_status = status
+        elif day == 'day4':
+            task.day4_status = status
+        
+        # For setup tasks, sync all days to the same status
+        if task.task_type == 'setup':
+            task.day1_status = status
+            task.day2_status = status
+            task.day3_status = status
+            task.day4_status = status
+        
+        task.save()
+        
+        return JsonResponse({'success': True})
+    except AudioChecklistTask.DoesNotExist:
+        return JsonResponse({'error': 'Task not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@csrf_protect
+def audio_checklist_add_task(request):
+    """API endpoint to add a new task"""
+    try:
+        data = json.loads(request.body)
+        checklist_name = data.get('checklist_name')
+        task_type = data.get('task_type')  # 'setup' or 'daily'
+        task_text = data.get('task')
+        
+        current_project_id = request.session.get('current_project_id')
+        if not current_project_id:
+            return JsonResponse({'error': 'No project selected'}, status=400)
+        
+        checklist = AudioChecklist.objects.get(
+            project_id=current_project_id,
+            name=checklist_name
+        )
+        
+        # Get the next sort order
+        max_order = checklist.tasks.filter(task_type=task_type).aggregate(
+            Max('sort_order')
+        )['sort_order__max'] or 0
+                
+        task = AudioChecklistTask.objects.create(
+            checklist=checklist,
+            task=task_text,
+            task_type=task_type,
+            sort_order=max_order + 1
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'task_id': task.id,
+        })
+    except AudioChecklist.DoesNotExist:
+        return JsonResponse({'error': 'Checklist not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@csrf_protect
+def audio_checklist_delete_task(request):
+    """API endpoint to delete a task"""
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        
+        task = AudioChecklistTask.objects.get(id=task_id)
+        
+        # Verify user has access to this project
+        current_project_id = request.session.get('current_project_id')
+        if task.checklist.project_id != current_project_id:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        task.delete()
+        
+        return JsonResponse({'success': True})
+    except AudioChecklistTask.DoesNotExist:
+        return JsonResponse({'error': 'Task not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@csrf_protect
+def audio_checklist_reset(request):
+    """API endpoint to reset checklists to defaults"""
+    try:
+        current_project_id = request.session.get('current_project_id')
+        if not current_project_id:
+            return JsonResponse({'error': 'No project selected'}, status=400)
+        
+        project = Project.objects.get(id=current_project_id)
+        
+        # Delete existing checklists
+        AudioChecklist.objects.filter(project=project).delete()
+        
+        # Recreate defaults
+        AudioChecklist.create_default_checklists(project)
+        
+        return JsonResponse({'success': True})
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

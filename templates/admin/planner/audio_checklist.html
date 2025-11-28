@@ -32,6 +32,12 @@
         font-size: 1.8rem;
     }
 
+    .project-name {
+        color: #ffc107;
+        font-size: 1rem;
+        margin-top: 5px;
+    }
+
     .back-link {
         background-color: #333;
         color: #4a9eff;
@@ -78,6 +84,12 @@
         background-color: #d32f2f;
     }
 
+    .btn:disabled {
+        background-color: #666;
+        cursor: not-allowed;
+        transform: none;
+    }
+
     select {
         background-color: #333;
         color: #e0e0e0;
@@ -118,21 +130,19 @@
     }
 
     .checklist-table th {
-    background-color: #333;
-    color: #e0e0e0;
-    padding: 12px;
-    text-align: left;
-    font-weight: 600;
-    border: 1px solid #444;
+        background-color: #333;
+        color: #e0e0e0;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        border: 1px solid #444;
     }
 
     .checklist-table th[style*="ffc107"] {
-    color: #000 !important;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-    
+        color: #000 !important;
+        font-size: 14px;
+        font-weight: 700;
+    }
 
     .checklist-table td {
         padding: 10px;
@@ -226,6 +236,44 @@
         accent-color: #4CAF50;
     }
 
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .loading-overlay.hidden {
+        display: none;
+    }
+
+    .loading-spinner {
+        color: #4a9eff;
+        font-size: 24px;
+    }
+
+    .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 25px;
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 4px;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+    }
+
+    .notification.error {
+        background-color: #f44336;
+    }
+
     @keyframes slideIn {
         from {
             transform: translateX(100%);
@@ -241,14 +289,19 @@
 
 {% block content %}
 <div class="checklist-container">
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner">Loading...</div>
+    </div>
+
     <div class="checklist-header">
-        <h1>Audio Production Checklist</h1>
+        <div>
+            <h1>Audio Production Checklist</h1>
+            <div class="project-name" id="projectName">Loading...</div>
+        </div>
         <a href="{% url 'admin:index' %}" class="back-link">← Back to Admin</a>
     </div>
     
     <div class="controls">
-        <button class="btn" onclick="saveToLocalStorage()">💾 Save Progress</button>
-        <button class="btn" onclick="loadFromLocalStorage()">📂 Load Saved</button>
         <button class="btn danger" onclick="resetAll()">🔄 Reset All</button>
         <button class="btn" onclick="exportToCSV()">📊 Export to CSV</button>
         <button class="btn" onclick="window.print()">🖨️ Print</button>
@@ -262,124 +315,81 @@
     </div>
 
     <div id="checklistContainer"></div>
-    
-    <div class="export-section" style="margin-top: 30px; padding: 20px; background-color: #2a2a2a; border-radius: 8px; text-align: center;">
-        <h3 style="color: #4a9eff;">Quick Actions</h3>
-        <p>Progress is automatically saved in your browser. Use Export to share with team.</p>
-    </div>
 </div>
 
 <script>
-// Default checklist data
-const defaultChecklists = {
-    'FOH Check List': {
-        setup: [
-            { task: 'Load latest console file', stage: '' },
-            { task: 'Verify Dante Devices', stage: '' },
-            { task: 'Verify Dante Patch on console in & out', stage: '' },
-            { task: 'Verify Dante RF', stage: '' },
-            { task: 'Verify Analog RF', stage: '' },
-            { task: 'Verify PA zones', stage: '' },
-            { task: 'Verify Lobby feeds VO/Plybk/Mix', stage: '' },
-            { task: 'Verify Caption feed', stage: '' },
-            { task: 'Verify Translate feed', stage: '' },
-            { task: 'Primary FOH Audio PB I/O', stage: '' },
-            { task: 'Verify Smaaart I/O', stage: '' },
-            { task: 'Verify Reaper VOG I/O', stage: '' },
-            { task: 'Verify multitrack I/O', stage: '' },
-            { task: 'Backup Audio PB I/O', stage: '' },
-            { task: 'Rec LUFS Meter calibration', stage: '' },
-            { task: 'VOG mic', stage: '' },
-            { task: 'Ducker with VOG mic and VOs', stage: '' },
-            { task: 'Copy Comp Settings to Rec Plybck Buss', stage: '' },
-            { task: 'Set DANSE & 4045 in Record Groups', stage: '' },
-            { task: 'Upload and verify VOs and POs', stage: '' },
-            { task: 'Level out VOs & POs', stage: '' },
-            { task: 'Verify Audience Mics', stage: '' },
-            { task: 'Verify DS Spare Mic', stage: '' }
-        ],
-        daily: [
-            { task: 'PA Zone check', stage: '' },
-            { task: 'Verify FOH play backs', stage: '' },
-            { task: 'Verify Video play backs', stage: '' },
-            { task: 'Verify GFX lines', stage: '' },
-            { task: 'Verify REC feeds', stage: '' },
-            { task: 'Verify Streaming/Web feeds', stage: '' },
-            { task: 'Verify ASL feeds', stage: '' },
-            { task: 'Verify Translate feed', stage: '' },
-            { task: 'Verify Caption feed', stage: '' },
-            { task: 'Line check all RF', stage: '' },
-            { task: 'Line Check PODs', stage: '' },
-            { task: 'Line Check VOG', stage: '' },
-            { task: 'Line Check Audience mics', stage: '' },
-            { task: 'Line Check talent I/O', stage: '' },
-            { task: 'Verify multitrack I/O', stage: '' }
-        ]
-    },
-    'A2 Check List': {
-        setup: [
-            { task: 'RF input Analog', stage: '' },
-            { task: 'Frequency Coordination GS', stage: '' },
-            { task: 'Frequency Coordination event', stage: '' },
-            { task: 'RF set to +12', stage: '' },
-            { task: 'RF no offset', stage: '' },
-            { task: 'Verify RF Lavs have same capsules', stage: '' },
-            { task: 'Verify headsets have same capsule', stage: '' },
-            { task: 'Check LAV/HS connectors & cables', stage: '' },
-            { task: 'Have sufficient batteries', stage: '' },
-            { task: 'Comms wired and wireless', stage: '' },
-            { task: 'No latching on comms unless requested', stage: '' },
-            { task: 'Transceiver Firmware', stage: '' },
-            { task: 'Verify comm ISOs', stage: '' },
-            { task: 'Verify comms Stage Announce (SA)', stage: '' },
-            { task: 'Verify program (PGM) to comms', stage: '' },
-            { task: 'Camera Coms via Triax', stage: '' },
-            { task: 'Wireless amp control', stage: '' }
-        ],
-        daily: [
-            { task: 'Verify RF and Frequencies', stage: '' },
-            { task: 'Verify Comm Transceivers/system', stage: '' },
-            { task: 'Re-battery all RF', stage: '' },
-            { task: 'Verify session mic list', stage: '' },
-            { task: 'Verify Amp control', stage: '' },
-            { task: 'Verify Workbench control', stage: '' }
-        ]
-    },
-    'Video Check List': {
-        setup: [
-            { task: 'Verify all video inputs', stage: '' },
-            { task: 'Check SDI routing', stage: '' },
-            { task: 'Verify HDMI connections', stage: '' },
-            { task: 'Test all cameras', stage: '' },
-            { task: 'Configure streaming outputs', stage: '' },
-            { task: 'Set up confidence monitors', stage: '' },
-            { task: 'Verify recording devices', stage: '' },
-            { task: 'Check video sync', stage: '' },
-            { task: 'Test graphics systems', stage: '' },
-            { task: 'Verify projection mapping', stage: '' }
-        ],
-        daily: []
-    }
-};
+// Get CSRF token for AJAX requests
+function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+           document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+}
 
-let checklists = JSON.parse(JSON.stringify(defaultChecklists));
+let checklists = {};
 let statuses = {};
 
-function initializeStatuses() {
-    Object.keys(checklists).forEach(section => {
-        statuses[section] = {};
-        ['setup', 'daily'].forEach(type => {
-            statuses[section][type] = [];
-            checklists[section][type].forEach((item, index) => {
-                statuses[section][type][index] = {
-                    day1: 'not-started',
-                    day2: 'not-started',
-                    day3: 'not-started',
-                    day4: 'not-started'
-                };
-            });
+function showLoading() {
+    document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+function showNotification(message, isError = false) {
+    const notification = document.createElement('div');
+    notification.className = 'notification' + (isError ? ' error' : '');
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transition = 'opacity 0.3s';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+async function loadData() {
+    showLoading();
+    try {
+        const response = await fetch('{% url "planner:audio_checklist_data" %}');
+        const data = await response.json();
+        
+        if (data.error) {
+            showNotification(data.error, true);
+            return;
+        }
+        
+        checklists = data.checklists;
+        statuses = data.statuses;
+        document.getElementById('projectName').textContent = 'Project: ' + data.project_name;
+        renderChecklists();
+    } catch (error) {
+        showNotification('Error loading data: ' + error.message, true);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function apiCall(url, data) {
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify(data),
         });
-    });
+        const result = await response.json();
+        if (result.error) {
+            showNotification(result.error, true);
+            return null;
+        }
+        return result;
+    } catch (error) {
+        showNotification('Error: ' + error.message, true);
+        return null;
+    }
 }
 
 function renderChecklists() {
@@ -388,6 +398,7 @@ function renderChecklists() {
 
     Object.keys(checklists).forEach(sectionName => {
         const section = checklists[sectionName];
+        const sectionStatuses = statuses[sectionName];
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'checklist-section';
         
@@ -421,7 +432,7 @@ function renderChecklists() {
             setupHeader.textContent = 'Setup Tasks (One-Time)';
             setupDiv.appendChild(setupHeader);
             
-            const setupTable = createSetupTable(sectionName, 'setup', section.setup);
+            const setupTable = createSetupTable(sectionName, 'setup', section.setup, sectionStatuses.setup);
             setupDiv.appendChild(setupTable);
             layoutDiv.appendChild(setupDiv);
         }
@@ -440,7 +451,7 @@ function renderChecklists() {
             dailyHeader.textContent = 'Daily Tasks';
             dailyDiv.appendChild(dailyHeader);
             
-            const dailyTable = createDailyTable(sectionName, 'daily', section.daily);
+            const dailyTable = createDailyTable(sectionName, 'daily', section.daily, sectionStatuses.daily);
             dailyDiv.appendChild(dailyTable);
             layoutDiv.appendChild(dailyDiv);
         }
@@ -450,7 +461,7 @@ function renderChecklists() {
     });
 }
 
-function createSetupTable(sectionName, type, tasks) {
+function createSetupTable(sectionName, type, tasks, taskStatuses) {
     const table = document.createElement('table');
     table.className = 'checklist-table';
     table.style.width = '100%';
@@ -468,7 +479,7 @@ function createSetupTable(sectionName, type, tasks) {
 
     const tbody = document.createElement('tbody');
     tasks.forEach((task, index) => {
-        const row = createSetupRow(sectionName, type, task, index);
+        const row = createSetupRow(sectionName, type, task, taskStatuses[index]);
         tbody.appendChild(row);
     });
     table.appendChild(tbody);
@@ -476,7 +487,7 @@ function createSetupTable(sectionName, type, tasks) {
     return table;
 }
 
-function createDailyTable(sectionName, type, tasks) {
+function createDailyTable(sectionName, type, tasks, taskStatuses) {
     const table = document.createElement('table');
     table.className = 'checklist-table';
     table.style.width = '100%';
@@ -499,7 +510,7 @@ function createDailyTable(sectionName, type, tasks) {
 
     const tbody = document.createElement('tbody');
     tasks.forEach((task, index) => {
-        const row = createDailyRow(sectionName, type, task, index);
+        const row = createDailyRow(sectionName, type, task, taskStatuses[index]);
         tbody.appendChild(row);
     });
     table.appendChild(tbody);
@@ -507,22 +518,21 @@ function createDailyTable(sectionName, type, tasks) {
     return table;
 }
 
-function createSetupRow(sectionName, type, task, index) {
+function createSetupRow(sectionName, type, task, taskStatus) {
     const row = document.createElement('tr');
-    
-    // Get the single status for setup tasks (we'll use day1 as the storage)
-    const status = statuses[sectionName][type][index].day1;
+    const status = taskStatus.day1;
     
     row.className = `status-${status}`;
+    row.dataset.taskId = task.id;
 
     row.innerHTML = `
         <td>
             <input type="text" class="task-input" value="${task.task}" 
-                   onchange="updateTask('${sectionName}', '${type}', ${index}, this.value)">
+                   onchange="updateTask(${task.id}, 'task', this.value)">
         </td>
         <td>
             <select class="stage-select" 
-                    onchange="updateStage('${sectionName}', '${type}', ${index}, this.value)">
+                    onchange="updateTask(${task.id}, 'stage', this.value)">
                 <option value="" ${task.stage === '' ? 'selected' : ''}>-</option>
                 <option value="Pre-Production" ${task.stage === 'Pre-Production' ? 'selected' : ''}>Pre-Production</option>
                 <option value="Load-In" ${task.stage === 'Load-In' ? 'selected' : ''}>Load-In</option>
@@ -530,7 +540,7 @@ function createSetupRow(sectionName, type, task, index) {
         </td>
         <td>
             <select class="status-select" 
-                    onchange="updateSetupStatus('${sectionName}', '${type}', ${index}, this.value, this)">
+                    onchange="updateSetupStatus(${task.id}, this.value, this)">
                 <option value="not-started" ${status === 'not-started' ? 'selected' : ''}>Not Started</option>
                 <option value="in-progress" ${status === 'in-progress' ? 'selected' : ''}>In Progress</option>
                 <option value="complete" ${status === 'complete' ? 'selected' : ''}>Complete</option>
@@ -538,162 +548,137 @@ function createSetupRow(sectionName, type, task, index) {
             </select>
         </td>
         <td>
-            <button class="delete-btn" onclick="deleteTask('${sectionName}', '${type}', ${index})">×</button>
+            <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
         </td>
     `;
     
     return row;
 }
 
-function createDailyRow(sectionName, type, task, index) {
+function createDailyRow(sectionName, type, task, taskStatus) {
     const row = document.createElement('tr');
-    const taskStatuses = statuses[sectionName][type][index];
+    row.dataset.taskId = task.id;
     
     row.innerHTML = `
         <td>
             <input type="text" class="task-input" value="${task.task}" 
-                   onchange="updateTask('${sectionName}', '${type}', ${index}, this.value)">
+                   onchange="updateTask(${task.id}, 'task', this.value)">
         </td>
         <td style="text-align: center;">
             <input type="checkbox" class="day-checkbox" 
-                   ${taskStatuses.day1 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day1', this.checked)">
+                   ${taskStatus.day1 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus(${task.id}, 'day1', this.checked)">
         </td>
         <td style="text-align: center;">
             <input type="checkbox" class="day-checkbox"
-                   ${taskStatuses.day2 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day2', this.checked)">
+                   ${taskStatus.day2 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus(${task.id}, 'day2', this.checked)">
         </td>
         <td style="text-align: center;">
             <input type="checkbox" class="day-checkbox"
-                   ${taskStatuses.day3 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day3', this.checked)">
+                   ${taskStatus.day3 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus(${task.id}, 'day3', this.checked)">
         </td>
         <td style="text-align: center;">
             <input type="checkbox" class="day-checkbox"
-                   ${taskStatuses.day4 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus('${sectionName}', '${type}', ${index}, 'day4', this.checked)">
+                   ${taskStatus.day4 === 'complete' ? 'checked' : ''}
+                   onchange="updateDayStatus(${task.id}, 'day4', this.checked)">
         </td>
         <td>
-            <button class="delete-btn" onclick="deleteTask('${sectionName}', '${type}', ${index})">×</button>
+            <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
         </td>
     `;
     
     return row;
 }
 
-function updateSetupStatus(sectionName, type, index, value, selectElement) {
-    // For setup tasks, update all days to the same status (for compatibility)
-    statuses[sectionName][type][index].day1 = value;
-    statuses[sectionName][type][index].day2 = value;
-    statuses[sectionName][type][index].day3 = value;
-    statuses[sectionName][type][index].day4 = value;
-    
-    const row = selectElement.closest('tr');
-    row.className = `status-${value}`;
-    saveToLocalStorage();
-}
-
-function updateDayStatus(sectionName, type, index, day, checked) {
-    statuses[sectionName][type][index][day] = checked ? 'complete' : 'not-started';
-    saveToLocalStorage();
-}
-
-function updateTask(sectionName, type, index, value) {
-    checklists[sectionName][type][index].task = value;
-    saveToLocalStorage();
-}
-
-function updateStage(sectionName, type, index, value) {
-    checklists[sectionName][type][index].stage = value;
-    saveToLocalStorage();
-}
-
-function updateStatus(sectionName, type, index, day, value, selectElement) {
-    statuses[sectionName][type][index][day] = value;
-    
-    const row = selectElement.closest('tr');
-    const taskStatuses = statuses[sectionName][type][index];
-    const statusCounts = {};
-    Object.values(taskStatuses).forEach(status => {
-        statusCounts[status] = (statusCounts[status] || 0) + 1;
+async function updateTask(taskId, field, value) {
+    const result = await apiCall('{% url "planner:audio_checklist_update_task" %}', {
+        task_id: taskId,
+        field: field,
+        value: value,
     });
-    const majorityStatus = Object.keys(statusCounts).reduce((a, b) => 
-        statusCounts[a] > statusCounts[b] ? a : b
-    );
-    
-    row.className = `status-${majorityStatus}`;
-    saveToLocalStorage();
+    if (result && result.success) {
+        showNotification('Saved');
+    }
 }
 
-function addSetupTask(sectionName) {
+async function updateSetupStatus(taskId, value, selectElement) {
+    const result = await apiCall('{% url "planner:audio_checklist_update_status" %}', {
+        task_id: taskId,
+        day: 'day1',
+        status: value,
+    });
+    if (result && result.success) {
+        const row = selectElement.closest('tr');
+        row.className = `status-${value}`;
+        showNotification('Saved');
+    }
+}
+
+async function updateDayStatus(taskId, day, checked) {
+    const status = checked ? 'complete' : 'not-started';
+    const result = await apiCall('{% url "planner:audio_checklist_update_status" %}', {
+        task_id: taskId,
+        day: day,
+        status: status,
+    });
+    if (result && result.success) {
+        showNotification('Saved');
+    }
+}
+
+async function addSetupTask(sectionName) {
     const taskName = prompt('Enter setup task name:');
     if (taskName) {
-        checklists[sectionName].setup.push({ task: taskName, stage: '' });
-        statuses[sectionName].setup.push({
-            day1: 'not-started',
-            day2: 'not-started',
-            day3: 'not-started',
-            day4: 'not-started'
+        const result = await apiCall('{% url "planner:audio_checklist_add_task" %}', {
+            checklist_name: sectionName,
+            task_type: 'setup',
+            task: taskName,
         });
-        renderChecklists();
-        saveToLocalStorage();
+        if (result && result.success) {
+            await loadData();
+            showNotification('Task added');
+        }
     }
 }
 
-function addDailyTask(sectionName) {
+async function addDailyTask(sectionName) {
     const taskName = prompt('Enter daily task name:');
     if (taskName) {
-        checklists[sectionName].daily.push({ task: taskName, stage: '' });
-        statuses[sectionName].daily.push({
-            day1: 'not-started',
-            day2: 'not-started',
-            day3: 'not-started',
-            day4: 'not-started'
+        const result = await apiCall('{% url "planner:audio_checklist_add_task" %}', {
+            checklist_name: sectionName,
+            task_type: 'daily',
+            task: taskName,
         });
-        renderChecklists();
-        saveToLocalStorage();
+        if (result && result.success) {
+            await loadData();
+            showNotification('Task added');
+        }
     }
 }
-function deleteTask(sectionName, type, index) {
+
+async function deleteTask(taskId) {
     if (confirm('Are you sure you want to delete this task?')) {
-        checklists[sectionName][type].splice(index, 1);
-        statuses[sectionName][type].splice(index, 1);
-        renderChecklists();
-        saveToLocalStorage();
+        const result = await apiCall('{% url "planner:audio_checklist_delete_task" %}', {
+            task_id: taskId,
+        });
+        if (result && result.success) {
+            await loadData();
+            showNotification('Task deleted');
+        }
     }
 }
 
-function saveToLocalStorage() {
-    const data = {
-        checklists: checklists,
-        statuses: statuses,
-        timestamp: new Date().toISOString()
-    };
-    localStorage.setItem('audioChecklist', JSON.stringify(data));
-    showNotification('Progress saved!');
-}
-
-function loadFromLocalStorage() {
-    const saved = localStorage.getItem('audioChecklist');
-    if (saved) {
-        const data = JSON.parse(saved);
-        checklists = data.checklists;
-        statuses = data.statuses;
-        renderChecklists();
-        showNotification('Loaded saved progress!');
-    } else {
-        showNotification('No saved data found');
-    }
-}
-
-function resetAll() {
+async function resetAll() {
     if (confirm('This will reset all checklists to default. Are you sure?')) {
-        checklists = JSON.parse(JSON.stringify(defaultChecklists));
-        initializeStatuses();
-        renderChecklists();
-        localStorage.removeItem('audioChecklist');
-        showNotification('Reset to defaults');
+        showLoading();
+        const result = await apiCall('{% url "planner:audio_checklist_reset" %}', {});
+        if (result && result.success) {
+            await loadData();
+            showNotification('Reset to defaults');
+        }
+        hideLoading();
     }
 }
 
@@ -702,11 +687,13 @@ function exportToCSV() {
     
     Object.keys(checklists).forEach(sectionName => {
         const section = checklists[sectionName];
+        const sectionStatuses = statuses[sectionName];
+        
         ['setup', 'daily'].forEach(type => {
             section[type].forEach((task, index) => {
-                const taskStatuses = statuses[sectionName][type][index];
+                const taskStatus = sectionStatuses[type][index];
                 csv += `"${sectionName}","${type}","${task.task}","${task.stage || ''}",`;
-                csv += `"${taskStatuses.day1}","${taskStatuses.day2}","${taskStatuses.day3}","${taskStatuses.day4}"\n`;
+                csv += `"${taskStatus.day1}","${taskStatus.day2}","${taskStatus.day3}","${taskStatus.day4}"\n`;
             });
         });
     });
@@ -755,31 +742,9 @@ function filterByDay() {
     });
 }
 
-function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification';
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        notification.style.transition = 'opacity 0.3s';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
-    initializeStatuses();
-    
-    const saved = localStorage.getItem('audioChecklist');
-    if (saved) {
-        const data = JSON.parse(saved);
-        checklists = data.checklists;
-        statuses = data.statuses;
-    }
-    
-    renderChecklists();
+    loadData();
 });
 </script>
 {% endblock %}
