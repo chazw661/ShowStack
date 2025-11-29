@@ -1395,7 +1395,7 @@ class PACableSchedule(models.Model):
     # Fields matching spreadsheet columns
     label = models.ForeignKey(
         PAZone,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         verbose_name="Label",
         help_text="Zone label",
         related_name='cables',

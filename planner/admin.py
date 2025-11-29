@@ -2463,10 +2463,7 @@ class PAZoneAdmin(BaseEquipmentAdmin):
         qs = super().get_queryset(request)
         if hasattr(request, 'current_project') and request.current_project:
             from django.db.models import Q
-            return qs.filter(
-                Q(project=request.current_project) | 
-                Q(project__isnull=True)
-            )
+            return qs.filter(project=request.current_project)
         return qs.none()
     
     def save_model(self, request, obj, form, change):
@@ -2567,10 +2564,7 @@ class PACableAdmin(BaseEquipmentAdmin):
         if db_field.name == "label":
             if hasattr(request, 'current_project') and request.current_project:
                 from django.db.models import Q
-                kwargs["queryset"] = PAZone.objects.filter(
-                    Q(project=request.current_project) | 
-                    Q(project__isnull=True)  # Include global defaults
-                )
+                kwargs["queryset"] = PAZone.objects.filter(project=request.current_project)
             else:
                 kwargs["queryset"] = PAZone.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
