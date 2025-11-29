@@ -75,10 +75,11 @@ class BaseEquipmentAdmin(BaseAdmin):
     """Base admin for equipment models with project filtering and role-based permissions"""
 
 
-    def _get_user_role_for_project(self, request, project):
-        """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
-        if project.owner == request.user:
-            return 'owner'
+def _get_user_role_for_project(self, request, project):
+    """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
+    if project is None:
+        return None
+    if project.owner == request.user:
         
         try:
             from planner.models import ProjectMember
