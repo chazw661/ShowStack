@@ -3586,7 +3586,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 badges.append(badge)
         
         # Wrap in a container that displays 3 per row
-        result = f'''<div style="display: grid; grid-template-columns: repeat(3, auto); gap: 3px; max-width: 280px; justify-items: start;">{''.join(badges)}</div>'''
+        result = f'''<div style="display: grid; grid-template-columns: repeat(4, auto); gap: 3px; max-width: 380px; justify-items: start;">{''.join(badges)}</div>'''
         
         if channels.count() > 12:
             result += f'''<span style="color: #14b8a6; font-size: 11px; margin-left: 5px;">+{channels.count() - 12} more</span>'''
