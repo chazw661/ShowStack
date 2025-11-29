@@ -2535,11 +2535,11 @@ class PACableAdmin(BaseEquipmentAdmin):
     form = PACableInlineForm
     inlines = [PAFanOutInline]  # Add this line
     list_display = [
-    'label_display', 'destination', 'count', 'length',
+    'destination', 'count', 'length',
     'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
     'notes', 'drawing_ref'
 ]
-    list_filter = ['label', 'cable']
+    list_filter = ['cable']
     search_fields = ['destination', 'notes', 'drawing_ref']
     list_editable = ['count' ,'length']  
     
@@ -2547,7 +2547,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     fieldsets = (
         ('Cable Configuration', {
-            'fields': ('label', 'destination', 'count', 'length' , 'cable')
+            'fields': ('destination', 'count', 'length' , 'cable')
         }),
       
         
@@ -2559,26 +2559,14 @@ class PACableAdmin(BaseEquipmentAdmin):
     actions = ['export_cable_schedule']
 
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter label dropdown to current project only"""
-        if db_field.name == "label":
-            if hasattr(request, 'current_project') and request.current_project:
-                from django.db.models import Q
-                kwargs["queryset"] = PAZone.objects.filter(project=request.current_project)
-            else:
-                kwargs["queryset"] = PAZone.objects.none()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+   
     
-    def label_display(self, obj):
-        return f"{obj.label.name}" if obj.label else "-"
-    label_display.short_description = 'Label'
-    label_display.admin_order_field = 'label'
     
     def cable_display(self, obj):
         return obj.get_cable_display()
     cable_display.short_description = 'Cable'
     cable_display.admin_order_field = 'cable'
-    
+
     def fan_out_summary_display(self, obj):
         """Display summary of all fan outs"""
         return obj.fan_out_summary or "-"
