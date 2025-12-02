@@ -4009,7 +4009,7 @@ class MicAssignmentInline(BaseEquipmentInline):
     model = MicAssignment
     form = MicAssignmentForm
     extra = 0
-    fields = ['rf_number', 'mic_type', 'presenter', 'is_micd', 'is_d_mic', 'shared_presenters', 'notes']
+    fields = ['rf_number', 'mic_type', 'presenter', 'is_micd', 'is_d_mic', 'notes']
     ordering = ['rf_number']
     readonly_fields = ['rf_number']
 
