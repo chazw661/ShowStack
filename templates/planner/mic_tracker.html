@@ -141,7 +141,6 @@
                                                     title="Primary presenter"
                                                     {% if is_viewer %}readonly{% endif %}>
 
-
                                             {% if not is_viewer %}
                                             <!-- Add Shared Presenter Button -->
                                             <button type="button" 
@@ -151,22 +150,21 @@
                                                 +
                                             </button>
                                             {% endif %}
-                                            
-                                        
-                                        
                                         </div>
                                         
-                                        <!-- Shared Presenters Section - Only show if there are shared presenters -->
-                                        {% if assignment.shared_presenters.exists %}
-                                        <div class="shared-presenters-container" data-assignment-id="{{ assignment.id }}">
+                                        <!-- Shared Presenters Section - Always render, hide if empty -->
+                                        <div class="shared-presenters-container" 
+                                            data-assignment-id="{{ assignment.id }}"
+                                            style="{% if not assignment.shared_presenters.exists %}display: none;{% endif %}">
+                                            
                                             {% for shared in assignment.ordered_shared_presenters %}
                                             <div class="presenter-row shared-presenter" data-presenter-name="{{ shared.name }}">
                                                 <span class="presenter-order">{{ forloop.counter|add:"1" }}°</span>
                                                 <input type="text" 
-                                                       class="presenter-input {% if assignment.active_presenter_index == forloop.counter %}active-presenter{% endif %}" 
-                                                       value="{{ shared.name }}"
-                                                       readonly
-                                                       title="Shared presenter #{{ forloop.counter|add:"1" }}">
+                                                    class="presenter-input {% if assignment.active_presenter_index == forloop.counter %}active-presenter{% endif %}" 
+                                                    value="{{ shared.name }}"
+                                                    readonly
+                                                    title="Shared presenter #{{ forloop.counter|add:"1" }}">
                                                 {% if assignment.active_presenter_index == forloop.counter %}
                                                 <span class="current-badge">CURRENT</span>
                                                 {% endif %}
@@ -211,10 +209,6 @@
                                             </div>
                                             {% endif %}
                                         </div>
-                                        {% endif %}
-                                            
-                                           
-                                        
                                     </div>
                                     
                                     <div class="col-micd">
