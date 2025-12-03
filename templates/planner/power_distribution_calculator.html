@@ -438,7 +438,6 @@
         <!-- Amplifier Assignments -->
         <div class="panel">
             <h2 class="panel-title">Amplifier Assignments</h2>
-            <button class="btn" onclick="showAddAmplifierModal()">+ Add Amplifier Group</button>
             
             <table class="assignments-table" style="margin-top: 20px;">
                 <thead>
@@ -476,53 +475,6 @@
         </div>
     </div>
     
-    <!-- Add Amplifier Modal -->
-    <div id="addAmplifierModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeModal()">&times;</span>
-            <h2 class="modal-header">Add Amplifier Group</h2>
-            
-            <div class="form-group">
-                <label>Amplifier Model</label>
-                <select id="modal-amplifier">
-                    {% for amp in amplifier_profiles %}
-                    <option value="{{ amp.id }}">{{ amp.manufacturer }} {{ amp.model }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Quantity</label>
-                    <input type="number" id="modal-quantity" value="1" min="1">
-                </div>
-                <div class="form-group">
-                    <label>Zone</label>
-                    <input type="text" id="modal-zone" value="FOH" placeholder="e.g., FOH, Delays, Fills">
-                </div>
-            </div>
-            
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Position (Optional)</label>
-                    <input type="text" id="modal-position" placeholder="e.g., Stage Left, Tower 1">
-                </div>
-                <div class="form-group">
-                    <label>Duty Cycle</label>
-                    <select id="modal-duty">
-                        {% for value, label in duty_cycles %}
-                        <option value="{{ value }}" {% if value == 'heavy_music' %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-            
-            <div style="margin-top: 20px;">
-                <button class="btn" onclick="addAmplifier()">Add Amplifier Group</button>
-                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
     
     <!-- Edit Amplifier Modal - INSERT AFTER LINE 525 -->
     <div id="editAmplifierModal" class="modal">
@@ -646,23 +598,7 @@
         }
         
         // Modal functions
-        function showAddAmplifierModal() {
-            document.getElementById('addAmplifierModal').style.display = 'block';
-        }
-        
-        function closeModal() {
-            document.getElementById('addAmplifierModal').style.display = 'none';
-        }
-        
-        // Add amplifier
-        function addAmplifier() {
-            const data = {
-                amplifier_id: document.getElementById('modal-amplifier').value,
-                quantity: document.getElementById('modal-quantity').value,
-                zone: document.getElementById('modal-zone').value,
-                position: document.getElementById('modal-position').value,
-                duty_cycle: document.getElementById('modal-duty').value,
-            };
+       
             
             fetch(`/audiopatch/api/power/plan/${planId}/add-amp/`, {
                 method: 'POST',
@@ -803,17 +739,7 @@
         
         
 // Close modal when clicking outside
-        window.onclick = function(event) {
-            const addModal = document.getElementById('addAmplifierModal');
-            const editModal = document.getElementById('editAmplifierModal');
-            
-            if (event.target == addModal) {
-                addModal.style.display = 'none';
-            }
-            if (event.target == editModal) {
-                editModal.style.display = 'none';
-            }
-        }
+        
     </script>
 </body>
 </html>

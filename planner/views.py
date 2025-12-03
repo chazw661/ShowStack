@@ -1400,9 +1400,9 @@ def calculate_phase_distribution(plan):
         # Find phase with lowest load
         min_phase = min(phases.keys(), key=lambda x: phases[x]['total_current'])
         
-        # Assign to that phase
-        assignment.phase_assignment = min_phase
-        assignment.save(update_fields=['phase_assignment'])
+        # Assign to that phase (for display calculation only, don't persist)
+        assignment._display_phase = min_phase
+        # Removed: assignment.save() - keep AUTO in database
         
         phases[min_phase]['assignments'].append(assignment)
         phases[min_phase]['total_current'] += float(
