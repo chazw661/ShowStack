@@ -4279,6 +4279,12 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(session__day__project=request.current_project)
+        return qs.none()
     
     def rf_display(self, obj):
         return f"RF{obj.rf_number:02d}"
