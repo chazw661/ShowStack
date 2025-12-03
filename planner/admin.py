@@ -367,8 +367,8 @@ def test_action(modeladmin, request, queryset):
 @admin.register(Project, site=showstack_admin_site)
 class ProjectAdmin(admin.ModelAdmin):
     """Admin for Project model - doesn't use BaseEquipmentAdmin filtering"""
-    list_display = ['name', 'owner', 'start_date', 'venue', 'is_archived']
-    list_filter = ['is_archived', 'start_date']
+    list_display = ['name', 'owner', 'start_date', 'end_date', 'venue', 'is_archived']
+    list_filter = ['is_archived', 'start_date', 'end_date']
     search_fields = ['name', 'venue', 'client']
     actions = [duplicate_project_action]
     readonly_fields = ['owner', 'created_at', 'updated_at']  # <-- owner is readonly
@@ -382,7 +382,7 @@ class ProjectAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Project Details', {
-            'fields': ('name', 'owner', 'show_date', 'venue', 'client')
+            'fields': ('name', 'owner', 'start_date', 'end_date', 'venue', 'client')
         }),
         ('Notes', {
             'fields': ('notes',),
