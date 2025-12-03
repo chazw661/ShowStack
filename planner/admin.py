@@ -4013,6 +4013,7 @@ class MicAssignmentInline(BaseEquipmentInline):
     ordering = ['rf_number']
     readonly_fields = ['rf_number']
 
+    
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Filter presenter dropdown by current project"""
@@ -4187,6 +4188,12 @@ class MicSessionAdmin(BaseEquipmentAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(day__project=request.current_project)
+        return qs.none()
     
     def mic_usage(self, obj):
         stats = obj.get_mic_usage_stats()
