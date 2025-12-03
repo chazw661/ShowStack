@@ -1,1 +1,2 @@
-web: python manage.py collectstatic --noinput && python manage.py migrate && gunicorn audiopatch.wsgi
+release: python manage.py collectstatic --noinput && python manage.py migrate
+web: gunicorn audiopatch.wsgi
