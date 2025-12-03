@@ -25,7 +25,8 @@ class Project(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     # Show details
-    show_date = models.DateField(blank=True, null=True)
+    start_date = models.DateField(blank=True, null=True, verbose_name="Start Date")
+    end_date = models.DateField(blank=True, null=True, verbose_name="End Date")
     venue = models.CharField(max_length=200, blank=True)
     client = models.CharField(max_length=200, blank=True)
     notes = models.TextField(blank=True)
