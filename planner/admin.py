@@ -3075,6 +3075,7 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
     list_display = ['name']
     ordering = ['name']
     search_fields = ['name']
+    exclude = ['project']
     
     def get_urls(self):
         """Add custom URL for CSV import."""
@@ -3126,7 +3127,8 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
-    
+
+        
     class Media:
         css = {
             'all': ('admin/css/comm_crew_name_buttons.css',)
