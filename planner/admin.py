@@ -3127,6 +3127,12 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         if request.user.groups.filter(name='Viewer').exists():
             return False
         return super().has_delete_permission(request, obj)
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
 
         
     class Media:
