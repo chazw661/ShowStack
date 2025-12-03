@@ -71,12 +71,12 @@ def dashboard(request):
     user = request.user
     
     # Get projects owned by user
-    owned_projects = Project.objects.filter(owner=user).order_by('-show_date')
+    owned_projects = Project.objects.filter(owner=user).order_by('-start_date')
     
     # Get projects where user is a member
     member_projects = ProjectMember.objects.filter(
         user=user
-    ).select_related('project').order_by('-project__show_date')
+    ).select_related('project').order_by('-project__start_date')
 
     pending_invitations = Invitation.objects.filter(
         email=user.email,
@@ -249,7 +249,7 @@ def send_invitation_email(invitation, request):
 <ul>
     <li><strong>Project:</strong> {invitation.project.name}</li>
     <li><strong>Role:</strong> {invitation.get_role_display()}</li>
-    <li><strong>Show Date:</strong> {invitation.project.show_date or 'Not set'}</li>
+    <li><strong>Start Date:</strong> {{ invitation.project.start_date or 'Not set' }}</li>
     <li><strong>Venue:</strong> {invitation.project.venue or 'Not set'}</li>
 </ul>
 

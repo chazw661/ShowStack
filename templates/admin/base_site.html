@@ -31,8 +31,11 @@ html[data-theme="auto"] {
 {% block branding %}
 <div id="branding-wrapper" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 20px;">
     <h1 id="site-name">
-        <a href="{% url 'admin:index' %}">ShowStack Administration</a>
-    </h1>
+    <a href="{% url 'admin:index' %}" style="display: flex; align-items: center; gap: 10px;">
+        <img src="{% static 'admin/img/showstack_icon.svg' %}" alt="ShowStack" height="32" style="vertical-align: middle;">
+        <span><span style="color: #4a9eff;">ShowStack</span> Administration</span>
+    </a>
+</h1>
     <div class="dashboard-nav" style="display: flex; gap: 10px; align-items: center;">
         <a href="{% url 'dashboard' %}" class="dashboard-button" style="
             background: linear-gradient(135deg, #1a7a6f 0%, #0d5c54 100%);
@@ -130,6 +133,11 @@ html[data-theme="auto"] {
 
 {% block extrahead %}
 {{ block.super }}
+
+<!-- Favicon and App Icons -->
+<link rel="icon" type="image/png" sizes="32x32" href="{% static 'admin/img/favicon_32x32.png' %}">
+<link rel="icon" type="image/png" sizes="16x16" href="{% static 'admin/img/favicon_16x16.png' %}">
+<link rel="apple-touch-icon" sizes="180x180" href="{% static 'admin/img/icon_180x180.png' %}">
 
 <!-- Force dark theme for all users -->
 <script>
