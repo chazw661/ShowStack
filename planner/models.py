@@ -2361,7 +2361,7 @@ class AmplifierProfile(models.Model):
 class PowerDistributionPlan(models.Model):
     """Main power distribution planning for a show"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE) 
-    show_day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='power_plans')
+    show_day = models.ForeignKey(ShowDay, on_delete=models.SET_NULL, null=True, blank=True, related_name='power_plans')
     venue_name = models.CharField(max_length=200)
     
     SERVICE_TYPES = [
@@ -2405,7 +2405,7 @@ class PowerDistributionPlan(models.Model):
         ordering = ['-created_at']  # or ['id']
         
     def __str__(self):
-        return f"{self.show_day} - {self.venue_name} Power Plan"
+        return f"{self.venue_name} Power Plan" if self.venue_name else f"Power Plan {self.pk}"
     
     def get_usable_amperage(self):
         """Calculate usable amperage after applying safety margin"""

@@ -4523,17 +4523,18 @@ class AmplifierAssignmentInline(admin.TabularInline):
 
 class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
     list_display = [
-        'show_day', 'venue_name', 'service_type', 
+        'venue_name', 'service_type', 
         'available_amperage_per_leg', 'get_total_current', 'created_at', 'view_calculator_button',
     ]
     list_filter = ['service_type', 'created_at']
-    search_fields = ['venue_name', 'show_day__name', 'notes']
+    search_fields = ['venue_name', 'notes']
     date_hierarchy = 'created_at'
     
     fieldsets = (
-        ('Show Information', {
-            'fields': ('show_day', 'venue_name')
+        ('Venue Information', {
+            'fields': ('venue_name',)
         }),
+
         ('Electrical Service', {
             'fields': ('service_type', 'available_amperage_per_leg')
         }),
@@ -4546,6 +4547,8 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    exclude = ['project', 'show_day']
     
     # Remove get_summary_html from readonly_fields since it's not a real field
     readonly_fields = ['created_by', 'created_at', 'updated_at', 'get_total_current']
