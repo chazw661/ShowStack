@@ -1935,6 +1935,21 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
         messages.success(request, f'P1 Processor created with standard channel configuration (4 Analog, 4 AES, 8 AVB channels).')
         return HttpResponseRedirect(change_url)
     
+
+    def get_queryset(self, request):
+        """Filter P1 processors by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(system_processor__project=request.current_project)
+        return qs.none()
+
+    def response_change(self, request, obj):
+        """After saving, redirect back to System Processors list"""
+        if "_continue" not in request.POST and "_addanother" not in request.POST and "_save" in request.POST:
+            messages.success(request, f'P1 Configuration for "{obj.system_processor.name}" was changed successfully.')
+            return HttpResponseRedirect(reverse('admin:planner_systemprocessor_changelist'))
+        return super().response_change(request, obj)
+    
     def save_model(self, request, obj, form, change):
         """Save the model and create channels if new"""
         is_new = obj.pk is None
@@ -2213,6 +2228,20 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
         change_url = reverse('admin:planner_galaxyprocessor_change', args=(obj.pk,))
         messages.success(request, f'GALAXY Processor created with standard channel configuration (8 Analog, 8 AES, 16 AVB channels).')
         return HttpResponseRedirect(change_url)
+    
+    def get_queryset(self, request):
+        """Filter Galaxy processors by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(system_processor__project=request.current_project)
+        return qs.none()
+
+    def response_change(self, request, obj):
+        """After saving, redirect back to System Processors list"""
+        if "_continue" not in request.POST and "_addanother" not in request.POST and "_save" in request.POST:
+            messages.success(request, f'GALAXY Configuration for "{obj.system_processor.name}" was changed successfully.')
+            return HttpResponseRedirect(reverse('admin:planner_systemprocessor_changelist'))
+        return super().response_change(request, obj)
     
     def save_model(self, request, obj, form, change):
         """Save the model and create channels if new"""
