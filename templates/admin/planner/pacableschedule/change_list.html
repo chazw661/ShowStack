@@ -70,7 +70,7 @@
 .cable-summary-section {
     margin-top: 20px;
     padding: 15px;
-    background: #2a2a2a;  /* Dark background for container */
+    background: #2a2a2a;
     border: 1px solid #417690;
     border-radius: 4px;
 }
@@ -119,52 +119,10 @@
     font-weight: bold;
 }
 
-.cable-summary-section .total-with-overage {
-    font-weight: bold;
-    color: #4a9eff !important;
-}
-
 .cable-summary-section .safety-cells {
     background: #2a4a2a !important;
     color: #90ee90 !important;
     font-weight: bold;
-}
-
-.cable-summary-section .order-cells,
-.cable-summary-section .coupler-cells {
-    background: #4a4a00 !important;
-    color: #ffff99 !important;
-}
-
-.cable-summary-section .grand-total-row {
-    background: #333 !important;
-    font-weight: bold;
-}
-
-.cable-summary-section .grand-total-row td {
-    border: 2px solid #417690;
-}
-
-.cable-summary-section .quick-order-box {
-    margin-top: 20px;
-    padding: 10px;
-    background: #2a2a2a;
-    border: 1px solid #417690;
-    color: #f0f0f0;
-}
-
-.cable-summary-section .quick-order-box h3 {
-    color: #f0f0f0;
-    margin-top: 0;
-}
-
-.cable-summary-section .quick-order-box strong {
-    color: #4a9eff;
-}
-
-.cable-summary-section .quick-order-box ul {
-    margin: 5px 0;
-    color: #f0f0f0;
 }
 </style>
 
@@ -216,10 +174,9 @@
         </tbody>
     </table>
 
-    
     <!-- Fan Out Summary Section -->
     {% if fan_out_summary %}
-    <div class="cable-summary-section" style="margin-top: 20px;">
+    <div style="margin-top: 20px;">
         <h2>Fan Out Summary</h2>
         
         <table>
@@ -243,55 +200,75 @@
     </div>
     {% endif %}
     
-   <!-- Ordering Summary Box -->
-{% if cable_summary %}
-<div class="quick-order-box">
-    <h3 style="font-size: 20px; font-weight: bold;">Quick Order List</h3>
-    
-    <!-- Cable Orders -->
-    {% for cable_type, data in cable_summary.items %}
-    <div style="margin-bottom: 15px; font-size: 18px;">
-        <strong style="font-size: 18px; color: #79aec8;">{{ cable_type }}:</strong>
-        <ul style="font-size: 16px; line-height: 1.8;">
-            {% if data.hundreds_with_safety > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.hundreds_with_safety }} × 100' lengths</li>
-            {% endif %}
-            {% if data.fifties_with_safety > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.fifties_with_safety }} × 50' lengths</li>
-            {% endif %}
-            {% if data.twenty_fives_with_safety > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.twenty_fives_with_safety }} × 25' lengths</li>
-            {% endif %}
-            {% if data.tens_with_safety > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.tens_with_safety }} × 10' lengths</li>
-            {% endif %}
-            {% if data.fives_with_safety > 0 %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.fives_with_safety }} × 5' lengths</li>
-            {% endif %}
-        </ul>
-    </div>
-    {% endfor %}
-    
-    <!-- Fan Out Orders -->
-    {% if fan_out_summary %}
-    <div style="margin-top: 20px; margin-bottom: 15px;">
-        <strong style="font-size: 18px; color: #79aec8;">FAN OUTS:</strong>
-        <ul style="font-size: 16px; line-height: 1.8;">
-            {% for fan_out_type, data in fan_out_summary.items %}
-            <li style="font-size: 16px; margin: 5px 0;">Order {{ data.with_overage }} × {{ fan_out_type }}</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endif %}
-    
-    <!-- Note about overage -->
-    <div style="margin-top: 20px; padding: 10px; background-color: #2a3a2a; border-left: 3px solid #417690;">
-        <p style="font-size: 14px; color: #90ee90; margin: 0;">
-            <strong>Note:</strong> Cables and fan out quantities include a 20% safety margin.
+    <!-- Quick Order List -->
+    {% if cable_summary %}
+    <div style="margin-top: 20px; padding: 15px; background: #1e1e1e; border: 1px solid #417690; border-radius: 4px;">
+        <h3 style="font-size: 18px; font-weight: bold; color: #f0f0f0; margin: 0 0 15px 0; border-bottom: 1px solid #417690; padding-bottom: 10px;">Quick Order List</h3>
+        
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #417690;">
+                    <th style="padding: 8px; text-align: left; color: white; border: 1px solid #356683;">Item Type</th>
+                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid #356683;">Length</th>
+                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid #356683;">Order Qty</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cable_type, data in cable_summary.items %}
+                    {% if data.hundreds_with_safety > 0 %}
+                    <tr style="background: #2a2a2a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">100'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.hundreds_with_safety }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if data.fifties_with_safety > 0 %}
+                    <tr style="background: #2a2a2a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">50'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.fifties_with_safety }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if data.twenty_fives_with_safety > 0 %}
+                    <tr style="background: #2a2a2a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">25'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.twenty_fives_with_safety }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if data.tens_with_safety > 0 %}
+                    <tr style="background: #2a2a2a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">10'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.tens_with_safety }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if data.fives_with_safety > 0 %}
+                    <tr style="background: #2a2a2a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">5'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.fives_with_safety }}</td>
+                    </tr>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if fan_out_summary %}
+                    {% for fan_out_type, data in fan_out_summary.items %}
+                    <tr style="background: #2a3a2a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ fan_out_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">Fan Out</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+        
+        <p style="font-size: 12px; color: #90ee90; margin: 10px 0 0 0; padding: 8px; background: #2a3a2a; border-left: 3px solid #417690;">
+            <strong>Note:</strong> All quantities include 20% safety margin.
         </p>
     </div>
-</div>
-{% endif %}
+    {% endif %}
 </div>
 
 {% endblock %}
