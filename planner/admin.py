@@ -3038,6 +3038,19 @@ class CommPositionAdmin(BaseEquipmentAdmin):
     list_editable = ['order']
     ordering = ['order', 'name']
     search_fields = ['name']
+
+    def get_queryset(self, request):
+        """Filter positions by current project"""
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            if hasattr(request, 'current_project') and request.current_project:
+                return qs.filter(project=request.current_project)
+            return qs
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()
+    
+    
     actions = [populate_common_positions]  # Make sure this is defined
     
     def changelist_view(self, request, extra_context=None):
