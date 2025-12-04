@@ -1,4 +1,6 @@
+
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -13,7 +15,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -167,7 +169,7 @@
 <body>
     <div class="register-container">
         <div class="logo">
-            <h1>ShowStack</h1>
+            <img src="{% static 'admin/img/showstack_logo.svg' %}" alt="ShowStack" style="max-width: 250px; height: auto; margin-bottom: 15px;">
             <p>Professional Audio Production Management</p>
         </div>
         
