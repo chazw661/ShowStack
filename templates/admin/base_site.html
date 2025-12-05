@@ -686,4 +686,55 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+
+<!-- Color-coded Fixed/Variable dropdowns -->
+<style>
+/* Style the select itself based on value */
+select.bus-type-fixed {
+    background-color: #2a4a2a !important;
+    color: #90ee90 !important;
+    border-color: #90ee90 !important;
+}
+
+select.bus-type-variable {
+    background-color: #4a2a2a !important;
+    color: #ff9090 !important;
+    border-color: #ff9090 !important;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Find all bus_type select fields
+    function colorBusTypeDropdowns() {
+        document.querySelectorAll('select[name*="bus_type"]').forEach(function(select) {
+            updateSelectColor(select);
+            
+            select.addEventListener('change', function() {
+                updateSelectColor(this);
+            });
+        });
+    }
+    
+    function updateSelectColor(select) {
+        select.classList.remove('bus-type-fixed', 'bus-type-variable');
+        if (select.value === 'Fixed') {
+            select.classList.add('bus-type-fixed');
+        } else if (select.value === 'Variable') {
+            select.classList.add('bus-type-variable');
+        }
+    }
+    
+    // Run on page load
+    colorBusTypeDropdowns();
+    
+    // Also run when inline rows are added
+    if (typeof django !== 'undefined' && django.jQuery) {
+        django.jQuery(document).on('formset:added', function() {
+            setTimeout(colorBusTypeDropdowns, 100);
+        });
+    }
+});
+</script>
+
 {% endblock %}
