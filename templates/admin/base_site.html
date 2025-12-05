@@ -152,13 +152,6 @@ html[data-theme="auto"] {
     });
 </script>
 
-
-
-
-
-
-    
-
     {% if user_role == 'viewer' %}
 <style>
 /* Disable child menu items for viewers */
@@ -187,10 +180,6 @@ html[data-theme="auto"] {
 {% endif %}
 
 <style>
-
-
-/* Your existing dark theme styles... */
-
 /* Override Django's CSS variables for links */
 :root,
 html[data-theme="dark"],
@@ -200,7 +189,7 @@ html[data-theme="auto"] {
     --link-selected-fg: #00ff88 !important;
 }
 
-    /* Hide the System Dashboard button in the admin index */
+/* Hide the System Dashboard button in the admin index */
 .object-tools a[href*="dashboard"],
 a[href*="system-dashboard"],
 a.button[href*="dashboard"] {
@@ -318,61 +307,24 @@ input:focus, select:focus, textarea:focus {
 /* Buttons */
 .button, input[type="submit"], input[type="button"], 
 .submit-row input, a.button {
-    background: #1a7a6f !important;
+    background: #417690 !important;
     color: #fff !important;
-    border: 1px solid #2a9d8f !important;
-    font-weight: 600 !important;
-    padding: 4px 10px !important;
-    font-size: 12px !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
-}
-
-.button:hover, input[type="submit"]:hover, input[type="button"]:hover {
-    background: #2a9d8f !important;
-    color: #fff !important;
-}
-
-/* Force white text on Export buttons */
-td a.button,
-.field-export a.button {
-    color: #fff !important;
-}
-
-.button.default, input[type="submit"].default {
-    background: #00ff88 !important;
-    color: #fff !important;
-    border: 2px solid #00ff88 !important;
-}
-
-/* Add/action buttons */
-.addlink, .addlink:link, .addlink:visited,
-.object-tools a, .object-tools a:link {
-    background: transparent !important;
-    color: #447e9b !important;
     border: none !important;
-    padding: 2px 8px !important;
 }
 
-.addlink:hover, .object-tools a:hover {
-    background: #f5f5f5 !important;
-    color: #205067 !important;
+.button:hover, input[type="submit"]:hover, input[type="button"]:hover,
+.submit-row input:hover, a.button:hover {
+    background: #205067 !important;
 }
 
-/* Clear field buttons */
-button[name="_clearfield"],
-input[name="_clearfield"],
-.clearable-file-input button,
-.related-widget-wrapper-link,
-input[value="Clear field"] {
-    background: #2a9d8f !important;
-    color: #fff !important;
-    border: 1px solid #3db3a3 !important;
+/* Default button (save) */
+.default, input[type="submit"].default {
+    background: #00ff88 !important;
+    color: #000 !important;
 }
 
-button[name="_clearfield"]:hover,
-input[name="_clearfield"]:hover,
-input[value="Clear field"]:hover {
-    background: #3db3a3 !important;
+.default:hover, input[type="submit"].default:hover {
+    background: #00cc6a !important;
 }
 
 /* ========================================
@@ -609,6 +561,55 @@ a.historylink:hover {
 .historylink::after {
     display: none !important;
 }
+
+
+/* Smaller Dante Number fields */
+input[name*="dante_number"] {
+    width: 60px !important;
+    max-width: 60px !important;
+    text-align: center !important;
+}
+
+/*FIX FOR MAKING CELLS LARGER TO FIT IN ROWS
+
+/* Make inline form inputs fill more of the cell space */
+.inline-group table select,
+.inline-group table input[name*="name"],
+.inline-group table input[name*="destination"],
+.inline-group table textarea {
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+/* Add padding to inline table cells */
+.inline-group table td {
+    padding: 4px 6px !important;
+}
+
+/* Make inputs taller to fill rows */
+.inline-group table input,
+.inline-group table select {
+    padding: 8px 10px !important;
+    height: auto !important;
+}
+
+
+
+
+
+
+/* Color-coded Fixed/Variable dropdowns */
+select.bus-type-fixed {
+    background-color: #2a4a2a !important;
+    color: #90ee90 !important;
+    border-color: #90ee90 !important;
+}
+
+select.bus-type-variable {
+    background-color: #4a2a2a !important;
+    color: #ff9090 !important;
+    border-color: #ff9090 !important;
+}
 </style>
 
 <!-- Spreadsheet Navigation -->
@@ -686,26 +687,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-
 <!-- Color-coded Fixed/Variable dropdowns -->
-<style>
-/* Style the select itself based on value */
-select.bus-type-fixed {
-    background-color: #2a4a2a !important;
-    color: #90ee90 !important;
-    border-color: #90ee90 !important;
-}
-
-select.bus-type-variable {
-    background-color: #4a2a2a !important;
-    color: #ff9090 !important;
-    border-color: #ff9090 !important;
-}
-</style>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Find all bus_type select fields
     function colorBusTypeDropdowns() {
         document.querySelectorAll('select[name*="bus_type"]').forEach(function(select) {
             updateSelectColor(select);
@@ -725,10 +709,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Run on page load
     colorBusTypeDropdowns();
     
-    // Also run when inline rows are added
     if (typeof django !== 'undefined' && django.jQuery) {
         django.jQuery(document).on('formset:added', function() {
             setTimeout(colorBusTypeDropdowns, 100);
