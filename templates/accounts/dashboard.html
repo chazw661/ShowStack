@@ -335,7 +335,7 @@
                         <div style="flex: 1;">
                             <div class="project-name">{{ invitation.project.name }}</div>
                             <div class="project-details">
-                                <div class="project-date">{{ invitation.project.show_date|date:"F d, Y" }}</div>
+                                <div class="project-date">{{ invitation.project.start_date|date:"F d, Y" }}</div>
                                 <div>{{ invitation.project.venue }}</div>
                                 <div style="margin-top: 8px; font-size: 13px; color: #666;">
                                     <strong>{{ invitation.invited_by.get_full_name|default:invitation.invited_by.username }}</strong> 
@@ -373,7 +373,7 @@
                         <div style="flex: 1;">
                             <div class="project-name">{{ project.name }}</div>
                             <div class="project-details">
-                                <div class="project-date">{{ project.show_date|date:"F d, Y" }}</div>
+                                <div class="project-date">{{ project.start_date|date:"F d, Y" }}</div>
                                 <div>{{ project.venue }}</div>
                             </div>
                         </div>
@@ -410,7 +410,7 @@
                         <div style="flex: 1;">
                             <div class="project-name">{{ membership.project.name }}</div>
                             <div class="project-details">
-                                <div class="project-date">{{ membership.project.show_date|date:"F d, Y" }}</div>
+                                <div class="project-date">{{ membership.project.start_date|date:"F d, Y" }}</div>
                                 <div>{{ membership.project.venue }}</div>
                                 <div style="margin-top: 5px; font-size: 13px; color: #888;">
                                     Invited by {{ membership.invited_by.get_full_name|default:membership.invited_by.username }}

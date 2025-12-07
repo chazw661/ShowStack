@@ -152,7 +152,7 @@
             <dd>{{ project.owner.get_full_name|default:project.owner.username }}</dd>
             
             <dt>Show Date:</dt>
-            <dd>{{ project.show_date|date:"F d, Y"|default:"Not set" }}</dd>
+            <dd>{{ project.start_date|date:"F d, Y"|default:"Not set" }}</dd>
             
             <dt>Venue:</dt>
             <dd>{{ project.venue|default:"Not set" }}</dd>

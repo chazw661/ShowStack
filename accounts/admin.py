@@ -11,14 +11,14 @@ from planner.admin import BaseAdmin
 
 
 class ProjectAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'owner', 'show_date', 'venue', 'get_member_count', 'updated_at', 'is_archived']
-    list_filter = ['is_archived', 'show_date', 'owner']
+    list_display = ['name', 'owner', 'start_date', 'venue', 'get_member_count', 'updated_at', 'is_archived']
+    list_filter = ['is_archived', 'start_date', 'owner']
     search_fields = ['name', 'venue', 'client']
     readonly_fields = ['created_at', 'updated_at']
     
     fieldsets = [
         ('Project Details', {
-            'fields': ['name', 'owner', 'show_date', 'venue', 'client']
+            'fields': ['name', 'owner', 'start_date', 'venue', 'client']
         }),
         ('Notes', {
             'fields': ['notes'],
