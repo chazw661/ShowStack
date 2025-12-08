@@ -58,32 +58,8 @@ class Project(models.Model):
         if duplicate_for_user is None:
             duplicate_for_user = self.owner
         
-        try:
-            with transaction.atomic():
-               
-                # Create new project
-                new_project = Project.objects.create(
-                    name=new_name,
-                    owner=duplicate_for_user,
-                    start_date=self.start_date,
-                    end_date=self.end_date,
-                    venue=self.venue,
-                    client=self.client,
-                    notes=self.notes,
-                    is_archived=False
-                )
-               
-                
-               
-               
-                
-                return new_project
-                
-        except Exception as e:
-            
-            raise  # Re-raise the exception
+     
     
-    # ... rest of your duplicate method
         
         with transaction.atomic():
             # Create new project
