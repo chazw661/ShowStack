@@ -65,7 +65,8 @@ class Project(models.Model):
                 new_project = Project.objects.create(
                     name=new_name,
                     owner=duplicate_for_user,
-                    show_date=self.show_date,
+                    start_date=self.start_date,
+                    end_date=self.end_date,
                     venue=self.venue,
                     client=self.client,
                     notes=self.notes,
@@ -89,7 +90,8 @@ class Project(models.Model):
             new_project = Project.objects.create(
                 name=new_name,
                 owner=duplicate_for_user,
-                show_date=self.show_date,
+                start_date=self.start_date,
+                end_date=self.end_date,
                 venue=self.venue,
                 client=self.client,
                 notes=self.notes,
