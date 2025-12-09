@@ -157,31 +157,29 @@ class Project(models.Model):
                 new_location = location_map.get(device.location_id) if device.location_id else None
                 
                 new_device = Device.objects.create(
-                    project=new_project,
-                    location=new_location,
-                    name=device.name,
-                    input_count=device.input_count,
-                    output_count=device.output_count,
-                    rio_card_count=device.rio_card_count,
-                    notes=device.notes,
-                    ip_address=device.ip_address
-                )
-                
+                project=new_project,
+                location=new_location,
+                name=device.name,
+                input_count=device.input_count,
+                output_count=device.output_count,
+                primary_ip_address=device.primary_ip_address,
+                secondary_ip_address=device.secondary_ip_address
+            )
                 # Duplicate Device Inputs
-                for device_input in device.deviceinput_set.all():
-                    DeviceInput.objects.create(
+                for device_input in device.inputs.all():
+                   DeviceInput.objects.create(
                         device=new_device,
                         input_number=device_input.input_number,
-                        source=device_input.source
+                        signal_name=device_input.signal_name
                     )
                 
                 # Duplicate Device Outputs
-                for device_output in device.deviceoutput_set.all():
+                for device_output in device.outputs.all():
                     DeviceOutput.objects.create(
-                        device=new_device,
-                        output_number=device_output.output_number,
-                        destination=device_output.destination
-                    )
+                    device=new_device,
+                    output_number=device_output.output_number,
+                    signal_name=device_output.signal_name
+                )
             
             # 4. Duplicate Amplifiers
             for amp in self.amp_set.all():
@@ -192,72 +190,58 @@ class Project(models.Model):
                     location=new_location,
                     amp_model=amp.amp_model,
                     name=amp.name,
-                    notes=amp.notes,
-                    ip_address=amp.ip_address
+                    ip_address=amp.ip_address,
+                    color=amp.color,
+                    nl4_a_pair_1=amp.nl4_a_pair_1,
+                    nl4_a_pair_2=amp.nl4_a_pair_2,
+                    nl4_b_pair_1=amp.nl4_b_pair_1,
+                    nl4_b_pair_2=amp.nl4_b_pair_2,
+                    nl8_a_pair_1=amp.nl8_a_pair_1,
+                    nl8_a_pair_2=amp.nl8_a_pair_2,
+                    nl8_a_pair_3=amp.nl8_a_pair_3,
+                    nl8_a_pair_4=amp.nl8_a_pair_4,
+                    nl8_b_pair_1=amp.nl8_b_pair_1,
+                    nl8_b_pair_2=amp.nl8_b_pair_2,
+                    nl8_b_pair_3=amp.nl8_b_pair_3,
+                    nl8_b_pair_4=amp.nl8_b_pair_4,
+                    cacom_1_ch1=amp.cacom_1_ch1,
+                    cacom_1_ch2=amp.cacom_1_ch2,
+                    cacom_1_ch3=amp.cacom_1_ch3,
+                    cacom_1_ch4=amp.cacom_1_ch4,
+                    cacom_2_ch1=amp.cacom_2_ch1,
+                    cacom_2_ch2=amp.cacom_2_ch2,
+                    cacom_2_ch3=amp.cacom_2_ch3,
+                    cacom_2_ch4=amp.cacom_2_ch4,
+                    cacom_3_ch1=amp.cacom_3_ch1,
+                    cacom_3_ch2=amp.cacom_3_ch2,
+                    cacom_3_ch3=amp.cacom_3_ch3,
+                    cacom_3_ch4=amp.cacom_3_ch4,
+                    cacom_4_ch1=amp.cacom_4_ch1,
+                    cacom_4_ch2=amp.cacom_4_ch2,
+                    cacom_4_ch3=amp.cacom_4_ch3,
+                    cacom_4_ch4=amp.cacom_4_ch4
                 )
                 amp_map[amp.id] = new_amp
                 
                 # Duplicate Amp Channels
-                for channel in amp.ampchannel_set.all():
-                    AmpChannel.objects.create(
+                for channel in amp.channels.all():
+                                        AmpChannel.objects.create(
                         amp=new_amp,
                         channel_number=channel.channel_number,
-                        speaker_load=channel.speaker_load,
-                        notes=channel.notes
+                        channel_name=channel.channel_name,
+                        avb_stream=channel.avb_stream,
+                        aes_input=channel.aes_input,
+                        analog_input=channel.analog_input
                     )
                 
-                # Duplicate NL4 Connectors
-                for nl4 in amp.nl4connector_set.all():
-                    NL4Connector.objects.create(
-                        amp=new_amp,
-                        connector_number=nl4.connector_number,
-                        ch1_plus=nl4.ch1_plus,
-                        ch1_minus=nl4.ch1_minus,
-                        ch2_plus=nl4.ch2_plus,
-                        ch2_minus=nl4.ch2_minus
-                    )
+               
                 
-                # Duplicate NL8 Connectors
-                for nl8 in amp.nl8connector_set.all():
-                    NL8Connector.objects.create(
-                        amp=new_amp,
-                        connector_number=nl8.connector_number,
-                        ch1_plus=nl8.ch1_plus,
-                        ch1_minus=nl8.ch1_minus,
-                        ch2_plus=nl8.ch2_plus,
-                        ch2_minus=nl8.ch2_minus,
-                        ch3_plus=nl8.ch3_plus,
-                        ch3_minus=nl8.ch3_minus,
-                        ch4_plus=nl8.ch4_plus,
-                        ch4_minus=nl8.ch4_minus
-                    )
-                
-                # Duplicate CaCom Outputs
-                for cacom in amp.cacomoutput_set.all():
-                    CacomOutput.objects.create(
-                        amp=new_amp,
-                        output_number=cacom.output_number,
-                        ch1=cacom.ch1,
-                        ch2=cacom.ch2,
-                        ch3=cacom.ch3,
-                        ch4=cacom.ch4,
-                        ch5=cacom.ch5,
-                        ch6=cacom.ch6,
-                        ch7=cacom.ch7,
-                        ch8=cacom.ch8,
-                        ch9=cacom.ch9,
-                        ch10=cacom.ch10,
-                        ch11=cacom.ch11,
-                        ch12=cacom.ch12,
-                        ch13=cacom.ch13,
-                        ch14=cacom.ch14,
-                        ch15=cacom.ch15,
-                        ch16=cacom.ch16
-                    )
+               
+               
             
             # 5. Duplicate COMM System
             # Duplicate CommChannels
-            for channel in self.commchannel_set.all():
+            for channel in self.comm_channels.all():
                 CommChannel.objects.create(
                     project=new_project,
                     channel_number=channel.channel_number,
@@ -268,49 +252,52 @@ class Project(models.Model):
             for position in self.commposition_set.all():
                 CommPosition.objects.create(
                     project=new_project,
-                    position_number=position.position_number,
-                    name=position.name
+                    name=position.name,
+                    order=position.order
                 )
-            
+                            
             # Duplicate CommCrewNames
             for crew in self.commcrewname_set.all():
                 CommCrewName.objects.create(
                     project=new_project,
-                    name=crew.name,
-                    position_number=crew.position_number
+                    name=crew.name
                 )
             
             # Duplicate CommBeltPacks
             for beltpack in self.commbeltpack_set.all():
                 CommBeltPack.objects.create(
                     project=new_project,
-                    beltpack_number=beltpack.beltpack_number,
-                    assigned_to=beltpack.assigned_to,
-                    position=beltpack.position,
-                    channel_assignments=beltpack.channel_assignments
+                    bp_number=beltpack.bp_number,
+                    system_type=beltpack.system_type,
+                    unit_location=beltpack.unit_location,
+                    manufacturer=beltpack.manufacturer,
+                    ip_address=beltpack.ip_address,
+                    headset=beltpack.headset,
+                    audio_pgm=beltpack.audio_pgm,
+                    group=beltpack.group
                 )
             
             # 6. Duplicate Mic Tracker System
             # Duplicate Presenters first (needed for sessions)
             presenter_map = {}
-            for presenter in self.presenter_set.all():
+            for presenter in self.presenters.all():
                 new_presenter = Presenter.objects.create(
-                    project=new_project,
-                    name=presenter.name,
-                    title=presenter.title,
-                    organization=presenter.organization
-                )
+                project=new_project,
+                name=presenter.name,
+                notes=presenter.notes
+            )
                 presenter_map[presenter.id] = new_presenter
             
             # Duplicate ShowDays
             showday_map = {}
             for showday in self.showday_set.all():
                 new_showday = ShowDay.objects.create(
-                    project=new_project,
-                    day_number=showday.day_number,
-                    date=showday.date,
-                    name=showday.name
-                )
+                project=new_project,
+                date=showday.date,
+                name=showday.name,
+                is_collapsed=showday.is_collapsed,
+                order=showday.order
+            )
                 showday_map[showday.id] = new_showday
             
             # Duplicate MicSessions
@@ -1619,13 +1606,7 @@ class CommChannel(models.Model):
     def __str__(self):
         return f"{self.channel_number} - {self.name} ({self.abbreviation})"
     
-    def save(self, *args, **kwargs):
-        # Auto-set channel type based on input designation
-        if '4W' in self.input_designation:
-            self.channel_type = '4W'
-        elif '2W' in self.input_designation:
-            self.channel_type = '2W'
-        super().save(*args, **kwargs)
+    
 
 
 class CommPosition(models.Model):
@@ -1874,15 +1855,16 @@ import json
 class ShowDay(models.Model):
     """Represents a day in the show schedule"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE) 
-    date = models.DateField(unique=True)
+    date = models.DateField()
     name = models.CharField(max_length=100, blank=True, help_text="Optional name for the day (e.g., 'Day 1 - Setup')")
     is_collapsed = models.BooleanField(default=False, help_text="UI state: whether this day is collapsed in the view")
     order = models.IntegerField(default=0, help_text="Display order for days")
     
     class Meta:
         verbose_name = "Show Mic Tracker"
-        verbose_name_plural = "Show Mic Tracker"  # PARENT
-        ordering = ['date'] 
+        verbose_name_plural = "Show Mic Tracker"
+        ordering = ['date']
+        unique_together = [['project', 'date']]
 
     
     def __str__(self):
