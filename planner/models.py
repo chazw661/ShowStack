@@ -301,90 +301,131 @@ class Project(models.Model):
                 showday_map[showday.id] = new_showday
             
             # Duplicate MicSessions
-            for session in self.micsession_set.all():
-                new_showday = showday_map.get(session.show_day_id) if session.show_day_id else None
+            # Duplicate MicSessions (through ShowDays)
+                session_map = {}
+                for old_showday_id, new_showday in showday_map.items():
+                    old_showday = ShowDay.objects.get(id=old_showday_id)
+                    for session in old_showday.sessions.all():
+                        new_session = MicSession.objects.create(
+                            day=new_showday,
+                            name=session.name,
+                            session_type=session.session_type,
+                            start_time=session.start_time,
+                            end_time=session.end_time,
+                            location=session.location,
+                            notes=session.notes,
+                            num_mics=session.num_mics,
+                            column_position=session.column_position,
+                            order=session.order
+                        )
+                        session_map[session.id] = new_session
                 
-                new_session = MicSession.objects.create(
-                    project=new_project,
-                    show_day=new_showday,
-                    session_number=session.session_number,
-                    session_name=session.session_name,
-                    start_time=session.start_time,
-                    end_time=session.end_time
-                )
                 
-                # Duplicate the many-to-many presenters relationship
-                for presenter in session.presenters.all():
-                    new_presenter = presenter_map.get(presenter.id)
-                    if new_presenter:
-                        new_session.presenters.add(new_presenter)
                 
                 # Duplicate MicAssignments
-                for assignment in session.micassignment_set.all():
-                    MicAssignment.objects.create(
+                for assignment in session.mic_assignments.all():
+                   new_assignment = MicAssignment.objects.create(
                         session=new_session,
-                        mic_number=assignment.mic_number,
+                        rf_number=assignment.rf_number,
                         mic_type=assignment.mic_type,
-                        assigned_to=assignment.assigned_to,
+                        presenter=presenter_map.get(assignment.presenter_id) if assignment.presenter_id else None,
+                        is_micd=assignment.is_micd,
+                        is_d_mic=assignment.is_d_mic,
+                        active_presenter_index=assignment.active_presenter_index,
                         notes=assignment.notes
                     )
             
-            # Duplicate MicShowInformation
-            for mic_info in self.micshowinformation_set.all():
-                MicShowInformation.objects.create(
-                    project=new_project,
-                    show_name=mic_info.show_name,
-                    venue=mic_info.venue,
-                    dates=mic_info.dates,
-                    production_company=mic_info.production_company,
-                    audio_company=mic_info.audio_company
-                )
             
-            # 7. Duplicate Soundvision/PA System
-            # Duplicate Speaker Arrays
-            array_map = {}
-            for array in self.speakerarray_set.all():
-                new_location = location_map.get(array.location_id) if array.location_id else None
-                
-                new_array = SpeakerArray.objects.create(
-                    project=new_project,
-                    location=new_location,
-                    name=array.name,
-                    array_type=array.array_type,
-                    notes=array.notes
-                )
-                array_map[array.id] = new_array
-                
-                # Duplicate Speaker Cabinets
-                for cabinet in array.speakercabinet_set.all():
-                    SpeakerCabinet.objects.create(
-                        array=new_array,
-                        model=cabinet.model,
-                        quantity=cabinet.quantity,
-                        position=cabinet.position,
-                        angle=cabinet.angle
+                # Duplicate MicShowInfo (OneToOne)
+                if hasattr(self, 'mic_show_info'):
+                    MicShowInfo.objects.update_or_create(
+                        project=new_project,
+                        defaults={
+                            'show_name': self.mic_show_info.show_name,
+                            'venue_name': self.mic_show_info.venue_name,
+                            'ballroom_name': self.mic_show_info.ballroom_name,
+                            'start_date': self.mic_show_info.start_date,
+                            'end_date': self.mic_show_info.end_date,
+                            'default_mics_per_session': self.mic_show_info.default_mics_per_session,
+                            'default_session_duration': self.mic_show_info.default_session_duration
+                        }
                     )
             
-            # Duplicate Soundvision Predictions
-            for prediction in self.soundvisionprediction_set.all():
-                SoundvisionPrediction.objects.create(
-                    project=new_project,
-                    name=prediction.name,
-                    file=prediction.file,
-                    notes=prediction.notes,
-                    created_at=prediction.created_at
+                # 7. Duplicate Soundvision/PA System
+        # First duplicate SoundvisionPredictions
+        prediction_map = {}
+        for prediction in SoundvisionPrediction.objects.filter(project=self):
+            new_showday = showday_map.get(prediction.show_day_id) if prediction.show_day_id else None
+            
+            new_prediction = SoundvisionPrediction.objects.create(
+                project=new_project,
+                show_day=new_showday,
+                file_name=prediction.file_name,
+                version=prediction.version,
+                date_generated=prediction.date_generated,
+                raw_data=prediction.raw_data,
+                notes=prediction.notes
+            )
+            prediction_map[prediction.id] = new_prediction
+            
+            # Duplicate Speaker Arrays for this prediction
+            for array in prediction.speaker_arrays.all():
+                new_array = SpeakerArray.objects.create(
+                    prediction=new_prediction,
+                    source_name=array.source_name,
+                    array_base_name=array.array_base_name,
+                    symmetry_type=array.symmetry_type,
+                    group_context=array.group_context,
+                    configuration=array.configuration,
+                    bumper_type=array.bumper_type,
+                    position_x=array.position_x,
+                    position_y=array.position_y,
+                    position_z=array.position_z,
+                    site_angle=array.site_angle,
+                    azimuth=array.azimuth,
+                    top_site=array.top_site,
+                    bottom_site=array.bottom_site,
+                    num_motors=array.num_motors,
+                    front_pickup_position=array.front_pickup_position,
+                    rear_pickup_position=array.rear_pickup_position,
+                    front_motor_load_lb=array.front_motor_load_lb,
+                    rear_motor_load_lb=array.rear_motor_load_lb,
+                    total_weight_lb=array.total_weight_lb,
+                    enclosure_weight_lb=array.enclosure_weight_lb,
+                    bottom_elevation=array.bottom_elevation,
+                    spatial_dimensions=array.spatial_dimensions,
+                    mbar_hole=array.mbar_hole,
+                    is_single_point=array.is_single_point,
+                    bumper_angle=array.bumper_angle
                 )
+            
+            # Duplicate Speaker Cabinets
+            for cabinet in array.cabinets.all():
+                SpeakerCabinet.objects.create(
+                    array=new_array,
+                    position_number=cabinet.position_number,
+                    speaker_model=cabinet.speaker_model,
+                    angle_to_next=cabinet.angle_to_next,
+                    site_angle=cabinet.site_angle,
+                    top_z=cabinet.top_z,
+                    bottom_z=cabinet.bottom_z,
+                    panflex_setting=cabinet.panflex_setting
+                )
+            
+           
             
             # 8. Duplicate Power Distribution Plans
             for power_plan in self.powerdistributionplan_set.all():
-                new_location = location_map.get(power_plan.location_id) if power_plan.location_id else None
+                
                 
                 PowerDistributionPlan.objects.create(
                     project=new_project,
-                    location=new_location,
-                    name=power_plan.name,
-                    total_amps_available=power_plan.total_amps_available,
-                    voltage=power_plan.voltage,
+                    show_day=showday_map.get(power_plan.show_day_id) if power_plan.show_day_id else None,
+                    venue_name=power_plan.venue_name,
+                    service_type=power_plan.service_type,
+                    available_amperage_per_leg=power_plan.available_amperage_per_leg,
+                    transient_headroom=power_plan.transient_headroom,
+                    safety_margin=power_plan.safety_margin,
                     notes=power_plan.notes
                 )
             
