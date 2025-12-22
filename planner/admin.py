@@ -1,5 +1,3 @@
-
-
 # At the TOP of admin.py, organize all imports together (lines 1-25):
 
 # Django imports
@@ -3549,10 +3547,11 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     # Right after autocomplete_fields, add:
     list_display = [
         'bp_number',
-        'system_type_icon',  # NEW - we'll create this method
-        'manufacturer_display',  # NEW - we'll create this method  
-        'position',
+        'system_type_icon',  # Custom method
+        'manufacturer_display',  # Custom method  
+        'position',  # Keep as field for inline editing
         'name',
+        'unit_location',  # Location column
         'channel_summary',
         'headset',
         'ip_address',
@@ -3568,6 +3567,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     list_editable = [
         'position',
         'name',
+        'unit_location',
         'headset',
         'ip_address',
         'checked_out'
@@ -3575,7 +3575,14 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     
         
     
-    list_filter = ['system_type', 'manufacturer', 'checked_out']  # Added manufacturer
+    list_filter = [
+        'system_type', 
+        'manufacturer', 
+        'unit_location',
+        'position',
+        'headset',
+        'checked_out',
+    ]
     inlines = [CommBeltPackChannelInline]
     search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location', 'ip_address']
     ordering = ['system_type', 'bp_number']
