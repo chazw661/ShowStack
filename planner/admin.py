@@ -3205,7 +3205,6 @@ class CommBeltPackForm(forms.ModelForm):
             'position': forms.TextInput(attrs={'class': 'position-input'}),
             'name': forms.TextInput(attrs={'class': 'name-input'}),
             'notes': forms.Textarea(attrs={'rows': 2, 'cols': 40}),
-            'unit_location': forms.TextInput(attrs={'class': 'unit-location', 'placeholder': 'e.g., Unit #1 - FOH Rack'}),
         }
     
     def __init__(self, *args, **kwargs):
@@ -3242,13 +3241,6 @@ class CreateBeltPacksForm(forms.Form):
         initial=1,
         label="Starting BP number"
     )
-    unit_location = forms.CharField(
-        max_length=100,
-        required=False,
-        initial="Unit #1",
-        label="Unit Location (for wireless only)",
-        widget=forms.TextInput(attrs={'placeholder': 'e.g., Unit #1 - FOH Rack'})
-    )
 
 # Simpler action functions with different quantities
 def create_5_wireless_beltpacks(modeladmin, request, queryset):
@@ -3266,7 +3258,6 @@ def create_5_wireless_beltpacks(modeladmin, request, queryset):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1',
             project=project
         )
     
@@ -3289,7 +3280,6 @@ def create_10_wireless_beltpacks(modeladmin, request, queryset):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1',
             project=project
         )
     
@@ -3311,7 +3301,6 @@ def create_20_wireless_beltpacks(modeladmin, request, queryset):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1',
             project=project
         )
     
@@ -3335,7 +3324,6 @@ def create_50_wireless_beltpacks(modeladmin, request, queryset):
         CommBeltPack.objects.create(
             system_type='WIRELESS',
             bp_number=max_bp + i,
-            unit_location='Unit #1',
             project=project
         )
     
@@ -3584,8 +3572,26 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         'checked_out',
     ]
     inlines = [CommBeltPackChannelInline]
-    search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location', 'ip_address']
+    search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location__name', 'ip_address']
     ordering = ['system_type', 'bp_number']
+    
+    def get_changelist_formset(self, request, **kwargs):
+        """Override to filter unit_location dropdown by current project in list view"""
+        formset = super().get_changelist_formset(request, **kwargs)
+        
+        # Get current project
+        current_project = getattr(request, 'current_project', None)
+        
+        if current_project:
+            # Get the form class and override the queryset for unit_location
+            form = formset.form
+            if 'unit_location' in form.base_fields:
+                # Create a copy of the field to avoid modifying the original
+                import copy
+                form.base_fields['unit_location'] = copy.deepcopy(form.base_fields['unit_location'])
+                form.base_fields['unit_location'].queryset = Location.objects.filter(project=current_project)
+        
+        return formset
     
     # Actions for checking in/out and bulk creation
     actions = [
@@ -3652,6 +3658,14 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
     channel_summary.short_description = 'Channels'
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options based on current project"""
+        if db_field.name == "unit_location":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = Location.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
     def duplicate_beltpacks(self, request, queryset):

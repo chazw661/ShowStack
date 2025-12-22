@@ -185,6 +185,10 @@ class Project(models.Model):
             for amp in self.amp_set.all():
                 new_location = location_map.get(amp.location_id) if amp.location_id else None
                 
+                # Amp requires a location - skip if we can't map it
+                if not new_location:
+                    continue
+                
                 new_amp = Amp.objects.create(
                     project=new_project,
                     location=new_location,
@@ -263,19 +267,40 @@ class Project(models.Model):
                     name=crew.name
                 )
             
-            # Duplicate CommBeltPacks
+            # Duplicate CommBeltPacks and their channels
+            # First create a map of old CommChannel IDs to new ones
+            comm_channel_map = {}
+            for old_channel in self.comm_channels.all():
+                new_channel = CommChannel.objects.filter(
+                    project=new_project,
+                    channel_number=old_channel.channel_number
+                ).first()
+                if new_channel:
+                    comm_channel_map[old_channel.id] = new_channel
+            
             for beltpack in self.commbeltpack_set.all():
-                CommBeltPack.objects.create(
+                # Map unit_location to new location if it exists
+                new_unit_location = location_map.get(beltpack.unit_location_id) if beltpack.unit_location_id else None
+                
+                new_beltpack = CommBeltPack.objects.create(
                     project=new_project,
                     bp_number=beltpack.bp_number,
                     system_type=beltpack.system_type,
-                    unit_location=beltpack.unit_location,
+                    unit_location=new_unit_location,
                     manufacturer=beltpack.manufacturer,
                     ip_address=beltpack.ip_address,
                     headset=beltpack.headset,
                     audio_pgm=beltpack.audio_pgm,
                     group=beltpack.group
                 )
+                
+                # Duplicate CommBeltPackChannels
+                for bp_channel in beltpack.channels.all():
+                    CommBeltPackChannel.objects.create(
+                        beltpack=new_beltpack,
+                        channel_number=bp_channel.channel_number,
+                        channel=comm_channel_map.get(bp_channel.channel_id) if bp_channel.channel_id else None
+                    )
             
             # 6. Duplicate Mic Tracker System
             # Duplicate Presenters first (needed for sessions)
@@ -414,11 +439,9 @@ class Project(models.Model):
             
            
             
-            # 8. Duplicate Power Distribution Plans
+            # 8. Duplicate Power Distribution Plans and their AmplifierAssignments
             for power_plan in self.powerdistributionplan_set.all():
-                
-                
-                PowerDistributionPlan.objects.create(
+                new_power_plan = PowerDistributionPlan.objects.create(
                     project=new_project,
                     show_day=showday_map.get(power_plan.show_day_id) if power_plan.show_day_id else None,
                     venue_name=power_plan.venue_name,
@@ -428,6 +451,169 @@ class Project(models.Model):
                     safety_margin=power_plan.safety_margin,
                     notes=power_plan.notes
                 )
+                
+                # Duplicate AmplifierAssignments for this plan
+                for assignment in power_plan.amplifier_assignments.all():
+                    AmplifierAssignment.objects.create(
+                        distribution_plan=new_power_plan,
+                        amplifier=assignment.amplifier,  # FK to global AmplifierProfile
+                        quantity=assignment.quantity,
+                        zone=assignment.zone,
+                        position=assignment.position,
+                        phase_assignment=assignment.phase_assignment,
+                        duty_cycle=assignment.duty_cycle,
+                        calculated_current_per_unit=assignment.calculated_current_per_unit,
+                        calculated_total_current=assignment.calculated_total_current,
+                        notes=assignment.notes
+                    )
+            
+            # 9. Duplicate System Processors (P1 and Galaxy)
+            processor_map = {}
+            for sys_proc in self.systemprocessor_set.all():
+                new_location = location_map.get(sys_proc.location_id) if sys_proc.location_id else None
+                
+                # SystemProcessor requires a location - skip if we can't map it
+                if not new_location:
+                    continue
+                
+                new_sys_proc = SystemProcessor.objects.create(
+                    project=new_project,
+                    name=sys_proc.name,
+                    device_type=sys_proc.device_type,
+                    location=new_location,
+                    ip_address=sys_proc.ip_address,
+                    notes=sys_proc.notes
+                )
+                processor_map[sys_proc.id] = new_sys_proc
+                
+                # Duplicate P1Processor if exists
+                if hasattr(sys_proc, 'p1_config'):
+                    p1_config = sys_proc.p1_config
+                    # Create P1Processor (this will auto-create default channels)
+                    new_p1 = P1Processor(
+                        system_processor=new_sys_proc,
+                        notes=p1_config.notes
+                    )
+                    new_p1.save()
+                    
+                    # Delete auto-created default channels
+                    new_p1.inputs.all().delete()
+                    new_p1.outputs.all().delete()
+                    
+                    # Now duplicate P1Inputs from original
+                    for p1_input in p1_config.inputs.all():
+                        P1Input.objects.create(
+                            p1_processor=new_p1,
+                            input_type=p1_input.input_type,
+                            channel_number=p1_input.channel_number,
+                            label=p1_input.label,
+                            origin_device_output=None  # Will need device mapping if needed
+                        )
+                    
+                    # Duplicate P1Outputs
+                    for p1_output in p1_config.outputs.all():
+                        P1Output.objects.create(
+                            p1_processor=new_p1,
+                            output_type=p1_output.output_type,
+                            channel_number=p1_output.channel_number,
+                            label=p1_output.label,
+                            assigned_bus=p1_output.assigned_bus
+                        )
+                
+                # Duplicate GalaxyProcessor if exists
+                if hasattr(sys_proc, 'galaxy_config'):
+                    galaxy_config = sys_proc.galaxy_config
+                    new_galaxy = GalaxyProcessor.objects.create(
+                        system_processor=new_sys_proc,
+                        notes=galaxy_config.notes
+                    )
+                    
+                    # Duplicate GalaxyInputs
+                    for galaxy_input in galaxy_config.inputs.all():
+                        GalaxyInput.objects.create(
+                            galaxy_processor=new_galaxy,
+                            input_type=galaxy_input.input_type,
+                            channel_number=galaxy_input.channel_number,
+                            label=galaxy_input.label,
+                            origin_device_output=None  # Will need device mapping if needed
+                        )
+                    
+                    # Duplicate GalaxyOutputs
+                    for galaxy_output in galaxy_config.outputs.all():
+                        GalaxyOutput.objects.create(
+                            galaxy_processor=new_galaxy,
+                            output_type=galaxy_output.output_type,
+                            channel_number=galaxy_output.channel_number,
+                            label=galaxy_output.label,
+                            assigned_bus=galaxy_output.assigned_bus,
+                            destination=galaxy_output.destination
+                        )
+            
+            # 10. Duplicate PA Zones
+            # Note: PAZone has unique=True on name, so we need to generate unique names
+            pa_zone_map = {}
+            for pa_zone in PAZone.objects.filter(project=self):
+                new_location = location_map.get(pa_zone.location_id) if pa_zone.location_id else None
+                
+                # Generate unique name for the new zone
+                base_name = pa_zone.name
+                new_name = base_name
+                counter = 1
+                while PAZone.objects.filter(name=new_name).exists():
+                    new_name = f"{base_name}_{counter}"
+                    counter += 1
+                
+                new_pa_zone = PAZone.objects.create(
+                    project=new_project,
+                    name=new_name,
+                    description=pa_zone.description,
+                    location=new_location,
+                    sort_order=pa_zone.sort_order,
+                    zone_type=pa_zone.zone_type
+                )
+                pa_zone_map[pa_zone.id] = new_pa_zone
+            
+            # 11. Duplicate PA Cable Schedules and Fan Outs
+            for cable in PACableSchedule.objects.filter(project=self):
+                new_cable = PACableSchedule.objects.create(
+                    project=new_project,
+                    label=pa_zone_map.get(cable.label_id) if cable.label_id else None,
+                    destination=cable.destination,
+                    count=cable.count,
+                    cable=cable.cable,
+                    notes=cable.notes,
+                    drawing_ref=cable.drawing_ref,
+                    length=cable.length
+                )
+                
+                # Duplicate PAFanOuts
+                for fan_out in cable.fan_outs.all():
+                    PAFanOut.objects.create(
+                        cable_schedule=new_cable,
+                        fan_out_type=fan_out.fan_out_type,
+                        quantity=fan_out.quantity
+                    )
+            
+            # 12. Duplicate Audio Checklists and Tasks
+            for checklist in self.audio_checklists.all():
+                new_checklist = AudioChecklist.objects.create(
+                    project=new_project,
+                    name=checklist.name
+                )
+                
+                # Duplicate AudioChecklistTasks
+                for task in checklist.tasks.all():
+                    AudioChecklistTask.objects.create(
+                        checklist=new_checklist,
+                        task=task.task,
+                        task_type=task.task_type,
+                        stage=task.stage,
+                        sort_order=task.sort_order,
+                        day1_status=task.day1_status,
+                        day2_status=task.day2_status,
+                        day3_status=task.day3_status,
+                        day4_status=task.day4_status
+                    )
             
             # NOTE: We intentionally do NOT duplicate:
             # - ProjectMember (team members)
@@ -1731,11 +1917,15 @@ class CommBeltPack(models.Model):
         verbose_name="System Type"
     )
     
-    # Unit location for wireless systems - NEW
-    unit_location = models.CharField(
-        max_length=100,
+    # Unit location for wireless systems - ForeignKey to Location
+    unit_location = models.ForeignKey(
+        'Location',
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text="Location of wireless unit (e.g., 'Unit #1 - FOH Rack')"
+        related_name='comm_beltpacks',
+        verbose_name="Location",
+        help_text="Equipment location for this belt pack"
     )
 
     # Manufacturer/System - NEW
@@ -3040,5 +3230,4 @@ class AudioChecklistTask(models.Model):
         ordering = ['checklist', 'task_type', 'sort_order']
     
     def __str__(self):
-        return f"{self.checklist.name} - {self.task}"   
-
+        return f"{self.checklist.name} - {self.task}"
