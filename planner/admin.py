@@ -3523,7 +3523,42 @@ class CommBeltPackAdminForm(forms.ModelForm):
         js = ('admin/js/comm_beltpack_admin.js',) 
         
 
-        
+# Custom filters that respect current project for CommBeltPack
+class ProjectFilteredPositionFilter(admin.SimpleListFilter):
+    title = 'position'
+    parameter_name = 'position'
+    
+    def lookups(self, request, model_admin):
+        current_project = getattr(request, 'current_project', None)
+        if current_project:
+            # Get distinct positions used in this project's beltpacks
+            positions = CommPosition.objects.filter(
+                beltpacks__project=current_project
+            ).distinct().order_by('name')
+            return [(p.id, p.name) for p in positions]
+        return []
+    
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(position_id=self.value())
+        return queryset
+
+
+class ProjectFilteredLocationFilter(admin.SimpleListFilter):
+    title = 'Location'
+    parameter_name = 'unit_location'
+    
+    def lookups(self, request, model_admin):
+        current_project = getattr(request, 'current_project', None)
+        if current_project:
+            locations = Location.objects.filter(project=current_project).order_by('name')
+            return [(loc.id, loc.name) for loc in locations]
+        return []
+    
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(unit_location_id=self.value())
+        return queryset
 
 
 class CommBeltPackAdmin(BaseEquipmentAdmin):
@@ -3566,8 +3601,8 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     list_filter = [
         'system_type', 
         'manufacturer', 
-        'unit_location',
-        'position',
+        ProjectFilteredLocationFilter,
+        ProjectFilteredPositionFilter,
         'headset',
         'checked_out',
     ]
