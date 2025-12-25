@@ -42,7 +42,9 @@ def export_all_locations_pdf(request):
             'devices',
             'amps__amp_model',
             'amps__channels',
-            'system_processors'
+            'system_processors',
+            'comm_beltpacks__position',
+            'comm_beltpacks__name'
         ).order_by('name')
     else:
         locations = Location.objects.none()
@@ -212,35 +214,35 @@ def export_all_locations_pdf(request):
         
        
         # AMPLIFIERS
-    amps = location.amps.filter(project=location.project).select_related('amp_model').all()
-    if amps.exists():
-        has_equipment = True
-        story.append(Paragraph("Amplifiers", subheader_style))
-        
-        amp_data = []
-        for amp in amps:
-            # Get the amp name
-            amp_name = amp.name if hasattr(amp, 'name') and amp.name else "Unnamed Amp"
+        amps = location.amps.filter(project=location.project).select_related('amp_model').all()
+        if amps.exists():
+            has_equipment = True
+            story.append(Paragraph("Amplifiers", subheader_style))
             
-            # Get model name
-            model_name = str(amp.amp_model) if amp.amp_model else 'N/A'
+            amp_data = []
+            for amp in amps:
+                # Get the amp name
+                amp_name = amp.name if hasattr(amp, 'name') and amp.name else "Unnamed Amp"
+                
+                # Get model name
+                model_name = str(amp.amp_model) if amp.amp_model else 'N/A'
+                
+                # Get IP address
+                ip = str(amp.ip_address) if amp.ip_address else 'N/A'
+                
+                amp_data.append([
+                    amp_name,
+                    model_name,
+                    ip
+                ])
             
-            # Get IP address
-            ip = str(amp.ip_address) if amp.ip_address else 'N/A'
+            headers = ['Amp Name', 'Model', 'IP Address']
+            col_widths = [1.5*inch, 2*inch, 1.5*inch]
             
-            amp_data.append([
-                amp_name,
-                model_name,
-                ip
-            ])
-        
-        headers = ['Amp Name', 'Model', 'IP Address']
-        col_widths = [1.5*inch, 2*inch, 1.5*inch]
-        
-        table = create_equipment_table(headers, amp_data, col_widths)
-        if table:
-            story.append(table)
-            story.append(Spacer(1, 0.15*inch))
+            table = create_equipment_table(headers, amp_data, col_widths)
+            if table:
+                story.append(table)
+                story.append(Spacer(1, 0.15*inch))
         
         # SYSTEM PROCESSORS
         processors = location.system_processors.all()
@@ -260,6 +262,42 @@ def export_all_locations_pdf(request):
             col_widths = [2.5*inch, 1.5*inch, 2*inch]
             
             table = create_equipment_table(headers, processor_data, col_widths)
+            if table:
+                story.append(table)
+                story.append(Spacer(1, 0.15*inch))
+        
+        # COMM BELT PACKS
+        beltpacks = location.comm_beltpacks.all().order_by('bp_number')
+        if beltpacks.exists():
+            has_equipment = True
+            story.append(Paragraph("Comm Belt Packs", subheader_style))
+            
+            beltpack_data = []
+            for bp in beltpacks:
+                # Get position name
+                position_name = bp.position.name if bp.position else 'Unassigned'
+                
+                # Get crew name
+                crew_name = bp.name.name if bp.name else ''
+                
+                # Get system type display
+                system_type = bp.get_system_type_display() if hasattr(bp, 'get_system_type_display') else bp.system_type
+                
+                # Get IP address for hardwired
+                ip = bp.ip_address or '' if bp.system_type == 'HARDWIRED' else ''
+                
+                beltpack_data.append([
+                    f"BP #{bp.bp_number}",
+                    system_type,
+                    position_name,
+                    crew_name,
+                    ip
+                ])
+            
+            headers = ['BP #', 'Type', 'Position', 'Name', 'IP Address']
+            col_widths = [0.8*inch, 1*inch, 1.5*inch, 1.5*inch, 1.2*inch]
+            
+            table = create_equipment_table(headers, beltpack_data, col_widths)
             if table:
                 story.append(table)
                 story.append(Spacer(1, 0.15*inch))
@@ -292,7 +330,7 @@ def export_all_locations_pdf(request):
 def export_location_pdf(request, location_id):
     """
     Generate PDF showing all equipment in a specific location
-    Organized by module: Consoles, Devices, Amps, System Processors
+    Organized by module: Consoles, Devices, Amps, System Processors, Comm Belt Packs
     """
     from planner.models import Location
     
@@ -302,7 +340,9 @@ def export_location_pdf(request, location_id):
         'devices',
         'amps__amp_model',
         'amps__channels',
-        'system_processors'
+        'system_processors',
+        'comm_beltpacks__position',
+        'comm_beltpacks__name'
     ).get(id=location_id)
     
     # Create response
@@ -515,6 +555,45 @@ def export_location_pdf(request, location_id):
             story.append(table)
             story.append(Spacer(1, 0.3*inch))
     
+    # SECTION 5: COMM BELT PACKS
+    beltpacks = location.comm_beltpacks.all().order_by('bp_number')
+    if beltpacks.exists():
+        story.append(Paragraph("Comm Belt Packs", subheader_style))
+        
+        beltpack_data = []
+        for bp in beltpacks:
+            # Get position name
+            position_name = bp.position.name if bp.position else 'Unassigned'
+            
+            # Get crew name
+            crew_name = bp.name.name if bp.name else ''
+            
+            # Get system type display
+            system_type = bp.get_system_type_display() if hasattr(bp, 'get_system_type_display') else bp.system_type
+            
+            # Get headset type
+            headset = bp.get_headset_display() if hasattr(bp, 'get_headset_display') and bp.headset else ''
+            
+            # Get IP address for hardwired
+            ip = bp.ip_address or '' if bp.system_type == 'HARDWIRED' else ''
+            
+            beltpack_data.append([
+                f"BP #{bp.bp_number}",
+                system_type,
+                position_name,
+                crew_name,
+                headset,
+                ip
+            ])
+        
+        headers = ['BP #', 'Type', 'Position', 'Name', 'Headset', 'IP Address']
+        col_widths = [0.7*inch, 0.9*inch, 1.3*inch, 1.3*inch, 1*inch, 1.3*inch]
+        
+        table = create_equipment_table(headers, beltpack_data, col_widths)
+        if table:
+            story.append(table)
+            story.append(Spacer(1, 0.3*inch))
+    
     # Summary section at bottom
     summary_style = ParagraphStyle(
         'Summary',
@@ -535,7 +614,8 @@ def export_location_pdf(request, location_id):
         ['I/O Devices', str(devices.count())],
         ['Amplifiers', str(amps.count())],
         ['System Processors', str(processors.count())],
-        ['Total Equipment', str(consoles.count() + devices.count() + amps.count() + processors.count())]
+        ['Comm Belt Packs', str(beltpacks.count())],
+        ['Total Equipment', str(consoles.count() + devices.count() + amps.count() + processors.count() + beltpacks.count())]
     ]
     
     summary_table = Table(summary_data, colWidths=[3*inch, 1*inch])
