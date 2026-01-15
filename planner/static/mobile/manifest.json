@@ -1,0 +1,81 @@
+{
+    "name": "ShowStack",
+    "short_name": "ShowStack",
+    "description": "Professional audio production management for live events, touring, and broadcast",
+    "start_url": "/m/",
+    "scope": "/m/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#1a1a2e",
+    "theme_color": "#1a1a2e",
+    "categories": ["business", "productivity", "utilities"],
+    "lang": "en-US",
+    "dir": "ltr",
+    "icons": [
+        {
+            "src": "/static/mobile/icons/icon-72.png",
+            "sizes": "72x72",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/mobile/icons/icon-96.png",
+            "sizes": "96x96",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/mobile/icons/icon-128.png",
+            "sizes": "128x128",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/mobile/icons/icon-144.png",
+            "sizes": "144x144",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/mobile/icons/icon-152.png",
+            "sizes": "152x152",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/mobile/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/static/mobile/icons/icon-384.png",
+            "sizes": "384x384",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/mobile/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "My Projects",
+            "short_name": "Projects",
+            "description": "View your audio projects",
+            "url": "/m/",
+            "icons": [
+                {
+                    "src": "/static/mobile/icons/icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        }
+    ],
+    "screenshots": [],
+    "prefer_related_applications": false,
+    "related_applications": []
+}

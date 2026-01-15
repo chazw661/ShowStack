@@ -1,0 +1,197 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}{{ prediction.file_name }} - {{ project.name }}{% endblock %}
+
+{% block header %}
+<header class="mobile-header">
+    <a href="{% url 'mobile:predictions_list' project.id %}" class="back-link">←</a>
+    <h1 class="header-title">{{ prediction.file_name|truncatechars:18 }}</h1>
+    {% if prediction.pdf_file %}
+    <a href="{{ prediction.pdf_file.url }}" class="icon-btn" target="_blank" rel="noopener" aria-label="View PDF">📄</a>
+    {% else %}
+    <span class="icon-btn icon-disabled" aria-label="No PDF">📄</span>
+    {% endif %}
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="project-context">{{ project.name }}</div>
+
+<!-- Expand/Collapse Controls -->
+<div class="control-bar">
+    <button class="control-btn" onclick="expandAllArrays()">Expand All</button>
+    <button class="control-btn" onclick="collapseAllArrays()">Collapse All</button>
+</div>
+
+<!-- Arrays List -->
+<div class="arrays-list">
+    {% for item in array_data %}
+    <div class="array-card" data-array-id="{{ item.array.id }}">
+        
+        <!-- Array Header (always visible, tap to expand) -->
+        <div class="array-header" onclick="toggleArray({{ item.array.id }})">
+            <div class="array-title">
+                <span class="array-name">{{ item.array.source_name }}</span>
+                <span class="array-brand">L'Acoustics</span>
+            </div>
+            <div class="array-summary">{{ item.cabinet_summary }}</div>
+        </div>
+        
+        <!-- Array Details (collapsible) -->
+        <div class="array-details" id="details-{{ item.array.id }}">
+            
+            <!-- Key Stats Grid -->
+            <div class="stats-grid">
+                {% if item.array.total_weight_lb %}
+                <div class="stat-item">
+                    <div class="stat-label">Weight</div>
+                    <div class="stat-value">{{ item.array.total_weight_lb|floatformat:0 }} lbs</div>
+                </div>
+                {% endif %}
+                
+                {% if item.array.bottom_elevation %}
+                <div class="stat-item">
+                    <div class="stat-label">Trim</div>
+                    <div class="stat-value">{{ item.array.trim_height_display }}</div>
+                </div>
+                {% endif %}
+                
+                {% if item.array.is_single_point and item.array.front_pickup_position %}
+                <div class="stat-item">
+                    <div class="stat-label">Hole</div>
+                    <div class="stat-value">#{{ item.array.front_pickup_position }}</div>
+                </div>
+                {% elif item.array.bumper_angle %}
+                <div class="stat-item">
+                    <div class="stat-label">Bumper</div>
+                    <div class="stat-value">{{ item.array.bumper_angle }}°</div>
+                </div>
+                {% endif %}
+                
+                {% if item.array.azimuth %}
+                <div class="stat-item">
+                    <div class="stat-label">Azimuth</div>
+                    <div class="stat-value">{{ item.array.azimuth }}°</div>
+                </div>
+                {% endif %}
+                
+                {% if item.array.mbar_hole %}
+                <div class="stat-item">
+                    <div class="stat-label">MBar</div>
+                    <div class="stat-value">Hole {{ item.array.mbar_hole }}</div>
+                </div>
+                {% endif %}
+                
+                {% if item.array.configuration %}
+                <div class="stat-item">
+                    <div class="stat-label">Config</div>
+                    <div class="stat-value">{{ item.array.configuration }}</div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- No rigging data notice for ground stacks -->
+            {% if not item.array.total_weight_lb and not item.array.bottom_elevation %}
+            <div class="no-rigging-notice">Ground stack - no rigging data</div>
+            {% endif %}
+            
+            <!-- Cabinet Toggle -->
+            {% if item.cabinets %}
+            <button class="cabinet-toggle" onclick="toggleCabinets({{ item.array.id }}); event.stopPropagation();">
+                <span class="toggle-text">Show Cabinets</span>
+                <span class="toggle-icon">▼</span>
+            </button>
+            
+            <!-- Cabinet Table (hidden by default) -->
+            <div class="cabinet-table-wrapper" id="cabinets-{{ item.array.id }}">
+                <table class="cabinet-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Model</th>
+                            <th>Angle</th>
+                            {% if item.has_panflex %}
+                            <th>Panflex</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cab in item.cabinets %}
+                        <tr>
+                            <td>{{ cab.position_number }}</td>
+                            <td>{{ cab.speaker_model|default:"—" }}</td>
+                            <td>{{ cab.angle_to_next|floatformat:1|default:"—" }}°</td>
+                            {% if item.has_panflex %}
+                            <td>{{ cab.panflex_setting|default:"—" }}</td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="no-cabinets">No cabinet data available</div>
+            {% endif %}
+            
+        </div>
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <div class="empty-icon">📦</div>
+        <div class="empty-title">No Arrays</div>
+        <div class="empty-message">No arrays found in this prediction file.</div>
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Toggle individual array details
+function toggleArray(arrayId) {
+    const details = document.getElementById(`details-${arrayId}`);
+    if (details) {
+        details.classList.toggle('expanded');
+    }
+}
+
+// Toggle cabinet table within an array
+function toggleCabinets(arrayId) {
+    const wrapper = document.getElementById(`cabinets-${arrayId}`);
+    const card = wrapper.closest('.array-card');
+    const btn = card.querySelector('.cabinet-toggle');
+    
+    const isExpanded = wrapper.classList.toggle('expanded');
+    
+    if (btn) {
+        btn.querySelector('.toggle-text').textContent = isExpanded ? 'Hide Cabinets' : 'Show Cabinets';
+        btn.querySelector('.toggle-icon').textContent = isExpanded ? '▲' : '▼';
+    }
+}
+
+// Expand all array details
+function expandAllArrays() {
+    document.querySelectorAll('.array-details').forEach(el => {
+        el.classList.add('expanded');
+    });
+}
+
+// Collapse all array details and cabinet tables
+function collapseAllArrays() {
+    document.querySelectorAll('.array-details').forEach(el => {
+        el.classList.remove('expanded');
+    });
+    document.querySelectorAll('.cabinet-table-wrapper').forEach(el => {
+        el.classList.remove('expanded');
+    });
+    document.querySelectorAll('.cabinet-toggle .toggle-text').forEach(el => {
+        el.textContent = 'Show Cabinets';
+    });
+    document.querySelectorAll('.cabinet-toggle .toggle-icon').forEach(el => {
+        el.textContent = '▼';
+    });
+}
+</script>
+{% endblock %}

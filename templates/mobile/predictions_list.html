@@ -1,0 +1,45 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}Predictions - {{ project.name }}{% endblock %}
+
+{% block header %}
+<header class="mobile-header">
+    <a href="{% url 'mobile:project_overview' project.id %}" class="back-link">←</a>
+    <h1 class="header-title">PREDICTIONS</h1>
+    <button class="icon-btn" onclick="location.reload()" aria-label="Refresh">⟳</button>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="project-context">{{ project.name }}</div>
+
+{% if prediction_data %}
+<div class="predictions-list">
+    {% for item in prediction_data %}
+    <a href="{% url 'mobile:prediction_detail' project.id item.prediction.id %}" class="card prediction-card">
+        <div class="card-icon">📊</div>
+        <div class="card-content">
+            <div class="card-title">{{ item.prediction.file_name|default:"Untitled Prediction" }}</div>
+            <div class="card-meta">
+                Uploaded: {{ item.prediction.created_at|date:"M j, Y" }}
+                {% if item.prediction.version %}• v{{ item.prediction.version }}{% endif %}
+            </div>
+            <div class="card-stats">
+                {{ item.array_count }} array{{ item.array_count|pluralize }} • {{ item.cabinet_count }} cabinet{{ item.cabinet_count|pluralize }}
+            </div>
+        </div>
+        <div class="card-arrow">→</div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📊</div>
+    <div class="empty-title">No Predictions</div>
+    <div class="empty-message">
+        Upload Soundvision PDFs via the desktop admin to see them here.
+    </div>
+</div>
+{% endif %}
+{% endblock %}

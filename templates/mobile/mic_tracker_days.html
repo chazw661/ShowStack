@@ -1,0 +1,45 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}Mic Tracker - {{ project.name }}{% endblock %}
+
+{% block header %}
+<header class="mobile-header">
+    <a href="{% url 'mobile:project_overview' project.id %}" class="back-link">←</a>
+    <h1 class="header-title">MIC TRACKER</h1>
+    <button class="icon-btn" onclick="location.reload()" aria-label="Refresh">⟳</button>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="project-context">{{ project.name }}</div>
+
+{% if day_data %}
+<div class="days-list">
+    {% for item in day_data %}
+    <a href="{% url 'mobile:mic_tracker_sessions' project.id item.day.id %}" class="card day-card">
+        <div class="day-date">
+            <span class="date-month">{{ item.day.date|date:"M" }}</span>
+            <span class="date-day">{{ item.day.date|date:"j" }}</span>
+            <span class="date-weekday">{{ item.day.date|date:"D" }}</span>
+        </div>
+        <div class="card-content">
+            <div class="card-title">{{ item.day.name|default:item.day.date|date:"l" }}</div>
+            <div class="card-stats">
+                {{ item.session_count }} session{{ item.session_count|pluralize }} • {{ item.mic_count }} mic{{ item.mic_count|pluralize }}
+            </div>
+        </div>
+        <div class="card-arrow">→</div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">📅</div>
+    <div class="empty-title">No Show Days</div>
+    <div class="empty-message">
+        Add show days via the desktop admin to start tracking mics.
+    </div>
+</div>
+{% endif %}
+{% endblock %}

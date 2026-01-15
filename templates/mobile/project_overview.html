@@ -1,0 +1,360 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}{{ project.name }} - ShowStack{% endblock %}
+
+{% block header_content %}
+<div class="header-left">
+    <a href="{% url 'mobile:dashboard' %}" class="back-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15,18 9,12 15,6"/>
+        </svg>
+    </a>
+</div>
+<div class="header-title">{{ project.name|truncatechars:20 }}</div>
+<div class="header-right">
+    <span class="sync-indicator synced" title="Synced">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="4"/>
+        </svg>
+    </span>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="project-container">
+    <!-- Project Info Card -->
+    <div class="card project-info-card">
+        <div class="project-header">
+            <h1 class="project-title">{{ project.name }}</h1>
+            <span class="role-badge role-{{ role }}">{{ role|title }}</span>
+        </div>
+        
+        <div class="project-details">
+            {% if project.client_name %}
+            <div class="detail-row">
+                <span class="detail-label">Client</span>
+                <span class="detail-value">{{ project.client_name }}</span>
+            </div>
+            {% endif %}
+            
+            {% if project.event_date %}
+            <div class="detail-row">
+                <span class="detail-label">Date</span>
+                <span class="detail-value">{{ project.event_date|date:"l, F j, Y" }}</span>
+            </div>
+            {% endif %}
+            
+            {% if project.venue_name %}
+            <div class="detail-row">
+                <span class="detail-label">Venue</span>
+                <span class="detail-value">{{ project.venue_name }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Module Navigation Grid -->
+    <h2 class="section-header">Modules</h2>
+    
+    <div class="module-grid">
+        <!-- Predictions - Ready in Phase 2 -->
+       <a href="{% url 'mobile:predictions_list' project.id %}" class="module-tile module-available">
+            <div class="module-icon">📊</div>
+            <div class="module-info">
+                <span class="module-name">Predictions</span>
+                <span class="module-count">
+                    {% if prediction_count %}{{ prediction_count }} array{% if prediction_count != 1 %}s{% endif %}{% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="module-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9,18 15,12 9,6"/>
+                </svg>
+            </div>
+        </a>
+        
+        <!-- Mic Tracker - Ready in Phase 3 -->
+        <a href="{% url 'mobile:mic_tracker_days' project.id %}" class="module-tile module-available">
+            <div class="module-icon">🎤</div>
+            <div class="module-info">
+                <span class="module-name">Mic Tracker</span>
+                <span class="module-count">
+                    {% if mic_count %}{{ mic_count }} mic{% if mic_count != 1 %}s{% endif %}{% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="module-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9,18 15,12 9,6"/>
+                </svg>
+            </div>
+        </a>
+        
+        <!-- COMM - Ready in Phase 4 -->
+        <a href="{% url 'mobile:comm_list' project.id %}" class="module-tile module-available">
+            <div class="module-icon">🎧</div>
+            <div class="module-info">
+                <span class="module-name">COMM</span>
+                <span class="module-count">
+                    {% if comm_count %}{{ comm_count }} pack{% if comm_count != 1 %}s{% endif %}{% else %}—{% endif %}
+                </span>
+            </div>
+            <div class="module-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9,18 15,12 9,6"/>
+                </svg>
+            </div>
+        </a>
+        
+        <!-- RF Frequencies - Phase 6 -->
+        <div class="module-tile module-coming-soon">
+            <div class="module-icon">📻</div>
+            <div class="module-info">
+                <span class="module-name">RF Frequencies</span>
+                <span class="module-count">Coming Soon</span>
+            </div>
+        </div>
+        
+        <!-- Consoles - View Only for now -->
+        <div class="module-tile module-view-only">
+            <div class="module-icon">🎛️</div>
+            <div class="module-info">
+                <span class="module-name">Consoles</span>
+                <span class="module-count">
+                    {% if console_count %}{{ console_count }}{% else %}—{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <!-- Amplifiers - View Only for now -->
+        <div class="module-tile module-view-only">
+            <div class="module-icon">🔊</div>
+            <div class="module-info">
+                <span class="module-name">Amplifiers</span>
+                <span class="module-count">
+                    {% if amplifier_count %}{{ amplifier_count }}{% else %}—{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <!-- Processors - View Only for now -->
+        <div class="module-tile module-view-only">
+            <div class="module-icon">⚙️</div>
+            <div class="module-info">
+                <span class="module-name">Processors</span>
+                <span class="module-count">
+                    {% if processor_count %}{{ processor_count }}{% else %}—{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <!-- PA Cables - View Only for now -->
+        <div class="module-tile module-view-only">
+            <div class="module-icon">🔌</div>
+            <div class="module-info">
+                <span class="module-name">PA Cables</span>
+                <span class="module-count">
+                    {% if cable_count %}{{ cable_count }}{% else %}—{% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    {% if can_edit %}
+    <div class="quick-actions">
+        <a href="{% url 'admin:planner_project_change' project.id %}" class="btn btn-secondary btn-full">
+            Edit in Admin
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .project-container {
+        padding: 0 16px 24px;
+    }
+    
+    .back-btn {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #4a9eff;
+        margin-left: -8px;
+    }
+    
+    .back-btn svg {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .sync-indicator {
+        color: #666680;
+    }
+    
+    .sync-indicator.synced {
+        color: #00ff88;
+    }
+    
+    .sync-indicator svg {
+        width: 12px;
+        height: 12px;
+    }
+    
+    /* Project Info Card */
+    .project-info-card {
+        margin-bottom: 8px;
+    }
+    
+    .project-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    
+    .project-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 0;
+        flex: 1;
+        padding-right: 12px;
+    }
+    
+    .project-details {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .detail-label {
+        font-size: 13px;
+        color: #666680;
+    }
+    
+    .detail-value {
+        font-size: 14px;
+        color: #a0a0b0;
+        text-align: right;
+    }
+    
+    /* Role Badge */
+    .role-badge {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        background: #333355;
+        color: #a0a0b0;
+        flex-shrink: 0;
+    }
+    
+    .role-badge.role-owner {
+        background: rgba(0, 255, 136, 0.15);
+        color: #00ff88;
+    }
+    
+    .role-badge.role-editor {
+        background: rgba(74, 158, 255, 0.2);
+        color: #4a9eff;
+    }
+    
+    .role-badge.role-viewer {
+        background: rgba(102, 102, 128, 0.2);
+        color: #888899;
+    }
+    
+    /* Module Grid */
+    .module-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    
+    .module-tile {
+        background: #252542;
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        text-decoration: none;
+        color: inherit;
+        transition: background 0.15s ease;
+        min-height: 100px;
+    }
+    
+    .module-tile.module-available:active {
+        background: #303060;
+    }
+    
+    .module-tile.module-coming-soon {
+        opacity: 0.5;
+    }
+    
+    .module-tile.module-view-only {
+        opacity: 0.7;
+    }
+    
+    .module-icon {
+        font-size: 28px;
+    }
+    
+    .module-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+    
+    .module-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #ffffff;
+    }
+    
+    .module-count {
+        font-size: 12px;
+        color: #666680;
+    }
+    
+    .module-arrow {
+        position: absolute;
+        top: 16px;
+        right: 12px;
+        color: #666680;
+    }
+    
+    .module-tile {
+        position: relative;
+    }
+    
+    .module-arrow svg {
+        width: 18px;
+        height: 18px;
+    }
+    
+    .module-coming-soon .module-arrow,
+    .module-view-only .module-arrow {
+        display: none;
+    }
+    
+    /* Quick Actions */
+    .quick-actions {
+        margin-top: 24px;
+    }
+</style>
+{% endblock %}

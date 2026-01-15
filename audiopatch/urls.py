@@ -57,6 +57,8 @@ urlpatterns = [
     # Root redirect to mic tracker
     path('', lambda request: redirect('/audiopatch/mic-tracker/')),
 
+    path('m/', include('planner.mobile_urls')),
+
     
     ]
 

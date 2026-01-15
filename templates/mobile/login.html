@@ -1,0 +1,242 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}Login - ShowStack{% endblock %}
+
+{% block header %}
+<!-- No header on login page -->
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-logo">
+        <div class="logo-icon">S</div>
+        <h1 class="logo-text">ShowStack</h1>
+        <p class="logo-tagline">Professional Audio Production</p>
+    </div>
+    
+    {% if error_message %}
+    <div class="error-banner">
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        {{ error_message }}
+    </div>
+    {% endif %}
+    
+    <form method="post" class="login-form">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="username" class="form-label">Username</label>
+            <input 
+                type="text" 
+                id="username" 
+                name="username" 
+                class="input" 
+                autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                required
+            >
+        </div>
+        
+        <div class="form-group">
+            <label for="password" class="form-label">Password</label>
+            <input 
+                type="password" 
+                id="password" 
+                name="password" 
+                class="input" 
+                autocomplete="current-password"
+                required
+            >
+        </div>
+        
+        <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+                <input type="checkbox" name="remember_me" id="remember_me" checked>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-text">Keep me signed in for 30 days</span>
+            </label>
+        </div>
+        
+        <button type="submit" class="btn btn-primary btn-full">
+            Sign In
+        </button>
+    </form>
+    
+    <div class="login-footer">
+        <p class="login-help">
+            Need an account? <a href="{% url 'admin:index' %}" class="link">Contact Admin</a>
+        </p>
+        <p class="login-desktop">
+            <a href="{% url 'admin:index' %}" class="link">Go to Desktop Admin →</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 24px;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+    
+    .login-logo {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    
+    .logo-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #4a9eff, #2d7cd6);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        font-weight: 700;
+        color: white;
+        margin: 0 auto 16px;
+        box-shadow: 0 8px 32px rgba(74, 158, 255, 0.3);
+    }
+    
+    .logo-text {
+        font-size: 28px;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 0 0 4px 0;
+    }
+    
+    .logo-tagline {
+        font-size: 14px;
+        color: #a0a0b0;
+        margin: 0;
+    }
+    
+    .error-banner {
+        background: rgba(255, 77, 77, 0.15);
+        border: 1px solid rgba(255, 77, 77, 0.3);
+        color: #ff6b6b;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+    }
+    
+    .error-icon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+    }
+    
+    .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .form-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: #a0a0b0;
+    }
+    
+    .checkbox-group {
+        flex-direction: row;
+    }
+    
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .checkbox-label input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .checkbox-custom {
+        width: 22px;
+        height: 22px;
+        background: #1a1a2e;
+        border: 2px solid #333355;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+    
+    .checkbox-label input:checked + .checkbox-custom {
+        background: #4a9eff;
+        border-color: #4a9eff;
+    }
+    
+    .checkbox-label input:checked + .checkbox-custom::after {
+        content: '✓';
+        color: white;
+        font-size: 14px;
+        font-weight: 700;
+    }
+    
+    .checkbox-text {
+        font-size: 14px;
+        color: #a0a0b0;
+    }
+    
+    .btn-full {
+        width: 100%;
+        margin-top: 8px;
+    }
+    
+    .login-footer {
+        margin-top: 32px;
+        text-align: center;
+    }
+    
+    .login-help {
+        font-size: 14px;
+        color: #666680;
+        margin: 0 0 12px 0;
+    }
+    
+    .login-desktop {
+        font-size: 14px;
+        margin: 0;
+    }
+    
+    .link {
+        color: #4a9eff;
+        text-decoration: none;
+    }
+    
+    .link:active {
+        color: #6ab0ff;
+    }
+</style>
+{% endblock %}

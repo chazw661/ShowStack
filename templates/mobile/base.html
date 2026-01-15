@@ -1,0 +1,68 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ShowStack">
+    <meta name="format-detection" content="telephone=no">
+    
+    <title>{% block title %}ShowStack{% endblock %}</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{% static 'mobile/manifest.json' %}">
+    
+    <!-- iOS Icons -->
+    <link rel="apple-touch-icon" href="{% static 'mobile/icons/icon-192.png' %}">
+    <link rel="apple-touch-icon" sizes="192x192" href="{% static 'mobile/icons/icon-192.png' %}">
+    <link rel="apple-touch-icon" sizes="512x512" href="{% static 'mobile/icons/icon-512.png' %}">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'mobile/icons/icon-192.png' %}">
+    
+    <!-- Mobile Styles -->
+    <link rel="stylesheet" href="{% static 'mobile/css/mobile.css' %}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% block header %}
+    <header class="mobile-header">
+        {% block header_content %}
+        <div class="header-left">
+            {% block back_button %}{% endblock %}
+        </div>
+        <div class="header-title">
+            {% block header_title %}ShowStack{% endblock %}
+        </div>
+        <div class="header-right">
+            {% block header_actions %}{% endblock %}
+        </div>
+        {% endblock %}
+    </header>
+    {% endblock %}
+    
+    <main class="mobile-main">
+        {% if messages %}
+        <div class="messages-container">
+            {% for message in messages %}
+            <div class="message message-{{ message.tags }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% block content %}{% endblock %}
+    </main>
+    
+    {% block footer %}{% endblock %}
+    
+    <!-- Mobile Scripts -->
+    <script src="{% static 'mobile/js/mobile.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

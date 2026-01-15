@@ -106,7 +106,8 @@ TEMPLATES = [
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [ 
             BASE_DIR / 'templates',
-            BASE_DIR / 'planner' / 'templates', ],
+            BASE_DIR / 'planner' / 'templates', 
+            ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -174,6 +175,11 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STATICFILES_DIRS = [
+    BASE_DIR / "planner" / "static",
+]
+
 
 
 

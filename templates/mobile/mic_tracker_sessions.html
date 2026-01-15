@@ -1,0 +1,57 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}{{ day.date|date:"M j" }} Sessions - {{ project.name }}{% endblock %}
+
+{% block header %}
+<header class="mobile-header">
+    <a href="{% url 'mobile:mic_tracker_days' project.id %}" class="back-link">←</a>
+    <h1 class="header-title">{{ day.date|date:"M j" }}</h1>
+    <button class="icon-btn" onclick="location.reload()" aria-label="Refresh">⟳</button>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="project-context">{{ project.name }} • {{ day.name|default:day.date|date:"l" }}</div>
+
+{% if session_data %}
+<div class="sessions-list">
+    {% for item in session_data %}
+    <a href="{% url 'mobile:mic_tracker_assignments' project.id item.session.id %}" class="card session-card">
+        <div class="session-time">
+            {% if item.session.start_time %}
+            {{ item.session.start_time|time:"g:i A" }}
+            {% else %}
+            <span class="time-tbd">TBD</span>
+            {% endif %}
+        </div>
+        <div class="card-content">
+            <div class="card-title">{{ item.session.name }}</div>
+            <div class="session-meta">
+                {% if item.session.session_type %}
+                <span class="session-type">{{ item.session.get_session_type_display }}</span>
+                {% endif %}
+                {% if item.session.location %}
+                <span class="session-location">📍 {{ item.session.location }}</span>
+                {% endif %}
+            </div>
+            <div class="card-stats">
+                <span class="mic-status {% if item.assigned_mics == item.total_mics %}all-assigned{% endif %}">
+                    {{ item.assigned_mics }}/{{ item.total_mics }} mics assigned
+                </span>
+            </div>
+        </div>
+        <div class="card-arrow">→</div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">🎤</div>
+    <div class="empty-title">No Sessions</div>
+    <div class="empty-message">
+        No sessions scheduled for this day yet.
+    </div>
+</div>
+{% endif %}
+{% endblock %}

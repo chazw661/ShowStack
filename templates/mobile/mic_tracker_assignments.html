@@ -1,0 +1,176 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}{{ session.name }} - Mic Tracker{% endblock %}
+
+{% block header %}
+<header class="mobile-header">
+    <a href="{% url 'mobile:mic_tracker_sessions' project.id day.id %}" class="back-link">←</a>
+    <h1 class="header-title">{{ session.name|truncatechars:18 }}</h1>
+    <button class="icon-btn" onclick="location.reload()" aria-label="Refresh">⟳</button>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="project-context">
+    {{ project.name }} • {{ day.date|date:"M j" }}
+    {% if session.start_time %} • {{ session.start_time|time:"g:i A" }}{% endif %}
+</div>
+
+<!-- Search/Filter Bar -->
+<div class="search-bar">
+    <input type="text" id="mic-search" placeholder="Search presenter or mic #..." class="search-input" autocomplete="off">
+    <button class="search-clear" onclick="clearSearch()" aria-label="Clear search">✕</button>
+</div>
+
+<!-- Mic Assignments List -->
+<div class="assignments-list" id="assignments-list">
+    {% for assignment in assignments %}
+    <div class="assignment-card {% if not assignment.presenter %}unassigned{% endif %}" 
+         data-rf="{{ assignment.rf_number }}"
+         data-search="{{ assignment.presenter.name|default:''|lower }} {% for sp in assignment.shared_presenters.all %}{{ sp.name|lower }} {% endfor %}">
+        
+        <div class="assignment-header">
+            <div class="rf-number">{{ assignment.rf_number }}</div>
+            <div class="mic-info">
+                {% if assignment.mic_type %}
+                <span class="mic-type-badge">{{ assignment.get_mic_type_display }}</span>
+                {% endif %}
+                {% if assignment.is_d_mic %}
+                <span class="status-badge d-mic">D-MIC</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="presenters-list">
+            {% if assignment.presenter %}
+            <!-- Primary Presenter -->
+            <div class="presenter-row" data-key="micd-{{ assignment.id }}-{{ assignment.presenter.id }}">
+                <span class="presenter-name">{{ assignment.presenter.name }}</span>
+                <button class="micd-btn" onclick="toggleMicd(this)">MIC'D</button>
+            </div>
+            
+            <!-- Shared Presenters -->
+            {% for shared in assignment.shared_presenters.all %}
+            <div class="presenter-row shared" data-key="micd-{{ assignment.id }}-{{ shared.id }}">
+                <span class="presenter-name">{{ shared.name }}</span>
+                <button class="micd-btn" onclick="toggleMicd(this)">MIC'D</button>
+            </div>
+            {% endfor %}
+            
+            {% else %}
+            <div class="presenter-row unassigned-row">
+                <span class="presenter-name unassigned-text">Unassigned</span>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if assignment.notes %}
+        <div class="assignment-note">📝 {{ assignment.notes }}</div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <div class="empty-icon">🎤</div>
+        <div class="empty-title">No Mics</div>
+        <div class="empty-message">No mic assignments for this session.</div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Reminder Banner -->
+<div class="reminder-banner">
+    💡 Remember to update ShowStack desktop after micing presenters
+</div>
+
+<!-- Quick Stats Footer -->
+{% if assignments %}
+<div class="stats-footer">
+    <div class="stat">
+        <span class="stat-value" id="total-count">{{ assignments|length }}</span>
+        <span class="stat-label">Mics</span>
+    </div>
+    <div class="stat">
+        <span class="stat-value" id="micd-count">0</span>
+        <span class="stat-label">MIC'D</span>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Session storage key prefix for this session
+const SESSION_KEY = 'showstack-micd-{{ session.id }}';
+
+// Load saved states on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadMicdStates();
+    updateStats();
+});
+
+function loadMicdStates() {
+    document.querySelectorAll('.presenter-row[data-key]').forEach(row => {
+        const key = row.dataset.key;
+        if (localStorage.getItem(key) === 'true') {
+            row.classList.add('micd');
+            row.querySelector('.micd-btn').classList.add('active');
+        }
+    });
+}
+
+function toggleMicd(button) {
+    const row = button.closest('.presenter-row');
+    const key = row.dataset.key;
+    const isActive = button.classList.contains('active');
+    
+    if (isActive) {
+        button.classList.remove('active');
+        row.classList.remove('micd');
+        localStorage.removeItem(key);
+    } else {
+        button.classList.add('active');
+        row.classList.add('micd');
+        localStorage.setItem(key, 'true');
+    }
+    
+    // Flash effect
+    row.classList.add('just-updated');
+    setTimeout(() => row.classList.remove('just-updated'), 500);
+    
+    updateStats();
+}
+
+function updateStats() {
+    const micdCount = document.querySelectorAll('.presenter-row.micd').length;
+    const micdEl = document.getElementById('micd-count');
+    if (micdEl) micdEl.textContent = micdCount;
+}
+
+// Search functionality
+const searchInput = document.getElementById('mic-search');
+if (searchInput) {
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        const cards = document.querySelectorAll('.assignment-card');
+        
+        cards.forEach(card => {
+            const rf = card.dataset.rf;
+            const search = card.dataset.search;
+            
+            const matches = !query || rf.includes(query) || search.includes(query);
+            card.style.display = matches ? 'block' : 'none';
+        });
+        
+        document.querySelector('.search-clear').style.display = query ? 'block' : 'none';
+    });
+}
+
+function clearSearch() {
+    searchInput.value = '';
+    searchInput.dispatchEvent(new Event('input'));
+    searchInput.focus();
+}
+</script>
+{% endblock %}

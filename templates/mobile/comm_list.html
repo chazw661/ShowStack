@@ -1,0 +1,247 @@
+{% extends 'mobile/base.html' %}
+{% load static %}
+
+{% block title %}COMM - {{ project.name }}{% endblock %}
+
+{% block header %}
+<header class="mobile-header">
+    <a href="{% url 'mobile:project_overview' project.id %}" class="back-link">←</a>
+    <h1 class="header-title">COMM</h1>
+    <button class="icon-btn" onclick="location.reload()" aria-label="Refresh">⟳</button>
+</header>
+{% endblock %}
+
+{% block content %}
+<div class="project-context">{{ project.name }}</div>
+
+<!-- Search Bar -->
+<div class="search-bar">
+    <input type="text" id="comm-search" placeholder="Search name, position, or BP #..." class="search-input" autocomplete="off">
+    <button class="search-clear" onclick="clearSearch()" aria-label="Clear search">✕</button>
+</div>
+
+{% if wireless_packs or hardwired_packs %}
+
+<!-- Wireless Section -->
+{% if wireless_packs %}
+<div class="comm-section">
+    <div class="section-header-bar">
+        <span class="section-title">📡 Wireless</span>
+        <span class="section-count">{{ wireless_packs|length }}</span>
+    </div>
+    
+    <div class="beltpack-list">
+        {% for bp in wireless_packs %}
+        <div class="beltpack-row {% if bp.checked_out %}checked-out{% endif %}"
+             data-bp-id="{{ bp.id }}"
+             data-bp="{{ bp.bp_number }}"
+             data-name="{{ bp.name.name|default:''|lower }}"
+             data-position="{{ bp.position.name|default:''|lower }}"
+             onclick="toggleCheckout({{ bp.id }}, this)">
+            
+            <div class="bp-number">{{ bp.bp_number }}</div>
+            
+            <div class="bp-info">
+                <div class="bp-position">{{ bp.position.name|default:"Unassigned" }}</div>
+                <div class="bp-name">{{ bp.name.name|default:"—" }}</div>
+                
+                <div class="bp-channels">
+                    {% if bp.channel_a %}<span class="channel-badge">{{ bp.channel_a.abbreviation }}</span>{% endif %}
+                    {% if bp.channel_b %}<span class="channel-badge">{{ bp.channel_b.abbreviation }}</span>{% endif %}
+                    {% if bp.channel_c %}<span class="channel-badge">{{ bp.channel_c.abbreviation }}</span>{% endif %}
+                    {% if bp.channel_d %}<span class="channel-badge">{{ bp.channel_d.abbreviation }}</span>{% endif %}
+                </div>
+            </div>
+            
+            <div class="bp-status">
+                <span class="checkout-badge {% if bp.checked_out %}out{% else %}in{% endif %}">
+                    {% if bp.checked_out %}OUT{% else %}IN{% endif %}
+                </span>
+                {% if bp.headset %}
+                <span class="headset-type">{{ bp.get_headset_display }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Hardwired Section -->
+{% if hardwired_packs %}
+<div class="comm-section">
+    <div class="section-header-bar">
+        <span class="section-title">🔌 Hardwired</span>
+        <span class="section-count">{{ hardwired_packs|length }}</span>
+    </div>
+    
+    <div class="beltpack-list">
+        {% for bp in hardwired_packs %}
+        <div class="beltpack-row {% if bp.checked_out %}checked-out{% endif %}"
+             data-bp-id="{{ bp.id }}"
+             data-bp="{{ bp.bp_number }}"
+             data-name="{{ bp.name.name|default:''|lower }}"
+             data-position="{{ bp.position.name|default:''|lower }}"
+             onclick="toggleCheckout({{ bp.id }}, this)">
+            
+            <div class="bp-number">{{ bp.bp_number }}</div>
+            
+            <div class="bp-info">
+                <div class="bp-position">{{ bp.position.name|default:"Unassigned" }}</div>
+                <div class="bp-name">{{ bp.name.name|default:"—" }}</div>
+                
+                <div class="bp-channels">
+                    {% if bp.channel_a %}<span class="channel-badge">{{ bp.channel_a.abbreviation }}</span>{% endif %}
+                    {% if bp.channel_b %}<span class="channel-badge">{{ bp.channel_b.abbreviation }}</span>{% endif %}
+                    {% if bp.channel_c %}<span class="channel-badge">{{ bp.channel_c.abbreviation }}</span>{% endif %}
+                    {% if bp.channel_d %}<span class="channel-badge">{{ bp.channel_d.abbreviation }}</span>{% endif %}
+                </div>
+                
+                {% if bp.ip_address %}
+                <div class="bp-ip">{{ bp.ip_address }}</div>
+                {% endif %}
+            </div>
+            
+            <div class="bp-status">
+                <span class="checkout-badge {% if bp.checked_out %}out{% else %}in{% endif %}">
+                    {% if bp.checked_out %}OUT{% else %}IN{% endif %}
+                </span>
+                {% if bp.headset %}
+                <span class="headset-type">{{ bp.get_headset_display }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Stats Footer -->
+<div class="stats-footer">
+    <div class="stat">
+        <span class="stat-value" id="total-count">{{ total_packs }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+    <div class="stat">
+        <span class="stat-value" id="out-count">{{ checked_out }}</span>
+        <span class="stat-label">Out</span>
+    </div>
+</div>
+
+{% else %}
+<div class="empty-state">
+    <div class="empty-icon">🎧</div>
+    <div class="empty-title">No Belt Packs</div>
+    <div class="empty-message">
+        Add COMM belt packs via the desktop admin.
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Get CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Toggle checkout status
+async function toggleCheckout(bpId, element) {
+    // Add loading state
+    element.classList.add('loading');
+    
+    try {
+        const response = await fetch(`/m/api/comm/toggle-checkout/${bpId}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update UI
+            const badge = element.querySelector('.checkout-badge');
+            
+            if (data.checked_out) {
+                element.classList.add('checked-out');
+                badge.classList.remove('in');
+                badge.classList.add('out');
+                badge.textContent = 'OUT';
+            } else {
+                element.classList.remove('checked-out');
+                badge.classList.remove('out');
+                badge.classList.add('in');
+                badge.textContent = 'IN';
+            }
+            
+            // Update footer count
+            updateCounts();
+            
+            // Brief highlight
+            element.classList.add('just-updated');
+            setTimeout(() => element.classList.remove('just-updated'), 500);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to update. Please try again.');
+    } finally {
+        element.classList.remove('loading');
+    }
+}
+
+// Update footer counts
+function updateCounts() {
+    const outCount = document.querySelectorAll('.beltpack-row.checked-out').length;
+    document.getElementById('out-count').textContent = outCount;
+}
+
+// Search functionality
+const searchInput = document.getElementById('comm-search');
+if (searchInput) {
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        const rows = document.querySelectorAll('.beltpack-row');
+        
+        rows.forEach(row => {
+            const bp = row.dataset.bp;
+            const name = row.dataset.name;
+            const position = row.dataset.position;
+            
+            const matches = !query || 
+                bp.includes(query) || 
+                name.includes(query) ||
+                position.includes(query);
+            
+            row.style.display = matches ? 'flex' : 'none';
+        });
+        
+        document.querySelector('.search-clear').style.display = query ? 'block' : 'none';
+    });
+}
+
+function clearSearch() {
+    const searchInput = document.getElementById('comm-search');
+    searchInput.value = '';
+    searchInput.dispatchEvent(new Event('input'));
+    searchInput.focus();
+}
+</script>
+{% endblock %}

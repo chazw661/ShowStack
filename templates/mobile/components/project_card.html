@@ -1,0 +1,36 @@
+{# templates/mobile/components/project_card.html #}
+{#
+   Reusable project card component
+   
+   Usage:
+   {% include 'mobile/components/project_card.html' with project=project show_role=True %}
+   
+   Parameters:
+   - project: Project model instance
+   - show_role: Boolean to show role badge (for shared projects)
+   - role: User's role on the project (owner, editor, viewer)
+#}
+
+<a href="{% url 'mobile:project_overview' project.id %}" class="project-card">
+    <div class="project-info">
+        <h3 class="project-name">{{ project.name }}</h3>
+        <div class="project-meta">
+            {% if project.client_name %}
+            <span class="project-client">{{ project.client_name }}</span>
+            {% endif %}
+            
+            {% if project.event_date %}
+            <span class="project-date">{{ project.event_date|date:"M j, Y" }}</span>
+            {% endif %}
+            
+            {% if show_role and role %}
+            <span class="role-badge role-{{ role }}">{{ role|title }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="project-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9,18 15,12 9,6"/>
+        </svg>
+    </div>
+</a>
