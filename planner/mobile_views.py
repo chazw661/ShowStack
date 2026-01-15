@@ -80,16 +80,14 @@ def mobile_dashboard(request):
     # Build shared projects list with role info
     shared_projects = []
     for membership in shared_memberships:
-        shared_projects.append({
-            'project': membership.project,
-            'role': membership.role,
-            'role_display': membership.get_role_display() if hasattr(membership, 'get_role_display') else membership.role.title(),
-        })
+        project = membership.project
+        project.user_role = membership.role
+        shared_projects.append(project)
     
     context = {
         'owned_projects': owned_projects,
         'shared_projects': shared_projects,
-        'total_projects': owned_projects.count() + len(shared_projects),
+        'total_count': owned_projects.count() + len(shared_projects),
     }
     return render(request, 'mobile/dashboard.html', context)
 
