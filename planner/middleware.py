@@ -43,10 +43,12 @@ class CurrentProjectMiddleware:
                         if is_superuser:
                             # Superusers can access any project
                             request.current_project = project
-                        else:
-                            # Owners can only access their own projects
-                            if project.owner == request.user:
-                                request.current_project = project
+                        elif project.owner == request.user:
+                            # User owns this project
+                            request.current_project = project
+                        elif ProjectMember.objects.filter(user=request.user, project=project).exists():
+                            # User is invited to this project
+                            request.current_project = project
                     except Project.DoesNotExist:
                         pass
                 
