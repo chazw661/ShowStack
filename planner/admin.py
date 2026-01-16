@@ -848,7 +848,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                     )
                     
                     # Duplicate all related inputs
-                    for input_obj in original.consoleinput_set.all():
+                    for input_obj in original.consoleinput_set.all().order_by('input_ch'):
                         ConsoleInput.objects.create(
                             console=new_console,
                             dante_number=input_obj.dante_number,
@@ -862,7 +862,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                         )
                     
                     # Duplicate aux outputs
-                    for aux in original.consoleauxoutput_set.all():
+                    for aux in original.consoleauxoutput_set.all().order_by('aux_number'):
                         ConsoleAuxOutput.objects.create(
                             console=new_console,
                             dante_number=aux.dante_number,
@@ -875,7 +875,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                         )
                     
                     # Duplicate matrix outputs
-                    for matrix in original.consolematrixoutput_set.all():
+                    for matrix in original.consolematrixoutput_set.all().order_by('matrix_number'):
                         ConsoleMatrixOutput.objects.create(
                             console=new_console,
                             dante_number=matrix.dante_number,
