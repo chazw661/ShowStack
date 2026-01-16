@@ -156,164 +156,89 @@ def generate_pa_cable_pdf(queryset):
     elements.append(header)
     elements.append(Spacer(1, 0.2*inch))
     
-    # Calculate cable summary (replicate the logic from changelist_view)
+    # Calculate cable summary using the same logic as changelist_view
     from planner.models import PACableSchedule
     
-    cable_summary = {}
+    # Build Quick Order List data (simple 3-column format matching web page)
+    quick_order_data = [['ITEM TYPE', 'LENGTH', 'ORDER QTY']]
+    
+    # Process cables by type
     for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
         cables = queryset.filter(cable=cable_type[0])
         if cables.exists():
-            # Calculate total length: count * length for each cable
-            total_length = sum((c.count or 0) * (c.length or 0) for c in cables)
-            if total_length > 0:
-                # Calculate standard cable quantities needed
-                hundreds = int(total_length / 100)
-                remaining = total_length % 100
-                
-                # Round up remaining to next standard length
-                fifties = 0
-                twenty_fives = 0
-                tens = 0
-                fives = 0
-                
-                if remaining > 0:
-                    if remaining > 50:
-                        hundreds += 1
-                    elif remaining > 25:
-                        fifties = 1
-                    elif remaining > 10:
-                        twenty_fives = 1
-                    elif remaining > 5:
-                        tens = 1
-                    elif remaining > 0:
-                        fives = 1
-                
-                cable_summary[cable_type[1]] = {
-                    'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
-                    'total_length': total_length,
-                    'hundreds': hundreds,
-                    'hundreds_with_safety': math.ceil(hundreds * 1.2),
-                    'fifties': fifties,
-                    'fifties_with_safety': math.ceil(fifties * 1.2),
-                    'twenty_fives': twenty_fives,
-                    'twenty_fives_with_safety': math.ceil(twenty_fives * 1.2),
-                    'tens': tens,
-                    'tens_with_safety': math.ceil(tens * 1.2),
-                    'fives': fives,
-                    'fives_with_safety': math.ceil(fives * 1.2),
-                    'couplers': hundreds - 1 if hundreds > 1 else 0,
-                }
-    
-    # Cable Summary Table
-    if cable_summary:
-        sec_header = Paragraph("Cable Orders (with 20% safety margin)", section_style)
-        elements.append(sec_header)
-        elements.append(Spacer(1, 0.1*inch))
-        
-        cable_data = [['CABLE TYPE', 'TOTAL FT', '100\' QTY', '50\' QTY', '25\' QTY', '10\' QTY', '5\' QTY', 'COUPLERS']]
-        
-        # Track totals
-        total_100 = 0
-        total_50 = 0
-        total_25 = 0
-        total_10 = 0
-        total_5 = 0
-        total_couplers = 0
-        total_footage = 0
-        
-        for cable_type, data in cable_summary.items():
-            total_footage += data['total_length']
-            total_100 += data['hundreds_with_safety']
-            total_50 += data['fifties_with_safety']
-            total_25 += data['twenty_fives_with_safety']
-            total_10 += data['tens_with_safety']
-            total_5 += data['fives_with_safety']
-            total_couplers += data['couplers']
+            # Calculate cables needed at each standard length
+            hundreds = 0
+            fifties = 0
+            twenty_fives = 0
+            tens = 0
+            fives = 0
             
-            cable_data.append([
-                cable_type,
-                f"{data['total_length']}'",
-                str(data['hundreds_with_safety']) if data['hundreds_with_safety'] > 0 else '-',
-                str(data['fifties_with_safety']) if data['fifties_with_safety'] > 0 else '-',
-                str(data['twenty_fives_with_safety']) if data['twenty_fives_with_safety'] > 0 else '-',
-                str(data['tens_with_safety']) if data['tens_with_safety'] > 0 else '-',
-                str(data['fives_with_safety']) if data['fives_with_safety'] > 0 else '-',
-                str(data['couplers']) if data['couplers'] > 0 else '-',
-            ])
-        
-        # Add totals row
-        cable_data.append([
-            'TOTALS',
-            f"{total_footage}'",
-            str(total_100) if total_100 > 0 else '-',
-            str(total_50) if total_50 > 0 else '-',
-            str(total_25) if total_25 > 0 else '-',
-            str(total_10) if total_10 > 0 else '-',
-            str(total_5) if total_5 > 0 else '-',
-            str(total_couplers) if total_couplers > 0 else '-',
-        ])
-        
-        cable_col_widths = [1.3*inch, 0.8*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.8*inch]
-        ct = Table(cable_data, colWidths=cable_col_widths, repeatRows=1)
-        
-        # Custom style with bold totals row
-        ct.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('GRID', (0, 0), (-1, -1), 0.5, DARK_GRAY),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ]))
-        
-        elements.append(ct)
-        elements.append(Spacer(1, 0.3*inch))
+            for cable in cables:
+                cable_length = cable.length or 0
+                cable_count = cable.count or 0
+                
+                for _ in range(cable_count):
+                    remaining = cable_length
+                    while remaining > 0:
+                        if remaining > 50:
+                            hundreds += 1
+                            remaining -= 100
+                        elif remaining > 25:
+                            fifties += 1
+                            remaining -= 50
+                        elif remaining > 10:
+                            twenty_fives += 1
+                            remaining -= 25
+                        elif remaining > 5:
+                            tens += 1
+                            remaining -= 10
+                        elif remaining > 0:
+                            fives += 1
+                            remaining -= 5
+            
+            # Apply 20% safety margin
+            hundreds_safe = math.ceil(hundreds * 1.2) if hundreds > 0 else 0
+            fifties_safe = math.ceil(fifties * 1.2) if fifties > 0 else 0
+            twenty_fives_safe = math.ceil(twenty_fives * 1.2) if twenty_fives > 0 else 0
+            tens_safe = math.ceil(tens * 1.2) if tens > 0 else 0
+            fives_safe = math.ceil(fives * 1.2) if fives > 0 else 0
+            
+            cable_name = cable_type[1]  # Display name
+            
+            # Add rows for each length that has quantities
+            if hundreds_safe > 0:
+                quick_order_data.append([cable_name, "100'", str(hundreds_safe)])
+            if fifties_safe > 0:
+                quick_order_data.append([cable_name, "50'", str(fifties_safe)])
+            if twenty_fives_safe > 0:
+                quick_order_data.append([cable_name, "25'", str(twenty_fives_safe)])
+            if tens_safe > 0:
+                quick_order_data.append([cable_name, "10'", str(tens_safe)])
+            if fives_safe > 0:
+                quick_order_data.append([cable_name, "5'", str(fives_safe)])
     
-    # Calculate fan out summary
+    # Add fan outs to Quick Order List
     fan_out_summary = {}
     for cable in queryset.prefetch_related('fan_outs'):
         for fan_out in cable.fan_outs.all():
             fan_out_name = fan_out.get_fan_out_type_display()
             if fan_out_name not in fan_out_summary:
-                fan_out_summary[fan_out_name] = {
-                    'total_quantity': 0,
-                    'with_overage': 0
-                }
-            fan_out_summary[fan_out_name]['total_quantity'] += fan_out.quantity
+                fan_out_summary[fan_out_name] = 0
+            fan_out_summary[fan_out_name] += fan_out.quantity
     
-    # Calculate 20% overage for each fan out type
-    for fan_out_type in fan_out_summary:
-        total = fan_out_summary[fan_out_type]['total_quantity']
-        fan_out_summary[fan_out_type]['with_overage'] = math.ceil(total * 1.2)
+    # Add fan outs with 20% safety
+    for fan_out_type, total_qty in fan_out_summary.items():
+        qty_with_safety = math.ceil(total_qty * 1.2)
+        quick_order_data.append([fan_out_type, "Fan Out", str(qty_with_safety)])
     
-    # Fan Out Summary Table
-    if fan_out_summary:
-        sec_header = Paragraph("Fan Out Orders (with 20% safety margin)", section_style)
-        elements.append(sec_header)
-        elements.append(Spacer(1, 0.1*inch))
+    # Create table if we have data
+    if len(quick_order_data) > 1:
+        col_widths = [3*inch, 1.5*inch, 1.5*inch]
+        qt = Table(quick_order_data, colWidths=col_widths, repeatRows=1)
+        qt.setStyle(table_style)
         
-        fan_data = [['FAN OUT TYPE', 'ORDER QTY']]
-        
-        for fan_out_type, data in fan_out_summary.items():
-            fan_data.append([
-                fan_out_type,
-                str(data['with_overage']),
-            ])
-        
-        fan_col_widths = [2*inch, 1*inch]
-        ft = Table(fan_data, colWidths=fan_col_widths, repeatRows=1)
-        ft.setStyle(table_style)
-        
-        elements.append(ft)
-        elements.append(Spacer(1, 0.2*inch))
+        elements.append(qt)
+        elements.append(Spacer(1, 0.3*inch))
     
     # Add note about safety margin
     note_style = ParagraphStyle(
