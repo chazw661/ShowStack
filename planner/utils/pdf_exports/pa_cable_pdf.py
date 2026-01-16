@@ -98,7 +98,7 @@ def generate_pa_cable_pdf(queryset):
         # Table data
         data = [['LABEL', 'DESTINATION', 'COUNT', 'LENGTH', 'CABLE TYPE', 'NOTES']]
         
-        for cable in queryset.order_by('id'):
+        for cable in queryset:
             # Convert label (PAZone ForeignKey) to string
             label_text = str(cable.label) if cable.label else ''
             
@@ -133,10 +133,11 @@ def generate_pa_cable_pdf(queryset):
             
             fan_data = [['CABLE', 'FAN OUT TYPE', 'QUANTITY']]
             
-            for cable in queryset.order_by('id'):
+            for cable in queryset:
                 for fan_out in cable.fan_outs.all():
+                    label_text = str(cable.label) if cable.label else f"Cable #{cable.id}"
                     fan_data.append([
-                        cable.label or f"Cable #{cable.id}",
+                        label_text,
                         fan_out.get_fan_out_type_display(),
                         str(fan_out.quantity),
                     ])
@@ -162,7 +163,8 @@ def generate_pa_cable_pdf(queryset):
     for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
         cables = queryset.filter(cable=cable_type[0])
         if cables.exists():
-            total_length = sum(c.total_cable_length for c in cables)
+            # Calculate total length: count * length for each cable
+            total_length = sum((c.count or 0) * (c.length or 0) for c in cables)
             if total_length > 0:
                 # Calculate standard cable quantities needed
                 hundreds = int(total_length / 100)
@@ -208,11 +210,29 @@ def generate_pa_cable_pdf(queryset):
         elements.append(sec_header)
         elements.append(Spacer(1, 0.1*inch))
         
-        cable_data = [['CABLE TYPE', '100\' QTY', '50\' QTY', '25\' QTY', '10\' QTY', '5\' QTY', 'COUPLERS']]
+        cable_data = [['CABLE TYPE', 'TOTAL FT', '100\' QTY', '50\' QTY', '25\' QTY', '10\' QTY', '5\' QTY', 'COUPLERS']]
+        
+        # Track totals
+        total_100 = 0
+        total_50 = 0
+        total_25 = 0
+        total_10 = 0
+        total_5 = 0
+        total_couplers = 0
+        total_footage = 0
         
         for cable_type, data in cable_summary.items():
+            total_footage += data['total_length']
+            total_100 += data['hundreds_with_safety']
+            total_50 += data['fifties_with_safety']
+            total_25 += data['twenty_fives_with_safety']
+            total_10 += data['tens_with_safety']
+            total_5 += data['fives_with_safety']
+            total_couplers += data['couplers']
+            
             cable_data.append([
                 cable_type,
+                f"{data['total_length']}'",
                 str(data['hundreds_with_safety']) if data['hundreds_with_safety'] > 0 else '-',
                 str(data['fifties_with_safety']) if data['fifties_with_safety'] > 0 else '-',
                 str(data['twenty_fives_with_safety']) if data['twenty_fives_with_safety'] > 0 else '-',
@@ -221,9 +241,38 @@ def generate_pa_cable_pdf(queryset):
                 str(data['couplers']) if data['couplers'] > 0 else '-',
             ])
         
-        cable_col_widths = [1.5*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch]
+        # Add totals row
+        cable_data.append([
+            'TOTALS',
+            f"{total_footage}'",
+            str(total_100) if total_100 > 0 else '-',
+            str(total_50) if total_50 > 0 else '-',
+            str(total_25) if total_25 > 0 else '-',
+            str(total_10) if total_10 > 0 else '-',
+            str(total_5) if total_5 > 0 else '-',
+            str(total_couplers) if total_couplers > 0 else '-',
+        ])
+        
+        cable_col_widths = [1.3*inch, 0.8*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.8*inch]
         ct = Table(cable_data, colWidths=cable_col_widths, repeatRows=1)
-        ct.setStyle(table_style)
+        
+        # Custom style with bold totals row
+        ct.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, DARK_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
         
         elements.append(ct)
         elements.append(Spacer(1, 0.3*inch))
