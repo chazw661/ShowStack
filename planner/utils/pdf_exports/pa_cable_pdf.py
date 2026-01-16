@@ -99,8 +99,11 @@ def generate_pa_cable_pdf(queryset):
         data = [['LABEL', 'DESTINATION', 'COUNT', 'LENGTH', 'CABLE TYPE', 'NOTES', 'DRAWING REF']]
         
         for cable in queryset.order_by('id'):
+            # Convert label (PAZone ForeignKey) to string
+            label_text = str(cable.label) if cable.label else ''
+            
             data.append([
-                Paragraph(cable.label or '', cell_style),
+                Paragraph(label_text, cell_style),
                 Paragraph(cable.destination or '', cell_style),
                 str(cable.count) if cable.count else '',
                 f"{cable.length}'" if cable.length else '',
