@@ -2284,20 +2284,21 @@ def all_amps_pdf_export(request):
 
 
 #-------PA Schedule PDF-------
-
-
 def all_pa_cables_pdf_export(request):
     """Export all PA cables to PDF."""
     from .models import PACableSchedule
     from .utils.pdf_exports.pa_cable_pdf import generate_pa_cable_pdf
     
-    queryset = PACableSchedule.objects.all()
-    pdf = generate_pa_cable_pdf(queryset)
+    # Filter by current project
+    if hasattr(request, 'current_project') and request.current_project:
+        queryset = PACableSchedule.objects.filter(project=request.current_project)
+    else:
+        queryset = PACableSchedule.objects.none()
     
+    pdf = generate_pa_cable_pdf(queryset)
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="pa_cable_schedule.pdf"'
     return response
-
 
 
 #--------Comm Beltpack PDF-----
