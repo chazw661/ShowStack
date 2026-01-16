@@ -87,20 +87,21 @@ def generate_pa_cable_pdf(queryset):
         elements.append(Spacer(1, 0.1*inch))
         
         # Table data
-        data = [['LABEL', 'DESTINATION', 'COUNT', 'CABLE TYPE', 'NOTES', 'DRAWING REF']]
+        data = [['LABEL', 'DESTINATION', 'COUNT', 'LENGTH', 'CABLE TYPE', 'NOTES', 'DRAWING REF']]
         
         for cable in queryset.order_by('id'):
             data.append([
                 cable.label or '',
                 cable.destination or '',
                 str(cable.count) if cable.count else '',
+                f"{cable.length}'" if cable.length else '',
                 cable.get_cable_display() if cable.cable else '',
                 cable.notes or '',
                 cable.drawing_ref or '',
             ])
         
         # Create table
-        col_widths = [2.0*inch, 1.8*inch, 0.6*inch, 1.2*inch, 2.3*inch, 0.8*inch]
+        col_widths = [1.8*inch, 1.6*inch, 0.5*inch, 0.6*inch, 1.2*inch, 2.0*inch, 0.8*inch]
         t = Table(data, colWidths=col_widths, repeatRows=1)
         t.setStyle(table_style)
         
