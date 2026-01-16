@@ -86,22 +86,31 @@ def generate_pa_cable_pdf(queryset):
         elements.append(header)
         elements.append(Spacer(1, 0.1*inch))
         
+        # Cell style for wrapping text
+        cell_style = ParagraphStyle(
+            'CellStyle',
+            parent=styles['Normal'],
+            fontSize=8,
+            leading=10,
+            fontName='Helvetica'
+        )
+        
         # Table data
         data = [['LABEL', 'DESTINATION', 'COUNT', 'LENGTH', 'CABLE TYPE', 'NOTES', 'DRAWING REF']]
         
         for cable in queryset.order_by('id'):
             data.append([
-                cable.label or '',
-                cable.destination or '',
+                Paragraph(cable.label or '', cell_style),
+                Paragraph(cable.destination or '', cell_style),
                 str(cable.count) if cable.count else '',
                 f"{cable.length}'" if cable.length else '',
                 cable.get_cable_display() if cable.cable else '',
-                cable.notes or '',
+                Paragraph(cable.notes or '', cell_style),
                 cable.drawing_ref or '',
             ])
         
         # Create table
-        col_widths = [1.8*inch, 1.6*inch, 0.5*inch, 0.6*inch, 1.2*inch, 2.0*inch, 0.8*inch]
+        col_widths = [2.0*inch, 1.5*inch, 0.5*inch, 0.6*inch, 0.9*inch, 2.2*inch, 0.8*inch]
         t = Table(data, colWidths=col_widths, repeatRows=1)
         t.setStyle(table_style)
         
