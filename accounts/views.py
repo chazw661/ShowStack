@@ -352,10 +352,8 @@ def set_project(request, project_id):
     from django.contrib import messages
     
     try:
-        # Check if user has access to this project
         project = Project.objects.get(id=project_id)
         
-        # Verify user is owner or member
         is_owner = project.owner == request.user
         is_member = ProjectMember.objects.filter(
             project=project,
@@ -368,9 +366,9 @@ def set_project(request, project_id):
         
         # Set the project in session
         request.session['current_project_id'] = project_id
+        request.session.modified = True  # <-- ADD THIS LINE
         messages.success(request, f'Now viewing: {project.name}')
         
-        # Redirect to admin panel
         return redirect('/admin/')
         
     except Project.DoesNotExist:

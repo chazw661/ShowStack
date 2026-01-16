@@ -23,15 +23,12 @@ class CurrentProjectMiddleware:
         if request.user.is_authenticated:
             # Get user role information
             is_superuser = request.user.is_superuser
-            is_owner = False
-            is_invited = False
             
-            if hasattr(request.user, 'userprofile'):
-                # Check if user owns any projects
-                is_owner = Project.objects.filter(owner=request.user).exists()
-                
-                # Check if user is invited to any projects
-                is_invited = ProjectMember.objects.filter(user=request.user).exists()
+            # Check if user owns any projects (doesn't require userprofile)
+            is_owner = Project.objects.filter(owner=request.user).exists()
+            
+            # Check if user is invited to any projects (doesn't require userprofile)
+            is_invited = ProjectMember.objects.filter(user=request.user).exists()
             
             # SUPERUSERS and PROJECT OWNERS: Can switch projects via dropdown
             if is_superuser or is_owner:
@@ -90,6 +87,7 @@ class CurrentProjectMiddleware:
                     if membership:
                         request.current_project = membership.project
                         request.session['current_project_id'] = membership.project.id
+                        request.session.modified = True
         
         response = self.get_response(request)
         return response
