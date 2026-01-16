@@ -11,7 +11,7 @@ class CurrentProjectMiddleware:
     Behavior by user role:
     - Superusers: Can switch between any project using dropdown
     - Project Owners: Can switch between their owned projects using dropdown
-    - Editors/Viewers: Automatically scoped to their invited projects (no dropdown)
+    - Editors/Viewers: Can access projects they're invited to via session
     """
     
     def __init__(self, get_response):
@@ -66,15 +66,30 @@ class CurrentProjectMiddleware:
                         request.current_project = first_project
                         request.session['current_project_id'] = first_project.id
             
-            # EDITORS and VIEWERS: Auto-scoped to invited projects (no switching)
+            # EDITORS and VIEWERS: Can access projects they're invited to
             elif is_invited and not is_owner:
-                # Get the first project they're invited to
-                membership = ProjectMember.objects.filter(user=request.user).select_related('project').first()
+                # First, check if there's a project_id in session that they have access to
+                project_id = request.session.get('current_project_id')
                 
-                if membership:
-                    request.current_project = membership.project
-                    # Store in session for consistency
-                    request.session['current_project_id'] = membership.project.id
+                if project_id:
+                    # Verify they're actually a member of this project
+                    membership = ProjectMember.objects.filter(
+                        user=request.user,
+                        project_id=project_id
+                    ).select_related('project').first()
+                    
+                    if membership:
+                        request.current_project = membership.project
+                
+                # If no valid project in session, fall back to first invited project
+                if not request.current_project:
+                    membership = ProjectMember.objects.filter(
+                        user=request.user
+                    ).select_related('project').first()
+                    
+                    if membership:
+                        request.current_project = membership.project
+                        request.session['current_project_id'] = membership.project.id
         
         response = self.get_response(request)
         return response
