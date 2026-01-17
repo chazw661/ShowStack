@@ -3740,15 +3740,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
     channel_summary.short_description = 'Channels'
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter dropdown options based on current project"""
-        if db_field.name == "unit_location":
-            if hasattr(request, 'current_project') and request.current_project:
-                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
-            else:
-                kwargs["queryset"] = Location.objects.none()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
+    
 
     def duplicate_beltpacks(self, request, queryset):
         """Duplicate selected belt packs with all their channels"""
@@ -3805,8 +3797,12 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         current_project = getattr(request, 'current_project', None)
         
         if current_project:
+            # Filter location dropdown
+            if db_field.name == "unit_location":
+                kwargs["queryset"] = Location.objects.filter(project=current_project).order_by('name')
+            
             # Filter position dropdown
-            if db_field.name == "position":
+            elif db_field.name == "position":
                 kwargs["queryset"] = CommPosition.objects.filter(project=current_project).order_by('name')
             
             # Filter name dropdown
@@ -3818,7 +3814,6 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 kwargs["queryset"] = CommChannel.objects.filter(project=current_project).order_by('input_designation')
         
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 
     
