@@ -2513,6 +2513,17 @@ class PAZoneAdmin(BaseEquipmentAdmin):
     
     actions = ['create_default_zones']
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter location dropdown by current project"""
+        if db_field.name == 'location':
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs['queryset'] = Location.objects.filter(
+                    project=request.current_project
+                ).order_by('name')
+            else:
+                kwargs['queryset'] = Location.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def get_queryset(self, request):
         """Filter zones by current project"""
         qs = super().get_queryset(request)
