@@ -3514,6 +3514,19 @@ class CommBeltPackChannelInline(admin.TabularInline):
             return True
         return request.user.has_perm('planner.change_commbeltpack')
     
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter channel dropdown by current project"""
+        if db_field.name == "channel":
+            current_project = getattr(request, "current_project", None)
+            if current_project:
+                kwargs["queryset"] = CommChannel.objects.filter(comm_system__project=current_project)
+            else:
+                kwargs["queryset"] = CommChannel.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    
+    
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         return formset
