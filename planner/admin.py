@@ -521,6 +521,7 @@ admin.site.index_title = "ShowStack Audio Management"
 
 class ConsoleInputInline(admin.TabularInline):
     model = ConsoleInput
+    ordering = ['input_ch'] 
     form = ConsoleInputForm
     extra = 0
     can_delete = True
@@ -568,6 +569,7 @@ class ConsoleInputInline(admin.TabularInline):
 
 class ConsoleAuxOutputInline(admin.TabularInline):
     model = ConsoleAuxOutput
+    ordering = ['aux_number']
     form = ConsoleAuxOutputForm
     extra = 0
     can_delete = True
@@ -603,6 +605,7 @@ class ConsoleAuxOutputInline(admin.TabularInline):
 
 class ConsoleMatrixOutputInline(admin.TabularInline):
     model = ConsoleMatrixOutput
+    ordering = ['matrix_number'] 
     form = ConsoleMatrixOutputForm
     extra = 0
     can_delete = True
