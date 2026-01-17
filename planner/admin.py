@@ -3520,12 +3520,12 @@ class CommBeltPackChannelInline(admin.TabularInline):
         if db_field.name == "channel":
             current_project = getattr(request, "current_project", None)
             if current_project:
-                kwargs["queryset"] = CommChannel.objects.filter(comm_system__project=current_project)
+                kwargs["queryset"] = CommChannel.objects.filter(project=current_project)
             else:
                 kwargs["queryset"] = CommChannel.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
-    
+
     
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
