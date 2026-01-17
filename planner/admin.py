@@ -589,7 +589,7 @@ class ConsoleAuxOutputInline(admin.TabularInline):
             aux_num_int=Cast('aux_number', IntegerField())
         ).order_by('aux_num_int')
     
-    
+
 
     def get_extra(self, request, obj=None, **kwargs):
         """Return 48 for new consoles, 0 for existing"""
@@ -2590,7 +2590,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     form = PACableInlineForm
     inlines = [PAFanOutInline]  # Add this line
     list_display = [
-    'destination', 'count', 'length',
+    'label','destination', 'count', 'length',
     'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
     'notes', 'drawing_ref'
 ]
