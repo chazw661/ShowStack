@@ -3971,6 +3971,13 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
             if hasattr(request, 'current_project') and request.current_project:
                 return qs.filter(project=request.current_project)
             return qs.none()
+    
+
+    def save_model(self, request, obj, form, change):
+        """Auto-assign current project when creating new belt pack"""
+        if not change and hasattr(request, 'current_project') and request.current_project:
+            obj.project = request.current_project
+        super().save_model(request, obj, form, change)
         
 
     
