@@ -2602,7 +2602,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     fieldsets = (
         ('Cable Configuration', {
-            'fields': ('destination', 'count', 'length' , 'cable')
+            'fields': ('label','destination', 'count', 'length' , 'cable')
         }),
       
         
