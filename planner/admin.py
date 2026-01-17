@@ -521,11 +521,18 @@ admin.site.index_title = "ShowStack Audio Management"
 
 class ConsoleInputInline(admin.TabularInline):
     model = ConsoleInput
-    ordering = ['input_ch'] 
     form = ConsoleInputForm
     extra = 0
     can_delete = True
     classes = ['collapse']
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        from django.db.models.functions import Cast
+        from django.db.models import IntegerField
+        return qs.annotate(
+            input_ch_int=Cast('input_ch', IntegerField())
+        ).order_by('input_ch_int')
 
     def get_extra(self, request, obj=None, **kwargs):
         """Return 144 for new consoles, 0 for existing"""
@@ -569,11 +576,20 @@ class ConsoleInputInline(admin.TabularInline):
 
 class ConsoleAuxOutputInline(admin.TabularInline):
     model = ConsoleAuxOutput
-    ordering = ['aux_number']
     form = ConsoleAuxOutputForm
     extra = 0
     can_delete = True
     classes = ['collapse']
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        from django.db.models.functions import Cast
+        from django.db.models import IntegerField
+        return qs.annotate(
+            aux_num_int=Cast('aux_number', IntegerField())
+        ).order_by('aux_num_int')
+    
+    
 
     def get_extra(self, request, obj=None, **kwargs):
         """Return 48 for new consoles, 0 for existing"""
@@ -605,11 +621,20 @@ class ConsoleAuxOutputInline(admin.TabularInline):
 
 class ConsoleMatrixOutputInline(admin.TabularInline):
     model = ConsoleMatrixOutput
-    ordering = ['matrix_number'] 
     form = ConsoleMatrixOutputForm
     extra = 0
     can_delete = True
     classes = ['collapse']
+
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        from django.db.models.functions import Cast
+        from django.db.models import IntegerField
+        return qs.annotate(
+            matrix_num_int=Cast('matrix_number', IntegerField())
+        ).order_by('matrix_num_int')
+    
 
     def get_extra(self, request, obj=None, **kwargs):
         """Return 24 for new consoles, 0 for existing"""
