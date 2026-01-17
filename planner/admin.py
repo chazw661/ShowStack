@@ -3177,6 +3177,14 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         extra_context['show_import_csv'] = True
         return super().changelist_view(request, extra_context)
     
+
+    def get_queryset(self, request):
+        """Filter crew names by current project"""
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs.none()
+    
     def get_model_perms(self, request):
         """Show in COMM section of admin"""
         return super().get_model_perms(request)
