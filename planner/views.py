@@ -2289,9 +2289,11 @@ def all_pa_cables_pdf_export(request):
     from .models import PACableSchedule
     from .utils.pdf_exports.pa_cable_pdf import generate_pa_cable_pdf
     
-    # Filter by current project
+    # Filter by current project and preserve ordering
     if hasattr(request, 'current_project') and request.current_project:
-        queryset = PACableSchedule.objects.filter(project=request.current_project)
+        queryset = PACableSchedule.objects.filter(
+            project=request.current_project
+        ).select_related('label').order_by('label__name', 'destination')
     else:
         queryset = PACableSchedule.objects.none()
     
