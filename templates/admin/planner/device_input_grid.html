@@ -35,21 +35,16 @@
               {% for form in form_chunk %}
                 <td class="device-input-cell">
                   {# hidden PK/FK fields etc. #}
-                 <input type="hidden" name="{{ form.input_number.html_name }}" 
-                  id="{{ form.input_number.id_for_label }}" 
-                  value="{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}">
+                  {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
+                  <input type="hidden" name="{{ form.input_number.html_name }}" 
+                         id="{{ form.input_number.id_for_label }}" 
+                         value="{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}">
 
                   {# Input number - handle None values #}
                   <div class="number">
-                    {% if form.instance.input_number %}
-                      In {{ form.instance.input_number }}
-                    {% elif form.initial.input_number %}
-                      In {{ form.initial.input_number }}
-                    {% else %}
-                      In {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
-                    {% endif %}
+                    In {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
                   </div>
 
                   {# Console input dropdown #}
