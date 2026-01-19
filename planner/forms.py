@@ -302,10 +302,14 @@ class DeviceInputInlineForm(forms.ModelForm):
         
         # For every Console and do Python-side filtering
         for console in console_qs:
+            # Sort console inputs numerically by input_ch
+            console_inputs = sorted(
+                [ci for ci in console.consoleinput_set.all() if ci.source],
+                key=lambda ci: int(ci.input_ch) if ci.input_ch.isdigit() else float('inf')
+            )
             opts = [
                 (ci.pk, f"{ci.input_ch}: {ci.source}")
-                for ci in console.consoleinput_set.all()
-                if ci.source  # only non‐empty, non‐None sources
+                for ci in console_inputs
             ]
             if opts:
                 grouped.append((console.name, opts))
