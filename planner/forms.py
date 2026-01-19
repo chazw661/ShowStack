@@ -308,7 +308,7 @@ class DeviceInputInlineForm(forms.ModelForm):
                 key=lambda ci: int(ci.input_ch) if ci.input_ch.isdigit() else float('inf')
             )
             opts = [
-                (ci.pk, f"{ci.input_ch}: {ci.source}")
+               (ci.pk, ci.source)
                 for ci in console_inputs
             ]
             if opts:
@@ -370,15 +370,15 @@ class DeviceOutputInlineForm(forms.ModelForm):
             # Aux outputs
             for ao in console.consoleauxoutput_set.all():
                 if ao.name:
-                    opts.append((f"aux_{ao.pk}", f"Aux {ao.aux_number}: {ao.name}"))
+                    opts.append((f"aux_{ao.pk}", ao.name))
             # Matrix outputs  
             for mo in console.consolematrixoutput_set.all():
                 if mo.name:
-                    opts.append((f"matrix_{mo.pk}", f"Mat {mo.matrix_number}: {mo.name}"))
+                    opts.append((f"matrix_{mo.pk}", mo.name))
 
             for so in console.consolestereooutput_set.all():
                 if so.name:
-                    opts.append((f"stereo_{so.pk}", f"{so.get_stereo_type_display()}: {so.name}"))        
+                    opts.append((f"stereo_{so.pk}", so.name))       
 
             if opts:
                 grouped.append((console.name, opts))
