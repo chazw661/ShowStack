@@ -1065,6 +1065,11 @@ class DeviceInputInline(BaseEquipmentInline):
     extra = 0
     ordering = ['input_number']
     template = "admin/planner/device_input_grid.html"
+
+    def get_queryset(self, request):
+        """Order by input_number to ensure grid positions match"""
+        qs = super().get_queryset(request)
+        return qs.order_by('input_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
@@ -1102,6 +1107,12 @@ class DeviceOutputInline(BaseEquipmentInline):
     ordering = ['output_number']
     fields = ['output_number', 'signal_name']
     template = "admin/planner/device_output_grid.html"
+
+
+    def get_queryset(self, request):
+        """Order by output_number to ensure grid positions match"""
+        qs = super().get_queryset(request)
+        return qs.order_by('output_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
