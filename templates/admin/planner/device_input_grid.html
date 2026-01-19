@@ -37,8 +37,7 @@
                   {# hidden PK/FK fields etc. #}
                  <input type="hidden" name="{{ form.input_number.html_name }}" 
                   id="{{ form.input_number.id_for_label }}" 
-                  value="{% if form.instance.input_number %}{{ form.instance.input_number }}{% elif form.initial.input_number %}{{ form.initial.input_number }}{% else %}{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}{% endif %}">
-                  {% for hidden in form.hidden_fields %}
+                  value="{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}">
                     {{ hidden }}
                   {% endfor %}
 
