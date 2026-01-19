@@ -1063,6 +1063,7 @@ class DeviceInputInline(BaseEquipmentInline):
     model = DeviceInput
     form = DeviceInputInlineForm
     extra = 0
+    ordering = ['input_number']
     template = "admin/planner/device_input_grid.html"
     
     def get_formset(self, request, obj=None, **kwargs):
@@ -1098,6 +1099,7 @@ class DeviceOutputInline(BaseEquipmentInline):
     model = DeviceOutput
     form = DeviceOutputInlineForm
     extra = 0
+    ordering = ['output_number']
     fields = ['output_number', 'signal_name']
     template = "admin/planner/device_output_grid.html"
     
