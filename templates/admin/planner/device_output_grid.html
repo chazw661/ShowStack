@@ -38,7 +38,9 @@
                   {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
-                  {{ form.output_number.as_hidden }}
+                  <input type="hidden" name="{{ form.output_number.html_name }}" 
+                  id="{{ form.output_number.id_for_label }}" 
+                  value="{% if form.instance.output_number %}{{ form.instance.output_number }}{% elif form.initial.output_number %}{{ form.initial.output_number }}{% else %}{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}{% endif %}">
                   
                   {# Hidden signal_name field #}
                   <input type="hidden" name="{{ form.signal_name.html_name }}" 
