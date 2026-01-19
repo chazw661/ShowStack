@@ -1185,8 +1185,34 @@ class DeviceAdmin(BaseEquipmentAdmin):
 
     
     def save_formset(self, request, form, formset, change):
-        # If you have inline formsets
         super().save_formset(request, form, formset, change)
+        
+        # After saving, ensure all input/output slots exist
+        device = form.instance
+        if device.pk:
+            # Fill in missing DeviceInput records
+            existing_input_numbers = set(
+                device.inputs.values_list('input_number', flat=True)
+            )
+            for num in range(1, device.input_count + 1):
+                if num not in existing_input_numbers:
+                    DeviceInput.objects.create(
+                        device=device,
+                        input_number=num,
+                        signal_name=''
+                    )
+            
+            # Fill in missing DeviceOutput records
+            existing_output_numbers = set(
+                device.outputs.values_list('output_number', flat=True)
+            )
+            for num in range(1, device.output_count + 1):
+                if num not in existing_output_numbers:
+                    DeviceOutput.objects.create(
+                        device=device,
+                        output_number=num,
+                        signal_name=''
+                    )
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
         print("=== CHANGEFORM_VIEW ===")
