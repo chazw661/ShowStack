@@ -4695,6 +4695,7 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
 class AmplifierAssignmentInline(BaseEquipmentInline):
     model = AmplifierAssignment
     extra = 1
+    can_delete = True
     fields = [
         'amplifier', 'quantity', 'zone', 'position', 
         'duty_cycle', 'phase_assignment', 
