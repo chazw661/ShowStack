@@ -244,8 +244,17 @@ class BaseEquipmentAdmin(BaseAdmin):
             return self._is_premium_owner(request) or self._user_has_editor_access(request)
         
         # Check specific object permission
-        # Handle both Project and Equipment objects
-        project = obj if obj.__class__.__name__ == 'Project' else obj.project
+        # Handle both Project and Equipment objects, including nested children
+        if obj.__class__.__name__ == 'Project':
+            project = obj
+        elif hasattr(obj, 'project'):
+            project = obj.project
+        elif hasattr(obj, 'array'):  # SpeakerCabinet
+            project = obj.array.prediction.project
+        elif hasattr(obj, 'prediction'):  # SpeakerArray
+            project = obj.prediction.project
+        else:
+            project = None
         role = self._get_user_role_for_project(request, project)
         return role in ['owner', 'editor']  # Viewers can't delete
     
