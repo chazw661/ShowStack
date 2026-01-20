@@ -4704,9 +4704,8 @@ class AmplifierAssignmentInline(admin.TabularInline):
     readonly_fields = ['calculated_current_per_unit', 'calculated_total_current']
     autocomplete_fields = ['amplifier']
 
-    def get_formset(self, request, obj=None, **kwargs):
-        kwargs['can_delete'] = True
-        return super().get_formset(request, obj, **kwargs)
+    def has_delete_permission(self, request, obj=None):
+        return True
 
 
 # Update your PowerDistributionPlanAdmin class in planner/admin.py
