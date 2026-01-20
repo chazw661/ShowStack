@@ -73,19 +73,19 @@ class BaseEquipmentAdmin(BaseAdmin):
     """Base admin for equipment models with project filtering and role-based permissions"""
 
 
-def _get_user_role_for_project(self, request, project):
-    """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
-    if project is None:
-        return None
-    if project.owner == request.user:
-        
-        try:
-            from planner.models import ProjectMember
-            member = ProjectMember.objects.get(user=request.user, project=project)
-            return member.role  # 'editor' or 'viewer'
-        except ProjectMember.DoesNotExist:
-            
+    def _get_user_role_for_project(self, request, project):
+        """Get user's role for a specific project (returns 'owner', 'editor', 'viewer', or None)"""
+        if project is None:
             return None
+        if project.owner == request.user:
+            
+            try:
+                from planner.models import ProjectMember
+                member = ProjectMember.objects.get(user=request.user, project=project)
+                return member.role  # 'editor' or 'viewer'
+            except ProjectMember.DoesNotExist:
+                
+                return None
         
 
 
@@ -131,6 +131,13 @@ def _get_user_role_for_project(self, request, project):
     def get_queryset(self, request):
         """Filter equipment to user's accessible projects"""
         qs = super().get_queryset(request)
+        
+        # DEBUG - remove after fixing
+        if self.model.__name__ == 'CommChannel':
+            print(f"DEBUG CommChannel get_queryset:")
+            print(f"  has current_project: {hasattr(request, 'current_project')}")
+            print(f"  current_project: {getattr(request, 'current_project', None)}")
+            print(f"  qs count before filter: {qs.count()}")
         
         # Filter by CURRENTLY SELECTED project, not all accessible projects
         if not hasattr(request, 'current_project') or not request.current_project:
