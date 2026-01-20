@@ -4704,6 +4704,10 @@ class AmplifierAssignmentInline(BaseEquipmentInline):
     readonly_fields = ['calculated_current_per_unit', 'calculated_total_current']
     autocomplete_fields = ['amplifier']
 
+    def get_formset(self, request, obj=None, **kwargs):
+        kwargs['can_delete'] = True
+        return super().get_formset(request, obj, **kwargs)
+
 
 # Update your PowerDistributionPlanAdmin class in planner/admin.py
 
