@@ -137,6 +137,13 @@ class SoundvisionParser:
         bumper_match = re.search(r'Bumper:\s*([^\n]+)', text)
         if bumper_match:
             data['bumper'] = bumper_match.group(1).strip()
+
+        # Extract MBAR hole A/B from bumper text for KARA
+        bumper_text = data['bumper'].lower()
+        if 'hole a' in bumper_text:
+            data['mbar_hole'] = 'A'
+        elif 'hole b' in bumper_text:
+            data['mbar_hole'] = 'B'
         
         # Number of motors
         motors_match = re.search(r'#\s*motors:\s*(\d+)', text)
@@ -200,13 +207,6 @@ class SoundvisionParser:
             hole_num = int(front_pickup_match.group(1))
             data['pickup_positions']['front'] = hole_num
             
-            # For KARA, determine MBar A or B based on hole number
-            if 'KARA' in base_name.upper():
-                # Hole 0 = MBar A, Hole 2 = MBar B (typical)
-                if hole_num == 0:
-                    data['mbar_hole'] = 'A'
-                elif hole_num == 2:
-                    data['mbar_hole'] = 'B'
         
         rear_pickup_match = re.search(r'Rear pickup position[^:]*:\s*(\d+)\s*\([^)]+\)', text)
         if rear_pickup_match:
