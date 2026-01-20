@@ -4692,7 +4692,7 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
         }
 
 
-class AmplifierAssignmentInline(BaseEquipmentInline):
+class AmplifierAssignmentInline(admin.TabularInline):
     model = AmplifierAssignment
     extra = 1
     can_delete = True
