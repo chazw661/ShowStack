@@ -193,6 +193,11 @@ def generate_soundvision_pdf(prediction):
                 bumper_display = array.get_bumper_type_display() if hasattr(array, 'get_bumper_type_display') else array.bumper_type
                 info_lines.append(f"<b>Bumper:</b> {bumper_display}")
             
+
+            if array.mbar_hole:
+                info_lines.append(f"<b>MBAR Hole:</b> {array.mbar_hole}")
+
+                
             # Position data
             position_parts = []
             if array.position_x is not None:
