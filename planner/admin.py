@@ -5281,7 +5281,7 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
         }
 
 class SpeakerArrayAdmin(BaseEquipmentAdmin):
-    list_display = ['source_name', 'prediction', 'configuration', 'display_weight', 
+    list_display = ['source_name', 'prediction', 'configuration','display_mbar_hole', 'display_weight', 
                    'display_trim', 'display_rigging', 'cabinet_count']
     list_filter = ['configuration', 'bumper_type', 'num_motors']
     search_fields = ['source_name', 'array_base_name']
@@ -5306,6 +5306,15 @@ class SpeakerArrayAdmin(BaseEquipmentAdmin):
     def cabinet_count(self, obj):
         return obj.cabinets.count()
     cabinet_count.short_description = "Cabinets"
+
+    def display_mbar_hole(self, obj):
+        """Display MBar hole setting for KARA arrays"""
+        if obj.mbar_hole:
+            return format_html('<strong>Hole {}</strong>', obj.mbar_hole)
+        return "-"
+    display_mbar_hole.short_description = "MBar Hole"
+
+
     
     def cabinet_summary(self, obj):
         cabinets = obj.cabinets.all().order_by('position_number')
