@@ -4695,17 +4695,24 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
 class AmplifierAssignmentInline(admin.TabularInline):
     model = AmplifierAssignment
     extra = 1
-    can_delete = True
+    can_delete = False  # Disable the checkbox
     fields = [
         'amplifier', 'quantity', 'zone', 'position', 
         'duty_cycle', 'phase_assignment', 
-        'calculated_current_per_unit', 'calculated_total_current'
+        'calculated_current_per_unit', 'calculated_total_current', 'delete_link'
     ]
-    readonly_fields = ['calculated_current_per_unit', 'calculated_total_current']
+    readonly_fields = ['calculated_current_per_unit', 'calculated_total_current', 'delete_link']
     autocomplete_fields = ['amplifier']
 
-    def has_delete_permission(self, request, obj=None):
-        return True
+    def delete_link(self, obj):
+        if obj.pk:
+            url = reverse('admin:planner_amplifierassignment_delete', args=[obj.pk])
+            return format_html(
+                '<a href="{}" style="color: #ff6b6b; font-weight: bold;">Delete</a>',
+                url
+            )
+        return "-"
+    delete_link.short_description = "Delete"
 
 
 # Update your PowerDistributionPlanAdmin class in planner/admin.py
