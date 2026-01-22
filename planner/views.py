@@ -1394,27 +1394,27 @@ def calculate_phase_distribution(plan):
             )
     
    
-    # Balance auto assignments - distribute individual amps across phases
-    for assignment in sorted(auto_assignments, 
-                           key=lambda x: x.calculated_total_current or 0, 
-                           reverse=True):
+    # Balance auto assignments - distribute amps evenly across phases (round-robin per line)
+    for assignment in auto_assignments:
         current_per_unit = float(assignment.calculated_current_per_unit or 0)
         quantity = assignment.quantity or 1
         
         # Track how many amps go to each phase for this assignment
         assignment._phase_distribution = {'L1': 0, 'L2': 0, 'L3': 0}
         
-        # Distribute each individual amp to the lowest loaded phase
-        for _ in range(quantity):
-            min_phase = min(phases.keys(), key=lambda x: phases[x]['total_current'])
-            phases[min_phase]['total_current'] += current_per_unit
-            assignment._phase_distribution[min_phase] += 1
+        # Simple round-robin distribution for THIS line only
+        phase_order = ['L1', 'L2', 'L3']
+        for i in range(quantity):
+            phase = phase_order[i % 3]  # Round-robin: 0->L1, 1->L2, 2->L3, 3->L1, etc.
+            phases[phase]['total_current'] += current_per_unit
+            assignment._phase_distribution[phase] += 1
         
         # Set display phase to show distribution (e.g., "L1:2, L2:2, L3:2")
         dist_parts = [f"{p}:{c}" for p, c in assignment._phase_distribution.items() if c > 0]
         assignment._display_phase = ", ".join(dist_parts) if len(dist_parts) > 1 else dist_parts[0].split(':')[0]
         
-        phases[min_phase]['assignments'].append(assignment)
+        # Add to L1's assignments list for display
+        phases['L1']['assignments'].append(assignment)
 
     # Calculate summary statistics
     total_current = sum(p['total_current'] for p in phases.values())
