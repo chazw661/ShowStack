@@ -1415,8 +1415,12 @@ def calculate_phase_distribution(plan):
         assignment._display_phase = ", ".join(dist_parts) if len(dist_parts) > 1 else dist_parts[0].split(':')[0]
         
         phases[min_phase]['assignments'].append(assignment)
-        min_current = min(p['total_current'] for p in phases.values())
-    
+
+    # Calculate summary statistics
+    total_current = sum(p['total_current'] for p in phases.values())
+    max_current = max(p['total_current'] for p in phases.values())
+    min_current = min(p['total_current'] for p in phases.values())
+       
     # Calculate imbalance
     if max_current > 0:
         imbalance = ((max_current - min_current) / max_current) * 100
