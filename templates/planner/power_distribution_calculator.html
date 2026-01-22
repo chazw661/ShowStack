@@ -450,7 +450,7 @@
                         <th>Phase</th>
                         <th>Current/Unit</th>
                         <th>Total Current</th>
-                        <th>Actions</th>
+                        
                     </tr>
                 </thead>
                 <tbody id="assignments-tbody">
@@ -465,9 +465,7 @@
                         <td>{{ assignment.calculated_current_per_unit|floatformat:1 }}A</td>
                         <td><strong>{{ assignment.calculated_total_current|floatformat:1 }}A</strong></td>
                         <td>
-                            <button class="btn btn-sm btn-secondary" onclick="editAssignment({{ assignment.id }})">Edit</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteAssignment({{ assignment.id }})">Delete</button>
-                        </td>
+                            
                     </tr>
                     {% endfor %}
                 </tbody>
