@@ -2639,7 +2639,7 @@ class AmplifierAssignment(models.Model):
         ('L1', 'Phase L1/A'),
         ('L2', 'Phase L2/B'),
         ('L3', 'Phase L3/C'),
-        ('AUTO', 'Auto-Balance'),
+        ('AUTO', 'Auto-Balance (distribute across phases)'),
     ]
     phase_assignment = models.CharField(
         max_length=10, 

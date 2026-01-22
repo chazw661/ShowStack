@@ -1393,26 +1393,29 @@ def calculate_phase_distribution(plan):
                 assignment.calculated_total_current or 0
             )
     
-    # Balance auto assignments
+   
+    # Balance auto assignments - distribute individual amps across phases
     for assignment in sorted(auto_assignments, 
                            key=lambda x: x.calculated_total_current or 0, 
                            reverse=True):
-        # Find phase with lowest load
-        min_phase = min(phases.keys(), key=lambda x: phases[x]['total_current'])
+        current_per_unit = float(assignment.calculated_current_per_unit or 0)
+        quantity = assignment.quantity or 1
         
-        # Assign to that phase (for display calculation only, don't persist)
-        assignment._display_phase = min_phase
-        # Removed: assignment.save() - keep AUTO in database
+        # Track how many amps go to each phase for this assignment
+        assignment._phase_distribution = {'L1': 0, 'L2': 0, 'L3': 0}
+        
+        # Distribute each individual amp to the lowest loaded phase
+        for _ in range(quantity):
+            min_phase = min(phases.keys(), key=lambda x: phases[x]['total_current'])
+            phases[min_phase]['total_current'] += current_per_unit
+            assignment._phase_distribution[min_phase] += 1
+        
+        # Set display phase to show distribution (e.g., "L1:2, L2:2, L3:2")
+        dist_parts = [f"{p}:{c}" for p, c in assignment._phase_distribution.items() if c > 0]
+        assignment._display_phase = ", ".join(dist_parts) if len(dist_parts) > 1 else dist_parts[0].split(':')[0]
         
         phases[min_phase]['assignments'].append(assignment)
-        phases[min_phase]['total_current'] += float(
-            assignment.calculated_total_current or 0
-        )
-    
-    # Calculate summary statistics
-    total_current = sum(p['total_current'] for p in phases.values())
-    max_current = max(p['total_current'] for p in phases.values())
-    min_current = min(p['total_current'] for p in phases.values())
+        min_current = min(p['total_current'] for p in phases.values())
     
     # Calculate imbalance
     if max_current > 0:
