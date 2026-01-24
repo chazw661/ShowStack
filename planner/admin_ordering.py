@@ -139,32 +139,22 @@ def ordered_get_app_list(request, app_label=None):
     
     for app in app_list:
         if app['app_label'] == 'planner':
-            # DEBUG - print model names before filtering
-            if is_viewer:
-                print(f"Models before filtering: {[m['object_name'] for m in app['models']]}")
+            # Filter out always-hidden models for everyone, and child models for viewers
+            filtered_models = []
+            for model in app['models']:
+                model_name = model['object_name'].lower()
+                if model_name in always_hidden:
+                    continue  # Always hide these
+                if is_viewer and model_name in child_models:
+                    continue  # Hide children for viewers
+                filtered_models.append(model)
             
-           # Filter out always-hidden models for everyone
-                filtered_models = []
-                for model in app['models']:
-                    model_name = model['object_name'].lower()
-                    if model_name in always_hidden:
-                        continue  # Always hide these
-                    if is_viewer and model_name in child_models:
-                        print(f"Filtering out: {model_name}")  # DEBUG
-                        continue  # Hide children for viewers
-                    filtered_models.append(model)
-                
-                app['models'] = filtered_models
-                print(f"Models after filtering: {[m['object_name'] for m in app['models']]}")  # DEBUG
-
+            app['models'] = filtered_models
+            
             # Sort remaining models
-        
-                print(f"DEBUG - Models before sort: {[(m['object_name'], order_map.get(m['object_name'].lower(), 999)) for m in app['models']]}")
-            app['models'].sort(key=lambda x: order_map.get(x['object_name'].lower(), 999))    
-                            
+            app['models'].sort(key=lambda x: order_map.get(x['object_name'].lower(), 999))
             
-        
-            return app_list
+    return app_list
 
 # Apply the monkey patch
 showstack_admin_site.get_app_list = ordered_get_app_list
