@@ -945,7 +945,7 @@ class AmpModel(models.Model):
     
     class Meta:
         verbose_name = "Amp Model Template"
-        verbose_name_plural = "    └─ Amp Model Templates"  # Child - End of tree
+        verbose_name_plural = "Amp Model Templates"  # Child - End of tree
         ordering = ['id']
     
     def __str__(self):
@@ -1141,7 +1141,7 @@ class AmpChannel(models.Model):
     
     class Meta:
         verbose_name = "Amp Channel"
-        verbose_name_plural = "    ├─ Amp Channels"
+        verbose_name_plural = "Amp Channels"
         # UPDATE THIS: Likely fields are 'amp', 'channel_number'
         ordering = ['id']
     
@@ -1772,7 +1772,7 @@ class PAFanOut(models.Model):
             
             class Meta:
                 verbose_name = "PA Fan Out"
-                verbose_name_plural = "    └─ PA Fan Outs"
+                verbose_name_plural = "PA Fan Outs"
                 ordering = ['id']  # SAFE DEFAULT
                      
             
@@ -1826,7 +1826,7 @@ class CommChannel(models.Model):
     
     class Meta:
         verbose_name = "Comm Channel"
-        verbose_name_plural = "    └─ Comm Channels"  # Child
+        verbose_name_plural = "Comm Channels"# Child
         ordering = ['id']  # or ['id']
 
     
@@ -1844,7 +1844,7 @@ class CommPosition(models.Model):
     
     class Meta:
         verbose_name = "Comm Position"
-        verbose_name_plural = "    ├─ Comm Positions"  # Child
+        verbose_name_plural = "Comm Positions"  # Child
         ordering = ['name']  # or ['id']
         unique_together = [['name', 'project']]
     
@@ -1859,7 +1859,7 @@ class CommCrewName(models.Model):
     
     class Meta:
         verbose_name = "Comm Crew Name"
-        verbose_name_plural = "    ├─ Comm Crew Names"
+        verbose_name_plural = "Comm Crew Names"
         # UPDATE THIS: Likely field is 'name'
         ordering = ['name'] 
         unique_together = ['name', 'project']
@@ -2141,7 +2141,7 @@ class Presenter(models.Model):
     
     class Meta:
         verbose_name = "Presenter"
-        verbose_name_plural = "  ├─ Presenters"  # Child of Show Mic Tracker
+        verbose_name_plural = "Presenters"  # Child of Show Mic Tracker
         ordering = ['name']
     
     def __str__(self):
@@ -2183,7 +2183,7 @@ class MicSession(models.Model):
     
     class Meta:
         verbose_name = "Mic Session"
-        verbose_name_plural = "    ├─ Mic Sessions"  # Child
+        verbose_name_plural = "Mic Sessions" # Child
         ordering = ['day', 'order']  # or ['id']
     
     def __str__(self):
@@ -2298,7 +2298,7 @@ class MicAssignment(models.Model):
     
     class Meta:
         verbose_name = "Mic Assignment"
-        verbose_name_plural = "    ├─ Mic Assignments"  # Child
+        verbose_name_plural = "Mic Assignments"  # Child
         ordering = ['rf_number']  
     
     # Replace the methods section in MicAssignment class (lines 1407-1440+)
@@ -2442,7 +2442,7 @@ class MicShowInfo(models.Model):
     
     class Meta:
         verbose_name = "Mic Show Information"
-        verbose_name_plural = "    └─ Mic Show Information"
+        verbose_name_plural = "Mic Show Information"
     
     def __str__(self):
         if self.show_name:
@@ -2509,7 +2509,7 @@ class AmplifierProfile(models.Model):
     
     class Meta:
         verbose_name = "Amplifier Profile"
-        verbose_name_plural = "    └─ Amplifier Profiles"  # Child
+        verbose_name_plural = "Amplifier Profiles"  # Child
         ordering = ['manufacturer', 'model']  # or ['i fields are 'manufacturer', 'model'
        
         
@@ -2678,7 +2678,7 @@ class AmplifierAssignment(models.Model):
     
     class Meta:
         verbose_name = "Amplifiers in Power Plan"
-        verbose_name_plural = "    ├─ Amplifiers in Power Plan"  # PARENT
+        verbose_name_plural = "Amplifiers in Power Plan" # PARENT
         ordering = ['id']  # SAFE DEFAULT - replace with your fields like 'zone', 'position', etc.
 
         
@@ -2825,7 +2825,7 @@ class SpeakerArray(models.Model):
     
     class Meta:
         verbose_name = "Speaker Array"
-        verbose_name_plural = "    ├─ Speaker Arrays"  # Child
+        verbose_name_plural = "Speaker Arrays"  # Child
         ordering = ['prediction', 'array_base_name']  #
     
     def __str__(self):
@@ -2946,7 +2946,7 @@ class SpeakerCabinet(models.Model):
     
     class Meta:
         verbose_name = "Speaker Cabinet"
-        verbose_name_plural = "    └─ Speaker Cabinets"  # Child
+        verbose_name_plural = "Speaker Cabinets" # Child
         ordering = ['id']  #
     
     def __str__(self):

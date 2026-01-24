@@ -63,6 +63,12 @@ def ordered_get_app_list(request, app_label=None):
         'p1output',           # Child of P1 Processor
         'galaxyinput',        # Child of Galaxy Processor
         'galaxyoutput',       # Child of Galaxy Processor
+        
+    }
+
+    # Models to always hide from sidebar (accessible via direct URL)
+    always_hidden = {
+        'ampmodel',
     }
     
     # Define the correct order with proper groupings
@@ -137,15 +143,16 @@ def ordered_get_app_list(request, app_label=None):
             if is_viewer:
                 print(f"Models before filtering: {[m['object_name'] for m in app['models']]}")
             
-            # Filter out child models for viewers
-            if is_viewer:
+           # Filter out always-hidden models for everyone
                 filtered_models = []
                 for model in app['models']:
                     model_name = model['object_name'].lower()
-                    if model_name not in child_models:
-                        filtered_models.append(model)
-                    else:
+                    if model_name in always_hidden:
+                        continue  # Always hide these
+                    if is_viewer and model_name in child_models:
                         print(f"Filtering out: {model_name}")  # DEBUG
+                        continue  # Hide children for viewers
+                    filtered_models.append(model)
                 
                 app['models'] = filtered_models
                 print(f"Models after filtering: {[m['object_name'] for m in app['models']]}")  # DEBUG

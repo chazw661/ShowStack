@@ -1,4 +1,5 @@
-{% extends "admin/index.html" %}
+{% extends "admin/base_site.html" %}
+{% load static %}
 
 {% block content %}
 <!-- System Dashboard Button -->
@@ -57,7 +58,147 @@
     </div>
 </div>
 
-
 {{ block.super }}
-{% endblock %}
 
+<!-- Collapsible Home Page Menu -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Define parent-child relationships (same as sidebar)
+    const menuStructure = {
+        'Comm Belt Packs': ['Comm Positions', 'Comm Channels', 'Comm Crew Names'],
+        'Show Mic Tracker': ['Mic Sessions', 'Mic Assignments', 'Presenters', 'Mic Show Information'],
+        'Soundvision Predictions': ['Speaker Arrays', 'Speaker Cabinets'],
+        'Power Distribution Plans': ['Amplifiers in Power Plan', 'Amplifier Profiles']
+    };
+    
+    // Get all child names
+    const allChildren = new Set();
+    Object.values(menuStructure).forEach(children => {
+        children.forEach(child => allChildren.add(child.toLowerCase().trim()));
+    });
+    
+    // Find the app-list tables on the home page
+    const appList = document.querySelector('.app-list, #content-main');
+    if (!appList) return;
+    
+    // Get saved state
+    const savedState = JSON.parse(localStorage.getItem('sidebarState') || '{}');
+    
+    // Find all table rows with model links
+    const allRows = appList.querySelectorAll('tr');
+    const rowMap = {};
+    
+    allRows.forEach(row => {
+        const link = row.querySelector('th a, td a');
+        if (link) {
+            const text = link.textContent.trim().toLowerCase();
+            if (!rowMap[text]) {
+                rowMap[text] = [];
+            }
+            rowMap[text].push({ row: row, link: link });
+        }
+    });
+    
+    // Process each parent
+    Object.entries(menuStructure).forEach(([parent, children]) => {
+        const parentLower = parent.toLowerCase();
+        const parentEntries = rowMap[parentLower];
+        
+        if (!parentEntries || parentEntries.length === 0) return;
+        
+        const parentRow = parentEntries[0].row;
+        const parentLink = parentEntries[0].link;
+        
+        // Find child rows
+        const childRows = [];
+        children.forEach(childName => {
+            const childLower = childName.toLowerCase();
+            const childEntries = rowMap[childLower];
+            if (childEntries) {
+                childEntries.forEach(entry => {
+                    childRows.push(entry.row);
+                    entry.row.classList.add('home-child-item');
+                });
+            }
+        });
+        
+        if (childRows.length === 0) return;
+        
+        // Create arrow
+        const arrow = document.createElement('span');
+        arrow.className = 'home-toggle-arrow';
+        arrow.innerHTML = '▶';
+        parentLink.insertBefore(arrow, parentLink.firstChild);
+        parentLink.style.fontWeight = 'bold';
+        
+        // Update display function
+        function updateDisplay(collapsed) {
+            if (collapsed) {
+                arrow.style.transform = 'rotate(0deg)';
+                childRows.forEach(row => {
+                    row.style.setProperty('display', 'none', 'important');
+                });
+            } else {
+                arrow.style.transform = 'rotate(90deg)';
+                childRows.forEach(row => {
+                    row.style.setProperty('display', 'table-row', 'important');
+                });
+            }
+        }
+        
+        // Apply initial state (default collapsed)
+        const isCollapsed = savedState[parent] !== false;
+        updateDisplay(isCollapsed);
+        
+        // Toggle function
+        function toggleChildren(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const currentlyCollapsed = childRows[0].style.display === 'none';
+            const newState = !currentlyCollapsed;
+            
+            updateDisplay(newState);
+            
+            savedState[parent] = newState;
+            localStorage.setItem('sidebarState', JSON.stringify(savedState));
+        }
+        
+        arrow.addEventListener('click', toggleChildren);
+        parentLink.addEventListener('dblclick', toggleChildren);
+    });
+    
+    // Add CSS for home page
+    const style = document.createElement('style');
+    style.textContent = `
+        .home-child-item th,
+        .home-child-item td {
+            padding-left: 30px !important;
+        }
+        .home-child-item th a::before,
+        .home-child-item td a::before {
+            content: '└ ';
+            color: #555;
+            font-size: 11px;
+        }
+        .home-toggle-arrow {
+            color: #888;
+            font-size: 10px;
+            transition: transform 0.2s;
+            display: inline-block;
+            cursor: pointer;
+            width: 16px;
+            margin-left: -20px;
+            margin-right: 4px;
+            text-align: center;
+        }
+        .home-toggle-arrow:hover {
+            color: #00ff88 !important;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    console.log('✅ Home page collapsible menu initialized');
+});
+</script>
+{% endblock %}

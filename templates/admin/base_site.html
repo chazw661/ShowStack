@@ -134,6 +134,170 @@ html[data-theme="auto"] {
 {% block extrahead %}
 {{ block.super }}
 
+
+
+<!-- Collapsible Sidebar Menu -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Define parent-child relationships
+    const menuStructure = {
+        'Comm Belt Packs': ['Comm Positions', 'Comm Channels', 'Comm Crew Names'],
+        'Show Mic Tracker': ['Mic Sessions', 'Mic Assignments', 'Presenters', 'Mic Show Information'],
+        'Soundvision Predictions': ['Speaker Arrays', 'Speaker Cabinets'],
+        'Power Distribution Plans': ['Amplifiers in Power Plan', 'Amplifier Profiles']
+    };
+    
+    // Find the sidebar
+    const sidebar = document.getElementById('nav-sidebar');
+    if (!sidebar) return;
+    
+    // Get saved state from localStorage
+    const savedState = JSON.parse(localStorage.getItem('sidebarState') || '{}');
+    
+    // Get all rows in the sidebar
+    const allRows = sidebar.querySelectorAll('tr');
+    
+    // Build a map of link text to row(s) - handle duplicates by storing arrays
+    const rowMap = {};
+    allRows.forEach(row => {
+        const link = row.querySelector('a:not(.addlink)');
+        if (link) {
+            const text = link.textContent.trim().toLowerCase();
+            if (!rowMap[text]) {
+                rowMap[text] = [];
+            }
+            rowMap[text].push({ row: row, link: link });
+        }
+    });
+    
+    // Process each parent
+    Object.entries(menuStructure).forEach(([parent, children]) => {
+        const parentLower = parent.toLowerCase();
+        const parentEntries = rowMap[parentLower];
+        
+        if (!parentEntries || parentEntries.length === 0) return;
+        
+        // Use the first matching parent
+        const parentRow = parentEntries[0].row;
+        const parentLink = parentEntries[0].link;
+        
+        // Collect ALL matching child rows
+        const childRows = [];
+        children.forEach(childName => {
+            const childLower = childName.toLowerCase();
+            const childEntries = rowMap[childLower];
+            if (childEntries) {
+                childEntries.forEach(entry => {
+                    childRows.push(entry.row);
+                    // Style child
+                    entry.row.classList.add('menu-child-item');
+                });
+            }
+        });
+        
+        if (childRows.length === 0) return;
+        
+        // Create arrow
+        const arrow = document.createElement('span');
+        arrow.className = 'menu-toggle-arrow';
+        arrow.innerHTML = '▶';
+        parentLink.insertBefore(arrow, parentLink.firstChild);
+        parentLink.style.fontWeight = 'bold';
+        
+        // Set initial state
+        const isCollapsed = savedState[parent] !== false;
+        
+        function updateDisplay(collapsed) {
+            if (collapsed) {
+                arrow.style.transform = 'rotate(0deg)';
+                childRows.forEach(row => {
+                    row.style.setProperty('display', 'none', 'important');
+                });
+            } else {
+                arrow.style.transform = 'rotate(90deg)';
+                childRows.forEach(row => {
+                    row.style.setProperty('display', 'block', 'important');
+                });
+            }
+        }
+        
+        // Apply initial state
+        updateDisplay(isCollapsed);
+        
+        // Toggle function
+        function toggleChildren(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const currentlyCollapsed = childRows[0].style.display === 'none';
+            const newState = !currentlyCollapsed;
+            
+            updateDisplay(newState);
+            
+            // Save state
+            savedState[parent] = newState;
+            localStorage.setItem('sidebarState', JSON.stringify(savedState));
+        }
+        
+        // Click handlers
+        arrow.addEventListener('click', toggleChildren);
+        parentLink.addEventListener('dblclick', toggleChildren);
+    });
+    
+    // Add CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        .menu-child-item td,
+        .menu-child-item th {
+            padding-left: 20px !important;
+        }
+        .menu-child-item a::before {
+            content: '└ ';
+            color: #555;
+            font-size: 11px;
+        }
+        .menu-toggle-arrow {
+            color: #888;
+            font-size: 10px;
+            transition: transform 0.2s;
+            display: inline-block;
+            cursor: pointer;
+            width: 16px;
+            margin-left: -20px;
+            margin-right: 4px;
+            text-align: center;
+        }
+        #nav-sidebar th a,
+        #nav-sidebar td a {
+            display: inline-block;
+        }
+        .menu-toggle-arrow:hover {
+            color: #00ff88 !important;
+        }
+        #nav-sidebar table {
+            width: 100% !important;
+        }
+        #nav-sidebar th, #nav-sidebar td {
+            display: block !important;
+            width: 100% !important;
+        }
+        #nav-sidebar tr {
+            display: block !important;
+        }
+        #nav-sidebar .addlink {
+            display: none !important;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    console.log('✅ Collapsible sidebar menu initialized');
+});
+</script>
+
+
+
+
+
 <!-- Favicon and App Icons -->
 <link rel="icon" type="image/png" sizes="32x32" href="{% static 'admin/img/favicon_32x32.png' %}">
 <link rel="icon" type="image/png" sizes="16x16" href="{% static 'admin/img/favicon_16x16.png' %}">
