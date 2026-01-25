@@ -1,0 +1,202 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}ShowStack - Professional Audio Production Management{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-content">
+            <div class="hero-badge">Now in Beta</div>
+            <h1 class="hero-title">
+                Production management<br>
+                <span class="text-gradient">built for audio pros</span>
+            </h1>
+            <p class="hero-subtitle">
+                ShowStack streamlines your live audio productions with powerful tools for system design, 
+                crew coordination, and equipment tracking. From corporate events to touring—all in one place.
+            </p>
+            
+            <form method="post" class="hero-form">
+                {% csrf_token %}
+                <div class="form-row">
+                    <input type="email" name="email" class="form-input" placeholder="Enter your email" required>
+                    <button type="submit" class="btn btn-primary btn-lg">Join Waitlist</button>
+                </div>
+                <p class="form-hint">Free during beta. No credit card required.</p>
+            </form>
+        </div>
+        
+        <div class="hero-image">
+            <div class="hero-screenshot">
+                <div class="screenshot-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                </div>
+                <div class="screenshot-content">
+                    <div class="mock-sidebar">
+                        <div class="mock-item active"></div>
+                        <div class="mock-item"></div>
+                        <div class="mock-item"></div>
+                        <div class="mock-item"></div>
+                    </div>
+                    <div class="mock-main">
+                        <div class="mock-header"></div>
+                        <div class="mock-grid">
+                            <div class="mock-card"></div>
+                            <div class="mock-card"></div>
+                            <div class="mock-card"></div>
+                            <div class="mock-card"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Trusted By Section -->
+<section class="social-proof">
+    <div class="container">
+        <p class="social-proof-text">Trusted by audio professionals at leading production companies</p>
+        <div class="logo-strip">
+            <span class="client-text">Corporate Events</span>
+            <span class="client-text">Touring</span>
+            <span class="client-text">Broadcast</span>
+            <span class="client-text">Festivals</span>
+            <span class="client-text">Houses of Worship</span>
+        </div>
+    </div>
+</section>
+
+<!-- Features Overview -->
+<section class="features-section" id="features">
+    <div class="container">
+        <div class="section-header">
+            <h2 class="section-title">Everything you need to run professional shows</h2>
+            <p class="section-subtitle">Purpose-built tools for audio engineers, by audio engineers.</p>
+        </div>
+        
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Soundvision Predictions</h3>
+                <p>Import and manage L-Acoustics Soundvision predictions. Track array configurations, SPL data, and coverage maps.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🎤</div>
+                <h3>Mic Tracking</h3>
+                <p>Assign microphones to presenters, track wireless frequencies, and generate channel lists with one click.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🎧</div>
+                <h3>COMM Management</h3>
+                <p>Organize intercom systems, beltpacks, and channels. Keep your crew connected and coordinated.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🔊</div>
+                <h3>Power Distribution</h3>
+                <p>Calculate amplifier power requirements, track circuits, and ensure balanced loads across your system.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🔌</div>
+                <h3>Cable Management</h3>
+                <p>Document PA cable runs, Dante networks, and signal flow. Never lose track of your infrastructure.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">👥</div>
+                <h3>Team Collaboration</h3>
+                <p>Share projects with crew members. Assign roles, control permissions, and keep everyone on the same page.</p>
+            </div>
+        </div>
+        
+        <div class="section-cta">
+            <a href="{% url 'marketing:features' %}" class="btn btn-secondary btn-lg">Explore All Features</a>
+        </div>
+    </div>
+</section>
+
+<!-- How It Works -->
+<section class="how-it-works">
+    <div class="container">
+        <div class="section-header">
+            <h2 class="section-title">From prep to show day</h2>
+            <p class="section-subtitle">ShowStack fits into your existing workflow.</p>
+        </div>
+        
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Create Your Project</h3>
+                <p>Start a new project for each show, tour leg, or installation. Add event details, venue info, and dates.</p>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Build Your System</h3>
+                <p>Import Soundvision files, configure amplifiers, set up COMM, and document your entire audio system.</p>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Collaborate & Execute</h3>
+                <p>Share with your crew, access everything on mobile, and run your show with confidence.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Mobile Section -->
+<section class="mobile-section">
+    <div class="container">
+        <div class="mobile-content">
+            <div class="mobile-text">
+                <h2>Access everywhere</h2>
+                <p>ShowStack works on any device. Use the full admin interface on desktop, or the mobile-optimized view on your phone at the gig.</p>
+                <ul class="mobile-features">
+                    <li>📱 Progressive Web App - add to home screen</li>
+                    <li>🌙 Dark mode for low-light environments</li>
+                    <li>⚡ Fast, responsive interface</li>
+                    <li>🔄 Real-time sync across devices</li>
+                </ul>
+            </div>
+            <div class="mobile-preview">
+                <div class="phone-frame">
+                    <div class="phone-screen">
+                        <div class="phone-header"></div>
+                        <div class="phone-content">
+                            <div class="phone-card"></div>
+                            <div class="phone-card"></div>
+                            <div class="phone-card"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA Section -->
+<section class="cta-section">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Ready to streamline your productions?</h2>
+            <p>Join audio professionals who are managing their shows more efficiently with ShowStack.</p>
+            <form method="post" class="cta-form">
+                {% csrf_token %}
+                <div class="form-row">
+                    <input type="email" name="email" class="form-input" placeholder="Enter your email" required>
+                    <button type="submit" class="btn btn-primary btn-lg">Get Early Access</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

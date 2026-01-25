@@ -29,6 +29,9 @@ from planner import views as planner_views
 urlpatterns = [
     # Admin site
     path('admin/', showstack_admin_site.urls),
+
+    path('', include('marketing.urls')),
+
     path('', include('accounts.urls')),
     
     # Dashboard at root level (accessible at /dashboard/)

@@ -1,0 +1,62 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Log In - ShowStack{% endblock %}
+
+{% block content %}
+<section class="auth-section">
+    <div class="container">
+        <div class="auth-container">
+            <div class="auth-header">
+                <a href="{% url 'marketing:home' %}" class="auth-logo">
+                    <span class="brand-icon">S</span>
+                </a>
+                <h1>Welcome back</h1>
+                <p>Log in to your ShowStack account.</p>
+            </div>
+            
+            <form method="post" class="auth-form">
+                {% csrf_token %}
+                
+                {% if form.non_field_errors %}
+                <div class="form-errors">
+                    {% for error in form.non_field_errors %}
+                    <p class="error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <div class="form-group">
+                    <label for="id_username">Username</label>
+                    <input type="text" name="username" id="id_username" class="form-input" placeholder="Your username" required autofocus>
+                    {% if form.username.errors %}
+                    <span class="field-error">{{ form.username.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_password">Password</label>
+                    <input type="password" name="password" id="id_password" class="form-input" placeholder="Your password" required>
+                    {% if form.password.errors %}
+                    <span class="field-error">{{ form.password.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="remember" checked>
+                        <span>Keep me logged in</span>
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-full btn-lg">Log In</button>
+            </form>
+            
+            <div class="auth-footer">
+                <p>Don't have an account? <a href="{% url 'marketing:register' %}">Sign up</a></p>
+                <!-- <p><a href="#">Forgot your password?</a></p> -->
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

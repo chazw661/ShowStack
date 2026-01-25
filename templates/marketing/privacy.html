@@ -1,0 +1,85 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Privacy Policy - ShowStack{% endblock %}
+
+{% block content %}
+<section class="legal-section">
+    <div class="container">
+        <div class="legal-content">
+            <h1>Privacy Policy</h1>
+            <p class="legal-updated">Last updated: {% now "F j, Y" %}</p>
+            
+            <h2>Introduction</h2>
+            <p>ShowStack ("we," "our," or "us") respects your privacy and is committed to protecting your personal data. This privacy policy explains how we collect, use, and safeguard your information when you use our service.</p>
+            
+            <h2>Information We Collect</h2>
+            <h3>Information You Provide</h3>
+            <ul>
+                <li><strong>Account Information:</strong> Name, email address, username, and password when you create an account.</li>
+                <li><strong>Profile Information:</strong> Company name, role, and other optional details.</li>
+                <li><strong>Project Data:</strong> Information you enter about your audio productions, including equipment lists, assignments, and configurations.</li>
+                <li><strong>Communications:</strong> Messages you send to us through contact forms or email.</li>
+            </ul>
+            
+            <h3>Information Collected Automatically</h3>
+            <ul>
+                <li><strong>Usage Data:</strong> How you interact with our service, including pages visited and features used.</li>
+                <li><strong>Device Information:</strong> Browser type, operating system, and device type.</li>
+                <li><strong>Log Data:</strong> IP address, access times, and referring URLs.</li>
+            </ul>
+            
+            <h2>How We Use Your Information</h2>
+            <p>We use your information to:</p>
+            <ul>
+                <li>Provide, maintain, and improve our service</li>
+                <li>Process your account registration and manage your subscription</li>
+                <li>Respond to your inquiries and provide customer support</li>
+                <li>Send important updates about the service</li>
+                <li>Analyze usage patterns to improve user experience</li>
+                <li>Protect against fraud and unauthorized access</li>
+            </ul>
+            
+            <h2>Data Sharing</h2>
+            <p>We do not sell your personal information. We may share data with:</p>
+            <ul>
+                <li><strong>Service Providers:</strong> Third parties that help us operate our service (hosting, analytics, email delivery).</li>
+                <li><strong>Legal Requirements:</strong> When required by law or to protect our rights.</li>
+                <li><strong>Business Transfers:</strong> In connection with a merger, acquisition, or sale of assets.</li>
+            </ul>
+            
+            <h2>Data Security</h2>
+            <p>We implement industry-standard security measures including:</p>
+            <ul>
+                <li>Encryption of data in transit (HTTPS/TLS)</li>
+                <li>Encrypted database storage</li>
+                <li>Regular security audits</li>
+                <li>Access controls and authentication</li>
+            </ul>
+            
+            <h2>Data Retention</h2>
+            <p>We retain your data as long as your account is active. You can delete your account at any time by contacting us. After deletion, your data will be removed within 30 days, except where we're required to retain it by law.</p>
+            
+            <h2>Your Rights</h2>
+            <p>You have the right to:</p>
+            <ul>
+                <li>Access your personal data</li>
+                <li>Correct inaccurate data</li>
+                <li>Delete your account and data</li>
+                <li>Export your data</li>
+                <li>Object to certain processing</li>
+            </ul>
+            
+            <h2>Cookies</h2>
+            <p>We use essential cookies to maintain your session and preferences. We do not use tracking cookies for advertising purposes.</p>
+            
+            <h2>Changes to This Policy</h2>
+            <p>We may update this policy from time to time. We'll notify you of significant changes via email or through the service.</p>
+            
+            <h2>Contact Us</h2>
+            <p>If you have questions about this privacy policy, please contact us at:</p>
+            <p><a href="mailto:privacy@showstack.io">privacy@showstack.io</a></p>
+        </div>
+    </div>
+</section>
+{% endblock %}

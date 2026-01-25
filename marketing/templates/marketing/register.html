@@ -1,0 +1,97 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Create Account - ShowStack{% endblock %}
+
+{% block content %}
+<section class="auth-section">
+    <div class="container">
+        <div class="auth-container">
+            <div class="auth-header">
+                <a href="{% url 'marketing:home' %}" class="auth-logo">
+                    <span class="brand-icon">S</span>
+                </a>
+                <h1>Create your account</h1>
+                <p>Start managing your audio productions today.</p>
+            </div>
+            
+            <form method="post" class="auth-form">
+                {% csrf_token %}
+                
+                {% if form.non_field_errors %}
+                <div class="form-errors">
+                    {% for error in form.non_field_errors %}
+                    <p class="error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <div class="form-row two-col">
+                    <div class="form-group">
+                        <label for="id_first_name">First Name *</label>
+                        {{ form.first_name }}
+                        {% if form.first_name.errors %}
+                        <span class="field-error">{{ form.first_name.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="id_last_name">Last Name *</label>
+                        {{ form.last_name }}
+                        {% if form.last_name.errors %}
+                        <span class="field-error">{{ form.last_name.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_email">Email *</label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                    <span class="field-error">{{ form.email.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_username">Username *</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                    <span class="field-error">{{ form.username.errors.0 }}</span>
+                    {% endif %}
+                    <span class="form-hint">Letters, digits, and @/./+/-/_ only.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_password1">Password *</label>
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}
+                    <span class="field-error">{{ form.password1.errors.0 }}</span>
+                    {% endif %}
+                    <span class="form-hint">At least 8 characters.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_password2">Confirm Password *</label>
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}
+                    <span class="field-error">{{ form.password2.errors.0 }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="terms" required>
+                        <span>I agree to the <a href="{% url 'marketing:terms' %}" target="_blank">Terms of Service</a> and <a href="{% url 'marketing:privacy' %}" target="_blank">Privacy Policy</a></span>
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-full btn-lg">Create Account</button>
+            </form>
+            
+            <div class="auth-footer">
+                <p>Already have an account? <a href="{% url 'marketing:login' %}">Log in</a></p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

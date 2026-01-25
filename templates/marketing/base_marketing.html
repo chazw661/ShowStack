@@ -1,0 +1,141 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block meta_description %}ShowStack - Professional audio production management for live events, touring, and broadcast.{% endblock %}">
+    <meta name="keywords" content="audio production, live sound, event management, touring, broadcast, PA system, L-Acoustics, audio engineering">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="{% block og_title %}ShowStack - Audio Production Management{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Streamline your live audio productions with powerful tools for system design, crew coordination, and equipment tracking.{% endblock %}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://showstack.io{% block og_url %}{% endblock %}">
+    <meta property="og:image" content="{% static 'marketing/images/og-image.png' %}">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ShowStack - Audio Production Management">
+    <meta name="twitter:description" content="Streamline your live audio productions.">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="{% static 'mobile/icons/icon-192.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'mobile/icons/icon-192.png' %}">
+    
+    <title>{% block title %}ShowStack{% endblock %}</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="{% static 'marketing/css/marketing.css' %}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container navbar-container">
+            <a href="{% url 'marketing:home' %}" class="navbar-brand">
+                <span class="brand-icon">S</span>
+                <span class="brand-text">ShowStack</span>
+            </a>
+            
+            <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            
+            <div class="navbar-menu" id="navbar-menu">
+                <div class="navbar-links">
+                    <a href="{% url 'marketing:features' %}" class="nav-link">Features</a>
+                    <!-- <a href="{% url 'marketing:pricing' %}" class="nav-link">Pricing</a> -->
+                    <a href="{% url 'marketing:contact' %}" class="nav-link">Contact</a>
+                </div>
+                <div class="navbar-actions">
+                    {% if user.is_authenticated %}
+                    <a href="{% url 'admin:index' %}" class="btn btn-ghost">Dashboard</a>
+                    <a href="{% url 'marketing:logout' %}" class="btn btn-secondary">Log Out</a>
+                    {% else %}
+                    <a href="{% url 'marketing:login' %}" class="btn btn-ghost">Log In</a>
+                    <a href="{% url 'marketing:register' %}" class="btn btn-primary">Get Started</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Flash Messages -->
+    {% if messages %}
+    <div class="messages-container">
+        <div class="container">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+                <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="{% url 'marketing:home' %}" class="footer-logo">
+                        <span class="brand-icon">S</span>
+                        <span class="brand-text">ShowStack</span>
+                    </a>
+                    <p class="footer-tagline">Professional audio production management for live events, touring, and broadcast.</p>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="{% url 'marketing:features' %}">Features</a></li>
+                        <!-- <li><a href="{% url 'marketing:pricing' %}">Pricing</a></li> -->
+                        <li><a href="{% url 'marketing:contact' %}">Contact</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="{% url 'marketing:about' %}">About</a></li>
+                        <li><a href="{% url 'marketing:privacy' %}">Privacy</a></li>
+                        <li><a href="{% url 'marketing:terms' %}">Terms</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-links">
+                    <h4>Get Started</h4>
+                    <ul>
+                        <li><a href="{% url 'marketing:register' %}">Sign Up</a></li>
+                        <li><a href="{% url 'marketing:login' %}">Log In</a></li>
+                        <li><a href="{% url 'admin:index' %}">Dashboard</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; {% now "Y" %} ShowStack. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Scripts -->
+    <script src="{% static 'marketing/js/marketing.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

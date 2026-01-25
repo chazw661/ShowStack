@@ -1,0 +1,263 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Features - ShowStack{% endblock %}
+
+{% block content %}
+<!-- Features Hero -->
+<section class="page-hero">
+    <div class="container">
+        <h1>Powerful features for<br><span class="text-gradient">professional productions</span></h1>
+        <p class="page-hero-subtitle">Everything you need to plan, document, and execute flawless audio productions.</p>
+    </div>
+</section>
+
+<!-- Feature Details -->
+<section class="feature-details">
+    <div class="container">
+        
+        <!-- Soundvision Predictions -->
+        <div class="feature-detail">
+            <div class="feature-detail-content">
+                <div class="feature-detail-icon">📊</div>
+                <h2>Soundvision Predictions</h2>
+                <p>Import your L-Acoustics Soundvision predictions directly into ShowStack. Track multiple arrays, compare configurations, and keep all your SPL data organized by project.</p>
+                <ul class="feature-list">
+                    <li>Import Soundvision PDF files automatically</li>
+                    <li>Track SPL predictions at multiple distances</li>
+                    <li>Compare array configurations side-by-side</li>
+                    <li>Export prediction summaries for clients</li>
+                </ul>
+            </div>
+            <div class="feature-detail-visual">
+                <div class="feature-mock predictions-mock">
+                    <div class="mock-table">
+                        <div class="mock-row header">
+                            <span>Array</span>
+                            <span>Boxes</span>
+                            <span>SPL @ 30m</span>
+                        </div>
+                        <div class="mock-row">
+                            <span>Main L</span>
+                            <span>12x K2</span>
+                            <span>105 dB</span>
+                        </div>
+                        <div class="mock-row">
+                            <span>Main R</span>
+                            <span>12x K2</span>
+                            <span>105 dB</span>
+                        </div>
+                        <div class="mock-row">
+                            <span>Sub Array</span>
+                            <span>8x KS28</span>
+                            <span>112 dB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mic Tracking -->
+        <div class="feature-detail reverse">
+            <div class="feature-detail-content">
+                <div class="feature-detail-icon">🎤</div>
+                <h2>Mic Tracking</h2>
+                <p>Manage wireless microphones across your entire show. Assign mics to presenters, track frequencies, and generate channel sheets that your A2 will love.</p>
+                <ul class="feature-list">
+                    <li>Assign microphones to presenters by session</li>
+                    <li>Track RF frequencies and avoid conflicts</li>
+                    <li>Generate printable channel lists</li>
+                    <li>P-Touch label export for quick labeling</li>
+                </ul>
+            </div>
+            <div class="feature-detail-visual">
+                <div class="feature-mock mic-mock">
+                    <div class="mock-table">
+                        <div class="mock-row header">
+                            <span>Ch</span>
+                            <span>Presenter</span>
+                            <span>Mic</span>
+                        </div>
+                        <div class="mock-row">
+                            <span>1</span>
+                            <span>John Smith</span>
+                            <span>HH Shure</span>
+                        </div>
+                        <div class="mock-row">
+                            <span>2</span>
+                            <span>Sarah Chen</span>
+                            <span>Lav Sony</span>
+                        </div>
+                        <div class="mock-row">
+                            <span>3</span>
+                            <span>CEO Panel</span>
+                            <span>HH Shure</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- COMM Management -->
+        <div class="feature-detail">
+            <div class="feature-detail-content">
+                <div class="feature-detail-icon">🎧</div>
+                <h2>COMM Management</h2>
+                <p>Keep your crew connected with organized intercom documentation. Track beltpacks, channels, and assignments so everyone knows where to plug in.</p>
+                <ul class="feature-list">
+                    <li>Document beltpack assignments</li>
+                    <li>Track channels and partylines</li>
+                    <li>Generate crew sheets</li>
+                    <li>Offline access on mobile</li>
+                </ul>
+            </div>
+            <div class="feature-detail-visual">
+                <div class="feature-mock comm-mock">
+                    <div class="mock-grid-small">
+                        <div class="mock-beltpack">
+                            <span class="bp-num">BP-01</span>
+                            <span class="bp-name">A1</span>
+                        </div>
+                        <div class="mock-beltpack">
+                            <span class="bp-num">BP-02</span>
+                            <span class="bp-name">A2</span>
+                        </div>
+                        <div class="mock-beltpack">
+                            <span class="bp-num">BP-03</span>
+                            <span class="bp-name">Stage Mgr</span>
+                        </div>
+                        <div class="mock-beltpack">
+                            <span class="bp-num">BP-04</span>
+                            <span class="bp-name">Video</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Power Distribution -->
+        <div class="feature-detail reverse">
+            <div class="feature-detail-content">
+                <div class="feature-detail-icon">🔊</div>
+                <h2>Power Distribution</h2>
+                <p>Calculate and track power requirements for your amplifier racks. Ensure balanced loads and document circuit assignments for the electrician.</p>
+                <ul class="feature-list">
+                    <li>Auto-calculate amp power draw</li>
+                    <li>Balance loads across circuits</li>
+                    <li>Track breaker assignments</li>
+                    <li>Generate power distribution docs</li>
+                </ul>
+            </div>
+            <div class="feature-detail-visual">
+                <div class="feature-mock power-mock">
+                    <div class="power-meter">
+                        <div class="power-bar" style="width: 65%;"></div>
+                        <span class="power-label">Rack A: 65%</span>
+                    </div>
+                    <div class="power-meter">
+                        <div class="power-bar" style="width: 72%;"></div>
+                        <span class="power-label">Rack B: 72%</span>
+                    </div>
+                    <div class="power-meter">
+                        <div class="power-bar" style="width: 58%;"></div>
+                        <span class="power-label">Rack C: 58%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Team Collaboration -->
+        <div class="feature-detail">
+            <div class="feature-detail-content">
+                <div class="feature-detail-icon">👥</div>
+                <h2>Team Collaboration</h2>
+                <p>Share projects with your entire crew. Control who can view and who can edit. Keep everyone aligned from advance to load-out.</p>
+                <ul class="feature-list">
+                    <li>Invite team members by email</li>
+                    <li>Role-based permissions (Owner/Editor/Viewer)</li>
+                    <li>Real-time updates across devices</li>
+                    <li>Activity history and audit trail</li>
+                </ul>
+            </div>
+            <div class="feature-detail-visual">
+                <div class="feature-mock team-mock">
+                    <div class="team-list">
+                        <div class="team-member">
+                            <div class="avatar">CL</div>
+                            <div class="member-info">
+                                <span class="name">Charlie L.</span>
+                                <span class="role owner">Owner</span>
+                            </div>
+                        </div>
+                        <div class="team-member">
+                            <div class="avatar">MK</div>
+                            <div class="member-info">
+                                <span class="name">Mike K.</span>
+                                <span class="role editor">Editor</span>
+                            </div>
+                        </div>
+                        <div class="team-member">
+                            <div class="avatar">JR</div>
+                            <div class="member-info">
+                                <span class="name">Jenny R.</span>
+                                <span class="role viewer">Viewer</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</section>
+
+<!-- More Features -->
+<section class="more-features">
+    <div class="container">
+        <h2>And much more...</h2>
+        <div class="features-grid compact">
+            <div class="feature-card-small">
+                <span class="icon">🎛️</span>
+                <h4>Console Tracking</h4>
+                <p>Document console configurations and I/O</p>
+            </div>
+            <div class="feature-card-small">
+                <span class="icon">⚙️</span>
+                <h4>System Processors</h4>
+                <p>Track DSP and processor settings</p>
+            </div>
+            <div class="feature-card-small">
+                <span class="icon">🔌</span>
+                <h4>Cable Management</h4>
+                <p>Document cable runs and signal flow</p>
+            </div>
+            <div class="feature-card-small">
+                <span class="icon">🌐</span>
+                <h4>IP Management</h4>
+                <p>Track network addresses and Dante</p>
+            </div>
+            <div class="feature-card-small">
+                <span class="icon">📄</span>
+                <h4>PDF Export</h4>
+                <p>Generate professional documents</p>
+            </div>
+            <div class="feature-card-small">
+                <span class="icon">📱</span>
+                <h4>Mobile App</h4>
+                <p>Access on any device, anywhere</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Ready to get started?</h2>
+            <p>Join the beta and start managing your productions more efficiently.</p>
+            <a href="{% url 'marketing:register' %}" class="btn btn-primary btn-lg">Create Free Account</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

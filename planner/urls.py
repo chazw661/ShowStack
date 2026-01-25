@@ -20,6 +20,9 @@ from .views import (
 app_name = 'planner'  
 
 urlpatterns = [
+    
+   
+     #-----Consoles
     path("consoles/<int:console_id>/", views.console_detail, name="console_detail"),
     
     # P1 Processor URLs
@@ -155,8 +158,7 @@ urlpatterns = [
      path('audiochecklist/delete-task/', audio_checklist_delete_task, name='audio_checklist_delete_task'),
      path('audiochecklist/reset/', audio_checklist_reset, name='audio_checklist_reset'),
 
-
-
+      
     
 
    

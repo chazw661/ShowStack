@@ -1,0 +1,69 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}About - ShowStack{% endblock %}
+
+{% block content %}
+<!-- About Hero -->
+<section class="page-hero">
+    <div class="container">
+        <h1>Built by audio pros,<br><span class="text-gradient">for audio pros</span></h1>
+        <p class="page-hero-subtitle">ShowStack was born out of frustration with spreadsheets, paper notes, and disconnected tools.</p>
+    </div>
+</section>
+
+<!-- Story Section -->
+<section class="about-story">
+    <div class="container">
+        <div class="story-content">
+            <h2>Our Story</h2>
+            <p>After decades in professional audio—corporate events, touring, broadcast—we kept running into the same problems. Scattered documentation. Lost channel sheets. Crew members without access to critical information. Power calculations on napkins.</p>
+            
+            <p>Every show, we'd rebuild the same spreadsheets. Every gig, we'd hunt for last week's RF coordination. Every load-in, someone would ask "what's the COMM situation?" and we'd dig through emails.</p>
+            
+            <p>ShowStack is our solution. A single platform purpose-built for live audio professionals. Everything you need for show prep, documentation, and crew coordination—accessible from any device, shareable with your entire team.</p>
+            
+            <p>We're not a generic project management tool trying to fit audio into a box. We built ShowStack specifically for the way audio engineers actually work.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Values -->
+<section class="about-values">
+    <div class="container">
+        <h2>What We Believe</h2>
+        <div class="values-grid">
+            <div class="value-card">
+                <h3>🎯 Purpose-Built</h3>
+                <p>Generic tools require workarounds. ShowStack is designed specifically for live audio workflows—no compromises.</p>
+            </div>
+            
+            <div class="value-card">
+                <h3>📱 Accessible Anywhere</h3>
+                <p>Your documentation should be where you are—at FOH, in the amp room, or on the tour bus.</p>
+            </div>
+            
+            <div class="value-card">
+                <h3>👥 Team-First</h3>
+                <p>Great shows are team efforts. Easy sharing and collaboration are built into everything we do.</p>
+            </div>
+            
+            <div class="value-card">
+                <h3>🔒 Reliable & Secure</h3>
+                <p>Your show data is critical. We treat it that way—encrypted, backed up, and always available.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Ready to simplify your workflow?</h2>
+            <p>Join audio professionals who are already using ShowStack.</p>
+            <a href="{% url 'marketing:register' %}" class="btn btn-primary btn-lg">Get Started Free</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

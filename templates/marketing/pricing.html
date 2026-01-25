@@ -1,0 +1,147 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Pricing - ShowStack{% endblock %}
+
+{% block content %}
+<!-- Pricing Hero -->
+<section class="page-hero">
+    <div class="container">
+        <h1>Simple, transparent<br><span class="text-gradient">pricing</span></h1>
+        <p class="page-hero-subtitle">Start free during beta. Upgrade when you're ready.</p>
+    </div>
+</section>
+
+<!-- Pricing Cards -->
+<section class="pricing-section">
+    <div class="container">
+        <div class="pricing-grid">
+            
+            <!-- Free Tier -->
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <h3>Starter</h3>
+                    <div class="price">
+                        <span class="amount">$0</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <p class="pricing-desc">Perfect for freelancers and small gigs</p>
+                </div>
+                <ul class="pricing-features">
+                    <li><span class="check">✓</span> Up to 3 active projects</li>
+                    <li><span class="check">✓</span> All core features</li>
+                    <li><span class="check">✓</span> Mobile app access</li>
+                    <li><span class="check">✓</span> PDF exports</li>
+                    <li><span class="check">✓</span> Email support</li>
+                    <li class="disabled"><span class="x">–</span> Team collaboration</li>
+                    <li class="disabled"><span class="x">–</span> Priority support</li>
+                </ul>
+                <a href="{% url 'marketing:register' %}" class="btn btn-secondary btn-full">Get Started Free</a>
+            </div>
+            
+            <!-- Pro Tier -->
+            <div class="pricing-card featured">
+                <div class="pricing-badge">Most Popular</div>
+                <div class="pricing-header">
+                    <h3>Pro</h3>
+                    <div class="price">
+                        <span class="amount">$29</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <p class="pricing-desc">For working professionals and small teams</p>
+                </div>
+                <ul class="pricing-features">
+                    <li><span class="check">✓</span> Unlimited projects</li>
+                    <li><span class="check">✓</span> All core features</li>
+                    <li><span class="check">✓</span> Mobile app access</li>
+                    <li><span class="check">✓</span> PDF exports</li>
+                    <li><span class="check">✓</span> Team collaboration (up to 5)</li>
+                    <li><span class="check">✓</span> Priority email support</li>
+                    <li><span class="check">✓</span> Advanced reporting</li>
+                </ul>
+                <a href="{% url 'marketing:register' %}" class="btn btn-primary btn-full">Start Free Trial</a>
+            </div>
+            
+            <!-- Team Tier -->
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <h3>Team</h3>
+                    <div class="price">
+                        <span class="amount">$79</span>
+                        <span class="period">/month</span>
+                    </div>
+                    <p class="pricing-desc">For production companies and large crews</p>
+                </div>
+                <ul class="pricing-features">
+                    <li><span class="check">✓</span> Unlimited projects</li>
+                    <li><span class="check">✓</span> All Pro features</li>
+                    <li><span class="check">✓</span> Unlimited team members</li>
+                    <li><span class="check">✓</span> Admin controls</li>
+                    <li><span class="check">✓</span> API access</li>
+                    <li><span class="check">✓</span> Phone support</li>
+                    <li><span class="check">✓</span> Custom branding</li>
+                </ul>
+                <a href="{% url 'marketing:contact' %}" class="btn btn-secondary btn-full">Contact Sales</a>
+            </div>
+            
+        </div>
+        
+        <!-- Beta Notice -->
+        <div class="beta-notice">
+            <div class="beta-badge">🎉 Beta Offer</div>
+            <h3>Free during beta!</h3>
+            <p>All features are free while we're in beta. Early users will receive a significant discount when we launch paid plans.</p>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ Section -->
+<section class="faq-section">
+    <div class="container">
+        <h2>Frequently asked questions</h2>
+        
+        <div class="faq-grid">
+            <div class="faq-item">
+                <h4>How long is the beta period?</h4>
+                <p>We're planning to launch paid plans in early 2026. All beta users will be notified well in advance and receive loyalty discounts.</p>
+            </div>
+            
+            <div class="faq-item">
+                <h4>Can I cancel anytime?</h4>
+                <p>Yes! There are no long-term contracts. You can upgrade, downgrade, or cancel your subscription at any time.</p>
+            </div>
+            
+            <div class="faq-item">
+                <h4>Is my data secure?</h4>
+                <p>Absolutely. We use industry-standard encryption and your data is backed up daily. We never share your information with third parties.</p>
+            </div>
+            
+            <div class="faq-item">
+                <h4>Do you offer discounts for annual billing?</h4>
+                <p>Yes! When we launch paid plans, annual billing will include a 20% discount compared to monthly billing.</p>
+            </div>
+            
+            <div class="faq-item">
+                <h4>What happens to my projects if I downgrade?</h4>
+                <p>Your projects remain accessible. On the Starter plan, you can continue viewing all projects but can only actively edit your 3 most recent.</p>
+            </div>
+            
+            <div class="faq-item">
+                <h4>Do you offer educational or non-profit discounts?</h4>
+                <p>Yes! Contact us for special pricing for educational institutions, houses of worship, and registered non-profits.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Questions about pricing?</h2>
+            <p>We're happy to help you find the right plan for your needs.</p>
+            <a href="{% url 'marketing:contact' %}" class="btn btn-primary btn-lg">Contact Us</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

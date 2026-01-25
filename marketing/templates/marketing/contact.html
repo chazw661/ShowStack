@@ -1,0 +1,84 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Contact - ShowStack{% endblock %}
+
+{% block content %}
+<!-- Contact Hero -->
+<section class="page-hero compact">
+    <div class="container">
+        <h1>Get in touch</h1>
+        <p class="page-hero-subtitle">Questions, feedback, or just want to say hi? We'd love to hear from you.</p>
+    </div>
+</section>
+
+<!-- Contact Content -->
+<section class="contact-section">
+    <div class="container">
+        <div class="contact-grid">
+            
+            <!-- Contact Form -->
+            <div class="contact-form-container">
+                <h2>Send us a message</h2>
+                <form method="post" class="contact-form">
+                    {% csrf_token %}
+                    
+                    <div class="form-group">
+                        <label for="id_name">Name *</label>
+                        {{ form.name }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="id_email">Email *</label>
+                        {{ form.email }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="id_company">Company</label>
+                        {{ form.company }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="id_inquiry_type">What can we help with?</label>
+                        {{ form.inquiry_type }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="id_message">Message *</label>
+                        {{ form.message }}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg">Send Message</button>
+                </form>
+            </div>
+            
+            <!-- Contact Info -->
+            <div class="contact-info">
+                <div class="contact-card">
+                    <h3>📧 Email</h3>
+                    <p>For general inquiries:</p>
+                    <a href="mailto:hello@showstack.io">hello@showstack.io</a>
+                </div>
+                
+                <div class="contact-card">
+                    <h3>🐛 Support</h3>
+                    <p>Need help with the app?</p>
+                    <a href="mailto:support@showstack.io">support@showstack.io</a>
+                </div>
+                
+                <div class="contact-card">
+                    <h3>💼 Partnerships</h3>
+                    <p>Interested in working together?</p>
+                    <a href="mailto:partners@showstack.io">partners@showstack.io</a>
+                </div>
+                
+                <div class="contact-card">
+                    <h3>⏰ Response Time</h3>
+                    <p>We typically respond within 24-48 hours during business days.</p>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</section>
+{% endblock %}
