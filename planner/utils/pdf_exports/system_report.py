@@ -418,14 +418,6 @@ def export_system_report(request):
     story.append(Paragraph("5. COMM System", header_style))
     story.append(Spacer(1, 0.1*inch))
     
-    def get_channel_abbrev(channel):
-        if not channel:
-            return ''
-        channel_str = str(channel)
-        if '(' in channel_str and ')' in channel_str:
-            return channel_str[channel_str.find('(')+1:channel_str.find(')')].strip()
-        return channel_str
-    
     for system_type, type_name in [('WIRELESS', 'Wireless System'), ('HARDWIRED', 'Hardwired System')]:
         belt_packs = CommBeltPack.objects.filter(
             project=project,
@@ -441,20 +433,33 @@ def export_system_report(request):
                 crew_name = pack.name.name if pack.name else ''
                 location_name = pack.unit_location.name if pack.unit_location else ''
                 
+                # Get channel assignments
+                channels = pack.channels.all().order_by('channel_number')
+                channel_strs = []
+                for ch in channels[:4]:  # Show first 4 channels
+                    if ch.channel:
+                        channel_strs.append(str(ch.channel.abbreviation if hasattr(ch.channel, 'abbreviation') else ch.channel))
+                    else:
+                        channel_strs.append('')
+                
+                # Pad to 4 channels
+                while len(channel_strs) < 4:
+                    channel_strs.append('')
+                
                 comm_data.append([
                     str(pack.bp_number) if pack.bp_number else '',
                     position_name,
                     crew_name,
                     location_name,
                     pack.get_headset_display() if pack.headset else '',
-                    get_channel_abbrev(pack.channel_a),
-                    get_channel_abbrev(pack.channel_b),
-                    get_channel_abbrev(pack.channel_c),
-                    get_channel_abbrev(pack.channel_d),
+                    channel_strs[0],
+                    channel_strs[1],
+                    channel_strs[2],
+                    channel_strs[3],
                     pack.ip_address or ''
                 ])
             
-            headers = ['BP #', 'Position', 'Name', 'Location', 'Headset', 'CH A', 'CH B', 'CH C', 'CH D', 'IP']
+            headers = ['BP #', 'Position', 'Name', 'Location', 'Headset', 'CH 1', 'CH 2', 'CH 3', 'CH 4', 'IP']
             col_widths = [0.4*inch, 0.9*inch, 1.0*inch, 0.9*inch, 0.6*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 1.0*inch]
             
             table = create_table(headers, comm_data, col_widths)
