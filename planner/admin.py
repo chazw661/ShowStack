@@ -78,14 +78,14 @@ class BaseEquipmentAdmin(BaseAdmin):
         if project is None:
             return None
         if project.owner == request.user:
-            
-            try:
-                from planner.models import ProjectMember
-                member = ProjectMember.objects.get(user=request.user, project=project)
-                return member.role  # 'editor' or 'viewer'
-            except ProjectMember.DoesNotExist:
-                
-                return None
+            return 'owner'
+        
+        try:
+            from planner.models import ProjectMember
+            member = ProjectMember.objects.get(user=request.user, project=project)
+            return member.role  # 'editor' or 'viewer'
+        except ProjectMember.DoesNotExist:
+            return None
         
 
 
