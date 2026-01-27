@@ -599,6 +599,12 @@ def export_system_report(request):
                     # Array info
                     array_info_style = ParagraphStyle('ArrayInfo', fontSize=8, textColor=DARK_GRAY, leftIndent=12)
                     
+                    if array.array_base_name:
+                        story.append(Paragraph(f"<b>Base Name:</b> {array.array_base_name}", array_info_style))
+                    
+                    if array.group_context:
+                        story.append(Paragraph(f"<b>Group:</b> {array.group_context}", array_info_style))
+                    
                     if array.configuration:
                         config_display = array.get_configuration_display() if hasattr(array, 'get_configuration_display') else array.configuration
                         story.append(Paragraph(f"<b>Configuration:</b> {config_display}", array_info_style))
@@ -610,12 +616,21 @@ def export_system_report(request):
                     if array.mbar_hole:
                         story.append(Paragraph(f"<b>MBAR Hole:</b> {array.mbar_hole}", array_info_style))
                     
+                    # Position data
+                    position_parts = []
+                    if array.position_x is not None:
+                        position_parts.append(f"X: {array.position_x}")
+                    if array.position_y is not None:
+                        position_parts.append(f"Y: {array.position_y}")
+                    if array.position_z is not None:
+                        position_parts.append(f"Z: {array.position_z}")
+                    if position_parts:
+                        story.append(Paragraph(f"<b>Position:</b> {', '.join(position_parts)}", array_info_style))
+                    
                     if hasattr(array, 'bottom_elevation') and array.bottom_elevation is not None:
                         feet = int(array.bottom_elevation)
                         inches = int((float(array.bottom_elevation) - feet) * 12)
                         story.append(Paragraph(f"<b>Bottom Trim Height:</b> {feet}' {inches}\"", array_info_style))
-                    
-                    story.append(Spacer(1, 0.05*inch))
                     
                     # Cabinets table
                     cabinets = array.cabinets.all().order_by('position_number')
