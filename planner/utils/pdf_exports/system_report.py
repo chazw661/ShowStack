@@ -536,31 +536,116 @@ def export_system_report(request):
     
     if predictions.exists():
         for prediction in predictions:
-            story.append(Paragraph(f"Prediction: {prediction.file_name}", subheader_style))
+            # Prediction title
+            title_parts = []
+            if prediction.show_day:
+                title_parts.append(str(prediction.show_day))
+            title_parts.append(prediction.file_name)
+            title_text = " - ".join(title_parts)
+            story.append(Paragraph(f"Prediction: {title_text}", subheader_style))
             
-            # Speaker Arrays
+            # File info
+            info_parts = []
+            if prediction.version:
+                info_parts.append(f"Version: {prediction.version}")
+            if prediction.date_generated:
+                info_parts.append(f"Generated: {prediction.date_generated.strftime('%b. %d, %Y')}")
+            if info_parts:
+                story.append(Paragraph(" | ".join(info_parts), info_style))
+            
+            # Get arrays
             arrays = prediction.speaker_arrays.all().order_by('source_name')
+            
             if arrays.exists():
+                # Summary
+                total_arrays = arrays.count()
+                total_cabinets = sum(array.cabinets.count() for array in arrays)
+                
+                summary_data = [
+                    ['TOTAL ARRAYS', 'TOTAL CABINETS'],
+                    [str(total_arrays), str(total_cabinets)]
+                ]
+                summary_table = Table(summary_data, colWidths=[2*inch, 2*inch])
+                summary_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                story.append(summary_table)
+                story.append(Spacer(1, 0.15*inch))
+                
+                # Each array
                 for array in arrays:
-                    story.append(Paragraph(f"Array: {array.source_name}", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    # Array header with blue background
+                    array_style = ParagraphStyle(
+                        'ArrayHeader',
+                        fontSize=11,
+                        textColor=colors.white,
+                        backColor=BRAND_BLUE,
+                        fontName='Helvetica-Bold',
+                        leftIndent=6,
+                        rightIndent=6,
+                        spaceBefore=8,
+                        spaceAfter=4,
+                    )
+                    story.append(Paragraph(f" {array.source_name}", array_style))
                     
+                    # Array info
+                    array_info_style = ParagraphStyle('ArrayInfo', fontSize=8, textColor=DARK_GRAY, leftIndent=12)
+                    
+                    if array.configuration:
+                        config_display = array.get_configuration_display() if hasattr(array, 'get_configuration_display') else array.configuration
+                        story.append(Paragraph(f"<b>Configuration:</b> {config_display}", array_info_style))
+                    
+                    if array.bumper_type and array.bumper_type != 'NONE':
+                        bumper_display = array.get_bumper_type_display() if hasattr(array, 'get_bumper_type_display') else array.bumper_type
+                        story.append(Paragraph(f"<b>Bumper:</b> {bumper_display}", array_info_style))
+                    
+                    if hasattr(array, 'mbar_hole') and array.mbar_hole:
+                        story.append(Paragraph(f"<b>MBAR Hole:</b> {array.mbar_hole}", array_info_style))
+                    
+                    if hasattr(array, 'bottom_elevation') and array.bottom_elevation is not None:
+                        feet = int(array.bottom_elevation)
+                        inches = int((float(array.bottom_elevation) - feet) * 12)
+                        story.append(Paragraph(f"<b>Bottom Trim Height:</b> {feet}' {inches}\"", array_info_style))
+                    
+                    story.append(Spacer(1, 0.05*inch))
+                    
+                    # Cabinets table
                     cabinets = array.cabinets.all().order_by('position_number')
                     if cabinets.exists():
-                        cab_data = []
-                        for cab in cabinets:
+                        cab_data = [['#', 'Model', 'Angle', 'Panflex']]
+                        for idx, cab in enumerate(cabinets, 1):
+                            angle_str = f"{cab.angle_to_next}°" if cab.angle_to_next else ''
+                            panflex_str = cab.get_panflex_setting_display() if hasattr(cab, 'get_panflex_setting_display') and cab.panflex_setting else ''
                             cab_data.append([
-                                str(cab.position_number) if cab.position_number else '',
+                                str(idx),
                                 cab.speaker_model or '',
-                                f"{cab.angle_to_next}°" if cab.angle_to_next else '',
+                                angle_str,
+                                panflex_str,
                             ])
                         
-                        headers = ['Position', 'Speaker Model', 'Angle']
-                        col_widths = [0.8*inch, 2*inch, 0.8*inch]
-                        
-                        table = create_table(headers, cab_data, col_widths)
-                        if table:
-                            story.append(table)
-                            story.append(Spacer(1, 0.1*inch))
+                        cab_table = Table(cab_data, colWidths=[0.4*inch, 1.5*inch, 0.8*inch, 1.2*inch])
+                        cab_table.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, -1), 8),
+                            ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
+                            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, BACKGROUND_GRAY]),
+                            ('TOPPADDING', (0, 0), (-1, -1), 3),
+                            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                        ]))
+                        story.append(cab_table)
+                    
+                    story.append(Spacer(1, 0.1*inch))
             
             story.append(Spacer(1, 0.2*inch))
     else:
