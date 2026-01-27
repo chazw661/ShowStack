@@ -512,7 +512,7 @@ def export_system_report(request):
     
     story.append(PageBreak())
     
-    # =====================
+# =====================
     # SECTION 7: SOUNDVISION PREDICTIONS
     # =====================
     story.append(Paragraph("7. Soundvision Predictions", header_style))
@@ -522,27 +522,26 @@ def export_system_report(request):
     
     if predictions.exists():
         for prediction in predictions:
-            story.append(Paragraph(f"Prediction: {prediction.name}", subheader_style))
+            story.append(Paragraph(f"Prediction: {prediction.file_name}", subheader_style))
             
             # Speaker Arrays
-            arrays = prediction.arrays.all().order_by('name')
+            arrays = prediction.speaker_arrays.all().order_by('source_name')
             if arrays.exists():
                 for array in arrays:
-                    story.append(Paragraph(f"Array: {array.name}", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    story.append(Paragraph(f"Array: {array.source_name}", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
                     
-                    cabinets = array.cabinets.all().order_by('position')
+                    cabinets = array.cabinets.all().order_by('position_number')
                     if cabinets.exists():
                         cab_data = []
                         for cab in cabinets:
                             cab_data.append([
-                                str(cab.position) if cab.position else '',
-                                cab.cabinet_type or '',
-                                f"{cab.angle}°" if cab.angle else '',
-                                cab.notes or ''
+                                str(cab.position_number) if cab.position_number else '',
+                                cab.speaker_model or '',
+                                f"{cab.angle_to_next}°" if cab.angle_to_next else '',
                             ])
                         
-                        headers = ['Position', 'Cabinet Type', 'Angle', 'Notes']
-                        col_widths = [0.8*inch, 2*inch, 0.8*inch, 3*inch]
+                        headers = ['Position', 'Speaker Model', 'Angle']
+                        col_widths = [0.8*inch, 2*inch, 0.8*inch]
                         
                         table = create_table(headers, cab_data, col_widths)
                         if table:
