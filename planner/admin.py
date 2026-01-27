@@ -1686,7 +1686,7 @@ class AmpAdmin(BaseEquipmentAdmin):
 
 
 class LocationAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'description', 'amp_count', 'processor_count', 'export_pdf_button']
+    list_display = ['name', 'description', 'export_pdf_button']
     search_fields = ['name', 'description']
     ordering = ['name']
     
@@ -1711,7 +1711,7 @@ class LocationAdmin(BaseEquipmentAdmin):
             '<a class="button" href="{}" target="_blank">📄 Export PDF</a>',
             url
         )
-    export_pdf_button.short_description = 'Export'
+    export_pdf_button.short_description = 'Export Inventory'
     export_pdf_button.allow_tags = True
     
     def amp_count(self, obj):
