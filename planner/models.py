@@ -710,6 +710,53 @@ class ConsoleInput(models.Model):
     dante_number = models.CharField(max_length=3, blank=True, null=True)
     input_ch = models.CharField(max_length=10, blank=True, null=True)
     source = models.CharField(max_length=100, blank=True, null=True)
+    source = models.CharField(max_length=100, blank=True, null=True)
+    
+    SOURCE_HARDWARE_CHOICES = [
+        ('', '---------'),
+        ('Shure AD1', 'Shure AD1'),
+        ('Shure AD2', 'Shure AD2'),
+        ('Shure ADX1', 'Shure ADX1'),
+        ('Shure ADX2', 'Shure ADX2'),
+        ('Shure - Beta 87', 'Shure - Beta 87'),
+        ('Senn - MKH416', 'Senn - MKH416'),
+        ('Senn - MD431', 'Senn - MD431'),
+        ('USB DI', 'USB DI'),
+        ('AVIO', 'AVIO'),
+        ('Arcadia Dante', 'Arcadia Dante'),
+        ('RUIO-16', 'RUIO-16'),
+        ('FOH', 'FOH'),
+        ('RME', 'RME'),
+        ('XLR', 'XLR'),
+        ('Shure - B91', 'Shure - B91'),
+        ('Shure - B52', 'Shure - B52'),
+        ('Shure - B98', 'Shure - B98'),
+        ('Shure - Beta 181', 'Shure - Beta 181'),
+        ('Shure - SM58', 'Shure - SM58'),
+        ('Shure - SM57', 'Shure - SM57'),
+        ('Shure - KSM137', 'Shure - KSM137'),
+        ('Shure - KSM141', 'Shure - KSM141'),
+        ('Shure - KSM32', 'Shure - KSM32'),
+        ('Shure - KSM27', 'Shure - KSM27'),
+        ('Direct Box', 'Direct Box'),
+        ('Senn - e604', 'Senn - e604'),
+        ('Senn - e901', 'Senn - e901'),
+        ('Senn - e904', 'Senn - e904'),
+        ('Senn - e906', 'Senn - e906'),
+        ('Senn - e935s', 'Senn - e935s'),
+        ('Senn - e945', 'Senn - e945'),
+        ('Senn - MD421', 'Senn - MD421'),
+    ]
+    
+    source_hardware = models.CharField(
+        max_length=50,
+        choices=SOURCE_HARDWARE_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name="Source Hardware"
+    )
+
+
     group = models.CharField(max_length=100, blank=True, null=True)
     dca = models.CharField(max_length=100, blank=True, null=True)
     mute = models.CharField(max_length=100, blank=True, null=True)

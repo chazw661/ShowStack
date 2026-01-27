@@ -33,3 +33,10 @@
     display: none !important;
 }
 
+/* Console Input source_hardware dropdown - narrower width */
+#consoleinput_set-group .field-source_hardware select,
+.inline-group#consoleinput_set-group .field-source_hardware select {
+    width: 150px !important;
+    max-width: 150px !important;
+    min-width: 150px !important;
+}

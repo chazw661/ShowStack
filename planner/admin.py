@@ -714,7 +714,7 @@ class ConsoleStereoOutputInline(admin.TabularInline):
 
 
 class ConsoleAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'location','primary_ip_address', 'secondary_ip_address', 'is_template']
+    list_display = ['name', 'location','primary_ip_address', 'secondary_ip_address', 'is_template','export_buttons']
     list_filter = ['is_template', 'location']
     
     fieldsets = (
