@@ -474,7 +474,7 @@ def export_system_report(request):
                 ])
             
             headers = ['BP #', 'Position', 'Name', 'Location', 'Headset', 'CH 1', 'CH 2', 'CH 3', 'CH 4', 'IP']
-            col_widths = [0.4*inch, 0.9*inch, 1.0*inch, 0.9*inch, 0.6*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 1.0*inch]
+            col_widths = [0.35*inch, 1.2*inch, 1.3*inch, 0.9*inch, 0.6*inch, 0.45*inch, 0.45*inch, 0.45*inch, 0.45*inch, 0.9*inch]
             
             table = create_table(headers, comm_data, col_widths)
             if table:
