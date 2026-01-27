@@ -360,6 +360,15 @@ a.button[href*="dashboard"] {
     display: none !important;
 }
 
+
+/* Hide related widget buttons in Comm Belt Pack list view */
+body.app-planner.model-commbeltpack #changelist .related-widget-wrapper .change-related,
+body.app-planner.model-commbeltpack #changelist .related-widget-wrapper .delete-related,
+body.app-planner.model-commbeltpack #changelist .related-widget-wrapper .view-related,
+body.app-planner.model-commbeltpack #changelist .related-widget-wrapper .add-related {
+    display: none !important;
+}
+
 /* Inline dark theme with maximum specificity */
 html, body {
     background: #0a0a0a !important;

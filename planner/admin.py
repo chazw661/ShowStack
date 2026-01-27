@@ -3721,6 +3721,18 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         'headset',
         'checked_out',
     ]
+
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Remove add/edit/delete buttons from related field widgets in list view"""
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name in ['position', 'name', 'unit_location']:
+            formfield.widget.can_add_related = False
+            formfield.widget.can_change_related = False
+            formfield.widget.can_delete_related = False
+            formfield.widget.can_view_related = False
+        return formfield
+
     inlines = [CommBeltPackChannelInline]
     search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location__name', 'ip_address']
     ordering = ['system_type', 'bp_number']
