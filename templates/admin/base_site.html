@@ -203,6 +203,7 @@ document.addEventListener('DOMContentLoaded', function() {
         arrow.innerHTML = '▶';
         parentLink.insertBefore(arrow, parentLink.firstChild);
         parentLink.style.fontWeight = 'bold';
+        parentLink.style.textTransform = 'uppercase';
         
         // Set initial state
         const isCollapsed = savedState[parent] !== false;
