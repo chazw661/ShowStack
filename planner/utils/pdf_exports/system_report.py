@@ -168,7 +168,7 @@ def export_system_report(request):
     story.append(Paragraph("1. Consoles", header_style))
     story.append(Spacer(1, 0.1*inch))
     
-    consoles = Console.objects.filter(project=project, is_template=False).order_by('name')
+    consoles = Console.objects.filter(project=project).order_by('name')
     
     if consoles.exists():
         for console in consoles:
