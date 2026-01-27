@@ -294,35 +294,44 @@ def export_system_report(request):
                 story.append(Paragraph(f"Location: {device.location.name}", info_style))
             
             # Device Inputs
-            inputs = device.inputs.all().order_by('input_number')
+            inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
             if inputs.exists():
                 input_data = []
                 for inp in inputs:
-                    if inp.input_number or inp.signal_name:
-                        input_data.append([
-                            str(inp.input_number) if inp.input_number else '',
-                            inp.signal_name or '',
-                        ])
+                    # Get label from linked console input
+                    input_label = ''
+                    console_source = ''
+                    if inp.console_input:
+                        input_label = inp.console_input.source or ''
+                        if inp.console_input.console:
+                            console_input_num = inp.console_input.input_ch
+                            console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
+                    
+                    input_data.append([
+                        str(inp.input_number) if inp.input_number else '',
+                        input_label,
+                        console_source,
+                    ])
                 
                 if input_data:
                     story.append(Paragraph("Inputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
-                    headers = ['Input #', 'Signal Name']
-                    col_widths = [0.7*inch, 5*inch]
+                    headers = ['Input #', 'Signal', 'Console Source']
+                    col_widths = [0.7*inch, 2*inch, 3*inch]
                     table = create_table(headers, input_data, col_widths)
                     if table:
                         story.append(table)
                         story.append(Spacer(1, 0.15*inch))
             
             # Device Outputs
-            outputs = device.outputs.all().order_by('output_number')
+            outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
             if outputs.exists():
                 output_data = []
                 for out in outputs:
-                    if out.output_number or out.signal_name:
-                        output_data.append([
-                            str(out.output_number) if out.output_number else '',
-                            out.signal_name or '',
-                        ])
+                    output_label = out.signal_name or ''
+                    output_data.append([
+                        str(out.output_number) if out.output_number else '',
+                        output_label,
+                    ])
                 
                 if output_data:
                     story.append(Paragraph("Outputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
