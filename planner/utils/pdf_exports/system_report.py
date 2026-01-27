@@ -1,15 +1,15 @@
 # planner/utils/pdf_exports/system_report.py
 """
-System Report PDF Export - Comprehensive report of all parent modules
-Combines: Locations, IP Addresses, Consoles, Devices, Amps, System Processors, etc.
+System Report PDF Export - Comprehensive report combining all module exports
+Generates a complete system document suitable for sharing with crew members
 """
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, 
-    Spacer, PageBreak
+    Spacer, PageBreak, KeepTogether
 )
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
@@ -17,8 +17,9 @@ from django.http import HttpResponse
 from datetime import datetime
 import io
 
+from .pdf_styles import PDFStyles, LANDSCAPE_PAGE, MARGIN
 
-# Brand colors (matching your existing PDF exports)
+# Brand colors
 BRAND_BLUE = colors.HexColor('#4a9eff')
 DARK_GRAY = colors.HexColor('#333333')
 MEDIUM_GRAY = colors.HexColor('#666666')
@@ -29,43 +30,47 @@ BACKGROUND_GRAY = colors.HexColor('#f5f5f5')
 def export_system_report(request):
     """
     Generate comprehensive system report PDF
-    Includes all parent modules for the current project
+    Combines all module exports into one document
     """
     from planner.models import (
-        Location, Console, Device, Amp, SystemProcessor,
-        PACableSchedule, CommBeltPack, PowerDistributionPlan
+        Location, Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
+        Device, DeviceInput, DeviceOutput,
+        Amp, AmpChannel, SystemProcessor,
+        PACableSchedule, PAFanOut,
+        CommBeltPack, CommChannel,
+        PowerDistributionPlan, AmplifierAssignment,
+        SoundvisionPrediction, SpeakerArray, SpeakerCabinet
     )
     
     # Get current project
     if not hasattr(request, 'current_project') or not request.current_project:
-        # Return empty PDF with message
         return _empty_project_pdf()
     
     project = request.current_project
     
     # Create response
     response = HttpResponse(content_type='application/pdf')
-    filename = f"{project.name.replace(' ', '_')}_System_Report.pdf"
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    filename = f"{project.name.replace(' ', '_')}_Complete_System_Report.pdf"
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
     
-    # Create PDF document
+    # Create PDF document - use landscape for wide tables
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=letter,
-        rightMargin=0.5*inch,
-        leftMargin=0.5*inch,
-        topMargin=0.75*inch,
-        bottomMargin=0.75*inch
+        pagesize=LANDSCAPE_PAGE,
+        rightMargin=MARGIN,
+        leftMargin=MARGIN,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN
     )
     
-    # Container for PDF elements
     story = []
+    styles = PDFStyles()
     
     # Styles
     title_style = ParagraphStyle(
         'Title',
-        fontSize=28,
+        fontSize=32,
         textColor=BRAND_BLUE,
         spaceAfter=12,
         alignment=TA_CENTER,
@@ -86,8 +91,8 @@ def export_system_report(request):
         'SubHeader',
         fontSize=14,
         textColor=DARK_GRAY,
-        spaceAfter=10,
-        spaceBefore=10,
+        spaceAfter=8,
+        spaceBefore=12,
         alignment=TA_LEFT,
         fontName='Helvetica-Bold'
     )
@@ -101,363 +106,460 @@ def export_system_report(request):
         fontName='Helvetica'
     )
     
-    # Cover Page
-    story.append(Spacer(1, 1.5*inch))
-    story.append(Paragraph("System Report", title_style))
-    story.append(Spacer(1, 0.3*inch))
-    story.append(Paragraph(f"Project: {project.name}", header_style))
-    
-    project_info = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    story.append(Paragraph(project_info, info_style))
-    
-    story.append(PageBreak())
-    
     # Helper function to create section tables
     def create_table(headers, data, col_widths):
-        """Create a formatted table"""
         if not data:
             return None
-            
         table_data = [headers] + data
         table = Table(table_data, colWidths=col_widths, repeatRows=1)
-        
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
             ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 0.5, LIGHT_GRAY),
             ('LINEBELOW', (0, 0), (-1, 0), 2, BRAND_BLUE),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, BACKGROUND_GRAY]),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
         ]))
-        
         return table
     
-    # SECTION 1: EQUIPMENT LOCATIONS
-    story.append(Paragraph("Equipment Locations", header_style))
-    
-    locations = Location.objects.filter(project=project).prefetch_related(
-        'consoles', 'devices', 'amps', 'system_processors'
-    ).order_by('name')
-    
-    if locations.exists():
-        location_data = []
-        for location in locations:
-            console_count = location.consoles.count()
-            device_count = location.devices.count()
-            amp_count = location.amps.filter(project=project).count()
-            processor_count = location.system_processors.count()
-            total = console_count + device_count + amp_count + processor_count
-            
-            location_data.append([
-                location.name,
-                str(console_count),
-                str(device_count),
-                str(amp_count),
-                str(processor_count),
-                str(total)
-            ])
-        
-        headers = ['Location', 'Consoles', 'I/O Devices', 'Amps', 'Processors', 'Total']
-        col_widths = [2*inch, 0.9*inch, 1*inch, 0.7*inch, 1*inch, 0.7*inch]
-        
-        table = create_table(headers, location_data, col_widths)
-        if table:
-            story.append(table)
-    else:
-        story.append(Paragraph("No locations defined", info_style))
-    
+    # =====================
+    # COVER PAGE
+    # =====================
+    story.append(Spacer(1, 2*inch))
+    story.append(Paragraph("Complete System Report", title_style))
+    story.append(Spacer(1, 0.5*inch))
+    story.append(Paragraph(f"{project.name}", header_style))
     story.append(Spacer(1, 0.3*inch))
-    
-    # SECTION 2: IP ADDRESS ASSIGNMENTS
-    story.append(Paragraph("IP Address Assignments", header_style))
-    
-    # Collect all IP addresses from different modules
-    ip_data = []
-    
-    # Consoles
-    consoles = Console.objects.filter(project=project).order_by('name')
-    for console in consoles:
-        if console.primary_ip_address:
-            ip_data.append(['Console', console.name, console.primary_ip_address, 'Primary'])
-        if console.secondary_ip_address:
-            ip_data.append(['Console', console.name, console.secondary_ip_address, 'Secondary'])
-    
-    # Devices
-    devices = Device.objects.filter(project=project).order_by('name')
-    for device in devices:
-        if device.primary_ip_address:
-            ip_data.append(['I/O Device', device.name, device.primary_ip_address, 'Primary'])
-        if device.secondary_ip_address:
-            ip_data.append(['I/O Device', device.name, device.secondary_ip_address, 'Secondary'])
-    
-    # Amplifiers
-    amps = Amp.objects.filter(project=project).select_related('amp_model').order_by('name')
-    for amp in amps:
-        if amp.ip_address:
-            amp_name = amp.name if hasattr(amp, 'name') and amp.name else f"Amp {amp.id}"
-            ip_data.append(['Amplifier', amp_name, amp.ip_address, 'AVB'])
-    
-    # System Processors
-    processors = SystemProcessor.objects.filter(project=project).order_by('name')
-    for processor in processors:
-        if processor.ip_address:
-            ip_data.append(['Processor', processor.name, processor.ip_address, processor.device_type])
-    
-    if ip_data:
-        headers = ['Module', 'Device Name', 'IP Address', 'Type/Network']
-        col_widths = [1.2*inch, 2.5*inch, 1.5*inch, 1.3*inch]
-        
-        table = create_table(headers, ip_data, col_widths)
-        if table:
-            story.append(table)
-    else:
-        story.append(Paragraph("No IP addresses assigned", info_style))
-    
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", info_style))
     story.append(PageBreak())
     
-    # SECTION 3: CONSOLES
-    story.append(Paragraph("Consoles", header_style))
+    # =====================
+    # TABLE OF CONTENTS
+    # =====================
+    story.append(Paragraph("Table of Contents", header_style))
+    story.append(Spacer(1, 0.2*inch))
+    
+    toc_items = [
+        "1. Consoles",
+        "2. I/O Devices", 
+        "3. System Processors",
+        "4. PA Cable Schedule",
+        "5. COMM System",
+        "6. Power Distribution",
+        "7. Soundvision Predictions"
+    ]
+    for item in toc_items:
+        story.append(Paragraph(item, info_style))
+    story.append(PageBreak())
+    
+    # =====================
+    # SECTION 1: CONSOLES
+    # =====================
+    story.append(Paragraph("1. Consoles", header_style))
+    story.append(Spacer(1, 0.1*inch))
+    
+    consoles = Console.objects.filter(project=project, is_template=False).order_by('name')
     
     if consoles.exists():
-        console_data = []
         for console in consoles:
-            input_count = console.consoleinput_set.count() if hasattr(console, 'consoleinput_set') else 0
-            aux_count = console.consoleauxoutput_set.count() if hasattr(console, 'consoleauxoutput_set') else 0
-            matrix_count = console.consolematrixoutput_set.count() if hasattr(console, 'consolematrixoutput_set') else 0
+            story.append(Paragraph(f"Console: {console.name}", subheader_style))
             
-            console_data.append([
-                console.name,
-                console.primary_ip_address or 'N/A',
-                str(input_count),
-                str(aux_count),
-                str(matrix_count),
-                '✓' if console.is_template else ''
-            ])
-        
-        headers = ['Console Name', 'IP Address', 'Inputs', 'Aux', 'Matrix', 'Template']
-        col_widths = [2.5*inch, 1.3*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.9*inch]
-        
-        table = create_table(headers, console_data, col_widths)
-        if table:
-            story.append(table)
+            # Console Inputs
+            inputs = console.consoleinput_set.all().order_by('dante_number')
+            if inputs.exists():
+                input_data = []
+                for inp in inputs:
+                    if inp.dante_number or inp.input_ch or inp.source:
+                        input_data.append([
+                            str(inp.dante_number) if inp.dante_number else '',
+                            inp.input_ch or '',
+                            inp.source or '',
+                            inp.source_hardware or '',
+                            inp.group or '',
+                            inp.dca or '',
+                            inp.mute or '',
+                            inp.direct_out or '',
+                            inp.omni_in or ''
+                        ])
+                
+                if input_data:
+                    story.append(Paragraph("Inputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    headers = ['Dante #', 'Input Ch', 'Source', 'Src Hardware', 'Group', 'DCA', 'Mute', 'Direct Out', 'Omni In']
+                    col_widths = [0.5*inch, 0.6*inch, 1.4*inch, 1.0*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.7*inch, 0.7*inch]
+                    table = create_table(headers, input_data, col_widths)
+                    if table:
+                        story.append(table)
+                        story.append(Spacer(1, 0.15*inch))
+            
+            # Console Aux Outputs
+            aux_outputs = console.consoleauxoutput_set.all()
+            if aux_outputs.exists():
+                aux_data = []
+                for aux in sorted(aux_outputs, key=lambda x: int(x.aux_number) if x.aux_number and x.aux_number.isdigit() else 999):
+                    if aux.aux_number or aux.name:
+                        aux_data.append([
+                            str(aux.dante_number) if aux.dante_number else '',
+                            aux.aux_number or '',
+                            aux.name or '',
+                            aux.mono_stereo or '',
+                            getattr(aux, 'bus_type', '') or '',
+                            getattr(aux, 'omni_out', '') or ''
+                        ])
+                
+                if aux_data:
+                    story.append(Paragraph("Aux Outputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    headers = ['Dante #', 'Aux', 'Name', 'Mono/Stereo', 'Bus Type', 'Omni Out']
+                    col_widths = [0.7*inch, 0.5*inch, 2.5*inch, 0.9*inch, 0.9*inch, 0.9*inch]
+                    table = create_table(headers, aux_data, col_widths)
+                    if table:
+                        story.append(table)
+                        story.append(Spacer(1, 0.15*inch))
+            
+            # Console Matrix Outputs
+            matrix_outputs = console.consolematrixoutput_set.all()
+            if matrix_outputs.exists():
+                matrix_data = []
+                for mtx in sorted(matrix_outputs, key=lambda x: int(x.matrix_number) if x.matrix_number and x.matrix_number.isdigit() else 999):
+                    if mtx.matrix_number or mtx.name:
+                        matrix_data.append([
+                            str(mtx.dante_number) if mtx.dante_number else '',
+                            mtx.matrix_number or '',
+                            mtx.name or '',
+                            mtx.mono_stereo or '',
+                            getattr(mtx, 'destination', '') or '',
+                            getattr(mtx, 'omni_out', '') or ''
+                        ])
+                
+                if matrix_data:
+                    story.append(Paragraph("Matrix Outputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    headers = ['Dante #', 'Matrix', 'Name', 'Mono/Stereo', 'Destination', 'Omni Out']
+                    col_widths = [0.7*inch, 0.6*inch, 2.2*inch, 0.9*inch, 1.3*inch, 0.7*inch]
+                    table = create_table(headers, matrix_data, col_widths)
+                    if table:
+                        story.append(table)
+                        story.append(Spacer(1, 0.15*inch))
+            
+            # Console Stereo Outputs
+            stereo_outputs = console.consolestereooutput_set.all()
+            if stereo_outputs.exists():
+                stereo_data = []
+                for stereo in stereo_outputs:
+                    stereo_data.append([
+                        str(stereo.dante_number) if stereo.dante_number else '',
+                        stereo.get_stereo_type_display() if stereo.stereo_type else '',
+                        stereo.name or '',
+                        getattr(stereo, 'omni_out', '') or ''
+                    ])
+                
+                if stereo_data:
+                    story.append(Paragraph("Stereo Outputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    headers = ['Dante #', 'Buss', 'Name', 'Omni Out']
+                    col_widths = [0.8*inch, 1.2*inch, 3*inch, 1*inch]
+                    table = create_table(headers, stereo_data, col_widths)
+                    if table:
+                        story.append(table)
+            
+            story.append(PageBreak())
     else:
         story.append(Paragraph("No consoles configured", info_style))
+        story.append(PageBreak())
     
-    story.append(Spacer(1, 0.3*inch))
+    # =====================
+    # SECTION 2: I/O DEVICES
+    # =====================
+    story.append(Paragraph("2. I/O Devices", header_style))
+    story.append(Spacer(1, 0.1*inch))
     
-    # SECTION 4: I/O DEVICES
-    story.append(Paragraph("I/O Devices", header_style))
+    devices = Device.objects.filter(project=project).order_by('name')
     
     if devices.exists():
-        device_data = []
         for device in devices:
-            device_data.append([
-                device.name,
-                str(device.input_count),
-                str(device.output_count),
-                device.primary_ip_address or 'N/A'
-            ])
-        
-        headers = ['Device Name', 'Inputs', 'Outputs', 'IP Address']
-        col_widths = [2.5*inch, 0.8*inch, 0.8*inch, 2*inch]
-        
-        table = create_table(headers, device_data, col_widths)
-        if table:
-            story.append(table)
+            story.append(Paragraph(f"Device: {device.name}", subheader_style))
+            if device.location:
+                story.append(Paragraph(f"Location: {device.location.name}", info_style))
+            
+            # Device Inputs
+            inputs = device.deviceinput_set.all().order_by('input_number')
+            if inputs.exists():
+                input_data = []
+                for inp in inputs:
+                    if inp.input_number or inp.name:
+                        input_data.append([
+                            str(inp.input_number) if inp.input_number else '',
+                            str(inp.dante_number) if inp.dante_number else '',
+                            inp.name or '',
+                            inp.signal_type or '',
+                            inp.source or ''
+                        ])
+                
+                if input_data:
+                    story.append(Paragraph("Inputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    headers = ['Input #', 'Dante #', 'Name', 'Signal Type', 'Source']
+                    col_widths = [0.7*inch, 0.7*inch, 2*inch, 1*inch, 2*inch]
+                    table = create_table(headers, input_data, col_widths)
+                    if table:
+                        story.append(table)
+                        story.append(Spacer(1, 0.15*inch))
+            
+            # Device Outputs
+            outputs = device.deviceoutput_set.all().order_by('output_number')
+            if outputs.exists():
+                output_data = []
+                for out in outputs:
+                    if out.output_number or out.name:
+                        output_data.append([
+                            str(out.output_number) if out.output_number else '',
+                            str(out.dante_number) if out.dante_number else '',
+                            out.name or '',
+                            out.signal_type or '',
+                            out.destination or ''
+                        ])
+                
+                if output_data:
+                    story.append(Paragraph("Outputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    headers = ['Output #', 'Dante #', 'Name', 'Signal Type', 'Destination']
+                    col_widths = [0.7*inch, 0.7*inch, 2*inch, 1*inch, 2*inch]
+                    table = create_table(headers, output_data, col_widths)
+                    if table:
+                        story.append(table)
+            
+            story.append(PageBreak())
     else:
         story.append(Paragraph("No I/O devices configured", info_style))
+        story.append(PageBreak())
     
-    story.append(Spacer(1, 0.3*inch))
+    # =====================
+    # SECTION 3: SYSTEM PROCESSORS
+    # =====================
+    story.append(Paragraph("3. System Processors", header_style))
+    story.append(Spacer(1, 0.1*inch))
     
-    # SECTION 5: AMPLIFIERS
-    story.append(Paragraph("Amplifiers", header_style))
-    
-    if amps.exists():
-        amp_data = []
-        for amp in amps:
-            amp_name = amp.name if hasattr(amp, 'name') and amp.name else f"Amp {amp.id}"
-            model_name = str(amp.amp_model) if amp.amp_model else 'N/A'
-            location_name = amp.location.name if amp.location else 'N/A'
-            channel_count = amp.channels.count() if hasattr(amp, 'channels') else 0
-            
-            amp_data.append([
-                amp_name,
-                model_name,
-                location_name,
-                amp.ip_address or 'N/A',
-                str(channel_count)
-            ])
-        
-        headers = ['Amp Name', 'Model', 'Location', 'IP Address', 'Channels']
-        col_widths = [1.5*inch, 1.8*inch, 1.3*inch, 1.3*inch, 0.8*inch]
-        
-        table = create_table(headers, amp_data, col_widths)
-        if table:
-            story.append(table)
-    else:
-        story.append(Paragraph("No amplifiers configured", info_style))
-    
-    story.append(PageBreak())
-    
-    # SECTION 6: SYSTEM PROCESSORS
-    story.append(Paragraph("System Processors", header_style))
+    processors = SystemProcessor.objects.filter(project=project).order_by('name')
     
     if processors.exists():
         processor_data = []
-        for processor in processors:
-            location_name = processor.location.name if processor.location else 'N/A'
+        for proc in processors:
             processor_data.append([
-                processor.name,
-                processor.get_device_type_display() if hasattr(processor, 'get_device_type_display') else processor.device_type,
-                location_name,
-                processor.ip_address or 'N/A'
+                proc.name,
+                proc.get_device_type_display() if hasattr(proc, 'get_device_type_display') else proc.device_type,
+                proc.location.name if proc.location else '',
+                proc.ip_address or ''
             ])
         
-        headers = ['Processor Name', 'Type', 'Location', 'IP Address']
-        col_widths = [2*inch, 1.5*inch, 1.5*inch, 1.5*inch]
-        
+        headers = ['Name', 'Type', 'Location', 'IP Address']
+        col_widths = [2.5*inch, 2*inch, 2*inch, 2*inch]
         table = create_table(headers, processor_data, col_widths)
         if table:
             story.append(table)
     else:
         story.append(Paragraph("No system processors configured", info_style))
     
-    story.append(Spacer(1, 0.3*inch))
+    story.append(PageBreak())
     
-    # SECTION 7: PA CABLE SCHEDULES
-    story.append(Paragraph("PA Cable Schedule", header_style))
-
+    # =====================
+    # SECTION 4: PA CABLE SCHEDULE
+    # =====================
+    story.append(Paragraph("4. PA Cable Schedule", header_style))
+    story.append(Spacer(1, 0.1*inch))
+    
     pa_cables = PACableSchedule.objects.filter(project=project).order_by('label')
-
+    
     if pa_cables.exists():
-        cable_data = []
         for cable in pa_cables:
-            label_text = 'N/A'
-            if hasattr(cable, 'label') and cable.label:
-                label_text = str(cable.label)
+            story.append(Paragraph(f"Cable Run: {cable.label}", subheader_style))
             
-            # Get length
-            length_text = 'N/A'
-            if hasattr(cable, 'length') and cable.length:
-                length_text = str(cable.length)
+            # Cable info
+            cable_info = []
+            cable_info.append(['Cable Type', cable.cable_type or 'N/A'])
+            cable_info.append(['Length', str(cable.length) if cable.length else 'N/A'])
+            cable_info.append(['Count', str(cable.count) if cable.count else '0'])
+            cable_info.append(['To Location', cable.to_location or 'N/A'])
             
-            cable_data.append([
-                label_text,
-                cable.cable_type if cable.cable_type else 'N/A',
-                length_text,
-                str(cable.count) if cable.count else '0',
-                cable.to_location if cable.to_location else 'N/A'
-            ])
-        
-        headers = ['Label', 'Cable Type', 'Length', 'Count', 'To Location']
-        col_widths = [1.2*inch, 1.3*inch, 0.8*inch, 0.7*inch, 2.5*inch]
-        
-        table = create_table(headers, cable_data, col_widths)
-        if table:
-            story.append(table)
+            info_table = Table(cable_info, colWidths=[1.5*inch, 4*inch])
+            info_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            story.append(info_table)
+            
+            # Fan outs
+            fanouts = cable.pafanout_set.all().order_by('output_number')
+            if fanouts.exists():
+                story.append(Spacer(1, 0.1*inch))
+                story.append(Paragraph("Fan Outs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                
+                fanout_data = []
+                for fo in fanouts:
+                    fanout_data.append([
+                        str(fo.output_number) if fo.output_number else '',
+                        fo.destination or '',
+                        fo.speaker_model or '',
+                        fo.notes or ''
+                    ])
+                
+                headers = ['Output #', 'Destination', 'Speaker Model', 'Notes']
+                col_widths = [0.8*inch, 2.5*inch, 2*inch, 2*inch]
+                table = create_table(headers, fanout_data, col_widths)
+                if table:
+                    story.append(table)
+            
+            story.append(Spacer(1, 0.2*inch))
     else:
-        story.append(Paragraph("No PA cable runs defined", info_style))
-
-    story.append(Spacer(1, 0.3*inch))
+        story.append(Paragraph("No PA cable runs configured", info_style))
     
+    story.append(PageBreak())
     
-    # SECTION 8: COMM SYSTEM
-    # SECTION 8: COMM SYSTEM
-    story.append(Paragraph("COMM System", header_style))
-
-    # Helper function to extract channel abbreviations
+    # =====================
+    # SECTION 5: COMM SYSTEM
+    # =====================
+    story.append(Paragraph("5. COMM System", header_style))
+    story.append(Spacer(1, 0.1*inch))
+    
     def get_channel_abbrev(channel):
-        """Extract abbreviation from channel name like 'CH1 (PROD)' -> 'PROD'"""
         if not channel:
             return ''
         channel_str = str(channel)
         if '(' in channel_str and ')' in channel_str:
             return channel_str[channel_str.find('(')+1:channel_str.find(')')].strip()
         return channel_str
-
-    # Separate by system_type
-    for system_type, type_name in [('H', 'Hardwired'), ('W', 'Wireless')]:
+    
+    for system_type, type_name in [('WIRELESS', 'Wireless System'), ('HARDWIRED', 'Hardwired System')]:
         belt_packs = CommBeltPack.objects.filter(
             project=project,
             system_type=system_type
         ).order_by('bp_number')
         
         if belt_packs.exists():
-            story.append(Paragraph(f"{type_name} Belt Packs", subheader_style))
+            story.append(Paragraph(type_name, subheader_style))
             
             comm_data = []
             for pack in belt_packs:
+                position_name = pack.position.name if pack.position else ''
+                crew_name = pack.name.name if pack.name else ''
+                location_name = pack.unit_location.name if pack.unit_location else ''
+                
                 comm_data.append([
                     str(pack.bp_number) if pack.bp_number else '',
-                    pack.position or '',
-                    pack.name or '',
+                    position_name,
+                    crew_name,
+                    location_name,
                     pack.get_headset_display() if pack.headset else '',
                     get_channel_abbrev(pack.channel_a),
                     get_channel_abbrev(pack.channel_b),
                     get_channel_abbrev(pack.channel_c),
                     get_channel_abbrev(pack.channel_d),
-                    pack.get_group_display() if pack.group else ''
+                    pack.ip_address or ''
                 ])
             
-            headers = ['BP #', 'Position', 'Name', 'Headset', 'CH A', 'CH B', 'CH C', 'CH D', 'Group']
-            col_widths = [0.4*inch, 0.9*inch, 1.6*inch, 0.7*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.6*inch]
+            headers = ['BP #', 'Position', 'Name', 'Location', 'Headset', 'CH A', 'CH B', 'CH C', 'CH D', 'IP']
+            col_widths = [0.4*inch, 0.9*inch, 1.0*inch, 0.9*inch, 0.6*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 1.0*inch]
             
             table = create_table(headers, comm_data, col_widths)
             if table:
                 story.append(table)
                 story.append(Spacer(1, 0.2*inch))
-
+    
     if not CommBeltPack.objects.filter(project=project).exists():
         story.append(Paragraph("No COMM belt packs configured", info_style))
-
+    
     story.append(PageBreak())
     
-    # SECTION 9: POWER DISTRIBUTION
-    # SECTION 9: POWER DISTRIBUTION
-    story.append(Paragraph("Power Distribution", header_style))
-
+    # =====================
+    # SECTION 6: POWER DISTRIBUTION
+    # =====================
+    story.append(Paragraph("6. Power Distribution", header_style))
+    story.append(Spacer(1, 0.1*inch))
+    
     power_plans = PowerDistributionPlan.objects.filter(project=project)
-
+    
     if power_plans.exists():
         for plan in power_plans:
-            # Get phase assignments
-            phase_data = []
-            if hasattr(plan, 'phaseassignment_set'):
-                assignments = plan.phaseassignment_set.select_related('amp').order_by('phase', 'position')
-                for assignment in assignments:
-                    amp_name = assignment.amp.name if hasattr(assignment.amp, 'name') and assignment.amp.name else f"Amp {assignment.amp.id}"
-                    phase_data.append([
-                        assignment.phase,
-                        str(assignment.position),
-                        amp_name,
-                        f"{assignment.amp_load:.1f}A" if assignment.amp_load else 'N/A'
-                    ])
+            story.append(Paragraph(f"Plan: {plan.name}", subheader_style))
             
-            if phase_data:
-                headers = ['Phase', 'Position', 'Amplifier', 'Load']
-                col_widths = [0.8*inch, 0.8*inch, 3*inch, 1*inch]
+            # Get amplifier assignments
+            assignments = plan.amplifier_assignments.all().order_by('phase_assignment', 'position')
+            if assignments.exists():
+                assign_data = []
+                for assign in assignments:
+                    amp_name = str(assign.amplifier) if assign.amplifier else ''
+                    assign_data.append([
+                        assign.phase_assignment or '',
+                        str(assign.position) if assign.position else '',
+                        amp_name,
+                        str(assign.quantity) if assign.quantity else '1',
+                        f"{assign.calculated_current_per_unit:.1f}A" if assign.calculated_current_per_unit else '',
+                        f"{assign.calculated_total_current:.1f}A" if assign.calculated_total_current else ''
+                    ])
                 
-                table = create_table(headers, phase_data, col_widths)
+                headers = ['Phase', 'Position', 'Amplifier', 'Qty', 'Current/Unit', 'Total Current']
+                col_widths = [0.7*inch, 0.7*inch, 3*inch, 0.5*inch, 1*inch, 1*inch]
+                
+                table = create_table(headers, assign_data, col_widths)
                 if table:
                     story.append(table)
-                    story.append(Spacer(1, 0.2*inch))
+            
+            story.append(Spacer(1, 0.2*inch))
     else:
         story.append(Paragraph("No power distribution plans configured", info_style))
     
-    # Build PDF
-    doc.build(story)
+    story.append(PageBreak())
     
-    # Get PDF data and return
+    # =====================
+    # SECTION 7: SOUNDVISION PREDICTIONS
+    # =====================
+    story.append(Paragraph("7. Soundvision Predictions", header_style))
+    story.append(Spacer(1, 0.1*inch))
+    
+    predictions = SoundvisionPrediction.objects.filter(project=project)
+    
+    if predictions.exists():
+        for prediction in predictions:
+            story.append(Paragraph(f"Prediction: {prediction.name}", subheader_style))
+            
+            # Speaker Arrays
+            arrays = prediction.arrays.all().order_by('name')
+            if arrays.exists():
+                for array in arrays:
+                    story.append(Paragraph(f"Array: {array.name}", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
+                    
+                    cabinets = array.cabinets.all().order_by('position')
+                    if cabinets.exists():
+                        cab_data = []
+                        for cab in cabinets:
+                            cab_data.append([
+                                str(cab.position) if cab.position else '',
+                                cab.cabinet_type or '',
+                                f"{cab.angle}°" if cab.angle else '',
+                                cab.notes or ''
+                            ])
+                        
+                        headers = ['Position', 'Cabinet Type', 'Angle', 'Notes']
+                        col_widths = [0.8*inch, 2*inch, 0.8*inch, 3*inch]
+                        
+                        table = create_table(headers, cab_data, col_widths)
+                        if table:
+                            story.append(table)
+                            story.append(Spacer(1, 0.1*inch))
+            
+            story.append(Spacer(1, 0.2*inch))
+    else:
+        story.append(Paragraph("No Soundvision predictions configured", info_style))
+    
+    # Build PDF
+    doc.build(story, onFirstPage=styles.add_page_number, onLaterPages=styles.add_page_number)
+    
+    # Return response
     pdf = buffer.getvalue()
     buffer.close()
     response.write(pdf)
