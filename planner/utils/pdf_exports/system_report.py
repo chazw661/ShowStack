@@ -289,46 +289,40 @@ def export_system_report(request):
                 story.append(Paragraph(f"Location: {device.location.name}", info_style))
             
             # Device Inputs
-            inputs = device.deviceinput_set.all().order_by('input_number')
+            inputs = device.inputs.all().order_by('input_number')
             if inputs.exists():
                 input_data = []
                 for inp in inputs:
-                    if inp.input_number or inp.name:
+                    if inp.input_number or inp.signal_name:
                         input_data.append([
                             str(inp.input_number) if inp.input_number else '',
-                            str(inp.dante_number) if inp.dante_number else '',
-                            inp.name or '',
-                            inp.signal_type or '',
-                            inp.source or ''
+                            inp.signal_name or '',
                         ])
                 
                 if input_data:
                     story.append(Paragraph("Inputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
-                    headers = ['Input #', 'Dante #', 'Name', 'Signal Type', 'Source']
-                    col_widths = [0.7*inch, 0.7*inch, 2*inch, 1*inch, 2*inch]
+                    headers = ['Input #', 'Signal Name']
+                    col_widths = [0.7*inch, 5*inch]
                     table = create_table(headers, input_data, col_widths)
                     if table:
                         story.append(table)
                         story.append(Spacer(1, 0.15*inch))
             
             # Device Outputs
-            outputs = device.deviceoutput_set.all().order_by('output_number')
+            outputs = device.outputs.all().order_by('output_number')
             if outputs.exists():
                 output_data = []
                 for out in outputs:
-                    if out.output_number or out.name:
+                    if out.output_number or out.signal_name:
                         output_data.append([
                             str(out.output_number) if out.output_number else '',
-                            str(out.dante_number) if out.dante_number else '',
-                            out.name or '',
-                            out.signal_type or '',
-                            out.destination or ''
+                            out.signal_name or '',
                         ])
                 
                 if output_data:
                     story.append(Paragraph("Outputs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
-                    headers = ['Output #', 'Dante #', 'Name', 'Signal Type', 'Destination']
-                    col_widths = [0.7*inch, 0.7*inch, 2*inch, 1*inch, 2*inch]
+                    headers = ['Output #', 'Signal Name']
+                    col_widths = [0.7*inch, 5*inch]
                     table = create_table(headers, output_data, col_widths)
                     if table:
                         story.append(table)
