@@ -174,8 +174,13 @@ def export_system_report(request):
         for console in consoles:
             story.append(Paragraph(f"Console: {console.name}", subheader_style))
             
-            # Console Inputs
-            inputs = console.consoleinput_set.all().order_by('dante_number')
+    
+            # Console Inputs - sort numerically since dante_number is CharField
+            from django.db.models.functions import Cast
+            from django.db.models import IntegerField
+            inputs = console.consoleinput_set.annotate(
+                dante_num_int=Cast('dante_number', IntegerField())
+            ).order_by('dante_num_int')
             if inputs.exists():
                 input_data = []
                 for inp in inputs:
