@@ -360,7 +360,7 @@ def export_system_report(request):
     
     story.append(PageBreak())
     
-    # =====================
+   # =====================
     # SECTION 4: PA CABLE SCHEDULE
     # =====================
     story.append(Paragraph("4. PA Cable Schedule", header_style))
@@ -388,7 +388,7 @@ def export_system_report(request):
             story.append(info_table)
             
             # Fan outs
-            fanouts = cable.pafanout_set.all().order_by('output_number')
+            fanouts = cable.fan_outs.all()
             if fanouts.exists():
                 story.append(Spacer(1, 0.1*inch))
                 story.append(Paragraph("Fan Outs", ParagraphStyle('Small', fontSize=10, textColor=DARK_GRAY, spaceBefore=6)))
@@ -396,14 +396,12 @@ def export_system_report(request):
                 fanout_data = []
                 for fo in fanouts:
                     fanout_data.append([
-                        str(fo.output_number) if fo.output_number else '',
-                        fo.destination or '',
-                        fo.speaker_model or '',
-                        fo.notes or ''
+                        fo.get_fan_out_type_display() if fo.fan_out_type else '',
+                        str(fo.quantity) if fo.quantity else '1',
                     ])
                 
-                headers = ['Output #', 'Destination', 'Speaker Model', 'Notes']
-                col_widths = [0.8*inch, 2.5*inch, 2*inch, 2*inch]
+                headers = ['Fan Out Type', 'Quantity']
+                col_widths = [3*inch, 1*inch]
                 table = create_table(headers, fanout_data, col_widths)
                 if table:
                     story.append(table)
