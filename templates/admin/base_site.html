@@ -253,8 +253,9 @@ document.addEventListener('DOMContentLoaded', function() {
             text-transform: uppercase !important;
             font-weight: bold !important;
         }
-        /* Override for child items - normal case */
-        .menu-child-item th a {
+        /* Override for child items - normal case (higher specificity) */
+        #nav-sidebar .menu-child-item th a,
+        #nav-sidebar tr.menu-child-item th a {
             text-transform: none !important;
             font-weight: normal !important;
         }
@@ -262,7 +263,8 @@ document.addEventListener('DOMContentLoaded', function() {
         .menu-child-item th {
             padding-left: 20px !important;
         }
-        .menu-child-item a::before {
+        #nav-sidebar .menu-child-item a::before,
+        #nav-sidebar tr.menu-child-item a::before {
             content: '└ ';
             color: #555;
             font-size: 11px;
