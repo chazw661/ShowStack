@@ -482,7 +482,7 @@ def export_system_report(request):
     
     if power_plans.exists():
         for plan in power_plans:
-            story.append(Paragraph(f"Plan: {plan.name}", subheader_style))
+            story.append(Paragraph(f"Venue: {plan.venue_name}", subheader_style))
             
             # Get amplifier assignments
             assignments = plan.amplifier_assignments.all().order_by('phase_assignment', 'position')
