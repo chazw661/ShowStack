@@ -607,7 +607,7 @@ def export_system_report(request):
                         bumper_display = array.get_bumper_type_display() if hasattr(array, 'get_bumper_type_display') else array.bumper_type
                         story.append(Paragraph(f"<b>Bumper:</b> {bumper_display}", array_info_style))
                     
-                    if hasattr(array, 'mbar_hole') and array.mbar_hole:
+                    if array.mbar_hole:
                         story.append(Paragraph(f"<b>MBAR Hole:</b> {array.mbar_hole}", array_info_style))
                     
                     if hasattr(array, 'bottom_elevation') and array.bottom_elevation is not None:
