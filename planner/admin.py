@@ -2680,6 +2680,17 @@ class PACableAdmin(BaseEquipmentAdmin):
     actions = ['export_cable_schedule']
 
 
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Filter dropdown options based on current project"""
+        if db_field.name == "label":
+            if hasattr(request, 'current_project') and request.current_project:
+                kwargs["queryset"] = PAZone.objects.filter(project=request.current_project)
+            else:
+                kwargs["queryset"] = PAZone.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
    
     
     
