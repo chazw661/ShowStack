@@ -1521,7 +1521,6 @@ class PAZone(models.Model):
 
     name = models.CharField(
         max_length=20, 
-        unique=True,
         help_text="Short zone code (e.g., HL, HR, FF1)"
     )
     description = models.CharField(
@@ -1563,6 +1562,7 @@ class PAZone(models.Model):
         verbose_name = "PA Zone"
         verbose_name_plural = "PA Zones"  # Child
         ordering = ['id']  # or ['id']
+        unique_together = ['project', 'name']
     
     def __str__(self):
         return f"{self.name} - {self.description}"
