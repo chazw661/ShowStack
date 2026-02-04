@@ -2729,27 +2729,43 @@ class PACableAdmin(BaseEquipmentAdmin):
                 total_length = 0  # ← Must be here, BEFORE the loop
                 
                 # Process each cable individually
+                # Process each cable individually
                 for cable in cables:
-                    cable_length = cable.total_cable_length
-                    total_length += cable_length
+                    # Get per-run length and count
+                    run_length = cable.length  # Single run length
+                    run_count = cable.count    # Number of runs
                     
-                    # Round THIS cable to standard lengths
-                    remaining = cable_length
+                    total_length += run_length * run_count
                     
-                    # Count 100' cables for this run
+                    # Calculate standard lengths needed for ONE run
+                    remaining = run_length
+                    run_hundreds = 0
+                    run_fifties = 0
+                    run_twenty_fives = 0
+                    run_tens = 0
+                    run_fives = 0
+                    
+                    # Count 100' cables for this single run
                     while remaining > 50:
-                        hundreds += 1
+                        run_hundreds += 1
                         remaining -= 100
                     
-                    # Count remaining
+                    # Count remaining for this single run
                     if remaining > 25:
-                        fifties += 1
+                        run_fifties += 1
                     elif remaining > 10:
-                        twenty_fives += 1
+                        run_twenty_fives += 1
                     elif remaining > 5:
-                        tens += 1
+                        run_tens += 1
                     elif remaining > 0:
-                        fives += 1
+                        run_fives += 1
+                    
+                    # Multiply by count to get total cables needed
+                    hundreds += run_hundreds * run_count
+                    fifties += run_fifties * run_count
+                    twenty_fives += run_twenty_fives * run_count
+                    tens += run_tens * run_count
+                    fives += run_fives * run_count
                 
                 # AFTER the loop, check and add to summary
                 if total_length > 0:
