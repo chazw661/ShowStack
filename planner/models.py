@@ -1609,6 +1609,7 @@ class PACableSchedule(models.Model):
         ('NL4_JUMPER', 'NL4 Jumper'),
         ('NL_4' , 'NL 4'),
         ('CA-COM', 'CA-COM'),
+        ('SC32', 'SC32'),
         ('NL_8' , 'NL 8'),
         ('XLR' , 'XLR'),
         ('XLR_FAN' , 'XLR Fan'),
