@@ -4188,11 +4188,14 @@ def populate_default_channels(modeladmin, request, queryset):
     ]
     
     for input_des, channel_num, name, abbr, order in default_channels:
+        # Extract channel_type from input_designation (e.g., '1 4W' -> '4W', 'A 2W' -> '2W')
+        channel_type = '4W' if '4W' in input_des else '2W' if '2W' in input_des else '4W'
+        
         CommChannel.objects.get_or_create(
             channel_number=channel_num,
             project=project,
             defaults={
-                'input_designation': input_des,
+                'channel_type': channel_type,
                 'name': name,
                 'abbreviation': abbr,
                 'order': order
