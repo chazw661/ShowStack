@@ -64,8 +64,9 @@ class SoundvisionParser:
     
     def _parse_all_arrays(self):
         """Parse all arrays in the document, regardless of groups"""
-        # First, find group context for each array
-        group_pattern = r'\d+\.\s*Group:\s*(\w+)'
+        # FIX: Capture full group name including spaces (e.g., "KARA Mains", "KIVA Out", "X8 Outfill")
+        # Pattern matches "1. Group: KARA Mains" or "2. Group: Delay"
+        group_pattern = r'\d+\.\s*Group:\s*([^\n]+?)(?:\n|$)'
         group_matches = list(re.finditer(group_pattern, self.raw_text))
         
         # Find all sources
@@ -83,7 +84,7 @@ class SoundvisionParser:
                 next_group_pos = group_matches[i+1].start() if i+1 < len(group_matches) else len(self.raw_text)
                 
                 if group_pos <= source_pos < next_group_pos:
-                    group_context = group_match.group(1)
+                    group_context = group_match.group(1).strip()
                     break
             
             # Find the end of this source section

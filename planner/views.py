@@ -1787,30 +1787,39 @@ def predictions_list(request):
     
     return render(request, 'planner/predictions_list.html', context)
 
+# Updated prediction_detail view for planner/views.py
+# Replace lines ~1790-1817 with this code
+
 def prediction_detail(request, pk):
-    """Display detailed prediction with collapsible arrays grouped by base name"""
+    """Display detailed prediction with collapsible arrays grouped by Soundvision group and base name"""
     prediction = get_object_or_404(SoundvisionPrediction, pk=pk)
     
-    # Group arrays by their base name
-    grouped_arrays = defaultdict(list)
+    # Group arrays by their Soundvision group context FIRST, then by base name
+    # This keeps "KARA II 1" in "KARA Mains" separate from "KARA II 1" in "Delay"
+    grouped_arrays = defaultdict(lambda: defaultdict(list))
     total_weight = Decimal('0')
     total_arrays = 0
     
-    for array in prediction.speaker_arrays.all().order_by('array_base_name', 'position_x'):
-        grouped_arrays[array.array_base_name].append(array)
+    for array in prediction.speaker_arrays.all().order_by('group_context', 'array_base_name', 'position_x'):
+        group_context = array.group_context or 'Ungrouped'
+        grouped_arrays[group_context][array.array_base_name].append(array)
         if array.total_weight_lb:
             total_weight += array.total_weight_lb
         total_arrays += 1
     
-    # Sort the groups by name
-    grouped_arrays = dict(sorted(grouped_arrays.items()))
+    # Convert nested defaultdict to regular dict for template
+    # Structure: { 'KARA Mains': {'KARA II 1': [array1, array2], 'KARA II 2': [...]}, 'Delay': {...} }
+    grouped_arrays = {
+        group: dict(sorted(arrays.items()))
+        for group, arrays in sorted(grouped_arrays.items())
+    }
     
     context = {
         'prediction': prediction,
         'grouped_arrays': grouped_arrays,
         'total_weight': total_weight,
         'total_arrays': total_arrays,
-        'array_count': len(grouped_arrays),
+        'group_count': len(grouped_arrays),
         'slugify': slugify  # Pass slugify to template
     }
     
