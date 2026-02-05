@@ -83,7 +83,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'accounts',
-    'marketing'
+    'marketing',
+    'django.contrib.humanize', 
     
 ]
 
