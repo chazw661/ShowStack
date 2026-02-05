@@ -163,8 +163,40 @@
 </div>
 
 <style>
+/* Force dark theme on body and override any base template styles */
+html, body {
+    background: #1a1a1a !important;
+    color: #fff !important;
+    margin: 0;
+    padding: 0;
+}
+
+/* Hide the Tailwind test div from base.html */
+.bg-blue-200 {
+    display: none !important;
+}
+
+/* Dark navbar override */
+.navbar {
+    background: #252525 !important;
+    padding: 10px 20px;
+    border-bottom: 1px solid #333;
+}
+
+.navbar a {
+    color: #4a9eff !important;
+    text-decoration: none;
+    margin-right: 20px;
+}
+
+.navbar a:hover {
+    color: #6ab4ff !important;
+}
+
 .prediction-detail {
     padding: 20px;
+    background: #1a1a1a;
+    min-height: 100vh;
 }
 
 .page-header {
@@ -178,14 +210,16 @@
 
 .header-meta {
     display: flex;
-    gap: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
     color: #aaa;
 }
 
 .meta-item {
-    padding: 4px 8px;
+    padding: 6px 12px;
     background: #2a2a2a;
     border-radius: 4px;
+    font-size: 14px;
 }
 
 .controls {
@@ -200,6 +234,7 @@
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+    text-decoration: none;
 }
 
 .btn-secondary {
@@ -226,6 +261,7 @@
     background: #1e1e1e;
     border-radius: 8px;
     overflow: hidden;
+    border: 1px solid #333;
 }
 
 .group-header {
@@ -239,6 +275,7 @@
     font-size: 18px;
     margin: 0;
     border-bottom: 1px solid #3a3a3a;
+    user-select: none;
 }
 
 .group-header:hover {
@@ -248,6 +285,7 @@
 .group-header .toggle-icon {
     font-size: 12px;
     transition: transform 0.2s;
+    width: 16px;
 }
 
 .group-header.collapsed .toggle-icon {
@@ -263,6 +301,7 @@
 
 .group-content {
     padding: 10px;
+    background: #1e1e1e;
 }
 
 /* Array Group (second level - e.g., "KARA II 1", "KARA II 2") */
@@ -281,6 +320,7 @@
     background: #2d2d2d;
     cursor: pointer;
     color: #fff;
+    user-select: none;
 }
 
 .array-header:hover {
@@ -290,6 +330,7 @@
 .array-header .toggle-icon {
     font-size: 10px;
     color: #888;
+    width: 12px;
 }
 
 .array-name {
@@ -305,36 +346,39 @@
     margin-left: auto;
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .badge {
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: 4px;
     font-size: 12px;
+    font-weight: 500;
 }
 
 .badge-weight {
-    background: #3a5a3a;
+    background: #2d4a2d;
     color: #8f8;
 }
 
 .badge-trim {
-    background: #3a3a5a;
+    background: #2d2d4a;
     color: #88f;
 }
 
 .badge-count {
-    background: #5a3a3a;
+    background: #4a2d2d;
     color: #f88;
 }
 
 .badge-mbar {
-    background: #5a5a3a;
+    background: #4a4a2d;
     color: #ff8;
 }
 
 .array-content {
     padding: 15px;
+    background: #222;
 }
 
 /* Array Instance (individual arrays within a group) */
@@ -357,10 +401,13 @@
     margin-bottom: 10px;
     padding-bottom: 10px;
     border-bottom: 1px solid #333;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .instance-header strong {
     color: #4a9eff;
+    font-size: 16px;
 }
 
 .position-info {
@@ -378,18 +425,20 @@
 .detail-row {
     display: flex;
     justify-content: space-between;
-    padding: 4px 8px;
-    background: #222;
+    padding: 6px 10px;
+    background: #252525;
     border-radius: 4px;
 }
 
 .detail-label {
     color: #888;
+    font-size: 13px;
 }
 
 .detail-value {
     color: #fff;
     font-weight: 500;
+    font-size: 13px;
 }
 
 .cabinet-table {
@@ -403,7 +452,7 @@
 
 .cabinet-table th,
 .cabinet-table td {
-    padding: 8px 12px;
+    padding: 10px 12px;
     text-align: left;
     border-bottom: 1px solid #333;
 }
@@ -414,14 +463,31 @@
     font-weight: 500;
     text-transform: uppercase;
     font-size: 11px;
+    letter-spacing: 0.5px;
 }
 
 .cabinet-table td {
     color: #fff;
+    font-size: 13px;
 }
 
-.cabinet-table tr:hover td {
-    background: #252525;
+.cabinet-table tbody tr:hover td {
+    background: #2a2a2a;
+}
+
+/* Hide sidebar from base if present */
+.sidebar {
+    display: none !important;
+}
+
+.main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+}
+
+.container {
+    max-width: none !important;
+    padding: 0 !important;
 }
 </style>
 
@@ -429,13 +495,16 @@
 function toggleGroup(groupId) {
     const content = document.getElementById(groupId);
     const header = content.previousElementSibling;
+    const icon = header.querySelector('.toggle-icon');
     
     if (content.style.display === 'none') {
         content.style.display = 'block';
         header.classList.remove('collapsed');
+        icon.textContent = '▼';
     } else {
         content.style.display = 'none';
         header.classList.add('collapsed');
+        icon.textContent = '▶';
     }
 }
 
@@ -457,7 +526,10 @@ function expandAll() {
     // Expand all groups
     document.querySelectorAll('.group-content').forEach(el => {
         el.style.display = 'block';
-        el.previousElementSibling.classList.remove('collapsed');
+        const header = el.previousElementSibling;
+        header.classList.remove('collapsed');
+        const icon = header.querySelector('.toggle-icon');
+        if (icon) icon.textContent = '▼';
     });
     
     // Expand all arrays
@@ -472,7 +544,10 @@ function collapseAll() {
     // Collapse all groups
     document.querySelectorAll('.group-content').forEach(el => {
         el.style.display = 'none';
-        el.previousElementSibling.classList.add('collapsed');
+        const header = el.previousElementSibling;
+        header.classList.add('collapsed');
+        const icon = header.querySelector('.toggle-icon');
+        if (icon) icon.textContent = '▶';
     });
     
     // Collapse all arrays
