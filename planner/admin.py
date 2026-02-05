@@ -5385,7 +5385,7 @@ class SpeakerArrayAdmin(BaseEquipmentAdmin):
         
         summary_lines = []
         for cab in cabinets:
-            angle_str = f"→ {cab.angle_to_next}°" if cab.angle_to_next else ""
+            angle_str = f"→ {cab.angle_to_next}°" if cab.angle_to_next is not None else ""
             panflex_str = f" [{cab.panflex_setting}]" if cab.panflex_setting else ""
             line = f"#{cab.position_number}: {cab.speaker_model}{angle_str}{panflex_str}"
             summary_lines.append(line)

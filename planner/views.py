@@ -1880,7 +1880,7 @@ def export_prediction_summary(request, pk):
             # Cabinet configuration summary
             cabinet_angles = []
             for cab in array.cabinets.all():
-                if cab.angle_to_next:
+                if cab.angle_to_next is not None:
                     cabinet_angles.append(f"{cab.angle_to_next}°")
             config = " ".join(cabinet_angles) if cabinet_angles else "No angles"
             

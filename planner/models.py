@@ -2998,7 +2998,7 @@ class SpeakerCabinet(models.Model):
         ordering = ['id']  #
     
     def __str__(self):
-        angle_str = f" ({self.angle_to_next}°)" if self.angle_to_next else ""
+        angle_str = f" ({self.angle_to_next}°)" if self.angle_to_next is not None else ""
         panflex_str = f" [{self.panflex_setting}]" if self.panflex_setting else ""
         return f"#{self.position_number} {self.speaker_model}{angle_str}{panflex_str}"            
     

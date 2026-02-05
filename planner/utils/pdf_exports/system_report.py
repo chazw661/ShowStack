@@ -637,7 +637,7 @@ def export_system_report(request):
                     if cabinets.exists():
                         cab_data = [['#', 'Model', 'Angle', 'Panflex']]
                         for idx, cab in enumerate(cabinets, 1):
-                            angle_str = f"{cab.angle_to_next}°" if cab.angle_to_next else ''
+                            angle_str = f"{cab.angle_to_next}°" if cab.angle_to_next is not None else ''
                             panflex_str = cab.get_panflex_setting_display() if hasattr(cab, 'get_panflex_setting_display') and cab.panflex_setting else ''
                             cab_data.append([
                                 str(idx),
