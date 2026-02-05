@@ -3066,6 +3066,10 @@ class Invitation(models.Model):
     
     def accept(self, user):
         """Accept the invitation and create ProjectMember"""
+        # Already accepted - nothing to do
+        if self.status == 'accepted':
+            return True
+        
         if not self.is_valid():
             return False
         
@@ -3075,9 +3079,22 @@ class Invitation(models.Model):
         
         # Check if already a member
         if ProjectMember.objects.filter(project=self.project, user=user).exists():
+            # User is already a member, just mark invitation as accepted
             self.status = 'accepted'
             self.accepted_at = timezone.now()
             self.save()
+            return True
+        
+        # Check for any other accepted invitation for same project/email (duplicate invite scenario)
+        existing_accepted = Invitation.objects.filter(
+            project=self.project,
+            email__iexact=self.email,
+            status='accepted'
+        ).exclude(pk=self.pk).exists()
+        
+        if existing_accepted:
+            # Another invitation was already accepted, delete this duplicate
+            self.delete()
             return True
         
         # Create ProjectMember

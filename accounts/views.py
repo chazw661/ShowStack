@@ -73,14 +73,17 @@ def dashboard(request):
     # Get projects owned by user
     owned_projects = Project.objects.filter(owner=user).order_by('-start_date')
     
-    # Get projects where user is a member
-    member_projects = ProjectMember.objects.filter(
-        user=user
-    ).select_related('project').order_by('-project__start_date')
-
+   # Get project IDs where user is already a member or owner
+    member_project_ids = ProjectMember.objects.filter(user=user).values_list('project_id', flat=True)
+    owned_project_ids = owned_projects.values_list('id', flat=True)
+    excluded_project_ids = list(member_project_ids) + list(owned_project_ids)
+    
+    # Get pending invitations, excluding projects user already has access to
     pending_invitations = Invitation.objects.filter(
-        email=user.email,
+        email__iexact=user.email,
         status='pending'
+    ).exclude(
+        project_id__in=excluded_project_ids
     ).select_related('project', 'invited_by').order_by('-invited_at')
 
     
