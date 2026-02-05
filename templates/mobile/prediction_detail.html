@@ -121,7 +121,7 @@
                         <tr>
                             <td>{{ cab.position_number }}</td>
                             <td>{{ cab.speaker_model|default:"—" }}</td>
-                            <td>{{ cab.angle_to_next|floatformat:1|default:"—" }}°</td>
+                            <td>{{ cab.angle_to_next|floatformat:1|default_if_none:"—" }}°</td>
                             {% if item.has_panflex %}
                             <td>{{ cab.panflex_setting|default:"—" }}</td>
                             {% endif %}

@@ -464,7 +464,7 @@
                                         <span class="cabinet-model">{{ cab.speaker_model }}</span>
                                     </span>
                                     <span>
-                                        {% if cab.angle_to_next %}
+                                        {% if cab.angle_to_next is not None %}
                                         <span class="cabinet-angle">{{ cab.angle_to_next|floatformat:1 }}°</span>
                                         {% endif %}
                                         {% if cab.panflex_setting %}
