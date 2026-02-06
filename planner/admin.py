@@ -1348,7 +1348,7 @@ class AmpModelAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Output Configuration', {
-            'fields': ('nl4_connector_count', 'nl8_connector_count', 'cacom_output_count'),
+            'fields': ('nl4_connector_count', 'nl8_connector_count', 'cacom_output_count','sc32_connector_count'),
             'classes': ('collapse',)
         }),
     )
