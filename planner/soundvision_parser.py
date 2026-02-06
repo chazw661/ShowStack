@@ -1,4 +1,4 @@
-# Create file: planner/soundvision_parser.py
+# planner/soundvision_parser.py
 
 import re
 import PyPDF2
@@ -16,7 +16,7 @@ class SoundvisionParser:
         self.raw_text = ""
         self.data = {
             'metadata': {},
-            'arrays': []  # Changed from 'groups' to 'arrays'
+            'arrays': []
         }
     
     def parse_pdf_file(self, pdf_file) -> Dict[str, Any]:
@@ -31,7 +31,7 @@ class SoundvisionParser:
             # Parse metadata
             self._parse_metadata()
             
-            # Parse all arrays directly (ignore groups)
+            # Parse all arrays directly
             self._parse_all_arrays()
             
             return self.data
@@ -64,8 +64,7 @@ class SoundvisionParser:
     
     def _parse_all_arrays(self):
         """Parse all arrays in the document, regardless of groups"""
-        # FIX: Capture full group name including spaces (e.g., "KARA Mains", "KIVA Out", "X8 Outfill")
-        # Pattern matches "1. Group: KARA Mains" or "2. Group: Delay"
+        # Capture full group name including spaces (e.g., "KARA Mains", "KIVA Out", "X8 Outfill")
         group_pattern = r'\d+\.\s*Group:\s*([^\n]+?)(?:\n|$)'
         group_matches = list(re.finditer(group_pattern, self.raw_text))
         
@@ -202,13 +201,11 @@ class SoundvisionParser:
             data['dimensions']['bottom_elevation'] = float(bottom_elev_match.group(1))
         
         # Pickup positions (for hole numbers and MBar)
-        # Front pickup: "1 (29.03; 8.09; 24.03)" or "0 (0.00; 17.09; 24.02)"
         front_pickup_match = re.search(r'Front pickup position[^:]*:\s*(\d+)\s*\([^)]+\)', text)
         if front_pickup_match:
             hole_num = int(front_pickup_match.group(1))
             data['pickup_positions']['front'] = hole_num
             
-        
         rear_pickup_match = re.search(r'Rear pickup position[^:]*:\s*(\d+)\s*\([^)]+\)', text)
         if rear_pickup_match:
             data['pickup_positions']['rear'] = int(rear_pickup_match.group(1))
@@ -222,53 +219,79 @@ class SoundvisionParser:
         """Parse the cabinet configuration table"""
         cabinets = []
         
-        # Pattern for table rows with or without Panflex
-        # Matches lines like: "#1 KIVA II -13.2 24.00 23.05"
-        # or: "#1 KARA II 5 -8.2 24.00 23.02 55/35"
-        
-        # Try to find the table header to understand format
+        # Check if this is a Panflex table (KARA)
         has_panflex = 'Panflex' in text or bool(re.search(r'\d+/\d+', text))
         
         if has_panflex:
-            # KARA style with Panflex
-            pattern = r'#(\d+)\s+([A-Z]+(?:\s+[A-Z]+)*)\s+([-\d.]+)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+(\d+/\d+)'
+            # KARA style with Panflex - always has angle column
+            # Format: #1 KARA II 5 -8.2 24.00 23.02 55/35
+            pattern = r'#(\d+)\s+([A-Z]+(?:\s+[A-Z]+)*)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+(\d+/\d+)'
             matches = re.finditer(pattern, text)
             
             for match in matches:
                 cabinet = {
                     'position': int(match.group(1)),
                     'model': match.group(2).strip(),
-                    'angle': float(match.group(3)) if match.group(3) and match.group(3) != '' else 0,
+                    'angle': float(match.group(3)) if match.group(3) else 0,
                     'site': float(match.group(4)),
                     'top_z': float(match.group(5)),
                     'bottom_z': float(match.group(6)),
                     'panflex': match.group(7)
                 }
                 cabinets.append(cabinet)
+            return cabinets
         
-        # If no KARA matches or not KARA, try standard format
-        if not cabinets:
-            # Standard format without Panflex
-            pattern = r'#(\d+)\s+([A-Z]+(?:\s+[A-Z]+)*)\s+([-\d.]+)?\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)'
-            matches = re.finditer(pattern, text)
+        # Non-Panflex format (KIVA, KS28, SYVA, X8, etc.)
+        # Challenge: First row may have NO angle, subsequent rows have angle
+        # Row 1: #1 KIVA II 0 32.10 32.03 (3 data numbers: site, top_z, bottom_z)
+        # Row 2+: #2 KIVA II 0 0 32.03 31.08 (4 data numbers: angle, site, top_z, bottom_z)
+        
+        # Find all lines starting with # followed by a number
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
             
-            for match in matches:
-                angle_str = match.group(3)
-                # Handle empty angle field
-                angle = 0
-                if angle_str and angle_str.strip() and angle_str != '':
-                    try:
-                        angle = float(angle_str)
-                    except:
-                        angle = 0
-                
+            # Must start with # and a digit
+            if not re.match(r'^#\d+', line):
+                continue
+            
+            # Skip header rows
+            if 'Type' in line and ('Angles' in line or 'Site' in line):
+                continue
+            
+            # Extract all numbers from the line
+            # Pattern: #position MODEL_NAME numbers...
+            cabinet_match = re.match(r'^#(\d+)\s+([A-Z]+(?:\s+[A-Z]+)*(?:\s+LOW)?)\s+(.*)', line)
+            if not cabinet_match:
+                continue
+            
+            position = int(cabinet_match.group(1))
+            model = cabinet_match.group(2).strip()
+            rest = cabinet_match.group(3).strip()
+            
+            # Extract numbers from the rest of the line
+            numbers = re.findall(r'[-]?\d+\.?\d*', rest)
+            
+            if len(numbers) >= 4:
+                # Has angle: angle, site, top_z, bottom_z
                 cabinet = {
-                    'position': int(match.group(1)),
-                    'model': match.group(2).strip(),
-                    'angle': angle,
-                    'site': float(match.group(4)),
-                    'top_z': float(match.group(5)),
-                    'bottom_z': float(match.group(6))
+                    'position': position,
+                    'model': model,
+                    'angle': float(numbers[0]),
+                    'site': float(numbers[1]),
+                    'top_z': float(numbers[2]),
+                    'bottom_z': float(numbers[3])
+                }
+                cabinets.append(cabinet)
+            elif len(numbers) == 3:
+                # No angle (first cabinet): site, top_z, bottom_z
+                cabinet = {
+                    'position': position,
+                    'model': model,
+                    'angle': 0,  # First cabinet has no inter-cabinet angle
+                    'site': float(numbers[0]),
+                    'top_z': float(numbers[1]),
+                    'bottom_z': float(numbers[2])
                 }
                 cabinets.append(cabinet)
         
@@ -287,8 +310,6 @@ def import_soundvision_prediction(prediction_obj, pdf_file):
     
     # Store raw parsed data
     prediction_obj.raw_data = data
-    
-    # ... rest of the function continues as before
     
     # Update metadata
     if 'metadata' in data:
@@ -310,13 +331,15 @@ def import_soundvision_prediction(prediction_obj, pdf_file):
             config_type = 'vertical_flown'
         elif 'vertical' in config and 'ground' in config:
             config_type = 'vertical_ground'
+        elif 'horizontal' in config:
+            config_type = 'horizontal'
         else:
             config_type = 'vertical_flown'  # default
         
         # Determine bumper type
         bumper = array_data.get('bumper', '').upper()
         bumper_type = 'NONE'
-        for bt in ['KIBU-SB', 'KIBU II', 'M-BUMP', 'K1-BUMP', 'K2-BUMP', 'A-BUMP']:
+        for bt in ['KIBU-SB', 'KIBU II', 'M-BUMP', 'K1-BUMP', 'K2-BUMP', 'A-BUMP', 'SYVA BASE']:
             if bt in bumper:
                 bumper_type = bt
                 break
@@ -371,11 +394,10 @@ def import_soundvision_prediction(prediction_obj, pdf_file):
         array.save()
         
         # Create cabinets
-        # Create cabinets
-        for i, cab_data in enumerate(array_data.get('cabinets', [])):  # Add enumerate here
+        for i, cab_data in enumerate(array_data.get('cabinets', [])):
             cabinet = SpeakerCabinet.objects.create(
                 array=array,
-                position_number=i + 1,  # Now 'i' is defined from enumerate
+                position_number=cab_data.get('position', i + 1),
                 speaker_model=cab_data['model'],
                 angle_to_next=Decimal(str(cab_data.get('angle', 0))),
                 site_angle=Decimal(str(cab_data.get('site', 0))),
