@@ -1493,6 +1493,15 @@ class AmpAdminForm(forms.ModelForm):
                     for field in ['nl8_b_pair_1', 'nl8_b_pair_2', 'nl8_b_pair_3', 'nl8_b_pair_4']:
                         if field in self.fields:
                             self.fields[field].widget = forms.HiddenInput()
+
+                # Hide SC32 fields if amp doesn't have SC32 connector
+                if not hasattr(amp_model, 'sc32_connector_count') or amp_model.sc32_connector_count == 0:
+                    for field in ['sc32_ch1', 'sc32_ch2', 'sc32_ch3', 'sc32_ch4',
+                                  'sc32_ch5', 'sc32_ch6', 'sc32_ch7', 'sc32_ch8',
+                                  'sc32_ch9', 'sc32_ch10', 'sc32_ch11', 'sc32_ch12',
+                                  'sc32_ch13', 'sc32_ch14', 'sc32_ch15', 'sc32_ch16']:
+                        if field in self.fields:
+                            self.fields[field].widget = forms.HiddenInput()            
                     
             except (ValueError, AmpModel.DoesNotExist):
                 pass

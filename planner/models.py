@@ -989,6 +989,12 @@ class AmpModel(models.Model):
     
     # Cacom configuration  
     cacom_output_count = models.IntegerField(default=0)
+
+    # SC32 Configuration (for LA7.16 and similar)
+    sc32_connector_count = models.IntegerField(
+        default=0,
+        choices=[(0, 'None'), (1, '1 SC32')]
+    )
     
     class Meta:
         verbose_name = "Amp Model Template"
@@ -1114,6 +1120,29 @@ class Amp(models.Model):
     cacom_4_ch2 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch14")
     cacom_4_ch3 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch15")
     cacom_4_ch4 = models.CharField(max_length=100, blank=True, verbose_name="CaCom 4 - Ch16")
+
+
+    # SC32 output (if present) - 16 channels on single connector
+    # SC32 channels 1-4
+    sc32_ch1 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch1")
+    sc32_ch2 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch2")
+    sc32_ch3 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch3")
+    sc32_ch4 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch4")
+    # SC32 channels 5-8
+    sc32_ch5 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch5")
+    sc32_ch6 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch6")
+    sc32_ch7 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch7")
+    sc32_ch8 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch8")
+    # SC32 channels 9-12
+    sc32_ch9 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch9")
+    sc32_ch10 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch10")
+    sc32_ch11 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch11")
+    sc32_ch12 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch12")
+    # SC32 channels 13-16
+    sc32_ch13 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch13")
+    sc32_ch14 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch14")
+    sc32_ch15 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch15")
+    sc32_ch16 = models.CharField(max_length=100, blank=True, verbose_name="SC32 - Ch16")
     
     class Meta:
         verbose_name = "Amplifier Assignment"
