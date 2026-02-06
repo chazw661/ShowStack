@@ -216,84 +216,121 @@ class SoundvisionParser:
         return data
     
     def _parse_cabinet_table(self, text: str) -> List[Dict[str, Any]]:
-        """Parse the cabinet configuration table"""
+        """Parse the cabinet configuration table
+        
+        Handles two PDF extraction formats:
+        1. Columns on same line: "#1 KIVA II 0 32.10 32.03"
+        2. Columns on separate lines: "#1\\nKIVA II\\n0\\n32.10\\n32.03"
+        """
         cabinets = []
         
-        # Check if this is a Panflex table (KARA)
-        has_panflex = 'Panflex' in text or bool(re.search(r'\d+/\d+', text))
+        # Check if this is a Panflex table (KARA) - has pattern like "55/55" or "55/35"
+        has_panflex = bool(re.search(r'\d+/\d+', text))
         
-        if has_panflex:
-            # KARA style with Panflex - always has angle column
-            # Format: #1 KARA II 5 -8.2 24.00 23.02 55/35
-            pattern = r'#(\d+)\s+([A-Z]+(?:\s+[A-Z]+)*)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+(\d+/\d+)'
-            matches = re.finditer(pattern, text)
-            
-            for match in matches:
-                cabinet = {
-                    'position': int(match.group(1)),
-                    'model': match.group(2).strip(),
-                    'angle': float(match.group(3)) if match.group(3) else 0,
-                    'site': float(match.group(4)),
-                    'top_z': float(match.group(5)),
-                    'bottom_z': float(match.group(6)),
-                    'panflex': match.group(7)
-                }
-                cabinets.append(cabinet)
+        # Determine number of columns based on table header
+        # With Panflex: #, Type, Angles, Site, Top Z, Bottom Z, Panflex (7 cols)
+        # Without Panflex but with Angles: #, Type, Angles, Site, Top Z, Bottom Z (6 cols)
+        # Some tables may not have Angles column for first row
+        
+        # Find the table section - starts after header row containing "Type" and "Top Z"
+        table_header_match = re.search(r'#\s*Type.*?Top Z.*?Bottom Z', text, re.DOTALL)
+        if not table_header_match:
             return cabinets
         
-        # Non-Panflex format (KIVA, KS28, SYVA, X8, etc.)
-        # Challenge: First row may have NO angle, subsequent rows have angle
-        # Row 1: #1 KIVA II 0 32.10 32.03 (3 data numbers: site, top_z, bottom_z)
-        # Row 2+: #2 KIVA II 0 0 32.03 31.08 (4 data numbers: angle, site, top_z, bottom_z)
+        # Get text after the header
+        table_start = table_header_match.end()
         
-        # Find all lines starting with # followed by a number
-        lines = text.split('\n')
-        for line in lines:
-            line = line.strip()
+        # Find where table ends (usually "Acoustic configuration" or end of section)
+        table_end_match = re.search(r'(\d+\.\s*\d+\.?\s*Acoustic configuration|Page \d+ of \d+)', text[table_start:])
+        if table_end_match:
+            table_text = text[table_start:table_start + table_end_match.start()]
+        else:
+            table_text = text[table_start:]
+        
+        # Parse cabinet rows by finding #N patterns and collecting subsequent values
+        # Pattern: #1, #2, #3, etc.
+        cabinet_markers = list(re.finditer(r'#(\d+)', table_text))
+        
+        for i, marker in enumerate(cabinet_markers):
+            position = int(marker.group(1))
             
-            # Must start with # and a digit
-            if not re.match(r'^#\d+', line):
+            # Get text from this marker to the next marker (or end)
+            start_pos = marker.end()
+            if i + 1 < len(cabinet_markers):
+                end_pos = cabinet_markers[i + 1].start()
+            else:
+                end_pos = len(table_text)
+            
+            row_text = table_text[start_pos:end_pos]
+            
+            # Extract tokens (split by whitespace/newlines)
+            tokens = row_text.split()
+            
+            if not tokens:
                 continue
             
-            # Skip header rows
-            if 'Type' in line and ('Angles' in line or 'Site' in line):
-                continue
+            # First token(s) should be the model name (e.g., "KIVA", "II" or "KARA", "II" or "KS28")
+            model_parts = []
+            data_start = 0
             
-            # Extract all numbers from the line
-            # Pattern: #position MODEL_NAME numbers...
-            cabinet_match = re.match(r'^#(\d+)\s+([A-Z]+(?:\s+[A-Z]+)*(?:\s+LOW)?)\s+(.*)', line)
-            if not cabinet_match:
-                continue
+            for j, token in enumerate(tokens):
+                # Check if this looks like a number (data value) or model name part
+                if re.match(r'^-?\d+\.?\d*$', token):
+                    # This is a number, model name is complete
+                    data_start = j
+                    break
+                else:
+                    model_parts.append(token)
             
-            position = int(cabinet_match.group(1))
-            model = cabinet_match.group(2).strip()
-            rest = cabinet_match.group(3).strip()
+            model = ' '.join(model_parts)
+            numbers = []
             
-            # Extract numbers from the rest of the line
-            numbers = re.findall(r'[-]?\d+\.?\d*', rest)
+            # Collect numeric values
+            for token in tokens[data_start:]:
+                if re.match(r'^-?\d+\.?\d*$', token):
+                    numbers.append(float(token))
+                elif re.match(r'^\d+/\d+$', token):
+                    # Panflex value - store separately
+                    panflex = token
             
-            if len(numbers) >= 4:
-                # Has angle: angle, site, top_z, bottom_z
-                cabinet = {
-                    'position': position,
-                    'model': model,
-                    'angle': float(numbers[0]),
-                    'site': float(numbers[1]),
-                    'top_z': float(numbers[2]),
-                    'bottom_z': float(numbers[3])
-                }
-                cabinets.append(cabinet)
-            elif len(numbers) == 3:
-                # No angle (first cabinet): site, top_z, bottom_z
-                cabinet = {
-                    'position': position,
-                    'model': model,
-                    'angle': 0,  # First cabinet has no inter-cabinet angle
-                    'site': float(numbers[0]),
-                    'top_z': float(numbers[1]),
-                    'bottom_z': float(numbers[2])
-                }
-                cabinets.append(cabinet)
+            # Determine column mapping based on number count and whether we have Panflex
+            cabinet = {
+                'position': position,
+                'model': model,
+                'angle': 0,
+                'site': 0,
+                'top_z': 0,
+                'bottom_z': 0
+            }
+            
+            if has_panflex:
+                # KARA format: angle, site, top_z, bottom_z, panflex
+                if len(numbers) >= 4:
+                    cabinet['angle'] = numbers[0]
+                    cabinet['site'] = numbers[1]
+                    cabinet['top_z'] = numbers[2]
+                    cabinet['bottom_z'] = numbers[3]
+                    # Look for panflex pattern
+                    panflex_match = re.search(r'(\d+/\d+)', row_text)
+                    if panflex_match:
+                        cabinet['panflex'] = panflex_match.group(1)
+            else:
+                # Non-Panflex format (KIVA, KS28, etc.)
+                # Could be 3 numbers (no angle) or 4 numbers (with angle)
+                if len(numbers) == 3:
+                    # No angle column: site, top_z, bottom_z
+                    cabinet['angle'] = 0
+                    cabinet['site'] = numbers[0]
+                    cabinet['top_z'] = numbers[1]
+                    cabinet['bottom_z'] = numbers[2]
+                elif len(numbers) >= 4:
+                    # Has angle: angle, site, top_z, bottom_z
+                    cabinet['angle'] = numbers[0]
+                    cabinet['site'] = numbers[1]
+                    cabinet['top_z'] = numbers[2]
+                    cabinet['bottom_z'] = numbers[3]
+            
+            cabinets.append(cabinet)
         
         return cabinets
 
