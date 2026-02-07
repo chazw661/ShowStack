@@ -1191,7 +1191,7 @@ class AmpChannel(models.Model):
     """Individual channel within an amplifier"""
     amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
     channel_number = models.IntegerField()
-    channel_name = models.CharField(max_length=100, default="")
+    channel_name = models.CharField(max_length=100, blank=True, default="")
     AVB_CHOICES = [(f'AVB {i}', f'AVB {i}') for i in range(1, 17)]
     AVB_CHOICES.insert(0, ('', '---------'))
     
