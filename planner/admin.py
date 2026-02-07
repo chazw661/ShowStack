@@ -1593,7 +1593,19 @@ class AmpAdmin(BaseEquipmentAdmin):
             fieldsets.append(('NL8 Connectors', {
                 'fields': nl8_fields,
                 'classes': ('collapse',)
-            }))    
+            })) 
+
+        if obj and obj.amp_model and hasattr(obj.amp_model, 'sc32_connector_count') and obj.amp_model.sc32_connector_count > 0:
+            sc32_fields = [
+                'sc32_ch1', 'sc32_ch2', 'sc32_ch3', 'sc32_ch4',
+                'sc32_ch5', 'sc32_ch6', 'sc32_ch7', 'sc32_ch8',
+                'sc32_ch9', 'sc32_ch10', 'sc32_ch11', 'sc32_ch12',
+                'sc32_ch13', 'sc32_ch14', 'sc32_ch15', 'sc32_ch16'
+            ]
+            
+            fieldsets.append(('SC32 Output', {
+                'fields': sc32_fields,
+            }))   
 
         return fieldsets
     
