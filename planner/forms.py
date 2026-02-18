@@ -736,6 +736,7 @@ class P1InputInlineForm(forms.ModelForm):
                 device_queryset = device_queryset.filter(project=project)
 
             for device in device_queryset:
+                opts = []
                 # Filter outputs that have a console connection (using GenericForeignKey)
                 for output in device.outputs.filter(content_type__isnull=False, object_id__isnull=False).order_by('output_number'):
                     # Use signal_name if available, otherwise show output number
