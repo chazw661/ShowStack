@@ -1552,17 +1552,8 @@ class PAZone(models.Model):
         max_length=20, 
         help_text="Short zone code (e.g., HL, HR, FF1)"
     )
-    description = models.CharField(
-        max_length=100,
-        help_text="Full description (e.g., House Left, Front Fill 1)"
-    )
-    location = models.ForeignKey(
-        Location, 
-        on_delete=models.CASCADE, 
-        related_name='pa_zones',
-        blank=True,
-        null=True
-    )
+   
+   
     sort_order = models.PositiveIntegerField(
         default=100,
         help_text="Order in dropdown (lower numbers appear first)"
@@ -1594,36 +1585,35 @@ class PAZone(models.Model):
         unique_together = ['project', 'name']
     
     def __str__(self):
-        return f"{self.name} - {self.description}"
+        return self.name
     
     @classmethod
     def create_default_zones(cls):
         """Create standard L'Acoustics zones - can be called from migration or admin"""
         default_zones = [
-            ('HL', 'House Left', 'MAIN', 10),
-            ('HR', 'House Right', 'MAIN', 20),
-            ('HC', 'House Center', 'MAIN', 30),
-            ('SL', 'Sub Left', 'SUB', 40),
-            ('SR', 'Sub Right', 'SUB', 50),
-            ('SC', 'Sub Center', 'SUB', 60),
-            ('FF', 'Front Fill', 'FILL', 70),
-            ('FF1', 'Front Fill 1', 'FILL', 71),
-            ('FF2', 'Front Fill 2', 'FILL', 72),
-            ('OFL', 'Out Fill Left', 'FILL', 80),
-            ('OFR', 'Out Fill Right', 'FILL', 90),
-            ('D1', 'Delay 1', 'DELAY', 100),
-            ('D2', 'Delay 2', 'DELAY', 110),
-            ('D3', 'Delay 3', 'DELAY', 120),
-            ('LF', 'Lip Fill', 'FILL', 130),
-            ('UB', 'Under Balcony', 'FILL', 140),
-            ('BAL', 'Balcony', 'FILL', 150),
+            ('HL', 'MAIN', 10),
+            ('HR', 'MAIN', 20),
+            ('HC', 'MAIN', 30),
+            ('SL', 'SUB', 40),
+            ('SR', 'SUB', 50),
+            ('SC', 'SUB', 60),
+            ('FF', 'FILL', 70),
+            ('FF1', 'FILL', 71),
+            ('FF2', 'FILL', 72),
+            ('OFL', 'FILL', 80),
+            ('OFR', 'FILL', 90),
+            ('D1', 'DELAY', 100),
+            ('D2', 'DELAY', 110),
+            ('D3', 'DELAY', 120),
+            ('LF', 'FILL', 130),
+            ('UB', 'FILL', 140),
+            ('BAL', 'FILL', 150),
         ]
         
-        for name, desc, zone_type, order in default_zones:
+        for name, zone_type, order in default_zones:
             cls.objects.get_or_create(
                 name=name,
                 defaults={
-                    'description': desc,
                     'zone_type': zone_type,
                     'sort_order': order
                 }

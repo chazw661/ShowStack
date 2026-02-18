@@ -2581,24 +2581,15 @@ class PAFanOutInline(admin.TabularInline):
 
 class PAZoneAdmin(BaseEquipmentAdmin):
     form = PAZoneForm
-    list_display = ['name', 'description', 'zone_type', 'sort_order', 'location']
-    list_filter = ['zone_type', 'location']
-    search_fields = ['name', 'description']
+    list_display = ['name', 'zone_type', 'sort_order']
+    list_filter = ['zone_type']
+    search_fields = ['name']
     list_editable = ['sort_order']
     ordering = ['sort_order', 'name']
     
     actions = ['create_default_zones']
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter location dropdown by current project"""
-        if db_field.name == 'location':
-            if hasattr(request, 'current_project') and request.current_project:
-                kwargs['queryset'] = Location.objects.filter(
-                    project=request.current_project
-                ).order_by('name')
-            else:
-                kwargs['queryset'] = Location.objects.none()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
 
     def get_queryset(self, request):
         """Filter zones by current project"""

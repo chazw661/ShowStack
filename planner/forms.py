@@ -1036,17 +1036,12 @@ PACableFormSet = forms.modelformset_factory(
 class PAZoneForm(forms.ModelForm):
     class Meta:
         model = PAZone
-        fields = ['name', 'description', 'zone_type', 'sort_order', 'location']
+        fields = ['name', 'zone_type', 'sort_order']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'style': 'width: 100px;',
                 'placeholder': 'HL'
-            }),
-            'description': forms.TextInput(attrs={
-                'class': 'form-control',
-                'style': 'width: 200px;',
-                'placeholder': 'House Left'
             }),
             'zone_type': forms.Select(attrs={
                 'class': 'form-control',
@@ -1057,10 +1052,6 @@ class PAZoneForm(forms.ModelForm):
                 'style': 'width: 80px;',
                 'min': '1'
             }),
-            'location': forms.Select(attrs={
-                'class': 'form-control',
-                'style': 'width: 200px;'
-            })
         }
 
 
