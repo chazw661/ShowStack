@@ -725,8 +725,17 @@ class P1InputInlineForm(forms.ModelForm):
             
             # Get all devices that have outputs with console connections
             from .models import Device
-            for device in Device.objects.prefetch_related('outputs').order_by('name'):
-                opts = []
+            # Get the current project from the P1 processor
+            project = None
+            if self.instance and self.instance.pk and self.instance.p1_processor:
+                project = self.instance.p1_processor.system_processor.project
+
+            # Filter devices by project
+            device_queryset = Device.objects.prefetch_related('outputs').order_by('name')
+            if project:
+                device_queryset = device_queryset.filter(project=project)
+
+            for device in device_queryset:
                 # Filter outputs that have a console connection (using GenericForeignKey)
                 for output in device.outputs.filter(content_type__isnull=False, object_id__isnull=False).order_by('output_number'):
                     # Use signal_name if available, otherwise show output number
