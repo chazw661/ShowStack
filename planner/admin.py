@@ -3176,6 +3176,8 @@ def populate_common_positions(modeladmin, request, queryset):
     
     modeladmin.message_user(request, "Common positions populated successfully.")
 
+def has_module_permission(self, request):
+    return False
 
 
 class CommPositionAdmin(BaseEquipmentAdmin):
@@ -3253,7 +3255,8 @@ class CommPositionAdmin(BaseEquipmentAdmin):
             'all': ('admin/css/comm_position_buttons.css',)
         }
     
-    
+def has_module_permission(self, request):
+    return False   
 
 
 # Comm Crew Name Admin
@@ -3334,6 +3337,11 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         css = {
             'all': ('admin/css/comm_crew_name_buttons.css',)
         }
+
+
+def has_module_permission(self, request):
+        return False
+
 
 # Custom form for CommBeltPack with dynamic dropdowns
 
