@@ -2609,9 +2609,23 @@ class PAZoneAdmin(BaseEquipmentAdmin):
         return qs.none()
     
     def save_model(self, request, obj, form, change):
-        """Auto-assign current project"""
+        """Auto-assign current project and handle duplicate names"""
         if not change and hasattr(request, 'current_project') and request.current_project:
             obj.project = request.current_project
+        
+        # Check for duplicate zone name in this project before saving
+        if hasattr(request, 'current_project') and request.current_project:
+            existing = PAZone.objects.filter(
+                project=request.current_project,
+                name=obj.name
+            )
+            if change and obj.pk:
+                existing = existing.exclude(pk=obj.pk)
+            if existing.exists():
+                from django.contrib import messages
+                messages.error(request, f'A zone with the name "{obj.name}" already exists in this project.')
+                return  # Don't save
+        
         super().save_model(request, obj, form, change)
     
     # ... rest of existing code ...
