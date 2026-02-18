@@ -12,59 +12,80 @@
 {% endblock %}
 
 {% block result_list %}
-<div class="comm-summary">
-    <h3>Belt Pack Summary</h3>
+<div class="comm-summary" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap;">
     
-    <div class="system-section wireless-section">
-        <h4>📻 Wireless System</h4>
-        <div class="stats">
-            <span class="stat">
-                <span class="stat-label">Total:</span>
-                <span class="stat-value">{{ wireless_total }}</span>
-            </span>
-            <span class="stat">
-                <span class="stat-label">Checked Out:</span>
-                <span class="stat-value">{{ wireless_checked }}</span>
-            </span>
-            <span class="stat">
-                <span class="stat-label">Available:</span>
-                <span class="stat-value">{{ wireless_available }}</span>
-            </span>
+    <!-- Left side: Belt Pack Summary -->
+    <div style="flex: 1; min-width: 280px;">
+        <h3>Belt Pack Summary</h3>
+        
+        <div class="system-section wireless-section">
+            <h4>📻 Wireless System</h4>
+            <div class="stats">
+                <span class="stat">
+                    <span class="stat-label">Total:</span>
+                    <span class="stat-value">{{ wireless_total }}</span>
+                </span>
+                <span class="stat">
+                    <span class="stat-label">Checked Out:</span>
+                    <span class="stat-value">{{ wireless_checked }}</span>
+                </span>
+                <span class="stat">
+                    <span class="stat-label">Available:</span>
+                    <span class="stat-value">{{ wireless_available }}</span>
+                </span>
+            </div>
+            
+            {% if wireless_groups %}
+            <div class="group-stats">
+                <span class="stat-label">By Group:</span>
+                {% for group, count in wireless_groups.items %}
+                <span class="stat mini">
+                    <span class="stat-label">{{ group }}:</span>
+                    <span class="stat-value">{{ count }}</span>
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
         
-        {% if wireless_groups %}
-        <div class="group-stats">
-            <span class="stat-label">By Group:</span>
-            {% for group, count in wireless_groups.items %}
-            <span class="stat mini">
-                <span class="stat-label">{{ group }}:</span>
-                <span class="stat-value">{{ count }}</span>
-            </span>
-            {% endfor %}
+        <div class="system-section hardwired-section">
+            <h4>🔌 Hardwired System</h4>
+            <div class="stats">
+                <span class="stat">
+                    <span class="stat-label">Total:</span>
+                    <span class="stat-value">{{ hardwired_total }}</span>
+                </span>
+            </div>
+            
+            {% if hardwired_groups %}
+            <div class="group-stats">
+                <span class="stat-label">By Group:</span>
+                {% for group, count in hardwired_groups.items %}
+                <span class="stat mini">
+                    <span class="stat-label">{{ group }}:</span>
+                    <span class="stat-value">{{ count }}</span>
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
-    
-    <div class="system-section hardwired-section">
-    <h4>🔌 Hardwired System</h4>
-    <div class="stats">
-        <span class="stat">
-            <span class="stat-label">Total:</span>
-            <span class="stat-value">{{ hardwired_total }}</span>
-        </span>
-    </div>
-    
-        {% if hardwired_groups %}
-        <div class="group-stats">
-            <span class="stat-label">By Group:</span>
-            {% for group, count in hardwired_groups.items %}
-            <span class="stat mini">
-                <span class="stat-label">{{ group }}:</span>
-                <span class="stat-value">{{ count }}</span>
-            </span>
-            {% endfor %}
-        </div>
-        {% endif %}
+
+    <!-- Right side: Quick Links -->
+    <div style="display: flex; flex-direction: column; gap: 12px; min-width: 200px;">
+        <h3 style="margin: 0 0 4px 0; font-size: 13px; text-transform: uppercase; color: #888; letter-spacing: 1px;">Manage</h3>
+        <a href="../commposition/" class="comm-nav-btn">
+            <span class="comm-nav-icon">📋</span>
+            <span class="comm-nav-label">Positions</span>
+        </a>
+        <a href="../commcrewname/" class="comm-nav-btn">
+            <span class="comm-nav-icon">👤</span>
+            <span class="comm-nav-label">Crew Names</span>
+        </a>
+        <a href="../commchannel/" class="comm-nav-btn">
+            <span class="comm-nav-icon">📡</span>
+            <span class="comm-nav-label">Channels</span>
+        </a>
     </div>
 </div>
 
@@ -74,6 +95,42 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
+/* Comm Navigation Buttons */
+.comm-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, #1a2a3a 0%, #243447 100%);
+    border: 1px solid #3a5068;
+    border-radius: 8px;
+    color: #e0e0e0;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    min-width: 180px;
+}
+
+.comm-nav-btn:hover {
+    background: linear-gradient(135deg, #243447 0%, #2d4a63 100%);
+    border-color: #4a9eff;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.15);
+}
+
+.comm-nav-icon {
+    font-size: 18px;
+    width: 28px;
+    text-align: center;
+}
+
+.comm-nav-label {
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
 /* Collapsible group headers */
 .system-group-header {
     background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
