@@ -86,9 +86,7 @@ class ShowStackAdminSite(admin.AdminSite):
             
             # Communications (11-14)
             'commbeltpack': 11,
-            'commposition': 12,
-            'commcrewname': 13,
-            'commchannel': 14,
+           
             
             # Show Mic Tracker (15-19)
             'showday': 15,  # Show Mic Tracker - PARENT
@@ -137,6 +135,9 @@ class ShowStackAdminSite(admin.AdminSite):
                     auth_order = {'user': 0, 'group': 1, 'userprofile': 2}.get(model_name, 999)
                     auth_models.append((auth_order, model))
                 else:
+                    # Skip models that are accessible via parent page buttons
+                    if model_name in ('commposition', 'commcrewname', 'commchannel'):
+                        continue
                     order = order_map.get(model_name, 999)
                     other_models.append((order, model))
         
