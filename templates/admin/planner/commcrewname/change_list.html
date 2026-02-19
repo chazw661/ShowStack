@@ -1,10 +1,5 @@
 {% extends "admin/change_list.html" %}
 {% block object-tools-items %}
-    <li>
-        <a href="../commbeltpack/" class="viewlink" style="background: linear-gradient(135deg, #1a2a3a, #243447); border: 1px solid #3a5068; border-radius: 6px; padding: 6px 14px; color: #e0e0e0; font-weight: 500; transition: all 0.2s ease;">
-            ← Belt Packs
-        </a>
-    </li>
     <!-- Import CSV Button -->
     <li>
         <a href="{% url 'planner:import_comm_crew_names_csv' %}" class="addlink">
@@ -12,4 +7,9 @@
         </a>
     </li>
     {{ block.super }}
+    <li>
+        <a href="../commbeltpack/" class="viewlink" style="background: linear-gradient(135deg, #1a2a3a, #243447); border: 1px solid #3a5068; border-radius: 6px; padding: 6px 14px; color: #e0e0e0; font-weight: 500; transition: all 0.2s ease;">
+            ← Belt Packs
+        </a>
+    </li>
 {% endblock %}
