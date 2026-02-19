@@ -234,17 +234,20 @@ def generate_pa_cable_pdf(queryset):
                 ext_qty = fan_out.quantity
                 
                 length_label = f"{ext_length}'"
-                safe_qty = math.ceil(ext_qty * 1.2)
-                
                 # Check if this cable+length already exists in quick_order_data
                 found = False
                 for row in quick_order_data[1:]:  # Skip header
                     if row[0] == cable_name and row[1] == length_label:
-                        row[2] = str(int(row[2]) + safe_qty)
+                        # Recalculate: add raw ext_qty to pre-safety total, reapply safety
+                        current_safe = int(row[2])
+                        # Reverse the 20% to get raw, add extension, reapply
+                        raw_estimate = round(current_safe / 1.2)
+                        new_total = raw_estimate + ext_qty
+                        row[2] = str(math.ceil(new_total * 1.2))
                         found = True
                         break
                 if not found:
-                    quick_order_data.append([cable_name, length_label, str(safe_qty)])            
+                    quick_order_data.append([cable_name, length_label, str(math.ceil(ext_qty * 1.2))])          
     
     # Add fan outs to Quick Order List
     fan_out_summary = {}
