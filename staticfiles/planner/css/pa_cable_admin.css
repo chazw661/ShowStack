@@ -23,18 +23,11 @@
 
 /* FIX: Summary table container - force dark background */
 .pa-cable-summary,
-div[style*="background-color: #f9f9f9"],
-div[style*="background"] {
+div[style*="background-color: #f9f9f9"] {
     background: #2a2a2a !important;
     border: 1px solid #417690 !important;
     padding: 15px;
     margin: 20px 0;
-}
-
-/* FIX: Summary table itself - dark background */
-.pa-cable-summary table,
-table[style*="border-collapse"] {
-    background: #1e1e1e !important;
 }
 
 /* FIX: All cells in summary table - light text on dark */
