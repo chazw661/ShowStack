@@ -3846,32 +3846,22 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     manufacturer_display.admin_order_field = 'manufacturer'
 
     def channel_summary(self, obj):
-        """Display summary of assigned channels with visual badges (3 per row)"""
+        """Display summary of assigned channels with clickable badges"""
         from django.utils.safestring import mark_safe
         
         channels = obj.channels.all()
         if not channels:
             return mark_safe('<span style="color: #666;">No channels</span>')
         
-        # Initialize badges list
         badges = []
-        
-        # Create visual badges for each channel
-        for ch in channels[:12]:  # Show first 12
+        for ch in channels[:12]:
             if ch.channel:
-                # Get channel info
-                ch_num = ch.channel_number
                 ch_abbrev = ch.channel.abbreviation if hasattr(ch.channel, 'abbreviation') and ch.channel.abbreviation else ch.channel.name[:4]
-                
-                # Create a colored badge
-                badge = f'''<span style="display: inline-block; background: #14b8a6; color: #000; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; font-weight: 500; white-space: nowrap; min-width: 75px; text-align: center;">{ch_num}: {ch_abbrev}</span>'''
-                badges.append(badge)
+                badge = f'''<span class="ch-badge assigned" data-bpc-id="{ch.id}" data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" style="display: inline-block; background: #14b8a6; color: #000; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; font-weight: 500; white-space: nowrap; min-width: 75px; text-align: center; cursor: pointer;">{ch.channel_number}: {ch_abbrev}</span>'''
             else:
-                # Empty channel badge
-                badge = f'''<span style="display: inline-block; background: #333; color: #666; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; white-space: nowrap; min-width: 75px; text-align: center;">{ch.channel_number}: —</span>'''
-                badges.append(badge)
+                badge = f'''<span class="ch-badge unassigned" data-bpc-id="{ch.id}" data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" style="display: inline-block; background: #333; color: #666; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; white-space: nowrap; min-width: 75px; text-align: center; cursor: pointer;">{ch.channel_number}: —</span>'''
+            badges.append(badge)
         
-        # Wrap in a container that displays 3 per row
         result = f'''<div style="display: grid; grid-template-columns: repeat(4, auto); gap: 3px; max-width: 380px; justify-items: start;">{''.join(badges)}</div>'''
         
         if channels.count() > 12:
@@ -4042,6 +4032,69 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         
         return base_fieldsets
     
+
+    def get_urls(self):
+        """Add custom AJAX URL for channel assignment"""
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('assign-channel/', self.admin_site.admin_view(self.assign_channel_view), name='commbeltpack_assign_channel'),
+            path('get-channels/', self.admin_site.admin_view(self.get_channels_view), name='commbeltpack_get_channels'),
+        ]
+        return custom_urls + urls
+
+    def get_channels_view(self, request):
+        """Return available channels as JSON for the popup"""
+        import json
+        from django.http import JsonResponse
+        
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'channels': []})
+        
+        channels = CommChannel.objects.filter(project=current_project).order_by('order', 'name')
+        channel_list = [{'id': ch.id, 'name': str(ch), 'abbreviation': ch.abbreviation} for ch in channels]
+        return JsonResponse({'channels': channel_list})
+
+    def assign_channel_view(self, request):
+        """AJAX endpoint to assign a channel to a belt pack channel slot"""
+        import json
+        from django.http import JsonResponse
+        
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=405)
+        
+        try:
+            data = json.loads(request.body)
+            beltpack_channel_id = data.get('beltpack_channel_id')
+            channel_id = data.get('channel_id')  # None means unassign
+            
+            bp_channel = CommBeltPackChannel.objects.get(id=beltpack_channel_id)
+            
+            # Verify project access
+            current_project = getattr(request, 'current_project', None)
+            if bp_channel.beltpack.project != current_project:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+            
+            if channel_id:
+                channel = CommChannel.objects.get(id=channel_id, project=current_project)
+                bp_channel.channel = channel
+                bp_channel.save()
+                return JsonResponse({
+                    'success': True,
+                    'abbreviation': channel.abbreviation,
+                    'channel_number': bp_channel.channel_number
+                })
+            else:
+                bp_channel.channel = None
+                bp_channel.save()
+                return JsonResponse({
+                    'success': True,
+                    'abbreviation': None,
+                    'channel_number': bp_channel.channel_number
+                })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
     def changelist_view(self, request, extra_context=None):
         """Add summary information grouped by system type"""
