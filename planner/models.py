@@ -1793,8 +1793,13 @@ class PACableSchedule(models.Model):
         fan_outs = self.fan_outs.all()
         if not fan_outs:
             return ""
-        return ", ".join([f"{fo.get_fan_out_type_display()} x{fo.quantity}" 
-                        for fo in fan_outs])
+        parts = []
+        for fo in fan_outs:
+            text = f"{fo.get_fan_out_type_display()} x{fo.quantity}"
+            if fo.extension_cable and fo.extension_length:
+                text += f", +{fo.extension_cable} {fo.extension_length}' x{fo.quantity}"
+            parts.append(text)
+        return ", ".join(parts)
     
     @property
     def total_cable_length(self):
@@ -1842,7 +1847,35 @@ class PAFanOut(models.Model):
                 default=1,
                 validators=[MinValueValidator(1)]
             )
+
+            EXTENSION_CABLE_CHOICES = [
+        ('', 'None'),
+        ('NL4', 'NL4'),
+        ('NL8', 'NL8'),
+    ]
+    
+            EXTENSION_LENGTH_CHOICES = [
+                (0, 'None'),
+                (6, "6'"),
+                (25, "25'"),
+                (50, "50'"),
+                (100, "100'"),
+                (150, "150'"),
+            ]
             
+            extension_cable = models.CharField(
+                max_length=10,
+                choices=EXTENSION_CABLE_CHOICES,
+                blank=True,
+                default='',
+                verbose_name="Extension Cable"
+            )
+            extension_length = models.IntegerField(
+                choices=EXTENSION_LENGTH_CHOICES,
+                default=0,
+                verbose_name="Extension Length"
+            )
+                    
             class Meta:
                 verbose_name = "PA Fan Out"
                 verbose_name_plural = "PA Fan Outs"
@@ -1850,7 +1883,10 @@ class PAFanOut(models.Model):
                      
             
             def __str__(self):
-                return f"{self.get_fan_out_type_display()} x{self.quantity}"
+                result = f"{self.get_fan_out_type_display()} x{self.quantity}"
+                if self.extension_cable and self.extension_length:
+                    result += f" +{self.extension_cable} {self.extension_length}'"
+                return result
             
 
 

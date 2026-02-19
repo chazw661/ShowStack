@@ -271,6 +271,16 @@
                     </tr>
                     {% endfor %}
                 {% endif %}
+
+                {% if extension_summary %}
+                    {% for ext_type, data in extension_summary.items %}
+                    <tr style="background: #2a2a3a;">
+                        <td style="padding: 8px; border: 1px solid #333; color: #e0a040; font-weight: bold;">{{ ext_type }} (Extension)</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">Extension</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
             </tbody>
         </table>
         

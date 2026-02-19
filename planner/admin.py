@@ -2561,7 +2561,7 @@ class PAFanOutInline(admin.TabularInline):
         """Inline for managing multiple fan outs per cable run"""
         model = PAFanOut
         extra = 1
-        fields = ['fan_out_type', 'quantity']
+        fields = ['fan_out_type', 'quantity', 'extension_cable', 'extension_length']
         
         def get_formset(self, request, obj=None, **kwargs):
             formset = super().get_formset(request, obj, **kwargs)
@@ -2663,7 +2663,7 @@ class PAFanOutInline(admin.TabularInline):
     """Inline for managing multiple fan outs per cable run"""
     model = PAFanOut
     extra = 1
-    fields = ['fan_out_type', 'quantity']
+    fields = ['fan_out_type', 'quantity', 'extension_cable', 'extension_length']
     
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
@@ -2844,6 +2844,8 @@ class PACableAdmin(BaseEquipmentAdmin):
         
         # Calculate fan out totals with 20% overage
         fan_out_summary = {}
+        extension_cables = {}  # Track extension cables separately
+        
         for cable in qs.prefetch_related('fan_outs'):
             for fan_out in cable.fan_outs.all():
                 if fan_out.fan_out_type:
@@ -2854,15 +2856,30 @@ class PACableAdmin(BaseEquipmentAdmin):
                             'with_overage': 0
                         }
                     fan_out_summary[fan_out_name]['total_quantity'] += fan_out.quantity
+                
+                # Track extension cables
+                if fan_out.extension_cable and fan_out.extension_length:
+                    ext_key = f"{fan_out.extension_cable} {fan_out.extension_length}'"
+                    if ext_key not in extension_cables:
+                        extension_cables[ext_key] = 0
+                    extension_cables[ext_key] += fan_out.quantity
         
         # Calculate 20% overage for each fan out type
         for fan_out_type in fan_out_summary:
             total = fan_out_summary[fan_out_type]['total_quantity']
             fan_out_summary[fan_out_type]['with_overage'] = math.ceil(total * 1.2)
         
-        # Add to context
+        # Add extension cables to context
+        extension_summary = {}
+        for ext_key, qty in extension_cables.items():
+            extension_summary[ext_key] = {
+                'total_quantity': qty,
+                'with_overage': math.ceil(qty * 1.2)
+            }
+        
         response.context_data['cable_summary'] = cable_summary
         response.context_data['fan_out_summary'] = fan_out_summary
+        response.context_data['extension_summary'] = extension_summary
         response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
         
         return response
