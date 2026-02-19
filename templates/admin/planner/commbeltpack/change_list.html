@@ -345,8 +345,9 @@ django.jQuery(document).ready(function($) {
                     alert('Error: ' + (data.error || 'Unknown error'));
                 }
             },
+            
             error: function(xhr) {
-                alert('Error saving channel assignment');
+                alert('Error ' + xhr.status + ': ' + xhr.responseText.substring(0, 200));
             }
         });
     });
