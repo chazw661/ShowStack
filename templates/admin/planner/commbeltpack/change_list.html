@@ -294,13 +294,13 @@ django.jQuery(document).ready(function($) {
             for (var i = 0; i < channels.length; i++) {
                 var ch = channels[i];
                 var isActive = (currentText.trim() === ch.abbreviation) ? ' active' : '';
-                html += '<button class="ch-popup-option' + isActive + '" data-channel-id="' + ch.id + '">' + 
+                html += '<button type="button" class="ch-popup-option' + isActive + '" data-channel-id="' + ch.id + '">' +
                     '<strong>' + ch.abbreviation + '</strong> &mdash; ' + ch.name + 
                     '</button>';
             }
             
             // Add unassign option
-            html += '<button class="ch-popup-unassign" data-channel-id="">✕ Unassign Channel</button>';
+            html += '<button type="button" class="ch-popup-unassign" data-channel-id="">✕ Unassign Channel</button>';
             
             $popupList.html(html);
         });
