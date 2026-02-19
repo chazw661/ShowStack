@@ -1007,11 +1007,12 @@ class PACableInlineForm(forms.ModelForm):
     
     class Meta:
         model = PACableSchedule
-        fields = [
-            'label', 'destination', 'count', 'cable', 
-            'notes', 'drawing_ref'
-        ]
-    
+        fields = '__all__'
+        widgets = {
+            'color': forms.TextInput(attrs={'type': 'color', 'value': '#FFFFFF'}),
+        }
+
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         

@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<form method="post">
+    {% csrf_token %}
+    <p>Select a color for the selected items:</p>
+    <input type="color" name="color" value="#3498db" style="width:60px; height:40px; cursor:pointer;">
+    <br><br>
+    {% for cable in queryset %}
+        <input type="hidden" name="_selected_action" value="{{ cable.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="assign_color">
+    <input type="hidden" name="apply" value="true">
+    <button type="submit" class="button" style="background:#14b8a6; color:#000; padding:8px 20px; border:none; border-radius:4px; cursor:pointer;">Apply Color</button>
+    <a href="../" style="margin-left:10px; color:#aaa;">Cancel</a>
+</form>
+{% endblock %}

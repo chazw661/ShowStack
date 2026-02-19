@@ -1717,7 +1717,13 @@ class PACableSchedule(models.Model):
     from_location = models.CharField(max_length=50, default="AMP RACK", editable=False)
     to_location = models.CharField(max_length=50, blank=True, editable=False)
     amp_location = models.ForeignKey(Location, on_delete=models.SET_NULL, blank=True, null=True, editable=False)
-    
+    color = models.CharField(
+        max_length=7,
+        blank=True,
+        null=True,
+        default='',
+        help_text="Row background color (hex code)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

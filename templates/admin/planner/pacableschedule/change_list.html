@@ -45,6 +45,16 @@
             transform: translateY(-1px) !important;
         }
     </style>
+    <script>
+    django.jQuery(document).ready(function($) {
+        $('#result_list tbody tr').each(function() {
+            var $colorDiv = $(this).find('[data-cable-color]');
+            if ($colorDiv.length && $colorDiv.data('cable-color')) {
+                $(this).css('background-color', $colorDiv.data('cable-color') + '33');
+            }
+        });
+    });
+    </script>
 {% endblock %}
 
 {% block object-tools-items %}

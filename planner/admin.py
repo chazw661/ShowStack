@@ -2547,9 +2547,9 @@ class PACableInline(admin.TabularInline):
     form = PACableInlineForm
     extra = 5
     fields = [
-        'label', 'destination', 'count', 'cable', 
-        'count2', 'fan_out', 'notes', 'drawing_ref'
-    ]
+            'label', 'destination', 'count', 'length', 'cable', 
+            'notes', 'drawing_ref', 'color'
+        ]
     
     class Media:
         css = {
@@ -2684,7 +2684,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     list_display = [
     'label','destination', 'count', 'length',
     'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
-    'notes', 'drawing_ref'
+    'notes', 'drawing_ref','color_display'
 ]
     list_filter = ['cable']
     search_fields = ['destination', 'notes', 'drawing_ref']
@@ -2694,7 +2694,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     fieldsets = (
         ('Cable Configuration', {
-            'fields': ('label','destination', 'count', 'length' , 'cable')
+            'fields': ('label','destination', 'count', 'length' , 'cable','color')
         }),
       
         
@@ -2703,7 +2703,38 @@ class PACableAdmin(BaseEquipmentAdmin):
         })
     )
     
-    actions = ['export_cable_schedule']
+    actions = ['export_cable_schedule','assign_color']
+
+
+    
+
+
+    def color_display(self, obj):
+        """Show a small color preview in the list"""
+        if obj.color:
+            return format_html(
+                '<div style="width: 30px; height: 20px; background-color: {}; border: 1px solid #000;"></div>',
+                obj.color
+            )
+        return '-'
+    color_display.short_description = 'Color'
+
+    def assign_color(self, request, queryset):
+        """Bulk assign color to selected cables"""
+        if 'apply' in request.POST:
+            color = request.POST.get('color')
+            if color:
+                count = queryset.update(color=color)
+                self.message_user(request, f'Color assigned to {count} cable(s).')
+                return None
+        
+        from django.template.response import TemplateResponse
+        return TemplateResponse(request, 'admin/planner/assign_color.html', {
+            'cables': queryset,
+            'action_checkbox_name': 'ACTION_CHECKBOX_NAME',
+            'queryset': queryset,
+        })
+    assign_color.short_description = 'Assign color to selected cables'
 
 
 
