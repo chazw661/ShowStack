@@ -8,19 +8,17 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from io import BytesIO
 import math
-from django.db.models import Sum
 
 try:
     from .pdf_styles import PDFStyles, LANDSCAPE_PAGE, MARGIN, BRAND_BLUE, DARK_GRAY
 except ImportError:
-    # Fallback values if pdf_styles doesn't exist
     MARGIN = 0.5 * inch
     BRAND_BLUE = colors.HexColor('#4a9eff')
     DARK_GRAY = colors.HexColor('#333333')
 
 
 def generate_pa_cable_pdf(queryset):
-    """Generate PDF for PA Cable Schedule with cable runs and ordering summary."""
+    """Generate PDF for PA Cable Schedule matching the admin list view layout."""
     
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -32,10 +30,8 @@ def generate_pa_cable_pdf(queryset):
         bottomMargin=MARGIN + 0.3*inch,
     )
     
-    # Create styles
     styles = getSampleStyleSheet()
     
-    # Title style
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
@@ -46,7 +42,6 @@ def generate_pa_cable_pdf(queryset):
         fontName='Helvetica-Bold'
     )
     
-    # Section header style
     section_style = ParagraphStyle(
         'CustomSection',
         parent=styles['Heading2'],
@@ -56,117 +51,128 @@ def generate_pa_cable_pdf(queryset):
         fontName='Helvetica-Bold'
     )
     
-    # Table style
-    table_style = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # First column left-aligned
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('GRID', (0, 0), (-1, -1), 0.5, DARK_GRAY),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    ])
+    cell_style = ParagraphStyle(
+        'CellStyle',
+        parent=styles['Normal'],
+        fontSize=7,
+        leading=9,
+        fontName='Helvetica'
+    )
+    
+    cell_style_bold = ParagraphStyle(
+        'CellStyleBold',
+        parent=styles['Normal'],
+        fontSize=7,
+        leading=9,
+        fontName='Helvetica-Bold'
+    )
+    
+    note_style = ParagraphStyle(
+        'Note',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#666666'),
+        fontName='Helvetica-Oblique'
+    )
     
     elements = []
     
-    # Title
+    # ==================== CABLE LIST ====================
     title = Paragraph("PA CABLE SCHEDULE", title_style)
     elements.append(title)
     elements.append(Spacer(1, 0.2*inch))
     
-    # Cable Runs Section
     if queryset.exists():
-        # Section header
-        header = Paragraph("Cable Runs", section_style)
-        elements.append(header)
-        elements.append(Spacer(1, 0.1*inch))
+        # Header row matching admin list view
+        data = [['LABEL', 'DESTINATION', 'COUNT', 'LENGTH', 'CABLE', 'FAN OUTS', 'NOTES', 'DWG REF', 'COLOR']]
         
-        # Cell style for wrapping text
-        cell_style = ParagraphStyle(
-            'CellStyle',
-            parent=styles['Normal'],
-            fontSize=8,
-            leading=10,
-            fontName='Helvetica'
-        )
+        # Track colors for row styling
+        row_colors = [None]  # None for header row
         
-        # Table data
-        data = [['LABEL', 'DESTINATION', 'COUNT', 'LENGTH', 'CABLE TYPE', 'NOTES']]
-        
-        for cable in queryset:
-            # Convert label (PAZone ForeignKey) to string
-            label_text = str(cable.label) if cable.label else ''
+        for cable in queryset.prefetch_related('fan_outs'):
+            label_text = str(cable.label) if cable.label else '-'
+            destination = cable.destination or '-'
+            count = str(cable.count) if cable.count else '1'
+            length = f"{cable.length}'" if cable.length else '-'
+            cable_type = cable.get_cable_display() if cable.cable else '-'
+            fan_out = cable.fan_out_summary or '-'
+            notes = cable.notes or '-'
+            drawing_ref = cable.drawing_ref or '-'
             
             data.append([
-                Paragraph(label_text, cell_style),
-                Paragraph(cable.destination or '', cell_style),
-                str(cable.count) if cable.count else '',
-                f"{cable.length}'" if cable.length else '',
-                cable.get_cable_display() if cable.cable else '',
-                Paragraph(cable.notes or '', cell_style),
+                Paragraph(label_text, cell_style_bold),
+                Paragraph(destination, cell_style),
+                count,
+                length,
+                cable_type,
+                Paragraph(fan_out, cell_style),
+                Paragraph(notes, cell_style),
+                Paragraph(drawing_ref, cell_style),
+                '',  # Color column - filled by cell background
             ])
+            
+            row_colors.append(cable.color if cable.color else None)
         
-        # Create table
-        col_widths = [2.2*inch, 1.8*inch, 0.5*inch, 0.6*inch, 1.0*inch, 2.4*inch]
+        # Column widths matching admin layout proportions
+        col_widths = [1.1*inch, 1.3*inch, 0.5*inch, 0.6*inch, 0.8*inch, 1.4*inch, 2.2*inch, 0.7*inch, 0.4*inch]
+        
         t = Table(data, colWidths=col_widths, repeatRows=1)
-        t.setStyle(table_style)
         
+        # Base table style
+        style_commands = [
+            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),   # Label left
+            ('ALIGN', (1, 1), (1, -1), 'LEFT'),   # Destination left
+            ('ALIGN', (5, 1), (5, -1), 'LEFT'),   # Fan outs left
+            ('ALIGN', (6, 1), (6, -1), 'LEFT'),   # Notes left
+            ('ALIGN', (7, 1), (7, -1), 'LEFT'),   # Drawing ref left
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, DARK_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            # Alternating row colors
+        ]
+        
+        # Add alternating row backgrounds and color column fills
+        for i in range(1, len(data)):
+            # Alternating base color
+            if i % 2 == 0:
+                style_commands.append(('BACKGROUND', (0, i), (-2, i), colors.HexColor('#f5f5f5')))
+            else:
+                style_commands.append(('BACKGROUND', (0, i), (-2, i), colors.white))
+            
+            # Color swatch in last column
+            if row_colors[i]:
+                try:
+                    style_commands.append(('BACKGROUND', (-1, i), (-1, i), colors.HexColor(row_colors[i])))
+                except ValueError:
+                    pass
+        
+        t.setStyle(TableStyle(style_commands))
         elements.append(t)
-        elements.append(Spacer(1, 0.2*inch))
-        
-        # Fan Outs section (if any exist)
-        fan_outs_exist = False
-        for cable in queryset:
-            if cable.fan_outs.exists():
-                fan_outs_exist = True
-                break
-        
-        if fan_outs_exist:
-            header = Paragraph("Fan Outs by Cable", section_style)
-            elements.append(header)
-            elements.append(Spacer(1, 0.1*inch))
-            
-            fan_data = [['CABLE', 'FAN OUT TYPE', 'QUANTITY']]
-            
-            for cable in queryset:
-                for fan_out in cable.fan_outs.all():
-                    label_text = str(cable.label) if cable.label else f"Cable #{cable.id}"
-                    fan_data.append([
-                        label_text,
-                        fan_out.get_fan_out_type_display(),
-                        str(fan_out.quantity),
-                    ])
-            
-            fan_col_widths = [2*inch, 2*inch, 1*inch]
-            ft = Table(fan_data, colWidths=fan_col_widths, repeatRows=1)
-            ft.setStyle(table_style)
-            
-            elements.append(ft)
     
-    # Page break before Quick Order List
-    elements.append(PageBreak())
+    # ==================== QUICK ORDER LIST ====================
+    elements.append(Spacer(1, 0.4*inch))
     
-    # Quick Order List Section
-    header = Paragraph("QUICK ORDER LIST", title_style)
+    header = Paragraph("QUICK ORDER LIST", section_style)
     elements.append(header)
-    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Spacer(1, 0.1*inch))
     
-    # Calculate cable summary using the same logic as changelist_view
-    from planner.models import PACableSchedule
-    
-    # Build Quick Order List data (simple 3-column format matching web page)
     quick_order_data = [['ITEM TYPE', 'LENGTH', 'ORDER QTY']]
     
-    # Process cables by type
+    from planner.models import PACableSchedule
+    
     for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
         cables = queryset.filter(cable=cable_type[0])
         if cables.exists():
-            # Calculate cables needed at each standard length
             hundreds = 0
             fifties = 0
             twenty_fives = 0
@@ -196,16 +202,14 @@ def generate_pa_cable_pdf(queryset):
                             fives += 1
                             remaining -= 5
             
-            # Apply 20% safety margin
             hundreds_safe = math.ceil(hundreds * 1.2) if hundreds > 0 else 0
             fifties_safe = math.ceil(fifties * 1.2) if fifties > 0 else 0
             twenty_fives_safe = math.ceil(twenty_fives * 1.2) if twenty_fives > 0 else 0
             tens_safe = math.ceil(tens * 1.2) if tens > 0 else 0
             fives_safe = math.ceil(fives * 1.2) if fives > 0 else 0
             
-            cable_name = cable_type[1]  # Display name
+            cable_name = cable_type[1]
             
-            # Add rows for each length that has quantities
             if hundreds_safe > 0:
                 quick_order_data.append([cable_name, "100'", str(hundreds_safe)])
             if fifties_safe > 0:
@@ -226,28 +230,45 @@ def generate_pa_cable_pdf(queryset):
                 fan_out_summary[fan_out_name] = 0
             fan_out_summary[fan_out_name] += fan_out.quantity
     
-    # Add fan outs with 20% safety
     for fan_out_type, total_qty in fan_out_summary.items():
         qty_with_safety = math.ceil(total_qty * 1.2)
         quick_order_data.append([fan_out_type, "Fan Out", str(qty_with_safety)])
     
-    # Create table if we have data
     if len(quick_order_data) > 1:
+        # Quick order table style
+        qo_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, DARK_GRAY),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            # Green highlight for order qty column
+            ('BACKGROUND', (2, 1), (2, -1), colors.HexColor('#e8f5e9')),
+            ('TEXTCOLOR', (2, 1), (2, -1), colors.HexColor('#2e7d32')),
+            ('FONTNAME', (2, 1), (2, -1), 'Helvetica-Bold'),
+        ])
+        
+        # Alternating rows
+        for i in range(1, len(quick_order_data)):
+            if i % 2 == 0:
+                qo_style.add('BACKGROUND', (0, i), (1, i), colors.HexColor('#f5f5f5'))
+            else:
+                qo_style.add('BACKGROUND', (0, i), (1, i), colors.white)
+        
         col_widths = [3*inch, 1.5*inch, 1.5*inch]
         qt = Table(quick_order_data, colWidths=col_widths, repeatRows=1)
-        qt.setStyle(table_style)
+        qt.setStyle(qo_style)
         
         elements.append(qt)
         elements.append(Spacer(1, 0.3*inch))
     
-    # Add note about safety margin
-    note_style = ParagraphStyle(
-        'Note',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=colors.HexColor('#666666'),
-        fontName='Helvetica-Oblique'
-    )
     note = Paragraph(
         "<i>Note: All quantities include a 20% safety margin for temporary installations.</i>",
         note_style
