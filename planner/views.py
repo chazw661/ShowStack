@@ -911,12 +911,21 @@ def update_mic_assignment(request):
             
         elif field == 'notes':
             assignment.notes = value
-            
+
+        elif field == 'presenter_id':
+            if value:
+                presenter = Presenter.objects.get(id=int(value))
+                assignment.presenter = presenter
+            else:
+                assignment.presenter = None
+                
         else:
             return JsonResponse({
                 'success': False,
                 'error': f'Unknown field: {field}'
-            }, status=400)
+            }, status=400)    
+            
+       
         
         assignment.save()
         

@@ -198,6 +198,7 @@
     .type-GOOSENECK { background: rgba(255,152,0,0.12);   color: #ff9800; }  .type-GOOSENECK .type-dot { background: #ff9800; }
     .type-COMBO     { background: rgba(233,30,99,0.12);   color: #e91e63; }  .type-COMBO    .type-dot { background: #e91e63; }
     .type-empty     { background: var(--bg-raised);       color: var(--text-dim); }  .type-empty .type-dot { background: var(--text-dim); }
+    .type-INSTRUMENT { background: rgba(0,230,118,0.12); color: #00e676; } .type-INSTRUMENT .type-dot { background: #00e676; }
 
     .a1-presenter-primary { font-size: 15px; font-weight: 600; color: var(--text-primary); }
     .a1-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
@@ -550,6 +551,9 @@
                                 </button>
                             </div>
 
+
+                            
+
                             <div class="a2-presenter-block">
                                 <div class="a2-photo-zone" onclick="{% if not is_viewer %}triggerPhotoUpload({{ assignment.id }}){% endif %}">
                                     {% if assignment.photo %}
@@ -581,6 +585,18 @@
 <div class="presenter-dropdown" id="presenter-dd-{{ assignment.id }}"></div>
                                     </div>
                                     <div class="a2-settings-row">
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Type</span>
+                                            <select class="a2-select" onchange="updateMicType({{ assignment.id }}, this.value)" {% if is_viewer %}disabled{% endif %}>
+                                                <option value="">— select —</option>
+                                                <option value="HH"        {% if assignment.mic_type == 'HH'        %}selected{% endif %}>Handheld</option>
+                                                <option value="LAV"       {% if assignment.mic_type == 'LAV'       %}selected{% endif %}>Lav</option>
+                                                <option value="HEADSET"   {% if assignment.mic_type == 'HEADSET'   %}selected{% endif %}>Headset</option>
+                                                <option value="PODIUM"    {% if assignment.mic_type == 'PODIUM'    %}selected{% endif %}>Podium</option>
+                                                <option value="BOOM"      {% if assignment.mic_type == 'BOOM'      %}selected{% endif %}>Boom</option>
+                                                <option value="INSTRUMENT"{% if assignment.mic_type == 'INSTRUMENT'%}selected{% endif %}>Instrument</option>
+                                            </select>
+                                        </div>
                                         <div class="a2-setting">
                                             <span class="a2-setting-label">Placement</span>
                                             <select class="a2-select" onchange="updateField({{ assignment.id }}, 'placement', this.value)" {% if is_viewer %}disabled{% endif %}>
@@ -776,6 +792,31 @@ function toggleMicd(assignmentId, btn) {
         if (a2btn) { a2btn.classList.toggle('on', newState); a2btn.classList.toggle('off', !newState); }
     }
     updateField(assignmentId, 'is_micd', newState);
+}
+
+function updateMicType(assignmentId, value) {
+    updateField(assignmentId, 'mic_type', value);
+    // Update the badge in the card header
+    const card = document.getElementById('a2-card-' + assignmentId);
+    if (!card) return;
+    const meta = card.querySelector('.a2-card-meta');
+    if (!meta) return;
+    const labels = {
+        'HH': 'HH', 'LAV': 'LAV', 'HEADSET': 'HEADSET',
+        'PODIUM': 'PODIUM', 'BOOM': 'BOOM', 'INSTRUMENT': 'INSTRUMENT'
+    };
+    if (value && labels[value]) {
+        meta.innerHTML = '<span class="mic-type-badge type-' + value + '" style="font-size:9px;padding:2px 7px;">' +
+            '<span class="type-dot"></span>' + labels[value] + '</span>';
+    } else {
+        meta.innerHTML = '';
+    }
+    // Also sync the A1 row badge
+    const a1td = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
+    if (a1td) {
+        a1td.className = 'mic-type-badge type-' + (value || 'empty');
+        a1td.innerHTML = '<span class="type-dot"></span>' + (labels[value] || '—');
+    }
 }
 
 function toggleMicdA2(assignmentId, btn) {

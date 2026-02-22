@@ -2201,8 +2201,8 @@ class ShowDay(models.Model):
     order = models.IntegerField(default=0, help_text="Display order for days")
     
     class Meta:
-        verbose_name = "Show Mic Tracker"
-        verbose_name_plural = "Show Mic Tracker"
+        verbose_name = "Day"
+        verbose_name_plural = "Mic Tracker"
         ordering = ['date']
         unique_together = [['project', 'date']]
 
@@ -2353,16 +2353,62 @@ class MicSession(models.Model):
 class MicAssignment(models.Model):
     """Represents a single mic assignment within a session"""
     MIC_TYPES = [
-        ('', '---'),
-        ('HH', 'Handheld'),
-        ('LAV', 'Lavalier'),
-        ('HEADSET', 'Headset'),
-        ('PODIUM', 'Podium'),
-        ('BOOM', 'Boom'),
-        ('BOUNDARY', 'Boundary'),
-        ('GOOSENECK', 'Gooseneck'),
-        ('COMBO', 'Combo Pack'),
+    ('', '---'),
+    ('HH', 'Handheld'),
+    ('LAV', 'Lav'),
+    ('HEADSET', 'Headset'),
+    ('PODIUM', 'Podium'),
+    ('BOOM', 'Boom'),
+    ('INSTRUMENT', 'Instrument'),
+]
+
+    PLACEMENT_CHOICES = [
+    ('', '---'),
+    ('LEFT_EAR', 'Left Ear'),
+    ('RIGHT_EAR', 'Right Ear'),
+    ('TIE', 'Tie'),
+    ('LAV_MAGNET', 'Lav Magnet'),
+    ('COLLAR', 'Collar'),
+    ('HAIR_MOUNT', 'Hair Mount'),
+    ('CHEEK', 'Cheek Mount'),
+    ('FOREHEAD', 'Forehead'),
+    ('CHEST_POCKET', 'Chest Pocket'),
+    ('BELT_CLIP', 'Belt Clip'),
     ]
+
+    SENSITIVITY_CHOICES = [
+        ('', '---'),
+        ('-20', '-20 dB'),
+        ('-18', '-18 dB'),
+        ('-15', '-15 dB'),
+        ('-12', '-12 dB'),
+        ('-10', '-10 dB'),
+        ('-9', '-9 dB'),
+        ('-6', '-6 dB'),
+        ('-3', '-3 dB'),
+        ('0', '0 dB'),
+        ('+3', '+3 dB'),
+        ('+6', '+6 dB'),
+        ('+9', '+9 dB'),
+        ('+12', '+12 dB'),
+        ('+15', '+15 dB'),
+        ('+18', '+18 dB'),
+        ('+20', '+20 dB'),
+    ]
+
+    OUTPUT_LEVEL_CHOICES = [
+    ('', '---'),
+    ('LOW', 'Low'),
+    ('MED', 'Medium'),
+    ('HIGH', 'High'),
+    ('0DBU', '0 dBu'),
+    ('6DBU', '+6 dBu'),
+    ('12DBU', '+12 dBu'),
+    ('18DBU', '+18 dBu'),
+    ('0DBV', '0 dBV'),
+    ('6DBV', '+6 dBV'),
+    ('12DBV', '+12 dBV'),
+]
     
     session = models.ForeignKey(MicSession, on_delete=models.CASCADE, related_name='mic_assignments')
     rf_number = models.IntegerField(validators=[MinValueValidator(1)])
@@ -2379,23 +2425,45 @@ class MicAssignment(models.Model):
 )
     
     shared_presenters = models.ManyToManyField(
-        Presenter,
-        blank=True,
-        related_name='shared_mic_assignments',
-        help_text="Additional presenters sharing this mic"
+    Presenter,
+    blank=True,
+    through='SharedPresenterAssignment',
+    related_name='shared_mic_assignments',
+    help_text="Additional presenters sharing this mic"
 )
     
     # Status checkboxes
     is_micd = models.BooleanField(default=False, verbose_name="MIC'D")
     is_d_mic = models.BooleanField(default=False, verbose_name="D-MIC")
     active_presenter_index = models.IntegerField(default=0)
+
+
+
     
-   
+   # A2 View — transmitter settings
+    placement = models.CharField(
+        max_length=20, choices=PLACEMENT_CHOICES, blank=True,
+        help_text="Mic placement on primary presenter"
+    )
+    sensitivity = models.CharField(
+        max_length=10, choices=SENSITIVITY_CHOICES, blank=True,
+        help_text="Transmitter input sensitivity"
+    )
+    output_level = models.CharField(
+        max_length=10, choices=OUTPUT_LEVEL_CHOICES, blank=True,
+        help_text="Transmitter RF output level"
+    )
     
     
     
     # Additional fields
     notes = models.TextField(blank=True)
+    photo = models.ImageField(
+    upload_to='presenter_photos/',
+    null=True,
+    blank=True,
+    help_text="Presenter headshot for A2 view"
+)
     last_modified = models.DateTimeField(auto_now=True)
     modified_by = models.ForeignKey(
         'auth.User', 
@@ -2528,6 +2596,38 @@ class MicAssignment(models.Model):
             return f"{presenters[0]} / {presenters[1]}"
         else:
             return f"{presenters[0]} / +{len(presenters)-1} more"
+        
+
+class SharedPresenterAssignment(models.Model):
+    """
+    Through model for MicAssignment → Presenter M2M.
+    Stores per-assignment placement for each shared presenter.
+    """
+    PLACEMENT_CHOICES = MicAssignment.PLACEMENT_CHOICES  # reuse same list
+
+    mic_assignment = models.ForeignKey(
+        MicAssignment,
+        on_delete=models.CASCADE,
+        related_name='shared_presenter_assignments'
+    )
+    presenter = models.ForeignKey(
+        Presenter,
+        on_delete=models.CASCADE,
+        related_name='shared_assignments'
+    )
+    placement = models.CharField(
+        max_length=20, choices=PLACEMENT_CHOICES, blank=True
+    )
+    order = models.IntegerField(default=0, help_text="Display order")
+
+    class Meta:
+        ordering = ['order', 'id']
+        verbose_name = "Shared Presenter Assignment"
+        verbose_name_plural = "Shared Presenter Assignments"
+
+    def __str__(self):
+        return f"{self.presenter.name} on RF{self.mic_assignment.rf_number}"
+
     
    
 

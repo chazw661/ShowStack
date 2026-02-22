@@ -101,6 +101,11 @@ MIDDLEWARE = [
     
 ]
 
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+
 ROOT_URLCONF = 'audiopatch.urls'
 
 TEMPLATES = [

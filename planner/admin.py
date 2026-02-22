@@ -4699,7 +4699,7 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
             'fields': ('session', 'rf_number', 'mic_type')
         }),
         ('Presenter Information', {
-            'fields': ('presenter', 'shared_presenters')
+            'fields': ('presenter',)
         }),
         ('Status', {
             'fields': ('is_micd', 'is_d_mic')
