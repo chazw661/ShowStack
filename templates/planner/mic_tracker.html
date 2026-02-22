@@ -1,4 +1,3 @@
-<!-- planner/templates/planner/mic_tracker.html -->
 {% extends "admin/base_site.html" %}
 {% load static %}
 
@@ -6,7 +5,372 @@
 
 {% block extrastyle %}
     {{ block.super }}
-    <link rel="stylesheet" type="text/css" href="{% static 'admin/css/mic_tracker.css' %}">
+    <style>
+    :root {
+        --bg-base:       #0f0f1a;
+        --bg-card:       #181828;
+        --bg-raised:     #1e1e32;
+        --bg-input:      #252540;
+        --border:        #2a2a45;
+        --border-bright: #3a3a60;
+        --accent-blue:   #4a9eff;
+        --accent-green:  #00e676;
+        --accent-amber:  #ffab00;
+        --accent-red:    #ff5252;
+        --text-primary:  #e8e8f0;
+        --text-secondary:#9090b0;
+        --text-dim:      #505070;
+        --micd-bg:       rgba(0, 230, 118, 0.08);
+        --micd-border:   rgba(0, 230, 118, 0.35);
+    }
+
+    #mic-tracker-root * { box-sizing: border-box; }
+    #mic-tracker-root {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: var(--bg-base);
+        color: var(--text-primary);
+        min-height: 100vh;
+        padding: 0 0 60px;
+    }
+
+    /* Page header */
+    .mtt-header {
+        display: flex; align-items: center; gap: 24px;
+        padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+        background: var(--bg-card); flex-wrap: wrap;
+    }
+    .mtt-title {
+        font-size: 16px; font-weight: 700; letter-spacing: 0.12em;
+        text-transform: uppercase; color: var(--accent-blue); white-space: nowrap;
+    }
+    .mtt-show-meta { display: flex; gap: 24px; flex: 1; flex-wrap: wrap; }
+    .mtt-meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .mtt-meta-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+    .mtt-meta-value { font-size: 13px; color: var(--text-secondary); }
+    .mtt-header-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* Buttons */
+    .btn-mtt {
+        padding: 7px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+        text-transform: uppercase; border-radius: 4px; border: none; cursor: pointer;
+        text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+        transition: opacity 0.15s, transform 0.1s; font-family: inherit;
+    }
+    .btn-mtt:active { transform: scale(0.97); }
+    .btn-mtt:hover { opacity: 0.85; }
+    .btn-mtt-primary { background: var(--accent-blue); color: #000; }
+    .btn-mtt-ghost   { background: var(--bg-raised); color: var(--text-secondary); border: 1px solid var(--border-bright); }
+    .btn-mtt-export  { background: var(--bg-raised); color: var(--accent-amber); border: 1px solid rgba(255,171,0,0.3); }
+
+    .btn-icon-sm {
+        width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--border);
+        background: var(--bg-raised); color: var(--text-dim); font-size: 13px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.15s; text-decoration: none; padding: 0; font-family: inherit;
+    }
+    .btn-icon-sm:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+
+    /* Day */
+    .mtt-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mtt-day-header {
+        display: flex; align-items: center; gap: 14px; padding: 11px 16px;
+        background: var(--bg-raised); cursor: pointer; user-select: none;
+    }
+    .mtt-day-header:hover { background: #222238; }
+    .mtt-day-collapse { font-size: 10px; color: var(--text-dim); transition: transform 0.2s; width: 12px; text-align: center; flex-shrink: 0; }
+    .mtt-day-collapse.collapsed { transform: rotate(-90deg); }
+    .mtt-day-name { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
+    .mtt-day-stats { display: flex; gap: 16px; margin-left: auto; font-size: 11px; color: var(--text-dim); }
+    .mtt-day-stats strong { color: var(--text-secondary); }
+    .mtt-day-actions { display: flex; gap: 6px; }
+
+    /* Add session footer */
+    .mtt-add-session-bar {
+        padding: 10px 14px;
+        border-top: 1px solid var(--border);
+        background: #0f0f1a;
+    }
+
+    /* Session */
+    .mtt-session { margin: 14px 14px 0 14px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+
+    .mtt-session-header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 0 14px; background: #14142a;
+        border-bottom: 1px solid var(--border);
+        min-height: 46px; flex-wrap: wrap;
+        cursor: pointer; user-select: none;
+         z-index: 10;
+        position: relative;
+    }
+
+    /* Session collapse arrow */
+    .mtt-session-collapse {
+        font-size: 10px; color: var(--text-dim);
+        transition: transform 0.2s; width: 12px;
+        text-align: center; flex-shrink: 0;
+    }
+    .mtt-session-collapse.collapsed { transform: rotate(-90deg); }
+
+    /* Session body — collapses */
+    .mtt-session-body { }
+    .mtt-session-body.collapsed { display: none; }
+
+    .mtt-session-date {
+        font-size: 10px; color: var(--text-dim); background: var(--bg-raised);
+        padding: 2px 8px; border-radius: 3px; white-space: nowrap; flex-shrink: 0;
+    }
+    .mtt-session-name { font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.04em; }
+    .mtt-session-loc { font-size: 11px; color: var(--text-dim); }
+
+    /* Session A1/A2 tabs */
+    .session-tabs { display: flex; height: 46px; align-items: stretch; flex-shrink: 0; margin-right: 8px; }
+    .session-tab {
+        height: 100%; padding: 0 22px; font-size: 15px; font-weight: 700;
+        letter-spacing: 0.08em; text-transform: uppercase; border: none;
+        background: transparent; color: var(--text-dim); cursor: pointer;
+        border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+        font-family: inherit;
+    }
+    .session-tab:hover { color: var(--text-secondary); }
+    .session-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+    .session-actions {
+        display: flex; gap: 4px; align-items: center;
+        padding-left: 10px; border-left: 1px solid var(--border); height: 30px;
+        margin-left: auto;
+    }
+
+    .session-panel { display: none; }
+    .session-panel.active { display: block; }
+
+    .mtt-session-stats {
+        font-size: 10px; color: var(--text-dim); padding: 6px 14px;
+        background: #0f0f1a; border-top: 1px solid var(--border);
+        display: flex; gap: 16px;
+    }
+    .mtt-session-stats strong { color: var(--accent-green); }
+
+    /* Dropdown */
+    .mtt-dropdown { position: relative; display: inline-block; }
+    .mtt-dropdown-menu {
+        display: none; position: absolute; right: 0; top: 100%;
+        background: var(--bg-raised); border: 1px solid var(--border-bright);
+        border-radius: 4px; min-width: 185px; z-index: 200;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow: hidden;
+    }
+    .mtt-dropdown:hover .mtt-dropdown-menu { display: block; }
+    .mtt-dropdown-menu a { display: block; padding: 8px 14px; font-size: 11px; color: var(--text-secondary); text-decoration: none; }
+    .mtt-dropdown-menu a:hover { background: var(--bg-input); color: var(--text-primary); }
+    .mtt-dropdown-menu .divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+    /* A1 table */
+    .a1-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .a1-table thead th {
+        padding: 8px 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+        text-transform: uppercase; color: var(--text-dim); background: #13131f;
+        text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .a1-table thead th.th-center { text-align: center; }
+
+    .a1-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    .a1-row:last-child { border-bottom: none; }
+    .a1-row:hover { background: rgba(255,255,255,0.02); }
+    .a1-row.row-micd { background: var(--micd-bg); }
+    .a1-row.row-micd:hover { background: rgba(0,230,118,0.11); }
+    .a1-row td { padding: 9px 12px; vertical-align: middle; }
+
+    .a1-rf { width: 56px; font-size: 20px; font-weight: 800; color: var(--text-primary); }
+    .a1-row.row-micd .a1-rf { color: var(--accent-green); }
+
+    .mic-type-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 9px; border-radius: 3px; font-size: 10px;
+        font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+    }
+    .mic-type-badge .type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .type-HH        { background: rgba(74,158,255,0.12);  color: #4a9eff; }  .type-HH       .type-dot { background: #4a9eff; }
+    .type-LAV       { background: rgba(255,171,0,0.12);   color: #ffab00; }  .type-LAV      .type-dot { background: #ffab00; }
+    .type-HEADSET   { background: rgba(180,100,255,0.12); color: #b464ff; }  .type-HEADSET  .type-dot { background: #b464ff; }
+    .type-PODIUM    { background: rgba(0,230,118,0.12);   color: #00e676; }  .type-PODIUM   .type-dot { background: #00e676; }
+    .type-BOOM      { background: rgba(255,82,82,0.12);   color: #ff5252; }  .type-BOOM     .type-dot { background: #ff5252; }
+    .type-BOUNDARY  { background: rgba(0,188,212,0.12);   color: #00bcd4; }  .type-BOUNDARY .type-dot { background: #00bcd4; }
+    .type-GOOSENECK { background: rgba(255,152,0,0.12);   color: #ff9800; }  .type-GOOSENECK .type-dot { background: #ff9800; }
+    .type-COMBO     { background: rgba(233,30,99,0.12);   color: #e91e63; }  .type-COMBO    .type-dot { background: #e91e63; }
+    .type-empty     { background: var(--bg-raised);       color: var(--text-dim); }  .type-empty .type-dot { background: var(--text-dim); }
+
+    .a1-presenter-primary { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .a1-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
+    .a1-unassigned { font-size: 12px; color: var(--text-dim); font-style: italic; }
+    .a1-shared-tag {
+        display: inline-block; margin-left: 8px; font-size: 9px;
+        background: var(--bg-raised); color: var(--text-dim);
+        border: 1px solid var(--border-bright); padding: 1px 7px;
+        border-radius: 10px; vertical-align: middle;
+    }
+
+    .a1-micd-cell { width: 80px; text-align: center; }
+    .a1-micd-toggle {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 58px; height: 28px; border-radius: 4px; font-size: 11px;
+        font-weight: 800; letter-spacing: 0.1em; cursor: pointer; border: none;
+        transition: all 0.15s; text-transform: uppercase; font-family: inherit;
+    }
+    .a1-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
+    .a1-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 12px rgba(0,230,118,0.4); }
+
+    .a1-notes-cell { width: 200px; }
+    .a1-notes-input {
+        width: 100%; background: transparent; border: none;
+        border-bottom: 1px solid transparent; color: var(--text-secondary);
+        font-size: 11px; font-family: inherit; padding: 2px 4px; outline: none;
+        transition: border-color 0.15s;
+    }
+    .a1-notes-input:focus { border-bottom-color: var(--border-bright); }
+    .a1-notes-input::placeholder { color: var(--text-dim); }
+
+    .a1-actions-bar {
+        display: flex; justify-content: flex-end; padding: 7px 12px;
+        background: #13131f; border-bottom: 1px solid var(--border); gap: 6px;
+    }
+
+    /* A2 cards */
+    .a2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 12px; padding: 14px; }
+
+    .a2-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
+    .a2-card.card-micd { border-color: var(--micd-border); box-shadow: 0 0 0 1px rgba(0,230,118,0.1) inset; }
+
+    .a2-presenter-details { flex: 1; min-width: 0; overflow: visible; }
+    .a2-card.card-micd .a2-card-header { background: rgba(0,230,118,0.06); border-bottom-color: var(--micd-border); }
+
+    .a2-rf-badge {
+        width: 40px; height: 40px; border-radius: 5px; background: var(--bg-raised);
+        border: 1px solid var(--border-bright); display: flex; align-items: center;
+        justify-content: center; font-size: 17px; font-weight: 800; color: var(--text-primary); flex-shrink: 0;
+    }
+    .a2-card.card-micd .a2-rf-badge { background: rgba(0,230,118,0.15); border-color: var(--accent-green); color: var(--accent-green); }
+    .a2-card-meta { flex: 1; }
+
+    .a2-card-header { 
+        display: flex; 
+        align-items: center; 
+        gap: 10px; 
+        padding: 10px 14px; 
+        background: #14142a; 
+        border-bottom: 1px solid var(--border);
+        justify-content: space-between;
+    }
+
+    .a2-micd-toggle {
+        padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800;
+        letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none;
+        transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit;
+    }
+    .a2-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
+    .a2-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 16px rgba(0,230,118,0.45); }
+    .a2-micd-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .a2-micd-toggle.on .a2-micd-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.6} }
+
+    .a2-presenter-block { display: flex; padding: 14px; border-bottom: 1px solid var(--border); }
+    .a2-presenter-block:last-of-type { border-bottom: none; }
+    .a2-presenter-block.shared-block { background: rgba(255,255,255,0.015); padding-left: 20px; }
+
+    .a2-photo-zone {
+        width: 70px; height: 70px; flex-shrink: 0; border-radius: 5px;
+        border: 1px dashed var(--border-bright); background: var(--bg-raised);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        overflow: hidden; cursor: pointer; margin-right: 14px; transition: border-color 0.15s;
+    }
+    .a2-photo-zone:hover { border-color: var(--accent-blue); }
+    .a2-photo-zone img { width: 100%; height: 100%; object-fit: cover; }
+    .a2-photo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .a2-photo-icon { font-size: 22px; opacity: 0.25; }
+    .a2-photo-label { font-size: 8px; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
+    .a2-photo-input { display: none; }
+
+    .a2-presenter-details { flex: 1; min-width: 0; }
+    .a2-presenter-name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; position: relative; }
+    .a2-presenter-role { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
+
+    .a2-presenter-name { font-size: 15px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .a2-unassigned { color: #6060a0; font-style: italic; font-size: 13px; }
+
+    .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .a2-setting { display: flex; flex-direction: column; gap: 3px; }
+    .a2-setting-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); }
+    .a2-select 
+    .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
+    .a2-select option { background: #1e1e32; }
+
+   .a2-notes-input { color: var(--text-primary); }
+    
+    .a2-notes-input:focus { border-color: var(--accent-blue); height: 52px; }
+   
+    .a2-notes-input::placeholder { color: #6060a0; }
+
+    .a2-shared-header { display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: #13131f; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .a2-shared-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+    .a2-shared-count { background: var(--bg-raised); color: var(--text-dim); font-size: 9px; padding: 1px 7px; border-radius: 10px; }
+
+    /* Print */
+    @media print {
+        .mtt-header-actions, .session-tabs, .mtt-day-actions, .session-actions,
+        .a1-actions-bar, .mtt-add-session-bar, .session-panel:not(.active),
+        #mic-tracker-update-banner { display: none !important; }
+        body, #mic-tracker-root { background: #fff; color: #000; }
+        .a1-table thead th { background: #f0f0f0; color: #333; }
+        .a1-row { border-bottom-color: #ddd; }
+        .a1-micd-toggle.on { background: #000; color: #fff; box-shadow: none; }
+        .mtt-day, .mtt-session { border-color: #ccc; }
+        .mtt-day-header, .mtt-session-header { background: #f5f5f5; }
+    }
+
+    #mic-tracker-update-banner {
+        display: none; position: fixed; top: 0; left: 0; right: 0;
+        background: var(--accent-blue); color: #000; padding: 10px 16px;
+        text-align: center; z-index: 99999; font-size: 13px; font-weight: 600;
+    }
+
+
+
+    .a2-presenter-input {
+    background: transparent; border: none;
+    border-bottom: 1px solid transparent;
+    color: var(--text-primary); font-size: 15px;
+    font-weight: 600; font-family: inherit;
+    width: 100%; outline: none; padding: 2px 0;
+    transition: border-color 0.15s;
+}
+    .a2-presenter-input:focus { border-bottom-color: var(--border-bright); }
+    .a2-presenter-input::placeholder { color: #6060a0; font-style: italic; font-weight: 400; font-size: 13px; }
+
+   .presenter-dropdown {
+    position: absolute; 
+    top: auto;
+    bottom: auto;
+    left: 0;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-bright); border-radius: 4px;
+    min-width: 220px; z-index: 1000;
+    display: none; 
+    max-height: 160px; 
+    overflow-y: auto;
+    padding-top: 4px;
+}
+.presenter-dropdown.open { display: block; }
+
+    .presenter-dropdown.open { display: block; }
+    .presenter-dd-item {
+        padding: 8px 12px; font-size: 12px; color: var(--text-secondary);
+        cursor: pointer;
+    }
+    .presenter-dd-item:hover { background: var(--bg-input); color: var(--text-primary); }
+
+
+    .presenter-dd-add { color: var(--accent-blue); border-top: 1px solid var(--border); }
+
+    </style>
 {% endblock %}
 
 {% block extrahead %}
@@ -16,423 +380,603 @@
 {% endblock %}
 
 {% block content %}
-<div id="mic-tracker-container">
-    <!-- Header Section -->
-    <div class="mic-tracker-header">
-        <h1>Mic Assignment Tracker</h1>
-        
-        <div class="show-info">
-            <div class="info-row">
-                <span class="label">Show:</span>
-                <span class="value">{{ show_info.show_name|default:"--" }}</span>
+<div id="mic-tracker-root">
+
+    <div id="mic-tracker-update-banner">
+        🔄 <strong>Updates Available</strong> — another user made changes.
+        <button onclick="location.reload()" style="margin-left:12px;background:#000;color:#4a9eff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:700;">Refresh</button>
+        <button onclick="document.getElementById('mic-tracker-update-banner').style.display='none'" style="margin-left:6px;background:transparent;border:1px solid #000;color:#000;padding:6px 12px;border-radius:4px;cursor:pointer;">Dismiss</button>
+    </div>
+
+    <!-- Page Header -->
+    <div class="mtt-header">
+        <div class="mtt-title">🎤 Mic Tracker</div>
+        <div class="mtt-show-meta">
+            <div class="mtt-meta-item">
+                <span class="mtt-meta-label">Show</span>
+                <span class="mtt-meta-value">{{ show_info.show_name|default:"—" }}</span>
             </div>
-            <div class="info-row">
-                <span class="label">Venue:</span>
-                <span class="value">{{ show_info.venue_name|default:"--" }}</span>
+            <div class="mtt-meta-item">
+                <span class="mtt-meta-label">Venue</span>
+                <span class="mtt-meta-value">{{ show_info.venue_name|default:"—" }}</span>
             </div>
-            <div class="info-row">
-                <span class="label">Ballroom:</span>
-                <span class="value">{{ show_info.ballroom_name|default:"--" }}</span>
+            <div class="mtt-meta-item">
+                <span class="mtt-meta-label">Room</span>
+                <span class="mtt-meta-value">{{ show_info.ballroom_name|default:"—" }}</span>
             </div>
-            <div class="info-row">
-                <span class="label">Duration:</span>
-                <span class="value">{{ show_info.duration_display|default:"--" }}</span>
+            <div class="mtt-meta-item">
+                <span class="mtt-meta-label">Dates</span>
+                <span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span>
             </div>
         </div>
-        
-        <div class="tracker-actions">
+        <div class="mtt-header-actions">
             {% if not is_viewer %}
-            <button class="btn btn-primary" onclick="addNewDay()">Add Day</button>
+            <button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>
             {% endif %}
+            <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
+        </div>
+    </div>
 
-            <a href="/audiopatch/mic-tracker/export/" class="btn btn-export">Export CSV</a>
+    <!-- Days -->
+    {% for day_data in days_data %}
+    <div class="mtt-day" data-day-id="{{ day_data.day.id }}">
+        <div class="mtt-day-header" onclick="toggleDay({{ day_data.day.id }}, this)">
+            <span class="mtt-day-collapse {% if day_data.day.is_collapsed %}collapsed{% endif %}">▼</span>
+            <span class="mtt-day-name">{{ day_data.day }}</span>
+            <div class="mtt-day-stats">
+                {% with stats=day_data.day.get_all_mics_status %}
+                <span><strong>{{ stats.used }}</strong>/{{ stats.total }} mic'd</span>
+                <span>{{ day_data.day.sessions.count }} session{{ day_data.day.sessions.count|pluralize }}</span>
+                {% endwith %}
+            </div>
+            <div class="mtt-day-actions">
+            </div>
         </div>
 
-    <!-- Days Container -->
-    <div class="days-container">
-        {% for day_data in days_data %}
-        <div class="day-section" data-day-id="{{ day_data.day.id }}" data-collapsed="{{ day_data.day.is_collapsed|yesno:'true,false' }}">
-            <div class="day-header" onclick="toggleDay({{ day_data.day.id }})">
-                <span class="collapse-icon">{% if day_data.day.is_collapsed %}▶{% else %}▼{% endif %}</span>
-                <h2>{{ day_data.day }}</h2>
-                <div class="day-stats">
-                    {% with stats=day_data.day.get_all_mics_status %}
-                    <span class="stat">Sessions: {{ day_data.day.sessions.count }}</span>
-                    <span class="stat">Mics: {{ stats.used }}/{{ stats.total }}</span>
-                    <span class="stat">Available: {{ stats.available }}</span>
-                    {% endwith %}
-                </div>
-                <div class="day-actions">
+        <div class="mtt-day-content" {% if day_data.day.is_collapsed %}style="display:none"{% endif %}>
+
+            {% for session in day_data.sessions %}
+            <div class="mtt-session" data-session-id="{{ session.id }}">
+
+                <!-- Session header with collapse toggle and A1/A2 tabs -->
+                <div class="mtt-session-header" onclick="toggleSession({{ session.id }}, event)">
+                    <span class="mtt-session-collapse" id="session-collapse-{{ session.id }}">▼</span>
+                    <div class="session-tabs">
+                        <button class="session-tab active" onclick="switchSessionTab({{ session.id }}, 'a1', this)">A1</button>
+                        <button class="session-tab" onclick="switchSessionTab({{ session.id }}, 'a2', this)">A2</button>
+                    </div>
+                    <span class="mtt-session-date">{{ session.day.date|date:"m/d" }}</span>
+                    <span class="mtt-session-name">{{ session.name }}</span>
+                    {% if session.location %}<span class="mtt-session-loc">· {{ session.location }}</span>{% endif %}
+
                     {% if not is_viewer %}
-                    <button class="btn btn-sm" onclick="event.stopPropagation(); addSession({{ day_data.day.id }})">Add Session</button>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="day-content" {% if day_data.day.is_collapsed %}style="display: none;"{% endif %}>
-                <div class="sessions-grid">
-                    {% for session in day_data.sessions %}
-                        {% if forloop.counter0|divisibleby:3 %}
-                            {% if not forloop.first %}</div>{% endif %}
-                            <div class="session-row">
-                        {% endif %}
-                        
-                        <div class="session-column" data-session-id="{{ session.id }}">
-                            <div class="session-header">
-                                <div class="session-info">
-                                    <span class="session-date">{{ session.day.date|date:"m/d" }}</span>
-                                    <h3>{{ session.name }}</h3>
-                                    {% if session.location %}
-                                    <span class="session-location">{{ session.location }}</span>
-                                    {% endif %}
-                                </div>
-                                <div class="session-actions">
-                                    {% if not is_viewer %}
-                                    <button class="btn-icon" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
-                                    <button class="btn-icon" title="Settings" onclick="editSession({{ session.id }})">⚙️</button>
-                                    <div class="dropdown">
-                                        <button class="btn-icon" title="Bulk Actions">⋮</button>
-                                        <div class="dropdown-content">
-                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'check_all_micd'); return false;">Check All MIC'D</a>
-                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'uncheck_all_micd'); return false;">Uncheck All MIC'D</a>
-                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'check_all_dmic'); return false;">Check All D-MIC</a>
-                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'uncheck_all_dmic'); return false;">Uncheck All D-MIC</a>
-                                            <a href="#" onclick="bulkUpdate({{ session.id }}, 'clear_all'); return false;">Clear All</a>
-                                        </div>
-                                    </div>
-                                    {% endif %}
-                                </div>
-                            </div> 
-                            
-                            <div class="mic-grid">
-                                <div class="mic-grid-header">
-                                    <div class="col-rf">RF#</div>
-                                    <div class="col-type">TYPE</div>
-                                    <div class="col-presenter">PRESENTER</div>
-                                    <div class="col-micd">MIC'D</div>
-                                    <div class="col-dmic">D-MIC</div>
-                                </div>
-                                
-                                {% for assignment in session.mic_assignments.all %}
-                                <div class="mic-row {% if assignment.is_micd %}is-micd{% endif %}" data-assignment-id="{{ assignment.id }}">
-                                    <div class="col-rf">{{ assignment.rf_number|stringformat:"02d" }}</div>
-                                    
-                                    <div class="col-type">
-                                        <select class="mic-type-select" onchange="updateField({{ assignment.id }}, 'mic_type', this.value)" {% if is_viewer %}disabled{% endif %}>
-                                            <option value="">---</option>
-                                            {% for value, label in mic_types %}
-                                            {% if value %}
-                                            <option value="{{ value }}" {% if assignment.mic_type == value %}selected{% endif %}>{{ label }}</option>
-                                            {% endif %}
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="col-presenter">
-                                        <!-- Primary Presenter Row -->
-                                        <div class="presenter-row primary-presenter">
-                                            <span class="presenter-order">1°</span>
-                                            <input type="text" 
-                                                    class="presenter-input {% if assignment.active_presenter_index == 0 %}active-presenter{% endif %}" 
-                                                    value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
-                                                    placeholder="Enter name..."
-                                                    list="presenters-datalist"
-                                                    onchange="updateField({{ assignment.id }}, 'presenter', this.value)"
-                                                    title="Primary presenter"
-                                                    {% if is_viewer %}readonly{% endif %}>
-
-                                            {% if not is_viewer %}
-                                            <!-- Add Shared Presenter Button -->
-                                            <button type="button" 
-                                                    class="btn-add-shared" 
-                                                    onclick="togglePresenters({{ assignment.id }})"
-                                                    title="Add shared presenter">
-                                                +
-                                            </button>
-                                            {% endif %}
-                                        </div>
-                                        
-                                        <!-- Shared Presenters Section - Always render, hide if empty -->
-                                        <div class="shared-presenters-container" 
-                                            data-assignment-id="{{ assignment.id }}"
-                                            style="{% if not assignment.shared_presenters.exists %}display: none;{% endif %}">
-                                            
-                                            {% for shared in assignment.ordered_shared_presenters %}
-                                            <div class="presenter-row shared-presenter" data-presenter-name="{{ shared.name }}">
-                                                <span class="presenter-order">{{ forloop.counter|add:"1" }}°</span>
-                                                <input type="text" 
-                                                    class="presenter-input {% if assignment.active_presenter_index == forloop.counter %}active-presenter{% endif %}" 
-                                                    value="{{ shared.name }}"
-                                                    readonly
-                                                    title="Shared presenter #{{ forloop.counter|add:"1" }}">
-                                                {% if assignment.active_presenter_index == forloop.counter %}
-                                                <span class="current-badge">CURRENT</span>
-                                                {% endif %}
-                                                {% if not is_viewer %}
-                                                <button type="button" 
-                                                        class="btn-remove-presenter" 
-                                                        onclick="removeSharedPresenter({{ assignment.id }}, '{{ shared.name }}')"
-                                                        title="Remove presenter">
-                                                    ×
-                                                </button>
-                                                {% endif %}
-                                            </div>
-                                            {% endfor %}
-                                            
-                                            <!-- Add New Presenter Form -->
-                                            {% if not is_viewer %}
-                                            <div class="add-presenter-row">
-                                                <input type="text" 
-                                                        class="presenter-input add-presenter-input" 
-                                                        placeholder="Add presenter..."
-                                                        id="newPresenter_{{ assignment.id }}"
-                                                        list="presenters-datalist"
-                                                        onkeypress="if(event.key === 'Enter') addSharedPresenterInline({{ assignment.id }})">
-                                                <button type="button" 
-                                                        class="btn-add-inline" 
-                                                        onclick="addSharedPresenterInline({{ assignment.id }})"
-                                                        title="Add presenter">
-                                                    +
-                                                </button>
-                                            </div>
-                                            {% endif %}
-                                            
-                                            <!-- Reset Button (only show if not on primary) -->
-                                            {% if assignment.active_presenter_index > 0 %}
-                                            <div class="reset-row">
-                                                <button type="button" 
-                                                        class="btn-reset-rotation" 
-                                                        onclick="resetPresenterRotation({{ assignment.id }})"
-                                                        title="Reset to primary presenter">
-                                                    ↺ Reset to Primary
-                                                </button>
-                                            </div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="col-micd">
-                                        <input type="checkbox" 
-                                            class="mic-checkbox"
-                                            {% if assignment.is_micd %}checked{% endif %}
-                                            onchange="updateField({{ assignment.id }}, 'is_micd', this.checked)"
-                                            {% if is_viewer %}disabled{% endif %}>
-                                    </div>
-
-                                    <div class="col-dmic">
-                                        <input type="checkbox" 
-                                            class="mic-checkbox dmic-checkbox"
-                                            {% if assignment.is_d_mic %}checked{% endif %}
-                                            onchange="handleDmicChange({{ assignment.id }}, this.checked)"
-                                            {% if is_viewer %}disabled{% endif %}>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                            
-                            <div class="session-footer">
-                                {% with stats=session.get_mic_usage_stats %}
-                                <span class="session-stat">MIC'D: {{ stats.micd }}/{{ stats.total }}</span>
-                                <span class="session-stat">Available: {{ stats.total|add:stats.micd|stringformat:"-d" }}</span>
-                                {% if stats.shared > 0 %}
-                                <span class="session-stat">Shared: {{ stats.shared }}</span>
-                                {% endif %}
-                                {% endwith %}
+                    <div class="session-actions">
+                        <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
+                        <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
+                        <div class="mtt-dropdown">
+                            <button class="btn-icon-sm" title="Bulk actions">⋮</button>
+                            <div class="mtt-dropdown-menu">
+                                <a href="#" onclick="bulkUpdate({{ session.id }},'check_all_micd');return false;">✓ Check All MIC'D</a>
+                                <a href="#" onclick="bulkUpdate({{ session.id }},'uncheck_all_micd');return false;">✗ Uncheck All MIC'D</a>
+                                <div class="divider"></div>
+                                <a href="#" onclick="bulkUpdate({{ session.id }},'check_all_dmic');return false;">✓ Check All D-MIC</a>
+                                <a href="#" onclick="bulkUpdate({{ session.id }},'uncheck_all_dmic');return false;">✗ Uncheck All D-MIC</a>
+                                <div class="divider"></div>
+                                <a href="#" onclick="bulkUpdate({{ session.id }},'clear_all');return false;" style="color:#ff5252;">⊘ Clear All</a>
                             </div>
                         </div>
-                        
-                        {% if forloop.last %}</div>{% endif %}
-                    {% endfor %}
-                    
-                    
-                    
-                    {% if not is_viewer %}
-                        {% if not day_data.sessions %}
-                            <div class="session-row">
-                                <div class="session-column empty">
-                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
-                                        + Add Session
-                                    </button>
-                                </div>
-                                <div class="session-column empty">
-                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
-                                        + Add Session
-                                    </button>
-                                </div>
-                                <div class="session-column empty">
-                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
-                                        + Add Session
-                                    </button>
-                                </div>
-                            </div>
-                        {% elif day_data.sessions|length|divisibleby:3 %}
-                            <div class="session-row">
-                                <div class="session-column empty">
-                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 0)">
-                                        + Add Session
-                                    </button>
-                                </div>
-                                <div class="session-column empty">
-                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 1)">
-                                        + Add Session
-                                    </button>
-                                </div>
-                                <div class="session-column empty">
-                                    <button class="btn btn-ghost" onclick="addSession({{ day_data.day.id }}, 2)">
-                                        + Add Session
-                                    </button>
-                                </div>
-                            </div>
-                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
+
+                <!-- Session body (collapsible) -->
+                <div class="mtt-session-body" id="session-body-{{ session.id }}">
+
+                    <!-- A1 Panel -->
+                    <div class="session-panel active" id="session-{{ session.id }}-a1">
+                        <div class="a1-actions-bar">
+                            <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="window.print()">🖨 Print</button>
+                        </div>
+                        <table class="a1-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:56px;">RF#</th>
+                                    <th style="width:110px;">Type</th>
+                                    <th>Presenter</th>
+                                    <th class="th-center a1-micd-cell">MIC'D</th>
+                                    <th class="a1-notes-cell">Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for assignment in session.mic_assignments.all %}
+                            <tr class="a1-row {% if assignment.is_micd %}row-micd{% endif %}"
+                                id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
+                                <td class="a1-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
+                                <td>
+                                    {% if assignment.mic_type %}
+                                    <span class="mic-type-badge type-{{ assignment.mic_type }}"><span class="type-dot"></span>{{ assignment.mic_type }}</span>
+                                    {% else %}
+                                    <span class="mic-type-badge type-empty"><span class="type-dot"></span>—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if assignment.presenter %}
+                                    <span class="a1-presenter-primary">{{ assignment.presenter.name }}</span>
+                                    {% if assignment.shared_presenters.exists %}<span class="a1-shared-tag">+{{ assignment.shared_presenters.count }} more</span>{% endif %}
+                                    {% else %}
+                                    <span class="a1-unassigned">— Unassigned —</span>
+                                    {% endif %}
+                                </td>
+                                <td class="a1-micd-cell">
+                                    <button class="a1-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
+                                            onclick="toggleMicd({{ assignment.id }}, this)"
+                                            {% if is_viewer %}disabled style="cursor:default"{% endif %}>
+                                        {% if assignment.is_micd %}ON{% else %}—{% endif %}
+                                    </button>
+                                </td>
+                                <td class="a1-notes-cell">
+                                    <input type="text" class="a1-notes-input"
+                                           value="{{ assignment.notes|default:'' }}"
+                                           placeholder="notes..."
+                                           onchange="updateField({{ assignment.id }}, 'notes', this.value)"
+                                           {% if is_viewer %}readonly{% endif %}>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- A2 Panel -->
+                    <div class="session-panel" id="session-{{ session.id }}-a2">
+                        <div class="a2-grid">
+                        {% for assignment in session.mic_assignments.all %}
+                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %}"
+                             id="a2-card-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
+
+                            <div class="a2-card-header">
+                                <div class="a2-rf-badge">{{ assignment.rf_number|stringformat:"02d" }}</div>
+                                <div class="a2-card-meta">
+                                    {% if assignment.mic_type %}
+                                    <span class="mic-type-badge type-{{ assignment.mic_type }}" style="font-size:9px;padding:2px 7px;">
+                                        <span class="type-dot"></span>{{ assignment.mic_type }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <button class="a2-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
+                                        onclick="toggleMicdA2({{ assignment.id }}, this)"
+                                        {% if is_viewer %}disabled style="cursor:default"{% endif %}>
+                                    <span class="a2-micd-dot"></span>MIC'D
+                                </button>
+                            </div>
+
+                            <div class="a2-presenter-block">
+                                <div class="a2-photo-zone" onclick="{% if not is_viewer %}triggerPhotoUpload({{ assignment.id }}){% endif %}">
+                                    {% if assignment.photo %}
+                                    <img src="{{ assignment.photo.url }}" alt="presenter">
+                                    {% else %}
+                                    <div class="a2-photo-placeholder">
+                                        <span class="a2-photo-icon">👤</span>
+                                        {% if not is_viewer %}<span class="a2-photo-label">Photo</span>{% endif %}
+                                    </div>
+                                    {% endif %}
+                                    {% if not is_viewer %}
+                                    <input type="file" class="a2-photo-input" id="photo-input-{{ assignment.id }}"
+                                           accept="image/*" onchange="uploadPhoto({{ assignment.id }}, this)">
+                                    {% endif %}
+                                </div>
+                                <div class="a2-presenter-details">
+                                    <div class="a2-presenter-name-row">
+                                        <span class="a2-presenter-role">Primary</span>
+                                        <input type="text"
+                                                class="a2-presenter-input"
+                                                id="presenter-input-{{ assignment.id }}"
+                                                value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
+                                                placeholder="— Unassigned —"
+                                                autocomplete="off"
+                                                onfocus="searchPresenters({{ assignment.id }}, '')"
+                                                oninput="searchPresenters({{ assignment.id }}, this.value)"
+                                                onchange="assignPresenter({{ assignment.id }}, this.value)"
+                                                {% if is_viewer %}readonly{% endif %}>
+<div class="presenter-dropdown" id="presenter-dd-{{ assignment.id }}"></div>
+                                    </div>
+                                    <div class="a2-settings-row">
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Placement</span>
+                                            <select class="a2-select" onchange="updateField({{ assignment.id }}, 'placement', this.value)" {% if is_viewer %}disabled{% endif %}>
+                                                <option value="">— select —</option>
+                                                <option value="LEFT_EAR"     {% if assignment.placement == 'LEFT_EAR'     %}selected{% endif %}>Left Ear</option>
+                                                <option value="RIGHT_EAR"    {% if assignment.placement == 'RIGHT_EAR'    %}selected{% endif %}>Right Ear</option>
+                                                <option value="TIE"          {% if assignment.placement == 'TIE'          %}selected{% endif %}>Tie</option>
+                                                <option value="LAV_MAGNET"   {% if assignment.placement == 'LAV_MAGNET'   %}selected{% endif %}>Lav Magnet</option>
+                                                <option value="COLLAR"       {% if assignment.placement == 'COLLAR'       %}selected{% endif %}>Collar</option>
+                                                <option value="HAIR_MOUNT"   {% if assignment.placement == 'HAIR_MOUNT'   %}selected{% endif %}>Hair Mount</option>
+                                                <option value="CHEEK"        {% if assignment.placement == 'CHEEK'        %}selected{% endif %}>Cheek Mount</option>
+                                                <option value="FOREHEAD"     {% if assignment.placement == 'FOREHEAD'     %}selected{% endif %}>Forehead</option>
+                                                <option value="CHEST_POCKET" {% if assignment.placement == 'CHEST_POCKET' %}selected{% endif %}>Chest Pocket</option>
+                                                <option value="BELT_CLIP"    {% if assignment.placement == 'BELT_CLIP'    %}selected{% endif %}>Belt Clip</option>
+                                            </select>
+                                        </div>
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Sensitivity</span>
+                                            <select class="a2-select" onchange="updateField({{ assignment.id }}, 'sensitivity', this.value)" {% if is_viewer %}disabled{% endif %}>
+                                                <option value="">— select —</option>
+                                                {% for val, label in assignment.SENSITIVITY_CHOICES %}{% if val %}<option value="{{ val }}" {% if assignment.sensitivity == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Output Level</span>
+                                            <select class="a2-select" onchange="updateField({{ assignment.id }}, 'output_level', this.value)" {% if is_viewer %}disabled{% endif %}>
+                                                <option value="">— select —</option>
+                                                {% for val, label in assignment.OUTPUT_LEVEL_CHOICES %}{% if val %}<option value="{{ val }}" {% if assignment.output_level == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <textarea class="a2-notes-input"
+                                              placeholder="Notes (allergies, preferences, setup tips...)"
+                                              onchange="updateField({{ assignment.id }}, 'notes', this.value)"
+                                              {% if is_viewer %}readonly{% endif %}>{{ assignment.notes|default:'' }}</textarea>
+                                </div>
+                            </div>
+
+                            {% if assignment.shared_presenters.exists %}
+                            <div class="a2-shared-header">
+                                <span class="a2-shared-label">Shared Presenters</span>
+                                <span class="a2-shared-count">{{ assignment.shared_presenters.count }}</span>
+                            </div>
+                            {% for shared in assignment.shared_presenters.all %}
+                            <div class="a2-presenter-block shared-block">
+                                <div class="a2-photo-zone" onclick="{% if not is_viewer %}triggerPresenterPhoto({{ shared.id }}){% endif %}">
+                                    {% if shared.photo %}<img src="{{ shared.photo.url }}" alt="{{ shared.name }}">
+                                    {% else %}
+                                    <div class="a2-photo-placeholder">
+                                        <span class="a2-photo-icon">👤</span>
+                                        {% if not is_viewer %}<span class="a2-photo-label">Photo</span>{% endif %}
+                                    </div>
+                                    {% endif %}
+                                    {% if not is_viewer %}
+                                    <input type="file" class="a2-photo-input" id="photo-input-p-{{ shared.id }}"
+                                           accept="image/*" onchange="uploadPresenterPhoto({{ shared.id }}, this)">
+                                    {% endif %}
+                                </div>
+                                <div class="a2-presenter-details">
+                                    <div class="a2-presenter-name-row">
+                                        <span class="a2-presenter-role">Shared</span>
+                                        <span class="a2-presenter-name">{{ shared.name }}</span>
+                                    </div>
+                                    <div class="a2-settings-row">
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Placement</span>
+                                            <select class="a2-select" onchange="updateSharedPlacement({{ assignment.id }}, {{ shared.id }}, this.value)" {% if is_viewer %}disabled{% endif %}>
+                                                <option value="">— select —</option>
+                                                <option value="LEFT_EAR">Left Ear</option>
+                                                <option value="RIGHT_EAR">Right Ear</option>
+                                                <option value="TIE">Tie</option>
+                                                <option value="LAV_MAGNET">Lav Magnet</option>
+                                                <option value="COLLAR">Collar</option>
+                                                <option value="HAIR_MOUNT">Hair Mount</option>
+                                                <option value="CHEEK">Cheek Mount</option>
+                                                <option value="FOREHEAD">Forehead</option>
+                                                <option value="CHEST_POCKET">Chest Pocket</option>
+                                                <option value="BELT_CLIP">Belt Clip</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+
+                        </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Session stats footer -->
+                    <div class="mtt-session-stats">
+                        {% with stats=session.get_mic_usage_stats %}
+                        <span>MIC'D: <strong>{{ stats.micd }}</strong>/{{ stats.total }}</span>
+                        <span>D-MIC: {{ stats.d_mic }}</span>
+                        {% if stats.shared > 0 %}<span>Shared: {{ stats.shared }}</span>{% endif %}
+                        {% endwith %}
+                    </div>
+
+                </div><!-- end mtt-session-body -->
+            </div><!-- end mtt-session -->
+            {% endfor %}
+
+            <!-- Add Session button at bottom of day -->
+            {% if not is_viewer %}
+            <div class="mtt-add-session-bar">
+                <button class="btn-mtt btn-mtt-ghost" onclick="addSession({{ day_data.day.id }})">+ Add Session</button>
             </div>
-        </div>
-        {% endfor %}
+            {% endif %}
+
+        </div><!-- end mtt-day-content -->
+    </div><!-- end mtt-day -->
+    {% empty %}
+    <div style="padding:48px;text-align:center;color:var(--text-dim);">
+        No show days yet.
+        {% if not is_viewer %}
+        <button class="btn-mtt btn-mtt-primary" onclick="addNewDay()" style="margin-left:12px;">+ Add Day</button>
+        {% endif %}
     </div>
+    {% endfor %}
+
 </div>
-<!-- Close the for day_data in days_data loop -->
 
-                <!-- Shared datalist for all presenter inputs -->
-                    <datalist id="presenters-datalist">
-                        <!-- Will be populated by JavaScript -->
-                    </datalist>
+<datalist id="presenters-datalist"></datalist>
+<script src="{% static 'admin/js/mic_tracker.js' %}"></script>
 
-                   <script src="{% static 'admin/js/mic_tracker.js' %}"></script>
-        
-        <!-- Auto-refresh for collaborative editing -->
-        <script>
-        (function() {
-            'use strict';
-            
-            let lastChecksum = null;
-            let lastActivity = Date.now();
-            let hasUnseenUpdates = false;
-            const CHECK_INTERVAL = 5000; // 5 seconds
-            const IDLE_THRESHOLD = 30000; // 30 seconds
-            
-            // Track user activity
-            function updateActivity() {
-                lastActivity = Date.now();
-                hideUpdateBanner();
+<script>
+// ── Session tab switching ──────────────────────────────────────
+function switchSessionTab(sessionId, tabId, btn) {
+    const session = document.querySelector('[data-session-id="' + sessionId + '"]');
+    if (!session) return;
+    session.querySelectorAll('.session-panel').forEach(p => p.classList.remove('active'));
+    session.querySelectorAll('.session-tab').forEach(t => t.classList.remove('active'));
+    const panel = document.getElementById('session-' + sessionId + '-' + tabId);
+    if (panel) panel.classList.add('active');
+    btn.classList.add('active');
+    localStorage.setItem('sessionTab-' + sessionId, tabId);
+}
+
+// Restore saved tab on load
+document.addEventListener('mousedown', function(e) {
+    if (!e.target.closest('.presenter-dropdown') && 
+        !e.target.classList.contains('a2-presenter-input')) {
+        document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
+    }
+});
+
+// ── Session collapse ───────────────────────────────────────────
+function toggleSession(sessionId, event) {
+    // Don't collapse when clicking tabs or action buttons
+    if (event.target.closest('.session-tabs') ||
+        event.target.closest('.session-actions') ||
+        event.target.closest('.mtt-dropdown-menu')) return;
+
+    const body = document.getElementById('session-body-' + sessionId);
+    const icon = document.getElementById('session-collapse-' + sessionId);
+    if (!body) return;
+    const isCollapsed = body.classList.contains('collapsed');
+    body.classList.toggle('collapsed', !isCollapsed);
+    if (icon) icon.classList.toggle('collapsed', !isCollapsed);
+}
+
+// ── Day collapse ───────────────────────────────────────────────
+function toggleDay(dayId, headerEl) {
+    const dayEl = headerEl.closest('.mtt-day');
+    const content = dayEl.querySelector('.mtt-day-content');
+    const icon = dayEl.querySelector('.mtt-day-collapse');
+    if (!content) return;
+    const isCollapsed = content.style.display === 'none';
+    content.style.display = isCollapsed ? '' : 'none';
+    if (icon) icon.classList.toggle('collapsed', !isCollapsed);
+    fetch('/audiopatch/api/toggle-day-collapse/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCsrfToken()},
+        body: 'day_id=' + dayId
+    });
+}
+
+// ── MIC'D toggles ─────────────────────────────────────────────
+function toggleMicd(assignmentId, btn) {
+    const isOn = btn.classList.contains('on');
+    const newState = !isOn;
+    btn.classList.toggle('on', newState);
+    btn.classList.toggle('off', !newState);
+    btn.textContent = newState ? 'ON' : '—';
+    const row = document.getElementById('a1-row-' + assignmentId);
+    if (row) row.classList.toggle('row-micd', newState);
+    const card = document.getElementById('a2-card-' + assignmentId);
+    if (card) {
+        card.classList.toggle('card-micd', newState);
+        const a2btn = card.querySelector('.a2-micd-toggle');
+        if (a2btn) { a2btn.classList.toggle('on', newState); a2btn.classList.toggle('off', !newState); }
+    }
+    updateField(assignmentId, 'is_micd', newState);
+}
+
+function toggleMicdA2(assignmentId, btn) {
+    const isOn = btn.classList.contains('on');
+    const newState = !isOn;
+    btn.classList.toggle('on', newState);
+    btn.classList.toggle('off', !newState);
+    const card = document.getElementById('a2-card-' + assignmentId);
+    if (card) card.classList.toggle('card-micd', newState);
+    const a1btn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
+    if (a1btn) {
+        a1btn.classList.toggle('on', newState);
+        a1btn.classList.toggle('off', !newState);
+        a1btn.textContent = newState ? 'ON' : '—';
+        const row = document.getElementById('a1-row-' + assignmentId);
+        if (row) row.classList.toggle('row-micd', newState);
+    }
+    updateField(assignmentId, 'is_micd', newState);
+}
+
+// ── Photo uploads ──────────────────────────────────────────────
+function triggerPhotoUpload(id) { const el = document.getElementById('photo-input-' + id); if (el) el.click(); }
+function triggerPresenterPhoto(id) { const el = document.getElementById('photo-input-p-' + id); if (el) el.click(); }
+
+function uploadPhoto(assignmentId, input) {
+    if (!input.files || !input.files[0]) return;
+    const fd = new FormData();
+    fd.append('photo', input.files[0]);
+    fd.append('assignment_id', assignmentId);
+    fd.append('csrfmiddlewaretoken', getCsrfToken());
+    fetch('/audiopatch/api/mic/upload-photo/', { method: 'POST', body: fd })
+        .then(r => r.json()).then(data => {
+            if (data.success && data.photo_url)
+                input.closest('.a2-photo-zone').innerHTML = '<img src="' + data.photo_url + '" style="width:100%;height:100%;object-fit:cover;">';
+        });
+}
+function uploadPresenterPhoto(presenterId, input) {
+    if (!input.files || !input.files[0]) return;
+    const fd = new FormData();
+    fd.append('photo', input.files[0]);
+    fd.append('presenter_id', presenterId);
+    fd.append('csrfmiddlewaretoken', getCsrfToken());
+    fetch('/audiopatch/api/mic/upload-presenter-photo/', { method: 'POST', body: fd })
+        .then(r => r.json()).then(data => {
+            if (data.success && data.photo_url)
+                input.closest('.a2-photo-zone').innerHTML = '<img src="' + data.photo_url + '" style="width:100%;height:100%;object-fit:cover;">';
+        });
+}
+
+// ── Shared placement ───────────────────────────────────────────
+function updateSharedPlacement(assignmentId, presenterId, value) {
+    fetch('/audiopatch/api/mic/update-shared-placement/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({assignment_id: assignmentId, presenter_id: presenterId, placement: value})
+    });
+}
+
+// ── CSRF ───────────────────────────────────────────────────────
+function getCsrfToken() {
+    const c = document.cookie.split(';').find(x => x.trim().startsWith('csrftoken='));
+    return c ? c.trim().split('=')[1] : '';
+}
+
+// ── Live update checker ────────────────────────────────────────
+(function() {
+    let lastChecksum = null, lastActivity = Date.now(), hasUnseen = false;
+    document.addEventListener('click', () => lastActivity = Date.now());
+    document.addEventListener('keypress', () => lastActivity = Date.now());
+    async function check() {
+        try {
+            const r = await fetch('/api/mic-tracker-checksum/');
+            if (!r.ok) return;
+            const data = await r.json();
+            if (!data.checksum) return;
+            if (lastChecksum === null) { lastChecksum = data.checksum; return; }
+            if (data.checksum !== lastChecksum) {
+                lastChecksum = data.checksum;
+                if ((Date.now() - lastActivity) > 30000 && !hasUnseen) { location.reload(); }
+                else { document.getElementById('mic-tracker-update-banner').style.display = 'block'; hasUnseen = true; }
             }
-            
-            // Listen for user interactions
-            document.addEventListener('click', updateActivity);
-            document.addEventListener('keypress', updateActivity);
-            document.addEventListener('input', updateActivity);
-            document.addEventListener('change', updateActivity);
-            
-            // Create update banner
-            function createBanner() {
-                const banner = document.createElement('div');
-                banner.id = 'mic-tracker-update-banner';
-                banner.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    background: #4a9eff;
-                    color: white;
-                    padding: 12px;
-                    text-align: center;
-                    z-index: 99999;
-                    display: none;
-                    font-size: 14px;
-                    font-weight: 500;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                `;
-                banner.innerHTML = `
-                    <strong>🔄 Updates Available!</strong> Another user has made changes.
-                    <button onclick="location.reload()" style="
-                        margin-left: 15px;
-                        background: white;
-                        color: #4a9eff;
-                        border: none;
-                        padding: 8px 20px;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        font-weight: bold;
-                        font-size: 13px;
-                    ">Refresh Now</button>
-                    <button onclick="document.getElementById('mic-tracker-update-banner').style.display='none'" style="
-                        margin-left: 8px;
-                        background: transparent;
-                        color: white;
-                        border: 1px solid white;
-                        padding: 8px 16px;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        font-size: 13px;
-                    ">Dismiss</button>
-                `;
-                document.body.insertBefore(banner, document.body.firstChild);
-                return banner;
-            }
-            
-            function showUpdateBanner() {
-                let banner = document.getElementById('mic-tracker-update-banner');
-                if (!banner) {
-                    banner = createBanner();
+        } catch(e) {}
+    }
+    setInterval(check, 5000);
+    setTimeout(check, 5000);
+})();
+
+
+function searchPresenters(assignmentId, query) {
+    const dd = document.getElementById('presenter-dd-' + assignmentId);
+    fetch('/audiopatch/api/presenters/list/?q=' + encodeURIComponent(query))
+        .then(r => r.json())
+        .then(data => {
+            dd.innerHTML = '';
+            if (!data.presenters || !data.presenters.length) { dd.classList.remove('open'); return; }
+            data.presenters.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'presenter-dd-item';
+                item.textContent = p.name;
+                item.onmousedown = (e) => {
+                e.preventDefault();
+                document.getElementById('presenter-input-' + assignmentId).value = p.name;
+                dd.classList.remove('open');
+                updateField(assignmentId, 'presenter_id', p.id);
+                // Sync to A1 row
+                const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
+                if (a1primary) {
+                    a1primary.textContent = p.name;
+                } else {
+                    const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
+                    if (a1unassigned) {
+                        a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + p.name + '</span>';
+                    }
                 }
-                banner.style.display = 'block';
-                hasUnseenUpdates = true;
-            }
-            
-            function hideUpdateBanner() {
-                const banner = document.getElementById('mic-tracker-update-banner');
-                if (banner) {
-                    banner.style.display = 'none';
+            };
+                dd.appendChild(item);
+            });
+
+// Determine if dropdown should open up or down
+const inputEl = document.getElementById('presenter-input-' + assignmentId);
+const inputRect = inputEl.getBoundingClientRect();
+const viewportHeight = window.innerHeight;
+const spaceBelow = viewportHeight - inputRect.bottom;
+const spaceAbove = inputRect.top;
+
+if (spaceAbove > spaceBelow && spaceAbove > 160) {
+    // More room above AND enough space — open upward
+    dd.style.bottom = '100%';
+    dd.style.top = 'auto';
+    dd.style.marginBottom = '4px';
+    dd.style.marginTop = '0';
+    dd.style.boxShadow = '0 -8px 24px rgba(0,0,0,0.4)';
+} else {
+    // Default — open downward
+    dd.style.bottom = 'auto';
+    dd.style.top = '100%';
+    dd.style.marginBottom = '0';
+    dd.style.marginTop = '4px';
+    dd.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+}
+
+dd.classList.add('open');
+
+
+
+
+           
+        });
+}
+// Add "create new" option if typed name doesn't exactly match
+const exactMatch = data.presenters.some(p => p.name.toLowerCase() === query.toLowerCase());
+if (query && !exactMatch) {
+    const addItem = document.createElement('div');
+    addItem.className = 'presenter-dd-item presenter-dd-add';
+    addItem.textContent = '+ Add "' + query + '" as new presenter';
+    addItem.onclick = () => {
+        fetch('/audiopatch/api/presenters/create/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({name: query})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('presenter-input-' + assignmentId).value = query;
+                dd.classList.remove('open');
+                updateField(assignmentId, 'presenter_id', data.presenter_id);
+                // Sync A1
+                const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
+                if (a1primary) { a1primary.textContent = query; }
+                else {
+                    const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
+                    if (a1unassigned) a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + query + '</span>';
                 }
-                hasUnseenUpdates = false;
             }
-            
-            function isUserIdle() {
-                return (Date.now() - lastActivity) > IDLE_THRESHOLD;
-            }
-            
-            async function checkForUpdates() {
-                try {
-                    const response = await fetch('/api/mic-tracker-checksum/');
-                    if (!response.ok) {
-                        console.error('Mic Tracker: Checksum endpoint error', response.status);
-                        return;
-                    }
-                    
-                    const data = await response.json();
-                    
-                    if (!data.checksum) {
-                        return;
-                    }
-                    
-                    if (lastChecksum === null) {
-                        lastChecksum = data.checksum;
-                        console.log('Mic Tracker: Initial checksum stored');
-                        return;
-                    }
-                    
-                    if (data.checksum !== lastChecksum) {
-                        console.log('Mic Tracker: Changes detected!');
-                        lastChecksum = data.checksum;
-                        
-                        if (isUserIdle() && !hasUnseenUpdates) {
-                            console.log('Mic Tracker: Auto-refreshing (user idle)');
-                            location.reload();
-                        } else {
-                            console.log('Mic Tracker: Showing update banner');
-                            showUpdateBanner();
-                        }
-                    }
-                } catch (error) {
-                    console.error('Mic Tracker: Error checking for updates', error);
-                }
-            }
-            
-            console.log('🔄 Mic Tracker: Live updates enabled (checking every 5 seconds)');
-            setInterval(checkForUpdates, CHECK_INTERVAL);
-            setTimeout(checkForUpdates, CHECK_INTERVAL);
-        })();
-        </script>
-        
-    {% endblock %}
-            
+        });
+    };
+    dd.appendChild(addItem);
+}
+
+function assignPresenter(assignmentId, value) {
+    const dd = document.getElementById('presenter-dd-' + assignmentId);
+    dd.classList.remove('open');
+    if (!value) updateField(assignmentId, 'presenter_id', '');
+}
+
+// Close on outside click
+document.addEventListener('mousedown', function(e) {
+    if (!e.target.closest('.presenter-dropdown') && !e.target.closest('.a2-presenter-input')) {
+        document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
+    }
+});
+
+// Close on input blur with small delay to allow click to register first
+document.addEventListener('focusout', function(e) {
+    if (e.target.classList.contains('a2-presenter-input')) {
+        setTimeout(() => {
+            document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
+        }, 200);
+    }
+});
+</script>
+
+{% endblock %}

@@ -595,16 +595,15 @@ def mic_tracker_view(request):
     # Fetch all through objects in one query
     from planner.models import MicAssignment
     ThroughModel = MicAssignment.shared_presenters.through
-
     through_objects = ThroughModel.objects.filter(
-        micassignment_id__in=all_assignment_ids
-    ).order_by('micassignment_id', 'id').select_related('presenter')
+        mic_assignment_id__in=all_assignment_ids
+    ).order_by('mic_assignment_id', 'id').select_related('presenter')
 
     # Group by assignment_id
     from collections import defaultdict
     presenters_by_assignment = defaultdict(list)
     for through_obj in through_objects:
-        presenters_by_assignment[through_obj.micassignment_id].append(through_obj.presenter)
+        presenters_by_assignment[through_obj.mic_assignment_id].append(through_obj.presenter)
 
     # Attach to assignments
     for day in days:
@@ -1275,9 +1274,25 @@ def dmic_and_rotate(request):
     #---Dropdown for presenters---
 @staff_member_required
 def get_presenters_list(request):
-    """Return all presenters for autocomplete"""
-    presenters = Presenter.objects.all().order_by('name').values('id', 'name')
+    q = request.GET.get('q', '')
+    project = getattr(request, 'current_project', None)
+    presenters = Presenter.objects.filter(name__icontains=q)
+    if project:
+        presenters = presenters.filter(project=project)
+    presenters = presenters.order_by('name').values('id', 'name')
     return JsonResponse({'presenters': list(presenters)})
+
+@staff_member_required
+def create_presenter(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False})
+    data = json.loads(request.body)
+    name = data.get('name', '').strip()
+    if not name:
+        return JsonResponse({'success': False})
+    project = getattr(request, 'current_project', None)
+    presenter, created = Presenter.objects.get_or_create(name=name, project=project)
+    return JsonResponse({'success': True, 'presenter_id': presenter.id})
 
 
 

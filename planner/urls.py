@@ -72,6 +72,7 @@ urlpatterns = [
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     # In urls.py
     path('api/presenters/list/', views.get_presenters_list, name='get_presenters_list'),
+    path('api/presenters/create/', views.create_presenter, name='create_presenter'),
     
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
@@ -163,3 +164,8 @@ urlpatterns = [
 
    
 ]
+
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
