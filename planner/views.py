@@ -47,7 +47,7 @@ from .models import (
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
     Device, Device, SystemProcessor, Amp, Location, PACableSchedule, PAZone,
-    ShowDay, MicSession, MicAssignment, MicShowInfo, PowerDistributionPlan, AmplifierProfile, 
+    ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PowerDistributionPlan, AmplifierProfile, 
     AmplifierAssignment
 )
 
@@ -1304,6 +1304,36 @@ def create_presenter(request):
     return JsonResponse({'success': True, 'presenter_id': presenter.id})
 
 
+
+
+@staff_member_required
+def manage_mic_groups(request, session_id):
+    session = get_object_or_404(MicSession, id=session_id)
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        action = data.get('action')
+        if action == 'create':
+            group = MicGroup.objects.create(
+                session=session,
+                name=data['name'],
+                color=data['color']
+            )
+            return JsonResponse({'success': True, 'group_id': group.id, 'name': group.name, 'color': group.color})
+        elif action == 'delete':
+            MicGroup.objects.filter(id=data['group_id'], session=session).delete()
+            return JsonResponse({'success': True})
+    groups = list(session.mic_groups.values('id', 'name', 'color'))
+    return JsonResponse({'success': True, 'groups': groups})
+
+@staff_member_required  
+def assign_mic_group(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        assignment = get_object_or_404(MicAssignment, id=data['assignment_id'])
+        group_id = data.get('group_id')
+        assignment.group = MicGroup.objects.get(id=group_id) if group_id else None
+        assignment.save()
+        return JsonResponse({'success': True})
 
 @require_http_methods(["GET"])
 def get_assignment_details(request, assignment_id):

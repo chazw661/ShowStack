@@ -37,7 +37,7 @@ from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import Location, Amp, AmpChannel
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
-from .models import ShowDay, MicSession, MicAssignment, MicShowInfo 
+from .models import ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup
 from .models import Presenter
 
 # Form imports
@@ -4760,6 +4760,17 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
             'all': ('admin/css/mic_assignment_buttons.css',)
         }
 
+class MicGroupAdmin(BaseEquipmentAdmin):
+    list_display = ['name', 'color', 'session']
+    list_filter = ['color']
+    exclude = ['project']
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(session__day__project=request.current_project)
+        return qs.none()
+
 
 
 
@@ -5680,6 +5691,7 @@ showstack_admin_site.register(ShowDay, ShowDayAdmin)
 showstack_admin_site.register(Presenter, PresenterAdmin)
 showstack_admin_site.register(MicSession, MicSessionAdmin)
 showstack_admin_site.register(MicAssignment, MicAssignmentAdmin)
+showstack_admin_site.register(MicGroup, MicGroupAdmin)
 showstack_admin_site.register(MicShowInfo, MicShowInfoAdmin)
 showstack_admin_site.register(AmplifierProfile, AmplifierProfileAdmin)
 showstack_admin_site.register(PowerDistributionPlan, PowerDistributionPlanAdmin)

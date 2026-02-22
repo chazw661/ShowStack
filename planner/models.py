@@ -2230,6 +2230,8 @@ class ShowDay(models.Model):
         }
     
 
+    
+
 
 # ========Presenters========
 
@@ -2350,6 +2352,21 @@ class MicSession(models.Model):
                 new_assignment.shared_presenters = assignment.shared_presenters
                 new_assignment.save()
 
+class MicGroup(models.Model):
+    GROUP_COLORS = [
+        ('blue',   'Blue'),
+        ('amber',  'Amber'),
+        ('red',    'Red'),
+        ('purple', 'Purple'),
+        ('teal',   'Teal'),
+    ]
+    session = models.ForeignKey(MicSession, on_delete=models.CASCADE, related_name='mic_groups')
+    name = models.CharField(max_length=50)
+    color = models.CharField(max_length=10, choices=GROUP_COLORS, default='blue')
+
+    def __str__(self):
+        return f"{self.name} ({self.color})"               
+
 class MicAssignment(models.Model):
     """Represents a single mic assignment within a session"""
     MIC_TYPES = [
@@ -2412,6 +2429,11 @@ class MicAssignment(models.Model):
     
     session = models.ForeignKey(MicSession, on_delete=models.CASCADE, related_name='mic_assignments')
     rf_number = models.IntegerField(validators=[MinValueValidator(1)])
+    group = models.ForeignKey(
+    'MicGroup', on_delete=models.SET_NULL,
+    null=True, blank=True, related_name='assignments'
+)
+
     
     # Mic details
     mic_type = models.CharField(max_length=20, choices=MIC_TYPES, blank=True)

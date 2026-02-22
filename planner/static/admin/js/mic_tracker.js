@@ -17,6 +17,7 @@ function getCookie(name) {
 }
 
 const csrftoken = getCookie('csrftoken');
+function getCsrfToken() { return getCookie("csrftoken"); }
 
 // Global variables for managing shared presenters
 let currentAssignmentId = null;
@@ -1009,3 +1010,183 @@ async function loadPresentersList() {
 
 // Load presenters when page loads
 document.addEventListener('DOMContentLoaded', loadPresentersList);
+// ── Mic Groups ─────────────────────────────────────────────────
+var currentGroupSessionId = null;
+var sessionGroups = {};
+var GROUP_COLORS = {
+    blue:   '#4a9eff',
+    amber:  '#ffab00',
+    red:    '#ff5252',
+    purple: '#b464ff',
+    teal:   '#00bcd4'
+};
+
+function loadGroups(sessionId, callback) {
+    fetch('/audiopatch/api/mic-groups/' + sessionId + '/')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                sessionGroups[sessionId] = data.groups;
+                if (callback) callback(data.groups);
+            }
+        });
+}
+
+function openGroupPicker(assignmentId, sessionId, dotEl) {
+    document.querySelectorAll('.group-picker.open').forEach(p => p.classList.remove('open'));
+    var picker = document.getElementById('group-picker-' + assignmentId);
+    if (!picker) return;
+    loadGroups(sessionId, function(groups) {
+        picker.innerHTML = '';
+        var title = document.createElement('div');
+        title.className = 'group-picker-title';
+        title.textContent = 'Assign Group';
+        picker.appendChild(title);
+        var noneItem = document.createElement('div');
+        noneItem.className = 'group-picker-none';
+        noneItem.textContent = '— No Group —';
+        noneItem.onmousedown = function(e) {
+            e.preventDefault();
+            assignGroup(assignmentId, null, null, null, dotEl);
+            picker.classList.remove('open');
+        };
+        picker.appendChild(noneItem);
+        if (groups.length > 0) {
+            var div = document.createElement('div');
+            div.className = 'group-picker-divider';
+            picker.appendChild(div);
+        }
+        groups.forEach(function(g) {
+            var item = document.createElement('div');
+            item.className = 'group-picker-item';
+            item.innerHTML = '<span style="width:12px;height:12px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span> ' + g.name;
+            item.onmousedown = function(e) {
+                e.preventDefault();
+                assignGroup(assignmentId, g.id, g.name, g.color, dotEl);
+                picker.classList.remove('open');
+            };
+            picker.appendChild(item);
+        });
+        var divider2 = document.createElement('div');
+        divider2.className = 'group-picker-divider';
+        picker.appendChild(divider2);
+        var manageBtn = document.createElement('div');
+        manageBtn.className = 'group-picker-manage';
+        manageBtn.textContent = '⚙ Manage Groups...';
+        manageBtn.onmousedown = function(e) {
+            e.preventDefault();
+            picker.classList.remove('open');
+            openGroupManager(sessionId);
+        };
+        picker.appendChild(manageBtn);
+        var dotRect = dotEl.getBoundingClientRect();
+        var spaceBelow = window.innerHeight - dotRect.bottom;
+        if (spaceBelow < 200) {
+            picker.style.bottom = '100%';
+            picker.style.top = 'auto';
+        } else {
+            picker.style.top = '100%';
+            picker.style.bottom = 'auto';
+        }
+        picker.classList.add('open');
+    });
+}
+
+function assignGroup(assignmentId, groupId, groupName, groupColor, dotEl) {
+    fetch('/audiopatch/api/mic-groups/assign/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({assignment_id: assignmentId, group_id: groupId})
+    })
+    .then(r => r.json())
+    .then(function(data) {
+        if (data.success) {
+            dotEl.className = 'group-dot ' + (groupColor ? 'color-' + groupColor : 'empty');
+            dotEl.title = groupName || 'Assign group';
+            var row = document.getElementById('a1-row-' + assignmentId);
+            if (row) {
+                row.classList.remove('group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal');
+                if (groupColor) row.classList.add('group-' + groupColor);
+            }
+        }
+    });
+}
+
+function openGroupManager(sessionId) {
+    currentGroupSessionId = sessionId;
+    var modal = document.getElementById('group-manage-modal');
+    modal.classList.remove('hidden');
+    refreshGroupManagerList(sessionId);
+}
+
+function closeGroupManager() {
+    document.getElementById('group-manage-modal').classList.add('hidden');
+    currentGroupSessionId = null;
+}
+
+function refreshGroupManagerList(sessionId) {
+    loadGroups(sessionId, function(groups) {
+        var list = document.getElementById('group-manage-list');
+        list.innerHTML = '';
+        if (groups.length === 0) {
+            list.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">No groups yet. Add one below.</div>';
+            return;
+        }
+        groups.forEach(function(g) {
+            var item = document.createElement('div');
+            item.className = 'group-manage-item';
+            item.innerHTML = '<span style="width:14px;height:14px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span>' +
+                '<span class="group-manage-name">' + g.name + '</span>' +
+                '<button class="group-manage-delete" onclick="deleteGroup(' + g.id + ',' + sessionId + ')">✕</button>';
+            list.appendChild(item);
+        });
+    });
+}
+
+function addGroup() {
+    var name = document.getElementById('group-add-name').value.trim();
+    var color = document.getElementById('group-add-color').value;
+    if (!name || !currentGroupSessionId) return;
+    fetch('/audiopatch/api/mic-groups/' + currentGroupSessionId + '/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({action: 'create', name: name, color: color})
+    })
+    .then(r => r.json())
+    .then(function(data) {
+        if (data.success) {
+            document.getElementById('group-add-name').value = '';
+            delete sessionGroups[currentGroupSessionId];
+            refreshGroupManagerList(currentGroupSessionId);
+        }
+    });
+}
+
+function deleteGroup(groupId, sessionId) {
+    if (!confirm('Delete this group? Assignments will be unassigned.')) return;
+    fetch('/audiopatch/api/mic-groups/' + sessionId + '/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({action: 'delete', group_id: groupId})
+    })
+    .then(r => r.json())
+    .then(function(data) {
+        if (data.success) {
+            delete sessionGroups[sessionId];
+            refreshGroupManagerList(sessionId);
+            document.querySelectorAll('[data-session-id="' + sessionId + '"] .a1-row').forEach(function(row) {
+                row.classList.remove('group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal');
+            });
+            document.querySelectorAll('[data-session-id="' + sessionId + '"] .group-dot').forEach(function(dot) {
+                dot.className = 'group-dot empty';
+                dot.title = 'Assign group';
+            });
+        }
+    });
+}
+
+document.addEventListener('mousedown', function(e) {
+    if (!e.target.closest('.group-picker') && !e.target.classList.contains('group-dot')) {
+        document.querySelectorAll('.group-picker.open').forEach(function(p) { p.classList.remove('open'); });
+    }
+});

@@ -119,6 +119,8 @@ urlpatterns = [
 
     #----Mic Tracker Presenter CSV Import---
     path('api/presenters/import/', views.import_presenters_csv, name='import_presenters_csv'),
+    path('api/mic-groups/<int:session_id>/', views.manage_mic_groups, name='manage_mic_groups'),
+    path('api/mic-groups/assign/', views.assign_mic_group, name='assign_mic_group'),
 
 
     #-----Soundvision PDF----

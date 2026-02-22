@@ -371,6 +371,74 @@
 
     .presenter-dd-add { color: var(--accent-blue); border-top: 1px solid var(--border); }
 
+    /* Mic Groups */
+    .a1-row.group-blue   { border-left: 4px solid #4a9eff; }
+    .a1-row.group-amber  { border-left: 4px solid #ffab00; }
+    .a1-row.group-red    { border-left: 4px solid #ff5252; }
+    .a1-row.group-purple { border-left: 4px solid #b464ff; }
+    .a1-row.group-teal   { border-left: 4px solid #00bcd4; }
+
+    .group-dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        display: inline-block; cursor: pointer; flex-shrink: 0;
+        border: 2px solid transparent; transition: transform 0.1s;
+    }
+    .group-dot:hover { transform: scale(1.2); }
+    .group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
+    .group-dot.color-blue   { background: #4a9eff; }
+    .group-dot.color-amber  { background: #ffab00; }
+    .group-dot.color-red    { background: #ff5252; }
+    .group-dot.color-purple { background: #b464ff; }
+    .group-dot.color-teal   { background: #00bcd4; }
+
+    .group-picker {
+        position: absolute; z-index: 500; background: var(--bg-raised);
+        border: 1px solid var(--border-bright); border-radius: 6px;
+        padding: 10px; min-width: 180px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none;
+    }
+    .group-picker.open { display: block; }
+    .group-picker-title { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+    .group-picker-item {
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .group-picker-item:hover { background: var(--bg-input); color: var(--text-primary); }
+    .group-picker-item.selected { color: var(--text-primary); font-weight: 600; }
+    .group-picker-none { color: var(--text-dim); font-size: 11px; padding: 5px 6px; cursor: pointer; }
+    .group-picker-none:hover { color: var(--text-secondary); }
+    .group-picker-divider { height: 1px; background: var(--border); margin: 6px 0; }
+    .group-picker-manage { font-size: 10px; color: var(--accent-blue); padding: 4px 6px; cursor: pointer; }
+    .group-picker-manage:hover { text-decoration: underline; }
+
+    .group-manage-modal {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6); z-index: 1000;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .group-manage-modal.hidden { display: none; }
+    .group-manage-box {
+        background: var(--bg-raised); border: 1px solid var(--border-bright);
+        border-radius: 8px; padding: 24px; min-width: 320px; max-width: 400px;
+    }
+    .group-manage-title { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
+    .group-manage-list { margin-bottom: 12px; }
+    .group-manage-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 7px 0; border-bottom: 1px solid var(--border);
+    }
+    .group-manage-item:last-child { border-bottom: none; }
+    .group-manage-name { flex: 1; font-size: 13px; color: var(--text-primary); }
+    .group-manage-delete { background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; padding: 2px 6px; }
+    .group-add-row { display: flex; gap: 8px; margin-top: 12px; }
+    .group-add-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border-bright); color: var(--text-primary); border-radius: 4px; padding: 6px 10px; font-size: 12px; }
+    .group-color-select { background: var(--bg-input); border: 1px solid var(--border-bright); color: var(--text-primary); border-radius: 4px; padding: 6px 8px; font-size: 12px; }
+    .group-add-btn { background: var(--accent-blue); color: #000; border: none; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .group-modal-close { float: right; background: none; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; margin-top: -4px; }
+
+    .a1-group-cell { width: 28px; text-align: center; padding: 0 4px !important; position: relative; }
+
     </style>
 {% endblock %}
 
@@ -454,6 +522,7 @@
                     <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
                         <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
+                        <button class="btn-icon-sm" title="Manage Groups" onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤</button>
                         <div class="mtt-dropdown">
                             <button class="btn-icon-sm" title="Bulk actions">⋮</button>
                             <div class="mtt-dropdown-menu">
@@ -481,6 +550,7 @@
                         <table class="a1-table">
                             <thead>
                                 <tr>
+                                    <th style="width:28px;"></th>
                                     <th style="width:56px;">RF#</th>
                                     <th style="width:110px;">Type</th>
                                     <th>Presenter</th>
@@ -490,8 +560,17 @@
                             </thead>
                             <tbody>
                             {% for assignment in session.mic_assignments.all %}
-                            <tr class="a1-row {% if assignment.is_micd %}row-micd{% endif %}"
+                            <tr class="a1-row {% if assignment.is_micd %}row-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
                                 id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
+                                <td class="a1-group-cell">
+                                    {% if not is_viewer %}
+                                    <span class="group-dot {% if assignment.group %}color-{{ assignment.group.color }}{% else %}empty{% endif %}"
+                                          onclick="openGroupPicker({{ assignment.id }}, {{ session.id }}, this)"
+                                          title="{% if assignment.group %}{{ assignment.group.name }}{% else %}Assign group{% endif %}">
+                                    </span>
+                                    <div class="group-picker" id="group-picker-{{ assignment.id }}"></div>
+                                    {% endif %}
+                                </td>
                                 <td class="a1-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
                                 <td>
                                     {% if assignment.mic_type %}
@@ -704,7 +783,8 @@
             <!-- Add Session button at bottom of day -->
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
-                <button class="btn-mtt btn-mtt-ghost" onclick="addSession({{ day_data.day.id }})">+ Add Session</button>
+                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" 
+                    onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤ Groups</button>
             </div>
             {% endif %}
 
@@ -719,6 +799,26 @@
     </div>
     {% endfor %}
 
+</div>
+
+<!-- Group Manager Modal -->
+<div class="group-manage-modal hidden" id="group-manage-modal">
+    <div class="group-manage-box">
+        <button class="group-modal-close" onclick="closeGroupManager()">×</button>
+        <div class="group-manage-title">Manage Groups</div>
+        <div class="group-manage-list" id="group-manage-list"></div>
+        <div class="group-add-row">
+            <input type="text" class="group-add-input" id="group-add-name" placeholder="Group name (e.g. CEO Panel)">
+            <select class="group-color-select" id="group-add-color">
+                <option value="blue">🔵 Blue</option>
+                <option value="amber">🟡 Amber</option>
+                <option value="red">🔴 Red</option>
+                <option value="purple">🟣 Purple</option>
+                <option value="teal">🩵 Teal</option>
+            </select>
+            <button class="group-add-btn" onclick="addGroup()">Add</button>
+        </div>
+    </div>
 </div>
 
 <datalist id="presenters-datalist"></datalist>
@@ -1017,6 +1117,11 @@ document.addEventListener('focusout', function(e) {
             document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
         }, 200);
     }
+});
+
+// Close modal on background click
+document.getElementById('group-manage-modal').addEventListener('mousedown', function(e) {
+    if (e.target === this) closeGroupManager();
 });
 </script>
 
