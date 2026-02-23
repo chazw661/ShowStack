@@ -71,7 +71,7 @@
     .btn-icon-sm:hover { border-color: var(--border-bright); color: var(--text-secondary); }
 
     /* Day */
-    .mtt-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mtt-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
     .mtt-day-header {
         display: flex; align-items: center; gap: 14px; padding: 11px 16px;
         background: var(--bg-raised); cursor: pointer; user-select: none;
@@ -92,7 +92,7 @@
     }
 
     /* Session */
-    .mtt-session { margin: 14px 14px 0 14px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+    .mtt-session { margin: 14px 14px 0 14px; border: 1px solid var(--border); border-radius: 5px; overflow: visible; }
 
     .mtt-session-header {
         display: flex; align-items: center; gap: 10px;
@@ -167,10 +167,10 @@
     /* A1 table */
     .a1-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .a1-table thead th {
-        padding: 8px 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
-        text-transform: uppercase; color: var(--text-dim); background: #13131f;
-        text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
-    }
+    padding: 12px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-secondary); background: #13131f;
+    text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
     .a1-table thead th.th-center { text-align: center; }
 
     .a1-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
@@ -281,14 +281,28 @@
         width: 70px; height: 70px; flex-shrink: 0; border-radius: 5px;
         border: 1px dashed var(--border-bright); background: var(--bg-raised);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        overflow: hidden; cursor: pointer; margin-right: 14px; transition: border-color 0.15s;
+        overflow: visible; cursor: pointer; margin-right: 14px; transition: border-color 0.15s;
+        position: relative;
     }
     .a2-photo-zone:hover { border-color: var(--accent-blue); }
-    .a2-photo-zone img { width: 100%; height: 100%; object-fit: cover; }
+    .a2-photo-zone > img { width: 70px; height: 70px; object-fit: cover; border-radius: 5px; display: block; }
     .a2-photo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 3px; }
     .a2-photo-icon { font-size: 22px; opacity: 0.25; }
     .a2-photo-label { font-size: 8px; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
     .a2-photo-input { display: none; }
+
+    /* Photo hover expand */
+    .a2-photo-expand {
+        display: none; position: absolute; top: 0; left: 0; z-index: 200;
+        width: 200px; height: 200px; border-radius: 8px; overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        border: 2px solid var(--accent-blue);
+    }
+    .a2-photo-expand img { width: 100%; height: 100%; object-fit: cover; }
+    .a2-photo-zone:hover .a2-photo-expand { display: block; }
+
+    /* Camera icon overlay */
+    
 
     .a2-presenter-details { flex: 1; min-width: 0; }
     .a2-presenter-name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; position: relative; }
@@ -522,19 +536,7 @@
                     <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
                         <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
-                        <button class="btn-icon-sm" title="Manage Groups" onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤</button>
-                        <div class="mtt-dropdown">
-                            <button class="btn-icon-sm" title="Bulk actions">⋮</button>
-                            <div class="mtt-dropdown-menu">
-                                <a href="#" onclick="bulkUpdate({{ session.id }},'check_all_micd');return false;">✓ Check All MIC'D</a>
-                                <a href="#" onclick="bulkUpdate({{ session.id }},'uncheck_all_micd');return false;">✗ Uncheck All MIC'D</a>
-                                <div class="divider"></div>
-                                <a href="#" onclick="bulkUpdate({{ session.id }},'check_all_dmic');return false;">✓ Check All D-MIC</a>
-                                <a href="#" onclick="bulkUpdate({{ session.id }},'uncheck_all_dmic');return false;">✗ Uncheck All D-MIC</a>
-                                <div class="divider"></div>
-                                <a href="#" onclick="bulkUpdate({{ session.id }},'clear_all');return false;" style="color:#ff5252;">⊘ Clear All</a>
-                            </div>
-                        </div>
+                        
                     </div>
                     {% endif %}
                 </div>
@@ -550,8 +552,16 @@
                         <table class="a1-table">
                             <thead>
                                 <tr>
-                                    <th style="width:28px;"></th>
-                                    <th style="width:56px;">RF#</th>
+                                    <th style="width:44px;padding:4px 0;text-align:center;">
+                                    {% if not is_viewer %}
+                                    <button onclick="openGroupManager({{ session.id }})" 
+                                            style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
+                                                background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
+                                                color:var(--accent-blue);border-radius:3px;cursor:pointer;
+                                                line-height:1;">GRP</button>
+                                    {% endif %}
+                                </th>
+                                <th style="width:56px;">RF#</th>
                                     <th style="width:110px;">Type</th>
                                     <th>Presenter</th>
                                     <th class="th-center a1-micd-cell">MIC'D</th>
@@ -634,18 +644,19 @@
                             
 
                             <div class="a2-presenter-block">
-                                <div class="a2-photo-zone" onclick="{% if not is_viewer %}triggerPhotoUpload({{ assignment.id }}){% endif %}">
-                                    {% if assignment.photo %}
-                                    <img src="{{ assignment.photo.url }}" alt="presenter">
+                                <div class="a2-photo-zone" onclick="{% if not is_viewer %}{% if assignment.presenter %}triggerPresenterPhoto({{ assignment.presenter.id }}){% endif %}{% endif %}">
+                                    {% if assignment.presenter and assignment.presenter.photo %}
+                                    <img src="{{ assignment.presenter.photo.url }}" alt="{{ assignment.presenter.name }}">
+                                    <div class="a2-photo-expand"><img src="{{ assignment.presenter.photo.url }}" alt="{{ assignment.presenter.name }}"></div>
                                     {% else %}
                                     <div class="a2-photo-placeholder">
                                         <span class="a2-photo-icon">👤</span>
                                         {% if not is_viewer %}<span class="a2-photo-label">Photo</span>{% endif %}
                                     </div>
                                     {% endif %}
-                                    {% if not is_viewer %}
-                                    <input type="file" class="a2-photo-input" id="photo-input-{{ assignment.id }}"
-                                           accept="image/*" onchange="uploadPhoto({{ assignment.id }}, this)">
+                                    {% if not is_viewer and assignment.presenter %}
+                                    <input type="file" class="a2-photo-input" id="photo-input-p-{{ assignment.presenter.id }}"
+                                           accept="image/*" onchange="uploadPresenterPhoto({{ assignment.presenter.id }}, this)">
                                     {% endif %}
                                 </div>
                                 <div class="a2-presenter-details">
@@ -723,6 +734,7 @@
                             <div class="a2-presenter-block shared-block">
                                 <div class="a2-photo-zone" onclick="{% if not is_viewer %}triggerPresenterPhoto({{ shared.id }}){% endif %}">
                                     {% if shared.photo %}<img src="{{ shared.photo.url }}" alt="{{ shared.name }}">
+                                    <div class="a2-photo-expand"><img src="{{ shared.photo.url }}" alt="{{ shared.name }}"></div>
                                     {% else %}
                                     <div class="a2-photo-placeholder">
                                         <span class="a2-photo-icon">👤</span>

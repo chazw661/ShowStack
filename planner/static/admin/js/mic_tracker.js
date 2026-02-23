@@ -1190,3 +1190,38 @@ document.addEventListener('mousedown', function(e) {
         document.querySelectorAll('.group-picker.open').forEach(function(p) { p.classList.remove('open'); });
     }
 });
+
+// ── Photo uploads ───────────────────────────────────────────────
+function triggerPhotoUpload(id) {
+    var el = document.getElementById('photo-input-' + id);
+    if (el) el.click();
+}
+
+function triggerPresenterPhoto(id) {
+    var el = document.getElementById('photo-input-p-' + id);
+    if (el) el.click();
+}
+
+function uploadPresenterPhoto(presenterId, input) {
+    if (!input.files || !input.files[0]) return;
+    var fd = new FormData();
+    fd.append('photo', input.files[0]);
+    fd.append('presenter_id', presenterId);
+    fd.append('csrfmiddlewaretoken', getCsrfToken());
+    fetch('/audiopatch/api/mic/upload-presenter-photo/', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success && data.photo_url) {
+                var zone = input.closest('.a2-photo-zone');
+                var placeholder = zone.querySelector('.a2-photo-placeholder');
+                if (placeholder) placeholder.remove();
+                var img = zone.querySelector('img');
+                if (!img) {
+                    img = document.createElement('img');
+                    img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:4px;';
+                    zone.insertBefore(img, zone.firstChild);
+                }
+                img.src = data.photo_url;
+            }
+        });
+}

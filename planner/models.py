@@ -2239,7 +2239,6 @@ class Presenter(models.Model):
     name = models.CharField(max_length=200, unique=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
     project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -2249,6 +2248,12 @@ class Presenter(models.Model):
     name = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    photo = models.ImageField(          # ← ADD THIS
+        upload_to='presenter_photos/',
+        null=True,
+        blank=True,
+        help_text="Presenter headshot"
+    )
     
     class Meta:
         verbose_name = "Presenter"
@@ -2481,10 +2486,10 @@ class MicAssignment(models.Model):
     # Additional fields
     notes = models.TextField(blank=True)
     photo = models.ImageField(
-    upload_to='presenter_photos/',
-    null=True,
-    blank=True,
-    help_text="Presenter headshot for A2 view"
+        upload_to='presenter_photos/',
+        null=True,
+        blank=True,
+        help_text="Presenter headshot for A2 view"
 )
     last_modified = models.DateTimeField(auto_now=True)
     modified_by = models.ForeignKey(

@@ -1306,6 +1306,25 @@ def create_presenter(request):
 
 
 
+
+@staff_member_required
+def upload_presenter_photo(request):
+    if request.method == 'POST':
+        presenter_id = request.POST.get('presenter_id')
+        photo = request.FILES.get('photo')
+        if not presenter_id or not photo:
+            return JsonResponse({'success': False, 'error': 'Missing data'})
+        try:
+            presenter = Presenter.objects.get(id=presenter_id)
+            presenter.photo.save(photo.name, photo, save=True)
+            return JsonResponse({'success': True, 'photo_url': presenter.photo.url})
+        except Presenter.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Presenter not found'})
+    return JsonResponse({'success': False})
+
+
+
+
 @staff_member_required
 def manage_mic_groups(request, session_id):
     session = get_object_or_404(MicSession, id=session_id)

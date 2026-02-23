@@ -72,8 +72,11 @@ urlpatterns = [
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     # In urls.py
     path('api/presenters/list/', views.get_presenters_list, name='get_presenters_list'),
+    
     path('api/presenters/create/', views.create_presenter, name='create_presenter'),
     
+    # Add to urls.py
+     path('api/mic/upload-presenter-photo/', views.upload_presenter_photo, name='upload_presenter_photo'),
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
      path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),
