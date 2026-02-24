@@ -100,7 +100,7 @@
         border-bottom: 1px solid var(--border);
         min-height: 46px; flex-wrap: wrap;
         cursor: pointer; user-select: none;
-         z-index: 10;
+        z-index: 10;
         position: relative;
     }
 
@@ -167,10 +167,10 @@
     /* A1 table */
     .a1-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .a1-table thead th {
-    padding: 12px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--text-secondary); background: #13131f;
-    text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
-}
+        padding: 12px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+        text-transform: uppercase; color: var(--text-secondary); background: #13131f;
+        text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
     .a1-table thead th.th-center { text-align: center; }
 
     .a1-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
@@ -252,12 +252,12 @@
     .a2-card.card-micd .a2-rf-badge { background: rgba(0,230,118,0.15); border-color: var(--accent-green); color: var(--accent-green); }
     .a2-card-meta { flex: 1; }
 
-    .a2-card-header { 
-        display: flex; 
-        align-items: center; 
-        gap: 10px; 
-        padding: 10px 14px; 
-        background: #14142a; 
+    .a2-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: #14142a;
         border-bottom: 1px solid var(--border);
         justify-content: space-between;
     }
@@ -301,9 +301,6 @@
     .a2-photo-expand img { width: 100%; height: 100%; object-fit: cover; }
     .a2-photo-zone:hover .a2-photo-expand { display: block; }
 
-    /* Camera icon overlay */
-    
-
     .a2-presenter-details { flex: 1; min-width: 0; }
     .a2-presenter-name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; position: relative; }
     .a2-presenter-role { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
@@ -314,19 +311,39 @@
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
     .a2-setting-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); }
-    .a2-select 
+
+    /* FIX: restored missing .a2-select base rule */
+    .a2-select {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-size: 11px;
+        border-radius: 3px;
+        padding: 3px 6px;
+        font-family: inherit;
+        cursor: pointer;
+    }
     .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
     .a2-select option { background: #1e1e32; }
 
-   .a2-notes-input { color: var(--text-primary); }
-    
+    .a2-notes-input { color: var(--text-primary); }
     .a2-notes-input:focus { border-color: var(--accent-blue); height: 52px; }
-   
     .a2-notes-input::placeholder { color: #6060a0; }
 
-    .a2-shared-header { display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: #13131f; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-    .a2-shared-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
-    .a2-shared-count { background: var(--bg-raised); color: var(--text-dim); font-size: 9px; padding: 1px 7px; border-radius: 10px; }
+    /* Slot queue */
+    .a2-slot-queue { border-top: 1px solid var(--border); padding: 8px 14px 4px; background: #13131f; }
+    .a2-slot-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .a2-slot-btn { background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.4); color: var(--accent-blue); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer; letter-spacing: 0.05em; }
+    .a2-slot-btn:hover { background: rgba(74,158,255,0.25); }
+    .a2-slot-counter { font-size: 11px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.05em; }
+    .a2-slot-list { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+    .a2-slot-chip { font-size: 10px; padding: 3px 9px; border-radius: 10px; background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); display: inline-flex; align-items: center; }
+    .a2-slot-chip.active { background: rgba(74,158,255,0.15); color: var(--accent-blue); border-color: rgba(74,158,255,0.4); font-weight: 600; }
+    .a2-slot-remove { margin-left: 5px; opacity: 0.4; cursor: pointer; font-size: 9px; }
+    .a2-slot-remove:hover { opacity: 1; color: #ff4444; }
+    .a2-add-slot-bar { padding: 6px 14px 10px; background: #13131f; border-top: 1px solid var(--border); }
+    .a2-add-slot-btn { background: none; border: 1px dashed var(--border-bright); color: var(--text-dim); font-size: 10px; padding: 4px 12px; border-radius: 4px; cursor: pointer; width: 100%; }
+    .a2-add-slot-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 
     /* Print */
     @media print {
@@ -347,42 +364,36 @@
         text-align: center; z-index: 99999; font-size: 13px; font-weight: 600;
     }
 
-
-
     .a2-presenter-input {
-    background: transparent; border: none;
-    border-bottom: 1px solid transparent;
-    color: var(--text-primary); font-size: 15px;
-    font-weight: 600; font-family: inherit;
-    width: 100%; outline: none; padding: 2px 0;
-    transition: border-color 0.15s;
-}
+        background: transparent; border: none;
+        border-bottom: 1px solid transparent;
+        color: var(--text-primary); font-size: 15px;
+        font-weight: 600; font-family: inherit;
+        width: 100%; outline: none; padding: 2px 0;
+        transition: border-color 0.15s;
+    }
     .a2-presenter-input:focus { border-bottom-color: var(--border-bright); }
     .a2-presenter-input::placeholder { color: #6060a0; font-style: italic; font-weight: 400; font-size: 13px; }
 
-   .presenter-dropdown {
-    position: absolute; 
-    top: auto;
-    bottom: auto;
-    left: 0;
-    background: var(--bg-raised);
-    border: 1px solid var(--border-bright); border-radius: 4px;
-    min-width: 220px; z-index: 1000;
-    display: none; 
-    max-height: 160px; 
-    overflow-y: auto;
-    padding-top: 4px;
-}
-.presenter-dropdown.open { display: block; }
-
+    .presenter-dropdown {
+        position: absolute;
+        top: auto;
+        bottom: auto;
+        left: 0;
+        background: var(--bg-raised);
+        border: 1px solid var(--border-bright); border-radius: 4px;
+        min-width: 220px; z-index: 1000;
+        display: none;
+        max-height: 160px;
+        overflow-y: auto;
+        padding-top: 4px;
+    }
     .presenter-dropdown.open { display: block; }
     .presenter-dd-item {
         padding: 8px 12px; font-size: 12px; color: var(--text-secondary);
         cursor: pointer;
     }
     .presenter-dd-item:hover { background: var(--bg-input); color: var(--text-primary); }
-
-
     .presenter-dd-add { color: var(--accent-blue); border-top: 1px solid var(--border); }
 
     /* Mic Groups */
@@ -536,7 +547,6 @@
                     <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
                         <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
-                        
                     </div>
                     {% endif %}
                 </div>
@@ -554,14 +564,14 @@
                                 <tr>
                                     <th style="width:44px;padding:4px 0;text-align:center;">
                                     {% if not is_viewer %}
-                                    <button onclick="openGroupManager({{ session.id }})" 
+                                    <button onclick="openGroupManager({{ session.id }})"
                                             style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
                                                 background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
                                                 color:var(--accent-blue);border-radius:3px;cursor:pointer;
                                                 line-height:1;">GRP</button>
                                     {% endif %}
-                                </th>
-                                <th style="width:56px;">RF#</th>
+                                    </th>
+                                    <th style="width:56px;">RF#</th>
                                     <th style="width:110px;">Type</th>
                                     <th>Presenter</th>
                                     <th class="th-center a1-micd-cell">MIC'D</th>
@@ -592,7 +602,7 @@
                                 <td>
                                     {% if assignment.presenter %}
                                     <span class="a1-presenter-primary">{{ assignment.presenter.name }}</span>
-                                    {% if assignment.shared_presenters.exists %}<span class="a1-shared-tag">+{{ assignment.shared_presenters.count }} more</span>{% endif %}
+                                    {% if assignment.presenter_slots.count > 1 %}<span class="a1-shared-tag">+{{ assignment.presenter_slots.count|add:"-1" }} more</span>{% endif %}
                                     {% else %}
                                     <span class="a1-unassigned">— Unassigned —</span>
                                     {% endif %}
@@ -640,25 +650,35 @@
                                 </button>
                             </div>
 
-
-                            
-
+                            <!-- FIX: photo zone now keyed to active_slot.id for discrete per-presenter photos -->
+                            {% with active_slot=assignment.active_slot %}
                             <div class="a2-presenter-block">
-                                <div class="a2-photo-zone" onclick="{% if not is_viewer %}{% if assignment.presenter %}triggerPresenterPhoto({{ assignment.presenter.id }}){% endif %}{% endif %}">
-                                    {% if assignment.presenter and assignment.presenter.photo %}
-                                    <img src="{{ assignment.presenter.photo.url }}" alt="{{ assignment.presenter.name }}">
-                                    <div class="a2-photo-expand"><img src="{{ assignment.presenter.photo.url }}" alt="{{ assignment.presenter.name }}"></div>
+                                <div class="a2-photo-zone"
+                                     id="photo-zone-{{ assignment.id }}"
+                                     onclick="{% if not is_viewer %}triggerPhotoForSlot({% if active_slot %}{{ active_slot.id }}{% else %}0{% endif %}, {{ assignment.id }}){% endif %}">
+                                    {% if active_slot and active_slot.photo %}
+                                    <img src="{{ active_slot.photo.url }}"
+                                         alt="{{ active_slot.presenter.name|default:'' }}"
+                                         id="photo-img-{{ assignment.id }}">
+                                    <div class="a2-photo-expand">
+                                        <img src="{{ active_slot.photo.url }}" id="photo-expand-{{ assignment.id }}">
+                                    </div>
                                     {% else %}
-                                    <div class="a2-photo-placeholder">
+                                    <div class="a2-photo-placeholder" id="photo-placeholder-{{ assignment.id }}">
                                         <span class="a2-photo-icon">👤</span>
                                         {% if not is_viewer %}<span class="a2-photo-label">Photo</span>{% endif %}
                                     </div>
                                     {% endif %}
-                                    {% if not is_viewer and assignment.presenter %}
-                                    <input type="file" class="a2-photo-input" id="photo-input-p-{{ assignment.presenter.id }}"
-                                           accept="image/*" onchange="uploadPresenterPhoto({{ assignment.presenter.id }}, this)">
+                                    {% if not is_viewer %}
+                                    <input type="file" class="a2-photo-input"
+                                           id="photo-input-slot-{% if active_slot %}{{ active_slot.id }}{% else %}0{% endif %}"
+                                           data-assignment-id="{{ assignment.id }}"
+                                           accept="image/*"
+                                           onchange="uploadPhotoForSlot({% if active_slot %}{{ active_slot.id }}{% else %}0{% endif %}, {{ assignment.id }}, this)">
                                     {% endif %}
                                 </div>
+                                {% endwith %}
+
                                 <div class="a2-presenter-details">
                                     <div class="a2-presenter-name-row">
                                         <span class="a2-presenter-role">Primary</span>
@@ -671,8 +691,9 @@
                                                 onfocus="searchPresenters({{ assignment.id }}, '')"
                                                 oninput="searchPresenters({{ assignment.id }}, this.value)"
                                                 onchange="assignPresenter({{ assignment.id }}, this.value)"
+                                                onblur="assignPresenter({{ assignment.id }}, this.value)"
                                                 {% if is_viewer %}readonly{% endif %}>
-<div class="presenter-dropdown" id="presenter-dd-{{ assignment.id }}"></div>
+                                        <div class="presenter-dropdown" id="presenter-dd-{{ assignment.id }}"></div>
                                     </div>
                                     <div class="a2-settings-row">
                                         <div class="a2-setting">
@@ -725,54 +746,38 @@
                                 </div>
                             </div>
 
-                            {% if assignment.shared_presenters.exists %}
-                            <div class="a2-shared-header">
-                                <span class="a2-shared-label">Shared Presenters</span>
-                                <span class="a2-shared-count">{{ assignment.shared_presenters.count }}</span>
-                            </div>
-                            {% for shared in assignment.shared_presenters.all %}
-                            <div class="a2-presenter-block shared-block">
-                                <div class="a2-photo-zone" onclick="{% if not is_viewer %}triggerPresenterPhoto({{ shared.id }}){% endif %}">
-                                    {% if shared.photo %}<img src="{{ shared.photo.url }}" alt="{{ shared.name }}">
-                                    <div class="a2-photo-expand"><img src="{{ shared.photo.url }}" alt="{{ shared.name }}"></div>
-                                    {% else %}
-                                    <div class="a2-photo-placeholder">
-                                        <span class="a2-photo-icon">👤</span>
-                                        {% if not is_viewer %}<span class="a2-photo-label">Photo</span>{% endif %}
-                                    </div>
-                                    {% endif %}
+                            {% with slots=assignment.presenter_slots.all slot_count=assignment.presenter_slots.count %}
+                            {% if slot_count > 1 %}
+                            <div class="a2-slot-queue" id="slot-queue-{{ assignment.id }}">
+                                <div class="a2-slot-nav">
                                     {% if not is_viewer %}
-                                    <input type="file" class="a2-photo-input" id="photo-input-p-{{ shared.id }}"
-                                           accept="image/*" onchange="uploadPresenterPhoto({{ shared.id }}, this)">
+                                    <button class="a2-slot-btn" onclick="prevSlot({{ assignment.id }})">◀ PREV</button>
+                                    {% endif %}
+                                    <span class="a2-slot-counter" id="slot-counter-{{ assignment.id }}">
+                                        {% for slot in slots %}{% if slot.is_active %}{{ forloop.counter }}{% endif %}{% endfor %} / {{ slot_count }}
+                                    </span>
+                                    {% if not is_viewer %}
+                                    <button class="a2-slot-btn a2-slot-btn-next" onclick="nextSlot({{ assignment.id }})">NEXT ▶</button>
                                     {% endif %}
                                 </div>
-                                <div class="a2-presenter-details">
-                                    <div class="a2-presenter-name-row">
-                                        <span class="a2-presenter-role">Shared</span>
-                                        <span class="a2-presenter-name">{{ shared.name }}</span>
+                                <div class="a2-slot-list">
+                                    {% for slot in slots %}
+                                    <div class="a2-slot-chip {% if slot.is_active %}active{% endif %}" data-slot-id="{{ slot.id }}">
+                                        {{ slot.presenter.name|default:"Unassigned" }}
+                                        {% if not is_viewer %}
+                                        <span class="a2-slot-remove" onclick="event.stopPropagation(); removePresenterSlot({{ assignment.id }}, {{ slot.id }})">✕</span>
+                                        {% endif %}
                                     </div>
-                                    <div class="a2-settings-row">
-                                        <div class="a2-setting">
-                                            <span class="a2-setting-label">Placement</span>
-                                            <select class="a2-select" onchange="updateSharedPlacement({{ assignment.id }}, {{ shared.id }}, this.value)" {% if is_viewer %}disabled{% endif %}>
-                                                <option value="">— select —</option>
-                                                <option value="LEFT_EAR">Left Ear</option>
-                                                <option value="RIGHT_EAR">Right Ear</option>
-                                                <option value="TIE">Tie</option>
-                                                <option value="LAV_MAGNET">Lav Magnet</option>
-                                                <option value="COLLAR">Collar</option>
-                                                <option value="HAIR_MOUNT">Hair Mount</option>
-                                                <option value="CHEEK">Cheek Mount</option>
-                                                <option value="FOREHEAD">Forehead</option>
-                                                <option value="CHEST_POCKET">Chest Pocket</option>
-                                                <option value="BELT_CLIP">Belt Clip</option>
-                                            </select>
-                                        </div>
-                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
-                            {% endfor %}
                             {% endif %}
+                            {% if not is_viewer %}
+                            <div class="a2-add-slot-bar">
+                                <button class="a2-add-slot-btn" onclick="addPresenterSlot({{ assignment.id }})">+ Add Presenter</button>
+                            </div>
+                            {% endif %}
+                            {% endwith %}
 
                         </div>
                         {% endfor %}
@@ -795,7 +800,7 @@
             <!-- Add Session button at bottom of day -->
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
-                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" 
+                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
                     onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤ Groups</button>
             </div>
             {% endif %}
@@ -849,9 +854,9 @@ function switchSessionTab(sessionId, tabId, btn) {
     localStorage.setItem('sessionTab-' + sessionId, tabId);
 }
 
-// Restore saved tab on load
+// ── Dropdown close on outside click ───────────────────────────
 document.addEventListener('mousedown', function(e) {
-    if (!e.target.closest('.presenter-dropdown') && 
+    if (!e.target.closest('.presenter-dropdown') &&
         !e.target.classList.contains('a2-presenter-input')) {
         document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
     }
@@ -859,7 +864,6 @@ document.addEventListener('mousedown', function(e) {
 
 // ── Session collapse ───────────────────────────────────────────
 function toggleSession(sessionId, event) {
-    // Don't collapse when clicking tabs or action buttons
     if (event.target.closest('.session-tabs') ||
         event.target.closest('.session-actions') ||
         event.target.closest('.mtt-dropdown-menu')) return;
@@ -908,7 +912,6 @@ function toggleMicd(assignmentId, btn) {
 
 function updateMicType(assignmentId, value) {
     updateField(assignmentId, 'mic_type', value);
-    // Update the badge in the card header
     const card = document.getElementById('a2-card-' + assignmentId);
     if (!card) return;
     const meta = card.querySelector('.a2-card-meta');
@@ -923,7 +926,6 @@ function updateMicType(assignmentId, value) {
     } else {
         meta.innerHTML = '';
     }
-    // Also sync the A1 row badge
     const a1td = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
     if (a1td) {
         a1td.className = 'mic-type-badge type-' + (value || 'empty');
@@ -949,33 +951,63 @@ function toggleMicdA2(assignmentId, btn) {
     updateField(assignmentId, 'is_micd', newState);
 }
 
-// ── Photo uploads ──────────────────────────────────────────────
-function triggerPhotoUpload(id) { const el = document.getElementById('photo-input-' + id); if (el) el.click(); }
-function triggerPresenterPhoto(id) { const el = document.getElementById('photo-input-p-' + id); if (el) el.click(); }
-
-function uploadPhoto(assignmentId, input) {
-    if (!input.files || !input.files[0]) return;
-    const fd = new FormData();
-    fd.append('photo', input.files[0]);
-    fd.append('assignment_id', assignmentId);
-    fd.append('csrfmiddlewaretoken', getCsrfToken());
-    fetch('/audiopatch/api/mic/upload-photo/', { method: 'POST', body: fd })
-        .then(r => r.json()).then(data => {
-            if (data.success && data.photo_url)
-                input.closest('.a2-photo-zone').innerHTML = '<img src="' + data.photo_url + '" style="width:100%;height:100%;object-fit:cover;">';
-        });
+// ── Photo uploads — FIX: keyed to slot.id not assignment.id ───
+function triggerPhotoForSlot(slotId, assignmentId) {
+    if (!slotId) return;
+    const input = document.getElementById('photo-input-slot-' + slotId);
+    if (input) input.click();
 }
-function uploadPresenterPhoto(presenterId, input) {
-    if (!input.files || !input.files[0]) return;
+
+async function uploadPhotoForSlot(slotId, assignmentId, input) {
+    if (!slotId || !input.files[0]) return;
     const fd = new FormData();
+    fd.append('slot_id', slotId);
     fd.append('photo', input.files[0]);
-    fd.append('presenter_id', presenterId);
-    fd.append('csrfmiddlewaretoken', getCsrfToken());
-    fetch('/audiopatch/api/mic/upload-presenter-photo/', { method: 'POST', body: fd })
-        .then(r => r.json()).then(data => {
-            if (data.success && data.photo_url)
-                input.closest('.a2-photo-zone').innerHTML = '<img src="' + data.photo_url + '" style="width:100%;height:100%;object-fit:cover;">';
-        });
+    const resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrftoken},
+        body: fd
+    });
+    const data = await resp.json();
+    if (data.success && data.photo_url) {
+        const zone = document.getElementById('photo-zone-' + assignmentId);
+        if (!zone) return;
+
+        // Remove placeholder if present
+        const placeholder = document.getElementById('photo-placeholder-' + assignmentId);
+        if (placeholder) placeholder.style.display = 'none';
+
+        // Update or create the thumbnail image
+        let img = document.getElementById('photo-img-' + assignmentId);
+        if (!img) {
+            img = document.createElement('img');
+            img.id = 'photo-img-' + assignmentId;
+            img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
+            zone.insertBefore(img, zone.firstChild);
+        }
+        img.src = data.photo_url;
+
+        // Update or create the hover-expand panel
+        let expandDiv = document.getElementById('photo-expand-' + assignmentId);
+        if (!expandDiv) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'a2-photo-expand';
+            const expandImg = document.createElement('img');
+            expandImg.id = 'photo-expand-' + assignmentId;
+            wrapper.appendChild(expandImg);
+            zone.appendChild(wrapper);
+            expandDiv = expandImg;
+        }
+        expandDiv.src = data.photo_url;
+
+        // Re-wire the file input for next upload
+        const fileInput = zone.querySelector('.a2-photo-input');
+        if (fileInput) {
+            fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + slotId + ', ' + assignmentId + ', this)');
+        }
+    } else {
+        alert('Photo upload failed: ' + (data.error || 'Unknown error'));
+    }
 }
 
 // ── Shared placement ───────────────────────────────────────────
@@ -1016,7 +1048,8 @@ function getCsrfToken() {
     setTimeout(check, 5000);
 })();
 
-
+// ── Presenter search dropdown ──────────────────────────────────
+// FIX: exactMatch / create-new block moved inside the .then() callback
 function searchPresenters(assignmentId, query) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     fetch('/audiopatch/api/presenters/list/?q=' + encodeURIComponent(query))
@@ -1024,105 +1057,212 @@ function searchPresenters(assignmentId, query) {
         .then(data => {
             dd.innerHTML = '';
             if (!data.presenters || !data.presenters.length) { dd.classList.remove('open'); return; }
+
             data.presenters.forEach(p => {
                 const item = document.createElement('div');
                 item.className = 'presenter-dd-item';
                 item.textContent = p.name;
                 item.onmousedown = (e) => {
-                e.preventDefault();
-                document.getElementById('presenter-input-' + assignmentId).value = p.name;
-                dd.classList.remove('open');
-                updateField(assignmentId, 'presenter_id', p.id);
-                // Sync to A1 row
-                const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
-                if (a1primary) {
-                    a1primary.textContent = p.name;
-                } else {
-                    const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
-                    if (a1unassigned) {
-                        a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + p.name + '</span>';
+                    e.preventDefault();
+                    document.getElementById('presenter-input-' + assignmentId).value = p.name;
+                    dd.classList.remove('open');
+                    updateField(assignmentId, 'presenter_id', p.id);
+                    const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
+                    if (a1primary) {
+                        a1primary.textContent = p.name;
+                    } else {
+                        const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
+                        if (a1unassigned) {
+                            a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + p.name + '</span>';
+                        }
                     }
-                }
-            };
+                };
                 dd.appendChild(item);
             });
 
-// Determine if dropdown should open up or down
-const inputEl = document.getElementById('presenter-input-' + assignmentId);
-const inputRect = inputEl.getBoundingClientRect();
-const viewportHeight = window.innerHeight;
-const spaceBelow = viewportHeight - inputRect.bottom;
-const spaceAbove = inputRect.top;
+            // Determine if dropdown should open up or down
+            const inputEl = document.getElementById('presenter-input-' + assignmentId);
+            const inputRect = inputEl.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const spaceBelow = viewportHeight - inputRect.bottom;
+            const spaceAbove = inputRect.top;
 
-if (spaceAbove > spaceBelow && spaceAbove > 160) {
-    // More room above AND enough space — open upward
-    dd.style.bottom = '100%';
-    dd.style.top = 'auto';
-    dd.style.marginBottom = '4px';
-    dd.style.marginTop = '0';
-    dd.style.boxShadow = '0 -8px 24px rgba(0,0,0,0.4)';
-} else {
-    // Default — open downward
-    dd.style.bottom = 'auto';
-    dd.style.top = '100%';
-    dd.style.marginBottom = '0';
-    dd.style.marginTop = '4px';
-    dd.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
-}
+            if (spaceAbove > spaceBelow && spaceAbove > 160) {
+                dd.style.bottom = '100%';
+                dd.style.top = 'auto';
+                dd.style.marginBottom = '4px';
+                dd.style.marginTop = '0';
+                dd.style.boxShadow = '0 -8px 24px rgba(0,0,0,0.4)';
+            } else {
+                dd.style.bottom = 'auto';
+                dd.style.top = '100%';
+                dd.style.marginBottom = '0';
+                dd.style.marginTop = '4px';
+                dd.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+            }
 
-dd.classList.add('open');
+            dd.classList.add('open');
 
-
-
-
-           
-        });
-}
-// Add "create new" option if typed name doesn't exactly match
-const exactMatch = data.presenters.some(p => p.name.toLowerCase() === query.toLowerCase());
-if (query && !exactMatch) {
-    const addItem = document.createElement('div');
-    addItem.className = 'presenter-dd-item presenter-dd-add';
-    addItem.textContent = '+ Add "' + query + '" as new presenter';
-    addItem.onclick = () => {
-        fetch('/audiopatch/api/presenters/create/', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
-            body: JSON.stringify({name: query})
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('presenter-input-' + assignmentId).value = query;
-                dd.classList.remove('open');
-                updateField(assignmentId, 'presenter_id', data.presenter_id);
-                // Sync A1
-                const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
-                if (a1primary) { a1primary.textContent = query; }
-                else {
-                    const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
-                    if (a1unassigned) a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + query + '</span>';
-                }
+            // FIX: create-new option now correctly inside .then() scope
+            const exactMatch = data.presenters.some(p => p.name.toLowerCase() === query.toLowerCase());
+            if (query && !exactMatch) {
+                const addItem = document.createElement('div');
+                addItem.className = 'presenter-dd-item presenter-dd-add';
+                addItem.textContent = '+ Add "' + query + '" as new presenter';
+                addItem.onclick = () => {
+                    fetch('/audiopatch/api/presenters/create/', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+                        body: JSON.stringify({name: query})
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.getElementById('presenter-input-' + assignmentId).value = query;
+                            dd.classList.remove('open');
+                            updateField(assignmentId, 'presenter_id', data.presenter_id);
+                            const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
+                            if (a1primary) { a1primary.textContent = query; }
+                            else {
+                                const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
+                                if (a1unassigned) a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + query + '</span>';
+                            }
+                        }
+                    });
+                };
+                dd.appendChild(addItem);
             }
         });
-    };
-    dd.appendChild(addItem);
 }
 
+// FIX: use presenter_id (not presenter_name) for ForeignKey assignment
 function assignPresenter(assignmentId, value) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     dd.classList.remove('open');
-    if (!value) updateField(assignmentId, 'presenter_id', '');
+    if (!value) {
+        updateField(assignmentId, 'presenter_id', '');
+    } else {
+        updateField(assignmentId, 'presenter_id', value);
+    }
 }
 
-// Close on outside click
-document.addEventListener('mousedown', function(e) {
-    if (!e.target.closest('.presenter-dropdown') && !e.target.closest('.a2-presenter-input')) {
-        document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
-    }
-});
+async function nextSlot(assignmentId) {
+    const resp = await fetch('/audiopatch/api/mic/slot/next/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
+        body: JSON.stringify({assignment_id: assignmentId})
+    });
+    const data = await resp.json();
+    if (data.success) applySlotData(assignmentId, data);
+}
 
-// Close on input blur with small delay to allow click to register first
+async function prevSlot(assignmentId) {
+    const resp = await fetch('/audiopatch/api/mic/slot/prev/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
+        body: JSON.stringify({assignment_id: assignmentId})
+    });
+    const data = await resp.json();
+    if (data.success) applySlotData(assignmentId, data);
+}
+
+async function addPresenterSlot(assignmentId) {
+    const resp = await fetch('/audiopatch/api/mic/slot/add/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
+        body: JSON.stringify({assignment_id: assignmentId})
+    });
+    const data = await resp.json();
+    if (data.success) location.reload();
+}
+
+async function removePresenterSlot(assignmentId, slotId) {
+    const resp = await fetch('/audiopatch/api/mic/slot/remove/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
+        body: JSON.stringify({assignment_id: assignmentId, slot_id: slotId})
+    });
+    const data = await resp.json();
+    if (data.success) location.reload();
+    else alert(data.error);
+}
+
+// FIX: applySlotData now updates the photo zone when navigating PREV/NEXT
+function applySlotData(assignmentId, data) {
+    const nameInput = document.getElementById('presenter-input-' + assignmentId);
+    if (nameInput) nameInput.value = data.presenter_name || '';
+
+    const card = document.getElementById('a2-card-' + assignmentId);
+    if (card) {
+        card.querySelectorAll('.a2-select').forEach(sel => {
+            const oc = sel.getAttribute('onchange') || '';
+            if (oc.includes('updateMicType')) sel.value = data.mic_type || '';
+            else if (oc.includes("'placement'")) sel.value = data.placement || '';
+            else if (oc.includes("'sensitivity'")) sel.value = data.sensitivity || '';
+            else if (oc.includes("'output_level'")) sel.value = data.output_level || '';
+        });
+        const notes = card.querySelector('.a2-notes-input');
+        if (notes) notes.value = data.notes || '';
+    }
+
+    const counter = document.getElementById('slot-counter-' + assignmentId);
+    if (counter) counter.textContent = (data.slot_index + 1) + ' / ' + data.slot_count;
+
+    document.querySelectorAll(`#slot-queue-${assignmentId} .a2-slot-chip`).forEach((chip, i) => {
+        chip.classList.toggle('active', i === data.slot_index);
+    });
+
+    const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
+    if (a1primary) a1primary.textContent = data.presenter_name || '— Unassigned —';
+
+    // FIX: update photo zone to show the new active slot's photo
+    const zone = document.getElementById('photo-zone-' + assignmentId);
+    if (zone && data.slot_id) {
+        // Re-wire click and file input to the new slot
+        zone.setAttribute('onclick', 'triggerPhotoForSlot(' + data.slot_id + ', ' + assignmentId + ')');
+        const fileInput = zone.querySelector('.a2-photo-input');
+        if (fileInput) {
+            fileInput.id = 'photo-input-slot-' + data.slot_id;
+            fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + data.slot_id + ', ' + assignmentId + ', this)');
+        }
+
+        // Update displayed photo
+        const placeholder = document.getElementById('photo-placeholder-' + assignmentId);
+        let img = document.getElementById('photo-img-' + assignmentId);
+
+        if (data.photo_url) {
+            if (placeholder) placeholder.style.display = 'none';
+            if (!img) {
+                img = document.createElement('img');
+                img.id = 'photo-img-' + assignmentId;
+                img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
+                zone.insertBefore(img, zone.firstChild);
+            }
+            img.style.display = 'block';
+            img.src = data.photo_url;
+
+            let expandDiv = document.getElementById('photo-expand-' + assignmentId);
+            if (!expandDiv) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'a2-photo-expand';
+                const expandImg = document.createElement('img');
+                expandImg.id = 'photo-expand-' + assignmentId;
+                wrapper.appendChild(expandImg);
+                zone.appendChild(wrapper);
+                expandDiv = expandImg;
+            }
+            expandDiv.src = data.photo_url;
+        } else {
+            // No photo for this slot — show placeholder
+            if (img) img.style.display = 'none';
+            const expandWrapper = zone.querySelector('.a2-photo-expand');
+            if (expandWrapper) expandWrapper.style.display = 'none';
+            if (placeholder) placeholder.style.display = '';
+        }
+    }
+}
+
+// ── Close input blur ───────────────────────────────────────────
 document.addEventListener('focusout', function(e) {
     if (e.target.classList.contains('a2-presenter-input')) {
         setTimeout(() => {
@@ -1131,7 +1271,7 @@ document.addEventListener('focusout', function(e) {
     }
 });
 
-// Close modal on background click
+// ── Close modal on background click ───────────────────────────
 document.getElementById('group-manage-modal').addEventListener('mousedown', function(e) {
     if (e.target === this) closeGroupManager();
 });

@@ -74,9 +74,21 @@ urlpatterns = [
     path('api/presenters/list/', views.get_presenters_list, name='get_presenters_list'),
     
     path('api/presenters/create/', views.create_presenter, name='create_presenter'),
+
+    path('api/mic/slot/prev/', views.previous_presenter_slot, name='previous_presenter_slot'),
+
+    path('api/mic/slot/next/', views.advance_presenter_slot, name='advance_presenter_slot'),
+
+    path('api/mic/slot/add/', views.add_presenter_slot, name='add_presenter_slot'),
+
+    path('api/mic/slot/remove/', views.remove_presenter_slot, name='remove_presenter_slot'),
+
+    path('api/mic/slot/upload-photo/', views.upload_slot_photo, name='upload_slot_photo'),
     
     # Add to urls.py
      path('api/mic/upload-presenter-photo/', views.upload_presenter_photo, name='upload_presenter_photo'),
+
+     path('api/mic/upload-photo-by-assignment/', views.upload_photo_by_assignment, name='upload_photo_by_assignment'),
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
      path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),

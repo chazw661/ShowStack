@@ -47,7 +47,7 @@ from .models import (
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
     Device, Device, SystemProcessor, Amp, Location, PACableSchedule, PAZone,
-    ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PowerDistributionPlan, AmplifierProfile, 
+    ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile, 
     AmplifierAssignment
 )
 
@@ -571,45 +571,14 @@ def mic_tracker_view(request):
         request.session['current_project'] = request.current_project.id
         request.session.modified = True
 
-        from django.db.models import Prefetch
-
-        from django.db.models import Prefetch
-
+        
     # Custom prefetch to order shared presenters by through table ID
         from django.db.models import Prefetch
 
     days = days.prefetch_related(
-        'sessions__mic_assignments__presenter',
-        'sessions__mic_assignments__shared_presenters'
-    ).order_by('date')  
-
-
-
-    # Pre-process shared presenters ordering for all assignments at once
-    all_assignment_ids = []
-    for day in days:
-        for session in day.sessions.all():
-            for assignment in session.mic_assignments.all():
-                all_assignment_ids.append(assignment.id)
-
-    # Fetch all through objects in one query
-    from planner.models import MicAssignment
-    ThroughModel = MicAssignment.shared_presenters.through
-    through_objects = ThroughModel.objects.filter(
-        mic_assignment_id__in=all_assignment_ids
-    ).order_by('mic_assignment_id', 'id').select_related('presenter')
-
-    # Group by assignment_id
-    from collections import defaultdict
-    presenters_by_assignment = defaultdict(list)
-    for through_obj in through_objects:
-        presenters_by_assignment[through_obj.mic_assignment_id].append(through_obj.presenter)
-
-    # Attach to assignments
-    for day in days:
-        for session in day.sessions.all():
-            for assignment in session.mic_assignments.all():
-                assignment.ordered_shared_presenters = presenters_by_assignment.get(assignment.id, [])
+    'sessions__mic_assignments__presenter_slots__presenter',
+    'sessions__mic_assignments__group',
+    ).order_by('date')
 
 
     
@@ -878,87 +847,68 @@ def update_mic_assignment(request):
         value = data.get('value')
         
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
-        
-        # Get current project from session
         current_project_id = request.session.get('current_project')
-        if not current_project_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'No project selected'
-            }, status=400)
         
-        # Handle different field types
-        if field == 'presenter' or field == 'presenter_name':  # Support both for compatibility
-            # Value should be a presenter name
-            if value:
-                # Try to get existing presenter or create new one WITH PROJECT
-                presenter, created = Presenter.objects.get_or_create(
-                    name=value.strip(),
-                    project_id=current_project_id
+        if field in ('is_micd', 'is_d_mic'):
+            setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
+            assignment.save()
+        elif field in ('presenter', 'presenter_name', 'presenter_id', 'mic_type',
+                    'placement', 'sensitivity', 'output_level', 'notes'):
+            slot = assignment.presenter_slots.filter(is_active=True).first()
+            if not slot:
+                slot = assignment.presenter_slots.order_by('order').first()
+            if not slot:
+                slot = PresenterSlot.objects.create(
+                    assignment=assignment, order=0, is_active=True
                 )
-                assignment.presenter = presenter
+            if field in ('presenter', 'presenter_name'):
+                if value:
+                    presenter, _ = Presenter.objects.get_or_create(
+                        name=value.strip(), project_id=current_project_id
+                    )
+                    slot.presenter = presenter
+                else:
+                    slot.presenter = None
+            elif field == 'presenter_id':
+                if value:
+                    try:
+                        slot.presenter = Presenter.objects.get(id=int(value))
+                    except (ValueError, Presenter.DoesNotExist):
+                        # Value is a name string, use get_or_create
+                        presenter, _ = Presenter.objects.get_or_create(
+                            name=value.strip(),
+                            project_id=current_project_id
+                        )
+                        slot.presenter = presenter
+                else:
+                    slot.presenter = None
             else:
-                assignment.presenter = None
-                
-        elif field == 'mic_type':
-            assignment.mic_type = value
-            
-        elif field == 'is_micd':
-            assignment.is_micd = value if isinstance(value, bool) else value == 'true'
-            
-        elif field == 'is_d_mic':
-            assignment.is_d_mic = value if isinstance(value, bool) else value == 'true'
-            
-        elif field == 'notes':
-            assignment.notes = value
-
-        elif field == 'presenter_id':
-            if value:
-                presenter = Presenter.objects.get(id=int(value))
-                assignment.presenter = presenter
-            else:
-                assignment.presenter = None
-                
+                setattr(slot, field, value)
+            slot.save()
         else:
-            return JsonResponse({
-                'success': False,
-                'error': f'Unknown field: {field}'
-            }, status=400)    
-            
-       
+            return JsonResponse({'success': False, 'error': f'Unknown field: {field}'}, status=400)
         
-        assignment.save()
-        
-        # Get updated stats
         session = assignment.session
         session_stats = {
             'micd': session.mic_assignments.filter(is_micd=True).count(),
             'total': session.mic_assignments.count(),
-            'shared': session.mic_assignments.filter(shared_presenters__isnull=False).exclude(shared_presenters__name='').distinct().count()
         }
+        active_slot = assignment.presenter_slots.filter(is_active=True).first()
+        presenter_display = active_slot.presenter.name if active_slot and active_slot.presenter else ''
         
-        # Get presenter display name
-        presenter_display = assignment.presenter.name if assignment.presenter else ''
-        presenter_count = 1 if assignment.presenter else 0
-        if assignment.shared_presenters.exists():
-            presenter_count += assignment.shared_presenters.count()
-        
+        slot_count = assignment.presenter_slots.count()
         return JsonResponse({
             'success': True,
             'session_stats': session_stats,
             'presenter_display': presenter_display,
-            'presenter_count': presenter_count,
-            'day_stats': {}
+            'presenter_count': slot_count,
         })
         
     except Exception as e:
         import traceback
         print(f"ERROR in update_mic_assignment: {str(e)}")
         print(traceback.format_exc())
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=400)
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
 @require_POST
@@ -1321,6 +1271,166 @@ def upload_presenter_photo(request):
         except Presenter.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Presenter not found'})
     return JsonResponse({'success': False})
+
+@staff_member_required
+def upload_photo_by_assignment(request):
+    if request.method == 'POST':
+        assignment_id = request.POST.get('assignment_id')
+        photo = request.FILES.get('photo')
+        try:
+            assignment = MicAssignment.objects.get(id=assignment_id)
+            slot = assignment.presenter_slots.filter(is_active=True).first()
+            if not slot:
+                return JsonResponse({'success': False, 'error': 'No active slot'})
+            slot.photo.save(photo.name, photo, save=True)
+            return JsonResponse({'success': True, 'photo_url': slot.photo.url})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+        
+
+@staff_member_required
+def upload_slot_photo(request):
+    if request.method == 'POST':
+        slot_id = request.POST.get('slot_id')
+        photo = request.FILES.get('photo')
+        if not slot_id or not photo:
+            return JsonResponse({'success': False, 'error': 'Missing slot_id or photo'})
+        try:
+            slot = PresenterSlot.objects.get(id=slot_id)
+            slot.photo.save(photo.name, photo, save=True)
+            return JsonResponse({'success': True, 'photo_url': slot.photo.url})
+        except PresenterSlot.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Slot not found'})
+    return JsonResponse({'success': False})        
+
+
+@require_POST
+def advance_presenter_slot(request):
+    """Move to next presenter slot"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        slots = list(assignment.presenter_slots.order_by('order'))
+        if not slots:
+            return JsonResponse({'success': False, 'error': 'No slots'})
+        current = next((i for i, s in enumerate(slots) if s.is_active), 0)
+        next_index = (current + 1) % len(slots)
+        for i, slot in enumerate(slots):
+            slot.is_active = (i == next_index)
+            slot.save()
+        active = slots[next_index]
+        return JsonResponse({
+            'success': True,
+            'slot_id': active.id,                                          # ADD THIS
+            'presenter_name': active.presenter.name if active.presenter else '',
+            'presenter_id': active.presenter.id if active.presenter else None,
+            'mic_type': active.mic_type,
+            'placement': active.placement,
+            'sensitivity': active.sensitivity,
+            'output_level': active.output_level,
+            'notes': active.notes,
+            'slot_index': next_index,
+            'slot_count': len(slots),
+            'photo_url': active.photo.url if active.photo else None,       # ADD THIS
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
+def previous_presenter_slot(request):
+    """Move to previous presenter slot"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        slots = list(assignment.presenter_slots.order_by('order'))
+        if not slots:
+            return JsonResponse({'success': False, 'error': 'No slots'})
+        current = next((i for i, s in enumerate(slots) if s.is_active), 0)
+        prev_index = (current - 1) % len(slots)
+        for i, slot in enumerate(slots):
+            slot.is_active = (i == prev_index)
+            slot.save()
+        active = slots[prev_index]
+        return JsonResponse({
+            'success': True,
+            'slot_id': active.id,                                          # ADD THIS
+            'presenter_name': active.presenter.name if active.presenter else '',
+            'presenter_id': active.presenter.id if active.presenter else None,
+            'mic_type': active.mic_type,
+            'placement': active.placement,
+            'sensitivity': active.sensitivity,
+            'output_level': active.output_level,
+            'notes': active.notes,
+            'slot_index': prev_index,
+            'slot_count': len(slots),
+            'photo_url': active.photo.url if active.photo else None,       # ADD THIS
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+    
+@require_POST
+def add_presenter_slot(request):
+    """Add a new presenter slot to an assignment"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        
+        # Get next order number
+        last_slot = assignment.presenter_slots.order_by('-order').first()
+        next_order = (last_slot.order + 1) if last_slot else 0
+        
+        # Create new slot but keep current active slot unchanged
+        slot = PresenterSlot.objects.create(
+            assignment=assignment,
+            order=next_order,
+            is_active=False
+        )
+        
+        slots = assignment.presenter_slots.order_by('order')
+        return JsonResponse({
+            'success': True,
+            'slot_id': slot.id,
+            'slot_index': next_order,
+            'slot_count': slots.count(),
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+    
+@require_POST
+def remove_presenter_slot(request):
+    """Remove a presenter slot from an assignment"""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        slot_id = data.get('slot_id')
+        
+        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        slots = list(assignment.presenter_slots.order_by('order'))
+        
+        if len(slots) <= 1:
+            return JsonResponse({'success': False, 'error': 'Cannot remove the only slot'})
+        
+        slot = get_object_or_404(PresenterSlot, id=slot_id, assignment=assignment)
+        was_active = slot.is_active
+        slot.delete()
+        
+        # Re-order remaining slots
+        remaining = list(assignment.presenter_slots.order_by('order'))
+        for i, s in enumerate(remaining):
+            s.order = i
+            s.save()
+        
+        # If deleted slot was active, activate first slot
+        if was_active and remaining:
+            remaining[0].is_active = True
+            remaining[0].save()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})    
 
 
 
@@ -2830,7 +2940,7 @@ def mic_tracker_checksum(request):
     assignments = MicAssignment.objects.filter(
         session__day__project_id=project_id
     ).values(
-        'id', 'rf_number', 'mic_type', 'presenter', 'notes', 'is_d_mic', 'active_presenter_index'
+        'id', 'rf_number', 'is_micd', 'is_d_mic'
     ).order_by('id')
     
     # Create a hash of the data

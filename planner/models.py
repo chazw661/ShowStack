@@ -2432,6 +2432,8 @@ class MicAssignment(models.Model):
     ('12DBV', '+12 dBV'),
 ]
     
+    
+    
     session = models.ForeignKey(MicSession, on_delete=models.CASCADE, related_name='mic_assignments')
     rf_number = models.IntegerField(validators=[MinValueValidator(1)])
     group = models.ForeignKey(
@@ -2623,6 +2625,43 @@ class MicAssignment(models.Model):
             return f"{presenters[0]} / {presenters[1]}"
         else:
             return f"{presenters[0]} / +{len(presenters)-1} more"
+        
+    @property
+    def active_slot(self):
+        slot = self.presenter_slots.filter(is_active=True).first()
+        if not slot:
+            slot = self.presenter_slots.order_by('order').first()
+        return slot
+
+    @property  
+    def presenter(self):
+        slot = self.active_slot
+        return slot.presenter if slot else None    
+        
+
+class PresenterSlot(models.Model):
+    assignment = models.ForeignKey(MicAssignment, on_delete=models.CASCADE, related_name='presenter_slots')
+    presenter = models.ForeignKey(Presenter, on_delete=models.SET_NULL, null=True, blank=True, related_name='slots')
+    order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=False)
+    mic_type = models.CharField(max_length=20, choices=MicAssignment.MIC_TYPES, blank=True)
+    placement = models.CharField(max_length=20, choices=MicAssignment.PLACEMENT_CHOICES, blank=True)
+    sensitivity = models.CharField(max_length=10, choices=MicAssignment.SENSITIVITY_CHOICES, blank=True)
+    output_level = models.CharField(max_length=10, choices=MicAssignment.OUTPUT_LEVEL_CHOICES, blank=True)
+    notes = models.TextField(blank=True)
+    photo = models.ImageField(
+    upload_to='slot_photos/',
+    null=True,
+    blank=True,
+    help_text="Photo for this presenter slot"
+)
+
+    class Meta:
+        ordering = ['order']
+        verbose_name = "Presenter Slot"
+
+    def __str__(self):
+        return f"Slot {self.order} - {self.presenter} on RF {self.assignment.rf_number}"       
         
 
 class SharedPresenterAssignment(models.Model):
