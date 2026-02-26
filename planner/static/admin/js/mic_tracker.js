@@ -681,30 +681,127 @@ function showNotification(message, type = 'info') {
 
 // ============ SESSION MANAGEMENT FUNCTIONS ============
 
-function addNewDay() {
-    const dateStr = prompt('Enter date for new day (MM/DD/YYYY):');
-    if (!dateStr) return;
-    
-    const parts = dateStr.split('/');
-    if (parts.length !== 3) {
-        alert('Invalid date format. Please use MM/DD/YYYY');
-        return;
-    }
-    
-    const month = parts[0].padStart(2, '0');
-    const day = parts[1].padStart(2, '0');
-    const year = parts[2];
-    const isoDate = `${year}-${month}-${day}`;
-    const name = prompt('Enter optional name for this day:');
-    
-    window.location.href = `/admin/planner/showday/add/?date=${isoDate}&name=${encodeURIComponent(name || '')}`;
+// ── Add Day Modal ─────────────────────────────────────────────
+function openAddDayModal() {
+    // Default date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('add-day-date').value = today;
+    document.getElementById('add-day-name').value = '';
+    document.getElementById('add-day-error').style.display = 'none';
+    document.getElementById('add-day-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('add-day-name').focus(), 50);
 }
 
-function addSession(dayId, columnPosition = 0) {
-    const name = prompt('Enter session name:');
-    if (!name) return;
-    window.location.href = `/admin/planner/micsession/add/?day=${dayId}&name=${encodeURIComponent(name)}&column_position=${columnPosition}`;
+function closeAddDayModal() {
+    document.getElementById('add-day-modal').classList.add('hidden');
 }
+
+async function submitAddDay() {
+    const date = document.getElementById('add-day-date').value;
+    const name = document.getElementById('add-day-name').value.trim();
+    const errEl = document.getElementById('add-day-error');
+
+    if (!date) { errEl.textContent = 'Please select a date.'; errEl.style.display = 'block'; return; }
+    errEl.style.display = 'none';
+
+    try {
+        const resp = await fetch('/audiopatch/api/day/create/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({ date: date, name: name })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            closeAddDayModal();
+            location.reload();
+        } else {
+            errEl.textContent = data.error || 'Failed to create day.';
+            errEl.style.display = 'block';
+        }
+    } catch(e) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+    }
+}
+
+// ── Add Session Modal ──────────────────────────────────────────
+let _addSessionDayId = null;
+
+function openAddSessionModal(dayId) {
+    _addSessionDayId = dayId;
+    document.getElementById('add-session-name').value = '';
+    document.getElementById('add-session-mics').value = '16';
+    document.getElementById('add-session-location').value = '';
+    document.getElementById('add-session-error').style.display = 'none';
+    document.getElementById('add-session-submit').disabled = false;
+    document.getElementById('add-session-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('add-session-name').focus(), 50);
+}
+
+function closeAddSessionModal() {
+    document.getElementById('add-session-modal').classList.add('hidden');
+    _addSessionDayId = null;
+}
+
+async function submitAddSession() {
+    const name = document.getElementById('add-session-name').value.trim();
+    const numMics = parseInt(document.getElementById('add-session-mics').value);
+    const location = document.getElementById('add-session-location').value.trim();
+    const errEl = document.getElementById('add-session-error');
+    const submitBtn = document.getElementById('add-session-submit');
+
+    if (!name) { errEl.textContent = 'Please enter a session name.'; errEl.style.display = 'block'; return; }
+    if (!numMics || numMics < 1 || numMics > 100) { errEl.textContent = 'Mic count must be between 1 and 100.'; errEl.style.display = 'block'; return; }
+    if (!_addSessionDayId) { errEl.textContent = 'No day selected.'; errEl.style.display = 'block'; return; }
+    errEl.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding...';
+
+    try {
+        const resp = await fetch('/audiopatch/api/session/create/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({ day_id: _addSessionDayId, name: name, num_mics: numMics, location: location })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            closeAddSessionModal();
+            location.reload();
+        } else {
+            errEl.textContent = data.error || 'Failed to create session.';
+            errEl.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add Session';
+        }
+    } catch(e) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Session';
+    }
+}
+
+// Close modals on backdrop click
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('add-day-modal').addEventListener('mousedown', function(e) {
+        if (e.target === this) closeAddDayModal();
+    });
+    document.getElementById('add-session-modal').addEventListener('mousedown', function(e) {
+        if (e.target === this) closeAddSessionModal();
+    });
+});
+
+// Enter key support for modals
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        if (!document.getElementById('add-day-modal').classList.contains('hidden')) submitAddDay();
+        else if (!document.getElementById('add-session-modal').classList.contains('hidden')) submitAddSession();
+    }
+});
+
+function addNewDay() { openAddDayModal(); }  // legacy alias
+
+function addSession(dayId, columnPosition = 0) { openAddSessionModal(dayId); }  // legacy alias
 
 function editSession(sessionId) {
     window.location.href = `/admin/planner/micsession/${sessionId}/change/`;

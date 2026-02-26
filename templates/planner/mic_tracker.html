@@ -3,6 +3,14 @@
 
 {% block title %}Mic Tracker - {{ show_info.show_name|default:"Audio Patch" }}{% endblock %}
 
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="/audiopatch/mic-tracker/">Mic Tracker</a>
+    &rsaquo;
+</div>
+{% endblock %}
+
 {% block extrastyle %}
     {{ block.super }}
     <style>
@@ -33,7 +41,6 @@
         padding: 0 0 60px;
     }
 
-    /* Page header */
     .mtt-header {
         display: flex; align-items: center; gap: 24px;
         padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
@@ -49,7 +56,6 @@
     .mtt-meta-value { font-size: 13px; color: var(--text-secondary); }
     .mtt-header-actions { display: flex; gap: 8px; align-items: center; }
 
-    /* Buttons */
     .btn-mtt {
         padding: 7px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
         text-transform: uppercase; border-radius: 4px; border: none; cursor: pointer;
@@ -70,7 +76,6 @@
     }
     .btn-icon-sm:hover { border-color: var(--border-bright); color: var(--text-secondary); }
 
-    /* Day */
     .mtt-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
     .mtt-day-header {
         display: flex; align-items: center; gap: 14px; padding: 11px 16px;
@@ -84,46 +89,25 @@
     .mtt-day-stats strong { color: var(--text-secondary); }
     .mtt-day-actions { display: flex; gap: 6px; }
 
-    /* Add session footer */
-    .mtt-add-session-bar {
-        padding: 10px 14px;
-        border-top: 1px solid var(--border);
-        background: #0f0f1a;
-    }
+    .mtt-add-session-bar { padding: 10px 14px; border-top: 1px solid var(--border); background: #0f0f1a; }
 
-    /* Session */
     .mtt-session { margin: 14px 14px 0 14px; border: 1px solid var(--border); border-radius: 5px; overflow: visible; }
-
     .mtt-session-header {
         display: flex; align-items: center; gap: 10px;
         padding: 0 14px; background: #14142a;
         border-bottom: 1px solid var(--border);
         min-height: 46px; flex-wrap: wrap;
         cursor: pointer; user-select: none;
-        z-index: 10;
-        position: relative;
+        z-index: 10; position: relative;
     }
-
-    /* Session collapse arrow */
-    .mtt-session-collapse {
-        font-size: 10px; color: var(--text-dim);
-        transition: transform 0.2s; width: 12px;
-        text-align: center; flex-shrink: 0;
-    }
+    .mtt-session-collapse { font-size: 10px; color: var(--text-dim); transition: transform 0.2s; width: 12px; text-align: center; flex-shrink: 0; }
     .mtt-session-collapse.collapsed { transform: rotate(-90deg); }
-
-    /* Session body — collapses */
     .mtt-session-body { }
     .mtt-session-body.collapsed { display: none; }
-
-    .mtt-session-date {
-        font-size: 10px; color: var(--text-dim); background: var(--bg-raised);
-        padding: 2px 8px; border-radius: 3px; white-space: nowrap; flex-shrink: 0;
-    }
+    .mtt-session-date { font-size: 10px; color: var(--text-dim); background: var(--bg-raised); padding: 2px 8px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
     .mtt-session-name { font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.04em; }
     .mtt-session-loc { font-size: 11px; color: var(--text-dim); }
 
-    /* Session A1/A2 tabs */
     .session-tabs { display: flex; height: 46px; align-items: stretch; flex-shrink: 0; margin-right: 8px; }
     .session-tab {
         height: 100%; padding: 0 22px; font-size: 15px; font-weight: 700;
@@ -134,37 +118,20 @@
     }
     .session-tab:hover { color: var(--text-secondary); }
     .session-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
-
-    .session-actions {
-        display: flex; gap: 4px; align-items: center;
-        padding-left: 10px; border-left: 1px solid var(--border); height: 30px;
-        margin-left: auto;
-    }
-
+    .session-actions { display: flex; gap: 4px; align-items: center; padding-left: 10px; border-left: 1px solid var(--border); height: 30px; margin-left: auto; }
     .session-panel { display: none; }
     .session-panel.active { display: block; }
-
-    .mtt-session-stats {
-        font-size: 10px; color: var(--text-dim); padding: 6px 14px;
-        background: #0f0f1a; border-top: 1px solid var(--border);
-        display: flex; gap: 16px;
-    }
+    .mtt-session-stats { font-size: 10px; color: var(--text-dim); padding: 6px 14px; background: #0f0f1a; border-top: 1px solid var(--border); display: flex; gap: 16px; }
     .mtt-session-stats strong { color: var(--accent-green); }
 
-    /* Dropdown */
     .mtt-dropdown { position: relative; display: inline-block; }
-    .mtt-dropdown-menu {
-        display: none; position: absolute; right: 0; top: 100%;
-        background: var(--bg-raised); border: 1px solid var(--border-bright);
-        border-radius: 4px; min-width: 185px; z-index: 200;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow: hidden;
-    }
+    .mtt-dropdown-menu { display: none; position: absolute; right: 0; top: 100%; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 185px; z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow: hidden; }
     .mtt-dropdown:hover .mtt-dropdown-menu { display: block; }
     .mtt-dropdown-menu a { display: block; padding: 8px 14px; font-size: 11px; color: var(--text-secondary); text-decoration: none; }
     .mtt-dropdown-menu a:hover { background: var(--bg-input); color: var(--text-primary); }
     .mtt-dropdown-menu .divider { height: 1px; background: var(--border); margin: 4px 0; }
 
-    /* A1 table */
+    /* ── A1 Table ── */
     .a1-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .a1-table thead th {
         padding: 12px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
@@ -173,21 +140,27 @@
     }
     .a1-table thead th.th-center { text-align: center; }
 
+    /* Primary rows */
     .a1-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-    .a1-row:last-child { border-bottom: none; }
     .a1-row:hover { background: rgba(255,255,255,0.02); }
     .a1-row.row-micd { background: var(--micd-bg); }
     .a1-row.row-micd:hover { background: rgba(0,230,118,0.11); }
     .a1-row td { padding: 9px 12px; vertical-align: middle; }
 
+    /* Expanded slot sub-rows */
+    .a1-slot-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    .a1-slot-row:hover { background: rgba(255,255,255,0.02); }
+    .a1-slot-row.row-micd { background: var(--micd-bg); }
+    .a1-slot-row.row-micd:hover { background: rgba(0,230,118,0.11); }
+    .a1-slot-row td { padding: 9px 12px; vertical-align: middle; }
+    .a1-slot-row .a1-rf { color: var(--text-dim) !important; font-size: 14px !important; }
+    .a1-slot-row.row-micd .a1-rf { color: var(--accent-green) !important; }
+    .a1-slot-active { color: var(--accent-blue) !important; }
+
     .a1-rf { width: 56px; font-size: 20px; font-weight: 800; color: var(--text-primary); }
     .a1-row.row-micd .a1-rf { color: var(--accent-green); }
 
-    .mic-type-badge {
-        display: inline-flex; align-items: center; gap: 5px;
-        padding: 3px 9px; border-radius: 3px; font-size: 10px;
-        font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
-    }
+    .mic-type-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
     .mic-type-badge .type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
     .type-HH        { background: rgba(74,158,255,0.12);  color: #4a9eff; }  .type-HH       .type-dot { background: #4a9eff; }
     .type-LAV       { background: rgba(255,171,0,0.12);   color: #ffab00; }  .type-LAV      .type-dot { background: #ffab00; }
@@ -202,13 +175,16 @@
 
     .a1-presenter-primary { font-size: 15px; font-weight: 600; color: var(--text-primary); }
     .a1-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
+    .a1-slot-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
     .a1-unassigned { font-size: 12px; color: var(--text-dim); font-style: italic; }
     .a1-shared-tag {
         display: inline-block; margin-left: 8px; font-size: 9px;
-        background: var(--bg-raised); color: var(--text-dim);
-        border: 1px solid var(--border-bright); padding: 1px 7px;
-        border-radius: 10px; vertical-align: middle;
+        background: var(--bg-raised); color: var(--accent-blue);
+        border: 1px solid rgba(74,158,255,0.4); padding: 1px 7px;
+        border-radius: 10px; vertical-align: middle; cursor: pointer;
+        transition: background 0.15s;
     }
+    .a1-shared-tag:hover { background: rgba(74,158,255,0.15); }
 
     .a1-micd-cell { width: 80px; text-align: center; }
     .a1-micd-toggle {
@@ -221,52 +197,23 @@
     .a1-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 12px rgba(0,230,118,0.4); }
 
     .a1-notes-cell { width: 200px; }
-    .a1-notes-input {
-        width: 100%; background: transparent; border: none;
-        border-bottom: 1px solid transparent; color: var(--text-secondary);
-        font-size: 11px; font-family: inherit; padding: 2px 4px; outline: none;
-        transition: border-color 0.15s;
-    }
+    .a1-notes-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary); font-size: 11px; font-family: inherit; padding: 2px 4px; outline: none; transition: border-color 0.15s; }
     .a1-notes-input:focus { border-bottom-color: var(--border-bright); }
     .a1-notes-input::placeholder { color: var(--text-dim); }
 
-    .a1-actions-bar {
-        display: flex; justify-content: flex-end; padding: 7px 12px;
-        background: #13131f; border-bottom: 1px solid var(--border); gap: 6px;
-    }
+    .a1-actions-bar { display: flex; justify-content: flex-end; padding: 7px 12px; background: #13131f; border-bottom: 1px solid var(--border); gap: 6px; }
 
-    /* A2 cards */
+    /* ── A2 Cards ── */
     .a2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 12px; padding: 14px; }
-
     .a2-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
     .a2-card.card-micd { border-color: var(--micd-border); box-shadow: 0 0 0 1px rgba(0,230,118,0.1) inset; }
-
     .a2-presenter-details { flex: 1; min-width: 0; overflow: visible; }
     .a2-card.card-micd .a2-card-header { background: rgba(0,230,118,0.06); border-bottom-color: var(--micd-border); }
-
-    .a2-rf-badge {
-        width: 40px; height: 40px; border-radius: 5px; background: var(--bg-raised);
-        border: 1px solid var(--border-bright); display: flex; align-items: center;
-        justify-content: center; font-size: 17px; font-weight: 800; color: var(--text-primary); flex-shrink: 0;
-    }
+    .a2-rf-badge { width: 40px; height: 40px; border-radius: 5px; background: var(--bg-raised); border: 1px solid var(--border-bright); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
     .a2-card.card-micd .a2-rf-badge { background: rgba(0,230,118,0.15); border-color: var(--accent-green); color: var(--accent-green); }
     .a2-card-meta { flex: 1; }
-
-    .a2-card-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 14px;
-        background: #14142a;
-        border-bottom: 1px solid var(--border);
-        justify-content: space-between;
-    }
-
-    .a2-micd-toggle {
-        padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800;
-        letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none;
-        transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit;
-    }
+    .a2-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #14142a; border-bottom: 1px solid var(--border); justify-content: space-between; }
+    .a2-micd-toggle { padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none; transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit; }
     .a2-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
     .a2-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 16px rgba(0,230,118,0.45); }
     .a2-micd-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
@@ -277,60 +224,32 @@
     .a2-presenter-block:last-of-type { border-bottom: none; }
     .a2-presenter-block.shared-block { background: rgba(255,255,255,0.015); padding-left: 20px; }
 
-    .a2-photo-zone {
-        width: 70px; height: 70px; flex-shrink: 0; border-radius: 5px;
-        border: 1px dashed var(--border-bright); background: var(--bg-raised);
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        overflow: visible; cursor: pointer; margin-right: 14px; transition: border-color 0.15s;
-        position: relative;
-    }
+    .a2-photo-zone { width: 70px; height: 70px; flex-shrink: 0; border-radius: 5px; border: 1px dashed var(--border-bright); background: var(--bg-raised); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: visible; cursor: pointer; margin-right: 14px; transition: border-color 0.15s; position: relative; }
     .a2-photo-zone:hover { border-color: var(--accent-blue); }
     .a2-photo-zone > img { width: 70px; height: 70px; object-fit: cover; border-radius: 5px; display: block; }
     .a2-photo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 3px; }
     .a2-photo-icon { font-size: 22px; opacity: 0.25; }
     .a2-photo-label { font-size: 8px; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
     .a2-photo-input { display: none; }
-
-    /* Photo hover expand */
-    .a2-photo-expand {
-        display: none; position: absolute; top: 0; left: 0; z-index: 200;
-        width: 200px; height: 200px; border-radius: 8px; overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-        border: 2px solid var(--accent-blue);
-    }
+    .a2-photo-expand { display: none; position: absolute; top: 0; left: 0; z-index: 200; width: 200px; height: 200px; border-radius: 8px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.6); border: 2px solid var(--accent-blue); }
     .a2-photo-expand img { width: 100%; height: 100%; object-fit: cover; }
     .a2-photo-zone:hover .a2-photo-expand { display: block; }
 
     .a2-presenter-details { flex: 1; min-width: 0; }
     .a2-presenter-name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; position: relative; }
     .a2-presenter-role { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
-
     .a2-presenter-name { font-size: 15px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .a2-unassigned { color: #6060a0; font-style: italic; font-size: 13px; }
-
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
     .a2-setting-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); }
-
-    /* FIX: restored missing .a2-select base rule */
-    .a2-select {
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        color: var(--text-secondary);
-        font-size: 11px;
-        border-radius: 3px;
-        padding: 3px 6px;
-        font-family: inherit;
-        cursor: pointer;
-    }
+    .a2-select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; border-radius: 3px; padding: 3px 6px; font-family: inherit; cursor: pointer; }
     .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
     .a2-select option { background: #1e1e32; }
-
     .a2-notes-input { color: var(--text-primary); }
     .a2-notes-input:focus { border-color: var(--accent-blue); height: 52px; }
     .a2-notes-input::placeholder { color: #6060a0; }
 
-    /* Slot queue */
     .a2-slot-queue { border-top: 1px solid var(--border); padding: 8px 14px 4px; background: #13131f; }
     .a2-slot-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .a2-slot-btn { background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.4); color: var(--accent-blue); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer; letter-spacing: 0.05em; }
@@ -345,11 +264,10 @@
     .a2-add-slot-btn { background: none; border: 1px dashed var(--border-bright); color: var(--text-dim); font-size: 10px; padding: 4px 12px; border-radius: 4px; cursor: pointer; width: 100%; }
     .a2-add-slot-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 
-    /* Print */
     @media print {
         .mtt-header-actions, .session-tabs, .mtt-day-actions, .session-actions,
         .a1-actions-bar, .mtt-add-session-bar, .session-panel:not(.active),
-        #mic-tracker-update-banner { display: none !important; }
+        #mic-tracker-update-banner, .a1-micd-cell { display: none !important; }
         body, #mic-tracker-root { background: #fff; color: #000; }
         .a1-table thead th { background: #f0f0f0; color: #333; }
         .a1-row { border-bottom-color: #ddd; }
@@ -358,56 +276,31 @@
         .mtt-day-header, .mtt-session-header { background: #f5f5f5; }
     }
 
-    #mic-tracker-update-banner {
-        display: none; position: fixed; top: 0; left: 0; right: 0;
-        background: var(--accent-blue); color: #000; padding: 10px 16px;
-        text-align: center; z-index: 99999; font-size: 13px; font-weight: 600;
-    }
+    #mic-tracker-update-banner { display: none; position: fixed; top: 0; left: 0; right: 0; background: var(--accent-blue); color: #000; padding: 10px 16px; text-align: center; z-index: 99999; font-size: 13px; font-weight: 600; }
 
-    .a2-presenter-input {
-        background: transparent; border: none;
-        border-bottom: 1px solid transparent;
-        color: var(--text-primary); font-size: 15px;
-        font-weight: 600; font-family: inherit;
-        width: 100%; outline: none; padding: 2px 0;
-        transition: border-color 0.15s;
-    }
+    .a2-presenter-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-primary); font-size: 15px; font-weight: 600; font-family: inherit; width: 100%; outline: none; padding: 2px 0; transition: border-color 0.15s; }
     .a2-presenter-input:focus { border-bottom-color: var(--border-bright); }
     .a2-presenter-input::placeholder { color: #6060a0; font-style: italic; font-weight: 400; font-size: 13px; }
 
-    .presenter-dropdown {
-        position: absolute;
-        top: auto;
-        bottom: auto;
-        left: 0;
-        background: var(--bg-raised);
-        border: 1px solid var(--border-bright); border-radius: 4px;
-        min-width: 220px; z-index: 1000;
-        display: none;
-        max-height: 160px;
-        overflow-y: auto;
-        padding-top: 4px;
-    }
+    .presenter-dropdown { position: absolute; top: auto; bottom: auto; left: 0; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 220px; z-index: 1000; display: none; max-height: 160px; overflow-y: auto; padding-top: 4px; }
     .presenter-dropdown.open { display: block; }
-    .presenter-dd-item {
-        padding: 8px 12px; font-size: 12px; color: var(--text-secondary);
-        cursor: pointer;
-    }
+    .presenter-dd-item { padding: 8px 12px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
     .presenter-dd-item:hover { background: var(--bg-input); color: var(--text-primary); }
     .presenter-dd-add { color: var(--accent-blue); border-top: 1px solid var(--border); }
 
-    /* Mic Groups */
+    /* ── Group colors ── */
     .a1-row.group-blue   { border-left: 4px solid #4a9eff; }
     .a1-row.group-amber  { border-left: 4px solid #ffab00; }
     .a1-row.group-red    { border-left: 4px solid #ff5252; }
     .a1-row.group-purple { border-left: 4px solid #b464ff; }
     .a1-row.group-teal   { border-left: 4px solid #00bcd4; }
+    .a1-slot-row.group-blue   { border-left: 4px solid #4a9eff; }
+    .a1-slot-row.group-amber  { border-left: 4px solid #ffab00; }
+    .a1-slot-row.group-red    { border-left: 4px solid #ff5252; }
+    .a1-slot-row.group-purple { border-left: 4px solid #b464ff; }
+    .a1-slot-row.group-teal   { border-left: 4px solid #00bcd4; }
 
-    .group-dot {
-        width: 14px; height: 14px; border-radius: 50%;
-        display: inline-block; cursor: pointer; flex-shrink: 0;
-        border: 2px solid transparent; transition: transform 0.1s;
-    }
+    .group-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; }
     .group-dot:hover { transform: scale(1.2); }
     .group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
     .group-dot.color-blue   { background: #4a9eff; }
@@ -416,19 +309,10 @@
     .group-dot.color-purple { background: #b464ff; }
     .group-dot.color-teal   { background: #00bcd4; }
 
-    .group-picker {
-        position: absolute; z-index: 500; background: var(--bg-raised);
-        border: 1px solid var(--border-bright); border-radius: 6px;
-        padding: 10px; min-width: 180px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none;
-    }
+    .group-picker { position: absolute; z-index: 500; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 6px; padding: 10px; min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none; }
     .group-picker.open { display: block; }
     .group-picker-title { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
-    .group-picker-item {
-        display: flex; align-items: center; gap: 8px;
-        padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 12px;
-        color: var(--text-secondary);
-    }
+    .group-picker-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--text-secondary); }
     .group-picker-item:hover { background: var(--bg-input); color: var(--text-primary); }
     .group-picker-item.selected { color: var(--text-primary); font-weight: 600; }
     .group-picker-none { color: var(--text-dim); font-size: 11px; padding: 5px 6px; cursor: pointer; }
@@ -437,22 +321,12 @@
     .group-picker-manage { font-size: 10px; color: var(--accent-blue); padding: 4px 6px; cursor: pointer; }
     .group-picker-manage:hover { text-decoration: underline; }
 
-    .group-manage-modal {
-        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.6); z-index: 1000;
-        display: flex; align-items: center; justify-content: center;
-    }
+    .group-manage-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .group-manage-modal.hidden { display: none; }
-    .group-manage-box {
-        background: var(--bg-raised); border: 1px solid var(--border-bright);
-        border-radius: 8px; padding: 24px; min-width: 320px; max-width: 400px;
-    }
+    .group-manage-box { background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 8px; padding: 24px; min-width: 320px; max-width: 400px; }
     .group-manage-title { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
     .group-manage-list { margin-bottom: 12px; }
-    .group-manage-item {
-        display: flex; align-items: center; gap: 10px;
-        padding: 7px 0; border-bottom: 1px solid var(--border);
-    }
+    .group-manage-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
     .group-manage-item:last-child { border-bottom: none; }
     .group-manage-name { flex: 1; font-size: 13px; color: var(--text-primary); }
     .group-manage-delete { background: none; border: none; color: var(--accent-red); cursor: pointer; font-size: 14px; padding: 2px 6px; }
@@ -464,6 +338,24 @@
 
     .a1-group-cell { width: 28px; text-align: center; padding: 0 4px !important; position: relative; }
 
+    /* Per-slot MIC'D button in A2 chip list */
+    .a2-slot-chip { gap: 5px; }
+    .a2-slot-micd-dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--border-bright); flex-shrink: 0; display: inline-block;
+        transition: background 0.2s, box-shadow 0.2s;
+    }
+    .a2-slot-micd-dot.on { background: var(--accent-green); box-shadow: 0 0 6px rgba(0,230,118,0.7); }
+    .a2-slot-chip.micd { background: rgba(0,230,118,0.12); border-color: rgba(0,230,118,0.4); color: var(--accent-green); font-weight: 600; }
+    .a2-slot-micd-btn {
+        font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+        padding: 2px 7px; border-radius: 3px; cursor: pointer;
+        border: 1px solid var(--border-bright); font-family: inherit;
+        transition: all 0.15s; line-height: 1.5; white-space: nowrap;
+    }
+    .a2-slot-micd-btn.off { background: var(--bg-input); color: var(--text-dim); }
+    .a2-slot-micd-btn.on  { background: var(--accent-green); color: #000; border-color: var(--accent-green); box-shadow: 0 0 8px rgba(0,230,118,0.35); }
+    .a2-slot-micd-btn:hover { opacity: 0.85; }
     </style>
 {% endblock %}
 
@@ -477,36 +369,22 @@
 <div id="mic-tracker-root">
 
     <div id="mic-tracker-update-banner">
-        🔄 <strong>Updates Available</strong> — another user made changes.
-        <button onclick="location.reload()" style="margin-left:12px;background:#000;color:#4a9eff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:700;">Refresh</button>
-        <button onclick="document.getElementById('mic-tracker-update-banner').style.display='none'" style="margin-left:6px;background:transparent;border:1px solid #000;color:#000;padding:6px 12px;border-radius:4px;cursor:pointer;">Dismiss</button>
+        🔄 <strong id="banner-message">Updates Available — refreshing in 5s</strong>
+        <button onclick="location.reload()" style="margin-left:12px;background:#000;color:#4a9eff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:700;">Refresh Now</button>
+        <button id="banner-dismiss" style="margin-left:6px;background:transparent;border:1px solid #000;color:#000;padding:6px 12px;border-radius:4px;cursor:pointer;">Dismiss</button>
     </div>
 
     <!-- Page Header -->
     <div class="mtt-header">
         <div class="mtt-title">🎤 Mic Tracker</div>
         <div class="mtt-show-meta">
-            <div class="mtt-meta-item">
-                <span class="mtt-meta-label">Show</span>
-                <span class="mtt-meta-value">{{ show_info.show_name|default:"—" }}</span>
-            </div>
-            <div class="mtt-meta-item">
-                <span class="mtt-meta-label">Venue</span>
-                <span class="mtt-meta-value">{{ show_info.venue_name|default:"—" }}</span>
-            </div>
-            <div class="mtt-meta-item">
-                <span class="mtt-meta-label">Room</span>
-                <span class="mtt-meta-value">{{ show_info.ballroom_name|default:"—" }}</span>
-            </div>
-            <div class="mtt-meta-item">
-                <span class="mtt-meta-label">Dates</span>
-                <span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span>
-            </div>
+            <div class="mtt-meta-item"><span class="mtt-meta-label">Show</span><span class="mtt-meta-value">{{ show_info.show_name|default:"—" }}</span></div>
+            <div class="mtt-meta-item"><span class="mtt-meta-label">Venue</span><span class="mtt-meta-value">{{ show_info.venue_name|default:"—" }}</span></div>
+            <div class="mtt-meta-item"><span class="mtt-meta-label">Room</span><span class="mtt-meta-value">{{ show_info.ballroom_name|default:"—" }}</span></div>
+            <div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span></div>
         </div>
         <div class="mtt-header-actions">
-            {% if not is_viewer %}
-            <button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>
-            {% endif %}
+            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
         </div>
     </div>
@@ -523,8 +401,7 @@
                 <span>{{ day_data.day.sessions.count }} session{{ day_data.day.sessions.count|pluralize }}</span>
                 {% endwith %}
             </div>
-            <div class="mtt-day-actions">
-            </div>
+            <div class="mtt-day-actions"></div>
         </div>
 
         <div class="mtt-day-content" {% if day_data.day.is_collapsed %}style="display:none"{% endif %}>
@@ -532,7 +409,6 @@
             {% for session in day_data.sessions %}
             <div class="mtt-session" data-session-id="{{ session.id }}">
 
-                <!-- Session header with collapse toggle and A1/A2 tabs -->
                 <div class="mtt-session-header" onclick="toggleSession({{ session.id }}, event)">
                     <span class="mtt-session-collapse" id="session-collapse-{{ session.id }}">▼</span>
                     <div class="session-tabs">
@@ -542,7 +418,6 @@
                     <span class="mtt-session-date">{{ session.day.date|date:"m/d" }}</span>
                     <span class="mtt-session-name">{{ session.name }}</span>
                     {% if session.location %}<span class="mtt-session-loc">· {{ session.location }}</span>{% endif %}
-
                     {% if not is_viewer %}
                     <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
@@ -551,10 +426,9 @@
                     {% endif %}
                 </div>
 
-                <!-- Session body (collapsible) -->
                 <div class="mtt-session-body" id="session-body-{{ session.id }}">
 
-                    <!-- A1 Panel -->
+                    <!-- ════════════════ A1 PANEL ════════════════ -->
                     <div class="session-panel active" id="session-{{ session.id }}-a1">
                         <div class="a1-actions-bar">
                             <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="window.print()">🖨 Print</button>
@@ -563,13 +437,12 @@
                             <thead>
                                 <tr>
                                     <th style="width:44px;padding:4px 0;text-align:center;">
-                                    {% if not is_viewer %}
-                                    <button onclick="openGroupManager({{ session.id }})"
-                                            style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
-                                                background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
-                                                color:var(--accent-blue);border-radius:3px;cursor:pointer;
-                                                line-height:1;">GRP</button>
-                                    {% endif %}
+                                        {% if not is_viewer %}
+                                        <button onclick="openGroupManager({{ session.id }})"
+                                                style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
+                                                    background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
+                                                    color:var(--accent-blue);border-radius:3px;cursor:pointer;line-height:1;">GRP</button>
+                                        {% endif %}
                                     </th>
                                     <th style="width:56px;">RF#</th>
                                     <th style="width:110px;">Type</th>
@@ -580,14 +453,66 @@
                             </thead>
                             <tbody>
                             {% for assignment in session.mic_assignments.all %}
+                            {% with slots=assignment.presenter_slots.all slot_count=assignment.presenter_slots.count %}
+
+                            {% if slot_count > 1 %}
+                            {# ── MULTI-PRESENTER: stacked equal-weight rows, RF# only on first ── #}
+                            {% for slot in slots %}
+                            <tr class="a1-row {% if slot.is_micd %}row-micd{% endif %} {% if slot.group %}group-{{ slot.group.color }}{% elif assignment.group %}group-{{ assignment.group.color }}{% endif %}"
+                                id="a1-slot-row-{{ slot.id }}"
+                                data-assignment-id="{{ assignment.id }}"
+                                data-slot-id="{{ slot.id }}">
+                                <td class="a1-group-cell">
+                                    {% if not is_viewer %}
+                                    <span class="group-dot {% if slot.group %}color-{{ slot.group.color }}{% elif assignment.group %}color-{{ assignment.group.color }}{% else %}empty{% endif %}"
+                                          onclick="openSlotGroupPicker({{ slot.id }}, {{ session.id }}, this)"
+                                          title="{% if slot.group %}{{ slot.group.name }}{% elif assignment.group %}{{ assignment.group.name }}{% else %}Assign group{% endif %}"></span>
+                                    <div class="group-picker" id="slot-group-picker-{{ slot.id }}"></div>
+                                    {% endif %}
+                                </td>
+                                <td class="a1-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
+                                <td>
+                                    {% if slot.mic_type %}
+                                    <span class="mic-type-badge type-{{ slot.mic_type }}"><span class="type-dot"></span>{{ slot.mic_type }}</span>
+                                    {% elif assignment.mic_type %}
+                                    <span class="mic-type-badge type-{{ assignment.mic_type }}"><span class="type-dot"></span>{{ assignment.mic_type }}</span>
+                                    {% else %}
+                                    <span class="mic-type-badge type-empty"><span class="type-dot"></span>—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if slot.presenter %}
+                                    <span class="a1-presenter-primary {% if slot.is_active %}a1-slot-active{% endif %}">{{ slot.presenter.name }}</span>
+                                    {% else %}
+                                    <span class="a1-unassigned">— Unassigned —</span>
+                                    {% endif %}
+                                </td>
+                                <td class="a1-micd-cell">
+                                    <button class="a1-micd-toggle {% if slot.is_micd %}on{% else %}off{% endif %}"
+                                            id="a1-micd-slot-{{ slot.id }}"
+                                            disabled style="cursor:default">
+                                        {% if slot.is_micd %}ON{% else %}—{% endif %}
+                                    </button>
+                                </td>
+                                <td class="a1-notes-cell">
+                                    <input type="text" class="a1-notes-input"
+                                           value="{{ slot.notes|default:'' }}"
+                                           placeholder="notes..."
+                                           onchange="updateSlotField({{ slot.id }}, 'notes', this.value)"
+                                           {% if is_viewer %}readonly{% endif %}>
+                                </td>
+                            </tr>
+                            {% endfor %}
+
+                            {% else %}
+                            {# ── SINGLE PRESENTER row ── #}
                             <tr class="a1-row {% if assignment.is_micd %}row-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
                                 id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
                                     <span class="group-dot {% if assignment.group %}color-{{ assignment.group.color }}{% else %}empty{% endif %}"
                                           onclick="openGroupPicker({{ assignment.id }}, {{ session.id }}, this)"
-                                          title="{% if assignment.group %}{{ assignment.group.name }}{% else %}Assign group{% endif %}">
-                                    </span>
+                                          title="{% if assignment.group %}{{ assignment.group.name }}{% else %}Assign group{% endif %}"></span>
                                     <div class="group-picker" id="group-picker-{{ assignment.id }}"></div>
                                     {% endif %}
                                 </td>
@@ -600,12 +525,13 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if assignment.presenter %}
-                                    <span class="a1-presenter-primary">{{ assignment.presenter.name }}</span>
-                                    {% if assignment.presenter_slots.count > 1 %}<span class="a1-shared-tag">+{{ assignment.presenter_slots.count|add:"-1" }} more</span>{% endif %}
+                                    {% with active=assignment.active_slot %}
+                                    {% if active and active.presenter %}
+                                    <span class="a1-presenter-primary">{{ active.presenter.name }}</span>
                                     {% else %}
                                     <span class="a1-unassigned">— Unassigned —</span>
                                     {% endif %}
+                                    {% endwith %}
                                 </td>
                                 <td class="a1-micd-cell">
                                     <button class="a1-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
@@ -622,12 +548,15 @@
                                            {% if is_viewer %}readonly{% endif %}>
                                 </td>
                             </tr>
+                            {% endif %}
+
+                            {% endwith %}
                             {% endfor %}
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- A2 Panel -->
+                    <!-- ════════════════ A2 PANEL ════════════════ -->
                     <div class="session-panel" id="session-{{ session.id }}-a2">
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
@@ -643,26 +572,25 @@
                                     </span>
                                     {% endif %}
                                 </div>
+                                {# Single-presenter cards keep MIC'D in header; multi-presenter use per-chip buttons #}
+                                {% if assignment.presenter_slots.count <= 1 %}
                                 <button class="a2-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
-                                        onclick="toggleMicdA2({{ assignment.id }}, this)"
+                                        id="a2-micd-btn-{{ assignment.id }}"
+                                        onclick="toggleMicd({{ assignment.id }}, this)"
                                         {% if is_viewer %}disabled style="cursor:default"{% endif %}>
                                     <span class="a2-micd-dot"></span>MIC'D
                                 </button>
+                                {% endif %}
                             </div>
 
-                            <!-- FIX: photo zone now keyed to active_slot.id for discrete per-presenter photos -->
                             {% with active_slot=assignment.active_slot %}
                             <div class="a2-presenter-block">
                                 <div class="a2-photo-zone"
                                      id="photo-zone-{{ assignment.id }}"
                                      onclick="{% if not is_viewer %}triggerPhotoForSlot({% if active_slot %}{{ active_slot.id }}{% else %}0{% endif %}, {{ assignment.id }}){% endif %}">
                                     {% if active_slot and active_slot.photo %}
-                                    <img src="{{ active_slot.photo.url }}"
-                                         alt="{{ active_slot.presenter.name|default:'' }}"
-                                         id="photo-img-{{ assignment.id }}">
-                                    <div class="a2-photo-expand">
-                                        <img src="{{ active_slot.photo.url }}" id="photo-expand-{{ assignment.id }}">
-                                    </div>
+                                    <img src="{{ active_slot.photo.url }}" alt="{{ active_slot.presenter.name|default:'' }}" id="photo-img-{{ assignment.id }}">
+                                    <div class="a2-photo-expand"><img src="{{ active_slot.photo.url }}" id="photo-expand-{{ assignment.id }}"></div>
                                     {% else %}
                                     <div class="a2-photo-placeholder" id="photo-placeholder-{{ assignment.id }}">
                                         <span class="a2-photo-icon">👤</span>
@@ -683,16 +611,16 @@
                                     <div class="a2-presenter-name-row">
                                         <span class="a2-presenter-role">Primary</span>
                                         <input type="text"
-                                                class="a2-presenter-input"
-                                                id="presenter-input-{{ assignment.id }}"
-                                                value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
-                                                placeholder="— Unassigned —"
-                                                autocomplete="off"
-                                                onfocus="searchPresenters({{ assignment.id }}, '')"
-                                                oninput="searchPresenters({{ assignment.id }}, this.value)"
-                                                onchange="assignPresenter({{ assignment.id }}, this.value)"
-                                                onblur="assignPresenter({{ assignment.id }}, this.value)"
-                                                {% if is_viewer %}readonly{% endif %}>
+                                               class="a2-presenter-input"
+                                               id="presenter-input-{{ assignment.id }}"
+                                               value="{% if assignment.presenter %}{{ assignment.presenter.name }}{% endif %}"
+                                               placeholder="— Unassigned —"
+                                               autocomplete="off"
+                                               onfocus="searchPresenters({{ assignment.id }}, '')"
+                                               oninput="searchPresenters({{ assignment.id }}, this.value)"
+                                               onchange="assignPresenter({{ assignment.id }}, this.value)"
+                                               onblur="assignPresenter({{ assignment.id }}, this.value)"
+                                               {% if is_viewer %}readonly{% endif %}>
                                         <div class="presenter-dropdown" id="presenter-dd-{{ assignment.id }}"></div>
                                     </div>
                                     <div class="a2-settings-row">
@@ -750,22 +678,22 @@
                             {% if slot_count > 1 %}
                             <div class="a2-slot-queue" id="slot-queue-{{ assignment.id }}">
                                 <div class="a2-slot-nav">
-                                    {% if not is_viewer %}
-                                    <button class="a2-slot-btn" onclick="prevSlot({{ assignment.id }})">◀ PREV</button>
-                                    {% endif %}
+                                    {% if not is_viewer %}<button class="a2-slot-btn" onclick="prevSlot({{ assignment.id }})">◀ PREV</button>{% endif %}
                                     <span class="a2-slot-counter" id="slot-counter-{{ assignment.id }}">
                                         {% for slot in slots %}{% if slot.is_active %}{{ forloop.counter }}{% endif %}{% endfor %} / {{ slot_count }}
                                     </span>
-                                    {% if not is_viewer %}
-                                    <button class="a2-slot-btn a2-slot-btn-next" onclick="nextSlot({{ assignment.id }})">NEXT ▶</button>
-                                    {% endif %}
+                                    {% if not is_viewer %}<button class="a2-slot-btn a2-slot-btn-next" onclick="nextSlot({{ assignment.id }})">NEXT ▶</button>{% endif %}
                                 </div>
                                 <div class="a2-slot-list">
                                     {% for slot in slots %}
-                                    <div class="a2-slot-chip {% if slot.is_active %}active{% endif %}" data-slot-id="{{ slot.id }}">
+                                    <div class="a2-slot-chip {% if slot.is_active %}active{% endif %} {% if slot.is_micd %}micd{% endif %}" data-slot-id="{{ slot.id }}">
+                                        <span class="a2-slot-micd-dot {% if slot.is_micd %}on{% endif %}"></span>
                                         {{ slot.presenter.name|default:"Unassigned" }}
                                         {% if not is_viewer %}
                                         <span class="a2-slot-remove" onclick="event.stopPropagation(); removePresenterSlot({{ assignment.id }}, {{ slot.id }})">✕</span>
+                                        <button class="a2-slot-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
+                                                id="a2-slot-micd-{{ slot.id }}"
+                                                onclick="event.stopPropagation(); toggleMicdSlot({{ assignment.id }}, {{ slot.id }}, this)">{% if slot.is_micd %}ON{% else %}MIC'D{% endif %}</button>
                                         {% endif %}
                                     </div>
                                     {% endfor %}
@@ -784,7 +712,6 @@
                         </div>
                     </div>
 
-                    <!-- Session stats footer -->
                     <div class="mtt-session-stats">
                         {% with stats=session.get_mic_usage_stats %}
                         <span>MIC'D: <strong>{{ stats.micd }}</strong>/{{ stats.total }}</span>
@@ -797,7 +724,6 @@
             </div><!-- end mtt-session -->
             {% endfor %}
 
-            <!-- Add Session button at bottom of day -->
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
@@ -810,9 +736,7 @@
     {% empty %}
     <div style="padding:48px;text-align:center;color:var(--text-dim);">
         No show days yet.
-        {% if not is_viewer %}
-        <button class="btn-mtt btn-mtt-primary" onclick="addNewDay()" style="margin-left:12px;">+ Add Day</button>
-        {% endif %}
+        {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()" style="margin-left:12px;">+ Add Day</button>{% endif %}
     </div>
     {% endfor %}
 
@@ -854,20 +778,14 @@ function switchSessionTab(sessionId, tabId, btn) {
     localStorage.setItem('sessionTab-' + sessionId, tabId);
 }
 
-// ── Dropdown close on outside click ───────────────────────────
 document.addEventListener('mousedown', function(e) {
-    if (!e.target.closest('.presenter-dropdown') &&
-        !e.target.classList.contains('a2-presenter-input')) {
+    if (!e.target.closest('.presenter-dropdown') && !e.target.classList.contains('a2-presenter-input')) {
         document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
     }
 });
 
-// ── Session collapse ───────────────────────────────────────────
 function toggleSession(sessionId, event) {
-    if (event.target.closest('.session-tabs') ||
-        event.target.closest('.session-actions') ||
-        event.target.closest('.mtt-dropdown-menu')) return;
-
+    if (event.target.closest('.session-tabs') || event.target.closest('.session-actions') || event.target.closest('.mtt-dropdown-menu')) return;
     const body = document.getElementById('session-body-' + sessionId);
     const icon = document.getElementById('session-collapse-' + sessionId);
     if (!body) return;
@@ -876,7 +794,6 @@ function toggleSession(sessionId, event) {
     if (icon) icon.classList.toggle('collapsed', !isCollapsed);
 }
 
-// ── Day collapse ───────────────────────────────────────────────
 function toggleDay(dayId, headerEl) {
     const dayEl = headerEl.closest('.mtt-day');
     const content = dayEl.querySelector('.mtt-day-content');
@@ -894,18 +811,32 @@ function toggleDay(dayId, headerEl) {
 
 // ── MIC'D toggles ─────────────────────────────────────────────
 function toggleMicd(assignmentId, btn) {
+    markLocalChange();
     const isOn = btn.classList.contains('on');
     const newState = !isOn;
     btn.classList.toggle('on', newState);
     btn.classList.toggle('off', !newState);
-    btn.textContent = newState ? 'ON' : '—';
-    const row = document.getElementById('a1-row-' + assignmentId);
-    if (row) row.classList.toggle('row-micd', newState);
+    // Preserve inner dot span, just update the text node
+    const dot = btn.querySelector('.a2-micd-dot');
+    if (dot) {
+        Array.from(btn.childNodes).forEach(n => { if (n.nodeType === 3) n.remove(); });
+        btn.appendChild(document.createTextNode(newState ? ' ON' : " MIC'D"));
+    } else {
+        btn.textContent = newState ? 'ON' : '—';
+    }
+    // Sync A1 row
+    const a1Row = document.getElementById('a1-row-' + assignmentId);
+    if (a1Row) {
+        a1Row.classList.toggle('row-micd', newState);
+        const a1Btn = a1Row.querySelector('.a1-micd-toggle');
+        if (a1Btn) { a1Btn.classList.toggle('on', newState); a1Btn.classList.toggle('off', !newState); a1Btn.textContent = newState ? 'ON' : '—'; }
+    }
+    // Sync A2 card border
     const card = document.getElementById('a2-card-' + assignmentId);
     if (card) {
         card.classList.toggle('card-micd', newState);
-        const a2btn = card.querySelector('.a2-micd-toggle');
-        if (a2btn) { a2btn.classList.toggle('on', newState); a2btn.classList.toggle('off', !newState); }
+        const a2btn = document.getElementById('a2-micd-btn-' + assignmentId);
+        if (a2btn && a2btn !== btn) { a2btn.classList.toggle('on', newState); a2btn.classList.toggle('off', !newState); }
     }
     updateField(assignmentId, 'is_micd', newState);
 }
@@ -916,42 +847,158 @@ function updateMicType(assignmentId, value) {
     if (!card) return;
     const meta = card.querySelector('.a2-card-meta');
     if (!meta) return;
-    const labels = {
-        'HH': 'HH', 'LAV': 'LAV', 'HEADSET': 'HEADSET',
-        'PODIUM': 'PODIUM', 'BOOM': 'BOOM', 'INSTRUMENT': 'INSTRUMENT'
-    };
+    const labels = { 'HH':'HH','LAV':'LAV','HEADSET':'HEADSET','PODIUM':'PODIUM','BOOM':'BOOM','INSTRUMENT':'INSTRUMENT' };
     if (value && labels[value]) {
-        meta.innerHTML = '<span class="mic-type-badge type-' + value + '" style="font-size:9px;padding:2px 7px;">' +
-            '<span class="type-dot"></span>' + labels[value] + '</span>';
-    } else {
-        meta.innerHTML = '';
-    }
+        meta.innerHTML = '<span class="mic-type-badge type-' + value + '" style="font-size:9px;padding:2px 7px;"><span class="type-dot"></span>' + labels[value] + '</span>';
+    } else { meta.innerHTML = ''; }
     const a1td = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
-    if (a1td) {
-        a1td.className = 'mic-type-badge type-' + (value || 'empty');
-        a1td.innerHTML = '<span class="type-dot"></span>' + (labels[value] || '—');
-    }
+    if (a1td) { a1td.className = 'mic-type-badge type-' + (value || 'empty'); a1td.innerHTML = '<span class="type-dot"></span>' + (labels[value] || '—'); }
 }
 
-function toggleMicdA2(assignmentId, btn) {
+// toggleMicdSlot: radio behavior — called from per-chip MIC'D buttons
+// Signature: toggleMicdSlot(assignmentId, slotId, btn)
+async function toggleMicdSlot(assignmentId, slotId, btn) {
+    markLocalChange();
     const isOn = btn.classList.contains('on');
     const newState = !isOn;
-    btn.classList.toggle('on', newState);
-    btn.classList.toggle('off', !newState);
-    const card = document.getElementById('a2-card-' + assignmentId);
-    if (card) card.classList.toggle('card-micd', newState);
-    const a1btn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
-    if (a1btn) {
-        a1btn.classList.toggle('on', newState);
-        a1btn.classList.toggle('off', !newState);
-        a1btn.textContent = newState ? 'ON' : '—';
-        const row = document.getElementById('a1-row-' + assignmentId);
-        if (row) row.classList.toggle('row-micd', newState);
+
+    try {
+        const resp = await fetch('/audiopatch/api/mic/slot/toggle-micd/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({slot_id: slotId, is_micd: newState})
+        });
+        const data = await resp.json();
+        if (!data.success) return;
+    } catch(e) { return; }
+
+    // Clear ALL chip MIC'D buttons/dots/highlights for this assignment
+    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-micd-btn').forEach(b => {
+        b.classList.remove('on'); b.classList.add('off'); b.textContent = "MIC'D";
+    });
+    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-micd-dot').forEach(d => d.classList.remove('on'));
+    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach(c => c.classList.remove('micd'));
+
+    // Clear all A1 slot rows for this assignment
+    document.querySelectorAll('.a1-row[data-assignment-id="' + assignmentId + '"]').forEach(row => {
+        row.classList.remove('row-micd');
+        const b = row.querySelector('.a1-micd-toggle');
+        if (b) { b.classList.remove('on'); b.classList.add('off'); b.textContent = '—'; }
+    });
+
+    // Also clear single-presenter A1 row if present
+    const a1SingleRow = document.getElementById('a1-row-' + assignmentId);
+    if (a1SingleRow) {
+        a1SingleRow.classList.remove('row-micd');
+        const b = a1SingleRow.querySelector('.a1-micd-toggle');
+        if (b) { b.classList.remove('on'); b.classList.add('off'); b.textContent = '—'; }
     }
-    updateField(assignmentId, 'is_micd', newState);
+
+    // Light up only the toggled slot if turning ON
+    if (newState) {
+        // A2 chip
+        btn.classList.add('on'); btn.classList.remove('off'); btn.textContent = 'ON';
+        const chip = btn.closest('.a2-slot-chip');
+        if (chip) {
+            chip.classList.add('micd');
+            const dot = chip.querySelector('.a2-slot-micd-dot');
+            if (dot) dot.classList.add('on');
+        }
+        // A1 slot row
+        const a1Row = document.getElementById('a1-slot-row-' + slotId);
+        if (a1Row) {
+            a1Row.classList.add('row-micd');
+            const a1Btn = document.getElementById('a1-micd-slot-' + slotId);
+            if (a1Btn) { a1Btn.classList.add('on'); a1Btn.classList.remove('off'); a1Btn.textContent = 'ON'; }
+        }
+        // Single-presenter A1 row (slot_count==1)
+        const a1Btn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
+        if (a1Btn) { a1Btn.classList.add('on'); a1Btn.classList.remove('off'); a1Btn.textContent = 'ON'; if (a1SingleRow) a1SingleRow.classList.add('row-micd'); }
+
+        // Card border
+        const card = document.getElementById('a2-card-' + assignmentId);
+        if (card) card.classList.add('card-micd');
+    } else {
+        const card = document.getElementById('a2-card-' + assignmentId);
+        if (card) card.classList.remove('card-micd');
+    }
 }
 
-// ── Photo uploads — FIX: keyed to slot.id not assignment.id ───
+// ── Expand/collapse slot rows ──────────────────────────────────
+function toggleSlotRows(assignmentId) {
+    const rows = document.querySelectorAll('.a1-slot-row[data-assignment-id="' + assignmentId + '"]');
+    if (!rows.length) return;
+    const isHidden = rows[0].style.display === 'none';
+    rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+    const badge = document.querySelector('#a1-row-' + assignmentId + ' .a1-shared-tag');
+    if (badge) badge.textContent = isHidden ? '▲ collapse' : '+' + rows.length + ' more';
+}
+
+// ── Update a slot field via API ────────────────────────────────
+async function updateSlotField(slotId, field, value) {
+    if (!slotId) return;
+    markLocalChange();
+    try {
+        const resp = await fetch('/audiopatch/api/mic/slot/update/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({slot_id: slotId, field: field, value: value})
+        });
+        const data = await resp.json();
+        if (!data.success) showNotification('Update failed: ' + (data.error || ''), 'error');
+    } catch(e) { showNotification('Error updating field', 'error'); }
+}
+
+// ── Slot group picker ──────────────────────────────────────────
+function openSlotGroupPicker(slotId, sessionId, dotEl) {
+    document.querySelectorAll('.group-picker.open').forEach(p => p.classList.remove('open'));
+    const picker = document.getElementById('slot-group-picker-' + slotId);
+    if (!picker) return;
+    loadGroups(sessionId, function(groups) {
+        picker.innerHTML = '';
+        const title = document.createElement('div');
+        title.className = 'group-picker-title';
+        title.textContent = 'Assign Group';
+        picker.appendChild(title);
+        const noneItem = document.createElement('div');
+        noneItem.className = 'group-picker-none';
+        noneItem.textContent = '— No Group —';
+        noneItem.onmousedown = function(e) { e.preventDefault(); assignSlotGroup(slotId, null, null, null, dotEl); picker.classList.remove('open'); };
+        picker.appendChild(noneItem);
+        if (groups.length) { const div = document.createElement('div'); div.className = 'group-picker-divider'; picker.appendChild(div); }
+        groups.forEach(function(g) {
+            const item = document.createElement('div');
+            item.className = 'group-picker-item';
+            item.innerHTML = '<span style="width:12px;height:12px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span> ' + g.name;
+            item.onmousedown = function(e) { e.preventDefault(); assignSlotGroup(slotId, g.id, g.name, g.color, dotEl); picker.classList.remove('open'); };
+            picker.appendChild(item);
+        });
+        const dotRect = dotEl.getBoundingClientRect();
+        if (window.innerHeight - dotRect.bottom < 200) { picker.style.bottom = '100%'; picker.style.top = 'auto'; }
+        else { picker.style.top = '100%'; picker.style.bottom = 'auto'; }
+        picker.classList.add('open');
+    });
+}
+
+function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl) {
+    fetch('/audiopatch/api/mic/slot/assign-group/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({slot_id: slotId, group_id: groupId})
+    }).then(r => r.json()).then(function(data) {
+        if (data.success) {
+            dotEl.className = 'group-dot ' + (groupColor ? 'color-' + groupColor : 'empty');
+            dotEl.title = groupName || 'Assign group';
+            const row = document.getElementById('a1-slot-row-' + slotId);
+            if (row) {
+                row.classList.remove('group-blue','group-amber','group-red','group-purple','group-teal');
+                if (groupColor) row.classList.add('group-' + groupColor);
+            }
+        }
+    });
+}
+
+// ── Photo uploads ──────────────────────────────────────────────
 function triggerPhotoForSlot(slotId, assignmentId) {
     if (!slotId) return;
     const input = document.getElementById('photo-input-slot-' + slotId);
@@ -960,76 +1007,75 @@ function triggerPhotoForSlot(slotId, assignmentId) {
 
 async function uploadPhotoForSlot(slotId, assignmentId, input) {
     if (!slotId || !input.files[0]) return;
+    markLocalChange();
     const fd = new FormData();
     fd.append('slot_id', slotId);
     fd.append('photo', input.files[0]);
-    const resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', {
-        method: 'POST',
-        headers: {'X-CSRFToken': csrftoken},
-        body: fd
-    });
+    const resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', { method: 'POST', headers: {'X-CSRFToken': csrftoken}, body: fd });
     const data = await resp.json();
     if (data.success && data.photo_url) {
         const zone = document.getElementById('photo-zone-' + assignmentId);
         if (!zone) return;
-
-        // Remove placeholder if present
         const placeholder = document.getElementById('photo-placeholder-' + assignmentId);
         if (placeholder) placeholder.style.display = 'none';
-
-        // Update or create the thumbnail image
         let img = document.getElementById('photo-img-' + assignmentId);
-        if (!img) {
-            img = document.createElement('img');
-            img.id = 'photo-img-' + assignmentId;
-            img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
-            zone.insertBefore(img, zone.firstChild);
-        }
+        if (!img) { img = document.createElement('img'); img.id = 'photo-img-' + assignmentId; img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;'; zone.insertBefore(img, zone.firstChild); }
         img.src = data.photo_url;
-
-        // Update or create the hover-expand panel
         let expandDiv = document.getElementById('photo-expand-' + assignmentId);
-        if (!expandDiv) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'a2-photo-expand';
-            const expandImg = document.createElement('img');
-            expandImg.id = 'photo-expand-' + assignmentId;
-            wrapper.appendChild(expandImg);
-            zone.appendChild(wrapper);
-            expandDiv = expandImg;
-        }
+        if (!expandDiv) { const wrapper = document.createElement('div'); wrapper.className = 'a2-photo-expand'; const expandImg = document.createElement('img'); expandImg.id = 'photo-expand-' + assignmentId; wrapper.appendChild(expandImg); zone.appendChild(wrapper); expandDiv = expandImg; }
         expandDiv.src = data.photo_url;
-
-        // Re-wire the file input for next upload
         const fileInput = zone.querySelector('.a2-photo-input');
-        if (fileInput) {
-            fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + slotId + ', ' + assignmentId + ', this)');
-        }
-    } else {
-        alert('Photo upload failed: ' + (data.error || 'Unknown error'));
-    }
+        if (fileInput) fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + slotId + ', ' + assignmentId + ', this)');
+    } else { alert('Photo upload failed: ' + (data.error || 'Unknown error')); }
 }
 
-// ── Shared placement ───────────────────────────────────────────
 function updateSharedPlacement(assignmentId, presenterId, value) {
-    fetch('/audiopatch/api/mic/update-shared-placement/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
-        body: JSON.stringify({assignment_id: assignmentId, presenter_id: presenterId, placement: value})
-    });
+    fetch('/audiopatch/api/mic/update-shared-placement/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId, presenter_id: presenterId, placement: value}) });
 }
 
-// ── CSRF ───────────────────────────────────────────────────────
 function getCsrfToken() {
     const c = document.cookie.split(';').find(x => x.trim().startsWith('csrftoken='));
     return c ? c.trim().split('=')[1] : '';
 }
 
 // ── Live update checker ────────────────────────────────────────
+// lastLocalChange: updated whenever THIS user saves anything.
+// If a checksum change is detected within 10s of a local save, we assume
+// it was caused by us — skip the countdown so we don't bounce ourselves.
+var lastLocalChange = 0;
+function markLocalChange() { lastLocalChange = Date.now(); }
+
 (function() {
-    let lastChecksum = null, lastActivity = Date.now(), hasUnseen = false;
-    document.addEventListener('click', () => lastActivity = Date.now());
-    document.addEventListener('keypress', () => lastActivity = Date.now());
+    let lastChecksum = null;
+    let countdownTimer = null;
+
+    function startCountdown() {
+        // Already counting down — don't restart
+        if (countdownTimer) return;
+        const banner = document.getElementById('mic-tracker-update-banner');
+        const msg = document.getElementById('banner-message');
+        const dismiss = document.getElementById('banner-dismiss');
+        if (!banner || !msg || !dismiss) { location.reload(); return; }
+        let count = 5;
+        msg.textContent = 'Updates Available — refreshing in ' + count + 's';
+        banner.style.setProperty('display', 'block', 'important');
+        countdownTimer = setInterval(function() {
+            count--;
+            if (count <= 0) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+                location.reload();
+            } else {
+                msg.textContent = 'Updates Available — refreshing in ' + count + 's';
+            }
+        }, 1000);
+        dismiss.onclick = function() {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+            banner.style.setProperty('display', 'none', 'important');
+        };
+    }
+
     async function check() {
         try {
             const r = await fetch('/api/mic-tracker-checksum/');
@@ -1039,8 +1085,11 @@ function getCsrfToken() {
             if (lastChecksum === null) { lastChecksum = data.checksum; return; }
             if (data.checksum !== lastChecksum) {
                 lastChecksum = data.checksum;
-                if ((Date.now() - lastActivity) > 30000 && !hasUnseen) { location.reload(); }
-                else { document.getElementById('mic-tracker-update-banner').style.display = 'block'; hasUnseen = true; }
+                // If this user saved something in the last 10 seconds, the
+                // change is ours — update the checksum silently, no countdown.
+                const timeSinceLocalSave = Date.now() - lastLocalChange;
+                if (timeSinceLocalSave < 10000) return;
+                startCountdown();
             }
         } catch(e) {}
     }
@@ -1049,7 +1098,60 @@ function getCsrfToken() {
 })();
 
 // ── Presenter search dropdown ──────────────────────────────────
-// FIX: exactMatch / create-new block moved inside the .then() callback
+// ── Sync a presenter name change into the A1 table immediately ──
+// Works for both single-presenter (a1-row-{assignmentId}) and
+// multi-presenter stacked rows (a1-slot-row-{slotId}).
+// slotId is optional — if omitted we look up the active chip's data-slot-id.
+function syncPresenterToA1(assignmentId, name, slotId) {
+    // Resolve slotId from the active chip if not provided
+    if (!slotId) {
+        const activeChip = document.querySelector('#slot-queue-' + assignmentId + ' .a2-slot-chip.active');
+        if (activeChip) slotId = activeChip.dataset.slotId;
+    }
+
+    // Helper: set text on a cell, replacing unassigned placeholder if needed
+    function setName(cell, text) {
+        if (!cell) return;
+        const existing = cell.querySelector('.a1-presenter-primary');
+        if (existing) {
+            existing.textContent = text;
+        } else {
+            const unassigned = cell.querySelector('.a1-unassigned');
+            if (unassigned) {
+                // Preserve active-slot class if present on the old element
+                const wasActive = unassigned.classList.contains('a1-slot-active');
+                unassigned.outerHTML = '<span class="a1-presenter-primary' + (wasActive ? ' a1-slot-active' : '') + '">' + text + '</span>';
+            }
+        }
+    }
+
+    // Try multi-presenter slot row first
+    if (slotId) {
+        const slotRow = document.getElementById('a1-slot-row-' + slotId);
+        if (slotRow) {
+            setName(slotRow.querySelector('td:nth-child(4)'), name);
+            // Also update the active chip label in A2 (text node before the ✕ and MIC'D btn)
+            const activeChip = document.querySelector('#slot-queue-' + assignmentId + ' .a2-slot-chip.active');
+            if (activeChip) {
+                // Update just the text node (first child text node)
+                for (const node of activeChip.childNodes) {
+                    if (node.nodeType === 3 && node.textContent.trim()) {
+                        node.textContent = name;
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    // Fall back to single-presenter row
+    const singleRow = document.getElementById('a1-row-' + assignmentId);
+    if (singleRow) {
+        setName(singleRow.querySelector('td:nth-child(4)'), name);
+    }
+}
+
 function searchPresenters(assignmentId, query) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     fetch('/audiopatch/api/presenters/list/?q=' + encodeURIComponent(query))
@@ -1057,7 +1159,6 @@ function searchPresenters(assignmentId, query) {
         .then(data => {
             dd.innerHTML = '';
             if (!data.presenters || !data.presenters.length) { dd.classList.remove('open'); return; }
-
             data.presenters.forEach(p => {
                 const item = document.createElement('div');
                 item.className = 'presenter-dd-item';
@@ -1067,66 +1168,38 @@ function searchPresenters(assignmentId, query) {
                     document.getElementById('presenter-input-' + assignmentId).value = p.name;
                     dd.classList.remove('open');
                     updateField(assignmentId, 'presenter_id', p.id);
-                    const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
-                    if (a1primary) {
-                        a1primary.textContent = p.name;
-                    } else {
-                        const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
-                        if (a1unassigned) {
-                            a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + p.name + '</span>';
-                        }
-                    }
+                    syncPresenterToA1(assignmentId, p.name);
                 };
                 dd.appendChild(item);
             });
-
-            // Determine if dropdown should open up or down
             const inputEl = document.getElementById('presenter-input-' + assignmentId);
             const inputRect = inputEl.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const spaceBelow = viewportHeight - inputRect.bottom;
+            const spaceBelow = window.innerHeight - inputRect.bottom;
             const spaceAbove = inputRect.top;
-
             if (spaceAbove > spaceBelow && spaceAbove > 160) {
-                dd.style.bottom = '100%';
-                dd.style.top = 'auto';
-                dd.style.marginBottom = '4px';
-                dd.style.marginTop = '0';
-                dd.style.boxShadow = '0 -8px 24px rgba(0,0,0,0.4)';
+                dd.style.bottom = '100%'; dd.style.top = 'auto'; dd.style.marginBottom = '4px'; dd.style.marginTop = '0'; dd.style.boxShadow = '0 -8px 24px rgba(0,0,0,0.4)';
             } else {
-                dd.style.bottom = 'auto';
-                dd.style.top = '100%';
-                dd.style.marginBottom = '0';
-                dd.style.marginTop = '4px';
-                dd.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+                dd.style.bottom = 'auto'; dd.style.top = '100%'; dd.style.marginBottom = '0'; dd.style.marginTop = '4px'; dd.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
             }
-
             dd.classList.add('open');
-
-            // FIX: create-new option now correctly inside .then() scope
             const exactMatch = data.presenters.some(p => p.name.toLowerCase() === query.toLowerCase());
             if (query && !exactMatch) {
                 const addItem = document.createElement('div');
                 addItem.className = 'presenter-dd-item presenter-dd-add';
                 addItem.textContent = '+ Add "' + query + '" as new presenter';
-                addItem.onclick = () => {
+                addItem.onmousedown = (e) => {
+                    e.preventDefault();
                     fetch('/audiopatch/api/presenters/create/', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
                         body: JSON.stringify({name: query})
                     })
-                    .then(r => r.json())
-                    .then(data => {
+                    .then(r => r.json()).then(data => {
                         if (data.success) {
                             document.getElementById('presenter-input-' + assignmentId).value = query;
                             dd.classList.remove('open');
                             updateField(assignmentId, 'presenter_id', data.presenter_id);
-                            const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
-                            if (a1primary) { a1primary.textContent = query; }
-                            else {
-                                const a1unassigned = document.querySelector('#a1-row-' + assignmentId + ' .a1-unassigned');
-                                if (a1unassigned) a1unassigned.outerHTML = '<span class="a1-presenter-primary">' + query + '</span>';
-                            }
+                            syncPresenterToA1(assignmentId, query);
                         }
                     });
                 };
@@ -1135,59 +1208,38 @@ function searchPresenters(assignmentId, query) {
         });
 }
 
-// FIX: use presenter_id (not presenter_name) for ForeignKey assignment
 function assignPresenter(assignmentId, value) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     dd.classList.remove('open');
-    if (!value) {
-        updateField(assignmentId, 'presenter_id', '');
-    } else {
-        updateField(assignmentId, 'presenter_id', value);
-    }
+    if (value) syncPresenterToA1(assignmentId, value);
+    updateField(assignmentId, 'presenter_id', value || '');
 }
 
 async function nextSlot(assignmentId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/next/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
-        body: JSON.stringify({assignment_id: assignmentId})
-    });
+    const resp = await fetch('/audiopatch/api/mic/slot/next/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId}) });
     const data = await resp.json();
     if (data.success) applySlotData(assignmentId, data);
 }
 
 async function prevSlot(assignmentId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/prev/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
-        body: JSON.stringify({assignment_id: assignmentId})
-    });
+    const resp = await fetch('/audiopatch/api/mic/slot/prev/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId}) });
     const data = await resp.json();
     if (data.success) applySlotData(assignmentId, data);
 }
 
 async function addPresenterSlot(assignmentId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/add/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
-        body: JSON.stringify({assignment_id: assignmentId})
-    });
+    const resp = await fetch('/audiopatch/api/mic/slot/add/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId}) });
     const data = await resp.json();
     if (data.success) location.reload();
 }
 
 async function removePresenterSlot(assignmentId, slotId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/remove/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken},
-        body: JSON.stringify({assignment_id: assignmentId, slot_id: slotId})
-    });
+    const resp = await fetch('/audiopatch/api/mic/slot/remove/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId, slot_id: slotId}) });
     const data = await resp.json();
     if (data.success) location.reload();
     else alert(data.error);
 }
 
-// FIX: applySlotData now updates the photo zone when navigating PREV/NEXT
 function applySlotData(assignmentId, data) {
     const nameInput = document.getElementById('presenter-input-' + assignmentId);
     if (nameInput) nameInput.value = data.presenter_name || '';
@@ -1208,52 +1260,49 @@ function applySlotData(assignmentId, data) {
     const counter = document.getElementById('slot-counter-' + assignmentId);
     if (counter) counter.textContent = (data.slot_index + 1) + ' / ' + data.slot_count;
 
-    document.querySelectorAll(`#slot-queue-${assignmentId} .a2-slot-chip`).forEach((chip, i) => {
+    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach((chip, i) => {
         chip.classList.toggle('active', i === data.slot_index);
     });
 
+    // Update A1 primary row
     const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
     if (a1primary) a1primary.textContent = data.presenter_name || '— Unassigned —';
 
-    // FIX: update photo zone to show the new active slot's photo
+    // Re-wire A1 primary row MIC'D button id to new active slot
+    // Also update A2 MIC'D button's active slot reference
+    if (data.slot_id) {
+        const a2MicdBtn = document.getElementById('a2-micd-btn-' + assignmentId);
+        if (a2MicdBtn) a2MicdBtn.dataset.activeSlotId = data.slot_id;
+        const a1MicdBtn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
+        if (a1MicdBtn) a1MicdBtn.id = 'a1-micd-slot-' + data.slot_id;
+        // Update type badge on primary row
+        const a1TypeBadge = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
+        if (a1TypeBadge) {
+            a1TypeBadge.className = 'mic-type-badge type-' + (data.mic_type || 'empty');
+            a1TypeBadge.innerHTML = '<span class="type-dot"></span>' + (data.mic_type || '—');
+        }
+        // Highlight active slot in expanded rows
+        document.querySelectorAll('.a1-slot-row[data-assignment-id="' + assignmentId + '"] .a1-presenter-primary').forEach(el => el.classList.remove('a1-slot-active'));
+        const activeSlotName = document.querySelector('#a1-slot-row-' + data.slot_id + ' .a1-presenter-primary');
+        if (activeSlotName) activeSlotName.classList.add('a1-slot-active');
+    }
+
+    // Update photo zone
     const zone = document.getElementById('photo-zone-' + assignmentId);
     if (zone && data.slot_id) {
-        // Re-wire click and file input to the new slot
         zone.setAttribute('onclick', 'triggerPhotoForSlot(' + data.slot_id + ', ' + assignmentId + ')');
         const fileInput = zone.querySelector('.a2-photo-input');
-        if (fileInput) {
-            fileInput.id = 'photo-input-slot-' + data.slot_id;
-            fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + data.slot_id + ', ' + assignmentId + ', this)');
-        }
-
-        // Update displayed photo
+        if (fileInput) { fileInput.id = 'photo-input-slot-' + data.slot_id; fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + data.slot_id + ', ' + assignmentId + ', this)'); }
         const placeholder = document.getElementById('photo-placeholder-' + assignmentId);
         let img = document.getElementById('photo-img-' + assignmentId);
-
         if (data.photo_url) {
             if (placeholder) placeholder.style.display = 'none';
-            if (!img) {
-                img = document.createElement('img');
-                img.id = 'photo-img-' + assignmentId;
-                img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
-                zone.insertBefore(img, zone.firstChild);
-            }
-            img.style.display = 'block';
-            img.src = data.photo_url;
-
+            if (!img) { img = document.createElement('img'); img.id = 'photo-img-' + assignmentId; img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;'; zone.insertBefore(img, zone.firstChild); }
+            img.style.display = 'block'; img.src = data.photo_url;
             let expandDiv = document.getElementById('photo-expand-' + assignmentId);
-            if (!expandDiv) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'a2-photo-expand';
-                const expandImg = document.createElement('img');
-                expandImg.id = 'photo-expand-' + assignmentId;
-                wrapper.appendChild(expandImg);
-                zone.appendChild(wrapper);
-                expandDiv = expandImg;
-            }
+            if (!expandDiv) { const wrapper = document.createElement('div'); wrapper.className = 'a2-photo-expand'; const expandImg = document.createElement('img'); expandImg.id = 'photo-expand-' + assignmentId; wrapper.appendChild(expandImg); zone.appendChild(wrapper); expandDiv = expandImg; }
             expandDiv.src = data.photo_url;
         } else {
-            // No photo for this slot — show placeholder
             if (img) img.style.display = 'none';
             const expandWrapper = zone.querySelector('.a2-photo-expand');
             if (expandWrapper) expandWrapper.style.display = 'none';
@@ -1262,16 +1311,12 @@ function applySlotData(assignmentId, data) {
     }
 }
 
-// ── Close input blur ───────────────────────────────────────────
 document.addEventListener('focusout', function(e) {
     if (e.target.classList.contains('a2-presenter-input')) {
-        setTimeout(() => {
-            document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open'));
-        }, 200);
+        setTimeout(() => { document.querySelectorAll('.presenter-dropdown').forEach(d => d.classList.remove('open')); }, 200);
     }
 });
 
-// ── Close modal on background click ───────────────────────────
 document.getElementById('group-manage-modal').addEventListener('mousedown', function(e) {
     if (e.target === this) closeGroupManager();
 });

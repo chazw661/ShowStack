@@ -33,9 +33,17 @@ import csv
 from django.shortcuts import redirect
 from .models import Project
 import hashlib
-
+import os
+from io import BytesIO
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph,Spacer, Image, HRFlowable, KeepTogether)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 from .models import AudioChecklist, AudioChecklistTask, Project, ProjectMember
+from .models import ShowDay, MicSession, MicAssignment, MicShowInfo
 
 
 
@@ -535,7 +543,7 @@ class SystemDashboardView(LoginRequiredMixin, View):
 
     #--------Mic Tracker Sheet---
 
-    from .models import ShowDay, MicSession, MicAssignment, MicShowInfo
+   
 
 @staff_member_required
 def mic_tracker_view(request):
@@ -810,6 +818,262 @@ def duplicate_session(request):
     
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})  
+    
+
+# ── Add/replace these two functions in planner/views.py ──────────────────────
+# Place them near your other mic tracker views.
+#
+# Required imports (add to top of views.py if not already present):
+#   import csv
+#   import os
+#   from datetime import date
+#   from io import BytesIO
+#   from django.http import HttpResponse
+#   from reportlab.lib.pagesizes import letter, landscape
+#   from reportlab.lib import colors
+#   from reportlab.lib.units import inch
+#   from reportlab.platypus import (
+#       SimpleDocTemplate, Table, TableStyle, Paragraph,
+#       Spacer, Image, HRFlowable, KeepTogether
+#   )
+#   from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+#   from reportlab.lib.enums import TA_LEFT, TA_CENTER
+#
+# Install reportlab if needed:  pip install reportlab
+
+
+@staff_member_required
+def export_mic_tracker(request):
+    """Export mic tracker data as CSV — current project, all days/sessions."""
+    project_id = request.session.get('current_project_id')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="mic_tracker_{date.today()}.csv"'
+    writer = csv.writer(response)
+
+    # Header block
+    show_info = getattr(request.current_project, 'mic_show_info', None)
+    writer.writerow(['Mic Assignment List'])
+    writer.writerow(['Show Name:', getattr(show_info, 'show_name', '') or ''])
+    writer.writerow(['Venue:',     getattr(show_info, 'venue_name', '') or ''])
+    writer.writerow(['Ballroom:',  getattr(show_info, 'ballroom_name', '') or ''])
+    writer.writerow(['Duration:',  getattr(show_info, 'duration_display', '') or ''])
+    writer.writerow([])
+
+    # Filter to current project only
+    days = ShowDay.objects.filter(
+        project_id=project_id
+    ).order_by('date').prefetch_related(
+        'sessions__mic_assignments__presenter_slots__presenter',
+    )
+
+    for day in days:
+        writer.writerow([f'Day: {day}'])
+
+        for session in day.sessions.order_by('order'):
+            writer.writerow([f'Session: {session.name}'])
+            writer.writerow([
+                'RF#', 'Presenter(s)', 'Type',
+                'Placement', 'Sensitivity', 'Output Level', 'Notes'
+            ])
+
+            for assignment in session.mic_assignments.order_by('rf_number'):
+                # Collect all presenter slots
+                slots = list(assignment.presenter_slots.order_by('order'))
+                if not slots:
+                    writer.writerow([
+                        f'{assignment.rf_number:02d}', '', '', '', '', '', ''
+                    ])
+                    continue
+
+                for i, slot in enumerate(slots):
+                    presenter_name = slot.presenter.name if slot.presenter else '— Unassigned —'
+                    writer.writerow([
+                        f'{assignment.rf_number:02d}' if i == 0 else '',
+                        presenter_name,
+                        slot.mic_type or '',
+                        slot.get_placement_display() if slot.placement else '',
+                        slot.sensitivity or '',
+                        slot.output_level or '',
+                        slot.notes or '',
+                    ])
+
+            writer.writerow([])
+        writer.writerow([])
+
+    return response
+
+
+@staff_member_required
+def export_mic_tracker_pdf(request):
+    """Export mic tracker A2 cards as PDF — current project, all days/sessions."""
+
+    project_id = request.session.get('current_project_id')
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.5 * inch,
+        leftMargin=0.5 * inch,
+        topMargin=0.5 * inch,
+        bottomMargin=0.5 * inch,
+    )
+
+    # ── Styles ────────────────────────────────────────────────────────────────
+    styles = getSampleStyleSheet()
+
+    style_title = ParagraphStyle('title',
+        fontSize=16, fontName='Helvetica-Bold', spaceAfter=4,
+        textColor=colors.HexColor('#1a1a2e'))
+
+    style_day = ParagraphStyle('day',
+        fontSize=13, fontName='Helvetica-Bold', spaceAfter=2, spaceBefore=12,
+        textColor=colors.HexColor('#0d3b6e'),
+        borderPad=4)
+
+    style_session = ParagraphStyle('session',
+        fontSize=11, fontName='Helvetica-Bold', spaceAfter=4, spaceBefore=8,
+        textColor=colors.HexColor('#1a5276'))
+
+    style_rf = ParagraphStyle('rf',
+        fontSize=20, fontName='Helvetica-Bold', alignment=TA_CENTER,
+        textColor=colors.HexColor('#1a1a2e'))
+
+    style_label = ParagraphStyle('label',
+        fontSize=7, fontName='Helvetica', textColor=colors.HexColor('#888888'),
+        spaceAfter=1)
+
+    style_value = ParagraphStyle('value',
+        fontSize=9, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a1a2e'),
+        spaceAfter=2)
+
+    style_presenter = ParagraphStyle('presenter',
+        fontSize=11, fontName='Helvetica-Bold', textColor=colors.HexColor('#1a1a2e'))
+
+    style_notes = ParagraphStyle('notes',
+        fontSize=8, fontName='Helvetica', textColor=colors.HexColor('#444444'),
+        spaceAfter=2)
+
+    CARD_BG    = colors.HexColor('#f4f7fb')
+    LABEL_BG   = colors.HexColor('#dce6f0')
+    BORDER     = colors.HexColor('#b0c4d8')
+    DARK       = colors.HexColor('#1a1a2e')
+
+    PHOTO_SIZE = 0.85 * inch
+    PAGE_W     = letter[0] - inch  # usable width
+
+    story = []
+
+    # ── Title ────────────────────────────────────────────────────────────────
+    show_info = getattr(request.current_project, 'mic_show_info', None)
+    show_name = getattr(show_info, 'show_name', '') or str(request.current_project)
+    story.append(Paragraph(f'🎤 Mic Tracker — {show_name}', style_title))
+    meta = []
+    if getattr(show_info, 'venue_name', ''):
+        meta.append(f"Venue: {show_info.venue_name}")
+    if getattr(show_info, 'duration_display', ''):
+        meta.append(f"Dates: {show_info.duration_display}")
+    if meta:
+        story.append(Paragraph('  |  '.join(meta), styles['Normal']))
+    story.append(Spacer(1, 0.15 * inch))
+
+    # ── Data ─────────────────────────────────────────────────────────────────
+    days = ShowDay.objects.filter(
+        project_id=project_id
+    ).order_by('date').prefetch_related(
+        'sessions__mic_assignments__presenter_slots__presenter',
+    )
+
+    for day in days:
+        story.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor('#0d3b6e')))
+        story.append(Paragraph(str(day), style_day))
+
+        for session in day.sessions.order_by('order'):
+            story.append(Paragraph(f'Session: {session.name}', style_session))
+
+            for assignment in session.mic_assignments.order_by('rf_number'):
+                slots = list(assignment.presenter_slots.order_by('order'))
+                if not slots:
+                    continue
+
+                # Build one card per slot (each slot = one presenter on this mic)
+                for slot in slots:
+                    presenter_name = slot.presenter.name if slot.presenter else '— Unassigned —'
+
+                    # ── Photo ────────────────────────────────────────────
+                    photo_cell = Spacer(PHOTO_SIZE, PHOTO_SIZE)
+                    if slot.photo and slot.photo.name:
+                        try:
+                            photo_path = slot.photo.path
+                            if os.path.exists(photo_path):
+                                photo_cell = Image(
+                                    photo_path,
+                                    width=PHOTO_SIZE,
+                                    height=PHOTO_SIZE,
+                                )
+                                photo_cell.hAlign = 'CENTER'
+                        except Exception:
+                            pass
+
+                    # ── Detail fields ────────────────────────────────────
+                    def field_block(label, value):
+                        return [
+                            Paragraph(label, style_label),
+                            Paragraph(value or '—', style_value),
+                        ]
+
+                    details = []
+                    details += field_block('PRESENTER', presenter_name)
+                    details += field_block('TYPE',      slot.mic_type or assignment.mic_type or '')
+                    details += field_block('PLACEMENT', slot.get_placement_display() if slot.placement else '')
+                    details += field_block('SENSITIVITY', slot.sensitivity or '')
+                    details += field_block('OUTPUT LEVEL', slot.output_level or '')
+                    if slot.notes:
+                        details.append(Paragraph('NOTES', style_label))
+                        details.append(Paragraph(slot.notes, style_notes))
+
+                    # ── Card layout: [RF# | Photo | Details] ─────────────
+                    rf_col_w    = 0.55 * inch
+                    photo_col_w = PHOTO_SIZE + 0.1 * inch
+                    detail_col_w = PAGE_W - rf_col_w - photo_col_w
+
+                    card_data = [[
+                        Paragraph(f'{assignment.rf_number:02d}', style_rf),
+                        photo_cell,
+                        details,
+                    ]]
+
+                    card = Table(
+                        card_data,
+                        colWidths=[rf_col_w, photo_col_w, detail_col_w],
+                        rowHeights=[None],
+                    )
+                    card.setStyle(TableStyle([
+                        ('BACKGROUND',  (0, 0), (-1, -1), CARD_BG),
+                        ('BACKGROUND',  (0, 0), (0, 0),   LABEL_BG),
+                        ('BOX',         (0, 0), (-1, -1), 1, BORDER),
+                        ('LINEAFTER',   (0, 0), (0, 0),   1, BORDER),
+                        ('LINEAFTER',   (1, 0), (1, 0),   1, BORDER),
+                        ('VALIGN',      (0, 0), (-1, -1), 'TOP'),
+                        ('ALIGN',       (0, 0), (0, 0),   'CENTER'),
+                        ('VALIGN',      (0, 0), (0, 0),   'MIDDLE'),
+                        ('TOPPADDING',  (0, 0), (-1, -1), 6),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                    ]))
+
+                    story.append(KeepTogether([card, Spacer(1, 0.06 * inch)]))
+
+            story.append(Spacer(1, 0.1 * inch))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="mic_tracker_{date.today()}.pdf"'
+    return response    
 
 
 
@@ -1230,6 +1494,58 @@ def dmic_and_rotate(request):
             'error': str(e)
         })
     
+
+@require_POST
+def update_slot_field(request):
+    try:
+        data = json.loads(request.body)
+        slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
+        field = data['field']
+        value = data['value']
+        if field in ('notes', 'mic_type', 'placement', 'sensitivity', 'output_level'):
+            setattr(slot, field, value)
+            slot.save()
+            return JsonResponse({'success': True})
+        return JsonResponse({'success': False, 'error': 'Invalid field'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
+def assign_slot_group(request):
+    try:
+        data = json.loads(request.body)
+        slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
+        group_id = data.get('group_id')
+        slot.group = MicGroup.objects.get(id=group_id) if group_id else None
+        slot.save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+    
+
+@require_POST
+def toggle_slot_micd(request):
+    try:
+        data = json.loads(request.body)
+        slot_id = data.get('slot_id')
+        new_state = data.get('is_micd', False)
+        slot = get_object_or_404(PresenterSlot, id=slot_id)
+        # Turn off all sibling slots on this assignment
+        PresenterSlot.objects.filter(assignment=slot.assignment).update(is_micd=False)
+        if new_state:
+            slot.is_micd = True
+            slot.save()
+        return JsonResponse({
+            'success': True,
+            'assignment_id': slot.assignment.id,
+            'active_slot_id': slot_id if new_state else None,
+            'is_micd': new_state
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})    
+
+
+
     #---Dropdown for presenters---
 @staff_member_required
 def get_presenters_list(request):
@@ -2924,34 +3240,133 @@ def populate_amp_models_view(request):
 @login_required
 @require_http_methods(["GET"])
 def mic_tracker_checksum(request):
-    """
-    Return a checksum of mic tracker data to detect changes.
-    """
+    """Return a checksum of mic tracker data to detect changes."""
     project_id = request.session.get('current_project_id')
     if not project_id:
         return JsonResponse({'checksum': None})
-    
-    # Get all mic sessions and assignments for this project
-    sessions = MicSession.objects.filter(day__project_id=project_id).values(
-        'id', 'name', 'start_time', 'end_time'
-    ).order_by('id')
-    
-    # MicAssignment fields (excluding relations and auto fields)
+
+    sessions = MicSession.objects.filter(
+        day__project_id=project_id
+    ).values('id', 'name', 'start_time', 'end_time').order_by('id')
+
     assignments = MicAssignment.objects.filter(
         session__day__project_id=project_id
-    ).values(
-        'id', 'rf_number', 'is_micd', 'is_d_mic'
-    ).order_by('id')
-    
-    # Create a hash of the data
+    ).values('id', 'rf_number', 'is_micd', 'is_d_mic').order_by('id')
+
+    # Include presenter slots so name/type/notes changes trigger refresh
+    slots = PresenterSlot.objects.filter(
+        assignment__session__day__project_id=project_id
+    ).values('id', 'assignment_id', 'presenter_id', 'mic_type', 'is_micd', 'is_active').order_by('id')
+
     data_string = json.dumps({
         'sessions': list(sessions),
-        'assignments': list(assignments)
+        'assignments': list(assignments),
+        'slots': list(slots),
     }, default=str)
-    
+
     checksum = hashlib.md5(data_string.encode()).hexdigest()
-    
     return JsonResponse({'checksum': checksum})
+
+
+# ── Add these two views to your audiopatch/views.py ──────────────────────────
+# They belong near your other session/day API endpoints.
+# Make sure ShowDay, MicSession are imported at the top of views.py.
+
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+import json
+
+
+@login_required
+@require_POST
+def create_day(request):
+    """Create a new ShowDay for the current project."""
+    try:
+        data = json.loads(request.body)
+        date_str = data.get('date')       # ISO format: YYYY-MM-DD
+        name = data.get('name', '').strip()
+
+        if not date_str:
+            return JsonResponse({'success': False, 'error': 'Date is required.'})
+
+        project_id = request.session.get('current_project_id')
+        if not project_id:
+            return JsonResponse({'success': False, 'error': 'No project selected.'})
+
+        # unique_together = [['project', 'date']] so get_or_create is safe
+        day, created = ShowDay.objects.get_or_create(
+            project_id=project_id,
+            date=date_str,
+            defaults={'name': name}
+        )
+
+        if not created:
+            return JsonResponse({'success': False, 'error': f'A day for {date_str} already exists.'})
+
+        if name and not created:
+            # Shouldn't reach here, but just in case
+            day.name = name
+            day.save()
+
+        return JsonResponse({'success': True, 'day_id': day.id})
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+@require_POST
+def create_session(request):
+    """Create a new MicSession with blank mic assignments."""
+    try:
+        data = json.loads(request.body)
+        day_id   = data.get('day_id')
+        name     = data.get('name', '').strip()
+        num_mics = int(data.get('num_mics', 16))
+        location = data.get('location', '').strip()
+
+        if not day_id:
+            return JsonResponse({'success': False, 'error': 'day_id is required.'})
+        if not name:
+            return JsonResponse({'success': False, 'error': 'Session name is required.'})
+        if not (1 <= num_mics <= 100):
+            return JsonResponse({'success': False, 'error': 'Mic count must be between 1 and 100.'})
+
+        day = ShowDay.objects.get(id=day_id)
+
+        # Determine order (append after existing sessions)
+        order = day.sessions.count()
+
+        # MicSession.save() calls create_mic_assignments() automatically
+        session = MicSession.objects.create(
+            day=day,
+            name=name,
+            num_mics=num_mics,
+            location=location,
+            order=order,
+        )
+
+        # Each new assignment also needs a default PresenterSlot so the
+        # A2 card and slot system works from the start.
+        for assignment in session.mic_assignments.all():
+            if not assignment.presenter_slots.exists():
+                PresenterSlot.objects.create(
+                    assignment=assignment,
+                    order=0,
+                    is_active=True,
+                )
+
+        return JsonResponse({
+            'success': True,
+            'session_id': session.id,
+            'num_mics': session.mic_assignments.count(),
+        })
+
+    except ShowDay.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Day not found.'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
   
 
 

@@ -91,9 +91,7 @@ class ShowStackAdminSite(admin.AdminSite):
             # Show Mic Tracker (15-19)
             'showday': 15,  # Show Mic Tracker - PARENT
             'micsession': 16,
-            'micassignment': 17,
             'presenter': 18,
-            'micshowinfo': 19,
             
             # PA Zones (20) - standalone
             'pazone': 20,
@@ -136,7 +134,7 @@ class ShowStackAdminSite(admin.AdminSite):
                     auth_models.append((auth_order, model))
                 else:
                     # Skip models that are accessible via parent page buttons
-                    if model_name in ('commposition', 'commcrewname', 'commchannel'):
+                    if model_name in ('commposition', 'commcrewname', 'commchannel', 'micassignment', 'micshowinfo'):
                         continue
                     order = order_map.get(model_name, 999)
                     other_models.append((order, model))

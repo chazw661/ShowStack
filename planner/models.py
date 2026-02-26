@@ -2650,11 +2650,19 @@ class PresenterSlot(models.Model):
     output_level = models.CharField(max_length=10, choices=MicAssignment.OUTPUT_LEVEL_CHOICES, blank=True)
     notes = models.TextField(blank=True)
     photo = models.ImageField(
-    upload_to='slot_photos/',
-    null=True,
-    blank=True,
-    help_text="Photo for this presenter slot"
-)
+        upload_to='slot_photos/',
+        null=True,
+        blank=True,
+        help_text="Photo for this presenter slot"
+    )
+    group = models.ForeignKey(
+        'MicGroup', 
+        null=True, blank=True, 
+        on_delete=models.SET_NULL,
+        related_name='slot_assignments'
+    )
+    is_micd = models.BooleanField(default=False)
+    
 
     class Meta:
         ordering = ['order']

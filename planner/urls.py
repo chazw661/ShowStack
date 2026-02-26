@@ -84,11 +84,27 @@ urlpatterns = [
     path('api/mic/slot/remove/', views.remove_presenter_slot, name='remove_presenter_slot'),
 
     path('api/mic/slot/upload-photo/', views.upload_slot_photo, name='upload_slot_photo'),
+
+    path('api/mic/slot/update/', views.update_slot_field, name='update_slot_field'),
+    path('api/mic/slot/assign-group/', views.assign_slot_group, name='assign_slot_group'),
+
+    path('api/mic/slot/toggle-micd/', views.toggle_slot_micd, name='toggle_slot_micd'),
     
     # Add to urls.py
      path('api/mic/upload-presenter-photo/', views.upload_presenter_photo, name='upload_presenter_photo'),
 
      path('api/mic/upload-photo-by-assignment/', views.upload_photo_by_assignment, name='upload_photo_by_assignment'),
+
+     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
+     path('mic-tracker/export/pdf/', views.export_mic_tracker_pdf, name='export_mic_tracker_pdf'),
+
+     # Add these two lines to your audiopatch/urls.py urlpatterns list
+# near your other API routes:
+
+     path('api/day/create/', views.create_day, name='create_day'),
+     path('api/session/create/', views.create_session, name='create_session'),
+
+
   # Power Distribution URLs
      path('power-distribution/', views.power_distribution_calculator, name='power_distribution_calculator'),
      path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),
