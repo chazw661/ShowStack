@@ -4698,9 +4698,6 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
         ('Assignment Details', {
             'fields': ('session', 'rf_number', 'mic_type')
         }),
-        ('Presenter Information', {
-            'fields': ('presenter',)
-        }),
         ('Status', {
             'fields': ('is_micd', 'is_d_mic')
         }),
