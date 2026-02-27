@@ -27,19 +27,35 @@ class Command(BaseCommand):
         else:
             self.stdout.write('  Viewer group already exists')
         
-        # Get all equipment models from planner app
+        # All active planner models
         equipment_models = [
-            'console', 'consoleinput', 'consoleauxoutput', 'consolematrixoutput',
-            'iodevice', 'deviceinput', 'deviceoutput',
-            'amplifierassignment', 'ampchannel',
+            # Consoles
+            'console', 'consoleinput', 'consoleauxoutput', 'consolematrixoutput', 'consolestereooutput',
+            # Devices
+            'device', 'deviceinput', 'deviceoutput',
+            # Amplifiers
+            'amp', 'ampchannel', 'amplifierassignment', 'amplifierprofile', 'ampmodel',
+            # Processors
             'systemprocessor', 'p1processor', 'p1input', 'p1output',
             'galaxyprocessor', 'galaxyinput', 'galaxyoutput',
+            # PA Cables
             'pacableschedule', 'pafanout', 'pazone',
-            'commsystem', 'commdevice', 'commchannel',
-            'mictracking', 'micpackage',
-            'powerdistribution', 'powerchannel',
-            'soundvisiondata',
-            'location', 'amp',
+            # Speaker arrays
+            'speakerarray', 'speakercabinet',
+            # Comms
+            'commchannel', 'commcrewname', 'commposition',
+            'commbeltpack', 'commbeltpackchannel',
+            # Mic Tracker
+            'showday', 'micsession', 'micassignment', 'micgroup',
+            'presenter', 'presenterslot', 'micshowinfo', 'sharedpresenterassignment',
+            # Power
+            'powerdistributionplan',
+            # Sound Vision
+            'soundvisionprediction',
+            # Project management
+            'location', 'project', 'projectmember', 'invitation',
+            # Checklists
+            'audiochecklist', 'audiochecklisttask',
         ]
         
         self.stdout.write('\nConfiguring permissions...')
@@ -49,14 +65,11 @@ class Command(BaseCommand):
         for model_name in equipment_models:
             try:
                 content_type = ContentType.objects.get(app_label='planner', model=model_name)
-                
-                # Add all CRUD permissions for editors
                 perms = Permission.objects.filter(content_type=content_type)
                 editor_permissions.extend(list(perms))
             except ContentType.DoesNotExist:
                 self.stdout.write(self.style.WARNING(f'  Model not found: {model_name}'))
         
-        # Clear existing permissions and set new ones
         editor_group.permissions.clear()
         editor_group.permissions.add(*editor_permissions)
         self.stdout.write(self.style.SUCCESS(f'✓ Configured Editor group ({len(editor_permissions)} permissions)'))
@@ -66,8 +79,6 @@ class Command(BaseCommand):
         for model_name in equipment_models:
             try:
                 content_type = ContentType.objects.get(app_label='planner', model=model_name)
-                
-                # Add only view permission for viewers
                 view_perm = Permission.objects.get(
                     content_type=content_type,
                     codename=f'view_{model_name}'
@@ -76,7 +87,6 @@ class Command(BaseCommand):
             except (ContentType.DoesNotExist, Permission.DoesNotExist):
                 self.stdout.write(self.style.WARNING(f'  View permission not found: {model_name}'))
         
-        # Clear existing permissions and set new ones
         viewer_group.permissions.clear()
         viewer_group.permissions.add(*viewer_permissions)
         self.stdout.write(self.style.SUCCESS(f'✓ Configured Viewer group ({len(viewer_permissions)} permissions)'))
