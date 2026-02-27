@@ -1,0 +1,43 @@
+{% comment %}Mic Tracker - ShowDay changelist template (templates/admin/planner/showday/change_list.html){% endcomment %}
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+<div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+    <a href="../presenter/" class="mtt-nav-btn">
+        <span class="mtt-nav-icon">👤</span>
+        <span class="mtt-nav-label">Presenters</span>
+    </a>
+</div>
+
+{{ block.super }}
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+.mtt-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, #1a2a3a 0%, #243447 100%);
+    border: 1px solid #3a5068;
+    border-radius: 8px;
+    color: #e0e0e0;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    min-width: 160px;
+}
+.mtt-nav-btn:hover {
+    background: linear-gradient(135deg, #243447 0%, #2d4a63 100%);
+    border-color: #4a9eff;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 158, 255, 0.15);
+}
+.mtt-nav-icon { font-size: 18px; width: 28px; text-align: center; }
+.mtt-nav-label { font-weight: 600; letter-spacing: 0.3px; }
+</style>
+{% endblock %}

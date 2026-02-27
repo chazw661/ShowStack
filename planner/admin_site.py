@@ -134,7 +134,7 @@ class ShowStackAdminSite(admin.AdminSite):
                     auth_models.append((auth_order, model))
                 else:
                     # Skip models that are accessible via parent page buttons
-                    if model_name in ('commposition', 'commcrewname', 'commchannel', 'micassignment', 'micshowinfo'):
+                    if model_name in ('commposition', 'commcrewname', 'commchannel', 'micassignment', 'micshowinfo', 'micsession', 'presenter', 'presenterslot'):
                         continue
                     order = order_map.get(model_name, 999)
                     other_models.append((order, model))
