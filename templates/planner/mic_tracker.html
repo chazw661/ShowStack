@@ -726,6 +726,7 @@
 
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
+                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day.id }})">+ Add Session</button>
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
                     onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤ Groups</button>
             </div>
