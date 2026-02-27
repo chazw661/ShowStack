@@ -6,7 +6,7 @@
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">Home</a>
-    &rsaquo; <a href="/admin/planner/showday/">Mic Tracker</a>
+    &rsaquo; <a href="/audiopatch/mic-tracker/">Mic Tracker</a>
     &rsaquo;
 </div>
 {% endblock %}
@@ -356,19 +356,6 @@
     .a2-slot-micd-btn.off { background: var(--bg-input); color: var(--text-dim); }
     .a2-slot-micd-btn.on  { background: var(--accent-green); color: #000; border-color: var(--accent-green); box-shadow: 0 0 8px rgba(0,230,118,0.35); }
     .a2-slot-micd-btn:hover { opacity: 0.85; }
-
-    /* Add Day / Add Session Modals */
-    .mtt-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
-    .mtt-modal.hidden { display: none; }
-    .mtt-modal-box { background: var(--bg-card); border: 1px solid var(--border-bright); border-radius: 10px; padding: 28px 32px; width: 400px; max-width: 95vw; }
-    .mtt-modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 20px; }
-    .mtt-modal-field { margin-bottom: 14px; }
-    .mtt-modal-label { display: block; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
-    .mtt-modal-input { width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px; color: var(--text-primary); font-size: 13px; padding: 8px 10px; font-family: inherit; box-sizing: border-box; }
-    .mtt-modal-input:focus { outline: none; border-color: var(--accent-blue); }
-    .mtt-modal-error { color: #ff6b6b; font-size: 12px; margin-bottom: 10px; }
-    .mtt-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-
     </style>
 {% endblock %}
 
@@ -398,8 +385,6 @@
         </div>
         <div class="mtt-header-actions">
             {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
-            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:#ffffff !important;">👤 Presenters</a>
-            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
         </div>
     </div>
@@ -638,54 +623,56 @@
                                                {% if is_viewer %}readonly{% endif %}>
                                         <div class="presenter-dropdown" id="presenter-dd-{{ assignment.id }}"></div>
                                     </div>
+                                    {% with active_slot=assignment.active_slot %}
                                     <div class="a2-settings-row">
                                         <div class="a2-setting">
                                             <span class="a2-setting-label">Type</span>
                                             <select class="a2-select" onchange="updateMicType({{ assignment.id }}, this.value)" {% if is_viewer %}disabled{% endif %}>
                                                 <option value="">— select —</option>
-                                                <option value="HH"        {% if assignment.mic_type == 'HH'        %}selected{% endif %}>Handheld</option>
-                                                <option value="LAV"       {% if assignment.mic_type == 'LAV'       %}selected{% endif %}>Lav</option>
-                                                <option value="HEADSET"   {% if assignment.mic_type == 'HEADSET'   %}selected{% endif %}>Headset</option>
-                                                <option value="PODIUM"    {% if assignment.mic_type == 'PODIUM'    %}selected{% endif %}>Podium</option>
-                                                <option value="BOOM"      {% if assignment.mic_type == 'BOOM'      %}selected{% endif %}>Boom</option>
-                                                <option value="INSTRUMENT"{% if assignment.mic_type == 'INSTRUMENT'%}selected{% endif %}>Instrument</option>
+                                                <option value="HH"        {% if active_slot.mic_type == 'HH'        %}selected{% endif %}>Handheld</option>
+                                                <option value="LAV"       {% if active_slot.mic_type == 'LAV'       %}selected{% endif %}>Lav</option>
+                                                <option value="HEADSET"   {% if active_slot.mic_type == 'HEADSET'   %}selected{% endif %}>Headset</option>
+                                                <option value="PODIUM"    {% if active_slot.mic_type == 'PODIUM'    %}selected{% endif %}>Podium</option>
+                                                <option value="BOOM"      {% if active_slot.mic_type == 'BOOM'      %}selected{% endif %}>Boom</option>
+                                                <option value="INSTRUMENT"{% if active_slot.mic_type == 'INSTRUMENT'%}selected{% endif %}>Instrument</option>
                                             </select>
                                         </div>
                                         <div class="a2-setting">
                                             <span class="a2-setting-label">Placement</span>
                                             <select class="a2-select" onchange="updateField({{ assignment.id }}, 'placement', this.value)" {% if is_viewer %}disabled{% endif %}>
                                                 <option value="">— select —</option>
-                                                <option value="LEFT_EAR"     {% if assignment.placement == 'LEFT_EAR'     %}selected{% endif %}>Left Ear</option>
-                                                <option value="RIGHT_EAR"    {% if assignment.placement == 'RIGHT_EAR'    %}selected{% endif %}>Right Ear</option>
-                                                <option value="TIE"          {% if assignment.placement == 'TIE'          %}selected{% endif %}>Tie</option>
-                                                <option value="LAV_MAGNET"   {% if assignment.placement == 'LAV_MAGNET'   %}selected{% endif %}>Lav Magnet</option>
-                                                <option value="COLLAR"       {% if assignment.placement == 'COLLAR'       %}selected{% endif %}>Collar</option>
-                                                <option value="HAIR_MOUNT"   {% if assignment.placement == 'HAIR_MOUNT'   %}selected{% endif %}>Hair Mount</option>
-                                                <option value="CHEEK"        {% if assignment.placement == 'CHEEK'        %}selected{% endif %}>Cheek Mount</option>
-                                                <option value="FOREHEAD"     {% if assignment.placement == 'FOREHEAD'     %}selected{% endif %}>Forehead</option>
-                                                <option value="CHEST_POCKET" {% if assignment.placement == 'CHEST_POCKET' %}selected{% endif %}>Chest Pocket</option>
-                                                <option value="BELT_CLIP"    {% if assignment.placement == 'BELT_CLIP'    %}selected{% endif %}>Belt Clip</option>
+                                                <option value="LEFT_EAR"     {% if active_slot.placement == 'LEFT_EAR'     %}selected{% endif %}>Left Ear</option>
+                                                <option value="RIGHT_EAR"    {% if active_slot.placement == 'RIGHT_EAR'    %}selected{% endif %}>Right Ear</option>
+                                                <option value="TIE"          {% if active_slot.placement == 'TIE'          %}selected{% endif %}>Tie</option>
+                                                <option value="LAV_MAGNET"   {% if active_slot.placement == 'LAV_MAGNET'   %}selected{% endif %}>Lav Magnet</option>
+                                                <option value="COLLAR"       {% if active_slot.placement == 'COLLAR'       %}selected{% endif %}>Collar</option>
+                                                <option value="HAIR_MOUNT"   {% if active_slot.placement == 'HAIR_MOUNT'   %}selected{% endif %}>Hair Mount</option>
+                                                <option value="CHEEK"        {% if active_slot.placement == 'CHEEK'        %}selected{% endif %}>Cheek Mount</option>
+                                                <option value="FOREHEAD"     {% if active_slot.placement == 'FOREHEAD'     %}selected{% endif %}>Forehead</option>
+                                                <option value="CHEST_POCKET" {% if active_slot.placement == 'CHEST_POCKET' %}selected{% endif %}>Chest Pocket</option>
+                                                <option value="BELT_CLIP"    {% if active_slot.placement == 'BELT_CLIP'    %}selected{% endif %}>Belt Clip</option>
                                             </select>
                                         </div>
                                         <div class="a2-setting">
                                             <span class="a2-setting-label">Sensitivity</span>
                                             <select class="a2-select" onchange="updateField({{ assignment.id }}, 'sensitivity', this.value)" {% if is_viewer %}disabled{% endif %}>
                                                 <option value="">— select —</option>
-                                                {% for val, label in assignment.SENSITIVITY_CHOICES %}{% if val %}<option value="{{ val }}" {% if assignment.sensitivity == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
+                                                {% for val, label in assignment.SENSITIVITY_CHOICES %}{% if val %}<option value="{{ val }}" {% if active_slot.sensitivity == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
                                             </select>
                                         </div>
                                         <div class="a2-setting">
                                             <span class="a2-setting-label">Output Level</span>
                                             <select class="a2-select" onchange="updateField({{ assignment.id }}, 'output_level', this.value)" {% if is_viewer %}disabled{% endif %}>
                                                 <option value="">— select —</option>
-                                                {% for val, label in assignment.OUTPUT_LEVEL_CHOICES %}{% if val %}<option value="{{ val }}" {% if assignment.output_level == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
+                                                {% for val, label in assignment.OUTPUT_LEVEL_CHOICES %}{% if val %}<option value="{{ val }}" {% if active_slot.output_level == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
                                             </select>
                                         </div>
                                     </div>
                                     <textarea class="a2-notes-input"
                                               placeholder="Notes (allergies, preferences, setup tips...)"
                                               onchange="updateField({{ assignment.id }}, 'notes', this.value)"
-                                              {% if is_viewer %}readonly{% endif %}>{{ assignment.notes|default:'' }}</textarea>
+                                              {% if is_viewer %}readonly{% endif %}>{% if active_slot %}{{ active_slot.notes|default:'' }}{% else %}{{ assignment.notes|default:'' }}{% endif %}</textarea>
+                                    {% endwith %}
                                 </div>
                             </div>
 
@@ -741,7 +728,7 @@
 
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
-                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
+                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day.id }})">+ Add Session</button>
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
                     onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤ Groups</button>
             </div>
@@ -756,51 +743,6 @@
     </div>
     {% endfor %}
 
-</div>
-
-
-<!-- Add Day Modal -->
-<div class="mtt-modal hidden" id="add-day-modal">
-    <div class="mtt-modal-box">
-        <div class="mtt-modal-title">Add Show Day</div>
-        <div class="mtt-modal-field">
-            <label class="mtt-modal-label">Date</label>
-            <input type="date" id="add-day-date" class="mtt-modal-input">
-        </div>
-        <div class="mtt-modal-field">
-            <label class="mtt-modal-label">Name / Label <span style="color:var(--text-dim);font-weight:400;">(optional)</span></label>
-            <input type="text" id="add-day-name" class="mtt-modal-input" placeholder="e.g. Day 1, General Session Day">
-        </div>
-        <div class="mtt-modal-error" id="add-day-error" style="display:none;"></div>
-        <div class="mtt-modal-actions">
-            <button class="btn-mtt btn-mtt-ghost" onclick="closeAddDayModal()">Cancel</button>
-            <button class="btn-mtt btn-mtt-primary" id="add-day-submit" onclick="submitAddDay()">Add Day</button>
-        </div>
-    </div>
-</div>
-
-<!-- Add Session Modal -->
-<div class="mtt-modal hidden" id="add-session-modal">
-    <div class="mtt-modal-box">
-        <div class="mtt-modal-title">Add Session</div>
-        <div class="mtt-modal-field">
-            <label class="mtt-modal-label">Session Name</label>
-            <input type="text" id="add-session-name" class="mtt-modal-input" placeholder="e.g. General Session, Breakout A">
-        </div>
-        <div class="mtt-modal-field">
-            <label class="mtt-modal-label">Number of Mics</label>
-            <input type="number" id="add-session-mics" class="mtt-modal-input" value="16" min="1" max="100">
-        </div>
-        <div class="mtt-modal-field">
-            <label class="mtt-modal-label">Location / Ballroom <span style="color:var(--text-dim);font-weight:400;">(optional)</span></label>
-            <input type="text" id="add-session-location" class="mtt-modal-input" placeholder="e.g. Main Ballroom">
-        </div>
-        <div class="mtt-modal-error" id="add-session-error" style="display:none;"></div>
-        <div class="mtt-modal-actions">
-            <button class="btn-mtt btn-mtt-ghost" onclick="closeAddSessionModal()">Cancel</button>
-            <button class="btn-mtt btn-mtt-primary" id="add-session-submit" onclick="submitAddSession()">Add Session</button>
-        </div>
-    </div>
 </div>
 
 <!-- Group Manager Modal -->
@@ -824,7 +766,7 @@
 </div>
 
 <datalist id="presenters-datalist"></datalist>
-<script src="{% static 'admin/js/mic_tracker_v2.js' %}"></script>
+<script src="{% static 'admin/js/mic_tracker.js' %}"></script>
 
 <script>
 // ── Session tab switching ──────────────────────────────────────
