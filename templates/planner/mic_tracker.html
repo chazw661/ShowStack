@@ -356,6 +356,19 @@
     .a2-slot-micd-btn.off { background: var(--bg-input); color: var(--text-dim); }
     .a2-slot-micd-btn.on  { background: var(--accent-green); color: #000; border-color: var(--accent-green); box-shadow: 0 0 8px rgba(0,230,118,0.35); }
     .a2-slot-micd-btn:hover { opacity: 0.85; }
+
+    /* Add Day / Add Session Modals */
+    .mtt-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+    .mtt-modal.hidden { display: none; }
+    .mtt-modal-box { background: var(--bg-card); border: 1px solid var(--border-bright); border-radius: 10px; padding: 28px 32px; width: 400px; max-width: 95vw; }
+    .mtt-modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 20px; }
+    .mtt-modal-field { margin-bottom: 14px; }
+    .mtt-modal-label { display: block; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+    .mtt-modal-input { width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px; color: var(--text-primary); font-size: 13px; padding: 8px 10px; font-family: inherit; box-sizing: border-box; }
+    .mtt-modal-input:focus { outline: none; border-color: var(--accent-blue); }
+    .mtt-modal-error { color: #ff6b6b; font-size: 12px; margin-bottom: 10px; }
+    .mtt-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
     </style>
 {% endblock %}
 
@@ -726,7 +739,7 @@
 
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
-                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day.id }})">+ Add Session</button>
+                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
                     onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤ Groups</button>
             </div>
@@ -741,6 +754,51 @@
     </div>
     {% endfor %}
 
+</div>
+
+
+<!-- Add Day Modal -->
+<div class="mtt-modal hidden" id="add-day-modal">
+    <div class="mtt-modal-box">
+        <div class="mtt-modal-title">Add Show Day</div>
+        <div class="mtt-modal-field">
+            <label class="mtt-modal-label">Date</label>
+            <input type="date" id="add-day-date" class="mtt-modal-input">
+        </div>
+        <div class="mtt-modal-field">
+            <label class="mtt-modal-label">Name / Label <span style="color:var(--text-dim);font-weight:400;">(optional)</span></label>
+            <input type="text" id="add-day-name" class="mtt-modal-input" placeholder="e.g. Day 1, General Session Day">
+        </div>
+        <div class="mtt-modal-error" id="add-day-error" style="display:none;"></div>
+        <div class="mtt-modal-actions">
+            <button class="btn-mtt btn-mtt-ghost" onclick="closeAddDayModal()">Cancel</button>
+            <button class="btn-mtt btn-mtt-primary" id="add-day-submit" onclick="submitAddDay()">Add Day</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Session Modal -->
+<div class="mtt-modal hidden" id="add-session-modal">
+    <div class="mtt-modal-box">
+        <div class="mtt-modal-title">Add Session</div>
+        <div class="mtt-modal-field">
+            <label class="mtt-modal-label">Session Name</label>
+            <input type="text" id="add-session-name" class="mtt-modal-input" placeholder="e.g. General Session, Breakout A">
+        </div>
+        <div class="mtt-modal-field">
+            <label class="mtt-modal-label">Number of Mics</label>
+            <input type="number" id="add-session-mics" class="mtt-modal-input" value="16" min="1" max="100">
+        </div>
+        <div class="mtt-modal-field">
+            <label class="mtt-modal-label">Location / Ballroom <span style="color:var(--text-dim);font-weight:400;">(optional)</span></label>
+            <input type="text" id="add-session-location" class="mtt-modal-input" placeholder="e.g. Main Ballroom">
+        </div>
+        <div class="mtt-modal-error" id="add-session-error" style="display:none;"></div>
+        <div class="mtt-modal-actions">
+            <button class="btn-mtt btn-mtt-ghost" onclick="closeAddSessionModal()">Cancel</button>
+            <button class="btn-mtt btn-mtt-primary" id="add-session-submit" onclick="submitAddSession()">Add Session</button>
+        </div>
+    </div>
 </div>
 
 <!-- Group Manager Modal -->
