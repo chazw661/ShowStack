@@ -231,7 +231,12 @@ class BaseEquipmentAdmin(BaseAdmin):
         
         # Check specific object permission
        # Handle both Project and Equipment objects
-        project = obj if obj.__class__.__name__ == 'Project' else obj.project
+        if obj.__class__.__name__ == 'Project':
+            project = obj
+        elif obj.__class__.__name__ == 'MicSession':
+            project = obj.day.project
+        else:
+            project = obj.project
         role = self._get_user_role_for_project(request, project)
         return role in ['owner', 'editor']  # Viewers can't edit
     
