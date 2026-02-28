@@ -1225,3 +1225,21 @@ async function loadPresentersList() {
 }
 
 document.addEventListener('DOMContentLoaded', loadPresentersList);
+async function deleteSession(sessionId) {
+    if (!confirm('Delete this session and all its mic assignments? This cannot be undone.')) return;
+    try {
+        const response = await fetch('/audiopatch/api/mic/delete-session/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Failed to delete session: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error deleting session');
+    }
+}

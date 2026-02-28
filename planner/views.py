@@ -841,7 +841,18 @@ def duplicate_session(request):
 #
 # Install reportlab if needed:  pip install reportlab
 
+def delete_session(request):
+    """AJAX endpoint to delete a mic session"""
+    try:
+        data = json.loads(request.body)
+        session_id = data.get("session_id")
+        session = get_object_or_404(MicSession, id=session_id)
+        session.delete()
+        return JsonResponse({"success": True})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
+@staff_member_required
 @staff_member_required
 def export_mic_tracker(request):
     """Export mic tracker data as CSV — current project, all days/sessions."""
@@ -903,6 +914,17 @@ def export_mic_tracker(request):
 
     return response
 
+
+def delete_session(request):
+    """AJAX endpoint to delete a mic session"""
+    try:
+        data = json.loads(request.body)
+        session_id = data.get('session_id')
+        session = get_object_or_404(MicSession, id=session_id)
+        session.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
 
 @staff_member_required
 def export_mic_tracker_pdf(request):
