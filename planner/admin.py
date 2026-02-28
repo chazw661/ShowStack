@@ -4624,6 +4624,22 @@ class MicSessionAdmin(BaseEquipmentAdmin):
         if hasattr(request, 'current_project') and request.current_project:
             return qs.filter(day__project=request.current_project)
         return qs.none()
+
+    def has_view_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return self.has_module_permission(request)
+        return (obj.day.project.owner == request.user or
+                ProjectMember.objects.filter(user=request.user, project=obj.day.project).exists())
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return True
+        return (obj.day.project.owner == request.user or
+                ProjectMember.objects.filter(user=request.user, project=obj.day.project, role='editor').exists())
     
     def mic_usage(self, obj):
         stats = obj.get_mic_usage_stats()
