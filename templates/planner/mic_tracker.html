@@ -730,7 +730,7 @@
 
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
-                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day.id }})">+ Add Session</button>
+                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
                     onclick="event.stopPropagation(); openGroupManager({{ session.id }})">⬤ Groups</button>
             </div>
@@ -745,6 +745,27 @@
     </div>
     {% endfor %}
 
+</div>
+<!-- Add Day Modal -->
+<div class="mtt-modal hidden" id="add-day-modal">
+    <div class="mtt-modal-box">
+        <div class="mtt-modal-title">Add Show Day</div>
+        <div class="mtt-modal-field"><label class="mtt-modal-label">Date</label><input type="date" id="add-day-date" class="mtt-modal-input"></div>
+        <div class="mtt-modal-field"><label class="mtt-modal-label">Name / Label <span style="color:var(--text-dim);font-weight:400;">(optional)</span></label><input type="text" id="add-day-name" class="mtt-modal-input" placeholder="e.g. Day 1, General Session Day"></div>
+        <div class="mtt-modal-error" id="add-day-error" style="display:none;"></div>
+        <div class="mtt-modal-actions"><button class="btn-mtt btn-mtt-ghost" onclick="closeAddDayModal()">Cancel</button><button class="btn-mtt btn-mtt-primary" id="add-day-submit" onclick="submitAddDay()">Add Day</button></div>
+    </div>
+</div>
+<!-- Add Session Modal -->
+<div class="mtt-modal hidden" id="add-session-modal">
+    <div class="mtt-modal-box">
+        <div class="mtt-modal-title">Add Session</div>
+        <div class="mtt-modal-field"><label class="mtt-modal-label">Session Name</label><input type="text" id="add-session-name" class="mtt-modal-input" placeholder="e.g. General Session, Breakout A"></div>
+        <div class="mtt-modal-field"><label class="mtt-modal-label">Number of Mics</label><input type="number" id="add-session-mics" class="mtt-modal-input" value="16" min="1" max="100"></div>
+        <div class="mtt-modal-field"><label class="mtt-modal-label">Location / Ballroom <span style="color:var(--text-dim);font-weight:400;">(optional)</span></label><input type="text" id="add-session-location" class="mtt-modal-input" placeholder="e.g. Main Ballroom"></div>
+        <div class="mtt-modal-error" id="add-session-error" style="display:none;"></div>
+        <div class="mtt-modal-actions"><button class="btn-mtt btn-mtt-ghost" onclick="closeAddSessionModal()">Cancel</button><button class="btn-mtt btn-mtt-primary" id="add-session-submit" onclick="submitAddSession()">Add Session</button></div>
+    </div>
 </div>
 
 <!-- Group Manager Modal -->
