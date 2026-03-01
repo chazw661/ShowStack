@@ -1007,7 +1007,11 @@ def export_mic_tracker_pdf(request):
         'sessions__mic_assignments__presenter_slots__presenter',
     )
 
+    first_day = True
     for day in days:
+        if not first_day:
+            story.append(PageBreak())
+        first_day = False
         story.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor('#0d3b6e')))
         story.append(Paragraph(str(day), style_day))
 
