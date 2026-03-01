@@ -975,20 +975,6 @@ function openGroupPicker(assignmentId, sessionId, dotEl) {
             picker.appendChild(item);
         });
 
-        var divider2 = document.createElement('div');
-        divider2.className = 'group-picker-divider';
-        picker.appendChild(divider2);
-
-        var manageBtn = document.createElement('div');
-        manageBtn.className = 'group-picker-manage';
-        manageBtn.textContent = '⚙ Manage Groups...';
-        manageBtn.onmousedown = function(e) {
-            e.preventDefault();
-            picker.classList.remove('open');
-            openGroupManager(sessionId);
-        };
-        picker.appendChild(manageBtn);
-
         var dotRect = dotEl.getBoundingClientRect();
         var spaceBelow = window.innerHeight - dotRect.bottom;
         if (spaceBelow < 200) {
