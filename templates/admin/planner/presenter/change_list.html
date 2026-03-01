@@ -1,10 +1,10 @@
 {% extends "admin/change_list.html" %}
 
-{% block object-tools-items %}
-    {{ block.super }}
-    <li>
-        <a href="{{ import_url }}" class="addlink">
-            Import from CSV
-        </a>
-    </li>
+{% block result_list %}
+<div style="display: flex; justify-content: flex-start; margin-bottom: 16px;">
+    <a href="/admin/planner/showday/" style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;background:linear-gradient(135deg,#1a2a3a,#243447);border:1px solid #3a5068;border-radius:8px;color:#e0e0e0;text-decoration:none;font-size:13px;font-weight:600;">
+        ← Show Days
+    </a>
+</div>
+{{ block.super }}
 {% endblock %}
