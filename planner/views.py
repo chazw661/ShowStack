@@ -38,7 +38,7 @@ from io import BytesIO
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph,Spacer, Image, HRFlowable, KeepTogether)
+from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, HRFlowable, KeepTogether, PageBreak)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
