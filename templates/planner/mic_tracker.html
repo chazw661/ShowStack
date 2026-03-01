@@ -521,11 +521,13 @@
                                 </td>
                                 <td class="a1-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
                                 <td>
-                                    {% if assignment.mic_type %}
-                                    <span class="mic-type-badge type-{{ assignment.mic_type }}"><span class="type-dot"></span>{{ assignment.mic_type }}</span>
+                                    {% with active_slot=assignment.active_slot %}
+                                    {% if active_slot.mic_type %}
+                                    <span class="mic-type-badge type-{{ active_slot.mic_type }}"><span class="type-dot"></span>{{ active_slot.mic_type }}</span>
                                     {% else %}
                                     <span class="mic-type-badge type-empty"><span class="type-dot"></span>—</span>
                                     {% endif %}
+                                    {% endwith %}
                                 </td>
                                 <td>
                                     {% with active=assignment.active_slot %}
