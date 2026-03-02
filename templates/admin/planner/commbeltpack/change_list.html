@@ -219,5 +219,108 @@
             if (groups.unknown.length) buildGroup('unknown', 'Other', '?', '', groups.unknown);
         });
     })();
+
+        // ── Channel assignment popup ──────────────────────────────
+        var modal = null;
+
+        function createModal() {
+            modal = document.createElement('div');
+            modal.id = 'ch-assign-modal';
+            modal.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;';
+            modal.innerHTML =
+                '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);" id="ch-modal-backdrop"></div>' +
+                '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e2d3d;border:1px solid #3a5068;border-radius:8px;min-width:320px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">' +
+                '<div style="padding:16px 20px;border-bottom:1px solid #2a3a4a;display:flex;justify-content:space-between;align-items:center;">' +
+                '<span id="ch-modal-title" style="font-weight:600;color:#e0e8f0;font-size:14px;"></span>' +
+                '<span id="ch-modal-close" style="cursor:pointer;color:#8ab4cc;font-size:18px;line-height:1;">&#x2715;</span>' +
+                '</div>' +
+                '<div id="ch-modal-list" style="padding:8px;max-height:300px;overflow-y:auto;"></div>' +
+                '</div>';
+            document.body.appendChild(modal);
+            document.getElementById('ch-modal-backdrop').addEventListener('click', closeModal);
+            document.getElementById('ch-modal-close').addEventListener('click', closeModal);
+        }
+
+        function closeModal() { if (modal) modal.style.display = 'none'; }
+
+        function openModal(bpcId, chNum, bpId) {
+            if (!modal) createModal();
+            document.getElementById('ch-modal-title').textContent = 'Assign Channel ' + chNum;
+            var list = document.getElementById('ch-modal-list');
+            list.innerHTML = '<div style="padding:12px;color:#8ab4cc;text-align:center;">Loading...</div>';
+            modal.style.display = 'block';
+            fetch('/admin/planner/commbeltpack/get-channels/', {
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                list.innerHTML = '';
+                data.channels.forEach(function(ch) {
+                    var item = document.createElement('div');
+                    item.style.cssText = 'padding:10px 14px;cursor:pointer;border-radius:4px;color:#e0e8f0;font-size:13px;margin:2px 0;';
+                    item.textContent = ch.abbreviation + ' \u2014 ' + ch.name;
+                    item.addEventListener('mouseover', function() { item.style.background = '#243447'; });
+                    item.addEventListener('mouseout', function() { item.style.background = ''; });
+                    item.addEventListener('click', function() { assignChannel(bpcId, ch.id, chNum); });
+                    list.appendChild(item);
+                });
+                var unassign = document.createElement('div');
+                unassign.style.cssText = 'padding:10px 14px;cursor:pointer;border-radius:4px;color:#ff6b6b;font-size:13px;margin-top:6px;border-top:1px solid #2a3a4a;';
+                unassign.textContent = '\u2715 Unassign Channel';
+                unassign.addEventListener('mouseover', function() { unassign.style.background = '#3a1a1a'; });
+                unassign.addEventListener('mouseout', function() { unassign.style.background = ''; });
+                unassign.addEventListener('click', function() { assignChannel(bpcId, null, chNum); });
+                list.appendChild(unassign);
+            })
+            .catch(function() {
+                list.innerHTML = '<div style="padding:12px;color:#ff6b6b;">Error loading channels</div>';
+            });
+        }
+
+        function assignChannel(bpcId, channelId, chNum) {
+            var csrfToken = document.cookie.split(';')
+                .map(function(c) { return c.trim(); })
+                .filter(function(c) { return c.startsWith('csrftoken='); })
+                .map(function(c) { return c.split('=')[1]; })[0] || '';
+            fetch('/admin/planner/commbeltpack/assign-channel/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({beltpack_channel_id: bpcId, channel_id: channelId})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    closeModal();
+                    var badge = document.querySelector('.ch-badge[data-bpc-id="' + bpcId + '"]');
+                    if (badge) {
+                        if (channelId && data.abbreviation) {
+                            badge.textContent = chNum + ': ' + data.abbreviation;
+                            badge.style.background = '#14b8a6';
+                            badge.style.color = '#000';
+                        } else {
+                            badge.textContent = chNum + ': \u2014';
+                            badge.style.background = '#333';
+                            badge.style.color = '#666';
+                        }
+                    }
+                }
+            })
+            .catch(function(e) { console.error('Assign error:', e); });
+        }
+
+        document.addEventListener('click', function(e) {
+            var badge = e.target.closest ? e.target.closest('.ch-badge') : null;
+            if (!badge) return;
+            openModal(
+                badge.getAttribute('data-bpc-id'),
+                badge.getAttribute('data-ch-num'),
+                badge.getAttribute('data-bp-id')
+            );
+        });
+
     </script>
 {% endblock %}
