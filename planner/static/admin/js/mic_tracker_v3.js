@@ -282,7 +282,12 @@ function saveSharedPresenters() {
             const cell = document.querySelector(`[data-id="${currentAssignmentId}"][data-field="presenter"]`);
             if (!cell) {
                 const row = document.querySelector(`[data-assignment-id="${currentAssignmentId}"]`);
-                if (row) {
+                var card = document.getElementById('a2-card-' + assignmentId);
+            if (card) {
+                card.classList.remove('group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal');
+                if (groupColor) card.classList.add('group-' + groupColor);
+            }
+            if (row) {
                     const presenterCell = row.querySelector('.col-presenter');
                     if (presenterCell) {
                         updateCellDisplay(presenterCell, currentSharedPresenters);
@@ -1000,6 +1005,11 @@ function assignGroup(assignmentId, groupId, groupName, groupColor, dotEl) {
             dotEl.className = 'group-dot ' + (groupColor ? 'color-' + groupColor : 'empty');
             dotEl.title = groupName || 'Assign group';
             var row = document.getElementById('a1-row-' + assignmentId);
+            var card = document.getElementById('a2-card-' + assignmentId);
+            if (card) {
+                card.classList.remove('group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal');
+                if (groupColor) card.classList.add('group-' + groupColor);
+            }
             if (row) {
                 row.classList.remove('group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal');
                 if (groupColor) row.classList.add('group-' + groupColor);
@@ -1095,6 +1105,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const countSpan = btn.querySelector('.share-count');
         if (countSpan) {
             const row = btn.closest('[data-assignment-id]');
+            var card = document.getElementById('a2-card-' + assignmentId);
+            if (card) {
+                card.classList.remove('group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal');
+                if (groupColor) card.classList.add('group-' + groupColor);
+            }
             if (row) {
                 const inputGroup = row.querySelector('.presenter-input-group');
                 if (inputGroup) inputGroup.classList.add('has-shared');

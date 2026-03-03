@@ -211,6 +211,11 @@
     .a2-card.card-micd .a2-card-header { background: rgba(0,230,118,0.06); border-bottom-color: var(--micd-border); }
     .a2-rf-badge { width: 40px; height: 40px; border-radius: 5px; background: var(--bg-raised); border: 1px solid var(--border-bright); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
     .a2-card.card-micd .a2-rf-badge { background: rgba(0,230,118,0.15); border-color: var(--accent-green); color: var(--accent-green); }
+    .a2-card.group-blue   { border-left: 4px solid #4a9eff; }
+    .a2-card.group-amber  { border-left: 4px solid #ffab00; }
+    .a2-card.group-red    { border-left: 4px solid #ff5252; }
+    .a2-card.group-purple { border-left: 4px solid #b464ff; }
+    .a2-card.group-teal   { border-left: 4px solid #00bcd4; }
     .a2-card-meta { flex: 1; }
     .a2-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #14142a; border-bottom: 1px solid var(--border); justify-content: space-between; }
     .a2-micd-toggle { padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none; transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit; }
@@ -565,7 +570,7 @@
                     <div class="session-panel" id="session-{{ session.id }}-a2">
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
-                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %}"
+                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
                              id="a2-card-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
 
                             <div class="a2-card-header">

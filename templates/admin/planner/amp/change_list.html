@@ -4,53 +4,145 @@
 {% block extrahead %}
     {{ block.super }}
     <style>
-        .expandable-row {
+        /* ── Hide the default Django result table when we have grouped layout ── */
+        {% if has_grouped_layout %}
+        #changelist #result_list,
+        #changelist .paginator,
+        #changelist p.paginator {
+            display: none !important;
+        }
+        {% endif %}
+
+        /* ── Location group headers ── */
+        .location-group {
+            margin-bottom: 6px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .location-header {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            background-color: #2a3f5f;
+            cursor: pointer;
+            user-select: none;
+            gap: 10px;
+        }
+        .location-header:hover {
+            background-color: #344e74;
+        }
+        .location-chevron {
+            display: inline-block;
+            transition: transform 0.2s;
+            font-size: 11px;
+            color: #aaa;
+            width: 14px;
+            flex-shrink: 0;
+        }
+        .location-chevron.open {
+            transform: rotate(90deg);
+        }
+        .location-name {
+            font-weight: bold;
+            color: #e0e0e0;
+            font-size: 14px;
+            flex: 1;
+        }
+        .location-amp-count {
+            font-size: 12px;
+            color: #9ab;
+            background: rgba(0,0,0,0.3);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        .location-order-btns {
+            display: flex;
+            gap: 4px;
+        }
+        .location-order-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 1px 7px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 18px;
+        }
+        .location-order-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .location-order-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+
+        /* ── Amp rows table inside each group ── */
+        .location-body {
+            display: none;
+        }
+        .location-body.open {
+            display: block;
+        }
+        .amp-group-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .amp-group-table thead th {
+            background: #1a2533;
+            color: #9ab;
+            font-size: 11px;
+            font-weight: normal;
+            padding: 6px 10px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        .amp-group-table tbody tr.amp-row {
+            border-bottom: 1px solid #2a2a2a;
             cursor: pointer;
         }
-        .expandable-row:hover {
-            background-color: rgba(255, 255, 255, 0.05);
+        .amp-group-table tbody tr.amp-row:hover {
+            background-color: rgba(255,255,255,0.04);
+        }
+        .amp-group-table tbody tr.amp-row td {
+            padding: 8px 10px;
+            vertical-align: middle;
         }
         .expand-icon {
             display: inline-block;
             transition: transform 0.2s;
-            margin-right: 8px;
-            vertical-align: middle;
-            cursor: pointer;
+            margin-right: 6px;
+            font-size: 10px;
+            color: #888;
         }
         .expand-icon.expanded {
             transform: rotate(90deg);
         }
-        /* Ensure checkbox and arrow are on same line */
-        #result_list tbody tr td:first-child {
+        .amp-name-cell {
             white-space: nowrap;
         }
-        #result_list tbody tr input[name="_selected_action"] {
+        .color-swatch {
+            display: inline-block;
+            width: 22px;
+            height: 16px;
+            border: 1px solid #555;
+            border-radius: 2px;
             vertical-align: middle;
-            margin-left: 5px;
+        }
+
+        /* ── Inline expand detail row ── */
+        .amp-details-row td {
+            padding: 0 !important;
         }
         .amp-details {
             display: none;
             padding: 20px;
-            background-color: rgba(0, 0, 0, 0.3);
+            background-color: rgba(0,0,0,0.35);
             border-top: 1px solid #444;
         }
         .amp-details.show {
             display: block;
-        }
-        .collapse-all-btn {
-            margin-left: 10px;
-            padding: 8px 15px;
-            background-color: #417690;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .collapse-all-btn:hover {
-            background-color: #5b8ba6;
-        }
-        .amp-inline-form {
-            max-width: 1200px;
         }
         .amp-inline-form .submit-row {
             padding: 10px 0;
@@ -75,6 +167,197 @@
         .save-amp-btn:hover {
             background: #5b8ba6 !important;
         }
+
+        /* ── Top buttons ── */
+        .collapse-all-btn {
+            margin-left: 10px;
+            padding: 8px 15px;
+            background-color: #417690;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .collapse-all-btn:hover { background-color: #5b8ba6; }
+
+        .locations-mgr-btn {
+            margin-left: 10px;
+            padding: 8px 15px;
+            background-color: #556b2f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .locations-mgr-btn:hover { background-color: #6b8c3a; }
+
+        /* ── Locations Modal ── */
+        .locations-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .locations-modal-overlay.open {
+            display: flex;
+        }
+        .locations-modal {
+            background: #1e2a3a;
+            border: 1px solid #445;
+            border-radius: 6px;
+            width: 480px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .locations-modal-header {
+            padding: 16px 20px;
+            background: #2a3f5f;
+            border-bottom: 1px solid #445;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .locations-modal-header h3 {
+            margin: 0;
+            color: #e0e0e0;
+            font-size: 15px;
+        }
+        .modal-close-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+        .modal-close-btn:hover { color: white; }
+        .locations-modal-body {
+            padding: 16px 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        /* Add new location */
+        .add-location-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .add-location-row input {
+            flex: 1;
+            padding: 7px 10px;
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+        .add-location-row input:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+        .add-location-row button {
+            padding: 7px 14px;
+            background: #417690;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .add-location-row button:hover { background: #5b8ba6; }
+
+        /* Location list sections */
+        .modal-section-label {
+            font-size: 11px;
+            color: #778;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #333;
+        }
+        .modal-section-divider {
+            margin: 16px 0;
+        }
+        .modal-location-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 8px;
+            border-radius: 4px;
+            margin-bottom: 3px;
+        }
+        .modal-location-item:hover { background: rgba(255,255,255,0.04); }
+        .modal-location-item.empty-loc { opacity: 0.6; }
+        .modal-loc-name {
+            flex: 1;
+            color: #ddd;
+            font-size: 13px;
+        }
+        .modal-loc-name input {
+            background: #2a2a2a;
+            border: 1px solid #4a9eff;
+            border-radius: 3px;
+            color: #e0e0e0;
+            padding: 3px 7px;
+            font-size: 13px;
+            width: 100%;
+        }
+        .modal-loc-count {
+            font-size: 11px;
+            color: #778;
+            min-width: 50px;
+            text-align: right;
+        }
+        .modal-loc-btns {
+            display: flex;
+            gap: 4px;
+        }
+        .modal-loc-btn {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid #444;
+            color: #bbb;
+            padding: 2px 7px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .modal-loc-btn:hover { background: rgba(255,255,255,0.15); color: white; }
+        .modal-loc-btn.delete { color: #e07070; border-color: #633; }
+        .modal-loc-btn.delete:hover { background: rgba(200,50,50,0.2); }
+        .modal-loc-btn.rename-confirm { color: #7de07d; border-color: #363; }
+        .modal-loc-btn.rename-confirm:hover { background: rgba(50,150,50,0.2); }
+
+        /* Warning */
+        .delete-warning {
+            font-size: 12px;
+            color: #e07070;
+            margin-top: 4px;
+            padding: 6px 8px;
+            background: rgba(200,50,50,0.1);
+            border-radius: 3px;
+            border: 1px solid #633;
+        }
+        .delete-warning button {
+            margin-left: 8px;
+            padding: 2px 8px;
+            background: #8b2222;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .delete-warning .cancel-delete {
+            background: #444;
+        }
     </style>
 {% endblock %}
 
@@ -88,186 +371,393 @@
         </a>
     </li>
     <li>
-        <button type="button" class="collapse-all-btn" onclick="collapseAllAmps()">
+        <button type="button" class="locations-mgr-btn" onclick="openLocationsModal()">
+            📍 Locations
+        </button>
+    </li>
+    <li>
+        <button type="button" class="collapse-all-btn" onclick="collapseAll()">
             Collapse All
         </button>
     </li>
 {% endblock %}
 
 {% block result_list %}
+    {% if has_grouped_layout %}
+
+    <!-- Grouped layout -->
+    <div id="grouped-amp-list">
+        {% if not grouped_amps %}
+            <p style="color:#778; padding:20px;">No amplifiers assigned to any location yet. Add amps and assign them a location.</p>
+        {% endif %}
+
+        {% for group in grouped_amps %}
+        <div class="location-group" data-location-id="{{ group.location.id }}">
+            <div class="location-header" onclick="toggleLocation(this)">
+                <span class="location-chevron">▶</span>
+                <span class="location-name">{{ group.location.name }}</span>
+                <span class="location-amp-count">{{ group.amp_count }} amp{{ group.amp_count|pluralize }}</span>
+                <div class="location-order-btns" onclick="event.stopPropagation()">
+                    <button class="location-order-btn" 
+                            onclick="reorderLocation({{ group.location.id }}, 'up')" 
+                            title="Move up">▲</button>
+                    <button class="location-order-btn" 
+                            onclick="reorderLocation({{ group.location.id }}, 'down')" 
+                            title="Move down">▼</button>
+                </div>
+            </div>
+            <div class="location-body">
+                <table class="amp-group-table">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;"></th>
+                            <th>Name</th>
+                            <th>Model</th>
+                            <th>IP Address</th>
+                            <th>Color</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for amp in group.amps %}
+                        <tr class="amp-row" data-amp-id="{{ amp.id }}"
+                            {% if amp.color %}style="background-color: {{ amp.color }}20;"{% endif %}>
+                            <td>
+                                <span class="expand-icon">▶</span>
+                            </td>
+                            <td class="amp-name-cell">{{ amp.name }}</td>
+                            <td>{{ amp.amp_model }}</td>
+                            <td>{{ amp.ip_address|default:"—" }}</td>
+                            <td>
+                                {% if amp.color %}
+                                <span class="color-swatch" style="background-color: {{ amp.color }};"></span>
+                                {% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        <tr class="amp-details-row" id="amp-details-{{ amp.id }}" style="display:none;">
+                            <td colspan="5">
+                                <div class="amp-details"></div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
     {{ block.super }}
+    {% endif %}
+
+    <!-- Locations Modal -->
+    <div class="locations-modal-overlay" id="locationsModal">
+        <div class="locations-modal">
+            <div class="locations-modal-header">
+                <h3>📍 Manage Locations</h3>
+                <button class="modal-close-btn" onclick="closeLocationsModal()">✕</button>
+            </div>
+            <div class="locations-modal-body">
+                <!-- Add new location -->
+                <div class="add-location-row">
+                    <input type="text" id="newLocationName" placeholder="New location name…" 
+                           onkeypress="if(event.key==='Enter') addLocation()">
+                    <button onclick="addLocation()">Add</button>
+                </div>
+
+                <!-- Active locations -->
+                {% with active_locs=all_locations %}
+                {% if active_locs %}
+                <div class="modal-section-label">Locations with Amps</div>
+                <div id="modal-active-locations">
+                    {% for loc in active_locs %}
+                    {% with amp_count=loc.amp_count %}
+                    {% if amp_count > 0 %}
+                    <div class="modal-location-item" id="modal-loc-{{ loc.id }}">
+                        <div class="modal-loc-name" id="modal-loc-name-{{ loc.id }}">
+                            {{ loc.name }}
+                        </div>
+                        <span class="modal-loc-count">{{ amp_count }} amp{{ amp_count|pluralize }}</span>
+                        <div class="modal-loc-btns">
+                            <button class="modal-loc-btn" onclick="startRename({{ loc.id }}, '{{ loc.name|escapejs }}')">Rename</button>
+                            <button class="modal-loc-btn delete" onclick="confirmDelete({{ loc.id }}, {{ amp_count }})">Delete</button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                    {% endfor %}
+                </div>
+
+                <!-- Empty locations -->
+                <div class="modal-section-divider">
+                    <div class="modal-section-label">Empty Locations</div>
+                    <div id="modal-empty-locations">
+                        {% for loc in active_locs %}
+                        {% with amp_count=loc.amp_count %}
+                        {% if amp_count == 0 %}
+                        <div class="modal-location-item empty-loc" id="modal-loc-{{ loc.id }}">
+                            <div class="modal-loc-name" id="modal-loc-name-{{ loc.id }}">
+                                {{ loc.name }}
+                            </div>
+                            <span class="modal-loc-count">No amps</span>
+                            <div class="modal-loc-btns">
+                                <button class="modal-loc-btn" onclick="startRename({{ loc.id }}, '{{ loc.name|escapejs }}')">Rename</button>
+                                <button class="modal-loc-btn delete" onclick="confirmDelete({{ loc.id }}, 0)">Delete</button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+
     <script>
-        (function($) {
-            $(document).ready(function() {
-                // Add expand icons to rows
-                $('#result_list tbody tr').each(function() {
-                    var $row = $(this);
-                    var $checkbox = $row.find('input[name="_selected_action"]');
-                    var ampId = $checkbox.val();
-                    
-                    if (ampId) {
-                        // Insert arrow before the checkbox
-                        $checkbox.before('<span class="expand-icon">▶</span>');
-                        $row.addClass('expandable-row');
-                        $row.attr('data-amp-id', ampId);
-                    }
-                });
-                
-                // Click handler for expand/collapse
-                $('.expandable-row').on('click', function(e) {
-                    // Don't trigger if clicking on checkbox, links, or form elements
-                    if ($(e.target).is('a, input[type="checkbox"], select')) {
-                        return;
-                    }
-                    
-                    var $row = $(this);
-                    var ampId = $row.attr('data-amp-id');
-                    var $icon = $row.find('.expand-icon');
-                    var $detailsRow = $('#amp-details-' + ampId);
-                    
-                    if ($detailsRow.length) {
-                        // Toggle existing details
-                        if ($detailsRow.hasClass('show')) {
-                            $detailsRow.removeClass('show').find('.amp-details').slideUp(200);
-                            $icon.removeClass('expanded');
+    (function($) {
+
+        // ── Location group expand/collapse ──────────────────────────────
+        window.toggleLocation = function(headerEl) {
+            var $header = $(headerEl);
+            var $body = $header.next('.location-body');
+            var $chevron = $header.find('.location-chevron');
+            $body.toggleClass('open');
+            $chevron.toggleClass('open');
+        };
+
+        // ── Collapse all ────────────────────────────────────────────────
+        window.collapseAll = function() {
+            $('.location-body').removeClass('open');
+            $('.location-chevron').removeClass('open');
+            $('.amp-details-row').hide().find('.amp-details').hide().removeClass('show');
+            $('.expand-icon').removeClass('expanded');
+        };
+
+        // ── Amp row expand/collapse ─────────────────────────────────────
+        $(document).on('click', '.amp-row', function(e) {
+            if ($(e.target).is('a, input, select, button')) return;
+            var $row = $(this);
+            var ampId = $row.data('amp-id');
+            var $icon = $row.find('.expand-icon');
+            var $detailsRow = $('#amp-details-' + ampId);
+            var $detailsDiv = $detailsRow.find('.amp-details');
+
+            if ($detailsDiv.html().trim() !== '') {
+                // Already loaded — toggle
+                if ($detailsRow.is(':visible')) {
+                    $detailsRow.hide();
+                    $detailsDiv.hide().removeClass('show');
+                    $icon.removeClass('expanded');
+                } else {
+                    $detailsRow.show();
+                    $detailsDiv.show().addClass('show');
+                    $icon.addClass('expanded');
+                }
+            } else {
+                // Load via AJAX
+                $icon.addClass('expanded');
+                $detailsRow.show();
+                $detailsDiv.html('Loading…').show().addClass('show');
+
+                $.ajax({
+                    url: '/admin/planner/amp/' + ampId + '/change/',
+                    type: 'GET',
+                    success: function(html) {
+                        var $html = $('<div>').html(html);
+                        var $form = $html.find('form');
+                        if ($form.length) {
+                            $form.find('.submit-row').remove();
+                            $form.append('<div class="submit-row"><button type="submit" class="save-amp-btn">Save Changes</button></div>');
+                            $form.attr('action', '/admin/planner/amp/' + ampId + '/change/');
+                            $detailsDiv.html($form);
+                            $detailsDiv.find('form').on('submit', function(e) {
+                                e.preventDefault();
+                                saveAmpForm($(this), ampId);
+                            });
                         } else {
-                            $detailsRow.addClass('show').find('.amp-details').slideDown(200);
-                            $icon.addClass('expanded');
+                            $detailsDiv.html('<p style="color:#f88;">Error loading form.</p>');
                         }
-                    } else {
-                        // Load details via AJAX
-                        $icon.addClass('expanded');
-                        var $newRow = $('<tr id="amp-details-' + ampId + '" class="amp-details-row show"><td colspan="100"></td></tr>');
-                        var $detailsDiv = $('<div class="amp-details" style="display:none;">Loading...</div>');
-                        $newRow.find('td').append($detailsDiv);
-                        $row.after($newRow);
-                        $detailsDiv.slideDown(200);
-                        
-                        // Load the form
-                        $.ajax({
-                            url: '/admin/planner/amp/' + ampId + '/change/',
-                            type: 'GET',
-                            success: function(html) {
-                                var $html = $('<div>').html(html);
-                                var $form = $html.find('form');
-                                
-                                if ($form.length) {
-                                    // Remove the original submit buttons
-                                    $form.find('.submit-row').remove();
-                                    
-                                    // Add our custom save button
-                                    $form.append('<div class="submit-row"><button type="submit" class="save-amp-btn">Save Changes</button></div>');
-                                    
-                                    // Set the form action
-                                    $form.attr('action', '/admin/planner/amp/' + ampId + '/change/');
-                                    
-                                    $detailsDiv.html($form);
-                                    
-                                    // Handle form submission via AJAX
-                                    $detailsDiv.find('form').on('submit', function(e) {
-                                        e.preventDefault();
-                                        saveAmpForm($(this), ampId, $detailsRow);
-                                    });
-                                } else {
-                                    $detailsDiv.html('<p style="color: #ff6b6b;">Error loading form. Please try again.</p>');
-                                }
-                            },
-                            error: function(xhr, status, error) {
-                                $detailsDiv.html('<p style="color: #ff6b6b;">Error loading form: ' + error + '</p>');
-                                console.error('Error loading form:', error);
-                            }
-                        });
+                    },
+                    error: function() {
+                        $detailsDiv.html('<p style="color:#f88;">Failed to load form.</p>');
                     }
                 });
-            });
-            
-            // Collapse all function
-            window.collapseAllAmps = function() {
-                $('.amp-details-row').removeClass('show').find('.amp-details').slideUp(200);
-                $('.expand-icon').removeClass('expanded');
-            };
-            
-            // Get CSRF token from cookie
-            function getCookie(name) {
-                var cookieValue = null;
-                if (document.cookie && document.cookie !== '') {
-                    var cookies = document.cookie.split(';');
-                    for (var i = 0; i < cookies.length; i++) {
-                        var cookie = cookies[i].trim();
-                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                            break;
+            }
+        });
+
+        // ── CSRF helper ─────────────────────────────────────────────────
+        function getCookie(name) {
+            var val = null;
+            if (document.cookie) {
+                document.cookie.split(';').forEach(function(c) {
+                    c = c.trim();
+                    if (c.startsWith(name + '=')) val = decodeURIComponent(c.slice(name.length + 1));
+                });
+            }
+            return val;
+        }
+
+        // ── Save amp form ────────────────────────────────────────────────
+        function saveAmpForm($form, ampId) {
+            var formData = new FormData($form[0]);
+            formData.append('_save', 'Save');
+            $.ajax({
+                url: $form.attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(response, status, xhr) {
+                    var $resp = $('<div>').html(response);
+                    var hasErrors = $resp.find('.errorlist, .errornote').length > 0;
+                    if (!hasErrors) {
+                        location.reload();
+                    } else {
+                        var $newForm = $resp.find('form');
+                        if ($newForm.length) {
+                            $newForm.find('.submit-row').remove();
+                            $newForm.append('<div class="submit-row"><button type="submit" class="save-amp-btn">Save Changes</button></div>');
+                            $('#amp-details-' + ampId).find('.amp-details').html($newForm);
+                            $newForm.on('submit', function(e) { e.preventDefault(); saveAmpForm($(this), ampId); });
                         }
+                        alert('Please correct the errors in the form.');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert('Error saving: ' + error);
+                }
+            });
+        }
+
+        // ── Location reorder ────────────────────────────────────────────
+        window.reorderLocation = function(locId, direction) {
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: { action: 'reorder_location', id: locId, direction: direction },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(r) { if (r.success) location.reload(); }
+            });
+        };
+
+        // ── Locations modal ─────────────────────────────────────────────
+        window.openLocationsModal = function() {
+            $('#locationsModal').addClass('open');
+            $('#newLocationName').focus();
+        };
+        window.closeLocationsModal = function() {
+            $('#locationsModal').removeClass('open');
+        };
+        // Close on overlay click
+        $('#locationsModal').on('click', function(e) {
+            if ($(e.target).is('#locationsModal')) closeLocationsModal();
+        });
+
+        // ── Add location ────────────────────────────────────────────────
+        window.addLocation = function() {
+            var name = $('#newLocationName').val().trim();
+            if (!name) return;
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: { action: 'add_location', name: name },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(r) {
+                    if (r.success) {
+                        $('#newLocationName').val('');
+                        // Add to empty section in modal
+                        var $empty = $('#modal-empty-locations');
+                        $empty.append(
+                            '<div class="modal-location-item empty-loc" id="modal-loc-' + r.id + '">' +
+                            '<div class="modal-loc-name" id="modal-loc-name-' + r.id + '">' + r.name + '</div>' +
+                            '<span class="modal-loc-count">No amps</span>' +
+                            '<div class="modal-loc-btns">' +
+                            '<button class="modal-loc-btn" onclick="startRename(' + r.id + ', \'' + r.name.replace(/'/g, "\\'") + '\')">Rename</button>' +
+                            '<button class="modal-loc-btn delete" onclick="confirmDelete(' + r.id + ', 0)">Delete</button>' +
+                            '</div></div>'
+                        );
+                    } else {
+                        alert('Could not add location.');
                     }
                 }
-                return cookieValue;
-            }
-            
-            // Save amp form via AJAX
-            function saveAmpForm($form, ampId, $detailsRow) {
-                // Get CSRF token
-                var csrftoken = getCookie('csrftoken');
-                
-                // Create FormData to properly handle all form fields
-                var formData = new FormData($form[0]);
-                
-                // CRITICAL: Add the save button to trigger Django's save logic
-                formData.append('_save', 'Save');
-                
-                // Debug logging
-                console.log('Submitting form for amp:', ampId);
-                console.log('Form action:', $form.attr('action'));
-                
-                $.ajax({
-                    url: $form.attr('action'),
-                    type: 'POST',
-                    data: formData,
-                    processData: false,  // CRITICAL: Don't process the data
-                    contentType: false,  // CRITICAL: Don't set contentType
-                    headers: {
-                        'X-CSRFToken': csrftoken,
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    success: function(response, status, xhr) {
-                        // Check if Django returned errors
-                        if (xhr.status === 200) {
-                            var $response = $('<div>').html(response);
-                            var hasErrors = $response.find('.errorlist, .errornote').length > 0;
-                            
-                            console.log('Response received. Has errors:', hasErrors);
-                            
-                            if (!hasErrors) {
-                                alert('Amp saved successfully!');
-                                location.reload();
-                            } else {
-                                // Show errors in the form
-                                var $newForm = $response.find('form');
-                                if ($newForm.length) {
-                                    $newForm.find('.submit-row').remove();
-                                    $newForm.append('<div class="submit-row"><button type="submit" class="save-amp-btn">Save Changes</button></div>');
-                                    $detailsRow.find('.amp-details').html($newForm);
-                                    
-                                    // Re-attach submit handler
-                                    $newForm.on('submit', function(e) {
-                                        e.preventDefault();
-                                        saveAmpForm($(this), ampId, $detailsRow);
-                                    });
-                                }
-                                alert('Please correct the errors in the form.');
-                            }
-                        } else {
-                            alert('Amp saved successfully!');
-                            location.reload();
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error saving amp:', error);
-                        console.error('Status:', status);
-                        console.error('Response:', xhr.responseText);
-                        alert('Error saving amp: ' + error + '. Check console for details.');
-                    }
-                });
-            }
-        })(django.jQuery);
+            });
+        };
+
+        // ── Rename location ─────────────────────────────────────────────
+        window.startRename = function(locId, currentName) {
+            var $nameDiv = $('#modal-loc-name-' + locId);
+            var $item = $('#modal-loc-' + locId);
+            $nameDiv.html('<input type="text" value="' + currentName.replace(/"/g, '&quot;') + '">');
+            var $btns = $item.find('.modal-loc-btns');
+            $btns.html(
+                '<button class="modal-loc-btn rename-confirm" onclick="confirmRename(' + locId + ')">Save</button>' +
+                '<button class="modal-loc-btn" onclick="cancelRename(' + locId + ', \'' + currentName.replace(/'/g, "\\'") + '\')">Cancel</button>'
+            );
+            $nameDiv.find('input').focus();
+        };
+
+        window.confirmRename = function(locId) {
+            var newName = $('#modal-loc-name-' + locId).find('input').val().trim();
+            if (!newName) return;
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: { action: 'rename_location', id: locId, name: newName },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(r) {
+                    if (r.success) location.reload();
+                    else alert('Could not rename location.');
+                }
+            });
+        };
+
+        window.cancelRename = function(locId, originalName) {
+            var $item = $('#modal-loc-' + locId);
+            $('#modal-loc-name-' + locId).html(originalName);
+            $item.find('.modal-loc-btns').html(
+                '<button class="modal-loc-btn" onclick="startRename(' + locId + ', \'' + originalName.replace(/'/g, "\\'") + '\')">Rename</button>' +
+                '<button class="modal-loc-btn delete" onclick="confirmDelete(' + locId + ', 0)">Delete</button>'
+            );
+        };
+
+        // ── Delete location ─────────────────────────────────────────────
+        window.confirmDelete = function(locId, ampCount) {
+            var $item = $('#modal-loc-' + locId);
+            // Remove any existing warning
+            $item.next('.delete-warning').remove();
+            var msg = ampCount > 0
+                ? ampCount + ' amp(s) will become unassigned. '
+                : 'This location has no amps. ';
+            var $warning = $(
+                '<div class="delete-warning">' + msg +
+                '<button onclick="doDelete(' + locId + ')">Confirm Delete</button>' +
+                '<button class="cancel-delete" onclick="cancelDeleteWarning(' + locId + ')">Cancel</button>' +
+                '</div>'
+            );
+            $item.after($warning);
+        };
+
+        window.cancelDeleteWarning = function(locId) {
+            $('#modal-loc-' + locId).next('.delete-warning').remove();
+        };
+
+        window.doDelete = function(locId) {
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: { action: 'delete_location', id: locId },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(r) {
+                    if (r.success) location.reload();
+                    else alert('Could not delete location.');
+                }
+            });
+        };
+
+    })(django.jQuery);
     </script>
 {% endblock %}

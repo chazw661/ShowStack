@@ -53,6 +53,7 @@ from .admin_site import showstack_admin_site
 from django.contrib import admin, messages
 
 
+from django.db.models import Max, Count
 from .models import CommBeltPack, CommBeltPackChannel
 
 
@@ -1520,12 +1521,144 @@ class AmpAdmin(BaseEquipmentAdmin):
     search_fields = ('name', 'ip_address')
     ordering = ['location', 'name']
     actions = ['assign_color_to_amps']
+    change_list_template = 'admin/planner/amp/change_list.html'
 
     class Media:
         css = {
             'all': ('admin/css/amp_list_buttons.css',)
         }
         js = ('admin/js/amp_row_colors.js',)  # Keep this one for row coloring
+
+
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        
+        # Handle AJAX location requests
+        if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            import json
+            action = request.POST.get('action')
+            
+            if action == 'add_location':
+                name = request.POST.get('name', '').strip()
+                if name and hasattr(request, 'current_project') and request.current_project:
+                    # Get max sort_order
+                    max_order = Location.objects.filter(
+                        project=request.current_project
+                    ).aggregate(models.Max('sort_order'))['sort_order__max'] or 0
+                    loc = Location.objects.create(
+                        name=name,
+                        project=request.current_project,
+                        sort_order=max_order + 1
+                    )
+                    from django.http import JsonResponse
+                    return JsonResponse({'success': True, 'id': loc.id, 'name': loc.name})
+                from django.http import JsonResponse
+                return JsonResponse({'success': False, 'error': 'Invalid name or no project'})
+            
+            elif action == 'rename_location':
+                loc_id = request.POST.get('id')
+                name = request.POST.get('name', '').strip()
+                if loc_id and name:
+                    try:
+                        loc = Location.objects.get(
+                            id=loc_id,
+                            project=request.current_project
+                        )
+                        loc.name = name
+                        loc.save()
+                        from django.http import JsonResponse
+                        return JsonResponse({'success': True})
+                    except Location.DoesNotExist:
+                        pass
+                from django.http import JsonResponse
+                return JsonResponse({'success': False})
+            
+            elif action == 'delete_location':
+                loc_id = request.POST.get('id')
+                if loc_id:
+                    try:
+                        loc = Location.objects.get(
+                            id=loc_id,
+                            project=request.current_project
+                        )
+                        # Unassign amps
+                        Amp.objects.filter(location=loc).update(location=None)
+                        loc.delete()
+                        from django.http import JsonResponse
+                        return JsonResponse({'success': True})
+                    except Location.DoesNotExist:
+                        pass
+                from django.http import JsonResponse
+                return JsonResponse({'success': False})
+            
+            elif action == 'reorder_location':
+                loc_id = request.POST.get('id')
+                direction = request.POST.get('direction')
+                if loc_id and direction:
+                    try:
+                        loc = Location.objects.get(
+                            id=loc_id,
+                            project=request.current_project
+                        )
+                        locations = list(Location.objects.filter(
+                            project=request.current_project
+                        ).order_by('sort_order', 'name'))
+                        idx = next((i for i, l in enumerate(locations) if l.id == loc.id), None)
+                        if idx is not None:
+                            if direction == 'up' and idx > 0:
+                                swap = locations[idx - 1]
+                                loc.sort_order, swap.sort_order = swap.sort_order, loc.sort_order
+                                # Ensure they differ
+                                if loc.sort_order == swap.sort_order:
+                                    loc.sort_order = swap.sort_order - 1
+                                loc.save()
+                                swap.save()
+                            elif direction == 'down' and idx < len(locations) - 1:
+                                swap = locations[idx + 1]
+                                loc.sort_order, swap.sort_order = swap.sort_order, loc.sort_order
+                                if loc.sort_order == swap.sort_order:
+                                    loc.sort_order = swap.sort_order + 1
+                                loc.save()
+                                swap.save()
+                        from django.http import JsonResponse
+                        return JsonResponse({'success': True})
+                    except Location.DoesNotExist:
+                        pass
+                from django.http import JsonResponse
+                return JsonResponse({'success': False})
+        
+        # Build grouped data for template
+        if hasattr(request, 'current_project') and request.current_project:
+            from django.db.models import Count
+            locations = Location.objects.filter(
+                project=request.current_project
+            ).annotate(
+                amp_count=Count('amps')
+            ).order_by('sort_order', 'name')
+            
+            # Only locations with amps
+            active_locations = []
+            for loc in locations:
+                amps = Amp.objects.filter(
+                    location=loc,
+                    project=request.current_project
+                ).order_by('name')
+                if amps.exists():
+                    active_locations.append({
+                        'location': loc,
+                        'amps': amps,
+                        'amp_count': amps.count(),
+                    })
+            
+            # All locations for modal (active first, then empty)
+            all_locations = list(locations)
+            
+            extra_context['grouped_amps'] = active_locations
+            extra_context['all_locations'] = all_locations
+            extra_context['has_grouped_layout'] = True
+        
+        return super().changelist_view(request, extra_context=extra_context)    
             
     def color_preview(self, obj):
         """Show a small color preview in the list"""
@@ -1714,11 +1847,11 @@ class AmpAdmin(BaseEquipmentAdmin):
 class LocationAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'description', 'export_pdf_button']
     search_fields = ['name', 'description']
-    ordering = ['name']
-    
+    ordering = ['sort_order', 'name']
+
     fieldsets = (
         ('Location Information', {
-            'fields': ('name', 'description')
+            'fields': ('name', 'description', 'sort_order')
         }),
     )
 

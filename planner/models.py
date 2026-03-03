@@ -951,6 +951,7 @@ class Location(models.Model):
     """Physical locations where amplifiers are deployed"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
     name = models.CharField(max_length=100, help_text="e.g., HL LA Racks, HR LA Racks, Monitor World")
+    sort_order = models.IntegerField(default=0)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -958,9 +959,9 @@ class Location(models.Model):
         return self.name
     
     class Meta:
-        verbose_name_plural = "Equip Location"
-        verbose_name_plural = "Equip Locations"  # Child
-        ordering = ['name']  # or ['id']
+        verbose_name = "Equip Location"
+        verbose_name_plural = "Equip Locations"
+        ordering = ['sort_order', 'name']
 
 
 

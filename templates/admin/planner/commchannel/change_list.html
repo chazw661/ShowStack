@@ -1,9 +1,267 @@
 {% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+/* ── Nav buttons ─────────────────────────────────────────────── */
+.comm-nav-buttons {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px 10px;
+    flex-wrap: wrap;
+}
+.comm-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    color: #e0e0e0;
+    border: 1px solid #3a5068;
+    background: linear-gradient(135deg, #1a2a3a, #243447);
+    transition: background 0.2s, border-color 0.2s;
+}
+.comm-nav-btn:hover {
+    background: linear-gradient(135deg, #243447, #2e4460);
+    border-color: #4a7090;
+    color: #fff;
+}
+.comm-nav-btn .btn-icon { font-size: 15px; }
+
+/* ── Summary bar ─────────────────────────────────────────────── */
+.comm-summary {
+    display: flex;
+    gap: 16px;
+    padding: 12px 16px;
+    background: #1a1a2e;
+    border-bottom: 1px solid #2a3a4a;
+    flex-wrap: wrap;
+}
+.comm-summary-card {
+    background: #1e2d3d;
+    border: 1px solid #2a4060;
+    border-radius: 6px;
+    padding: 10px 16px;
+    min-width: 180px;
+}
+.comm-summary-card h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: #8ab4cc;
+    text-transform: uppercase;
+}
+.comm-stat-row {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    flex-wrap: wrap;
+}
+.comm-stat { color: #c0ccd8; }
+.comm-stat strong { color: #e0e8f0; }
+.comm-group-pills {
+    margin-top: 6px;
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+.comm-group-pill {
+    background: #243447;
+    border: 1px solid #3a5068;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 11px;
+    color: #8ab4cc;
+}
+
+/* ── Collapsible group headers ───────────────────────────────── */
+.system-group-header {
+    background: linear-gradient(135deg, #1e2d3d 0%, #243447 100%);
+    color: #e0e0e0;
+    padding: 10px 16px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    border-left: 4px solid #3498db;
+    border-top: 2px solid #2a3a4a;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: background 0.2s;
+}
+.system-group-header.hardwired { border-left-color: #e67e22; }
+.system-group-header:hover { background: linear-gradient(135deg, #243447 0%, #2e4460 100%); }
+.system-group-header .toggle-icon {
+    font-size: 11px;
+    transition: transform 0.25s;
+    margin-right: 6px;
+}
+.system-group-header.collapsed .toggle-icon { transform: rotate(-90deg); }
+.system-group-header .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.count-badge {
+    background: rgba(255,255,255,0.15);
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+.group-hidden { display: none !important; }
+</style>
+{% endblock %}
+
 {% block object-tools-items %}
-    <li>
-        <a href="../commbeltpack/" class="viewlink" style="background: linear-gradient(135deg, #1a2a3a, #243447); border: 1px solid #3a5068; border-radius: 6px; padding: 6px 14px; color: #e0e0e0; font-weight: 500; transition: all 0.2s ease;">
-            ← Belt Packs
-        </a>
-    </li>
     {{ block.super }}
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Navigation buttons ──────────────────────────────────── -->
+<div class="comm-nav-buttons">
+    <a href="{% url 'admin:planner_commposition_changelist' %}" class="comm-nav-btn">
+        <span class="btn-icon">🎯</span> Positions
+    </a>
+    <a href="{% url 'admin:planner_commcrewname_changelist' %}" class="comm-nav-btn">
+        <span class="btn-icon">👤</span> Crew Names
+    </a>
+    <a href="{% url 'admin:planner_commchannel_changelist' %}" class="comm-nav-btn">
+        <span class="btn-icon">📻</span> Channels
+    </a>
+</div>
+
+<!-- ── Summary stats ───────────────────────────────────────── -->
+<div class="comm-summary">
+    <div class="comm-summary-card">
+        <h4>📡 Wireless</h4>
+        <div class="comm-stat-row">
+            <span class="comm-stat">Total: <strong>{{ wireless_total|default:"0" }}</strong></span>
+            <span class="comm-stat">Out: <strong>{{ wireless_checked|default:"0" }}</strong></span>
+            <span class="comm-stat">Avail: <strong>{{ wireless_available|default:"0" }}</strong></span>
+        </div>
+        {% if wireless_groups %}
+        <div class="comm-group-pills">
+            {% for group, count in wireless_groups.items %}
+            <span class="comm-group-pill">{{ group }}: {{ count }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="comm-summary-card">
+        <h4>🔌 Hardwired</h4>
+        <div class="comm-stat-row">
+            <span class="comm-stat">Total: <strong>{{ hardwired_total|default:"0" }}</strong></span>
+        </div>
+        {% if hardwired_groups %}
+        <div class="comm-group-pills">
+            {% for group, count in hardwired_groups.items %}
+            <span class="comm-group-pill">{{ group }}: {{ count }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ── Standard Django changelist (table + actions) ───────── -->
+{{ block.super }}
+
+{% endblock %}
+
+{% block result_list %}
+    {{ block.super }}
+    <script>
+    (function() {
+        document.addEventListener('DOMContentLoaded', function() {
+            var table = document.getElementById('result_list');
+            if (!table) return;
+
+            var tbody = table.querySelector('tbody');
+            if (!tbody) return;
+
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            if (!rows.length) return;
+
+            // ── Determine system type for each row ───────────────────
+            // The system_type_icon column shows 📡 or 🔌
+            // list_display order: bp_number, system_type_icon, manufacturer_display, ...
+            // system_type_icon is column index 2 (0=checkbox, 1=bp_number, 2=type_icon)
+            function getSystemType(row) {
+                var cells = row.querySelectorAll('td');
+                if (!cells.length) return 'unknown';
+                // Look through first few cells for the icon
+                for (var i = 0; i < Math.min(cells.length, 4); i++) {
+                    var text = cells[i].textContent.trim();
+                    if (text.indexOf('📡') !== -1) return 'wireless';
+                    if (text.indexOf('🔌') !== -1) return 'hardwired';
+                }
+                return 'unknown';
+            }
+
+            // ── Group rows by system type ─────────────────────────────
+            var groups = { wireless: [], hardwired: [], unknown: [] };
+            rows.forEach(function(row) {
+                var type = getSystemType(row);
+                groups[type].push(row);
+            });
+
+            // ── Load saved collapse state ─────────────────────────────
+            var savedState = {};
+            try { savedState = JSON.parse(localStorage.getItem('commBeltpackGroups') || '{}'); } catch(e) {}
+
+            // ── Build collapsible group ───────────────────────────────
+            function buildGroup(type, label, icon, borderClass, groupRows) {
+                if (!groupRows.length) return;
+
+                var isCollapsed = savedState[type] === true;
+
+                // Header row
+                var headerTr = document.createElement('tr');
+                headerTr.style.cssText = 'display: table-row;';
+                var headerTd = document.createElement('td');
+                headerTd.colSpan = 99;
+                headerTd.style.padding = '0';
+
+                var headerDiv = document.createElement('div');
+                headerDiv.className = 'system-group-header' + (borderClass ? ' ' + borderClass : '') + (isCollapsed ? ' collapsed' : '');
+                headerDiv.innerHTML =
+                    '<span><span class="toggle-icon">▼</span>' + icon + ' ' + label + '</span>' +
+                    '<div class="header-right">' +
+                    '<span class="count-badge">' + groupRows.length + ' belt pack' + (groupRows.length !== 1 ? 's' : '') + '</span>' +
+                    '</div>';
+
+                headerTd.appendChild(headerDiv);
+                headerTr.appendChild(headerTd);
+
+                // Insert header before first row of group
+                tbody.insertBefore(headerTr, groupRows[0]);
+
+                // Apply initial visibility
+                groupRows.forEach(function(r) {
+                    if (isCollapsed) r.classList.add('group-hidden');
+                });
+
+                // Toggle on click
+                headerDiv.addEventListener('click', function() {
+                    var nowCollapsed = headerDiv.classList.toggle('collapsed');
+                    groupRows.forEach(function(r) {
+                        r.classList.toggle('group-hidden', nowCollapsed);
+                    });
+                    savedState[type] = nowCollapsed;
+                    try { localStorage.setItem('commBeltpackGroups', JSON.stringify(savedState)); } catch(e) {}
+                });
+            }
+
+            buildGroup('wireless',  'Wireless',  '📡', '',           groups.wireless);
+            buildGroup('hardwired', 'Hardwired', '🔌', 'hardwired',  groups.hardwired);
+            if (groups.unknown.length) buildGroup('unknown', 'Other', '❓', '', groups.unknown);
+        });
+    })();
+    </script>
 {% endblock %}
