@@ -1681,7 +1681,7 @@ def advance_presenter_slot(request):
             'notes': active.notes,
             'slot_index': next_index,
             'slot_count': len(slots),
-            'photo_url': active.photo.url if active.photo else None,       # ADD THIS
+            'photo_url': active.photo_data or None,
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
@@ -1714,7 +1714,7 @@ def previous_presenter_slot(request):
             'notes': active.notes,
             'slot_index': prev_index,
             'slot_count': len(slots),
-            'photo_url': active.photo.url if active.photo else None,       # ADD THIS
+            'photo_url': active.photo_data or None,
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
