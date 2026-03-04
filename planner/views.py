@@ -1641,7 +1641,9 @@ def upload_slot_photo(request):
             return JsonResponse({'success': False, 'error': 'Missing slot_id or photo'})
         try:
             slot = PresenterSlot.objects.get(id=slot_id)
-            slot.photo.save(photo.name, photo, save=True)
+            import os
+            filename = os.path.basename(photo.name)
+            slot.photo.save(f'slot_photos/{filename}', photo, save=True)
             return JsonResponse({'success': True, 'photo_url': slot.photo.url})
         except PresenterSlot.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Slot not found'})
