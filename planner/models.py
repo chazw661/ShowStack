@@ -2656,6 +2656,11 @@ class PresenterSlot(models.Model):
         blank=True,
         help_text="Photo for this presenter slot"
     )
+    photo_data = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Base64 encoded photo data"
+    )
     group = models.ForeignKey(
         'MicGroup', 
         null=True, blank=True, 

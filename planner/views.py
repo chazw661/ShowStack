@@ -1640,11 +1640,14 @@ def upload_slot_photo(request):
         if not slot_id or not photo:
             return JsonResponse({'success': False, 'error': 'Missing slot_id or photo'})
         try:
+            import base64
             slot = PresenterSlot.objects.get(id=slot_id)
-            import os
-            filename = os.path.basename(photo.name)
-            slot.photo.save(f'slot_photos/{filename}', photo, save=True)
-            return JsonResponse({'success': True, 'photo_url': slot.photo.url})
+            photo_bytes = photo.read()
+            mime_type = photo.content_type or 'image/jpeg'
+            b64 = base64.b64encode(photo_bytes).decode('utf-8')
+            slot.photo_data = f'data:{mime_type};base64,{b64}'
+            slot.save()
+            return JsonResponse({'success': True, 'photo_url': slot.photo_data})
         except PresenterSlot.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Slot not found'})
     return JsonResponse({'success': False})        
