@@ -1624,11 +1624,13 @@ def upload_photo_by_assignment(request):
             slot = assignment.presenter_slots.filter(is_active=True).first()
             if not slot:
                 return JsonResponse({'success': False, 'error': 'No active slot'})
-            slot.photo.save(photo.name, photo, save=True)
+            import os
+            filename = os.path.basename(photo.name)
+            slot.photo.save(f'slot_photos/{filename}', photo, save=True)
             return JsonResponse({'success': True, 'photo_url': slot.photo.url})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)})
-        
+
 
 @staff_member_required
 def upload_slot_photo(request):
