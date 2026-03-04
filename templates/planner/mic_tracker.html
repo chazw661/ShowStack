@@ -598,7 +598,7 @@
                                 <div class="a2-photo-zone"
                                      id="photo-zone-{{ assignment.id }}"
                                      onclick="{% if not is_viewer %}triggerPhotoForSlot({% if active_slot %}{{ active_slot.id }}{% else %}0{% endif %}, {{ assignment.id }}){% endif %}">
-                                    {% if active_slot and active_slot.photo %}
+                                    {% if active_slot and active_slot.photo_data %}
                                     <img src="{{ active_slot.photo_data }}" alt="{{ active_slot.presenter.name|default:'' }}" id="photo-img-{{ assignment.id }}">
                                     <div class="a2-photo-expand"><img src="{{ active_slot.photo_data }}" id="photo-expand-{{ assignment.id }}"></div>
                                     {% else %}
