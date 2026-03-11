@@ -1527,7 +1527,7 @@ class AmpAdmin(BaseEquipmentAdmin):
         css = {
             'all': ('admin/css/amp_list_buttons.css',)
         }
-        js = ('admin/js/amp_row_colors.js',)  # Keep this one for row coloring
+        js = ()
 
 
 
