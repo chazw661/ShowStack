@@ -734,39 +734,34 @@
         };
 
         // ── Amp Dividers ─────────────────────────────────────────────
-        window.getCSRF = function() {
-            var m = document.cookie.match(/csrftoken=([^;]+)/);
-            return m ? m[1] : '';
-        };
         window.CSRF_TOKEN = '{{ csrf_token }}';
+        function dividerAjax(url, data, callback) {
+            $.ajax({
+                url: url,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                headers: { 'X-CSRFToken': window.CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(r) { if (callback) callback(r); },
+                error: function(xhr) { alert('Error: ' + xhr.status); }
+            });
+        }
         window.addDivider = function(locationId, projectId) {
-            fetch('/audiopatch/api/amp/divider/add/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
-                body: JSON.stringify({location_id: locationId, project_id: projectId, label: ''})
-            }).then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
+            dividerAjax('/audiopatch/api/amp/divider/add/',
+                {location_id: locationId, project_id: projectId, label: ''},
+                function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
         window.saveDividerLabel = function(dividerId, label) {
-            fetch('/audiopatch/api/amp/divider/' + dividerId + '/update/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
-                body: JSON.stringify({label: label})
-            });
+            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/update/', {label: label}, null);
         };
         window.deleteDivider = function(dividerId, btn) {
             if (!confirm('Delete this divider?')) return;
-            fetch('/audiopatch/api/amp/divider/' + dividerId + '/delete/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
-                body: JSON.stringify({})
-            }).then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
+            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/delete/', {},
+                function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
         window.reorderDivider = function(dividerId, direction) {
-            fetch('/audiopatch/api/amp/divider/' + dividerId + '/reorder/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN},
-                body: JSON.stringify({direction: direction})
-            }).then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
+            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/reorder/', {direction: direction},
+                function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
         // ── Locations modal ─────────────────────────────────────────────
         window.openLocationsModal = function() {
