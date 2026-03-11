@@ -734,10 +734,10 @@
         };
 
         // ── Amp Dividers ─────────────────────────────────────────────
-        function getCSRF() {
+        window.getCSRF = function() {
             var m = document.cookie.match(/csrftoken=([^;]+)/);
             return m ? m[1] : '';
-        }
+        };
         window.addDivider = function(locationId, projectId) {
             fetch('/audiopatch/api/amp/divider/add/', {
                 method: 'POST',
