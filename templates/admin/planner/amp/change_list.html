@@ -743,7 +743,7 @@
                 data: data,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 success: function(r) { if (callback) callback(r); },
-                error: function(xhr) { if (xhr.status !== 0) alert('Error: ' + xhr.status); }
+                error: function(xhr) { alert('Error: ' + xhr.status); }
             });
         }
         window.addDivider = function(locationId, projectId) {
