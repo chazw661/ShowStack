@@ -743,7 +743,7 @@
                 data: JSON.stringify(data),
                 headers: { 'X-CSRFToken': window.CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest' },
                 success: function(r) { if (callback) callback(r); },
-                error: function(xhr) { alert('Error: ' + xhr.status); }
+                error: function(xhr) { location.reload(); }
             });
         }
         window.addDivider = function(locationId, projectId) {
