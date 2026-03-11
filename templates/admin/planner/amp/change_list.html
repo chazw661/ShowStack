@@ -718,8 +718,15 @@
 
         // ── Amp Dividers ─────────────────────────────────────────────
         window.CSRF_TOKEN = '{{ csrf_token }}';
-        // ── Amp Dividers (localStorage) ──────────────────────────────
+        // ── Amp Dividers (localStorage + silent DB sync) ────────────
         var PROJECT_ID = '{{ request.current_project.id }}';
+
+        // DB seed data from server
+        var DB_DIVIDERS = {
+            {% for group in grouped_amps %}
+            '{{ group.location.id }}': [{% for item in group.items %}{% if item.type == 'divider' %}{'id':'db_{{ item.obj.id }}','db_id':{{ item.obj.id }},'label':'{{ item.obj.label|escapejs }}','after':{{ item.obj.sort_order }}},{% endif %}{% endfor %}],
+            {% endfor %}
+        };
 
         function divKey(locId) { return 'dividers_p' + PROJECT_ID + '_l' + locId; }
         function getDividers(locId) { try { return JSON.parse(localStorage.getItem(divKey(locId)) || '[]'); } catch(e) { return []; } }
@@ -762,17 +769,19 @@
             dividers.push({id: 'd' + Date.now(), label: '', after: $ampRows.length - 1});
             putDividers(locId, dividers);
             renderDividers(locId);
+            syncToDb(locId);
         };
 
         window.saveDividerLabel = function(locId, id, label) {
             var dividers = getDividers(locId);
             var d = dividers.find(function(x){ return x.id===id; });
-            if (d) { d.label = label; putDividers(locId, dividers); }
+            if (d) { d.label = label; putDividers(locId, dividers); syncToDb(locId); }
         };
 
         window.deleteDivider = function(locId, id) {
             putDividers(locId, getDividers(locId).filter(function(x){ return x.id!==id; }));
             renderDividers(locId);
+            syncToDb(locId);
         };
 
         window.reorderDivider = function(locId, id, dir) {
@@ -785,6 +794,7 @@
             else d.after = Math.min(max + 1, (d.after||0) + 1);
             putDividers(locId, dividers);
             renderDividers(locId);
+            syncToDb(locId);
         };
 
         // Re-render dividers when location is opened
@@ -795,8 +805,48 @@
             renderDividers(locId);
         };
 
-        // Render on page load for already-open locations
+        // Silent background DB sync
+        function syncToDb(locId) {
+            var dividers = getDividers(locId);
+            // Build ordered list with sort_order = index
+            var payload = dividers.map(function(d, i) {
+                return {id: d.db_id||'', label: d.label||'', sort_order: i, after: d.after||0};
+            });
+            $.ajax({
+                url: '/audiopatch/api/amp/divider/sync/',
+                type: 'POST',
+                data: {
+                    location_id: locId,
+                    project_id: PROJECT_ID,
+                    dividers: JSON.stringify(payload),
+                    csrfmiddlewaretoken: window.CSRF_TOKEN
+                },
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                success: function(r) {
+                    if (r.success && r.dividers) {
+                        // Update localStorage with server-assigned db_ids
+                        var stored = getDividers(locId);
+                        r.dividers.forEach(function(sd, i) {
+                            if (stored[i]) stored[i].db_id = sd.db_id;
+                        });
+                        putDividers(locId, stored);
+                    }
+                }
+            });
+        }
+
+        // Render on page load, seed from DB if localStorage empty
         $(function() {
+            Object.keys(DB_DIVIDERS).forEach(function(locId) {
+                var stored = getDividers(locId);
+                if (stored.length === 0 && DB_DIVIDERS[locId].length > 0) {
+                    // Seed from DB — convert sort_order to after index
+                    var seeded = DB_DIVIDERS[locId].map(function(d, i) {
+                        return {id: d.id, db_id: d.db_id, label: d.label, after: d.after};
+                    });
+                    putDividers(locId, seeded);
+                }
+            });
             $('.location-body.open').each(function() {
                 var locId = $(this).closest('.location-group').data('location-id');
                 renderDividers(locId);

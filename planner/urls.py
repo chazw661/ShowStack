@@ -146,6 +146,7 @@ urlpatterns = [
     # Amplifier PDF export
     path('amps/all/pdf/', views.all_amps_pdf_export, name='all_amps_pdf_export'),
     path('api/amp/reorder/', views.amp_reorder, name='amp_reorder'),
+    path('api/amp/divider/sync/', views.amp_divider_sync, name='amp_divider_sync'),
     path('api/amp/divider/add/', views.amp_divider_add, name='amp_divider_add'),
     path('api/amp/divider/<int:divider_id>/update/', views.amp_divider_update, name='amp_divider_update'),
     path('api/amp/divider/<int:divider_id>/delete/', views.amp_divider_delete, name='amp_divider_delete'),

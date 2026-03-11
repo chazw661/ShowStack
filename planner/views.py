@@ -2942,6 +2942,47 @@ def get_location_items(location, project):
     items.sort(key=lambda x: x['obj'].sort_order)
     return items
 
+
+@require_POST
+def amp_divider_sync(request):
+    """Sync all dividers for a location from localStorage state"""
+    try:
+        location = get_object_or_404(Location, id=request.POST.get('location_id'))
+        project = get_object_or_404(Project, id=request.POST.get('project_id'))
+        dividers_data = json.loads(request.POST.get('dividers', '[]'))
+        
+        # Get existing dividers for this location
+        existing = {d.id: d for d in AmpDivider.objects.filter(location=location, project=project)}
+        seen_ids = set()
+        
+        result = []
+        for i, d in enumerate(dividers_data):
+            db_id = d.get('id')
+            if db_id and db_id in existing:
+                # Update existing
+                div = existing[db_id]
+                div.label = d.get('label', '')
+                div.sort_order = i
+                div.save()
+                seen_ids.add(db_id)
+            else:
+                # Create new
+                div = AmpDivider.objects.create(
+                    location=location, project=project,
+                    label=d.get('label', ''), sort_order=i
+                )
+                seen_ids.add(div.id)
+            result.append({'db_id': div.id, 'sort_order': i})
+        
+        # Delete removed dividers
+        for did, div in existing.items():
+            if did not in seen_ids:
+                div.delete()
+        
+        return JsonResponse({'success': True, 'dividers': result})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
 def all_amps_pdf_export(request):
     """Export all amplifiers to PDF - filtered by current project"""
     
