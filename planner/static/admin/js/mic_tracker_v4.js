@@ -1343,7 +1343,7 @@ function openSlotGroupPicker(slotId, sessionId, dotEl) {
     });
 }
 
-function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl) {
+function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl, assignmentIdOverride) {
     fetch('/audiopatch/api/mic/slot/assign-group/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
@@ -1359,13 +1359,11 @@ function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl) {
                 row.classList.remove('group-blue','group-amber','group-red','group-purple','group-teal');
                 if (groupColor) row.classList.add('group-' + groupColor);
             }
-            // Update A2 pill if this slot is the active one
-            if (row) {
-                var assignmentId = row.dataset.assignmentId;
+            // Update A2 pill - use override assignmentId (from A2 picker) or look up from A1 row
+            var assignmentId = assignmentIdOverride || (row ? row.dataset.assignmentId : null);
+            if (assignmentId) {
                 var card = document.getElementById('a2-card-' + assignmentId);
-                var chip = document.querySelector('#a2-card-' + assignmentId + ' .a2-slot-chip.active');
-                var isActive = !chip || chip.dataset.slotId == slotId;
-                if (card && isActive) {
+                if (card) {
                     var pill = card.querySelector('.a2-group-pill');
                     if (groupColor) {
                         if (pill) {
@@ -1393,7 +1391,9 @@ function openA2GroupPicker(assignmentId, sessionId, dotEl) {
     var card = document.getElementById('a2-card-' + assignmentId);
     if (!card) return;
     var meta = card.querySelector('.a2-card-meta');
-    var slotId = meta ? meta.dataset.activeSlotId : null;
+    // Try active chip first, fall back to data-active-slot-id
+    var activeChip = card.querySelector('.a2-slot-chip.active');
+    var slotId = activeChip ? activeChip.dataset.slotId : (meta ? meta.dataset.activeSlotId : null);
     if (!slotId || slotId == '0') return;
     var picker = document.getElementById('a2-slot-group-picker-' + assignmentId);
     if (!picker) return;
@@ -1440,5 +1440,97 @@ function openA2GroupPicker(assignmentId, sessionId, dotEl) {
             picker.style.transform = '';
         }
         picker.classList.add('open');
+    });
+}
+
+function openA2GroupPicker(assignmentId, sessionId, dotEl) {
+    document.querySelectorAll('.group-picker.open').forEach(p => p.classList.remove('open'));
+    var picker = document.getElementById('a2-group-picker-' + assignmentId);
+    if (!picker) return;
+    var dotRect = dotEl.getBoundingClientRect();
+    loadGroups(sessionId, function(groups) {
+        picker.innerHTML = '';
+        var title = document.createElement('div');
+        title.className = 'group-picker-title';
+        title.textContent = 'Assign Group';
+        picker.appendChild(title);
+        var noneItem = document.createElement('div');
+        noneItem.className = 'group-picker-none';
+        noneItem.textContent = '— No Group —';
+        noneItem.onmousedown = function(e) {
+            e.preventDefault();
+            assignA2SlotGroup(assignmentId, null, null, null, dotEl);
+            picker.classList.remove('open');
+        };
+        picker.appendChild(noneItem);
+        if (groups.length > 0) {
+            var div = document.createElement('div');
+            div.className = 'group-picker-divider';
+            picker.appendChild(div);
+        }
+        groups.forEach(function(g) {
+            var item = document.createElement('div');
+            item.className = 'group-picker-item';
+            item.innerHTML = '<span style="width:12px;height:12px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span> ' + g.name;
+            item.onmousedown = function(e) {
+                e.preventDefault();
+                assignA2SlotGroup(assignmentId, g.id, g.name, g.color, dotEl);
+                picker.classList.remove('open');
+            };
+            picker.appendChild(item);
+        });
+        picker.style.position = 'fixed';
+        picker.style.left = dotRect.left + 'px';
+        picker.style.bottom = 'auto';
+        if (window.innerHeight - dotRect.bottom < 220) {
+            picker.style.top = (dotRect.top - 4) + 'px';
+            picker.style.transform = 'translateY(-100%)';
+        } else {
+            picker.style.top = (dotRect.bottom + 4) + 'px';
+            picker.style.transform = '';
+        }
+        picker.classList.add('open');
+    });
+}
+
+function assignA2SlotGroup(assignmentId, groupId, groupName, groupColor, dotEl) {
+    var dot = document.getElementById('a2-group-dot-' + assignmentId);
+    var slotId = dot ? dot.dataset.activeSlotId : null;
+    if (!slotId || slotId == '0') return;
+    fetch('/audiopatch/api/mic/slot/assign-a2-group/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({slot_id: slotId, group_id: groupId})
+    })
+    .then(r => r.json())
+    .then(function(data) {
+        if (data.success) {
+            // Update dot color
+            if (dot) {
+                dot.className = 'a2-group-dot ' + (groupColor ? 'color-' + groupColor : 'empty');
+                dot.title = groupName || 'Assign group';
+            }
+            // Update or create pill
+            var card = document.getElementById('a2-card-' + assignmentId);
+            if (card) {
+                var pill = card.querySelector('.a2-group-pill');
+                if (groupColor) {
+                    if (pill) {
+                        pill.className = 'a2-group-pill color-' + groupColor;
+                        pill.innerHTML = '<span class="a2-group-pill-dot"></span>' + groupName;
+                    } else {
+                        var meta = document.getElementById('a2-meta-' + assignmentId);
+                        if (meta) {
+                            var newPill = document.createElement('span');
+                            newPill.className = 'a2-group-pill color-' + groupColor;
+                            newPill.innerHTML = '<span class="a2-group-pill-dot"></span>' + groupName;
+                            meta.insertBefore(newPill, meta.firstChild);
+                        }
+                    }
+                } else {
+                    if (pill) pill.remove();
+                }
+            }
+        }
     });
 }

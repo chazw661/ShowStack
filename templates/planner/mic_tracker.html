@@ -325,6 +325,36 @@
     .group-picker-divider { height: 1px; background: var(--border); margin: 6px 0; }
     .group-picker-manage { font-size: 10px; color: var(--accent-blue); padding: 4px 6px; cursor: pointer; }
     .group-picker-manage:hover { text-decoration: underline; }
+    .a2-group-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; margin-left: 6px; vertical-align: middle; }
+    .a2-group-dot:hover { transform: scale(1.2); }
+    .a2-group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
+    .a2-group-dot.color-blue   { background: #4a9eff; }
+    .a2-group-dot.color-amber  { background: #ffab00; }
+    .a2-group-dot.color-red    { background: #ff5252; }
+    .a2-group-dot.color-purple { background: #b464ff; }
+    .a2-group-dot.color-teal   { background: #00bcd4; }
+    .a2-group-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 6px; }
+    .a2-group-pill.color-blue   { background: rgba(74,158,255,0.15); color: #4a9eff; border: 1px solid rgba(74,158,255,0.3); }
+    .a2-group-pill.color-amber  { background: rgba(255,171,0,0.15);  color: #ffab00; border: 1px solid rgba(255,171,0,0.3); }
+    .a2-group-pill.color-red    { background: rgba(255,82,82,0.15);  color: #ff5252; border: 1px solid rgba(255,82,82,0.3); }
+    .a2-group-pill.color-purple { background: rgba(180,100,255,0.15);color: #b464ff; border: 1px solid rgba(180,100,255,0.3); }
+    .a2-group-pill.color-teal   { background: rgba(0,188,212,0.15);  color: #00bcd4; border: 1px solid rgba(0,188,212,0.3); }
+    .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
+    .a2-group-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; margin-left: 6px; vertical-align: middle; }
+    .a2-group-dot:hover { transform: scale(1.2); }
+    .a2-group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
+    .a2-group-dot.color-blue   { background: #4a9eff; }
+    .a2-group-dot.color-amber  { background: #ffab00; }
+    .a2-group-dot.color-red    { background: #ff5252; }
+    .a2-group-dot.color-purple { background: #b464ff; }
+    .a2-group-dot.color-teal   { background: #00bcd4; }
+    .a2-group-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 6px; }
+    .a2-group-pill.color-blue   { background: rgba(74,158,255,0.15); color: #4a9eff; border: 1px solid rgba(74,158,255,0.3); }
+    .a2-group-pill.color-amber  { background: rgba(255,171,0,0.15);  color: #ffab00; border: 1px solid rgba(255,171,0,0.3); }
+    .a2-group-pill.color-red    { background: rgba(255,82,82,0.15);  color: #ff5252; border: 1px solid rgba(255,82,82,0.3); }
+    .a2-group-pill.color-purple { background: rgba(180,100,255,0.15);color: #b464ff; border: 1px solid rgba(180,100,255,0.3); }
+    .a2-group-pill.color-teal   { background: rgba(0,188,212,0.15);  color: #00bcd4; border: 1px solid rgba(0,188,212,0.3); }
+    .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
 
     .group-manage-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .group-manage-modal.hidden { display: none; }
@@ -568,18 +598,36 @@
 
                     <!-- ════════════════ A2 PANEL ════════════════ -->
                     <div class="session-panel" id="session-{{ session.id }}-a2">
+                        {% if not is_viewer %}
+                        <div style="padding: 8px 14px 0;">
+                            <button onclick="openGroupManager({{ session.id }})"
+                                    style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
+                                           background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
+                                           color:var(--accent-blue);border-radius:3px;cursor:pointer;line-height:1;">GRP</button>
+                        </div>
+                        {% endif %}
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
-                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
+                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %}"
                              id="a2-card-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
 
                             <div class="a2-card-header">
                                 <div class="a2-rf-badge">{{ assignment.rf_number|stringformat:"02d" }}</div>
-                                <div class="a2-card-meta">
+                                <div class="a2-card-meta" id="a2-meta-{{ assignment.id }}">
                                     {% if assignment.mic_type %}
                                     <span class="mic-type-badge type-{{ assignment.mic_type }}" style="font-size:9px;padding:2px 7px;">
                                         <span class="type-dot"></span>{{ assignment.mic_type }}
                                     </span>
+                                    {% endif %}
+                                    {% if not is_viewer %}
+                                    {% with active_slot=assignment.active_slot %}
+                                    <span class="a2-group-dot {% if active_slot.a2_group %}color-{{ active_slot.a2_group.color }}{% else %}empty{% endif %}"
+                                          id="a2-group-dot-{{ assignment.id }}"
+                                          data-active-slot-id="{{ active_slot.id|default:0 }}"
+                                          onclick="openA2GroupPicker({{ assignment.id }}, {{ session.id }}, this)"
+                                          title="{% if active_slot.a2_group %}{{ active_slot.a2_group.name }}{% else %}Assign group{% endif %}"></span>
+                                    <div class="group-picker" id="a2-group-picker-{{ assignment.id }}"></div>
+                                    {% endwith %}
                                     {% endif %}
                                 </div>
                                 {# Single-presenter cards keep MIC'D in header; multi-presenter use per-chip buttons #}
@@ -796,7 +844,7 @@
 </div>
 
 <datalist id="presenters-datalist"></datalist>
-<script src="{% static 'admin/js/mic_tracker_v3.js' %}"></script>
+<script src="{% static 'admin/js/mic_tracker_v4.js' %}"></script>
 
 <script>
 // ── Session tab switching ──────────────────────────────────────
@@ -1292,6 +1340,13 @@ function applySlotData(assignmentId, data) {
 
     const counter = document.getElementById('slot-counter-' + assignmentId);
     if (counter) counter.textContent = (data.slot_index + 1) + ' / ' + data.slot_count;
+    // Update A2 group dot to reflect new active slot
+    const groupDot = document.getElementById('a2-group-dot-' + assignmentId);
+    if (groupDot && data.slot_id) {
+        groupDot.dataset.activeSlotId = data.slot_id;
+        groupDot.className = 'a2-group-dot ' + (data.a2_group_color ? 'color-' + data.a2_group_color : 'empty');
+        groupDot.title = data.a2_group_name || 'Assign group';
+    }
 
     document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach((chip, i) => {
         chip.classList.toggle('active', i === data.slot_index);

@@ -88,6 +88,7 @@ urlpatterns = [
 
     path('api/mic/slot/update/', views.update_slot_field, name='update_slot_field'),
     path('api/mic/slot/assign-group/', views.assign_slot_group, name='assign_slot_group'),
+    path('api/mic/slot/assign-a2-group/', views.assign_slot_a2_group, name='assign_slot_a2_group'),
 
     path('api/mic/slot/toggle-micd/', views.toggle_slot_micd, name='toggle_slot_micd'),
     

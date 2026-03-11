@@ -1550,6 +1550,18 @@ def assign_slot_group(request):
     
 
 @require_POST
+def assign_slot_a2_group(request):
+    try:
+        data = json.loads(request.body)
+        slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
+        group_id = data.get('group_id')
+        slot.a2_group = MicGroup.objects.get(id=group_id) if group_id else None
+        slot.save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
 def toggle_slot_micd(request):
     try:
         data = json.loads(request.body)
@@ -1671,7 +1683,7 @@ def advance_presenter_slot(request):
         active = slots[next_index]
         return JsonResponse({
             'success': True,
-            'slot_id': active.id,                                          # ADD THIS
+            'slot_id': active.id,
             'presenter_name': active.presenter.name if active.presenter else '',
             'presenter_id': active.presenter.id if active.presenter else None,
             'mic_type': active.mic_type,
@@ -1682,6 +1694,8 @@ def advance_presenter_slot(request):
             'slot_index': next_index,
             'slot_count': len(slots),
             'photo_url': active.photo_data or None,
+            'a2_group_color': active.a2_group.color if active.a2_group else None,
+            'a2_group_name': active.a2_group.name if active.a2_group else None,
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
@@ -1704,7 +1718,7 @@ def previous_presenter_slot(request):
         active = slots[prev_index]
         return JsonResponse({
             'success': True,
-            'slot_id': active.id,                                          # ADD THIS
+            'slot_id': active.id,
             'presenter_name': active.presenter.name if active.presenter else '',
             'presenter_id': active.presenter.id if active.presenter else None,
             'mic_type': active.mic_type,
@@ -1715,6 +1729,8 @@ def previous_presenter_slot(request):
             'slot_index': prev_index,
             'slot_count': len(slots),
             'photo_url': active.photo_data or None,
+            'a2_group_color': active.a2_group.color if active.a2_group else None,
+            'a2_group_name': active.a2_group.name if active.a2_group else None,
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
