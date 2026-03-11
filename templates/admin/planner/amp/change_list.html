@@ -483,7 +483,24 @@
                     </thead>
                     <tbody>
                         {% for item in group.items %}
-                        {% if item.type == 'amp' %}
+                        {% if item.type == 'divider' %}
+                        <tr class="amp-divider-row" data-divider-id="{{ item.obj.id }}">
+                            <td colspan="4" class="amp-divider-cell">
+                                <span class="amp-divider-line"></span>
+                                <input class="amp-divider-label" type="text"
+                                       value="{{ item.obj.label }}"
+                                       placeholder="— divider label —"
+                                       onblur="saveDividerLabel({{ item.obj.id }}, this.value)"
+                                       onkeydown="if(event.key==='Enter')this.blur()">
+                                <span class="amp-divider-line"></span>
+                            </td>
+                            <td class="amp-divider-actions">
+                                <button class="amp-order-btn" onclick="reorderDivider({{ item.obj.id }}, 'up')" title="Move up">▲</button>
+                                <button class="amp-order-btn" onclick="reorderDivider({{ item.obj.id }}, 'down')" title="Move down">▼</button>
+                                <button class="amp-order-btn amp-divider-delete" onclick="deleteDivider({{ item.obj.id }}, this)" title="Delete">✕</button>
+                            </td>
+                        </tr>
+                        {% else %}
                         {% with amp=item.obj %}
                         <tr class="amp-row" data-amp-id="{{ amp.id }}"
                             {% if amp.color %}style="background-color: {{ amp.color }}20;"{% endif %}>
@@ -510,7 +527,7 @@
                     </tbody>
                 </table>
                 <button class="add-divider-btn"
-                        onclick="addDivider({{ group.location.id }})">
+                        onclick="addDivider({{ group.location.id }}, {{ request.current_project.id }})">
                     + Add Divider
                 </button>
             </div>
@@ -718,93 +735,33 @@
 
         // ── Amp Dividers ─────────────────────────────────────────────
         window.CSRF_TOKEN = '{{ csrf_token }}';
-        // ── Amp Dividers (localStorage) ──────────────────────────────
-        var PROJECT_ID = '{{ request.current_project.id }}';
-
-        function getDividerKey(locationId) {
-            return 'dividers_p' + PROJECT_ID + '_l' + locationId;
-        }
-
-        function loadDividers(locationId) {
-            try { return JSON.parse(localStorage.getItem(getDividerKey(locationId)) || '[]'); }
-            catch(e) { return []; }
-        }
-
-        function saveDividers(locationId, dividers) {
-            localStorage.setItem(getDividerKey(locationId), JSON.stringify(dividers));
-        }
-
-        function renderDividers(locationId) {
-            var dividers = loadDividers(locationId);
-            var $tbody = $('[data-location-id="' + locationId + '"] tbody');
-            // Remove existing divider rows
-            $tbody.find('.amp-divider-row').remove();
-            // Insert dividers at correct positions
-            dividers.forEach(function(d) {
-                var $rows = $tbody.find('tr.amp-row');
-                var $divRow = $(
-                    '<tr class="amp-divider-row" data-divider-id="' + d.id + '">' +
-                    '<td colspan="4" class="amp-divider-cell">' +
-                    '<span class="amp-divider-line"></span>' +
-                    '<input class="amp-divider-label" type="text" value="' + (d.label||'') + '" placeholder="— divider label —" ' +
-                    'onblur="saveDividerLabel('' + locationId + '', '' + d.id + '', this.value)" ' +
-                    'onkeydown="if(event.key==='Enter')this.blur()">' +
-                    '<span class="amp-divider-line"></span>' +
-                    '</td>' +
-                    '<td class="amp-divider-actions">' +
-                    '<button class="amp-order-btn" onclick="reorderDivider('' + locationId + '', '' + d.id + '', 'up')" title="Move up">▲</button>' +
-                    '<button class="amp-order-btn" onclick="reorderDivider('' + locationId + '', '' + d.id + '', 'down')" title="Move down">▼</button>' +
-                    '<button class="amp-order-btn amp-divider-delete" onclick="deleteDivider('' + locationId + '', '' + d.id + '')" title="Delete">✕</button>' +
-                    '</td></tr>'
-                );
-                if (d.afterAmpIndex === undefined || d.afterAmpIndex < 0) {
-                    $tbody.prepend($divRow);
-                } else if (d.afterAmpIndex >= $rows.length) {
-                    $tbody.append($divRow);
-                } else {
-                    $rows.eq(d.afterAmpIndex).after($divRow);
-                }
+        function dividerAjax(url, data, callback) {
+            data.csrfmiddlewaretoken = window.CSRF_TOKEN;
+            $.ajax({
+                url: url,
+                type: 'POST',
+                data: data,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(r) { if (callback) callback(r); },
+                error: function(xhr) { alert('Error: ' + xhr.status); }
             });
         }
-
-        window.addDivider = function(locationId) {
-            var dividers = loadDividers(locationId);
-            var $rows = $('[data-location-id="' + locationId + '"] tbody tr.amp-row');
-            var id = 'd' + Date.now();
-            dividers.push({id: id, label: '', afterAmpIndex: $rows.length - 1});
-            saveDividers(locationId, dividers);
-            renderDividers(locationId);
+        window.addDivider = function(locationId, projectId) {
+            dividerAjax('/audiopatch/api/amp/divider/add/',
+                {location_id: locationId, project_id: projectId, label: ''},
+                function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
-
-        window.saveDividerLabel = function(locationId, dividerId, label) {
-            var dividers = loadDividers(locationId);
-            var d = dividers.find(function(x){ return x.id === dividerId; });
-            if (d) { d.label = label; saveDividers(locationId, dividers); }
+        window.saveDividerLabel = function(dividerId, label) {
+            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/update/', {label: label}, null);
         };
-
-        window.deleteDivider = function(locationId, dividerId) {
-            var dividers = loadDividers(locationId).filter(function(x){ return x.id !== dividerId; });
-            saveDividers(locationId, dividers);
-            renderDividers(locationId);
+        window.deleteDivider = function(dividerId, btn) {
+            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/delete/', {},
+                function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
-
-        window.reorderDivider = function(locationId, dividerId, direction) {
-            var dividers = loadDividers(locationId);
-            var idx = dividers.findIndex(function(x){ return x.id === dividerId; });
-            if (idx < 0) return;
-            var d = dividers[idx];
-            if (direction === 'up') d.afterAmpIndex = Math.max(-1, (d.afterAmpIndex||0) - 1);
-            else d.afterAmpIndex = (d.afterAmpIndex||0) + 1;
-            saveDividers(locationId, dividers);
-            renderDividers(locationId);
+        window.reorderDivider = function(dividerId, direction) {
+            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/reorder/', {direction: direction},
+                function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
-
-        // Render all dividers on page load
-        $(function() {
-            {% for group in grouped_amps %}
-            renderDividers({{ group.location.id }});
-            {% endfor %}
-        });
         // ── Locations modal ─────────────────────────────────────────────
         window.openLocationsModal = function() {
             $('#locationsModal').addClass('open');
