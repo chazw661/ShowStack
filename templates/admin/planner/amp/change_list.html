@@ -483,24 +483,7 @@
                     </thead>
                     <tbody>
                         {% for item in group.items %}
-                        {% if item.type == 'divider' %}
-                        <tr class="amp-divider-row" data-divider-id="{{ item.obj.id }}">
-                            <td colspan="4" class="amp-divider-cell">
-                                <span class="amp-divider-line"></span>
-                                <input class="amp-divider-label" type="text"
-                                       value="{{ item.obj.label }}"
-                                       placeholder="— divider label —"
-                                       onblur="saveDividerLabel({{ item.obj.id }}, this.value)"
-                                       onkeydown="if(event.key==='Enter')this.blur()">
-                                <span class="amp-divider-line"></span>
-                            </td>
-                            <td class="amp-divider-actions">
-                                <button class="amp-order-btn" onclick="reorderDivider({{ item.obj.id }}, 'up')" title="Move up">▲</button>
-                                <button class="amp-order-btn" onclick="reorderDivider({{ item.obj.id }}, 'down')" title="Move down">▼</button>
-                                <button class="amp-order-btn amp-divider-delete" onclick="deleteDivider({{ item.obj.id }}, this)" title="Delete">✕</button>
-                            </td>
-                        </tr>
-                        {% else %}
+                        {% if item.type == 'amp' %}
                         {% with amp=item.obj %}
                         <tr class="amp-row" data-amp-id="{{ amp.id }}"
                             {% if amp.color %}style="background-color: {{ amp.color }}20;"{% endif %}>
@@ -527,7 +510,7 @@
                     </tbody>
                 </table>
                 <button class="add-divider-btn"
-                        onclick="addDivider({{ group.location.id }}, {{ request.current_project.id }})">
+                        onclick="addDivider({{ group.location.id }})">
                     + Add Divider
                 </button>
             </div>
@@ -735,33 +718,90 @@
 
         // ── Amp Dividers ─────────────────────────────────────────────
         window.CSRF_TOKEN = '{{ csrf_token }}';
-        function dividerAjax(url, data, callback) {
-            data.csrfmiddlewaretoken = window.CSRF_TOKEN;
-            $.ajax({
-                url: url,
-                type: 'POST',
-                data: data,
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                success: function(r) { if (callback) callback(r); },
-                error: function(xhr) { alert('Error: ' + xhr.status); }
+        // ── Amp Dividers (localStorage) ──────────────────────────────
+        var PROJECT_ID = '{{ request.current_project.id }}';
+
+        function divKey(locId) { return 'dividers_p' + PROJECT_ID + '_l' + locId; }
+        function getDividers(locId) { try { return JSON.parse(localStorage.getItem(divKey(locId)) || '[]'); } catch(e) { return []; } }
+        function putDividers(locId, arr) { localStorage.setItem(divKey(locId), JSON.stringify(arr)); }
+
+        function makeDividerRow(locId, d) {
+            var $tr = $('<tr class="amp-divider-row"></tr>').attr('data-divider-id', d.id);
+            var $cell = $('<td colspan="4" class="amp-divider-cell"></td>');
+            $cell.append('<span class="amp-divider-line"></span>');
+            var $input = $('<input class="amp-divider-label" type="text">').val(d.label||'').attr('placeholder','— divider label —');
+            $input.on('blur', function() { saveDividerLabel(locId, d.id, $(this).val()); });
+            $input.on('keydown', function(e) { if(e.key==='Enter') $(this).blur(); });
+            $cell.append($input);
+            $cell.append('<span class="amp-divider-line"></span>');
+            var $actions = $('<td class="amp-divider-actions"></td>');
+            $actions.append($('<button class="amp-order-btn" title="Move up">▲</button>').on('click', function(e){ e.stopPropagation(); reorderDivider(locId, d.id, 'up'); }));
+            $actions.append($('<button class="amp-order-btn" title="Move down">▼</button>').on('click', function(e){ e.stopPropagation(); reorderDivider(locId, d.id, 'down'); }));
+            $actions.append($('<button class="amp-order-btn amp-divider-delete" title="Delete">✕</button>').on('click', function(e){ e.stopPropagation(); deleteDivider(locId, d.id); }));
+            $tr.append($cell).append($actions);
+            return $tr;
+        }
+
+        function renderDividers(locId) {
+            var $tbody = $('[data-location-id="' + locId + '"] .amp-group-table tbody');
+            $tbody.find('.amp-divider-row').remove();
+            var dividers = getDividers(locId);
+            var $ampRows = $tbody.find('tr.amp-row');
+            dividers.forEach(function(d) {
+                var after = d.after !== undefined ? d.after : $ampRows.length - 1;
+                var $row = makeDividerRow(locId, d);
+                if (after < 0) $tbody.prepend($row);
+                else if (after >= $ampRows.length) $tbody.append($row);
+                else $ampRows.eq(after).after($row);
             });
         }
-        window.addDivider = function(locationId, projectId) {
-            dividerAjax('/audiopatch/api/amp/divider/add/',
-                {location_id: locationId, project_id: projectId, label: ''},
-                function(r) { if (r.success) location.reload(); else alert(r.error); });
+
+        window.addDivider = function(locId) {
+            var dividers = getDividers(locId);
+            var $ampRows = $('[data-location-id="' + locId + '"] .amp-group-table tbody tr.amp-row');
+            dividers.push({id: 'd' + Date.now(), label: '', after: $ampRows.length - 1});
+            putDividers(locId, dividers);
+            renderDividers(locId);
         };
-        window.saveDividerLabel = function(dividerId, label) {
-            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/update/', {label: label}, null);
+
+        window.saveDividerLabel = function(locId, id, label) {
+            var dividers = getDividers(locId);
+            var d = dividers.find(function(x){ return x.id===id; });
+            if (d) { d.label = label; putDividers(locId, dividers); }
         };
-        window.deleteDivider = function(dividerId, btn) {
-            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/delete/', {},
-                function(r) { if (r.success) location.reload(); else alert(r.error); });
+
+        window.deleteDivider = function(locId, id) {
+            putDividers(locId, getDividers(locId).filter(function(x){ return x.id!==id; }));
+            renderDividers(locId);
         };
-        window.reorderDivider = function(dividerId, direction) {
-            dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/reorder/', {direction: direction},
-                function(r) { if (r.success) location.reload(); else alert(r.error); });
+
+        window.reorderDivider = function(locId, id, dir) {
+            var dividers = getDividers(locId);
+            var d = dividers.find(function(x){ return x.id===id; });
+            if (!d) return;
+            var $ampRows = $('[data-location-id="' + locId + '"] .amp-group-table tbody tr.amp-row');
+            var max = $ampRows.length - 1;
+            if (dir === 'up') d.after = Math.max(-1, (d.after||0) - 1);
+            else d.after = Math.min(max + 1, (d.after||0) + 1);
+            putDividers(locId, dividers);
+            renderDividers(locId);
         };
+
+        // Re-render dividers when location is opened
+        var _origToggle = window.toggleLocation;
+        window.toggleLocation = function(headerEl) {
+            _origToggle(headerEl);
+            var locId = $(headerEl).closest('.location-group').data('location-id');
+            renderDividers(locId);
+        };
+
+        // Render on page load for already-open locations
+        $(function() {
+            $('.location-body.open').each(function() {
+                var locId = $(this).closest('.location-group').data('location-id');
+                renderDividers(locId);
+            });
+        });
         // ── Locations modal ─────────────────────────────────────────────
         window.openLocationsModal = function() {
             $('#locationsModal').addClass('open');
