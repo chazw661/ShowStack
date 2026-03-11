@@ -145,6 +145,11 @@ urlpatterns = [
     path('devices/all/pdf/', views.all_devices_pdf_export, name='all_devices_pdf_export'),
     # Amplifier PDF export
     path('amps/all/pdf/', views.all_amps_pdf_export, name='all_amps_pdf_export'),
+    path('api/amp/reorder/', views.amp_reorder, name='amp_reorder'),
+    path('api/amp/divider/add/', views.amp_divider_add, name='amp_divider_add'),
+    path('api/amp/divider/<int:divider_id>/update/', views.amp_divider_update, name='amp_divider_update'),
+    path('api/amp/divider/<int:divider_id>/delete/', views.amp_divider_delete, name='amp_divider_delete'),
+    path('api/amp/divider/<int:divider_id>/reorder/', views.amp_divider_reorder, name='amp_divider_reorder'),
     path('pa-cables/all/pdf/', views.all_pa_cables_pdf_export, name='all_pa_cables_pdf_export'),
     path('comm-beltpacks/all/pdf/', views.all_comm_beltpacks_pdf_export, name='all_comm_beltpacks_pdf_export'),
     path('comm-crew-names/import-csv/', views.import_comm_crew_names_csv, name='import_comm_crew_names_csv'),

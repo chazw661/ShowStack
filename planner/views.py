@@ -32,6 +32,7 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
+from .models import Amp, AmpDivider, Location
 import hashlib
 import os
 from io import BytesIO
@@ -2831,6 +2832,116 @@ def device_pdf_export(request, device_id):
 #-------Amplifier PDF Export----
 
 # Amplifier PDF Export
+
+@require_POST
+def amp_reorder(request):
+    """Reorder an amp within its location group"""
+    try:
+        data = json.loads(request.body)
+        amp = get_object_or_404(Amp, id=data['amp_id'])
+        direction = data.get('direction')  # 'up' or 'down'
+        location_items = get_location_items(amp.location, amp.project)
+        idx = next((i for i, item in enumerate(location_items) if item.get('type') == 'amp' and item['obj'].id == amp.id), None)
+        if idx is None:
+            return JsonResponse({'success': False, 'error': 'Amp not found'})
+        if direction == 'up' and idx > 0:
+            swap_idx = idx - 1
+        elif direction == 'down' and idx < len(location_items) - 1:
+            swap_idx = idx + 1
+        else:
+            return JsonResponse({'success': False, 'error': 'Cannot move'})
+        # Swap sort_orders
+        item_a = location_items[idx]
+        item_b = location_items[swap_idx]
+        a_order = item_a['obj'].sort_order
+        b_order = item_b['obj'].sort_order
+        item_a['obj'].sort_order = b_order
+        item_b['obj'].sort_order = a_order
+        item_a['obj'].save()
+        item_b['obj'].save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
+def amp_divider_add(request):
+    """Add a new divider to a location"""
+    try:
+        data = json.loads(request.body)
+        location = get_object_or_404(Location, id=data['location_id'])
+        project = get_object_or_404(Project, id=data['project_id'])
+        # Place at end of location items
+        location_items = get_location_items(location, project)
+        max_order = max((item['obj'].sort_order for item in location_items), default=-1)
+        divider = AmpDivider.objects.create(
+            project=project,
+            location=location,
+            label=data.get('label', ''),
+            sort_order=max_order + 1
+        )
+        return JsonResponse({'success': True, 'divider_id': divider.id, 'sort_order': divider.sort_order})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
+def amp_divider_update(request, divider_id):
+    """Update a divider label"""
+    try:
+        data = json.loads(request.body)
+        divider = get_object_or_404(AmpDivider, id=divider_id)
+        divider.label = data.get('label', '')
+        divider.save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
+def amp_divider_delete(request, divider_id):
+    """Delete a divider"""
+    try:
+        divider = get_object_or_404(AmpDivider, id=divider_id)
+        divider.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+@require_POST
+def amp_divider_reorder(request, divider_id):
+    """Move a divider up or down"""
+    try:
+        data = json.loads(request.body)
+        divider = get_object_or_404(AmpDivider, id=divider_id)
+        direction = data.get('direction')
+        location_items = get_location_items(divider.location, divider.project)
+        idx = next((i for i, item in enumerate(location_items) if item.get('type') == 'divider' and item['obj'].id == divider.id), None)
+        if idx is None:
+            return JsonResponse({'success': False, 'error': 'Divider not found'})
+        if direction == 'up' and idx > 0:
+            swap_idx = idx - 1
+        elif direction == 'down' and idx < len(location_items) - 1:
+            swap_idx = idx + 1
+        else:
+            return JsonResponse({'success': False, 'error': 'Cannot move'})
+        item_a = location_items[idx]
+        item_b = location_items[swap_idx]
+        a_order = item_a['obj'].sort_order
+        b_order = item_b['obj'].sort_order
+        item_a['obj'].sort_order = b_order
+        item_b['obj'].sort_order = a_order
+        item_a['obj'].save()
+        item_b['obj'].save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def get_location_items(location, project):
+    """Return interleaved list of amps and dividers sorted by sort_order"""
+    amps = list(Amp.objects.filter(location=location, project=project).order_by('sort_order', 'name'))
+    dividers = list(AmpDivider.objects.filter(location=location, project=project).order_by('sort_order'))
+    items = [{'type': 'amp', 'obj': a} for a in amps] + [{'type': 'divider', 'obj': d} for d in dividers]
+    items.sort(key=lambda x: x['obj'].sort_order)
+    return items
+
 def all_amps_pdf_export(request):
     """Export all amplifiers to PDF - filtered by current project"""
     

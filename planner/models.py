@@ -1018,6 +1018,7 @@ class Amp(models.Model):
         max_length=100, 
         help_text="Unique identifier (e.g., 'LA12X-1', 'Stage Left 1')"
     )
+    sort_order = models.IntegerField(default=0, help_text="Order within location group")
     ip_address = models.GenericIPAddressField(blank=True, null=True)
 
     color = models.CharField(
@@ -1226,6 +1227,20 @@ class AmpChannel(models.Model):
         return f"{self.amp.name} - Ch{self.channel_number}"
 
 
+
+# -------Amp Dividers--------
+class AmpDivider(models.Model):
+    """A labeled divider row that can be placed between amps in a location group"""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
+    location = models.ForeignKey('Location', on_delete=models.CASCADE, related_name='amp_dividers')
+    label = models.CharField(max_length=100, default='', blank=True)
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order']
+
+    def __str__(self):
+        return f"Divider: {self.label or '---'} ({self.location})"
 
         # -------System Processors--------
 

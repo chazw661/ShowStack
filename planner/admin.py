@@ -34,7 +34,7 @@ from django.db import models
 # Model imports (add the mic tracking models to your existing model imports)
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
-from .models import Location, Amp, AmpChannel
+from .models import Location, Amp, AmpChannel, AmpDivider
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup
@@ -1643,11 +1643,19 @@ class AmpAdmin(BaseEquipmentAdmin):
                 amps = Amp.objects.filter(
                     location=loc,
                     project=request.current_project
-                ).order_by('name')
+                ).order_by('sort_order', 'name')
+                dividers = AmpDivider.objects.filter(
+                    location=loc,
+                    project=request.current_project
+                ).order_by('sort_order')
+                # Interleave amps and dividers by sort_order
+                items = [{'type': 'amp', 'obj': a} for a in amps] + [{'type': 'divider', 'obj': d} for d in dividers]
+                items.sort(key=lambda x: x['obj'].sort_order)
                 if amps.exists():
                     active_locations.append({
                         'location': loc,
                         'amps': amps,
+                        'items': items,
                         'amp_count': amps.count(),
                     })
             
