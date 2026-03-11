@@ -755,7 +755,6 @@
             dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/update/', {label: label}, null);
         };
         window.deleteDivider = function(dividerId, btn) {
-            if (!confirm('Delete this divider?')) return;
             dividerAjax('/audiopatch/api/amp/divider/' + dividerId + '/delete/', {},
                 function(r) { if (r.success) location.reload(); else alert(r.error); });
         };
