@@ -2867,7 +2867,7 @@ def amp_reorder(request):
 def amp_divider_add(request):
     """Add a new divider to a location"""
     try:
-        data = json.loads(request.body)
+        data = request.POST
         location = get_object_or_404(Location, id=data['location_id'])
         project = get_object_or_404(Project, id=data['project_id'])
         # Place at end of location items
@@ -2887,7 +2887,7 @@ def amp_divider_add(request):
 def amp_divider_update(request, divider_id):
     """Update a divider label"""
     try:
-        data = json.loads(request.body)
+        data = request.POST
         divider = get_object_or_404(AmpDivider, id=divider_id)
         divider.label = data.get('label', '')
         divider.save()
@@ -2909,7 +2909,7 @@ def amp_divider_delete(request, divider_id):
 def amp_divider_reorder(request, divider_id):
     """Move a divider up or down"""
     try:
-        data = json.loads(request.body)
+        data = request.POST
         divider = get_object_or_404(AmpDivider, id=divider_id)
         direction = data.get('direction')
         location_items = get_location_items(divider.location, divider.project)

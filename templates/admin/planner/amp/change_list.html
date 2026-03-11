@@ -736,12 +736,12 @@
         // ── Amp Dividers ─────────────────────────────────────────────
         window.CSRF_TOKEN = '{{ csrf_token }}';
         function dividerAjax(url, data, callback) {
+            data.csrfmiddlewaretoken = window.CSRF_TOKEN;
             $.ajax({
                 url: url,
                 type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(data),
-                headers: { 'X-CSRFToken': window.CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest' },
+                data: data,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
                 success: function(r) { if (callback) callback(r); },
                 error: function(xhr) { alert('Error: ' + xhr.status); }
             });
