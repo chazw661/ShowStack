@@ -306,6 +306,10 @@ document.addEventListener('DOMContentLoaded', function() {
 <link rel="apple-touch-icon" sizes="180x180" href="{% static 'admin/img/icon_180x180.png' %}">
 
 <!-- Force dark theme for all users -->
+<style>
+/* Hide Django admin theme switcher */
+#django-admin-theme-toggle, .theme-toggle { display: none !important; }
+</style>
 <script>
     // Run immediately to prevent flash of light theme
     (function() {
