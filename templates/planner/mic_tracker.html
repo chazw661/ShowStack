@@ -727,9 +727,11 @@
                                         </div>
                                     </div>
                                     <textarea class="a2-notes-input"
+                                              id="a2-notes-{{ assignment.id }}"
+                                              data-active-slot-id="{% if active_slot %}{{ active_slot.id }}{% endif %}"
                                               placeholder="Notes (allergies, preferences, setup tips...)"
-                                              onblur="updateField({{ assignment.id }}, 'notes', this.value)"
-                                              {% if is_viewer %}readonly{% endif %}>{% if active_slot %}{{ active_slot.notes|default:'' }}{% else %}{{ assignment.notes|default:'' }}{% endif %}</textarea>
+                                              onblur="if(this.dataset.activeSlotId) updateSlotField(this.dataset.activeSlotId, 'notes', this.value)"
+                                              {% if is_viewer %}readonly{% endif %}>{% if active_slot %}{{ active_slot.notes|default:'' }}{% endif %}</textarea>
                                     {% endwith %}
                                 </div>
                             </div>
