@@ -15,8 +15,8 @@ class ShowStackAdminSite(admin.AdminSite):
     - Viewers: See only equipment sections (read-only enforced at model level)
     """
     
-    site_header = "ShowStack Administration"
-    site_title = "ShowStack Admin"
+    site_header = "ShowStack"
+    site_title = "ShowStack"
     index_title = "Equipment Management"
     
     def get_app_list(self, request, app_label=None):
