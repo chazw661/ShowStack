@@ -431,10 +431,9 @@ function renderChecklists() {
     const container = document.getElementById('checklistContainer');
     container.innerHTML = '';
 
-    [activeTab].forEach(sectionName => {
-        if (!checklists[sectionName]) return;
+    Object.keys(checklists).forEach(sectionName => {
         const section = checklists[sectionName];
-        const sectionStatuses = statuses[sectionName] || {setup:{}, daily:{}};
+        const sectionStatuses = statuses[sectionName];
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'checklist-section';
         
@@ -721,10 +720,9 @@ async function resetAll() {
 function exportToCSV() {
     let csv = 'Section,Type,Task,Stage,Day 1,Day 2,Day 3,Day 4\n';
     
-    [activeTab].forEach(sectionName => {
-        if (!checklists[sectionName]) return;
+    Object.keys(checklists).forEach(sectionName => {
         const section = checklists[sectionName];
-        const sectionStatuses = statuses[sectionName] || {setup:{}, daily:{}};
+        const sectionStatuses = statuses[sectionName];
         
         ['setup', 'daily'].forEach(type => {
             section[type].forEach((task, index) => {
