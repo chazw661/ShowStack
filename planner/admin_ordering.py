@@ -69,6 +69,7 @@ def ordered_get_app_list(request, app_label=None):
     # Models to always hide from sidebar (accessible via direct URL)
     always_hidden = {
         'ampmodel',
+        'micgroup',
     }
     
     # Define the correct order with proper groupings
