@@ -10,6 +10,35 @@
         padding: 0;
     }
 
+    /* ── Checklist Tabs ── */
+    .checklist-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #333;
+        padding-bottom: 0;
+    }
+    .checklist-tab {
+        padding: 10px 24px;
+        background: #222;
+        color: #aaa;
+        border: 1px solid #333;
+        border-bottom: none;
+        border-radius: 6px 6px 0 0;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        transition: all 0.15s;
+    }
+    .checklist-tab:hover { background: #2a2a2a; color: #ddd; }
+    .checklist-tab.active {
+        background: #1a1a1a;
+        color: #4a9eff;
+        border-color: #444;
+        border-bottom-color: #1a1a1a;
+        margin-bottom: -2px;
+    }
     .checklist-container {
         background-color: #1a1a1a;
         color: #e0e0e0;
@@ -315,6 +344,11 @@
         </select>
     </div>
 
+    <div class="checklist-tabs" id="checklistTabs">
+        <button class="checklist-tab active" onclick="switchTab('FOH Check List', this)">FOH</button>
+        <button class="checklist-tab" onclick="switchTab('A2 Check List', this)">A2</button>
+        <button class="checklist-tab" onclick="switchTab('Prep Check List', this)">Prep</button>
+    </div>
     <div id="checklistContainer"></div>
 </div>
 

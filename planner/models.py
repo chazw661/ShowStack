@@ -3471,19 +3471,8 @@ class AudioChecklist(models.Model):
                     'Verify Workbench control',
                 ],
             },
-            'Video Check List': {
-                'setup': [
-                    'Verify all video inputs',
-                    'Check SDI routing',
-                    'Verify HDMI connections',
-                    'Test all cameras',
-                    'Configure streaming outputs',
-                    'Set up confidence monitors',
-                    'Verify recording devices',
-                    'Check video sync',
-                    'Test graphics systems',
-                    'Verify projection mapping',
-                ],
+            'Prep Check List': {
+                'setup': [],
                 'daily': [],
             },
         }
