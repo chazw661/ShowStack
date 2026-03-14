@@ -3472,7 +3472,21 @@ class AudioChecklist(models.Model):
                 ],
             },
             'Prep Check List': {
-                'setup': [],
+                'setup': [
+                    'Patch Console',
+                    'Dante Network- All Devices including FOH Playback',
+                    'Burn in Dante Network overnight',
+                    'Line Check Inputs',
+                    'Line Check Outputs',
+                    'Verify all amps on LANET',
+                    'Update Amps',
+                    'Verfy all amps in Redundant',
+                    'Check Network with Milan Manager Software',
+                    'Wire & LABEL Amp Analogue Inputs',
+                    'Label Tops of Amp Racks with Location',
+                    'Label Fronts of Amps',
+                    'Pack all Prep cables in cube case-including Network, Analogue, and Ethercon (Dante Network)',
+                ],
                 'daily': [],
             },
         }

@@ -427,13 +427,30 @@ async function apiCall(url, data) {
     }
 }
 
+function getDayLabel(sectionName, dayNum) {
+    return localStorage.getItem('dayLabel_' + sectionName + '_' + dayNum) || ('Day ' + dayNum);
+}
+function setDayLabel(sectionName, dayNum, value) {
+    localStorage.setItem('dayLabel_' + sectionName + '_' + dayNum, value);
+}
+
+var activeTab = 'FOH Check List';
+
+function switchTab(tabName, btn) {
+    activeTab = tabName;
+    document.querySelectorAll('.checklist-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    renderChecklists();
+}
+
 function renderChecklists() {
     const container = document.getElementById('checklistContainer');
     container.innerHTML = '';
 
-    Object.keys(checklists).forEach(sectionName => {
+    [activeTab].forEach(sectionName => {
         const section = checklists[sectionName];
-        const sectionStatuses = statuses[sectionName];
+        const sectionStatuses = statuses[sectionName] || {setup:{}, daily:{}};
+        if (!checklists[sectionName]) return;
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'checklist-section';
         
@@ -456,7 +473,7 @@ function renderChecklists() {
         // Left column - Setup tasks (one-time)
         if (section.setup && section.setup.length > 0) {
             const setupDiv = document.createElement('div');
-            setupDiv.style.flex = '0 0 40%';
+            setupDiv.style.flex = '0 0 55%';
             
             const setupHeader = document.createElement('h4');
             setupHeader.style.color = '#ffc107';
@@ -505,9 +522,9 @@ function createSetupTable(sectionName, type, tasks, taskStatuses) {
     const headerRow = document.createElement('tr');
     headerRow.innerHTML = `
         <th style="background-color: #ffc107; color: #000;">TASK</th>
-        <th style="background-color: #000; color: #fff; width: 130px;">STAGE</th>
-        <th style="background-color: #000; color: #fff; width: 120px;">STATUS</th>
-        <th style="width: 60px;">Actions</th>
+        <th style="background-color: #000; color: #fff; width: 90px;">STAGE</th>
+        <th style="background-color: #000; color: #fff; width: 110px;">STATUS</th>
+        <th style="width: 40px;">Actions</th>
     `;
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -529,16 +546,23 @@ function createDailyTable(sectionName, type, tasks, taskStatuses) {
     
     const thead = document.createElement('thead');
     
-    // Day headers row
+    // Day headers row - editable labels stored in localStorage
     const dayHeaderRow = document.createElement('tr');
-    dayHeaderRow.innerHTML = `
-        <th rowspan="2" style="background-color: #ffc107; color: #000; width: 300px;">TASK</th>
-        <th style="background-color: #ffc107; color: #000;">Day 1 ${sectionName.split(' ')[0]}</th>
-        <th style="background-color: #ffc107; color: #000;">Day 2 ${sectionName.split(' ')[0]}</th>
-        <th style="background-color: #ffc107; color: #000;">Day 3 ${sectionName.split(' ')[0]}</th>
-        <th style="background-color: #ffc107; color: #000;">Day 4 ${sectionName.split(' ')[0]}</th>
-        <th rowspan="2" style="width: 60px;">Actions</th>
-    `;
+    const prefix = sectionName.split(' ')[0];
+    let dayHeadersHtml = '<th rowspan="2" style="background-color: #ffc107; color: #000; width: 300px;">TASK</th>';
+    for (let d = 1; d <= 4; d++) {
+        const label = getDayLabel(sectionName, d);
+        dayHeadersHtml += `<th style="background-color: #ffc107; color: #000; min-width:80px;">
+            <input class="day-label-input" 
+                   value="${label}"
+                   data-section="${sectionName}" data-day="${d}"
+                   onblur="setDayLabel('${sectionName}', ${d}, this.value); this.closest('table').querySelectorAll('.day-col-${d}').forEach(el => el.setAttribute('data-label', this.value));"
+                   onkeydown="if(event.key==='Enter') this.blur()"
+                   style="background:transparent;border:none;border-bottom:1px dashed #0008;color:#000;font-weight:700;font-size:12px;width:100%;text-align:center;outline:none;padding:2px;">
+        </th>`;
+    }
+    dayHeadersHtml += '<th rowspan="2" style="width: 60px;">Actions</th>';
+    dayHeaderRow.innerHTML = dayHeadersHtml;
     thead.appendChild(dayHeaderRow);
     
     table.appendChild(thead);
