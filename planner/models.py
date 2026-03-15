@@ -3905,16 +3905,41 @@ class CommConfigPortAssignment(models.Model):
         ('Talk', 'Talk Only'),
         ('Listen', 'Listen Only'),
     ]
-
     config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='port_assignments')
     port_type = models.CharField(max_length=10, choices=PORT_TYPE_CHOICES)
     port_label = models.CharField(max_length=30)
     port_gid = models.CharField(max_length=60)
     partyline = models.ForeignKey(
-        CommConfigPartyline, on_delete=models.CASCADE,
+        CommConfigPartyline, on_delete=models.SET_NULL,
+        null=True, blank=True,
         related_name='port_assignments'
     )
     join_mode = models.CharField(max_length=15, choices=JOIN_MODE_CHOICES, default='Talk-Listen')
+
+    # 4-Wire specific
+    port_function = models.CharField(
+        max_length=10,
+        choices=[('4wire-x', '4-Wire-X (To Matrix)'), ('4wire', '4-Wire (To Panel)')],
+        default='4wire-x',
+        blank=True,
+    )
+    receive_call_signal = models.BooleanField(default=False)
+    output_level = models.CharField(
+        max_length=10,
+        choices=[('line', 'Line Level (0dB)'), ('mic', 'Mic Level (-55dB)')],
+        default='line',
+        blank=True,
+    )
+
+    # 2-Wire specific
+    mode_2w = models.CharField(
+        max_length=10,
+        choices=[('clearcom', 'Clear-Com'), ('rts', 'RTS')],
+        default='clearcom',
+        blank=True,
+    )
+    power_enabled = models.BooleanField(default=False)
+    termination_enabled = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Config Port Assignment"
@@ -3922,4 +3947,32 @@ class CommConfigPortAssignment(models.Model):
         ordering = ['port_type', 'port_label']
 
     def __str__(self):
-        return f"{self.port_label} → {self.partyline.label} ({self.join_mode})"
+        pl = self.partyline.label if self.partyline else 'Unassigned'
+        return f"{self.port_label} → {pl} ({self.join_mode})"
+
+
+class CommConfigDanteChannel(models.Model):
+    """A Dante audio channel assigned to a partyline."""
+    DIRECTION_CHOICES = [
+        ('send', 'Send (Output)'),
+        ('receive', 'Receive (Input)'),
+    ]
+
+    config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='dante_channels')
+    channel_number = models.IntegerField()
+    label = models.CharField(max_length=40)
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default='receive')
+    partyline = models.ForeignKey(
+        CommConfigPartyline, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='dante_channels'
+    )
+
+    class Meta:
+        verbose_name = "Dante Channel"
+        verbose_name_plural = "Dante Channels"
+        ordering = ['direction', 'channel_number']
+        unique_together = ['config', 'direction', 'channel_number']
+
+    def __str__(self):
+        pl = self.partyline.label if self.partyline else 'Unassigned'
+        return f"Dante {self.direction} {self.channel_number}: {self.label} → {pl}"

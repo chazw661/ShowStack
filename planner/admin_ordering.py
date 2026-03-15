@@ -100,6 +100,7 @@ def ordered_get_app_list(request, app_label=None):
         
         # Communications (12-15)
         'commbeltpack': 12,
+        'commconfig': 12.5,
         'commposition': 13,
         'commcrewname': 14,
         'commchannel': 15,

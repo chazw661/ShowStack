@@ -1,0 +1,1304 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}COMM Config | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/custom_admin.css' %}">
+<style>
+  /* ── Layout ── */
+  .cc-container {
+    padding: 20px;
+    max-width: 1400px;
+  }
+
+  /* ── Header bar ── */
+  .cc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .cc-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #e0e0e0;
+    font-weight: 600;
+  }
+  .cc-header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* ── Buttons ── */
+  .cc-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background 0.2s, opacity 0.2s;
+  }
+  .cc-btn-primary { background: #4a9eff; color: #fff; }
+  .cc-btn-primary:hover { background: #3a8eef; }
+  .cc-btn-secondary { background: #2a2a4a; color: #c0c0c0; border: 1px solid #3a3a5a; }
+  .cc-btn-secondary:hover { background: #3a3a5a; }
+  .cc-btn-success { background: #28a745; color: #fff; }
+  .cc-btn-success:hover { background: #218838; }
+  .cc-btn-danger { background: #dc3545; color: #fff; }
+  .cc-btn-danger:hover { background: #c82333; }
+  .cc-btn-disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── List view cards ── */
+  .cc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .cc-card {
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 10px;
+    padding: 18px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.1s;
+    text-decoration: none;
+    display: block;
+  }
+  .cc-card:hover {
+    border-color: #4a9eff;
+    transform: translateY(-2px);
+  }
+  .cc-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 6px;
+  }
+  .cc-card-meta {
+    font-size: 0.8rem;
+    color: #8888aa;
+    margin-bottom: 10px;
+  }
+  .cc-card-stats {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .cc-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #1e1e3a;
+    border-radius: 6px;
+    padding: 6px 12px;
+    min-width: 56px;
+  }
+  .cc-stat-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #4a9eff;
+  }
+  .cc-stat-label {
+    font-size: 0.7rem;
+    color: #6666aa;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .cc-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #a0a0cc;
+  }
+  .cc-empty-state .cc-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+
+  /* ── Dropdown menu ── */
+  .cc-dropdown { position: relative; display: inline-block; }
+  .cc-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: #1e1e3a;
+    border: 1px solid #3a3a5a;
+    border-radius: 8px;
+    min-width: 200px;
+    z-index: 100;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .cc-dropdown-menu.open { display: block; }
+  .cc-dropdown-item {
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    color: #c0c0c0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s;
+  }
+  .cc-dropdown-item:hover:not(.cc-dropdown-item--disabled) { background: #2a2a4a; }
+  .cc-dropdown-item--disabled { opacity: 0.4; cursor: not-allowed; }
+  .cc-dropdown-item .badge {
+    font-size: 0.65rem;
+    background: #2a2a4a;
+    color: #6666aa;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+
+  /* ── Editor layout ── */
+  .cc-editor-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .cc-back-btn {
+    color: #4a9eff;
+    text-decoration: none;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .cc-back-btn:hover { color: #7abfff; }
+  .cc-editor-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin: 0;
+    flex: 1;
+  }
+
+  /* ── Tabs ── */
+  .cc-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #2a2a4a;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .cc-tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #8888aa;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+    transition: color 0.2s, border-color 0.2s;
+    user-select: none;
+  }
+  .cc-tab:hover { color: #c0c0c0; }
+  .cc-tab.active {
+    color: #4a9eff;
+    border-bottom-color: #4a9eff;
+  }
+  .cc-tab-panel { display: none; }
+  .cc-tab-panel.active { display: block; }
+
+  /* ── Partylines tab ── */
+  .cc-partyline-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .cc-pl-card {
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 14px;
+    position: relative;
+  }
+  .cc-pl-channel {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #a0a0cc;
+    margin-bottom: 4px;
+  }
+  .cc-pl-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    border: none;
+    background: transparent;
+    width: 100%;
+    padding: 2px 0;
+    border-bottom: 1px dashed transparent;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .cc-pl-name:focus { border-bottom-color: #4a9eff; }
+  .cc-pl-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+  }
+  .cc-pl-helixnet {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #8888aa;
+    cursor: pointer;
+  }
+  .cc-pl-helixnet input[type=checkbox] { accent-color: #4a9eff; }
+  .cc-pl-delete {
+    font-size: 0.75rem;
+    color: #884444;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  .cc-pl-delete:hover { color: #dc3545; }
+
+  /* ── Roles tab ── */
+  .cc-role-group { margin-bottom: 24px; }
+  .cc-role-group-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #a0a0cc;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #2a2a4a;
+  }
+  .cc-role-row {
+    display: flex;
+    align-items: center;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-left: 4px solid #4a9eff;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 12px;
+  }
+  .cc-role-row:hover { background: #1a1a3a; }
+  .cc-role-row.expanded { background: #1a1a3a; border-left-color: #7abfff; }
+  .cc-role-expand-icon { font-size: 0.65rem; color: #5555aa; min-width: 14px; transition: color 0.2s; }
+  .cc-role-row.expanded .cc-role-expand-icon { color: #4a9eff; }
+
+  /* ── Keyset editor ── */
+  .cc-keyset-editor {
+    background: #0e0e22;
+    border: 1px solid #2a2a4a;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 14px 16px;
+    margin-bottom: 6px;
+  }
+  .cc-keyset-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .cc-role-rename-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed #3a3a5a;
+    color: #e0e0e0;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 2px 4px;
+    outline: none;
+    min-width: 160px;
+  }
+  .cc-role-rename-input:focus { border-bottom-color: #4a9eff; }
+  .cc-keyset-meta { display: flex; align-items: center; gap: 10px; }
+  .cc-keyset-device-badge {
+    font-size: 0.75rem;
+    background: #1a1a3a;
+    color: #6666cc;
+    border: 1px solid #3a3a5a;
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+  .cc-keyset-grid { display: flex; flex-direction: column; gap: 6px; }
+  .cc-keyset-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+  }
+  .cc-key-letter {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #4a9eff;
+    font-family: monospace;
+    min-width: 20px;
+    text-align: center;
+  }
+  .cc-key-select {
+    background: #1e1e3a;
+    border: 1px solid #2a2a4a;
+    border-radius: 5px;
+    color: #c0c0c0;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    outline: none;
+    cursor: pointer;
+  }
+  .cc-key-select:focus { border-color: #4a9eff; }
+  .cc-key-partyline { flex: 1; min-width: 140px; }
+  .cc-key-activation { min-width: 120px; }
+  .cc-key-talkmode { min-width: 110px; }
+  .cc-role-row[data-device="beltpack"] { border-left-color: #4a9eff; }
+  .cc-role-row[data-device="panel"] { border-left-color: #f0a500; }
+  .cc-role-row[data-device="station"] { border-left-color: #28a745; }
+  .cc-role-name { flex: 1; font-size: 0.875rem; color: #e0e0e0; font-weight: 500; }
+  .cc-role-keyset {
+    display: flex;
+    gap: 5px;
+  }
+  .cc-key-chip {
+    font-size: 0.7rem;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: #2a2a4a;
+    color: #8888cc;
+    font-family: monospace;
+  }
+  .cc-key-chip.assigned { background: #1a3a5a; color: #4a9eff; }
+
+  /* ── Ports tab ── */
+  .cc-port-group { margin-bottom: 24px; }
+  .cc-port-group-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #a0a0cc;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #2a2a4a;
+  }
+  .cc-port-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    gap: 12px;
+  }
+  .cc-port-label { flex: 1; font-size: 0.85rem; color: #c0c0c0; }
+  .cc-port-gid { font-size: 0.75rem; color: #555588; font-family: monospace; min-width: 80px; }
+  .cc-port-select {
+    background: #1e1e3a;
+    border: 1px solid #3a3a5a;
+    border-radius: 5px;
+    color: #c0c0c0;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    min-width: 140px;
+    outline: none;
+  }
+  .cc-port-select:focus { border-color: #4a9eff; }
+  .cc-port-select-sm { min-width: 80px !important; }
+  .cc-port-expanded-row {
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    overflow: hidden;
+  }
+  .cc-port-row-main {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 10px;
+  }
+  .cc-port-row-extra {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px 8px 12px;
+    background: #0e0e22;
+    border-top: 1px solid #1a1a3a;
+    flex-wrap: wrap;
+  }
+  .cc-port-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: monospace;
+    padding: 2px 7px;
+    border-radius: 4px;
+    min-width: 28px;
+    text-align: center;
+  }
+  .cc-port-badge-2w { background: #1a3a1a; color: #4acc4a; border: 1px solid #2a5a2a; }
+  .cc-port-badge-4w { background: #1a2a4a; color: #4a9eff; border: 1px solid #2a3a6a; }
+  .cc-port-name-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed #3a3a5a;
+    color: #e0e0e0;
+    font-size: 0.85rem;
+    padding: 2px 4px;
+    outline: none;
+    min-width: 120px;
+    max-width: 160px;
+  }
+  .cc-port-name-input:focus { border-bottom-color: #4a9eff; }
+  .cc-port-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    color: #8888aa;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .cc-port-toggle input[type=checkbox] { accent-color: #4a9eff; }
+
+  /* ── Sessions tab ── */
+  .cc-session-row {
+    display: flex;
+    align-items: center;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    gap: 12px;
+  }
+  .cc-session-type { font-size: 0.8rem; color: #f0a500; font-family: monospace; min-width: 80px; }
+  .cc-session-detail { flex: 1; font-size: 0.85rem; color: #c0c0c0; }
+
+  /* ── Settings tab ── */
+  .cc-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 800px;
+  }
+  @media (max-width: 600px) { .cc-settings-grid { grid-template-columns: 1fr; } }
+  .cc-field-group { margin-bottom: 14px; }
+  .cc-field-label { font-size: 0.8rem; color: #8888aa; margin-bottom: 4px; display: block; }
+  .cc-field-input {
+    width: 100%;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    padding: 8px 10px;
+    font-size: 0.875rem;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+  }
+  .cc-field-input:focus { border-color: #4a9eff; }
+
+  /* ── CSRF token ── */
+  .cc-csrf { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cc-container">
+
+{% if not config %}
+{# ════════════════════════════════════════════════════════ LIST VIEW ══ #}
+
+  <div class="cc-header">
+    <h1>⚙️ COMM Config</h1>
+    <div class="cc-header-actions">
+      <!-- Upload .cca -->
+      <button class="cc-btn cc-btn-secondary" id="btnUploadCca" onclick="document.getElementById('ccaUploadInput').click()">
+        ⬆ Upload .cca
+      </button>
+      <input type="file" id="ccaUploadInput" accept=".cca" style="display:none">
+
+      <!-- New Config dropdown -->
+      <div class="cc-dropdown">
+        <button class="cc-btn cc-btn-primary" onclick="toggleDropdown()">
+          + New Configuration ▾
+        </button>
+        <div class="cc-dropdown-menu" id="newConfigMenu">
+          <div class="cc-dropdown-item" onclick="createConfig('arcadia')">
+            📡 Arcadia Base Station
+          </div>
+          <div class="cc-dropdown-item cc-dropdown-item--disabled">
+            📻 FreeSpeak II <span class="badge">Soon</span>
+          </div>
+          <div class="cc-dropdown-item cc-dropdown-item--disabled">
+            🔗 HelixNet <span class="badge">Soon</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if configs %}
+  <div class="cc-grid">
+    {% for cfg in configs %}
+    <a class="cc-card" href="{% url 'planner:comm_config_editor' cfg.id %}">
+      <div class="cc-card-title">{{ cfg.device_type|default:"Arcadia" }} — {{ cfg.system_id|default:"—" }}</div>
+      <div class="cc-card-meta">Created {{ cfg.created_at|date:"M j, Y" }}</div>
+      <div class="cc-card-stats">
+        <div class="cc-stat">
+          <span class="cc-stat-val">{{ cfg.partylines.count }}</span>
+          <span class="cc-stat-label">Lines</span>
+        </div>
+        <div class="cc-stat">
+          <span class="cc-stat-val">{{ cfg.roles.count }}</span>
+          <span class="cc-stat-label">Roles</span>
+        </div>
+        <div class="cc-stat">
+          <span class="cc-stat-val">{{ cfg.sessions.count }}</span>
+          <span class="cc-stat-label">Sessions</span>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="cc-empty-state">
+    <div class="cc-empty-icon">📡</div>
+    <p>No configurations yet for this project.</p>
+    <p style="font-size:0.85rem">Click <strong>+ New Configuration</strong> to create your first Arcadia config.</p>
+  </div>
+  {% endif %}
+
+{% else %}
+{# ════════════════════════════════════════════════════════ EDITOR VIEW ══ #}
+
+  <div class="cc-editor-header">
+    <a class="cc-back-btn" href="{% url 'planner:comm_config' %}">← All Configs</a>
+    <h2 class="cc-editor-title">
+      {{ config.device_type|default:"Arcadia" }}
+      <span style="color:#5555aa;font-weight:400;font-size:1rem">/ {{ config.system_id|default:"—" }}</span>
+    </h2>
+    <div style="display:flex;gap:8px;">
+      <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
+      <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="cc-tabs">
+    <div class="cc-tab active" data-panel="partylines">Partylines</div>
+    <div class="cc-tab" data-panel="roles">Roles</div>
+    <div class="cc-tab" data-panel="ports">Ports</div>
+    <div class="cc-tab" data-panel="settings">Settings</div>
+    <div class="cc-tab" data-panel="sessions">Sessions</div>
+  </div>
+
+  <!-- ── PARTYLINES PANEL ── -->
+  <div class="cc-tab-panel active" id="panel-partylines">
+    <div class="cc-partyline-grid" id="partylineGrid">
+      {% for pl in partylines %}
+      <div class="cc-pl-card" data-pl-id="{{ pl.id }}">
+        <div class="cc-pl-channel">CH {{ pl.channel_number }}</div>
+        <input class="cc-pl-name"
+               value="{{ pl.label }}"
+               data-pl-id="{{ pl.id }}"
+               onblur="savePartylineName(this)"
+               onkeydown="if(event.key==='Enter')this.blur()">
+        <div class="cc-pl-footer">
+          <label class="cc-pl-helixnet">
+            <input type="checkbox"
+                   {% if pl.helixnet_enabled %}checked{% endif %}
+                   onchange="toggleHelixnet({{ pl.id }}, this.checked)">
+            HelixNet
+          </label>
+          <button class="cc-pl-delete" onclick="deletePartyline({{ pl.id }})">✕</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="cc-btn cc-btn-secondary" onclick="addPartyline({{ config.id }})">+ Add Partyline</button>
+  </div>
+
+  <!-- ── ROLES PANEL ── -->
+  <div class="cc-tab-panel" id="panel-roles">
+    {% if roles_by_type %}
+      {% for device_type, type_roles in roles_by_type.items %}
+      <div class="cc-role-group">
+        <div class="cc-role-group-label">{{ device_type }}</div>
+        {% for role in type_roles %}
+        <div class="cc-role-block" id="role-block-{{ role.id }}">
+          <div class="cc-role-row" data-device="{{ role.device_type }}" data-role-id="{{ role.id }}" onclick="expandRole({{ role.id }})">
+            <span class="cc-role-expand-icon" id="expand-icon-{{ role.id }}">▶</span>
+            <span class="cc-role-name">
+              <span class="cc-role-name-display" id="role-name-{{ role.id }}">{{ role.label }}</span>
+            </span>
+            <div class="cc-role-keyset" id="role-chips-{{ role.id }}">
+              {% for key in role.keysets.all %}
+              <span class="cc-key-chip {% if key.partyline %}assigned{% endif %}">
+                {{ key.key_letter }}{% if key.partyline %}: {{ key.partyline.label|truncatechars:8 }}{% endif %}
+              </span>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="cc-keyset-editor" id="keyset-editor-{{ role.id }}" style="display:none;">
+            <div class="cc-keyset-editor-header">
+              <div class="cc-keyset-role-label">
+                <input class="cc-role-rename-input"
+                       id="role-rename-{{ role.id }}"
+                       value="{{ role.label }}"
+                       onblur="saveRoleName({{ role.id }}, this.value)"
+                       onkeydown="if(event.key==='Enter')this.blur()">
+              </div>
+              <div class="cc-keyset-meta">
+                <span class="cc-keyset-device-badge">{{ role.get_device_type_display }}</span>
+                <button class="cc-btn cc-btn-danger" style="padding:4px 10px;font-size:0.75rem;" onclick="event.stopPropagation();deleteRole({{ role.id }})">🗑 Delete Role</button>
+              </div>
+            </div>
+            <div class="cc-keyset-grid">
+              {% for key in role.keysets.all %}
+              <div class="cc-keyset-row" id="keyset-row-{{ key.id }}">
+                <div class="cc-key-letter">{{ key.key_letter }}</div>
+                <select class="cc-key-select cc-key-partyline"
+                        onchange="saveKeyset({{ key.id }}, 'partyline', this.value)"
+                        title="Partyline">
+                  <option value="">— Unassigned —</option>
+                  {% for pl in partylines %}
+                  <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
+                    CH{{ pl.channel_number }}: {{ pl.label }}
+                  </option>
+                  {% endfor %}
+                </select>
+                <select class="cc-key-select cc-key-activation"
+                        onchange="saveKeyset({{ key.id }}, 'activation_state', this.value)"
+                        title="Activation">
+                  <option value="talkforcelisten" {% if key.activation_state == "talkforcelisten" %}selected{% endif %}>Talk + FL</option>
+                  <option value="talklisten" {% if key.activation_state == "talklisten" %}selected{% endif %}>Talk + Listen</option>
+                  <option value="talk" {% if key.activation_state == "talk" %}selected{% endif %}>Talk Only</option>
+                  <option value="listen" {% if key.activation_state == "listen" %}selected{% endif %}>Listen Only</option>
+                </select>
+                <select class="cc-key-select cc-key-talkmode"
+                        onchange="saveKeyset({{ key.id }}, 'talk_mode', this.value)"
+                        title="Talk Mode">
+                  <option value="latching" {% if key.talk_mode == "latching" %}selected{% endif %}>Latching</option>
+                  <option value="non-latching" {% if key.talk_mode == "non-latching" %}selected{% endif %}>Momentary</option>
+                  <option value="disabled" {% if key.talk_mode == "disabled" %}selected{% endif %}>Disabled</option>
+                </select>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <p style="color:#5555aa;text-align:center;padding:40px;">No roles defined. Create a new config to seed factory defaults.</p>
+    {% endif %}
+    <button class="cc-btn cc-btn-secondary" style="margin-top:8px;" onclick="addRole({{ config.id }})">+ Add Role</button>
+  </div>
+
+  <!-- ── PORTS PANEL ── -->
+  <div class="cc-tab-panel" id="panel-ports">
+
+    <!-- 2-Wire Ports -->
+    <div class="cc-port-group">
+      <div class="cc-port-group-label">2-Wire Ports</div>
+      {% for port in ports %}{% if port.port_type == '2W' %}
+      <div class="cc-port-expanded-row">
+        <div class="cc-port-row-main">
+          <span class="cc-port-badge cc-port-badge-2w">2W</span>
+          <input class="cc-port-name-input" value="{{ port.port_label }}"
+                 onblur="savePortLabel({{ port.id }}, this.value)"
+                 onkeydown="if(event.key=='Enter')this.blur()">
+          <select class="cc-port-select" onchange="assignPort({{ port.id }}, this.value)">
+            <option value="">— Unassigned —</option>
+            {% for pl in partylines %}
+            <option value="{{ pl.id }}" {% if port.partyline_id == pl.id %}selected{% endif %}>CH{{ pl.channel_number }}: {{ pl.label }}</option>
+            {% endfor %}
+          </select>
+          <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'join_mode', this.value)">
+            <option value="Talk-Listen" {% if port.join_mode == 'Talk-Listen' %}selected{% endif %}>Talk+Listen</option>
+            <option value="Talk" {% if port.join_mode == 'Talk' %}selected{% endif %}>Talk Only</option>
+            <option value="Listen" {% if port.join_mode == 'Listen' %}selected{% endif %}>Listen Only</option>
+          </select>
+        </div>
+        <div class="cc-port-row-extra">
+          <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'mode_2w', this.value)" title="Mode">
+            <option value="clearcom" {% if port.mode_2w == 'clearcom' %}selected{% endif %}>Clear-Com</option>
+            <option value="rts" {% if port.mode_2w == 'rts' %}selected{% endif %}>RTS</option>
+          </select>
+          <label class="cc-port-toggle">
+            <input type="checkbox" {% if port.power_enabled %}checked{% endif %}
+                   onchange="savePortField({{ port.id }}, 'power_enabled', this.checked)">
+            Power
+          </label>
+          <label class="cc-port-toggle">
+            <input type="checkbox" {% if port.termination_enabled %}checked{% endif %}
+                   onchange="savePortField({{ port.id }}, 'termination_enabled', this.checked)">
+            Termination
+          </label>
+        </div>
+      </div>
+      {% endif %}{% endfor %}
+    </div>
+
+    <!-- 4-Wire Ports -->
+    <div class="cc-port-group">
+      <div class="cc-port-group-label">4-Wire Ports</div>
+      {% for port in ports %}{% if port.port_type == '4W' %}
+      <div class="cc-port-expanded-row">
+        <div class="cc-port-row-main">
+          <span class="cc-port-badge cc-port-badge-4w">4W</span>
+          <input class="cc-port-name-input" value="{{ port.port_label }}"
+                 onblur="savePortLabel({{ port.id }}, this.value)"
+                 onkeydown="if(event.key=='Enter')this.blur()">
+          <select class="cc-port-select" onchange="assignPort({{ port.id }}, this.value)">
+            <option value="">— Unassigned —</option>
+            {% for pl in partylines %}
+            <option value="{{ pl.id }}" {% if port.partyline_id == pl.id %}selected{% endif %}>CH{{ pl.channel_number }}: {{ pl.label }}</option>
+            {% endfor %}
+          </select>
+          <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'join_mode', this.value)">
+            <option value="Talk-Listen" {% if port.join_mode == 'Talk-Listen' %}selected{% endif %}>Talk+Listen</option>
+            <option value="Talk" {% if port.join_mode == 'Talk' %}selected{% endif %}>Talk Only</option>
+            <option value="Listen" {% if port.join_mode == 'Listen' %}selected{% endif %}>Listen Only</option>
+          </select>
+        </div>
+        <div class="cc-port-row-extra">
+          <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'port_function', this.value)" title="Port Function">
+            <option value="4wire-x" {% if port.port_function == '4wire-x' %}selected{% endif %}>4-Wire-X (To Matrix)</option>
+            <option value="4wire" {% if port.port_function == '4wire' %}selected{% endif %}>4-Wire (To Panel)</option>
+          </select>
+          <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'output_level', this.value)" title="Output Level">
+            <option value="line" {% if port.output_level == 'line' %}selected{% endif %}>Line Level</option>
+            <option value="mic" {% if port.output_level == 'mic' %}selected{% endif %}>Mic Level</option>
+          </select>
+          <label class="cc-port-toggle">
+            <input type="checkbox" {% if port.receive_call_signal %}checked{% endif %}
+                   onchange="savePortField({{ port.id }}, 'receive_call_signal', this.checked)">
+            Call Signal
+          </label>
+        </div>
+      </div>
+      {% endif %}{% endfor %}
+    </div>
+
+    <!-- Dante Channels -->
+    <div class="cc-port-group">
+      <div class="cc-port-group-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Dante Channels</span>
+        <button class="cc-btn cc-btn-secondary" style="padding:3px 10px;font-size:0.75rem;" onclick="addDanteChannel({{ config.id }})">+ Add Channel</button>
+      </div>
+      {% if dante_channels %}
+        <!-- Receive channels -->
+        {% for ch in dante_channels %}
+        {% if ch.direction == 'receive' %}
+        <div class="cc-port-row" id="dante-row-{{ ch.id }}">
+          <span class="cc-port-gid" style="min-width:50px;color:#f0a500;">RX</span>
+          <input class="cc-port-label" style="background:transparent;border:none;border-bottom:1px dashed #3a3a5a;color:#c0c0c0;outline:none;flex:1;padding:2px 4px;"
+                 value="{{ ch.label }}"
+                 onblur="saveDanteLabel({{ ch.id }}, this.value)"
+                 onkeydown="if(event.key==='Enter')this.blur()">
+          <select class="cc-port-select" onchange="assignDante({{ ch.id }}, this.value)">
+            <option value="">— Unassigned —</option>
+            {% for pl in partylines %}
+            <option value="{{ pl.id }}" {% if ch.partyline_id == pl.id %}selected{% endif %}>
+              CH{{ pl.channel_number }}: {{ pl.label }}
+            </option>
+            {% endfor %}
+          </select>
+          <button class="cc-pl-delete" onclick="deleteDanteChannel({{ ch.id }})">✕</button>
+        </div>
+        {% endif %}
+        {% endfor %}
+        <!-- Send channels -->
+        {% for ch in dante_channels %}
+        {% if ch.direction == 'send' %}
+        <div class="cc-port-row" id="dante-row-{{ ch.id }}">
+          <span class="cc-port-gid" style="min-width:50px;color:#4a9eff;">TX</span>
+          <input class="cc-port-label" style="background:transparent;border:none;border-bottom:1px dashed #3a3a5a;color:#c0c0c0;outline:none;flex:1;padding:2px 4px;"
+                 value="{{ ch.label }}"
+                 onblur="saveDanteLabel({{ ch.id }}, this.value)"
+                 onkeydown="if(event.key==='Enter')this.blur()">
+          <select class="cc-port-select" onchange="assignDante({{ ch.id }}, this.value)">
+            <option value="">— Unassigned —</option>
+            {% for pl in partylines %}
+            <option value="{{ pl.id }}" {% if ch.partyline_id == pl.id %}selected{% endif %}>
+              CH{{ pl.channel_number }}: {{ pl.label }}
+            </option>
+            {% endfor %}
+          </select>
+          <button class="cc-pl-delete" onclick="deleteDanteChannel({{ ch.id }})">✕</button>
+        </div>
+        {% endif %}
+        {% endfor %}
+      {% else %}
+        <p style="color:#5555aa;font-size:0.85rem;padding:10px 0;">No Dante channels configured. Click + Add Channel to create one.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+<!-- ── SETTINGS PANEL ── -->
+<div class="cc-tab-panel" id="panel-settings">
+  <div class="cc-settings-grid">
+    <div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">Configuration Name</label>
+        <input class="cc-field-input" value="{{ config.name }}"
+               onblur="saveSetting('name', this.value)">
+      </div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">Wireless Region</label>
+        <select class="cc-field-input" onchange="saveSetting('wireless_region', this.value)">
+          {% for val, label in config.WIRELESS_REGION_CHOICES %}
+          <option value="{{ val }}" {% if config.wireless_region == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">Battery Type</label>
+        <select class="cc-field-input" onchange="saveSetting('battery_type', this.value)">
+          {% for val, label in config.BATTERY_TYPE_CHOICES %}
+          <option value="{{ val }}" {% if config.battery_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">Role Sorting</label>
+        <select class="cc-field-input" onchange="saveSetting('role_sorting', this.value)">
+          {% for val, label in config.ROLE_SORTING_CHOICES %}
+          <option value="{{ val }}" {% if config.role_sorting == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">Admin PIN</label>
+        <input class="cc-field-input" type="password" value="{{ config.admin_pin }}"
+               onblur="saveSetting('admin_pin', this.value)" placeholder="••••">
+      </div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">OTA PIN</label>
+        <input class="cc-field-input" type="password" value="{{ config.ota_pin }}"
+               onblur="saveSetting('ota_pin', this.value)" placeholder="••••">
+      </div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">System ID</label>
+        <input class="cc-field-input" value="{{ config.system_id }}"
+               readonly style="opacity:0.5;cursor:default;" title="Auto-generated on save">
+      </div>
+      <div class="cc-field-group">
+        <label class="cc-field-label">Hardware ID</label>
+        <input class="cc-field-input" value="{{ config.hardware_id|default:'— set on import —' }}"
+               readonly style="opacity:0.5;cursor:default;" title="Derived from device MAC">
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- ── SESSIONS PANEL ── -->
+  <div class="cc-tab-panel" id="panel-sessions">
+    {% if sessions %}
+      {% for session in sessions %}
+      <div class="cc-session-row">
+        <span class="cc-session-type">{{ session.session_type }}</span>
+        <span class="cc-session-detail">
+          {% if session.roleset %}Roleset: {{ session.roleset }}{% else %}No roleset{% endif %}
+          {% if session.default_role %} · Default: {{ session.default_role }}{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p style="color:#5555aa;text-align:center;padding:40px;">No sessions defined.</p>
+    {% endif %}
+    <button class="cc-btn cc-btn-secondary" style="margin-top:8px;" onclick="addSession({{ config.id }})">+ Add Session</button>
+  </div>
+
+{% endif %}{# end editor view #}
+
+</div>{# end cc-container #}
+
+<!-- ── Add Role Modal ── -->
+<div id="addRoleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:380px;max-width:480px;width:90%;">
+    <h3 style="color:#e0e0e0;margin:0 0 20px;font-size:1.1rem;">+ Add Role</h3>
+    <input type="hidden" id="addRoleConfigId">
+    <input type="hidden" id="addRoleNumber">
+    <div style="margin-bottom:14px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Role Name</label>
+      <input id="addRoleLabel" class="cc-field-input" placeholder="e.g. HBP Director" style="width:100%;box-sizing:border-box;"
+             onkeydown="if(event.key==='Enter')submitAddRole()">
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Device Type</label>
+      <select id="addRoleDeviceType" class="cc-field-input" style="width:100%;box-sizing:border-box;">
+        <option value="">— Select device type —</option>
+        <optgroup label="FreeSpeak">
+          <option value="FSII-BP">FreeSpeak II Beltpack</option>
+          <option value="E-BP">FreeSpeak Edge Beltpack</option>
+        </optgroup>
+        <optgroup label="HelixNet">
+          <option value="HBP-2X">HelixNet Beltpack (2-key)</option>
+          <option value="HKB-2X">HelixNet Keypanel (2-key)</option>
+          <option value="HMS-4X">HMS Station (4-key)</option>
+          <option value="HRM-4X">HRM Remote (4-key)</option>
+        </optgroup>
+        <optgroup label="V-Series Panels">
+          <option value="V12">V-Panel 12 Key</option>
+          <option value="V24">V-Panel 24 Key</option>
+          <option value="V32">V-Panel 32 Key</option>
+          <option value="V12D">V-Panel 12 Key Desktop</option>
+        </optgroup>
+        <optgroup label="Station">
+          <option value="NEP">Arcadia Station / Panel</option>
+          <option value="LQ-AIC">Agent-IC</option>
+        </optgroup>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="cc-btn cc-btn-secondary" onclick="closeAddRoleModal()">Cancel</button>
+      <button class="cc-btn cc-btn-primary" onclick="submitAddRole()">Add Role</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Dante Channel Modal ── -->
+<div id="addDanteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:340px;max-width:420px;width:90%;">
+    <h3 style="color:#e0e0e0;margin:0 0 20px;font-size:1.1rem;">+ Add Dante Channel</h3>
+    <input type="hidden" id="addDanteConfigId">
+    <div style="margin-bottom:14px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Channel Name</label>
+      <input id="addDanteLabel" class="cc-field-input" placeholder="e.g. FOH Mix L" style="width:100%;box-sizing:border-box;"
+             onkeydown="if(event.key==='Enter')submitAddDante()">
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Direction</label>
+      <select id="addDanteDirection" class="cc-field-input" style="width:100%;box-sizing:border-box;">
+        <option value="receive">RX — Receive (Input to Arcadia)</option>
+        <option value="send">TX — Send (Output from Arcadia)</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="cc-btn cc-btn-secondary" onclick="closeAddDanteModal()">Cancel</button>
+      <button class="cc-btn cc-btn-primary" onclick="submitAddDante()">Add Channel</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Hidden CSRF -->
+<form class="cc-csrf">{% csrf_token %}</form>
+
+<script>
+const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+// ── Tab switching ──
+document.querySelectorAll('.cc-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.cc-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.cc-tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+  });
+});
+
+// ── Dropdown toggle ──
+function toggleDropdown() {
+  document.getElementById('newConfigMenu').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.cc-dropdown')) {
+    document.getElementById('newConfigMenu')?.classList.remove('open');
+  }
+});
+
+// ── Create config ──
+function createConfig(deviceType) {
+  fetch('{% url "planner:comm_config_create" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ device_type: deviceType, project_id: {{ current_project.id|default:'null' }} })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.config_id) window.location.href = `/audiopatch/comm-config/${data.config_id}/`;
+    else alert('Error: ' + (data.error || 'Unknown'));
+  });
+}
+
+// ── Partyline: save name ──
+function savePartylineName(input) {
+  const plId = input.dataset.plId;
+  const newLabel = input.value.trim();
+  if (!newLabel) { input.value = input.defaultValue; return; }
+  fetch('{% url "planner:comm_config_update_partyline" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ partyline_id: plId, label: newLabel })
+  }).then(r => r.json()).then(data => {
+    if (!data.ok) alert('Save failed');
+  });
+}
+
+// ── Partyline: toggle HelixNet ──
+function toggleHelixnet(plId, enabled) {
+  fetch('{% url "planner:comm_config_update_partyline" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ partyline_id: plId, helixnet_enabled: enabled })
+  });
+}
+
+// ── Partyline: add ──
+function addPartyline(configId) {
+  fetch('{% url "planner:comm_config_add_partyline" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: configId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) location.reload();
+  });
+}
+
+// ── Partyline: delete ──
+function deletePartyline(plId) {
+  if (!confirm('Delete this partyline?')) return;
+  fetch('{% url "planner:comm_config_delete_partyline" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ partyline_id: plId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) document.querySelector(`[data-pl-id="${plId}"]`).remove();
+  });
+}
+
+// ── Port assignment ──
+function assignPort(portId, partylineId) {
+  fetch('{% url "planner:comm_config_assign_port" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ port_id: portId, partyline_id: partylineId || null })
+  });
+}
+
+function savePortLabel(portId, label) {
+  fetch('{% url "planner:comm_config_assign_port" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ port_id: portId, port_label: label })
+  });
+}
+
+function savePortField(portId, field, value) {
+  fetch('{% url "planner:comm_config_assign_port" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ port_id: portId, [field]: value })
+  });
+}
+
+function assignPortMode(portId, joinMode) {
+  fetch('{% url "planner:comm_config_assign_port" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ port_id: portId, join_mode: joinMode })
+  });
+}
+
+function addDanteChannel(configId) {
+  document.getElementById('addDanteConfigId').value = configId;
+  document.getElementById('addDanteModal').style.display = 'flex';
+}
+
+function closeAddDanteModal() {
+  document.getElementById('addDanteModal').style.display = 'none';
+}
+
+function submitAddDante() {
+  const configId = document.getElementById('addDanteConfigId').value;
+  const label = document.getElementById('addDanteLabel').value.trim();
+  const direction = document.getElementById('addDanteDirection').value;
+  if (!label) { alert('Please enter a channel name.'); return; }
+  fetch('{% url "planner:comm_config_add_dante" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: configId, label: label, direction: direction })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) { closeAddDanteModal(); location.reload(); }
+    else alert('Error: ' + (data.error || 'Unknown'));
+  });
+}
+
+function saveDanteLabel(chId, label) {
+  fetch('{% url "planner:comm_config_update_dante" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ channel_id: chId, label: label })
+  });
+}
+
+function assignDante(chId, partylineId) {
+  fetch('{% url "planner:comm_config_update_dante" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ channel_id: chId, partyline_id: partylineId || null })
+  });
+}
+
+function deleteDanteChannel(chId) {
+  if (!confirm('Delete this Dante channel?')) return;
+  fetch('{% url "planner:comm_config_delete_dante" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ channel_id: chId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) document.getElementById('dante-row-' + chId).remove();
+  });
+}
+
+// ── Settings save ──
+function saveSetting(field, value) {
+  fetch('{% url "planner:comm_config_update_setting" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: {{ config.id|default:'null' }}, field: field, value: value })
+  });
+}
+
+// ── Export ──
+function exportCca(configId) {
+  window.location.href = `/audiopatch/comm-config/${configId}/export/`;
+}
+
+// ── Delete config ──
+function deleteConfig(configId) {
+  if (!confirm('Permanently delete this configuration?')) return;
+  fetch('{% url "planner:comm_config_delete" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: configId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) window.location.href = '{% url "planner:comm_config" %}';
+  });
+}
+
+// ── Role expand (stub) ──
+function expandRole(roleId) {
+  const editor = document.getElementById('keyset-editor-' + roleId);
+  const icon = document.getElementById('expand-icon-' + roleId);
+  const row = document.querySelector('[data-role-id="' + roleId + '"]');
+  if (!editor) return;
+  const isOpen = editor.style.display !== 'none';
+  document.querySelectorAll('.cc-keyset-editor').forEach(e => e.style.display = 'none');
+  document.querySelectorAll('.cc-role-expand-icon').forEach(i => i.textContent = '▶');
+  document.querySelectorAll('.cc-role-row').forEach(r => r.classList.remove('expanded'));
+  if (!isOpen) {
+    editor.style.display = 'block';
+    icon.textContent = '▼';
+    row.classList.add('expanded');
+    editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function saveKeyset(keyId, field, value) {
+  fetch('{% url "planner:comm_config_update_keyset" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ keyset_id: keyId, field: field, value: value })
+  }).then(r => r.json()).then(data => {
+    if (!data.ok) alert('Save failed: ' + (data.error || 'Unknown'));
+    else refreshRoleChips(data.role_id);
+  });
+}
+
+function saveRoleName(roleId, newLabel) {
+  if (!newLabel.trim()) return;
+  fetch('{% url "planner:comm_config_update_role" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ role_id: roleId, label: newLabel.trim() })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      const display = document.getElementById('role-name-' + roleId);
+      if (display) display.textContent = newLabel.trim();
+    }
+  });
+}
+
+function deleteRole(roleId) {
+  if (!confirm('Delete this role and all its key assignments?')) return;
+  fetch('{% url "planner:comm_config_delete_role" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ role_id: roleId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) document.getElementById('role-block-' + roleId).remove();
+    else alert('Delete failed: ' + (data.error || 'Unknown'));
+  });
+}
+
+function refreshRoleChips(roleId) {
+  fetch('{% url "planner:comm_config_role_chips" %}?role_id=' + roleId)
+    .then(r => r.json())
+    .then(data => {
+      const chipsEl = document.getElementById('role-chips-' + roleId);
+      if (!chipsEl || !data.chips) return;
+      chipsEl.innerHTML = data.chips.map(c =>
+        `<span class="cc-key-chip ${c.assigned ? 'assigned' : ''}">${c.letter}${c.label ? ': ' + c.label : ''}</span>`
+      ).join('');
+    });
+}
+function addRole(configId) {
+  document.getElementById('addRoleConfigId').value = configId;
+  // Set next role number
+  const existingRoles = document.querySelectorAll('.cc-role-block').length;
+  document.getElementById('addRoleNumber').value = existingRoles + 1;
+  document.getElementById('addRoleModal').style.display = 'flex';
+}
+function closeAddRoleModal() {
+  document.getElementById('addRoleModal').style.display = 'none';
+}
+function submitAddRole() {
+  const configId = document.getElementById('addRoleConfigId').value;
+  const label = document.getElementById('addRoleLabel').value.trim();
+  const deviceType = document.getElementById('addRoleDeviceType').value;
+  const roleNumber = document.getElementById('addRoleNumber').value;
+  if (!label) { alert('Please enter a role name.'); return; }
+  if (!deviceType) { alert('Please select a device type.'); return; }
+  fetch('{% url "planner:comm_config_add_role" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: configId, label: label, device_type: deviceType, role_number: roleNumber })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      closeAddRoleModal();
+      location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  });
+}
+function addSession(configId) { alert('Session editor coming in next phase.'); }
+</script>
+{% endblock %}

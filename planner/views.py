@@ -3,7 +3,7 @@ from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 from django.db.models import Max
@@ -32,6 +32,7 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
+from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel
 from .models import Amp, AmpDivider, Location
 import hashlib
 import os
@@ -45,6 +46,12 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 from .models import AudioChecklist, AudioChecklistTask, Project, ProjectMember
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo
+import json as _json
+from django.http import JsonResponse
+
+from django.views.decorators.csrf import csrf_exempt  # not needed if using CSRF token in headers
+
+
 
 
 
@@ -1861,6 +1868,76 @@ def get_assignment_details(request, assignment_id):
             'success': False,
             'error': str(e)
         }, status=400)
+    
+
+
+
+@staff_member_required
+def comm_config_view(request, config_id=None):
+            """
+            COMM Config module — list view and editor view.
+            Mirrors the mic_tracker_view pattern.
+            """
+            current_project = getattr(request, 'current_project', None)
+
+            # List of configs for this project
+            configs = CommConfig.objects.filter(
+                project=current_project
+            ).order_by('created_at') if current_project else CommConfig.objects.none()
+
+            config = None
+            partylines = []
+            roles = []
+            ports = []
+            dante_channels = []
+            sessions = []
+
+            if config_id:
+                config = CommConfig.objects.filter(id=config_id, project=current_project).first()
+                if not config:
+                    from django.shortcuts import redirect
+                    return redirect("planner:comm_config")
+                partylines = config.partylines.all().order_by('channel_number')
+                roles = config.roles.all().order_by('device_type', 'label')
+                ports = config.port_assignments.all().order_by('port_type', 'port_label')
+                dante_channels = config.dante_channels.all().order_by('direction', 'channel_number')
+                sessions = config.sessions.all().order_by('session_type')
+
+            # Group roles by device_type for display
+            from itertools import groupby
+            roles_by_type = {}
+            for role in roles:
+                dt = role.get_device_type_display() if hasattr(role, 'get_device_type_display') else role.device_type
+                if dt not in roles_by_type:
+                    roles_by_type[dt] = []
+                roles_by_type[dt].append(role)
+
+            # Group ports by port_type
+            ports_by_type = {}
+            for port in ports:
+                pt = port.get_port_type_display() if hasattr(port, 'get_port_type_display') else port.port_type
+                if pt not in ports_by_type:
+                    ports_by_type[pt] = []
+                ports_by_type[pt].append(port)
+
+            context = {
+                
+                'title': 'COMM Config',
+                'has_permission': True,
+                'configs': configs,
+                'config': config,
+                'config_id': config_id,
+                'partylines': partylines,
+                'roles_by_type': roles_by_type,
+                'ports': ports,
+                'ports_by_type': ports_by_type,
+                'dante_channels': dante_channels if config_id else [],
+                'sessions': sessions,
+                'current_project': current_project,
+                'opts': CommConfig._meta,  # needed for admin breadcrumbs
+            }
+
+            return render(request, 'planner/comm_config.html', context)                                     
 
 
 @login_required
@@ -3469,11 +3546,9 @@ def mic_tracker_checksum(request):
     return JsonResponse({'checksum': checksum})
 
 
-# ── Add these two views to your audiopatch/views.py ──────────────────────────
-# They belong near your other session/day API endpoints.
-# Make sure ShowDay, MicSession are imported at the top of views.py.
 
-from django.views.decorators.http import require_POST
+
+
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 import json
@@ -3568,6 +3643,428 @@ def create_session(request):
         return JsonResponse({'success': False, 'error': 'Day not found.'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+    
+
+
+
+
+    
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Create
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_create(request):
+    try:
+        data = _json.loads(request.body)
+        device_type = data.get('device_type', 'arcadia')
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        config = CommConfig.objects.create(
+            project=current_project,
+            name=f"New {device_type.title()} Config",
+            device_type=device_type,
+        )
+
+        # Seed factory defaults
+        _seed_factory_defaults(config)
+
+        return JsonResponse({'ok': True, 'config_id': config.id})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def _seed_factory_defaults(config):
+    """
+    Populate a new CommConfig with Arcadia factory defaults:
+    4 partylines, 13 roles with keysets, 1 roleset, 2 sessions.
+    """
+    # ── Partylines ──
+    partyline_defaults = [
+        (1, 'PL 1'),
+        (2, 'PL 2'),
+        (3, 'PL 3'),
+        (4, 'PL 4'),
+    ]
+    partylines = {}
+    for ch, label in partyline_defaults:
+        pl = CommConfigPartyline.objects.create(
+            config=config,
+            channel_number=ch,
+            label=label,
+            helixnet_enabled=True,
+        )
+        partylines[ch] = pl
+
+    # ── Roles ──
+    # Format: (role_number, device_type, label, is_default, keysets)
+    # keysets: list of (key_index, partyline_ch_or_None, activation, talk_mode)
+    role_defaults = [
+        (1,  'FSII-BP', 'BP 1',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (2,  'FSII-BP', 'BP 2',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (3,  'FSII-BP', 'BP 3',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (4,  'FSII-BP', 'BP 4',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (5,  'FSII-BP', 'BP 5',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (6,  'FSII-BP', 'BP 6',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (7,  'FSII-BP', 'BP 7',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (8,  'FSII-BP', 'BP 8',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        # V-Series
+        (9,  'V12',     'V12 Panel', False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (10, 'V24',     'V24 Panel', False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (11, 'V32',     'V32 Panel', False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        (12, 'V12D',    'V12D Panel',False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+        # Arcadia station
+        (13, 'NEP',     'Station',   True,  [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+    ]
+
+    roles = {}
+    for role_num, dev_type, label, is_default, keysets in role_defaults:
+        role = CommConfigRole.objects.create(
+            config=config,
+            role_number=role_num,
+            device_type=dev_type,
+            label=label,
+            is_default=is_default,
+        )
+        roles[role_num] = role
+        for key_index, pl_ch, activation, talk_mode in keysets:
+            CommConfigKeyset.objects.create(
+                role=role,
+                key_index=key_index,
+                entity_type=0,  # Partyline
+                partyline=partylines.get(pl_ch) if pl_ch else None,
+                activation_state=activation,
+                talk_mode=talk_mode,
+            )
+
+    # ── Roleset ──
+    roleset = CommConfigRoleset.objects.create(
+        config=config,
+        roleset_number=1,
+        label='Default',
+        addressable=True,
+    )
+
+    # ── Sessions ──
+    CommConfigSession.objects.create(
+        config=config,
+        session_type='B.FSII',
+        label='Beltpack',
+        roleset=roleset,
+        default_role=roles.get(1),
+    )
+    CommConfigSession.objects.create(
+        config=config,
+        session_type='S.NEP',
+        label='Station',
+        roleset=roleset,
+        default_role=roles.get(13),
+    )
+
+
+    # ── Physical Ports ──
+    # 4x 2-Wire ports (labeled A-D like CCM)
+    for i, letter in enumerate(['A', 'B', 'C', 'D'], 1):
+        CommConfigPortAssignment.objects.create(
+            config=config,
+            port_type='2W',
+            port_label=f'2W Port {letter}',
+            port_gid=f'2w_{i}',
+            join_mode='Talk-Listen',
+            mode_2w='clearcom',
+            power_enabled=False,
+            termination_enabled=False,
+        )
+    # 8x 4-Wire ports
+    for i in range(1, 9):
+        CommConfigPortAssignment.objects.create(
+            config=config,
+            port_type='4W',
+            port_label=f'4W Port {i}',
+            port_gid=f'4w_{i}',
+            join_mode='Talk-Listen',
+            port_function='4wire-x',
+            receive_call_signal=False,
+            output_level='line',
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Partyline CRUD
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_update_partyline(request):
+    try:
+        data = _json.loads(request.body)
+        pl = CommConfigPartyline.objects.get(id=data['partyline_id'])
+        if 'label' in data:
+            pl.label = data['label']
+        if 'helixnet_enabled' in data:
+            pl.helixnet_enabled = data['helixnet_enabled']
+        pl.save()
+        return JsonResponse({'ok': True})
+    except CommConfigPartyline.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_add_partyline(request):
+    try:
+        data = _json.loads(request.body)
+        config = CommConfig.objects.get(id=data['config_id'])
+        # Next available channel number
+        existing = config.partylines.values_list('channel_number', flat=True)
+        next_ch = max(existing, default=0) + 1
+        pl = CommConfigPartyline.objects.create(
+            config=config,
+            channel_number=next_ch,
+            label=f'PL {next_ch}',
+            helixnet_enabled=True,
+        )
+        return JsonResponse({'ok': True, 'partyline_id': pl.id, 'channel_number': pl.channel_number, 'label': pl.label})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_delete_partyline(request):
+    try:
+        data = _json.loads(request.body)
+        pl = CommConfigPartyline.objects.get(id=data['partyline_id'])
+        # Detach any keyset assignments pointing to this partyline
+        CommConfigKeyset.objects.filter(partyline=pl).update(partyline=None, entity_type=None)
+        pl.delete()
+        return JsonResponse({'ok': True})
+    except CommConfigPartyline.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Port Assignments
+# Note: ports are created on import/.cca upload.
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Keyset update
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_update_keyset(request):
+    try:
+        data = _json.loads(request.body)
+        key = CommConfigKeyset.objects.get(id=data['keyset_id'])
+        field = data.get('field')
+        value = data.get('value')
+        allowed = {'activation_state', 'talk_mode', 'partyline'}
+        if field not in allowed:
+            return JsonResponse({'error': f'Field "{field}" not editable'}, status=400)
+        if field == 'partyline':
+            if value:
+                key.partyline = CommConfigPartyline.objects.get(id=value)
+                key.entity_type = 0
+            else:
+                key.partyline = None
+                key.entity_type = None
+        else:
+            setattr(key, field, value)
+        key.save()
+        return JsonResponse({'ok': True, 'role_id': key.role_id})
+    except CommConfigKeyset.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Role update
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_update_role(request):
+    try:
+        data = _json.loads(request.body)
+        role = CommConfigRole.objects.get(id=data['role_id'])
+        if 'label' in data:
+            role.label = data['label']
+        role.save()
+        return JsonResponse({'ok': True})
+    except CommConfigRole.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Role delete
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_delete_role(request):
+    try:
+        data = _json.loads(request.body)
+        role = CommConfigRole.objects.get(id=data['role_id'])
+        role.delete()
+        return JsonResponse({'ok': True})
+    except CommConfigRole.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Add Role
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_add_role(request):
+    try:
+        data = _json.loads(request.body)
+        config = CommConfig.objects.get(id=data['config_id'])
+        device_type = data['device_type']
+        label = data['label']
+        role_number = int(data.get('role_number', 1))
+        # Ensure unique role number
+        while CommConfigRole.objects.filter(config=config, role_number=role_number).exists():
+            role_number += 1
+        role = CommConfigRole.objects.create(
+            config=config,
+            role_number=role_number,
+            device_type=device_type,
+            label=label,
+        )
+        # Seed empty keysets based on device max_keysets
+        for i in range(role.max_keysets):
+            CommConfigKeyset.objects.create(
+                role=role,
+                key_index=i,
+                activation_state='talkforcelisten',
+                talk_mode='latching',
+            )
+        return JsonResponse({'ok': True, 'role_id': role.id})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Config not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Role chips (refresh after keyset change)
+# ─────────────────────────────────────────────────────────────
+def comm_config_role_chips(request):
+    try:
+        role_id = request.GET.get('role_id')
+        role = CommConfigRole.objects.get(id=role_id)
+        chips = []
+        for key in role.keysets.all().order_by('key_index'):
+            chips.append({
+                'letter': key.key_letter,
+                'assigned': bool(key.partyline_id),
+                'label': key.partyline.label[:8] if key.partyline else '',
+            })
+        return JsonResponse({'ok': True, 'chips': chips})
+    except CommConfigRole.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# This endpoint only assigns an existing port to a partyline.
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_assign_port(request):
+    try:
+        data = _json.loads(request.body)
+        port = CommConfigPortAssignment.objects.get(id=data['port_id'])
+        pl_id = data.get('partyline_id')
+        allowed_fields = {
+            'join_mode', 'port_function', 'receive_call_signal',
+            'output_level', 'mode_2w', 'power_enabled',
+            'termination_enabled', 'port_label',
+        }
+        if 'partyline_id' in data:
+            port.partyline = CommConfigPartyline.objects.get(id=pl_id) if pl_id else None
+        for field in allowed_fields:
+            if field in data:
+                setattr(port, field, data[field])
+        port.save()
+        return JsonResponse({'ok': True})
+    except (CommConfigPortAssignment.DoesNotExist, CommConfigPartyline.DoesNotExist):
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Settings
+# ─────────────────────────────────────────────────────────────
+
+# Fields the settings endpoint is allowed to write
+_SETTINGS_ALLOWED_FIELDS = {
+    'name', 'wireless_region', 'wireless_id', 'admin_pin', 'ota_pin',
+    'display_brightness', 'touch_sensitivity', 'battery_type',
+    'dsp_plc_state', 'disable_http', 'role_sorting',
+    'antenna_0_connector', 'antenna_1_connector',
+}
+
+@require_POST
+def comm_config_update_setting(request):
+    try:
+        data = _json.loads(request.body)
+        field = data.get('field')
+        if field not in _SETTINGS_ALLOWED_FIELDS:
+            return JsonResponse({'error': f'Field "{field}" not editable'}, status=400)
+        config = CommConfig.objects.get(id=data['config_id'])
+        # Type-coerce booleans and integers as needed
+        value = data['value']
+        int_fields = {'wireless_region', 'display_brightness', 'touch_sensitivity'}
+        bool_fields = {'dsp_plc_state', 'disable_http'}
+        if field in int_fields:
+            value = int(value)
+        elif field in bool_fields:
+            value = bool(value)
+        setattr(config, field, value)
+        config.save(update_fields=[field])
+        return JsonResponse({'ok': True})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Delete Config
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_delete(request):
+    try:
+        data = _json.loads(request.body)
+        config = CommConfig.objects.get(id=data['config_id'])
+        current_project = getattr(request, 'current_project', None)
+        if config.project != current_project:
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+        config.delete()
+        return JsonResponse({'ok': True})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Export stub (Phase 5)
+# ─────────────────────────────────────────────────────────────
+from django.http import HttpResponse
+
+def comm_config_export(request, config_id):
+    # Placeholder — full LevelDB/tar/gzip export is Phase 5
+    config = get_object_or_404(CommConfig, id=config_id)
+    return HttpResponse(
+        f"Export for '{config.name}' not yet implemented.",
+        content_type='text/plain',
+        status=501,
+    )
   
 
 
@@ -3631,7 +4128,7 @@ def debug_device_ordering(request):
 # Add these views to your views.py file
 
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST, require_GET
+
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_protect
 import json
@@ -3887,5 +4384,59 @@ def audio_checklist_reset(request):
         return JsonResponse({'success': True})
     except Project.DoesNotExist:
         return JsonResponse({'error': 'Project not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Dante Channel CRUD
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_add_dante(request):
+    try:
+        data = _json.loads(request.body)
+        config = CommConfig.objects.get(id=data['config_id'])
+        direction = data.get('direction', 'receive')
+        existing = config.dante_channels.filter(direction=direction).count()
+        ch = CommConfigDanteChannel.objects.create(
+            config=config,
+            channel_number=existing + 1,
+            label=data['label'],
+            direction=direction,
+        )
+        return JsonResponse({'ok': True, 'channel_id': ch.id})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_update_dante(request):
+    try:
+        data = _json.loads(request.body)
+        ch = CommConfigDanteChannel.objects.get(id=data['channel_id'])
+        if 'label' in data:
+            ch.label = data['label']
+        if 'partyline_id' in data:
+            pl_id = data['partyline_id']
+            ch.partyline = CommConfigPartyline.objects.get(id=pl_id) if pl_id else None
+        ch.save()
+        return JsonResponse({'ok': True})
+    except CommConfigDanteChannel.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_delete_dante(request):
+    try:
+        data = _json.loads(request.body)
+        ch = CommConfigDanteChannel.objects.get(id=data['channel_id'])
+        ch.delete()
+        return JsonResponse({'ok': True})
+    except CommConfigDanteChannel.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

@@ -52,6 +52,30 @@ urlpatterns = [
          views.import_comm_names, 
          name='import_comm_names'),
 
+
+         # COMM Config
+     path('comm-config/', views.comm_config_view, name='comm_config'),
+     path('comm-config/<int:config_id>/', views.comm_config_view, name='comm_config_editor'),
+     path('comm-config/create/', views.comm_config_create, name='comm_config_create'),
+     path('comm-config/partyline/update/', views.comm_config_update_partyline, name='comm_config_update_partyline'),
+     path('comm-config/partyline/add/', views.comm_config_add_partyline, name='comm_config_add_partyline'),
+     path('comm-config/partyline/delete/', views.comm_config_delete_partyline, name='comm_config_delete_partyline'),
+     path('comm-config/keyset/update/', views.comm_config_update_keyset, name='comm_config_update_keyset'),
+     path('comm-config/role/update/', views.comm_config_update_role, name='comm_config_update_role'),
+     path('comm-config/role/delete/', views.comm_config_delete_role, name='comm_config_delete_role'),
+     path('comm-config/role/add/', views.comm_config_add_role, name='comm_config_add_role'),
+     path('comm-config/role/chips/', views.comm_config_role_chips, name='comm_config_role_chips'),
+     path('comm-config/port/assign/', views.comm_config_assign_port, name='comm_config_assign_port'),
+     path('comm-config/dante/add/', views.comm_config_add_dante, name='comm_config_add_dante'),
+     path('comm-config/dante/update/', views.comm_config_update_dante, name='comm_config_update_dante'),
+     path('comm-config/dante/delete/', views.comm_config_delete_dante, name='comm_config_delete_dante'),
+     path('comm-config/dante/add/', views.comm_config_add_dante, name='comm_config_add_dante'),
+     path('comm-config/dante/update/', views.comm_config_update_dante, name='comm_config_update_dante'),
+     path('comm-config/dante/delete/', views.comm_config_delete_dante, name='comm_config_delete_dante'),
+     path('comm-config/setting/update/', views.comm_config_update_setting, name='comm_config_update_setting'),
+     path('comm-config/<int:config_id>/export/', views.comm_config_export, name='comm_config_export'),
+     path('comm-config/delete/', views.comm_config_delete, name='comm_config_delete'),
+
     # Dashboard
     path('admin/', admin.site.urls),
     path('dashboard/', SystemDashboardView.as_view(), name='system-dashboard'),

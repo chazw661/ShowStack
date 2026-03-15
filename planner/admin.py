@@ -5865,26 +5865,25 @@ showstack_admin_site.register(SpeakerCabinet, SpeakerCabinetAdmin)
 # COMM CONFIG - Base Station Configuration Editor
 # ============================================================
 class CommConfigAdmin(admin.ModelAdmin):
-    list_display = ['name', 'device_type', 'system_id', 'modified_at']
-    list_filter = ['device_type']
-    
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if hasattr(request, 'current_project') and request.current_project:
-            return qs.filter(project=request.current_project)
-        return qs
-    
-    def save_model(self, request, obj, form, change):
-        if not change:
-            if hasattr(request, 'current_project') and request.current_project:
-                from planner.models import Project
-                try:
-                    if isinstance(request.current_project, Project):
-                        obj.project = request.current_project
-                    else:
-                        obj.project = Project.objects.get(id=request.current_project)
-                except Project.DoesNotExist:
-                    pass
-        super().save_model(request, obj, form, change)
+    # ... your existing fields ...
 
+    def get_urls(self):
+        from django.urls import path as urlpath
+        urls = super().get_urls()
+        custom_urls = [
+            urlpath(
+                'comm-config/',
+                self.admin_site.admin_view(self.comm_config_redirect),
+                name='planner_commconfig_redirect',
+            ),
+        ]
+        return custom_urls + urls
+
+    def comm_config_redirect(self, request):
+        from django.shortcuts import redirect
+        return redirect('planner:comm_config')
+
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+        return redirect('planner:comm_config')
 showstack_admin_site.register(CommConfig, CommConfigAdmin)
