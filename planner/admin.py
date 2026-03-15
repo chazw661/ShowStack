@@ -3281,7 +3281,7 @@ class PACableAdmin(BaseEquipmentAdmin):
 
 
 
-from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack
+from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack, CommConfig
 from django.http import HttpResponseRedirect
 
 # Comm Channel Admin
@@ -5859,3 +5859,32 @@ showstack_admin_site.register(AudioChecklist, AudioChecklistAdmin)
 showstack_admin_site.register(SoundvisionPrediction, SoundvisionPredictionAdmin)
 showstack_admin_site.register(SpeakerArray, SpeakerArrayAdmin)
 showstack_admin_site.register(SpeakerCabinet, SpeakerCabinetAdmin)
+
+
+# ============================================================
+# COMM CONFIG - Base Station Configuration Editor
+# ============================================================
+class CommConfigAdmin(admin.ModelAdmin):
+    list_display = ['name', 'device_type', 'system_id', 'modified_at']
+    list_filter = ['device_type']
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if hasattr(request, 'current_project') and request.current_project:
+            return qs.filter(project=request.current_project)
+        return qs
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            if hasattr(request, 'current_project') and request.current_project:
+                from planner.models import Project
+                try:
+                    if isinstance(request.current_project, Project):
+                        obj.project = request.current_project
+                    else:
+                        obj.project = Project.objects.get(id=request.current_project)
+                except Project.DoesNotExist:
+                    pass
+        super().save_model(request, obj, form, change)
+
+showstack_admin_site.register(CommConfig, CommConfigAdmin)

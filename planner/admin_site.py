@@ -86,6 +86,7 @@ class ShowStackAdminSite(admin.AdminSite):
             
             # Communications (11-14)
             'commbeltpack': 11,
+            'commconfig': 12,
            
             
             # Show Mic Tracker (15-19)
@@ -134,7 +135,7 @@ class ShowStackAdminSite(admin.AdminSite):
                     auth_models.append((auth_order, model))
                 else:
                     # Skip models that are accessible via parent page buttons
-                    if model_name in ('commposition', 'commcrewname', 'commchannel', 'micassignment', 'micshowinfo', 'micsession', 'presenter', 'presenterslot'):
+                    if model_name in ('commposition', 'commcrewname', 'commchannel', 'micassignment', 'micshowinfo', 'micsession', 'presenter', 'presenterslot', 'commconfigpartyline', 'commconfigrole', 'commconfigkeyset', 'commconfigroleset', 'commconfigsession', 'commconfigportassignment'):
                         continue
                     order = order_map.get(model_name, 999)
                     other_models.append((order, model))

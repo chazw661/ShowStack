@@ -3561,3 +3561,365 @@ class AudioChecklistTask(models.Model):
     
     def __str__(self):
         return f"{self.checklist.name} - {self.task}"
+
+# ============================================================
+# COMM CONFIG MODULE - Base Station Configuration Editor
+# ============================================================
+# Models for offline programming of Clear-Com Arcadia,
+# FreeSpeak, and HelixNet base stations.
+# Produces .cca config files for upload to hardware.
+# ============================================================
+
+
+class CommConfig(models.Model):
+    """
+    Top-level configuration for a Clear-Com base station.
+    Each config can be exported as a .cca file.
+    """
+    DEVICE_TYPE_CHOICES = [
+        ('arcadia', 'Clear-Com Arcadia'),
+        ('freespeak', 'Clear-Com FreeSpeak II'),
+        ('helixnet', 'Clear-Com HelixNet'),
+    ]
+
+    WIRELESS_REGION_CHOICES = [
+        (0, 'US/Canada'),
+        (1, 'Europe'),
+        (2, 'Japan'),
+        (3, 'Australia'),
+        (4, 'Brazil'),
+        (5, 'China'),
+    ]
+
+    BATTERY_TYPE_CHOICES = [
+        ('Alkaline', 'Alkaline'),
+        ('NiMH', 'NiMH'),
+        ('Lithium', 'Lithium'),
+    ]
+
+    ROLE_SORTING_CHOICES = [
+        ('RoleNumber', 'By Role Number'),
+        ('RoleName', 'By Role Name'),
+    ]
+
+    ANTENNA_CONNECTOR_CHOICES = [
+        ('rj45', 'RJ45'),
+        ('fiber', 'Fiber'),
+    ]
+
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
+    name = models.CharField(
+        max_length=100,
+        help_text="Configuration name (e.g., 'GJS Corporate Template')"
+    )
+    device_type = models.CharField(
+        max_length=20,
+        choices=DEVICE_TYPE_CHOICES,
+        default='arcadia',
+    )
+
+    # System identifiers
+    system_id = models.CharField(
+        max_length=8,
+        blank=True,
+        help_text="8-char system ID (auto-generated or from imported .cca)"
+    )
+    hardware_id = models.CharField(
+        max_length=8,
+        blank=True,
+        help_text="Hardware MAC ID from unit (e.g., ff080f1f)"
+    )
+
+    # Device settings
+    wireless_region = models.IntegerField(
+        choices=WIRELESS_REGION_CHOICES,
+        default=0,
+    )
+    wireless_id = models.CharField(max_length=3, blank=True)
+    admin_pin = models.CharField(max_length=4, default='1111')
+    ota_pin = models.CharField(max_length=4, default='0000')
+    display_brightness = models.IntegerField(default=170)
+    touch_sensitivity = models.IntegerField(default=1)
+    battery_type = models.CharField(
+        max_length=10,
+        choices=BATTERY_TYPE_CHOICES,
+        default='Alkaline',
+    )
+    dsp_plc_state = models.BooleanField(default=False, verbose_name="DSP PLC")
+    disable_http = models.BooleanField(default=False)
+    role_sorting = models.CharField(
+        max_length=20,
+        choices=ROLE_SORTING_CHOICES,
+        default='RoleNumber',
+    )
+    antenna_0_connector = models.CharField(
+        max_length=10,
+        choices=ANTENNA_CONNECTOR_CHOICES,
+        default='rj45',
+        verbose_name="Antenna Port 0"
+    )
+    antenna_1_connector = models.CharField(
+        max_length=10,
+        choices=ANTENNA_CONNECTOR_CHOICES,
+        default='rj45',
+        verbose_name="Antenna Port 1"
+    )
+
+    # Factory hardware skeleton for .cca reconstruction
+    factory_base_json = models.JSONField(blank=True, default=dict)
+
+    # Admin credentials
+    admin_username = models.CharField(max_length=50, default='admin')
+    admin_password_hash = models.CharField(max_length=100, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "COMM Configuration"
+        verbose_name_plural = "COMM Configurations"
+        ordering = ['-modified_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_device_type_display()})"
+
+    def save(self, *args, **kwargs):
+        if not self.system_id:
+            self.system_id = uuid.uuid4().hex[:8]
+        super().save(*args, **kwargs)
+
+
+class CommConfigPartyline(models.Model):
+    """Partyline (communication channel) in the configuration."""
+    config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='partylines')
+    channel_number = models.IntegerField()
+    label = models.CharField(max_length=20)
+    helixnet_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Config Partyline"
+        verbose_name_plural = "Config Partylines"
+        ordering = ['channel_number']
+        unique_together = ['config', 'channel_number']
+
+    def __str__(self):
+        return f"Ch {self.channel_number}: {self.label}"
+
+
+class CommConfigRole(models.Model):
+    """Role definition — keyset assignments for a beltpack/panel position."""
+    DEVICE_TYPE_CHOICES = [
+        ('FSII-BP', 'FreeSpeak II Beltpack'),
+        ('E-BP', 'FreeSpeak Edge Beltpack'),
+        ('HBP-2X', 'HelixNet Beltpack (2-key)'),
+        ('HKB-2X', 'HelixNet Keypanel (2-key)'),
+        ('HMS-4X', 'HMS Station (4-key)'),
+        ('HRM-4X', 'HRM Remote (4-key)'),
+        ('NEP', 'Arcadia Station / Panel'),
+        ('V12', 'V-Panel 12 Key'),
+        ('V24', 'V-Panel 24 Key'),
+        ('V32', 'V-Panel 32 Key'),
+        ('V12D', 'V-Panel 12 Key Desktop'),
+        ('LQ-AIC', 'Agent-IC'),
+    ]
+
+    MIC_TYPE_CHOICES = [
+        ('automatic', 'Automatic'),
+        ('dynamic', 'Dynamic'),
+        ('dynamic_0', 'Dynamic (0dB)'),
+        ('electret', 'Electret'),
+    ]
+
+    SIDETONE_CONTROL_CHOICES = [
+        ('tracking', 'Tracking'),
+        ('fixed', 'Fixed'),
+    ]
+
+    DISPLAY_BRIGHTNESS_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+    ]
+
+    config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='roles')
+    role_number = models.IntegerField()
+    device_type = models.CharField(max_length=10, choices=DEVICE_TYPE_CHOICES)
+    label = models.CharField(max_length=20)
+    description = models.CharField(max_length=100, blank=True)
+    is_default = models.BooleanField(default=False)
+
+    # Audio settings
+    sidetone_gain = models.FloatField(default=-9.6)
+    sidetone_control = models.CharField(max_length=10, choices=SIDETONE_CONTROL_CHOICES, default='tracking')
+    headphone_limit = models.IntegerField(default=0)
+    headphone_gain = models.IntegerField(default=0)
+    mic_type = models.CharField(max_length=20, choices=MIC_TYPE_CHOICES, default='automatic')
+    master_volume = models.FloatField(default=-9.6)
+
+    # Display
+    display_brightness = models.CharField(max_length=10, choices=DISPLAY_BRIGHTNESS_CHOICES, default='high')
+
+    # Device-type-specific settings
+    extended_settings = models.JSONField(blank=True, default=dict)
+
+    class Meta:
+        verbose_name = "Config Role"
+        verbose_name_plural = "Config Roles"
+        ordering = ['is_default', 'role_number']
+        unique_together = ['config', 'role_number']
+
+    def __str__(self):
+        return f"{self.label} ({self.get_device_type_display()})"
+
+    @property
+    def max_keysets(self):
+        limits = {
+            'FSII-BP': 5, 'E-BP': 9, 'HBP-2X': 2, 'HKB-2X': 4,
+            'HMS-4X': 4, 'HRM-4X': 4, 'NEP': 9, 'LQ-AIC': 6,
+            'V12': 12, 'V24': 24, 'V32': 32, 'V12D': 12,
+        }
+        return limits.get(self.device_type, 4)
+
+
+class CommConfigKeyset(models.Model):
+    """Single key/button assignment on a role."""
+    ENTITY_TYPE_CHOICES = [
+        (0, 'Partyline / Channel'),
+        (1, 'Port / Direct'),
+    ]
+
+    ACTIVATION_CHOICES = [
+        ('talkforcelisten', 'Talk + Force Listen'),
+        ('talklisten', 'Talk + Listen'),
+        ('talk', 'Talk Only'),
+        ('listen', 'Listen Only'),
+    ]
+
+    TALK_MODE_CHOICES = [
+        ('latching', 'Latching'),
+        ('non-latching', 'Non-Latching (Momentary)'),
+        ('disabled', 'Disabled'),
+    ]
+
+    role = models.ForeignKey(CommConfigRole, on_delete=models.CASCADE, related_name='keysets')
+    key_index = models.IntegerField()
+
+    # What this key connects to
+    entity_type = models.IntegerField(choices=ENTITY_TYPE_CHOICES, null=True, blank=True)
+    partyline = models.ForeignKey(
+        CommConfigPartyline, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='keyset_assignments'
+    )
+    port_reference = models.CharField(max_length=100, blank=True)
+
+    # Key behavior
+    activation_state = models.CharField(max_length=20, choices=ACTIVATION_CHOICES, default='talkforcelisten')
+    talk_mode = models.CharField(max_length=15, choices=TALK_MODE_CHOICES, default='latching')
+    is_call_key = models.BooleanField(default=False)
+    is_reply_key = models.BooleanField(default=False)
+
+    # HelixNet-specific
+    in_use_tally = models.BooleanField(default=True)
+    minimum_volume = models.IntegerField(default=0)
+    maximum_volume = models.IntegerField(default=29)
+    interlock_group = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Config Keyset"
+        verbose_name_plural = "Config Keysets"
+        ordering = ['key_index']
+        unique_together = ['role', 'key_index']
+
+    def __str__(self):
+        key_letter = chr(65 + self.key_index) if self.key_index < 26 else str(self.key_index)
+        target = self.partyline.label if self.partyline else self.port_reference or "Unassigned"
+        return f"Key {key_letter}: {target}"
+
+    @property
+    def key_letter(self):
+        return chr(65 + self.key_index) if self.key_index < 26 else str(self.key_index)
+
+
+class CommConfigRoleset(models.Model):
+    """Roleset — named position grouping for session assignment."""
+    config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='rolesets')
+    roleset_number = models.IntegerField()
+    label = models.CharField(max_length=20)
+    addressable = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Config Roleset"
+        verbose_name_plural = "Config Rolesets"
+        ordering = ['roleset_number']
+        unique_together = ['config', 'roleset_number']
+
+    def __str__(self):
+        return self.label
+
+
+class CommConfigSession(models.Model):
+    """Session — a device login entry with roleset + default role."""
+    SESSION_TYPE_CHOICES = [
+        ('B.FSII', 'FreeSpeak II Beltpack'),
+        ('B.HBP', 'HelixNet Beltpack'),
+        ('B.HKB', 'HelixNet Keypanel'),
+        ('S.NEP', 'Station / Arcadia Panel'),
+        ('A.CCM', 'Admin (CCM)'),
+    ]
+
+    config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='sessions')
+    session_type = models.CharField(max_length=10, choices=SESSION_TYPE_CHOICES)
+    label = models.CharField(max_length=20)
+    roleset = models.ForeignKey(
+        CommConfigRoleset, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='sessions'
+    )
+    default_role = models.ForeignKey(
+        CommConfigRole, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='default_for_sessions'
+    )
+    addressable = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Config Session"
+        verbose_name_plural = "Config Sessions"
+        ordering = ['session_type', 'label']
+
+    def __str__(self):
+        return f"{self.label} ({self.get_session_type_display()})"
+
+
+class CommConfigPortAssignment(models.Model):
+    """Assigns a physical/virtual port to a partyline."""
+    PORT_TYPE_CHOICES = [
+        ('2W', '2-Wire'),
+        ('4W', '4-Wire'),
+        ('Dante', 'Dante'),
+        ('HelixNet', 'HelixNet'),
+        ('SA', 'Stage Announce'),
+        ('PGM', 'Program'),
+    ]
+
+    JOIN_MODE_CHOICES = [
+        ('Talk-Listen', 'Talk + Listen'),
+        ('Talk', 'Talk Only'),
+        ('Listen', 'Listen Only'),
+    ]
+
+    config = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='port_assignments')
+    port_type = models.CharField(max_length=10, choices=PORT_TYPE_CHOICES)
+    port_label = models.CharField(max_length=30)
+    port_gid = models.CharField(max_length=60)
+    partyline = models.ForeignKey(
+        CommConfigPartyline, on_delete=models.CASCADE,
+        related_name='port_assignments'
+    )
+    join_mode = models.CharField(max_length=15, choices=JOIN_MODE_CHOICES, default='Talk-Listen')
+
+    class Meta:
+        verbose_name = "Config Port Assignment"
+        verbose_name_plural = "Config Port Assignments"
+        ordering = ['port_type', 'port_label']
+
+    def __str__(self):
+        return f"{self.port_label} → {self.partyline.label} ({self.join_mode})"
