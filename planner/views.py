@@ -4299,11 +4299,11 @@ def comm_config_export(request, config_id):
             seq += 1
             seq_key = f'ÿby-sequenceÿ{seq:016d}'.encode()
             content_bytes = json.dumps(doc).encode('utf-8')
-            db.put(seq_key, b' ' + content_bytes)
+            db.put(seq_key, b'' + content_bytes)
             db.put(f'ÿmeta-storeÿ{doc_id}'.encode(), str(seq).encode())
 
-        db.put(b'ÿmeta-storeÿ_local_doc_count', str(len(docs)).encode())
-        db.put(b'ÿmeta-storeÿ_local_last_update_seq', str(seq).encode())
+        db.put(b'\xff' + b'meta-store' + b'\xff' + b'_local_doc_count', str(len(docs)).encode())
+        db.put(b'\xff' + b'meta-store' + b'\xff' + b'_local_last_update_seq', str(seq).encode())
         db.close()
 
         # Write support files
