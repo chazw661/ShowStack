@@ -1120,14 +1120,24 @@
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
 // ── Tab switching ──
-document.querySelectorAll('.cc-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.cc-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.cc-tab-panel').forEach(p => p.classList.remove('active'));
+function activateTab(panelName) {
+  document.querySelectorAll('.cc-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.cc-tab-panel').forEach(p => p.classList.remove('active'));
+  const tab = document.querySelector('[data-panel="' + panelName + '"]');
+  if (tab) {
     tab.classList.add('active');
-    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
-  });
+    document.getElementById('panel-' + panelName).classList.add('active');
+  }
+}
+document.querySelectorAll('.cc-tab').forEach(tab => {
+  tab.addEventListener('click', () => activateTab(tab.dataset.panel));
 });
+// Restore tab from sessionStorage on reload
+const storedTab = sessionStorage.getItem('ccActiveTab');
+sessionStorage.removeItem('ccActiveTab');
+if (storedTab && document.getElementById('panel-' + storedTab)) {
+  activateTab(storedTab);
+}
 
 // ── Dropdown toggle ──
 function toggleDropdown() {
@@ -1183,7 +1193,7 @@ function addPartyline(configId) {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ config_id: configId })
   }).then(r => r.json()).then(data => {
-    if (data.ok) { location.hash='partylines'; location.reload(); }
+    if (data.ok) { sessionStorage.setItem('ccActiveTab','partylines'); location.reload(); }
   });
 }
 
@@ -1251,7 +1261,7 @@ function submitAddDante() {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ config_id: configId, label: label, direction: direction })
   }).then(r => r.json()).then(data => {
-    if (data.ok) { closeAddDanteModal(); location.reload(); }
+    if (data.ok) { closeAddDanteModal(); sessionStorage.setItem('ccActiveTab','ports'); location.reload(); }
     else alert('Error: ' + (data.error || 'Unknown'));
   });
 }
@@ -1399,7 +1409,7 @@ function submitAddRole() {
   }).then(r => r.json()).then(data => {
     if (data.ok) {
       closeAddRoleModal();
-      location.reload();
+      sessionStorage.setItem('ccActiveTab','roles'); location.reload();
     } else {
       alert('Error: ' + (data.error || 'Unknown'));
     }
@@ -1423,7 +1433,7 @@ function submitAddSession() {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ config_id: configId, session_type: sessionType, label: label })
   }).then(r => r.json()).then(data => {
-    if (data.ok) { closeAddSessionModal(); location.hash='sessions'; location.reload(); }
+    if (data.ok) { closeAddSessionModal(); sessionStorage.setItem('ccActiveTab','sessions'); location.reload(); }
     else alert('Error: ' + (data.error || 'Unknown'));
   });
 }
@@ -1481,7 +1491,7 @@ function addRoleset(configId) {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ config_id: configId })
   }).then(r => r.json()).then(data => {
-    if (data.ok) location.reload();
+    if (data.ok) { sessionStorage.setItem('ccActiveTab','sessions'); location.reload(); }
     else alert('Error: ' + (data.error || 'Unknown'));
   });
 }
