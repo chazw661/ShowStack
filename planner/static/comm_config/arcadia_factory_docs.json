@@ -1,0 +1,4220 @@
+{
+  "0.01.!": {
+    "_id": "0.01.!",
+    "_rev": "1-6e423f72e852eac1568e8170ff462ed8",
+    "data": {
+      "active": true,
+      "completed": true
+    },
+    "name": "domain",
+    "tver": 1,
+    "type": "entity"
+  },
+  "0.01.lKcw3zUU.0000.0000": {
+    "_id": "0.01.lKcw3zUU.0000.0000",
+    "_rev": "1-953377a8f811a7de290d401193006b8b",
+    "data": {
+      "id": 0,
+      "name": "Neptune System Domain",
+      "tver": 1,
+      "type": "device"
+    },
+    "owner": "0.00.CLEARCOM.CAFE.DECA",
+    "type": "device"
+  },
+  "0.02.!": {
+    "_id": "0.02.!",
+    "_rev": "1-36a9d92366fef42421ac9e8f96021f72",
+    "data": {
+      "active": true,
+      "completed": true
+    },
+    "name": "system",
+    "tver": 1,
+    "type": "entity"
+  },
+  "0.02.lKcw3zUU.0000.0000": {
+    "_id": "0.02.lKcw3zUU.0000.0000",
+    "_rev": "1-4e0dc942fb1520eb4ad3fd8aee94fb4f",
+    "data": {
+      "description": "Neptune System",
+      "id": 0,
+      "masterIp": "127.0.0.1",
+      "masterPort": "443",
+      "name": "Neptune",
+      "tver": 1,
+      "type": "device"
+    },
+    "owner": "0.01.lKcw3zUU.0000.0000",
+    "type": "device"
+  },
+  "0.99.!": {
+    "_id": "0.99.!",
+    "_rev": "1-0e98813a588f0c0eae619f1c13e14955",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "user",
+    "tver": 1,
+    "type": "entity"
+  },
+  "0.99.A6AMk7Ur.0000.0000": {
+    "_id": "0.99.A6AMk7Ur.0000.0000",
+    "_rev": "1-c3601dc6cf6530808c86ca32c84614ff",
+    "data": {
+      "auth": {
+        "local": {
+          "legacyHash": "3f1b8dea8581d39e23f11c9d657fcc5f",
+          "passwordHash": "8d90a8dcfd7605877229f8d6cba55ed55070167b",
+          "provider": "local"
+        }
+      },
+      "identity": "admin",
+      "name": "System Admininstrator",
+      "type": "User"
+    },
+    "owner": "0.01.lKcw3zUU.0000.0000",
+    "type": "User"
+  },
+  "1.03.!": {
+    "_id": "1.03.!",
+    "_rev": "1-770259813de918ea0bc7a210e1b7edac",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "device",
+    "tver": 1,
+    "type": "entity"
+  },
+  "1.03.ff080f1f.0000.0000": {
+    "_id": "1.03.ff080f1f.0000.0000",
+    "_rev": "1-201d0bad4894073f3e6723c7900c0c05",
+    "data": {
+      "dver": 1,
+      "hwid": "ff080f1f",
+      "id": 1,
+      "label": "ff080f1f",
+      "settings": {
+        "aaBatteryType": "Alkaline",
+        "adminPin": "1111",
+        "antennaPorts": {
+          "antenna0": "rj45",
+          "antenna1": "rj45"
+        },
+        "deniedChannels": [],
+        "disableHttp": false,
+        "displayBrightness": 170,
+        "dspPlcState": false,
+        "groups": [],
+        "network": [
+          {
+            "dns1": "",
+            "dns2": "",
+            "gateway": "",
+            "interface": "admin",
+            "mode": "dhcp",
+            "netmask": "",
+            "rearConnector": 1,
+            "staticIP": ""
+          },
+          {
+            "dns1": "",
+            "dns2": "",
+            "gateway": "",
+            "interface": "ivc",
+            "mode": "dhcp",
+            "netmask": "",
+            "rearConnector": 1,
+            "staticIP": "",
+            "useAdmin": true
+          },
+          {
+            "dns1": "",
+            "dns2": "",
+            "gateway": "",
+            "interface": "aes67",
+            "mode": "dhcp",
+            "netmask": "",
+            "ptpFollowerMode": false,
+            "rearConnector": 2,
+            "staticIP": ""
+          },
+          {
+            "dns1": "",
+            "dns2": "",
+            "gateway": "",
+            "interface": "aes67Secondary",
+            "mode": "dhcp",
+            "netmask": "",
+            "ptpFollowerMode": false,
+            "rearConnector": 255,
+            "staticIP": ""
+          },
+          {
+            "gateway": "",
+            "host": "",
+            "interface": "danteprim",
+            "mac": "",
+            "mode": "",
+            "netmask": "",
+            "rearConnector": 255,
+            "sampleRate": 0,
+            "staticIP": "",
+            "status": ""
+          },
+          {
+            "gateway": "",
+            "host": "",
+            "interface": "dantesec",
+            "mac": "",
+            "mode": "",
+            "netmask": "",
+            "rearConnector": 255,
+            "sampleRate": 0,
+            "staticIP": "",
+            "status": ""
+          }
+        ],
+        "otaPin": "0000",
+        "resourceAllocation": 0,
+        "roleSorting": "RoleNumber",
+        "touchSensitivity": 1,
+        "wirelessId": "F1F",
+        "wirelessRegion": 0
+      },
+      "systemId": 528159,
+      "type": "NEP-ARCADIA",
+      "uuid": "f2a422bf-d2a1-474e-a735-dc6bda10b0f3",
+      "versionHW": "1.0",
+      "versionSW": "1.0"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "NEP-ARCADIA"
+  },
+  "1.04.!": {
+    "_id": "1.04.!",
+    "_rev": "1-8caace6e11af6b08938ca8d134daf6f4",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "endpoint",
+    "tver": 1,
+    "type": "entity"
+  },
+  "1.04.ff080f1f.01.000000": {
+    "_id": "1.04.ff080f1f.01.000000",
+    "_rev": "1-abbb46e8b2a63cc9ff5a760a12a5f545",
+    "data": {
+      "id": 16777216,
+      "isGateway": true,
+      "label": "TCVR1",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 0,
+        "e1TcvrIndex": 0,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000001": {
+    "_id": "1.04.ff080f1f.01.000001",
+    "_rev": "1-5c658c2031f0470c6816938df57fc250",
+    "data": {
+      "id": 16777217,
+      "isGateway": true,
+      "label": "TCVR2",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 0,
+        "e1TcvrIndex": 1,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000002": {
+    "_id": "1.04.ff080f1f.01.000002",
+    "_rev": "1-4119420f343f82f27cafd3441666d152",
+    "data": {
+      "id": 16777218,
+      "isGateway": true,
+      "label": "TCVR3",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 0,
+        "e1TcvrIndex": 2,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000003": {
+    "_id": "1.04.ff080f1f.01.000003",
+    "_rev": "1-ba70c59b11487bd7ecd966f387b24e21",
+    "data": {
+      "id": 16777219,
+      "isGateway": true,
+      "label": "TCVR4",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 0,
+        "e1TcvrIndex": 3,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000004": {
+    "_id": "1.04.ff080f1f.01.000004",
+    "_rev": "1-470506979a2dd1e2a0353f2472c0520f",
+    "data": {
+      "id": 16777220,
+      "isGateway": true,
+      "label": "TCVR5",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 0,
+        "e1TcvrIndex": 4,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000005": {
+    "_id": "1.04.ff080f1f.01.000005",
+    "_rev": "1-76d9e2d3e49395b93824221f62978426",
+    "data": {
+      "id": 16777221,
+      "isGateway": true,
+      "label": "TCVR6",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 1,
+        "e1TcvrIndex": 0,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000006": {
+    "_id": "1.04.ff080f1f.01.000006",
+    "_rev": "1-6bc2229997b0c86ad7fcfff984e64ad4",
+    "data": {
+      "id": 16777222,
+      "isGateway": true,
+      "label": "TCVR7",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 1,
+        "e1TcvrIndex": 1,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000007": {
+    "_id": "1.04.ff080f1f.01.000007",
+    "_rev": "1-e4046f4d4a43f0d293bcdc95395df52c",
+    "data": {
+      "id": 16777223,
+      "isGateway": true,
+      "label": "TCVR8",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 1,
+        "e1TcvrIndex": 2,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000008": {
+    "_id": "1.04.ff080f1f.01.000008",
+    "_rev": "1-d529cdf515797147e8e1eb2b10e06a42",
+    "data": {
+      "id": 16777224,
+      "isGateway": true,
+      "label": "TCVR9",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 1,
+        "e1TcvrIndex": 3,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.04.ff080f1f.01.000009": {
+    "_id": "1.04.ff080f1f.01.000009",
+    "_rev": "1-9b1d7acc39feb50af9133dd75e3d7938",
+    "data": {
+      "id": 16777225,
+      "isGateway": true,
+      "label": "TCVR10",
+      "roleTypes": [],
+      "settings": {
+        "e1Index": 1,
+        "e1TcvrIndex": 4,
+        "syncOffset": 1,
+        "transport": "E1"
+      },
+      "type": "FSII-Antenna"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "FSII-Antenna"
+  },
+  "1.10.!": {
+    "_id": "1.10.!",
+    "_rev": "1-fb5e4579acad4aa04ef71d9aef3c1fc9",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "external",
+    "tver": 1,
+    "type": "entity"
+  },
+  "2.05.!": {
+    "_id": "2.05.!",
+    "_rev": "1-ddf15c9df53dc67fe74d69159a0ee20b",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "interface",
+    "tver": 1,
+    "type": "entity"
+  },
+  "2.05.ff080f1f.0000.0000": {
+    "_id": "2.05.ff080f1f.0000.0000",
+    "_rev": "1-23e33348c1d2a3cf610a31d512a77951",
+    "data": {
+      "hwIndex": 0,
+      "id": 0,
+      "label": "1/2W I/F",
+      "settings": {
+        "mode": "ClearCom",
+        "power": false
+      },
+      "type": "2W",
+      "versionHW": "0.0"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "2W"
+  },
+  "2.05.ff080f1f.0001.0000": {
+    "_id": "2.05.ff080f1f.0001.0000",
+    "_rev": "1-9defecf379d032719c2e9221d8b61f9b",
+    "data": {
+      "hwIndex": 1,
+      "id": 1,
+      "label": "1/2W I/F",
+      "settings": {
+        "mode": "ClearCom",
+        "power": false
+      },
+      "type": "2W",
+      "versionHW": "0.0"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "2W"
+  },
+  "2.05.ff080f1f.0002.0000": {
+    "_id": "2.05.ff080f1f.0002.0000",
+    "_rev": "1-2d11f3d34f9d154100780402744c375d",
+    "data": {
+      "hwIndex": 2,
+      "id": 2,
+      "label": "1/4W I/F",
+      "settings": {},
+      "type": "4W",
+      "versionHW": "0.0"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "4W"
+  },
+  "2.05.ff080f1f.0003.0000": {
+    "_id": "2.05.ff080f1f.0003.0000",
+    "_rev": "1-18e033c3b953044f6824bdbf50c9770a",
+    "data": {
+      "hwIndex": 200,
+      "id": 3,
+      "label": "1/Dante I/F",
+      "settings": {
+        "LAN1": true,
+        "LAN2": false
+      },
+      "type": "Dante",
+      "versionHW": "0.0"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "Dante"
+  },
+  "2.05.ff080f1f.0004.0000": {
+    "_id": "2.05.ff080f1f.0004.0000",
+    "_rev": "1-a66899b88a4f7220c990404e5f2e2d65",
+    "data": {
+      "hwIndex": 4,
+      "id": 4,
+      "label": "1/undefined",
+      "settings": {},
+      "type": "BASE",
+      "versionHW": "0.0"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "BASE"
+  },
+  "2.05.ff080f1f.0005.0000": {
+    "_id": "2.05.ff080f1f.0005.0000",
+    "_rev": "1-ef70140a4ab9b42dfcb6bd87caec3abb",
+    "data": {
+      "hwIndex": 5,
+      "id": 5,
+      "label": "1/HelixNet I/F",
+      "settings": {},
+      "type": "HelixNet"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "HelixNet"
+  },
+  "2.05.ff080f1f.0006.0000": {
+    "_id": "2.05.ff080f1f.0006.0000",
+    "_rev": "1-12fa93cfc63e65dcd51a2d5a642bcf15",
+    "data": {
+      "hwIndex": 100,
+      "id": 6,
+      "label": "1/IVC I/F",
+      "settings": {},
+      "type": "IVC"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "IVC"
+  },
+  "2.11.!": {
+    "_id": "2.11.!",
+    "_rev": "1-d92629b98643711635968bb2fe08d5fe",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "xport",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.06.!": {
+    "_id": "3.06.!",
+    "_rev": "1-4cb8e718dbb867d31d86b10b06ec6ceb",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "port",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.06.ff080f1f.0000.0000": {
+    "_id": "3.06.ff080f1f.0000.0000",
+    "_rev": "1-19f03464dec20da9a88a0beeda011a07",
+    "data": {
+      "desc": "2W Port A",
+      "hwIndex": 0,
+      "id": 0,
+      "label": "2W Port A",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "termination": false
+      },
+      "type": "2W",
+      "userId": 135208704
+    },
+    "owner": "2.05.ff080f1f.0000.0000",
+    "type": "2W"
+  },
+  "3.06.ff080f1f.0000.0001": {
+    "_id": "3.06.ff080f1f.0000.0001",
+    "_rev": "1-26f7568692cffd0393fa9eb142ae2bfa",
+    "data": {
+      "desc": "2W Port B",
+      "hwIndex": 1,
+      "id": 1,
+      "label": "2W Port B",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "termination": false
+      },
+      "type": "2W",
+      "userId": 135208705
+    },
+    "owner": "2.05.ff080f1f.0000.0000",
+    "type": "2W"
+  },
+  "3.06.ff080f1f.0001.0000": {
+    "_id": "3.06.ff080f1f.0001.0000",
+    "_rev": "1-2c636b7c398201ac358881e1606aeca2",
+    "data": {
+      "desc": "2W Port C",
+      "hwIndex": 0,
+      "id": 0,
+      "label": "2W Port C",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "termination": false
+      },
+      "type": "2W",
+      "userId": 135208706
+    },
+    "owner": "2.05.ff080f1f.0001.0000",
+    "type": "2W"
+  },
+  "3.06.ff080f1f.0001.0001": {
+    "_id": "3.06.ff080f1f.0001.0001",
+    "_rev": "1-6df3bc4f9c82af60addb77ccfed5f36b",
+    "data": {
+      "desc": "2W Port D",
+      "hwIndex": 1,
+      "id": 1,
+      "label": "2W Port D",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "termination": false
+      },
+      "type": "2W",
+      "userId": 135208707
+    },
+    "owner": "2.05.ff080f1f.0001.0000",
+    "type": "2W"
+  },
+  "3.06.ff080f1f.0002.0000": {
+    "_id": "3.06.ff080f1f.0002.0000",
+    "_rev": "1-02b4070aa2994057695c142b7c2bd790",
+    "data": {
+      "desc": "4W Port 1",
+      "hwIndex": 0,
+      "id": 0,
+      "label": "4W Port 1",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208708
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0001": {
+    "_id": "3.06.ff080f1f.0002.0001",
+    "_rev": "1-6f9f369312d7d04cd1d0a87f0abc0abd",
+    "data": {
+      "desc": "4W Port 2",
+      "hwIndex": 1,
+      "id": 1,
+      "label": "4W Port 2",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208709
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0002": {
+    "_id": "3.06.ff080f1f.0002.0002",
+    "_rev": "1-c97b0d83e86857a4c29746caabf614e5",
+    "data": {
+      "desc": "4W Port 3",
+      "hwIndex": 2,
+      "id": 2,
+      "label": "4W Port 3",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208710
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0003": {
+    "_id": "3.06.ff080f1f.0002.0003",
+    "_rev": "1-c699b74b75a2a981b03fb8d34eae699a",
+    "data": {
+      "desc": "4W Port 4",
+      "hwIndex": 3,
+      "id": 3,
+      "label": "4W Port 4",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208711
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0004": {
+    "_id": "3.06.ff080f1f.0002.0004",
+    "_rev": "1-60309c39eb3fe0bd4614547c8e4027a8",
+    "data": {
+      "desc": "4W Port 5",
+      "hwIndex": 4,
+      "id": 4,
+      "label": "4W Port 5",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208712
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0005": {
+    "_id": "3.06.ff080f1f.0002.0005",
+    "_rev": "1-798c5789e96c827a9657c414e091af43",
+    "data": {
+      "desc": "4W Port 6",
+      "hwIndex": 5,
+      "id": 5,
+      "label": "4W Port 6",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208713
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0006": {
+    "_id": "3.06.ff080f1f.0002.0006",
+    "_rev": "1-9da1cb978a9aaffed3a8e76b9b7573b6",
+    "data": {
+      "desc": "4W Port 7",
+      "hwIndex": 6,
+      "id": 6,
+      "label": "4W Port 7",
+      "settings": {
+        "callSignal": true,
+        "inputGain": 0,
+        "joinMode": "Talk-Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "serial": {
+          "baudRate": 19200,
+          "data": 8,
+          "flowControl": "none",
+          "framingType": "Eclipse/4000",
+          "parity": 0,
+          "state": "disabled",
+          "stop": 1
+        }
+      },
+      "type": "4W",
+      "userId": 135208714
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "4W"
+  },
+  "3.06.ff080f1f.0002.0007": {
+    "_id": "3.06.ff080f1f.0002.0007",
+    "_rev": "1-c8a861caa48686fe392ea57a4db7741f",
+    "data": {
+      "desc": "SA",
+      "hwIndex": 7,
+      "id": 7,
+      "label": "SA",
+      "portId": 7,
+      "settings": {
+        "joinMode": "Listen",
+        "outputGain": 0,
+        "pinout": "panel",
+        "splitLabel": {
+          "direction": "output",
+          "otherPortId": 8
+        }
+      },
+      "type": "SA",
+      "userId": 135208715
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "SA"
+  },
+  "3.06.ff080f1f.0002.0008": {
+    "_id": "3.06.ff080f1f.0002.0008",
+    "_rev": "1-9bf2cf069a186d676534e34d891e3863",
+    "data": {
+      "desc": "PGM",
+      "hwIndex": 7,
+      "id": 8,
+      "label": "PGM",
+      "portId": 8,
+      "settings": {
+        "inputGain": 0,
+        "joinMode": "Talk",
+        "pinout": "panel",
+        "splitLabel": {
+          "direction": "input",
+          "otherPortId": 7
+        }
+      },
+      "type": "PGM",
+      "userId": 135208716
+    },
+    "owner": "2.05.ff080f1f.0002.0000",
+    "type": "PGM"
+  },
+  "3.06.ff080f1f.0004.0000": {
+    "_id": "3.06.ff080f1f.0004.0000",
+    "_rev": "1-55e969502c4cb52a0f2e2255cf128444",
+    "data": {
+      "desc": "Front Panel of Basestation",
+      "hwIndex": 12,
+      "id": 0,
+      "portId": 0,
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HS",
+      "userId": 135208717
+    },
+    "owner": "2.05.ff080f1f.0004.0000",
+    "type": "HS"
+  },
+  "3.06.ff080f1f.0005.0000": {
+    "_id": "3.06.ff080f1f.0005.0000",
+    "_rev": "2-a85a0f4a77ff106fdad6a16a4bc94abf",
+    "data": {
+      "desc": "HelixNet Port 0",
+      "hwIndex": 0,
+      "id": 0,
+      "label": "HXN P 0",
+      "settings": {
+        "associatedHxnChannelGid": "3.20.lKcw3zUU.0000.0001",
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208718
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0001": {
+    "_id": "3.06.ff080f1f.0005.0001",
+    "_rev": "2-f2a1dd8e2f59906190bd8f7181e178f9",
+    "data": {
+      "desc": "HelixNet Port 1",
+      "hwIndex": 1,
+      "id": 1,
+      "label": "HXN P 1",
+      "settings": {
+        "associatedHxnChannelGid": "3.20.lKcw3zUU.0000.0002",
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208719
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0002": {
+    "_id": "3.06.ff080f1f.0005.0002",
+    "_rev": "2-62227a3320aba4322defb8047577f8ae",
+    "data": {
+      "desc": "HelixNet Port 2",
+      "hwIndex": 2,
+      "id": 2,
+      "label": "HXN P 2",
+      "settings": {
+        "associatedHxnChannelGid": "3.20.lKcw3zUU.0000.0003",
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208720
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0003": {
+    "_id": "3.06.ff080f1f.0005.0003",
+    "_rev": "2-16384ce2889103008ed5c39fd7d19a47",
+    "data": {
+      "desc": "HelixNet Port 3",
+      "hwIndex": 3,
+      "id": 3,
+      "label": "HXN P 3",
+      "settings": {
+        "associatedHxnChannelGid": "3.20.lKcw3zUU.0000.0004",
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208721
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0004": {
+    "_id": "3.06.ff080f1f.0005.0004",
+    "_rev": "1-a4fb88d4bb3d4586f1369ce77879e2b8",
+    "data": {
+      "desc": "HelixNet Port 4",
+      "hwIndex": 4,
+      "id": 4,
+      "label": "HXN P 4",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208722
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0005": {
+    "_id": "3.06.ff080f1f.0005.0005",
+    "_rev": "1-bd7a28d7cfec494d14369c7a7d9fd903",
+    "data": {
+      "desc": "HelixNet Port 5",
+      "hwIndex": 5,
+      "id": 5,
+      "label": "HXN P 5",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208723
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0006": {
+    "_id": "3.06.ff080f1f.0005.0006",
+    "_rev": "1-340e6424740aaffd8a6130e57af88309",
+    "data": {
+      "desc": "HelixNet Port 6",
+      "hwIndex": 6,
+      "id": 6,
+      "label": "HXN P 6",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208724
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0007": {
+    "_id": "3.06.ff080f1f.0005.0007",
+    "_rev": "1-e5033cd8b2c76adbcebb0f4920219ea6",
+    "data": {
+      "desc": "HelixNet Port 7",
+      "hwIndex": 7,
+      "id": 7,
+      "label": "HXN P 7",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208725
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0008": {
+    "_id": "3.06.ff080f1f.0005.0008",
+    "_rev": "1-efea74c06c016f1dc5655bd85d0ccb6b",
+    "data": {
+      "desc": "HelixNet Port 8",
+      "hwIndex": 8,
+      "id": 8,
+      "label": "HXN P 8",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208726
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0009": {
+    "_id": "3.06.ff080f1f.0005.0009",
+    "_rev": "1-c527cbed4d6e371cd0e76a97188dcc15",
+    "data": {
+      "desc": "HelixNet Port 9",
+      "hwIndex": 9,
+      "id": 9,
+      "label": "HXN P 9",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208727
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.000a": {
+    "_id": "3.06.ff080f1f.0005.000a",
+    "_rev": "1-e1598c1624ddc6bee425bb13dc02c95d",
+    "data": {
+      "desc": "HelixNet Port 10",
+      "hwIndex": 10,
+      "id": 10,
+      "label": "HXN P 10",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208728
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.000b": {
+    "_id": "3.06.ff080f1f.0005.000b",
+    "_rev": "1-0053b103b9ab6e268dabef573d380fda",
+    "data": {
+      "desc": "HelixNet Port 11",
+      "hwIndex": 11,
+      "id": 11,
+      "label": "HXN P 11",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208729
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.000c": {
+    "_id": "3.06.ff080f1f.0005.000c",
+    "_rev": "1-129d2ce53b9a28d53c87794712831cd0",
+    "data": {
+      "desc": "HelixNet Port 12",
+      "hwIndex": 12,
+      "id": 12,
+      "label": "HXN P 12",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208730
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.000d": {
+    "_id": "3.06.ff080f1f.0005.000d",
+    "_rev": "1-2db5f80b9304d1e41905ab36cb94a0a9",
+    "data": {
+      "desc": "HelixNet Port 13",
+      "hwIndex": 13,
+      "id": 13,
+      "label": "HXN P 13",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208731
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.000e": {
+    "_id": "3.06.ff080f1f.0005.000e",
+    "_rev": "1-ac685ac51fe89ecc90353cf1cb63ee8a",
+    "data": {
+      "desc": "HelixNet Port 14",
+      "hwIndex": 14,
+      "id": 14,
+      "label": "HXN P 14",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208732
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.000f": {
+    "_id": "3.06.ff080f1f.0005.000f",
+    "_rev": "1-f4157b84c531d121ed3872c56c31472b",
+    "data": {
+      "desc": "HelixNet Port 15",
+      "hwIndex": 15,
+      "id": 15,
+      "label": "HXN P 15",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208733
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0010": {
+    "_id": "3.06.ff080f1f.0005.0010",
+    "_rev": "1-0d64b9db8814851a53f7412c3545f753",
+    "data": {
+      "desc": "HelixNet Port 16",
+      "hwIndex": 16,
+      "id": 16,
+      "label": "HXN P 16",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208734
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0011": {
+    "_id": "3.06.ff080f1f.0005.0011",
+    "_rev": "1-8b0c087004a0e29fc14d060cc730e1cf",
+    "data": {
+      "desc": "HelixNet Port 17",
+      "hwIndex": 17,
+      "id": 17,
+      "label": "HXN P 17",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208735
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0012": {
+    "_id": "3.06.ff080f1f.0005.0012",
+    "_rev": "1-0ca5898fa57c3098ee8bf67655130d61",
+    "data": {
+      "desc": "HelixNet Port 18",
+      "hwIndex": 18,
+      "id": 18,
+      "label": "HXN P 18",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208736
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0013": {
+    "_id": "3.06.ff080f1f.0005.0013",
+    "_rev": "1-23cd4e9893e3b3511660da4b7b633d4f",
+    "data": {
+      "desc": "HelixNet Port 19",
+      "hwIndex": 19,
+      "id": 19,
+      "label": "HXN P 19",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208737
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0014": {
+    "_id": "3.06.ff080f1f.0005.0014",
+    "_rev": "1-2455ea259ecf47b4560bb258a61b7c01",
+    "data": {
+      "desc": "HelixNet Port 20",
+      "hwIndex": 20,
+      "id": 20,
+      "label": "HXN P 20",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208738
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0015": {
+    "_id": "3.06.ff080f1f.0005.0015",
+    "_rev": "1-b74ba438c871bc383b9eafbbfe584887",
+    "data": {
+      "desc": "HelixNet Port 21",
+      "hwIndex": 21,
+      "id": 21,
+      "label": "HXN P 21",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208739
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0016": {
+    "_id": "3.06.ff080f1f.0005.0016",
+    "_rev": "1-7d4243160618c84a2cac4c14c3162df5",
+    "data": {
+      "desc": "HelixNet Port 22",
+      "hwIndex": 22,
+      "id": 22,
+      "label": "HXN P 22",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208740
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.06.ff080f1f.0005.0017": {
+    "_id": "3.06.ff080f1f.0005.0017",
+    "_rev": "1-12cf6bd9fcdcf1fde6f40a25ba3efca4",
+    "data": {
+      "desc": "HelixNet Port 23",
+      "hwIndex": 23,
+      "id": 23,
+      "label": "HXN P 23",
+      "settings": {
+        "inputGain": 0,
+        "outputGain": 0
+      },
+      "type": "HelixNet",
+      "userId": 135208741
+    },
+    "owner": "2.05.ff080f1f.0005.0000",
+    "type": "HelixNet"
+  },
+  "3.07.!": {
+    "_id": "3.07.!",
+    "_rev": "1-ee47a7a04062bb18955228806850314a",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "gpio",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.07.ff080f1f.0000.0000": {
+    "_id": "3.07.ff080f1f.0000.0000",
+    "_rev": "1-7a4c186474e4410f1d1e25bb59dc5942",
+    "data": {
+      "id": 0,
+      "label": "GPI1",
+      "settings": {
+        "events": []
+      },
+      "type": "GPI"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "GPI"
+  },
+  "3.07.ff080f1f.0000.0001": {
+    "_id": "3.07.ff080f1f.0000.0001",
+    "_rev": "1-958c24d270be5bd8e8f2ce78bb5f3723",
+    "data": {
+      "id": 1,
+      "label": "GPI2",
+      "settings": {
+        "events": []
+      },
+      "type": "GPI"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "GPI"
+  },
+  "3.07.ff080f1f.0001.0000": {
+    "_id": "3.07.ff080f1f.0001.0000",
+    "_rev": "1-c3244b437b375e2410a4e6bbaedbbf24",
+    "data": {
+      "id": 0,
+      "label": "GPO1",
+      "settings": {
+        "events": [],
+        "offDelays": 0
+      },
+      "type": "GPO"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "GPO"
+  },
+  "3.07.ff080f1f.0001.0001": {
+    "_id": "3.07.ff080f1f.0001.0001",
+    "_rev": "1-6efff44feb850ceb28dbc8132f22ae4b",
+    "data": {
+      "id": 1,
+      "label": "GPO2",
+      "settings": {
+        "events": [],
+        "offDelays": 0
+      },
+      "type": "GPO"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "GPO"
+  },
+  "3.07.ff080f1f.0001.0002": {
+    "_id": "3.07.ff080f1f.0001.0002",
+    "_rev": "1-a2604525b98c0e2634af81834444e78a",
+    "data": {
+      "id": 2,
+      "label": "GPO3",
+      "settings": {
+        "events": [],
+        "offDelays": 0
+      },
+      "type": "GPO"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "GPO"
+  },
+  "3.07.ff080f1f.0001.0003": {
+    "_id": "3.07.ff080f1f.0001.0003",
+    "_rev": "1-996deda1f143b086e3accc1d69f482b7",
+    "data": {
+      "id": 3,
+      "label": "GPO4",
+      "settings": {
+        "events": [],
+        "offDelays": 0
+      },
+      "type": "GPO"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "GPO"
+  },
+  "3.20.!": {
+    "_id": "3.20.!",
+    "_rev": "1-a45c2f15f04a42e6fc725491cd6f4d08",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "partyline",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.20.lKcw3zUU.0000.0001": {
+    "_id": "3.20.lKcw3zUU.0000.0001",
+    "_rev": "1-f8d04d5e1e89bb7dd2612757190848b9",
+    "data": {
+      "helixnetEnabled": true,
+      "id": 1,
+      "label": "Channel 1",
+      "type": "partyline"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "partyline"
+  },
+  "3.20.lKcw3zUU.0000.0002": {
+    "_id": "3.20.lKcw3zUU.0000.0002",
+    "_rev": "1-70a79fac3710a45c0e9084114631e9a3",
+    "data": {
+      "helixnetEnabled": true,
+      "id": 2,
+      "label": "Channel 2",
+      "type": "partyline"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "partyline"
+  },
+  "3.20.lKcw3zUU.0000.0003": {
+    "_id": "3.20.lKcw3zUU.0000.0003",
+    "_rev": "1-7cff87e5d024b853bfdf21a01f151b23",
+    "data": {
+      "helixnetEnabled": true,
+      "id": 3,
+      "label": "Channel 3",
+      "type": "partyline"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "partyline"
+  },
+  "3.20.lKcw3zUU.0000.0004": {
+    "_id": "3.20.lKcw3zUU.0000.0004",
+    "_rev": "1-03dfc9ce1b00c033e4814b50303ebba6",
+    "data": {
+      "helixnetEnabled": true,
+      "id": 4,
+      "label": "Channel 4",
+      "type": "partyline"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "partyline"
+  },
+  "3.21.!": {
+    "_id": "3.21.!",
+    "_rev": "1-fa6fc8f3f28bbca753051f49ad0eae78",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "direct",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.22.!": {
+    "_id": "3.22.!",
+    "_rev": "1-669828774ec2843a85bbca838a7e6f96",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "fixedGroup",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.23.!": {
+    "_id": "3.23.!",
+    "_rev": "1-eae9e47c5af412a6d3f9169e496362e2",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "role",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.23.lKcw3zUU.0000.0001": {
+    "_id": "3.23.lKcw3zUU.0000.0001",
+    "_rev": "1-982584e42dbb7640fdf6ae0390aac5aa",
+    "data": {
+      "description": "",
+      "id": 1,
+      "isDefault": true,
+      "label": "HMS Default",
+      "settings": {
+        "allTalkBtnMode": "visible",
+        "displayBrightness": "medium",
+        "gpios": [
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 0,
+            "label": "opto1",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 1,
+            "label": "opto2",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 2,
+            "label": "opto3",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 3,
+            "label": "opto4",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 0,
+            "label": "relay1",
+            "type": "relay"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 1,
+            "label": "relay2",
+            "type": "relay"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 2,
+            "label": "relay3",
+            "type": "relay"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 3,
+            "label": "relay4",
+            "type": "relay"
+          }
+        ],
+        "headphoneGain": 0,
+        "headphoneLimit": 0,
+        "headsetButtonMode": "toggle",
+        "headsetMicType": "dynamic_0",
+        "hotMicGain": 0,
+        "keyBrightness": "highLow",
+        "keysets": [
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 0,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 1,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/3",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 2,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/4",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 3,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [],
+            "inUseTally": false,
+            "interlockGroup": false,
+            "isPgm": true,
+            "keysetIndex": 4,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "disabled"
+          }
+        ],
+        "loudspeakerDimLevel": 0,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainMaximumVolume": 29,
+        "mainMinimumVolume": 0,
+        "menuAccessEnabled": true,
+        "micContourFilterEnabled": false,
+        "micHeadroom": "normal",
+        "pgmAssignments": [],
+        "pgmGain": 0,
+        "pgmGpoTriggerEnabled": false,
+        "pgmIfbDimLevel": 0,
+        "pgmLabel": "",
+        "pgmVoxEnabled": false,
+        "pgmVoxOffDelayMs": 500,
+        "rmkBtnMode": "visible",
+        "rsPgmEnabled": true,
+        "saBtnLatchEnabled": false,
+        "saGain": 0,
+        "saLabel": "",
+        "screensaverMode": "connectionName",
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -12
+      },
+      "type": "HMS-4X"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "HMS-4X"
+  },
+  "3.23.lKcw3zUU.0000.0002": {
+    "_id": "3.23.lKcw3zUU.0000.0002",
+    "_rev": "1-6c1ef90b69ee652ae7ecef5d6c03ba4c",
+    "data": {
+      "description": "",
+      "id": 2,
+      "isDefault": true,
+      "label": "HRM Default",
+      "settings": {
+        "allTalkBtnMode": "visible",
+        "displayBrightness": "medium",
+        "gpios": [
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 0,
+            "label": "opto1",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              }
+            ],
+            "hwIndex": 0,
+            "label": "relay1",
+            "type": "relay"
+          }
+        ],
+        "headphoneGain": 0,
+        "headphoneLimit": 0,
+        "headsetButtonMode": "toggle",
+        "headsetMicType": "dynamic_0",
+        "hotMicGain": 0,
+        "keyBrightness": "highLow",
+        "keysets": [
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 0,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 1,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/3",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 2,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/4",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 3,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [],
+            "inUseTally": false,
+            "interlockGroup": false,
+            "isPgm": true,
+            "keysetIndex": 4,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "disabled"
+          }
+        ],
+        "loudspeakerDimLevel": 0,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainMaximumVolume": 29,
+        "mainMinimumVolume": 0,
+        "menuAccessEnabled": true,
+        "micContourFilterEnabled": false,
+        "micHeadroom": "normal",
+        "pgmAssignments": [],
+        "pgmGain": 0,
+        "pgmGpoTriggerEnabled": false,
+        "pgmIfbDimLevel": 0,
+        "pgmLabel": "",
+        "pgmVoxEnabled": false,
+        "pgmVoxOffDelayMs": 500,
+        "rmkBtnMode": "disabled",
+        "rsPgmEnabled": true,
+        "saBtnLatchEnabled": false,
+        "saConnectionAssignModeEnabled": true,
+        "saConnectionAssignments": [],
+        "saGain": 0,
+        "saLabel": "",
+        "saPgmOutputEnabled": false,
+        "screensaverMode": "connectionName",
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -12
+      },
+      "type": "HRM-4X"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "HRM-4X"
+  },
+  "3.23.lKcw3zUU.0000.0003": {
+    "_id": "3.23.lKcw3zUU.0000.0003",
+    "_rev": "1-f68e1d4bc48e4800157255854ed3dd1b",
+    "data": {
+      "description": "",
+      "id": 3,
+      "isDefault": true,
+      "label": "HKB Default",
+      "settings": {
+        "displayBrightness": "medium",
+        "gpios": [
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 0,
+            "label": "opto1",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 1,
+            "label": "opto2",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 2,
+            "label": "opto3",
+            "type": "opto"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 0,
+            "label": "relay1",
+            "type": "relay"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 1,
+            "label": "relay2",
+            "type": "relay"
+          },
+          {
+            "events": [
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "talk"
+              },
+              {
+                "connections": [],
+                "type": "connection",
+                "value": "call"
+              },
+              {
+                "type": "localKeyPress",
+                "value": "none"
+              }
+            ],
+            "hwIndex": 2,
+            "label": "relay3",
+            "type": "relay"
+          }
+        ],
+        "headphoneGain": 0,
+        "headphoneLimit": 0,
+        "headsetButtonMode": "toggle",
+        "headsetMicType": "dynamic_0",
+        "keyBrightness": "highLow",
+        "keysets": [
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 0,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 1,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/3",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 2,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/4",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 3,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "latching"
+          },
+          {
+            "entities": [],
+            "inUseTally": false,
+            "interlockGroup": false,
+            "isPgm": true,
+            "keysetIndex": 4,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "talkBtnMode": "disabled"
+          }
+        ],
+        "loudspeakerDimLevel": 0,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainMaximumVolume": 29,
+        "mainMinimumVolume": 0,
+        "menuAccessEnabled": true,
+        "micContourFilterEnabled": false,
+        "micHeadroom": "normal",
+        "screensaverMode": "connectionName",
+        "shiftPage": "auto",
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -12,
+        "unlatchOnShiftEnabled": true
+      },
+      "type": "HKB-2X"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "HKB-2X"
+  },
+  "3.23.lKcw3zUU.0000.0004": {
+    "_id": "3.23.lKcw3zUU.0000.0004",
+    "_rev": "1-55b99130f03120f1eea507f2081046c7",
+    "data": {
+      "description": "",
+      "id": 4,
+      "isDefault": true,
+      "label": "HBP Default",
+      "settings": {
+        "displayBrightness": "medium",
+        "headphoneGain": 0,
+        "headphoneLimit": 0,
+        "headsetMicType": "dynamic_0",
+        "keyBrightness": "highLow",
+        "keysets": [
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 0,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "stackedKeyEnabled": false,
+            "stackedKeyLabel": "",
+            "talkBtnMode": "latching",
+            "usbFlasherMode": "disabled"
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 1,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "stackedKeyEnabled": false,
+            "stackedKeyLabel": "",
+            "talkBtnMode": "latching",
+            "usbFlasherMode": "disabled"
+          },
+          {
+            "entities": [],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 2,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "stackedKeyEnabled": false,
+            "stackedKeyLabel": "",
+            "talkBtnMode": "latching",
+            "usbFlasherMode": "disabled"
+          },
+          {
+            "entities": [],
+            "inUseTally": true,
+            "interlockGroup": false,
+            "keysetIndex": 3,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "stackedKeyEnabled": false,
+            "stackedKeyLabel": "",
+            "talkBtnMode": "latching",
+            "usbFlasherMode": "disabled"
+          },
+          {
+            "entities": [],
+            "inUseTally": false,
+            "interlockGroup": false,
+            "isPgm": true,
+            "keysetIndex": 4,
+            "maximumVolume": 29,
+            "minimumVolume": 0,
+            "secondaryTalkAction": "unassigned",
+            "stackedKeyEnabled": false,
+            "stackedKeyLabel": "",
+            "talkBtnMode": "disabled",
+            "usbFlasherMode": "disabled"
+          }
+        ],
+        "menuAccessEnabled": true,
+        "micContourFilterEnabled": false,
+        "micHeadroom": "normal",
+        "rotateDisplayEnabled": false,
+        "screensaverMode": "connectionName",
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -12,
+        "vibrateOnCallEnabled": false
+      },
+      "type": "HBP-2X"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "HBP-2X"
+  },
+  "3.23.lKcw3zUU.0000.0005": {
+    "_id": "3.23.lKcw3zUU.0000.0005",
+    "_rev": "1-c24df6615ed84e6fb14976c7d797378e",
+    "data": {
+      "description": "",
+      "id": 5,
+      "isDefault": true,
+      "label": "AIC Default",
+      "notAssignable": true,
+      "settings": {
+        "keysets": [
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "isAutoListen": true,
+            "keys": [
+              {
+                "isLatchable": true,
+                "keyIndex": 0,
+                "type": "Talk"
+              },
+              {
+                "isLatchable": true,
+                "keyIndex": 1,
+                "type": "Call"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 2,
+                "type": "None"
+              },
+              {
+                "isLatchable": true,
+                "keyIndex": 3,
+                "type": "Listen"
+              }
+            ],
+            "keysetIndex": 0,
+            "maxVolume": 15000,
+            "minVolume": 100
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "isAutoListen": true,
+            "keys": [
+              {
+                "isLatchable": true,
+                "keyIndex": 0,
+                "type": "Talk"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 1,
+                "type": "Call"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 2,
+                "type": "None"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 3,
+                "type": "Listen"
+              }
+            ],
+            "keysetIndex": 1,
+            "maxVolume": 15000,
+            "minVolume": 0
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/3",
+                "type": 0
+              }
+            ],
+            "isAutoListen": true,
+            "keys": [
+              {
+                "isLatchable": true,
+                "keyIndex": 0,
+                "type": "Talk"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 1,
+                "type": "Call"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 2,
+                "type": "None"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 3,
+                "type": "Listen"
+              }
+            ],
+            "keysetIndex": 2,
+            "maxVolume": 15000,
+            "minVolume": 0
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/4",
+                "type": 0
+              }
+            ],
+            "isAutoListen": true,
+            "keys": [
+              {
+                "isLatchable": true,
+                "keyIndex": 0,
+                "type": "Talk"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 1,
+                "type": "Call"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 2,
+                "type": "None"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 3,
+                "type": "Listen"
+              }
+            ],
+            "keysetIndex": 3,
+            "maxVolume": 15000,
+            "minVolume": 0
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/5",
+                "type": 0
+              }
+            ],
+            "isAutoListen": true,
+            "keys": [
+              {
+                "isLatchable": true,
+                "keyIndex": 0,
+                "type": "Talk"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 1,
+                "type": "Call"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 2,
+                "type": "None"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 3,
+                "type": "Listen"
+              }
+            ],
+            "keysetIndex": 4,
+            "maxVolume": 15000,
+            "minVolume": 0
+          },
+          {
+            "entities": [
+              {
+                "res": "/api/1/connections/6",
+                "type": 0
+              }
+            ],
+            "isAutoListen": true,
+            "keys": [
+              {
+                "isLatchable": true,
+                "keyIndex": 0,
+                "type": "Talk"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 1,
+                "type": "Call"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 2,
+                "type": "None"
+              },
+              {
+                "isLatchable": false,
+                "keyIndex": 3,
+                "type": "Listen"
+              }
+            ],
+            "keysetIndex": 5,
+            "maxVolume": 15000,
+            "minVolume": 0
+          }
+        ]
+      },
+      "type": "LQ-AIC"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "LQ-AIC"
+  },
+  "3.23.lKcw3zUU.0000.0006": {
+    "_id": "3.23.lKcw3zUU.0000.0006",
+    "_rev": "1-922b43f8737812066934d77a6f172b78",
+    "data": {
+      "description": "",
+      "id": 6,
+      "isDefault": true,
+      "label": "FSBP Default",
+      "settings": {
+        "batteryAlarmMode": "vibrate+audio",
+        "callAlertMode": "vibrate+audio",
+        "dimmedTallies": false,
+        "displayBrightness": "high",
+        "displayDimTimeout": 30,
+        "displayOffTimeout": 60,
+        "eavesdropping": false,
+        "groups": [],
+        "headphoneLimit": 0,
+        "headphoneLowLevelLimit": -70,
+        "keysets": [
+          {
+            "activationState": "talkforcelisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 0,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talkforcelisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "listen",
+            "entities": [
+              {
+                "res": "/api/1/special/call",
+                "type": 1
+              }
+            ],
+            "isCallKey": true,
+            "keysetIndex": 2,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "listen",
+            "entities": [
+              {
+                "res": "/api/1/special/call",
+                "type": 1
+              }
+            ],
+            "isCallKey": true,
+            "keysetIndex": 3,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "entities": [],
+            "isCallKey": false,
+            "isReplyKey": true,
+            "keysetIndex": 4,
+            "talkBtnMode": "disabled"
+          }
+        ],
+        "latchingTalkKeys": true,
+        "lineInVolume": 0,
+        "listenAgainAutoDelete": 240,
+        "listenAgainRecordTime": 15,
+        "logicInput1": "none",
+        "logicInput1ActionDestination": "",
+        "logicInput1ActionType": "none",
+        "logicInput2": "none",
+        "logicInput2ActionDestination": "",
+        "logicInput2ActionType": "none",
+        "lowBatteryThreshold": 10,
+        "masterVolume": -9.6,
+        "masterVolumeOperation": false,
+        "menuKeyMode": "switchvolctrl",
+        "menuLevel": "advanced",
+        "micEchoCancellation": false,
+        "micType": "automatic",
+        "outOfRangeAlarm": "audio",
+        "partyLineDisplayMode": false,
+        "portInputGain": 0,
+        "portOutputGain": 0,
+        "replyTalkAutoClear": 10,
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -9.6,
+        "useLocalSettings": false
+      },
+      "type": "FSII-BP"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "FSII-BP"
+  },
+  "3.23.lKcw3zUU.0000.0007": {
+    "_id": "3.23.lKcw3zUU.0000.0007",
+    "_rev": "1-f24081e5c6474104727e72ed6087e8be",
+    "data": {
+      "description": "",
+      "id": 7,
+      "isDefault": true,
+      "label": "Station Default",
+      "settings": {
+        "gnMicType": "electret",
+        "groups": [],
+        "headphoneDetect": true,
+        "headphoneLimit": 0,
+        "keysets": [
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 0,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/3",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 2,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/4",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 3,
+            "talkBtnMode": "latching"
+          }
+        ],
+        "masterVolume": -12,
+        "micType": "dynamic",
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -12
+      },
+      "type": "NEP"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "NEP"
+  },
+  "3.23.lKcw3zUU.0000.0008": {
+    "_id": "3.23.lKcw3zUU.0000.0008",
+    "_rev": "1-0d07c03c9e35b240a40d7f24e41bee77",
+    "data": {
+      "description": "",
+      "id": 8,
+      "isDefault": true,
+      "label": "EDGE Default",
+      "settings": {
+        "batteryAlarmMode": "vibrate+audio",
+        "blackoutMode": false,
+        "bluetoothEnabled": false,
+        "callAlertMode": "vibrate+audio",
+        "dimmedTallies": false,
+        "displayBrightness": "high",
+        "displayDimTimeout": 30,
+        "displayOffTimeout": 60,
+        "eavesdropping": false,
+        "flashlight": true,
+        "groups": [],
+        "headphoneGain": 0,
+        "headphoneLimit": 0,
+        "keysets": [
+          {
+            "activationState": "talkforcelisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 0,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talkforcelisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "listen",
+            "entities": [
+              {
+                "res": "/api/1/special/call",
+                "type": 1
+              }
+            ],
+            "isCallKey": true,
+            "keysetIndex": 2,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "listen",
+            "entities": [
+              {
+                "res": "/api/1/special/call",
+                "type": 1
+              }
+            ],
+            "isCallKey": true,
+            "keysetIndex": 3,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "entities": [],
+            "isCallKey": false,
+            "isReplyKey": true,
+            "keysetIndex": 4,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 5,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 6,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 7,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 8,
+            "maximumVolume": 12.1,
+            "minimumVolume": -80,
+            "talkBtnMode": "disabled"
+          }
+        ],
+        "latchingTalkKeys": true,
+        "logicInput1": "none",
+        "logicInput1ActionDestination": "",
+        "logicInput1ActionType": "none",
+        "logicInput2": "none",
+        "logicInput2ActionDestination": "",
+        "logicInput2ActionType": "none",
+        "lowBatteryThreshold": 10,
+        "mainVolumeMax": 0,
+        "mainVolumeMin": -69.9,
+        "masterVolume": -9.6,
+        "menuLevel": "advanced",
+        "micContourFilterEnabled": false,
+        "micType": "automatic",
+        "outOfRangeAlarm": "audio",
+        "portInputGain": 0,
+        "portOutputGain": 0,
+        "replyButtonVibration": false,
+        "replyTalkAutoClear": 10,
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -9.6,
+        "speaker": true,
+        "useLocalSettings": false
+      },
+      "type": "E-BP"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "E-BP"
+  },
+  "3.23.lKcw3zUU.0000.0009": {
+    "_id": "3.23.lKcw3zUU.0000.0009",
+    "_rev": "1-57ede6b580da878633b2004449d20277",
+    "data": {
+      "description": "",
+      "id": 9,
+      "isDefault": true,
+      "label": "V12 Default",
+      "settings": {
+        "auxVolumeLimit": -80,
+        "callToneEnabled": false,
+        "groups": [],
+        "gsMicGain": 50,
+        "headsetKeyLatch": false,
+        "headsetMicGain": 50,
+        "headsetMicType": "dynamic_unbalanced",
+        "keysets": [
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "isReplyKey": true,
+            "keysetIndex": 0,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 2,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 3,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 4,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 5,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 6,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 7,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 8,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 9,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 10,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 11,
+            "talkBtnMode": "latching"
+          }
+        ],
+        "listenAgainAutoDelete": 4,
+        "listenAgainThreshold": -48,
+        "logicInput1": "none",
+        "logicInput1ActivateTalkKeyNumber": 0,
+        "logicInput2": "none",
+        "logicInput2ActivateTalkKeyNumber": 0,
+        "logicInput3": "none",
+        "logicInput3ActivateTalkKeyNumber": 0,
+        "logicInput4": "none",
+        "logicInput4ActivateTalkKeyNumber": 0,
+        "loudspeakerDimLevel": -6,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainVolumeLimit": -36,
+        "menuLevel": "enabled",
+        "portInputGain": 0,
+        "portOutputGain": 0,
+        "replyTalkAutoClear": 10,
+        "sidetoneGain": -30,
+        "voxAudioDetectionReleaseDelay": 2,
+        "voxAudioDetectionThreshold": -20,
+        "voxAudioGating": false,
+        "voxAudioPresenceTally": false
+      },
+      "type": "V12"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "V12"
+  },
+  "3.23.lKcw3zUU.0000.000a": {
+    "_id": "3.23.lKcw3zUU.0000.000a",
+    "_rev": "1-b5b48309752db0cde5688297c86a5471",
+    "data": {
+      "description": "",
+      "id": 10,
+      "isDefault": true,
+      "label": "V24 Default",
+      "settings": {
+        "auxVolumeLimit": -80,
+        "callToneEnabled": false,
+        "groups": [],
+        "gsMicGain": 50,
+        "headsetKeyLatch": false,
+        "headsetMicGain": 50,
+        "headsetMicType": "dynamic_unbalanced",
+        "keysets": [
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "isReplyKey": true,
+            "keysetIndex": 0,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 2,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 3,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 4,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 5,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 6,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 7,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 8,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 9,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 10,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 11,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 12,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 13,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 14,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 15,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 16,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 17,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 18,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 19,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 20,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 21,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 22,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 23,
+            "talkBtnMode": "latching"
+          }
+        ],
+        "listenAgainAutoDelete": 4,
+        "listenAgainThreshold": -48,
+        "logicInput1": "none",
+        "logicInput1ActivateTalkKeyNumber": 0,
+        "logicInput2": "none",
+        "logicInput2ActivateTalkKeyNumber": 0,
+        "logicInput3": "none",
+        "logicInput3ActivateTalkKeyNumber": 0,
+        "logicInput4": "none",
+        "logicInput4ActivateTalkKeyNumber": 0,
+        "loudspeakerDimLevel": -6,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainVolumeLimit": -36,
+        "menuLevel": "enabled",
+        "portInputGain": 0,
+        "portOutputGain": 0,
+        "replyTalkAutoClear": 10,
+        "sidetoneGain": -30,
+        "voxAudioDetectionReleaseDelay": 2,
+        "voxAudioDetectionThreshold": -20,
+        "voxAudioGating": false,
+        "voxAudioPresenceTally": false
+      },
+      "type": "V24"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "V24"
+  },
+  "3.23.lKcw3zUU.0000.000b": {
+    "_id": "3.23.lKcw3zUU.0000.000b",
+    "_rev": "1-8b17688a7d8953a308d39e01f739db9d",
+    "data": {
+      "description": "",
+      "id": 11,
+      "isDefault": true,
+      "label": "V32 Default",
+      "settings": {
+        "auxVolumeLimit": -80,
+        "callToneEnabled": false,
+        "groups": [],
+        "gsMicGain": 50,
+        "headsetKeyLatch": false,
+        "headsetMicGain": 50,
+        "headsetMicType": "dynamic_unbalanced",
+        "keysets": [
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "isReplyKey": true,
+            "keysetIndex": 0,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 2,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 3,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 4,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 5,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 6,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 7,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 8,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 9,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 10,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 11,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 12,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 13,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 14,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 15,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 16,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 17,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 18,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 19,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 20,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 21,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 22,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 23,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 24,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 25,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 26,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 27,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 28,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 29,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 30,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 31,
+            "talkBtnMode": "latching"
+          }
+        ],
+        "listenAgainAutoDelete": 4,
+        "listenAgainThreshold": -48,
+        "logicInput1": "none",
+        "logicInput1ActivateTalkKeyNumber": 0,
+        "logicInput2": "none",
+        "logicInput2ActivateTalkKeyNumber": 0,
+        "logicInput3": "none",
+        "logicInput3ActivateTalkKeyNumber": 0,
+        "logicInput4": "none",
+        "logicInput4ActivateTalkKeyNumber": 0,
+        "loudspeakerDimLevel": -6,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainVolumeLimit": -36,
+        "menuLevel": "enabled",
+        "portInputGain": 0,
+        "portOutputGain": 0,
+        "replyTalkAutoClear": 10,
+        "sidetoneGain": -30,
+        "voxAudioDetectionReleaseDelay": 2,
+        "voxAudioDetectionThreshold": -20,
+        "voxAudioGating": false,
+        "voxAudioPresenceTally": false
+      },
+      "type": "V32"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "V32"
+  },
+  "3.23.lKcw3zUU.0000.000c": {
+    "_id": "3.23.lKcw3zUU.0000.000c",
+    "_rev": "1-f7a5e02fee8abdac314c124bb8aaa4a1",
+    "data": {
+      "description": "",
+      "id": 12,
+      "isDefault": true,
+      "label": "V12D Default",
+      "settings": {
+        "auxVolumeLimit": -80,
+        "callToneEnabled": false,
+        "groups": [],
+        "gsMicGain": 50,
+        "headsetKeyLatch": false,
+        "headsetMicGain": 50,
+        "headsetMicType": "dynamic_unbalanced",
+        "keysets": [
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "isReplyKey": true,
+            "keysetIndex": 0,
+            "talkBtnMode": "disabled"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 2,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 3,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 4,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 5,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 6,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 7,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 8,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 9,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 10,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talk",
+            "colorIndex": null,
+            "entities": [],
+            "isCallKey": false,
+            "keysetIndex": 11,
+            "talkBtnMode": "latching"
+          }
+        ],
+        "listenAgainAutoDelete": 4,
+        "listenAgainThreshold": -48,
+        "logicInput1": "none",
+        "logicInput1ActivateTalkKeyNumber": 0,
+        "logicInput2": "none",
+        "logicInput2ActivateTalkKeyNumber": 0,
+        "logicInput3": "none",
+        "logicInput3ActivateTalkKeyNumber": 0,
+        "logicInput4": "none",
+        "logicInput4ActivateTalkKeyNumber": 0,
+        "loudspeakerDimLevel": -6,
+        "loudspeakerMute": "toggle_w_hset_ctrl",
+        "mainVolumeLimit": -36,
+        "menuLevel": "enabled",
+        "portInputGain": 0,
+        "portOutputGain": 0,
+        "replyTalkAutoClear": 10,
+        "sidetoneGain": -30,
+        "voxAudioDetectionReleaseDelay": 2,
+        "voxAudioDetectionThreshold": -20,
+        "voxAudioGating": false,
+        "voxAudioPresenceTally": false
+      },
+      "type": "V12D"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "V12D"
+  },
+  "3.23.lKcw3zUU.0000.000d": {
+    "_id": "3.23.lKcw3zUU.0000.000d",
+    "_rev": "1-e9007c53cf833795f4696d8145daff7e",
+    "data": {
+      "description": "",
+      "id": 13,
+      "isDefault": false,
+      "label": "Arcadia",
+      "settings": {
+        "gnMicType": "electret",
+        "groups": [],
+        "headphoneDetect": true,
+        "headphoneLimit": 0,
+        "keysets": [
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/1",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 0,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/2",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 1,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/3",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 2,
+            "talkBtnMode": "latching"
+          },
+          {
+            "activationState": "talklisten",
+            "entities": [
+              {
+                "res": "/api/1/connections/4",
+                "type": 0
+              }
+            ],
+            "isCallKey": false,
+            "keysetIndex": 3,
+            "talkBtnMode": "latching"
+          }
+        ],
+        "masterVolume": -12,
+        "micType": "dynamic",
+        "sidetoneControl": "tracking",
+        "sidetoneGain": -12
+      },
+      "type": "NEP"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "NEP"
+  },
+  "3.24.!": {
+    "_id": "3.24.!",
+    "_rev": "1-85d2975b7143657e0fa116e78d4eb843",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "ifb",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.88.!": {
+    "_id": "3.88.!",
+    "_rev": "1-c2854ccb30f8f42b8523d18119cdabdc",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "roleset",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.88.lKcw3zUU.0000.0001": {
+    "_id": "3.88.lKcw3zUU.0000.0001",
+    "_rev": "1-3b6b9b91cdde8bb096a0625d93791bc2",
+    "data": {
+      "addressable": true,
+      "dpId": 1,
+      "id": 1,
+      "label": "Arcadia",
+      "name": "Arcadia",
+      "type": "Roleset"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "Roleset"
+  },
+  "3.99.!": {
+    "_id": "3.99.!",
+    "_rev": "1-20add1b309e8643684f1ff4f2129b827",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "session",
+    "tver": 1,
+    "type": "entity"
+  },
+  "3.99.lKcw3zUU.0000.0000": {
+    "_id": "3.99.lKcw3zUU.0000.0000",
+    "_rev": "1-c957fb076c9408db031c86d6f4372ff9",
+    "data": {
+      "id": 0,
+      "label": "admin",
+      "profile": {
+        "role": "admin"
+      },
+      "type": "A.CCM"
+    },
+    "owner": "0.99.A6AMk7Ur.0000.0000",
+    "type": "A.CCM"
+  },
+  "3.99.lKcw3zUU.0003.0000": {
+    "_id": "3.99.lKcw3zUU.0003.0000",
+    "_rev": "1-3e13ecd5b039d0782424609facdd7124",
+    "data": {
+      "addressable": false,
+      "id": 0,
+      "label": "Arcadia",
+      "settings": {
+        "defaultRole": 13
+      },
+      "type": "S.NEP"
+    },
+    "owner": "3.88.lKcw3zUU.0000.0001",
+    "type": "S.NEP"
+  },
+  "4.22.!": {
+    "_id": "4.22.!",
+    "_rev": "1-9bc33b4c559c694a18ff7ab8cd691c8f",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "licensedPort",
+    "tver": 1,
+    "type": "entity"
+  },
+  "4.22.lKcw3zUU.0000.0000": {
+    "_id": "4.22.lKcw3zUU.0000.0000",
+    "_rev": "1-e9893d8d4518047b31ce64a252c66cf3",
+    "data": {
+      "id": 0,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0001": {
+    "_id": "4.22.lKcw3zUU.0000.0001",
+    "_rev": "1-6740985a0d4af11f30cec4868f85bff8",
+    "data": {
+      "id": 1,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0002": {
+    "_id": "4.22.lKcw3zUU.0000.0002",
+    "_rev": "1-2fe13dc397223a2c66d324b818308e49",
+    "data": {
+      "id": 2,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0003": {
+    "_id": "4.22.lKcw3zUU.0000.0003",
+    "_rev": "1-f117b96a3fd4ef7d995ab93287709760",
+    "data": {
+      "id": 3,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0004": {
+    "_id": "4.22.lKcw3zUU.0000.0004",
+    "_rev": "1-6a962f9a344ecf913dd47c1ab8c0d4bc",
+    "data": {
+      "id": 4,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0005": {
+    "_id": "4.22.lKcw3zUU.0000.0005",
+    "_rev": "1-2c3a0bb570cebecbae5a7e3243b780a2",
+    "data": {
+      "id": 5,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0006": {
+    "_id": "4.22.lKcw3zUU.0000.0006",
+    "_rev": "1-52542da9c2a5cdfbef4202b7b074df4a",
+    "data": {
+      "id": 6,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0007": {
+    "_id": "4.22.lKcw3zUU.0000.0007",
+    "_rev": "1-388d8b3e49cf12a8dbf97e59f10d21e4",
+    "data": {
+      "id": 7,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0008": {
+    "_id": "4.22.lKcw3zUU.0000.0008",
+    "_rev": "1-c58ae1747b2f9ffed7a569147f6254ec",
+    "data": {
+      "id": 8,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0009": {
+    "_id": "4.22.lKcw3zUU.0000.0009",
+    "_rev": "1-6a98655dc4734acc541e3e3a59002c99",
+    "data": {
+      "id": 9,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.000a": {
+    "_id": "4.22.lKcw3zUU.0000.000a",
+    "_rev": "1-6225915e01e1c44ee1fae1fbc0a1c021",
+    "data": {
+      "id": 10,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.000b": {
+    "_id": "4.22.lKcw3zUU.0000.000b",
+    "_rev": "1-598f9bed2c001648ee73bd2e154bf8d4",
+    "data": {
+      "id": 11,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.000c": {
+    "_id": "4.22.lKcw3zUU.0000.000c",
+    "_rev": "1-1b71a9538948b8409db35cdf31d9eb97",
+    "data": {
+      "id": 12,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.000d": {
+    "_id": "4.22.lKcw3zUU.0000.000d",
+    "_rev": "1-73a14de1c20779f5f331cf05691a0728",
+    "data": {
+      "id": 13,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.000e": {
+    "_id": "4.22.lKcw3zUU.0000.000e",
+    "_rev": "1-7fbc4cdcee884b814194fa006baa6cd0",
+    "data": {
+      "id": 14,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.000f": {
+    "_id": "4.22.lKcw3zUU.0000.000f",
+    "_rev": "1-98de4b5f0ebb3f5fd1544e8a2e1ad272",
+    "data": {
+      "id": 15,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0010": {
+    "_id": "4.22.lKcw3zUU.0000.0010",
+    "_rev": "1-36a8998c1228323fb7799a286a42f2f0",
+    "data": {
+      "id": 16,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0011": {
+    "_id": "4.22.lKcw3zUU.0000.0011",
+    "_rev": "1-dc8e7ac073dd14c224d0c56a8b4d5d4f",
+    "data": {
+      "id": 17,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0012": {
+    "_id": "4.22.lKcw3zUU.0000.0012",
+    "_rev": "1-14866976f515ef3026251f1ed9004319",
+    "data": {
+      "id": 18,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0013": {
+    "_id": "4.22.lKcw3zUU.0000.0013",
+    "_rev": "1-901c3745410e75f703e13c8f04bf5616",
+    "data": {
+      "id": 19,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0014": {
+    "_id": "4.22.lKcw3zUU.0000.0014",
+    "_rev": "1-98e4aecdaca63b1829d165c6b016e42a",
+    "data": {
+      "id": 20,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0015": {
+    "_id": "4.22.lKcw3zUU.0000.0015",
+    "_rev": "1-a4b0b7ca2be838b631a32bebdc427c31",
+    "data": {
+      "id": 21,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0016": {
+    "_id": "4.22.lKcw3zUU.0000.0016",
+    "_rev": "1-4d8f1bd513132c217e6fb0ef30222443",
+    "data": {
+      "id": 22,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0017": {
+    "_id": "4.22.lKcw3zUU.0000.0017",
+    "_rev": "1-94dce7bb2c704cddfb59d67e658bbf70",
+    "data": {
+      "id": 23,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0018": {
+    "_id": "4.22.lKcw3zUU.0000.0018",
+    "_rev": "1-0f5f0027dd0f85aed2d85a85ecfe0d23",
+    "data": {
+      "id": 24,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.0019": {
+    "_id": "4.22.lKcw3zUU.0000.0019",
+    "_rev": "1-4c24f0f89d74830ee4a5254673b18048",
+    "data": {
+      "id": 25,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.001a": {
+    "_id": "4.22.lKcw3zUU.0000.001a",
+    "_rev": "1-9319c17876ba4c2ddce02d5c4f7ac604",
+    "data": {
+      "id": 26,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.001b": {
+    "_id": "4.22.lKcw3zUU.0000.001b",
+    "_rev": "1-a4681debae54173dc3f3430bd6c220d0",
+    "data": {
+      "id": 27,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.001c": {
+    "_id": "4.22.lKcw3zUU.0000.001c",
+    "_rev": "1-d0dce4f0cb843fbd49d07b370898b4f7",
+    "data": {
+      "id": 28,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.001d": {
+    "_id": "4.22.lKcw3zUU.0000.001d",
+    "_rev": "1-222309403447a34e87331a32d89953ee",
+    "data": {
+      "id": 29,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.001e": {
+    "_id": "4.22.lKcw3zUU.0000.001e",
+    "_rev": "1-b6a0b3c75a0a8f8f68cf390b8033a83b",
+    "data": {
+      "id": 30,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.22.lKcw3zUU.0000.001f": {
+    "_id": "4.22.lKcw3zUU.0000.001f",
+    "_rev": "1-1ab47151ecb542ef571a2ec49467c83c",
+    "data": {
+      "id": 31,
+      "type": "any"
+    },
+    "owner": "1.03.ff080f1f.0000.0000",
+    "type": "licensedPort"
+  },
+  "4.44.!": {
+    "_id": "4.44.!",
+    "_rev": "1-4f63394b6990ccbda19c156f63930106",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "assignment",
+    "tver": 1,
+    "type": "entity"
+  },
+  "4.55.!": {
+    "_id": "4.55.!",
+    "_rev": "1-05950606c97f030821893ca875114ad7",
+    "data": {
+      "active": true,
+      "completed": true,
+      "keyname": "id"
+    },
+    "name": "dynamicPort",
+    "tver": 1,
+    "type": "entity"
+  },
+  "4.55.lKcw3zUU.0000.0001": {
+    "_id": "4.55.lKcw3zUU.0000.0001",
+    "_rev": "1-080e3b059bbeb66b9607bc84b7a3701e",
+    "data": {
+      "destination": "3.88.lKcw3zUU.0000.0001",
+      "id": 1,
+      "type": "roleset"
+    },
+    "owner": "0.02.lKcw3zUU.0000.0000",
+    "type": "roleset"
+  },
+  "admin/author.0.data.assignment": {
+    "_id": "admin/author.0.data.assignment",
+    "_rev": "1-7048f76e4afaf3cfe264ac92919a220b",
+    "value": 0
+  },
+  "admin/author.0.data.direct": {
+    "_id": "admin/author.0.data.direct",
+    "_rev": "1-ac906738d1b6f32b9e76ba98eee12864",
+    "value": 0
+  },
+  "admin/author.0.data.dynamicPort": {
+    "_id": "admin/author.0.data.dynamicPort",
+    "_rev": "1-d5ca92ffacf5caa3dd0ed64c0fd00bdf",
+    "value": 0
+  },
+  "admin/author.0.data.external": {
+    "_id": "admin/author.0.data.external",
+    "_rev": "1-c628666c15f0f3302137c19bb66980cb",
+    "value": 0
+  },
+  "admin/author.0.data.fixedGroup": {
+    "_id": "admin/author.0.data.fixedGroup",
+    "_rev": "1-593d23e2953e7522f4250b70dc832b8b",
+    "value": 0
+  },
+  "admin/author.0.data.ifb": {
+    "_id": "admin/author.0.data.ifb",
+    "_rev": "1-875feaba0f1a3e1987490b6d197a041f",
+    "value": 0
+  },
+  "admin/author.0.data.partyline": {
+    "_id": "admin/author.0.data.partyline",
+    "_rev": "1-c0520a5b9c1bf22b9ba64b83b1ca6ce8",
+    "value": 0
+  },
+  "admin/author.0.data.role": {
+    "_id": "admin/author.0.data.role",
+    "_rev": "1-4b023b3b439973552225385eea9da9d7",
+    "value": 0
+  },
+  "admin/author.registry.00:0e:98:08:0f:1f": {
+    "_id": "admin/author.registry.00:0e:98:08:0f:1f",
+    "_rev": "1-675aee1c46d65fcddbfd6ff64cbddc25",
+    "aid": 0,
+    "baseMac": "ff080f1f"
+  },
+  "admin/author.registry.nextId": {
+    "_id": "admin/author.registry.nextId",
+    "_rev": "2-6fea870174034e6823c2c47e0b174668",
+    "aid": 1
+  },
+  "admin/schema": {
+    "_id": "admin/schema",
+    "_rev": "1-7f025fecacde01a0617157fe60d0b957",
+    "context": "device",
+    "version": "146"
+  }
+}
