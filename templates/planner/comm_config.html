@@ -488,6 +488,40 @@
     margin-bottom: 6px;
     gap: 12px;
   }
+  .cc-session-block { margin-bottom: 6px; }
+  .cc-session-row {
+    display: flex;
+    align-items: center;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    padding: 8px 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .cc-session-type-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: #1a2a1a;
+    color: #f0a500;
+    border: 1px solid #3a3a1a;
+    border-radius: 4px;
+    padding: 2px 8px;
+    white-space: nowrap;
+    font-family: monospace;
+  }
+  .cc-session-label-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed #3a3a5a;
+    color: #e0e0e0;
+    font-size: 0.875rem;
+    padding: 2px 4px;
+    outline: none;
+    min-width: 120px;
+    max-width: 180px;
+  }
+  .cc-session-label-input:focus { border-bottom-color: #4a9eff; }
   .cc-session-type { font-size: 0.8rem; color: #f0a500; font-family: monospace; min-width: 80px; }
   .cc-session-detail { flex: 1; font-size: 0.85rem; color: #c0c0c0; }
 
@@ -919,18 +953,63 @@
   <div class="cc-tab-panel" id="panel-sessions">
     {% if sessions %}
       {% for session in sessions %}
-      <div class="cc-session-row">
-        <span class="cc-session-type">{{ session.session_type }}</span>
-        <span class="cc-session-detail">
-          {% if session.roleset %}Roleset: {{ session.roleset }}{% else %}No roleset{% endif %}
-          {% if session.default_role %} · Default: {{ session.default_role }}{% endif %}
-        </span>
+      <div class="cc-session-block" id="session-block-{{ session.id }}">
+        <div class="cc-session-row">
+          <span class="cc-session-type-badge">{{ session.get_session_type_display }}</span>
+          <input class="cc-session-label-input"
+                 value="{{ session.label }}"
+                 onblur="saveSessionLabel({{ session.id }}, this.value)"
+                 onkeydown="if(event.key=='Enter')this.blur()">
+          <select class="cc-port-select" onchange="saveSessionField({{ session.id }}, 'roleset', this.value)" title="Roleset">
+            <option value="">— No Roleset —</option>
+            {% for rs in rolesets %}
+            <option value="{{ rs.id }}" {% if session.roleset_id == rs.id %}selected{% endif %}>{{ rs.label }}</option>
+            {% endfor %}
+          </select>
+          <select class="cc-port-select" onchange="saveSessionField({{ session.id }}, 'default_role', this.value)" title="Default Role">
+            <option value="">— No Default —</option>
+            {% for role in all_roles %}
+            <option value="{{ role.id }}" {% if session.default_role_id == role.id %}selected{% endif %}>{{ role.label }} ({{ role.device_type }})</option>
+            {% endfor %}
+          </select>
+          <label class="cc-port-toggle">
+            <input type="checkbox" {% if session.addressable %}checked{% endif %}
+                   onchange="saveSessionField({{ session.id }}, 'addressable', this.checked)">
+            Addressable
+          </label>
+          <button class="cc-pl-delete" onclick="deleteSession({{ session.id }})" title="Delete session">✕</button>
+        </div>
       </div>
       {% endfor %}
     {% else %}
       <p style="color:#5555aa;text-align:center;padding:40px;">No sessions defined.</p>
     {% endif %}
-    <button class="cc-btn cc-btn-secondary" style="margin-top:8px;" onclick="addSession({{ config.id }})">+ Add Session</button>
+    <button class="cc-btn cc-btn-secondary" style="margin-top:12px;" onclick="openAddSessionModal({{ config.id }})">+ Add Session</button>
+
+    <!-- Rolesets sub-section -->
+    <div style="margin-top:32px;">
+      <div class="cc-role-group-label" style="color:#a0a0cc;margin-bottom:10px;">ROLESETS</div>
+      {% if rolesets %}
+        {% for rs in rolesets %}
+        <div class="cc-session-row" id="roleset-block-{{ rs.id }}">
+          <input class="cc-session-label-input" style="min-width:160px;"
+                 value="{{ rs.label }}"
+                 onblur="saveRolesetLabel({{ rs.id }}, this.value)"
+                 onkeydown="if(event.key=='Enter')this.blur()">
+          <span style="font-size:0.75rem;color:#5555aa;">Roleset #{{ rs.roleset_number }}</span>
+          <label class="cc-port-toggle">
+            <input type="checkbox" {% if rs.addressable %}checked{% endif %}
+                   onchange="saveRolesetField({{ rs.id }}, 'addressable', this.checked)">
+            Addressable
+          </label>
+          <button class="cc-pl-delete" onclick="deleteRoleset({{ rs.id }})" title="Delete roleset">✕</button>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p style="color:#5555aa;font-size:0.85rem;">No rolesets defined.</p>
+      {% endif %}
+      <button class="cc-btn cc-btn-secondary" style="margin-top:8px;padding:5px 12px;font-size:0.8rem;" onclick="addRoleset({{ config.id }})">+ Add Roleset</button>
+    </div>
   </div>
 
 {% endif %}{# end editor view #}
@@ -1007,6 +1086,33 @@
 
 
 
+<!-- ── Add Session Modal ── -->
+<div id="addSessionModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:380px;max-width:460px;width:90%;">
+    <h3 style="color:#e0e0e0;margin:0 0 20px;font-size:1.1rem;">+ Add Session</h3>
+    <input type="hidden" id="addSessionConfigId">
+    <div style="margin-bottom:14px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Session Type</label>
+      <select id="addSessionType" class="cc-field-input" style="width:100%;box-sizing:border-box;">
+        <option value="">— Select type —</option>
+        <option value="B.FSII">B.FSII — FreeSpeak II Beltpack</option>
+        <option value="B.HBP">B.HBP — HelixNet Beltpack</option>
+        <option value="B.HKB">B.HKB — HelixNet Keypanel</option>
+        <option value="S.NEP">S.NEP — Station / Arcadia Panel</option>
+        <option value="A.CCM">A.CCM — Admin (CCM)</option>
+      </select>
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Label</label>
+      <input id="addSessionLabel" class="cc-field-input" placeholder="e.g. Beltpack, Director" style="width:100%;box-sizing:border-box;"
+             onkeydown="if(event.key==='Enter')submitAddSession()">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="cc-btn cc-btn-secondary" onclick="closeAddSessionModal()">Cancel</button>
+      <button class="cc-btn cc-btn-primary" onclick="submitAddSession()">Add Session</button>
+    </div>
+  </div>
+</div>
 <!-- Hidden CSRF -->
 <form class="cc-csrf">{% csrf_token %}</form>
 
@@ -1077,7 +1183,7 @@ function addPartyline(configId) {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ config_id: configId })
   }).then(r => r.json()).then(data => {
-    if (data.ok) location.reload();
+    if (data.ok) { location.hash='partylines'; location.reload(); }
   });
 }
 
@@ -1299,6 +1405,85 @@ function submitAddRole() {
     }
   });
 }
-function addSession(configId) { alert('Session editor coming in next phase.'); }
+function openAddSessionModal(configId) {
+  document.getElementById('addSessionConfigId').value = configId;
+  document.getElementById('addSessionModal').style.display = 'flex';
+}
+function closeAddSessionModal() {
+  document.getElementById('addSessionModal').style.display = 'none';
+}
+function submitAddSession() {
+  const configId = document.getElementById('addSessionConfigId').value;
+  const sessionType = document.getElementById('addSessionType').value;
+  const label = document.getElementById('addSessionLabel').value.trim();
+  if (!sessionType) { alert('Please select a session type.'); return; }
+  if (!label) { alert('Please enter a label.'); return; }
+  fetch('{% url "planner:comm_config_add_session" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: configId, session_type: sessionType, label: label })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) { closeAddSessionModal(); location.hash='sessions'; location.reload(); }
+    else alert('Error: ' + (data.error || 'Unknown'));
+  });
+}
+function saveSessionLabel(sessionId, label) {
+  fetch('{% url "planner:comm_config_update_session" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ session_id: sessionId, label: label })
+  });
+}
+function saveSessionField(sessionId, field, value) {
+  fetch('{% url "planner:comm_config_update_session" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ session_id: sessionId, [field]: value })
+  });
+}
+function deleteSession(sessionId) {
+  if (!confirm('Delete this session?')) return;
+  fetch('{% url "planner:comm_config_delete_session" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ session_id: sessionId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) document.getElementById('session-block-' + sessionId).remove();
+  });
+}
+function saveRolesetLabel(rolesetId, label) {
+  fetch('{% url "planner:comm_config_update_roleset" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ roleset_id: rolesetId, label: label })
+  });
+}
+function saveRolesetField(rolesetId, field, value) {
+  fetch('{% url "planner:comm_config_update_roleset" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ roleset_id: rolesetId, [field]: value })
+  });
+}
+function deleteRoleset(rolesetId) {
+  if (!confirm('Delete this roleset? Sessions linked to it will lose their roleset assignment.')) return;
+  fetch('{% url "planner:comm_config_delete_roleset" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ roleset_id: rolesetId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) { document.getElementById('roleset-block-' + rolesetId).remove(); }
+  });
+}
+function addRoleset(configId) {
+  fetch('{% url "planner:comm_config_add_roleset" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ config_id: configId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) location.reload();
+    else alert('Error: ' + (data.error || 'Unknown'));
+  });
+}
 </script>
 {% endblock %}

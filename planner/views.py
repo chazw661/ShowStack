@@ -1891,6 +1891,8 @@ def comm_config_view(request, config_id=None):
             ports = []
             dante_channels = []
             sessions = []
+            rolesets = []
+            all_roles = []
 
             if config_id:
                 config = CommConfig.objects.filter(id=config_id, project=current_project).first()
@@ -1902,6 +1904,8 @@ def comm_config_view(request, config_id=None):
                 ports = config.port_assignments.all().order_by('port_type', 'port_label')
                 dante_channels = config.dante_channels.all().order_by('direction', 'channel_number')
                 sessions = config.sessions.all().order_by('session_type')
+                rolesets = config.rolesets.all().order_by('roleset_number')
+                all_roles = config.roles.all().order_by('role_number')
 
             # Group roles by device_type for display
             from itertools import groupby
@@ -1933,6 +1937,8 @@ def comm_config_view(request, config_id=None):
                 'ports_by_type': ports_by_type,
                 'dante_channels': dante_channels if config_id else [],
                 'sessions': sessions,
+                'rolesets': rolesets if config_id else [],
+                'all_roles': all_roles if config_id else [],
                 'current_project': current_project,
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
             }
@@ -4437,6 +4443,115 @@ def comm_config_delete_dante(request):
         ch.delete()
         return JsonResponse({'ok': True})
     except CommConfigDanteChannel.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Session CRUD
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_add_session(request):
+    try:
+        data = _json.loads(request.body)
+        config = CommConfig.objects.get(id=data['config_id'])
+        session = CommConfigSession.objects.create(
+            config=config,
+            session_type=data['session_type'],
+            label=data['label'],
+        )
+        return JsonResponse({'ok': True, 'session_id': session.id})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_update_session(request):
+    try:
+        data = _json.loads(request.body)
+        session = CommConfigSession.objects.get(id=data['session_id'])
+        if 'label' in data:
+            session.label = data['label']
+        if 'roleset' in data:
+            rs_id = data['roleset']
+            session.roleset = CommConfigRoleset.objects.get(id=rs_id) if rs_id else None
+        if 'default_role' in data:
+            role_id = data['default_role']
+            session.default_role = CommConfigRole.objects.get(id=role_id) if role_id else None
+        if 'addressable' in data:
+            session.addressable = data['addressable']
+        session.save()
+        return JsonResponse({'ok': True})
+    except CommConfigSession.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_delete_session(request):
+    try:
+        data = _json.loads(request.body)
+        session = CommConfigSession.objects.get(id=data['session_id'])
+        session.delete()
+        return JsonResponse({'ok': True})
+    except CommConfigSession.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Roleset CRUD
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_add_roleset(request):
+    try:
+        data = _json.loads(request.body)
+        config = CommConfig.objects.get(id=data['config_id'])
+        next_num = (config.rolesets.aggregate(
+            m=__import__('django.db.models', fromlist=['Max']).Max('roleset_number')
+        )['m'] or 0) + 1
+        rs = CommConfigRoleset.objects.create(
+            config=config,
+            roleset_number=next_num,
+            label=f'Roleset {next_num}',
+        )
+        return JsonResponse({'ok': True, 'roleset_id': rs.id})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_update_roleset(request):
+    try:
+        data = _json.loads(request.body)
+        rs = CommConfigRoleset.objects.get(id=data['roleset_id'])
+        if 'label' in data:
+            rs.label = data['label']
+        if 'addressable' in data:
+            rs.addressable = data['addressable']
+        rs.save()
+        return JsonResponse({'ok': True})
+    except CommConfigRoleset.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_delete_roleset(request):
+    try:
+        data = _json.loads(request.body)
+        rs = CommConfigRoleset.objects.get(id=data['roleset_id'])
+        rs.delete()
+        return JsonResponse({'ok': True})
+    except CommConfigRoleset.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
