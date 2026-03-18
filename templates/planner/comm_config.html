@@ -330,11 +330,12 @@
   .cc-keyset-meta { display: flex; align-items: center; gap: 10px; }
   .cc-keyset-device-badge {
     font-size: 0.75rem;
-    background: #1a1a3a;
-    color: #6666cc;
-    border: 1px solid #3a3a5a;
+    background: #1e2a4a;
+    color: #a0b4ff;
+    border: 1px solid #4a5a8a;
     border-radius: 4px;
     padding: 3px 8px;
+    font-weight: 500;
   }
   .cc-keyset-grid { display: flex; flex-direction: column; gap: 6px; }
   .cc-keyset-row {
@@ -377,14 +378,16 @@
     gap: 5px;
   }
   .cc-key-chip {
-    font-size: 0.7rem;
-    padding: 2px 7px;
+    font-size: 0.72rem;
+    padding: 3px 8px;
     border-radius: 4px;
-    background: #2a2a4a;
-    color: #8888cc;
+    background: #1e1e3a;
+    color: #9090bb;
     font-family: monospace;
+    border: 1px solid #3a3a5a;
+    white-space: nowrap;
   }
-  .cc-key-chip.assigned { background: #1a3a5a; color: #4a9eff; }
+  .cc-key-chip.assigned { background: #0e2a4a; color: #6ab4ff; border-color: #2a5a8a; font-weight: 600; }
 
   /* ── Ports tab ── */
   .cc-port-group { margin-bottom: 24px; }
@@ -1181,7 +1184,15 @@ function savePartylineName(input) {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ partyline_id: plId, label: newLabel })
   }).then(r => r.json()).then(data => {
-    if (!data.ok) alert('Save failed');
+  }).then(r => r.json()).then(data => {
+    if (!data.ok) { alert('Save failed'); return; }
+    // Update all dropdown options referencing this partyline
+    document.querySelectorAll('option').forEach(opt => {
+      if (opt.value === plId) {
+        const parts = opt.text.split(': ');
+        if (parts.length >= 2) opt.text = parts[0] + ': ' + newLabel;
+      }
+    });
   });
 }
 
