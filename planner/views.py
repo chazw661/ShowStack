@@ -1890,6 +1890,7 @@ def comm_config_view(request, config_id=None):
             roles = []
             ports = []
             dante_channels = []
+            helixnet_partylines = []
             sessions = []
             rolesets = []
             all_roles = []
@@ -1900,6 +1901,7 @@ def comm_config_view(request, config_id=None):
                     from django.shortcuts import redirect
                     return redirect("planner:comm_config")
                 partylines = config.partylines.all().order_by('channel_number')
+                helixnet_partylines = config.partylines.filter(helixnet_enabled=True).order_by('channel_number')
                 roles = config.roles.all().order_by('device_type', 'label')
                 ports = config.port_assignments.all().order_by('port_type', 'port_label')
                 dante_channels = config.dante_channels.all().order_by('direction', 'channel_number')
@@ -1932,6 +1934,7 @@ def comm_config_view(request, config_id=None):
                 'config': config,
                 'config_id': config_id,
                 'partylines': partylines,
+                'helixnet_partylines': helixnet_partylines if config_id else [],
                 'roles_by_type': roles_by_type,
                 'ports': ports,
                 'ports_by_type': ports_by_type,

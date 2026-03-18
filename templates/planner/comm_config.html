@@ -713,11 +713,19 @@
                         onchange="saveKeyset({{ key.id }}, 'partyline', this.value)"
                         title="Partyline">
                   <option value="">— Unassigned —</option>
-                  {% for pl in partylines %}
-                  <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
-                    CH{{ pl.channel_number }}: {{ pl.label }}
-                  </option>
-                  {% endfor %}
+                  {% if role.device_type in "HBP-2X,HKB-2X,HMS-4X,HRM-4X" %}
+                    {% for pl in helixnet_partylines %}
+                    <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
+                      CH{{ pl.channel_number }}: {{ pl.label }}
+                    </option>
+                    {% endfor %}
+                  {% else %}
+                    {% for pl in partylines %}
+                    <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
+                      CH{{ pl.channel_number }}: {{ pl.label }}
+                    </option>
+                    {% endfor %}
+                  {% endif %}
                 </select>
                 <select class="cc-key-select cc-key-activation"
                         onchange="saveKeyset({{ key.id }}, 'activation_state', this.value)"
