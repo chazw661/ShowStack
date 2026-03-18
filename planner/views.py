@@ -32,7 +32,7 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
-from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel
+from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName
 from .models import Amp, AmpDivider, Location
 import hashlib
 import os
@@ -1943,6 +1943,7 @@ def comm_config_view(request, config_id=None):
                 'rolesets': rolesets if config_id else [],
                 'all_roles': all_roles if config_id else [],
                 'current_project': current_project,
+                'crew_names': CommCrewName.objects.filter(project=current_project).order_by('name') if current_project else [],
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
             }
 
@@ -4826,6 +4827,40 @@ def comm_config_delete_roleset(request):
         rs.delete()
         return JsonResponse({'ok': True})
     except CommConfigRoleset.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Crew Name CRUD
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_add_crew_name(request):
+    try:
+        data = _json.loads(request.body)
+        name = data.get('name', '').strip()
+        current_project = getattr(request, 'current_project', None)
+        if not name or not current_project:
+            return JsonResponse({'error': 'Missing name or project'}, status=400)
+        cn, created = CommCrewName.objects.get_or_create(
+            name=name, project=current_project
+        )
+        if not created:
+            return JsonResponse({'error': 'Name already exists'}, status=400)
+        return JsonResponse({'ok': True, 'id': cn.id})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def comm_config_delete_crew_name(request):
+    try:
+        data = _json.loads(request.body)
+        cn = CommCrewName.objects.get(id=data['crew_name_id'])
+        cn.delete()
+        return JsonResponse({'ok': True})
+    except CommCrewName.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

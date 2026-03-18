@@ -479,6 +479,17 @@
     white-space: nowrap;
   }
   .cc-port-toggle input[type=checkbox] { accent-color: #4a9eff; }
+  .cc-crew-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    margin-bottom: 5px;
+  }
+  .cc-crew-name-text { font-size: 0.875rem; color: #c0c0c0; }
 
   /* ── Sessions tab ── */
   .cc-session-row {
@@ -633,10 +644,13 @@
       <span style="color:#5555aa;font-weight:400;font-size:1rem">/ {{ config.system_id|default:"—" }}</span>
     </h2>
     <div style="display:flex;gap:8px;">
+      <button class="cc-btn cc-btn-secondary" onclick="openCrewNamesModal()">👥 Crew Names</button>
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
     </div>
   </div>
+
+
 
   <!-- Tab bar -->
   <div class="cc-tabs">
@@ -697,11 +711,20 @@
           <div class="cc-keyset-editor" id="keyset-editor-{{ role.id }}" style="display:none;">
             <div class="cc-keyset-editor-header">
               <div class="cc-keyset-role-label">
-                <input class="cc-role-rename-input"
-                       id="role-rename-{{ role.id }}"
-                       value="{{ role.label }}"
-                       onblur="saveRoleName({{ role.id }}, this.value)"
-                       onkeydown="if(event.key==='Enter')this.blur()">
+                <div class="cc-role-name-wrapper" style="position:relative;display:inline-block;">
+                  <input class="cc-role-rename-input"
+                         id="role-rename-{{ role.id }}"
+                         value="{{ role.label }}"
+                         autocomplete="off"
+                         onblur="hideCrewDropdown({{ role.id }})"
+                         oninput="filterCrewDropdown({{ role.id }}, this.value)"
+                         onfocus="showCrewDropdown({{ role.id }}, this.value)"
+                         onkeydown="handleCrewKeydown(event, {{ role.id }})">
+                  <span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);color:#5555aa;font-size:0.7rem;pointer-events:none;">▾</span>
+                  <div class="cc-crew-dropdown" id="crew-dd-{{ role.id }}"
+                       style="display:none;position:absolute;top:100%;left:0;min-width:200px;background:#1e1e3a;border:1px solid #3a3a5a;border-radius:6px;z-index:200;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+                  </div>
+                </div>
               </div>
               <div class="cc-keyset-meta">
                 <span class="cc-keyset-device-badge">{{ role.get_device_type_display }}</span>
@@ -1124,6 +1147,31 @@
     </div>
   </div>
 </div>
+<!-- ── Crew Names Modal ── -->
+<div id="crewNamesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:400px;max-width:500px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:#e0e0e0;margin:0;font-size:1.1rem;">👥 Crew Names</h3>
+      <button class="cc-btn cc-btn-secondary" style="padding:4px 10px;" onclick="closeCrewNamesModal()">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <input id="newCrewNameInput" class="cc-field-input" placeholder="Add new crew name..." style="flex:1;"
+             onkeydown="if(event.key==='Enter')addCrewName()">
+      <button class="cc-btn cc-btn-primary" onclick="addCrewName()">+ Add</button>
+    </div>
+    <div id="crewNamesList_modal" style="overflow-y:auto;flex:1;">
+      {% for cn in crew_names %}
+      <div class="cc-crew-name-row" id="crew-name-{{ cn.id }}">
+        <span class="cc-crew-name-text">{{ cn.name }}</span>
+        <button class="cc-pl-delete" onclick="deleteCrewName({{ cn.id }})">✕</button>
+      </div>
+      {% empty %}
+      <p style="color:#5555aa;font-size:0.85rem;text-align:center;padding:20px;">No crew names yet. Add some above.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
 <!-- Hidden CSRF -->
 <form class="cc-csrf">{% csrf_token %}</form>
 
@@ -1367,6 +1415,84 @@ function saveKeyset(keyId, field, value) {
   });
 }
 
+// ── Crew name dropdown for role rename ──
+const allCrewNames = [{% for cn in crew_names %}"{{ cn.name }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+
+function buildCrewDropdown(roleId, filter) {
+  const dd = document.getElementById('crew-dd-' + roleId);
+  const input = document.getElementById('role-rename-' + roleId);
+  const filtered = filter
+    ? allCrewNames.filter(n => n.toLowerCase().includes(filter.toLowerCase()))
+    : allCrewNames;
+  dd.innerHTML = '';
+  if (filtered.length === 0) { dd.style.display = 'none'; return; }
+  filtered.forEach(name => {
+    const item = document.createElement('div');
+    item.textContent = name;
+    item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:0.875rem;color:#c0c0c0;border-bottom:1px solid #2a2a4a;';
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      input.value = name;
+      dd.style.display = 'none';
+      saveRoleName(roleId, name);
+    });
+    item.addEventListener('mouseover', () => item.style.background = '#2a2a4a');
+    item.addEventListener('mouseout', () => item.style.background = '');
+    dd.appendChild(item);
+  });
+  dd.style.display = 'block';
+}
+
+function showCrewDropdown(roleId, val) {
+  buildCrewDropdown(roleId, val);
+}
+
+function filterCrewDropdown(roleId, val) {
+  buildCrewDropdown(roleId, val);
+}
+
+function hideCrewDropdown(roleId) {
+  setTimeout(() => {
+    const dd = document.getElementById('crew-dd-' + roleId);
+    if (dd) dd.style.display = 'none';
+    const input = document.getElementById('role-rename-' + roleId);
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) return;
+    // Auto-add to crew names if not already in list
+    if (name && !allCrewNames.includes(name)) {
+      fetch('{% url "planner:comm_config_add_crew_name" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ name: name, project_id: {{ current_project.id|default:'null' }} })
+      }).then(r => r.json()).then(data => {
+        if (data.ok) {
+          allCrewNames.push(name);
+          // Add to crew names modal list if open
+          const list = document.getElementById('crewNamesList_modal');
+          if (list) {
+            const row = document.createElement('div');
+            row.className = 'cc-crew-name-row';
+            row.id = 'crew-name-' + data.id;
+            row.innerHTML = `<span class="cc-crew-name-text">${name}</span><button class="cc-pl-delete" onclick="deleteCrewName(${data.id})">✕</button>`;
+            list.appendChild(row);
+          }
+        }
+      });
+    }
+    saveRoleName(roleId, name);
+  }, 150);
+}
+
+function handleCrewKeydown(event, roleId) {
+  if (event.key === 'Enter') {
+    document.getElementById('role-rename-' + roleId).blur();
+  }
+  if (event.key === 'Escape') {
+    document.getElementById('crew-dd-' + roleId).style.display = 'none';
+  }
+}
+
 function saveRoleName(roleId, newLabel) {
   if (!newLabel.trim()) return;
   fetch('{% url "planner:comm_config_update_role" %}', {
@@ -1434,6 +1560,55 @@ function submitAddRole() {
     }
   });
 }
+function openCrewNamesModal() {
+  document.getElementById('crewNamesModal').style.display = 'flex';
+  document.getElementById('newCrewNameInput').focus();
+}
+function closeCrewNamesModal() {
+  document.getElementById('crewNamesModal').style.display = 'none';
+}
+function addCrewName() {
+  const input = document.getElementById('newCrewNameInput');
+  const name = input.value.trim();
+  if (!name) return;
+  fetch('{% url "planner:comm_config_add_crew_name" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ name: name, project_id: {{ current_project.id|default:'null' }} })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      // Add to modal list
+      const list = document.getElementById('crewNamesList_modal');
+      const emptyMsg = list.querySelector('p');
+      if (emptyMsg) emptyMsg.remove();
+      const row = document.createElement('div');
+      row.className = 'cc-crew-name-row';
+      row.id = 'crew-name-' + data.id;
+      row.innerHTML = `<span class="cc-crew-name-text">${name}</span><button class="cc-pl-delete" onclick="deleteCrewName(${data.id})">✕</button>`;
+      list.appendChild(row);
+      // Add to datalist
+      const dl = document.getElementById('crewNamesList');
+      const opt = document.createElement('option');
+      opt.value = name;
+      dl.appendChild(opt);
+      input.value = '';
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  });
+}
+function deleteCrewName(crewId) {
+  fetch('{% url "planner:comm_config_delete_crew_name" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ crew_name_id: crewId })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) {
+      document.getElementById('crew-name-' + crewId).remove();
+    }
+  });
+}
+
 function openAddSessionModal(configId) {
   document.getElementById('addSessionConfigId').value = configId;
   document.getElementById('addSessionModal').style.display = 'flex';
