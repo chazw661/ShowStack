@@ -75,26 +75,22 @@ def register(request):
             return render(request, 'marketing/register.html', {'form': form})
         if form.is_valid():
             user = form.save()
-            login(request, user)
-            messages.success(request, f"Welcome to ShowStack, {user.first_name}!")
-            return redirect('admin:index')
+            # Auto-assign to Viewer group
+            from django.contrib.auth.models import Group
+            try:
+                viewer_group = Group.objects.get(name='Viewer')
+                user.groups.add(viewer_group)
+            except Group.DoesNotExist:
+                pass
+            # Don't log them in yet — send to pending page
+            return redirect('marketing:pending')
         return render(request, 'marketing/register.html', {'form': form})
     else:
         form = RegistrationForm()
     
     return render(request, 'marketing/register.html', {'form': form})
     
-    if request.method == 'POST':
-        form = RegistrationForm(request.POST)
-        terms_accepted = request.POST.get('terms')
-        if not terms_accepted:
-            messages.error(request, 'You must accept the Terms of Service and Privacy Policy to create an account.')
-            return render(request, 'marketing/register.html', {'form': form})
-        if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, f"Welcome to ShowStack, {user.first_name}!")
-            return redirect('admin:index')
+    
 
 
 def user_login(request):
@@ -151,6 +147,12 @@ def about(request):
     About page.
     """
     return render(request, 'marketing/about.html')
+
+def pending(request):
+    """
+    Post-registration pending approval page.
+    """
+    return render(request, 'marketing/pending.html')
 
 
 def privacy(request):

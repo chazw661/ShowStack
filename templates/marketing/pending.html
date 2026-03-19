@@ -1,0 +1,26 @@
+{% extends 'marketing/base_marketing.html' %}
+{% load static %}
+
+{% block title %}Account Pending - ShowStack{% endblock %}
+
+{% block content %}
+<section class="auth-section">
+    <div class="container">
+        <div class="auth-container" style="text-align: center;">
+            <div class="auth-header">
+                <a href="{% url 'marketing:home' %}" class="auth-logo">
+                    <span class="brand-icon">S</span>
+                </a>
+                <h1>You're registered!</h1>
+                <p>Your account is pending approval. You'll receive an email at the address you registered with once your account has been activated.</p>
+            </div>
+            <div style="margin: 30px 0; padding: 24px; background: #f7f9fc; border-left: 4px solid #4a9eff; border-radius: 0 6px 6px 0; text-align: left;">
+                <p style="margin: 0; color: #444; font-size: 0.95rem;"><strong>What happens next?</strong><br><br>
+                ShowStack is currently in beta. Our team will review your registration and activate your account shortly. If you have questions, email us at <a href="mailto:showstackapp@gmail.com">showstackapp@gmail.com</a>.</p>
+            </div>
+            <a href="{% url 'marketing:home' %}" class="btn btn-primary">Back to Home</a>
+        </div>
+    </div>
+</section>
+{% endblock %}
+EOF

@@ -15,6 +15,11 @@ urlpatterns = [
     path('register/', views.register, name='register'),
     path('login/', views.user_login, name='login'),
     path('logout/', views.user_logout, name='logout'),
+
+    # Registration pending
+    path('pending/', views.pending, name='pending'),
+    
+
     
     # Legal
     path('privacy/', views.privacy, name='privacy'),
