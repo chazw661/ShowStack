@@ -78,6 +78,23 @@ def register(request):
             login(request, user)
             messages.success(request, f"Welcome to ShowStack, {user.first_name}!")
             return redirect('admin:index')
+        return render(request, 'marketing/register.html', {'form': form})
+    else:
+        form = RegistrationForm()
+    
+    return render(request, 'marketing/register.html', {'form': form})
+    
+    if request.method == 'POST':
+        form = RegistrationForm(request.POST)
+        terms_accepted = request.POST.get('terms')
+        if not terms_accepted:
+            messages.error(request, 'You must accept the Terms of Service and Privacy Policy to create an account.')
+            return render(request, 'marketing/register.html', {'form': form})
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, f"Welcome to ShowStack, {user.first_name}!")
+            return redirect('admin:index')
 
 
 def user_login(request):
