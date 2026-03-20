@@ -3478,6 +3478,7 @@ class AudioChecklist(models.Model):
                     'Burn in Dante Network overnight',
                     'Line Check Inputs',
                     'Line Check Outputs',
+                    'Re-Initialize all Amps',
                     'Verify all amps on LANET',
                     'Update Amps',
                     'Verfy all amps in Redundant',
