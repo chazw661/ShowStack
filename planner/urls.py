@@ -91,6 +91,7 @@ urlpatterns = [
     # Dashboard
     path('admin/', admin.site.urls),
     path('dashboard/', SystemDashboardView.as_view(), name='system-dashboard'),
+    path('dashboard/stats/', views.dashboard_stats, name='dashboard_stats'),
     
     # ADD THESE MIC TRACKER URLs
    # NEW: Shared Presenter Management URLs

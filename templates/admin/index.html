@@ -1,204 +1,285 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block content %}
-<!-- System Dashboard Button -->
-<div style="margin: 20px;">
-    <a href="/dashboard/" class="button"
-       style="background: #417690; color: white; padding: 15px 25px; font-size: 16px; text-decoration: none; display: inline-block;">
-        🏠 System Dashboard
-    </a>
-</div>
+{% block title %}ShowStack — System Overview{% endblock %}
 
-<!-- IP Report Section -->
-<div style="margin: 20px;">
-    <div class="module" style="background: #2a2a2a; border: 1px solid #4a9eff; border-radius: 4px;">
-        <h2 style="background: #4a9eff; color: white; padding: 10px 15px; margin: 0; border-radius: 4px 4px 0 0;">
-            🌐 IP Report
-        </h2>
-        <table style="width: 100%;">
-            <tbody>
-                <tr>
-                    <td style="padding: 15px;">
-                        <a href="/audiopatch/ip-addresses/" 
-                           style="color: #4a9eff; text-decoration: none; font-weight: bold; font-size: 16px;">
-                            IP Address Management
-                        </a>
-                        <p style="color: #999; margin: 5px 0 0 0; font-size: 13px;">
-                            View and edit all IP addresses across Consoles, Devices, Amplifiers, Processors, and Belt Packs
-                        </p>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- System Report Section -->
-<div style="margin: 20px;">
-    <div class="module" style="background: #2a2a2a; border: 1px solid #4a9eff; border-radius: 4px;">
-        <h2 style="background: #4a9eff; color: white; padding: 10px 15px; margin: 0; border-radius: 4px 4px 0 0;">
-            📊 System Report
-        </h2>
-        <table style="width: 100%;">
-            <tbody>
-                <tr>
-                    <td style="padding: 15px;">
-                        <a href="{% url 'planner:system_report_pdf' %}"
-                           style="color: #4a9eff; text-decoration: none; font-weight: bold; font-size: 16px;">
-                            Generate Complete System Report PDF
-                        </a>
-                        <p style="color: #999; margin: 5px 0 0 0; font-size: 13px;">
-                            Comprehensive PDF report including Locations, IP Addresses, Consoles, Devices, Amplifiers, Processors, PA Cables, COMM, and Power Distribution
-                        </p>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
+{% block extrahead %}
 {{ block.super }}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
-<!-- Collapsible Home Page Menu -->
+  :root {
+    --bg: #080812;
+    --surface: #0e0e1e;
+    --surface2: #13132a;
+    --border: rgba(255,255,255,0.1);
+    --border-bright: rgba(74,158,255,0.3);
+    --text: #e2e2f0;
+    --text-dim: #9090b0;
+    --text-muted: #9090b0;
+    --accent: #4a9eff;
+    --accent-glow: rgba(74,158,255,0.15);
+    --green: #3dd68c;
+    --amber: #f0a500;
+    --red: #ff5a5a;
+    --purple: #a78bfa;
+    --teal: #2dd4bf;
+  }
+
+  #content-main { padding: 0 !important; }
+  #content { padding: 0 !important; background: var(--bg) !important; }
+  .ss-dash { font-family: 'DM Sans', sans-serif; background: var(--bg); min-height: 100vh; padding: 32px 40px; color: var(--text); }
+  .ss-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; gap: 20px; }
+  .ss-project-name { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; font-family: 'DM Mono', monospace; }
+  .ss-title { font-size: 1.8rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; line-height: 1.1; }
+  .ss-subtitle { font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; font-family: 'DM Mono', monospace; }
+  .ss-header-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  .ss-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 8px; font-size: 0.8rem; font-weight: 500; cursor: pointer; text-decoration: none; border: 1px solid var(--border); background: var(--surface2); color: var(--text-dim); transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
+  .ss-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+  .ss-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; margin-bottom: 32px; position: relative; overflow: hidden; }
+  .ss-diagram::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% -20%, rgba(74,158,255,0.04) 0%, transparent 60%); pointer-events: none; }
+  .ss-diagram-title { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: #b0b0dd; font-family: 'DM Mono', monospace; margin-bottom: 28px; }
+  .ss-flow { display: flex; align-items: stretch; gap: 0; position: relative; }
+
+  .ss-node { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px; position: relative; transition: border-color 0.2s, transform 0.2s; text-decoration: none; cursor: pointer; display: block; }
+  .ss-node:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .ss-node-icon { font-size: 1.4rem; margin-bottom: 10px; display: block; }
+  .ss-node-label { display: none; }
+  .ss-node-name { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+  .ss-node-stats { display: flex; flex-direction: column; gap: 4px; }
+  .ss-node-stat { display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; }
+  .ss-node-stat-label { color: var(--text-dim); }
+  .ss-node-stat-val { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--accent); }
+  .ss-node-stat-val.dim { color: var(--text-muted); }
+
+  .ss-arrow { display: flex; align-items: center; justify-content: center; padding: 0 8px; flex-shrink: 0; }
+  .ss-arrow-line { width: 32px; height: 1px; background: linear-gradient(to right, var(--border-bright), rgba(74,158,255,0.1)); position: relative; }
+  .ss-arrow-line::after { content: '›'; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 0.9rem; opacity: 0.5; }
+
+  .ss-status-dot { position: absolute; top: 14px; right: 14px; width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .ss-status-dot.empty { background: var(--text-muted); box-shadow: none; }
+
+  .ss-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+  .ss-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-decoration: none; display: block; transition: border-color 0.2s, background 0.2s; }
+  .ss-card:hover { border-color: var(--border-bright); background: var(--surface2); }
+  .ss-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .ss-card-icon { font-size: 1.1rem; }
+  .ss-card-label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: #a0a0cc; font-family: 'DM Mono', monospace; }
+  .ss-card-title { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+  .ss-card-metrics { display: flex; gap: 16px; }
+  .ss-metric { display: flex; flex-direction: column; }
+  .ss-metric-val { font-size: 1.4rem; font-weight: 600; color: var(--text); font-family: 'DM Mono', monospace; line-height: 1; }
+  .ss-metric-label { font-size: 0.68rem; color: #a0a0cc; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  .ss-card.comm { border-left: 3px solid var(--amber); }
+  .ss-card.mic { border-left: 3px solid var(--purple); }
+  .ss-card.power { border-left: 3px solid var(--red); }
+  .ss-card.check { border-left: 3px solid var(--accent); }
+  .ss-card.net { border-left: 3px solid #6b7280; }
+  .ss-card.cca { border-left: 3px solid var(--teal); }
+
+  .ss-links { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ss-link { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; font-size: 0.78rem; font-weight: 500; text-decoration: none; background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim); transition: all 0.2s; }
+  .ss-link:hover { color: var(--accent); border-color: var(--accent); }
+
+  .ss-node-icon { width: 28px; height: 28px; margin-bottom: 10px; display: block; color: var(--accent); stroke-width: 1.5; }
+  .ss-card-icon { width: 20px; height: 20px; color: var(--text-dim); stroke-width: 1.5; }
+  @media (max-width: 900px) {
+    .ss-flow { flex-direction: column; }
+    .ss-arrow { transform: rotate(90deg); padding: 8px 0; }
+    .ss-grid { grid-template-columns: 1fr 1fr; }
+    .ss-dash { padding: 20px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ss-dash">
+
+  <div class="ss-header">
+    <div>
+      <div class="ss-project-name" id="ss-project-name">Loading project...</div>
+      <div class="ss-title">System Overview</div>
+      <div class="ss-subtitle" id="ss-timestamp">—</div>
+    </div>
+    <div class="ss-header-actions">
+      <a href="/audiopatch/system-report/pdf/" class="ss-btn" target="_blank"><svg style="width:14px;height:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> System PDF</a>
+      <a href="/audiopatch/ip-addresses/" class="ss-btn"><svg style="width:14px;height:14px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg> IP Report</a>
+    </div>
+  </div>
+
+  <div class="ss-diagram">
+    <div class="ss-diagram-title">Audio Signal Flow</div>
+    <div class="ss-flow">
+      <a class="ss-node" href="/admin/planner/console/">
+        <div class="ss-status-dot empty" id="dot-consoles"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><circle cx="12" cy="4" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="20" r="2"/></svg>
+        <div class="ss-node-label">Input</div>
+        <div class="ss-node-name">Consoles</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Desks</span><span class="ss-node-stat-val" id="stat-consoles">—</span></div>
+          
+        </div>
+      </a>
+      <div class="ss-arrow"><div class="ss-arrow-line"></div></div>
+      <a class="ss-node" href="/admin/planner/device/">
+        <div class="ss-status-dot empty" id="dot-devices"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+        <div class="ss-node-name">I/O Devices</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Devices</span><span class="ss-node-stat-val" id="stat-devices2">—</span></div>
+        </div>
+      </a>
+      <div class="ss-arrow"><div class="ss-arrow-line"></div></div>
+      <a class="ss-node" href="/admin/planner/systemprocessor/">
+        <div class="ss-status-dot empty" id="dot-proc"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+        <div class="ss-node-label">Processing</div>
+        <div class="ss-node-name">Processors</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">P1</span><span class="ss-node-stat-val" id="stat-p1">—</span></div>
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Galaxy</span><span class="ss-node-stat-val" id="stat-galaxy">—</span></div>
+        </div>
+      </a>
+      <div class="ss-arrow"><div class="ss-arrow-line"></div></div>
+      <a class="ss-node" href="/admin/planner/amp/">
+        <div class="ss-status-dot empty" id="dot-amps"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        <div class="ss-node-label">Amplification</div>
+        <div class="ss-node-name">Amplifiers</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Amps</span><span class="ss-node-stat-val" id="stat-amps">—</span></div>
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Locations</span><span class="ss-node-stat-val" id="stat-locations">—</span></div>
+        </div>
+      </a>
+      <div class="ss-arrow"><div class="ss-arrow-line"></div></div>
+      <a class="ss-node" href="/admin/planner/pacableschedule/">
+        <div class="ss-status-dot empty" id="dot-pa"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9a2 2 0 0 1-2-2V5h6v2a2 2 0 0 1-2 2Z"/><path d="M3 5V3"/><path d="M7 5V3"/><path d="M19 15V6.5a3.5 3.5 0 0 0-7 0v11a3.5 3.5 0 0 1-7 0V9"/><path d="M17 21v-2"/><path d="M21 21v-2"/><path d="M22 19h-6v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2Z"/></svg>
+        <div class="ss-node-label">Distribution</div>
+        <div class="ss-node-name">PA Cable</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Runs</span><span class="ss-node-stat-val" id="stat-cables">—</span></div>
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Zones</span><span class="ss-node-stat-val" id="stat-zones">—</span></div>
+        </div>
+      </a>
+      <div class="ss-arrow"><div class="ss-arrow-line"></div></div>
+      <a class="ss-node" href="/admin/planner/soundvisionprediction/">
+        <div class="ss-status-dot empty" id="dot-sv"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2"/></svg>
+        <div class="ss-node-label">Output</div>
+        <div class="ss-node-name">Soundvision</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Predictions</span><span class="ss-node-stat-val" id="stat-sv">—</span></div>
+          <div class="ss-node-stat"><span class="ss-node-stat-label">Arrays</span><span class="ss-node-stat-val" id="stat-arrays">—</span></div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="ss-grid">
+    <div class="ss-card comm" style="grid-column: span 1;">
+      <div class="ss-card-header">
+        <svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+        <span class="ss-card-label">Communications</span>
+      </div>
+      <div class="ss-card-title" style="margin-bottom:14px;">COMM System</div>
+      <div class="ss-card-metrics" style="margin-bottom:14px;">
+        <div class="ss-metric"><span class="ss-metric-val" id="m-packs">—</span><span class="ss-metric-label">Belt Packs</span></div>
+        <div class="ss-metric"><span class="ss-metric-val" id="m-checked">—</span><span class="ss-metric-label">Checked Out</span></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="/admin/planner/commbeltpack/" style="flex:1;padding:7px 10px;background:#1a1a2a;border:1px solid #2a2a4a;border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#4a9eff'" onmouseout="this.style.borderColor='#2a2a4a'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg> Belt Packs</a>
+        <a href="/audiopatch/comm-config/" style="flex:1;padding:7px 10px;background:#1a1a2a;border:1px solid #2a2a4a;border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#4a9eff'" onmouseout="this.style.borderColor='#2a2a4a'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> Config</a>
+      </div>
+    </div>
+    <a class="ss-card mic" href="/audiopatch/mic-tracker/">
+      <div class="ss-card-header">
+        <svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        <span class="ss-card-label">Wireless</span>
+      </div>
+      <div class="ss-card-title">Mic Tracker</div>
+      <div id="mic-days-list" style="font-size:0.78rem;color:#9090b0;">
+        <span style="color:#5555aa;">Loading...</span>
+      </div>
+    </a>
+    <a class="ss-card power" href="/admin/planner/powerdistributionplan/">
+      <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="ss-card-label">Electrical</span></div>
+      <div class="ss-card-title">Power Distribution</div>
+      <div class="ss-card-metrics">
+        <div class="ss-metric"><span class="ss-metric-val" id="m-plans">—</span><span class="ss-metric-label">Plans</span></div>
+        <div class="ss-metric"><span class="ss-metric-val" id="m-amps-power">—</span><span class="ss-metric-label">Amps in Plans</span></div>
+      </div>
+    </a>
+    <a class="ss-card check" href="/admin/planner/audiochecklist/">
+      <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg><span class="ss-card-label">Operations</span></div>
+      <div class="ss-card-title">Audio Checklist</div>
+      <div class="ss-card-metrics">
+        <div class="ss-metric"><span class="ss-metric-val">FOH</span><span class="ss-metric-label">A2 · Prep</span></div>
+      </div>
+    </a>
+    <a class="ss-card net" href="/audiopatch/ip-addresses/">
+      <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><span class="ss-card-label">Network</span></div>
+      <div class="ss-card-title">IP Management</div>
+      <div class="ss-card-metrics">
+        <div class="ss-metric"><span class="ss-metric-val">DNS</span><span class="ss-metric-label">Address Table</span></div>
+      </div>
+    </a>
+  </div>
+
+  <div class="ss-links">
+    <a class="ss-link" href="/admin/planner/console/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><circle cx="12" cy="4" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="20" r="2"/></svg> Consoles</a>
+    <a class="ss-link" href="/admin/planner/device/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> I/O Devices</a>
+    <a class="ss-link" href="/admin/planner/systemprocessor/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg> Processors</a>
+    <a class="ss-link" href="/admin/planner/amp/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> Amplifiers</a>
+    <a class="ss-link" href="/admin/planner/pacableschedule/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9a2 2 0 0 1-2-2V5h6v2a2 2 0 0 1-2 2Z"/><path d="M3 5V3"/><path d="M7 5V3"/><path d="M19 15V6.5a3.5 3.5 0 0 0-7 0v11a3.5 3.5 0 0 1-7 0V9"/><path d="M17 21v-2"/><path d="M21 21v-2"/><path d="M22 19h-6v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2Z"/></svg> PA Cable</a>
+    <a class="ss-link" href="/admin/planner/commbeltpack/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg> Belt Packs</a>
+    <a class="ss-link" href="/admin/planner/project/"><svg style="width:13px;height:13px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Projects</a>
+  </div>
+
+</div>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Define parent-child relationships (same as sidebar)
-    const menuStructure = {
-        'Comm Belt Packs': ['Comm Positions', 'Comm Channels', 'Comm Crew Names'],
-        'Show Mic Tracker': ['Mic Sessions', 'Mic Assignments', 'Presenters', 'Mic Show Information'],
-        'Soundvision Predictions': ['Speaker Arrays', 'Speaker Cabinets'],
-        'Power Distribution Plans': ['Amplifiers in Power Plan', 'Amplifier Profiles']
-    };
-    
-    // Get all child names
-    const allChildren = new Set();
-    Object.values(menuStructure).forEach(children => {
-        children.forEach(child => allChildren.add(child.toLowerCase().trim()));
-    });
-    
-    // Find the app-list tables on the home page
-    const appList = document.querySelector('.app-list, #content-main');
-    if (!appList) return;
-    
-    // Get saved state
-    const savedState = JSON.parse(localStorage.getItem('sidebarState') || '{}');
-    
-    // Find all table rows with model links
-    const allRows = appList.querySelectorAll('tr');
-    const rowMap = {};
-    
-    allRows.forEach(row => {
-        const link = row.querySelector('th a, td a');
-        if (link) {
-            const text = link.textContent.trim().toLowerCase();
-            if (!rowMap[text]) {
-                rowMap[text] = [];
-            }
-            rowMap[text].push({ row: row, link: link });
-        }
-    });
-    
-    // Process each parent
-    Object.entries(menuStructure).forEach(([parent, children]) => {
-        const parentLower = parent.toLowerCase();
-        const parentEntries = rowMap[parentLower];
-        
-        if (!parentEntries || parentEntries.length === 0) return;
-        
-        const parentRow = parentEntries[0].row;
-        const parentLink = parentEntries[0].link;
-        
-        // Find child rows
-        const childRows = [];
-        children.forEach(childName => {
-            const childLower = childName.toLowerCase();
-            const childEntries = rowMap[childLower];
-            if (childEntries) {
-                childEntries.forEach(entry => {
-                    childRows.push(entry.row);
-                    entry.row.classList.add('home-child-item');
-                });
-            }
-        });
-        
-        if (childRows.length === 0) return;
-        
-        // Create arrow
-        const arrow = document.createElement('span');
-        arrow.className = 'home-toggle-arrow';
-        arrow.innerHTML = '▶';
-        parentLink.insertBefore(arrow, parentLink.firstChild);
-        parentLink.style.fontWeight = 'bold';
-        
-        // Update display function
-        function updateDisplay(collapsed) {
-            if (collapsed) {
-                arrow.style.transform = 'rotate(0deg)';
-                childRows.forEach(row => {
-                    row.style.setProperty('display', 'none', 'important');
-                });
-            } else {
-                arrow.style.transform = 'rotate(90deg)';
-                childRows.forEach(row => {
-                    row.style.setProperty('display', 'table-row', 'important');
-                });
-            }
-        }
-        
-        // Apply initial state (default collapsed)
-        const isCollapsed = savedState[parent] !== false;
-        updateDisplay(isCollapsed);
-        
-        // Toggle function
-        function toggleChildren(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const currentlyCollapsed = childRows[0].style.display === 'none';
-            const newState = !currentlyCollapsed;
-            
-            updateDisplay(newState);
-            
-            savedState[parent] = newState;
-            localStorage.setItem('sidebarState', JSON.stringify(savedState));
-        }
-        
-        arrow.addEventListener('click', toggleChildren);
-        parentLink.addEventListener('dblclick', toggleChildren);
-    });
-    
-    // Add CSS for home page
-    const style = document.createElement('style');
-    style.textContent = `
-        .home-child-item th,
-        .home-child-item td {
-            padding-left: 30px !important;
-        }
-        .home-child-item th a::before,
-        .home-child-item td a::before {
-            content: '└ ';
-            color: #555;
-            font-size: 11px;
-        }
-        .home-toggle-arrow {
-            color: #888;
-            font-size: 10px;
-            transition: transform 0.2s;
-            display: inline-block;
-            cursor: pointer;
-            width: 16px;
-            margin-left: -20px;
-            margin-right: 4px;
-            text-align: center;
-        }
-        .home-toggle-arrow:hover {
-            color: #00ff88 !important;
-        }
-    `;
-    document.head.appendChild(style);
-    
-    console.log('✅ Home page collapsible menu initialized');
-});
+async function loadStats() {
+  try {
+    const resp = await fetch('/audiopatch/dashboard/stats/');
+    if (!resp.ok) return;
+    const d = await resp.json();
+    if (d.project_name) document.getElementById('ss-project-name').textContent = d.project_name;
+    document.getElementById('ss-timestamp').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+    setVal('stat-consoles', d.console_total); setDot('dot-consoles', d.console_total > 0);
+    setVal('stat-devices2', d.device_total); setDot('dot-devices', d.device_total > 0);
+    setVal('stat-devices2', d.device_total); setDot('dot-devices', d.device_total > 0);
+    setVal('stat-devices', d.device_total);
+    setVal('stat-p1', d.proc_p1); setVal('stat-galaxy', d.proc_galaxy);
+    setDot('dot-proc', (d.proc_p1 + d.proc_galaxy) > 0);
+    setVal('stat-amps', d.amp_total); setVal('stat-locations', d.amp_locations);
+    setDot('dot-amps', d.amp_total > 0);
+    setVal('stat-cables', d.pa_cables); setVal('stat-zones', d.pa_zones);
+    setDot('dot-pa', d.pa_cables > 0);
+    setVal('stat-sv', d.sv_total); setVal('stat-arrays', d.sv_arrays);
+    setDot('dot-sv', d.sv_total > 0);
+    setVal('m-packs', d.comm_packs); setVal('m-checked', d.comm_checked);
+    setVal('m-mics', d.mic_total); setVal('m-micd', d.mic_micd);
+    const micList = document.getElementById('mic-days-list');
+    if (micList && d.show_days) {
+      if (d.show_days.length === 0) {
+        micList.innerHTML = '<span style="color:#5555aa;">No show days</span>';
+      } else {
+        micList.innerHTML = d.show_days.map(day => {
+          const date = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
+          return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
+            + '<span style="color:#c0c0d0;">' + date + ' — ' + day.name + '</span>'
+            + '<span style="color:#4a9eff;font-family:DM Mono,monospace;">' + day.mic_count + '</span>'
+            + '</div>';
+        }).join('');
+      }
+    }
+    setVal('m-plans', d.power_plans); setVal('m-amps-power', d.power_amps);
+  } catch(e) { console.log('Stats error:', e); }
+}
+function setVal(id, val) { const el = document.getElementById(id); if (el && val !== undefined) el.textContent = val; }
+function setDot(id, active) { const el = document.getElementById(id); if (el) el.className = 'ss-status-dot' + (active ? '' : ' empty'); }
+loadStats();
 </script>
 {% endblock %}

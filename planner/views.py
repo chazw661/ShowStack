@@ -4995,3 +4995,53 @@ def comm_config_delete_crew_name(request):
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# Dashboard Stats JSON endpoint
+# ─────────────────────────────────────────────────────────────
+@require_GET
+@require_GET
+@require_GET
+def dashboard_stats(request):
+    """JSON stats for the system overview dashboard."""
+    from .models import ShowDay, MicAssignment
+    cp = getattr(request, 'current_project', None)
+    p = {'project': cp} if cp else {}
+
+    try:
+        # Show days with mic counts
+        show_days = []
+        if cp:
+            for day in ShowDay.objects.filter(project=cp).order_by('date')[:5]:
+                mic_count = MicAssignment.objects.filter(session__day=day).count()
+                show_days.append({
+                    'date': str(day.date),
+                    'name': day.name,
+                    'mic_count': mic_count,
+                })
+
+        data = {
+            'project_name': cp.name if cp else 'No Project Selected',
+            'console_total': Console.objects.filter(**p).count(),
+            'device_total': Device.objects.filter(**p).count(),
+            'proc_p1': SystemProcessor.objects.filter(**{**p, 'device_type': 'P1'}).count(),
+            'proc_galaxy': SystemProcessor.objects.filter(**{**p, 'device_type': 'GALAXY'}).count(),
+            'amp_total': Amp.objects.filter(**p).count(),
+            'amp_locations': Location.objects.filter(**p).count(),
+            'pa_cables': PACableSchedule.objects.filter(**p).count(),
+            'pa_zones': PAZone.objects.filter(**p).count(),
+            'sv_total': SoundvisionPrediction.objects.filter(**p).count(),
+            'sv_arrays': 0,
+            'comm_packs': CommBeltPack.objects.filter(**p).count(),
+            'comm_checked': CommBeltPack.objects.filter(**{**p, 'checked_out': True}).count(),
+            'mic_total': sum(d['mic_count'] for d in show_days),
+            'mic_micd': MicAssignment.objects.filter(session__day__project=cp, is_micd=True).count() if cp else 0,
+            'power_plans': PowerDistributionPlan.objects.filter(**p).count(),
+            'power_amps': 0,
+            'show_days': show_days,
+        }
+        return JsonResponse(data)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
