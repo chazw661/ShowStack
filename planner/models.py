@@ -3563,6 +3563,61 @@ class AudioChecklistTask(models.Model):
     def __str__(self):
         return f"{self.checklist.name} - {self.task}"
 
+
+
+class AudioChecklistTemplate(models.Model):
+    """A saved checklist template that can be loaded into any project."""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='checklist_templates')
+    name = models.CharField(max_length=100)
+    created_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='checklist_templates'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Checklist Template"
+        verbose_name_plural = "Checklist Templates"
+        ordering = ['name']
+        unique_together = ['project', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class AudioChecklistTemplateTask(models.Model):
+    """A single task stored in a checklist template."""
+    TASK_TYPE_CHOICES = [
+        ('setup', 'Setup (One-Time)'),
+        ('daily', 'Daily'),
+    ]
+    SECTION_CHOICES = [
+        ('FOH', 'FOH'),
+        ('A2', 'A2'),
+        ('Prep', 'Prep'),
+    ]
+    STAGE_CHOICES = [
+        ('', '-'),
+        ('Pre-Production', 'Pre-Production'),
+        ('Load-In', 'Load-In'),
+    ]
+
+    template = models.ForeignKey(AudioChecklistTemplate, on_delete=models.CASCADE, related_name='tasks')
+    task = models.CharField(max_length=255)
+    section = models.CharField(max_length=10, choices=SECTION_CHOICES, default='FOH')
+    task_type = models.CharField(max_length=10, choices=TASK_TYPE_CHOICES, default='setup')
+    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default='', blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Template Task"
+        verbose_name_plural = "Template Tasks"
+        ordering = ['template', 'section', 'task_type', 'sort_order']
+
+    def __str__(self):
+        return f"{self.template.name} - {self.section} - {self.task}"
+
 # ============================================================
 # COMM CONFIG MODULE - Base Station Configuration Editor
 # ============================================================

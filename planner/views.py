@@ -32,7 +32,7 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
-from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName
+from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask
 from .models import Amp, AmpDivider, Location
 import hashlib
 import os
@@ -4665,6 +4665,137 @@ def audio_checklist_reset(request):
         return JsonResponse({'success': True})
     except Project.DoesNotExist:
         return JsonResponse({'error': 'Project not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+
+
+# ─────────────────────────────────────────────────────────────
+# Audio Checklist Templates
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def audio_checklist_save_template(request):
+    """Save current checklist as a named template."""
+    try:
+        data = _json.loads(request.body)
+        name = data.get('name', '').strip()
+        current_project = getattr(request, 'current_project', None)
+        if not name or not current_project:
+            return JsonResponse({'error': 'Missing name or project'}, status=400)
+
+        # Delete existing template with same name in this project
+        AudioChecklistTemplate.objects.filter(project=current_project, name=name).delete()
+
+        # Create new template
+        template = AudioChecklistTemplate.objects.create(
+            project=current_project,
+            name=name,
+            created_by=request.user,
+        )
+
+        # Copy all tasks from current checklists
+        from .models import AudioChecklist
+        section_map = {'FOH': 'FOH', 'A2': 'A2', 'Prep': 'Prep'}
+        sort_order = 0
+        for checklist in AudioChecklist.objects.filter(project=current_project):
+            section = checklist.name.replace(' Check List', '').replace(' Checklist', '').strip()
+            if section not in section_map:
+                section = 'FOH'
+            for task in checklist.tasks.all().order_by('task_type', 'sort_order'):
+                AudioChecklistTemplateTask.objects.create(
+                    template=template,
+                    task=task.task,
+                    section=section,
+                    task_type=task.task_type,
+                    stage=task.stage,
+                    sort_order=sort_order,
+                )
+                sort_order += 1
+
+        return JsonResponse({'ok': True, 'template_id': template.id, 'name': template.name})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_GET
+def audio_checklist_list_templates(request):
+    """List all templates for the current project."""
+    try:
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'templates': []})
+        templates = AudioChecklistTemplate.objects.filter(
+            project=current_project
+        ).order_by('name').values('id', 'name', 'created_at')
+        return JsonResponse({'templates': list(templates)})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def audio_checklist_load_template(request):
+    """Replace current checklist tasks with a template."""
+    try:
+        data = _json.loads(request.body)
+        template_id = data.get('template_id')
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No project'}, status=400)
+
+        template = AudioChecklistTemplate.objects.get(id=template_id, project=current_project)
+
+        from .models import AudioChecklist
+        # Delete all existing tasks
+        for checklist in AudioChecklist.objects.filter(project=current_project):
+            checklist.tasks.all().delete()
+
+        # Ensure checklists exist for each section
+        section_checklist_map = {}
+        section_names = {
+            'FOH': 'FOH Check List',
+            'A2': 'A2 Check List',
+            'Prep': 'Prep Check List',
+        }
+        for section, checklist_name in section_names.items():
+            cl, _ = AudioChecklist.objects.get_or_create(
+                project=current_project,
+                name=checklist_name,
+            )
+            section_checklist_map[section] = cl
+
+        # Load template tasks
+        from .models import AudioChecklistTask
+        for task in template.tasks.all().order_by('sort_order'):
+            section = task.section if task.section in section_checklist_map else 'FOH'
+            AudioChecklistTask.objects.create(
+                checklist=section_checklist_map[section],
+                task=task.task,
+                task_type=task.task_type,
+                stage=task.stage,
+                sort_order=task.sort_order,
+            )
+
+        return JsonResponse({'ok': True})
+    except AudioChecklistTemplate.DoesNotExist:
+        return JsonResponse({'error': 'Template not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def audio_checklist_delete_template(request):
+    """Delete a saved template."""
+    try:
+        data = _json.loads(request.body)
+        current_project = getattr(request, 'current_project', None)
+        template = AudioChecklistTemplate.objects.get(
+            id=data['template_id'], project=current_project
+        )
+        template.delete()
+        return JsonResponse({'ok': True})
+    except AudioChecklistTemplate.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 

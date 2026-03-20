@@ -15,6 +15,10 @@ from .views import (
      audio_checklist_add_task,
      audio_checklist_delete_task,
      audio_checklist_reset,
+     audio_checklist_save_template,
+     audio_checklist_list_templates,
+     audio_checklist_load_template,
+     audio_checklist_delete_template,
      )
 
 app_name = 'planner'  
@@ -231,6 +235,10 @@ urlpatterns = [
      path('audiochecklist/add-task/', audio_checklist_add_task, name='audio_checklist_add_task'),
      path('audiochecklist/delete-task/', audio_checklist_delete_task, name='audio_checklist_delete_task'),
      path('audiochecklist/reset/', audio_checklist_reset, name='audio_checklist_reset'),
+     path('audiochecklist/template/save/', audio_checklist_save_template, name='audio_checklist_save_template'),
+     path('audiochecklist/template/list/', audio_checklist_list_templates, name='audio_checklist_list_templates'),
+     path('audiochecklist/template/load/', audio_checklist_load_template, name='audio_checklist_load_template'),
+     path('audiochecklist/template/delete/', audio_checklist_delete_template, name='audio_checklist_delete_template'),
 
       
     

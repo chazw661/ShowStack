@@ -340,6 +340,8 @@
         <button class="btn danger" onclick="resetAll()">🔄 Reset All</button>
         <button class="btn" onclick="exportToCSV()">📊 Export to CSV</button>
         <button class="btn" onclick="window.print()">🖨️ Print</button>
+        <button class="btn" onclick="openSaveTemplateModal()" style="background:#1a3a5a;border-color:#4a9eff;color:#4a9eff;">💾 Save as Template</button>
+        <button class="btn" onclick="openLoadTemplateModal()" style="background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;">📂 Load Template</button>
         <select id="dayFilter" onchange="filterByDay()">
             <option value="all">All Days</option>
             <option value="day1">Day 1</option>
@@ -810,5 +812,106 @@ function filterByDay() {
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
 });
+</script>
+
+<!-- ── Save Template Modal ── -->
+<div id="saveTemplateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:360px;max-width:440px;width:90%;">
+    <h3 style="color:#e0e0e0;margin:0 0 20px;font-size:1.1rem;">💾 Save as Template</h3>
+    <div style="margin-bottom:20px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Template Name</label>
+      <input id="templateNameInput" style="width:100%;box-sizing:border-box;background:#1e1e3a;border:1px solid #3a3a5a;border-radius:6px;color:#e0e0e0;padding:8px 10px;font-size:0.875rem;outline:none;"
+             placeholder="e.g. GJS Corporate Standard"
+             onkeydown="if(event.key==='Enter')submitSaveTemplate()">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn" onclick="document.getElementById('saveTemplateModal').style.display='none'">Cancel</button>
+      <button class="btn" style="background:#1a3a5a;border-color:#4a9eff;color:#4a9eff;" onclick="submitSaveTemplate()">Save Template</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Load Template Modal ── -->
+<div id="loadTemplateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:380px;max-width:480px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:#e0e0e0;margin:0;font-size:1.1rem;">📂 Load Template</h3>
+      <button class="btn" style="padding:4px 10px;" onclick="document.getElementById('loadTemplateModal').style.display='none'">✕</button>
+    </div>
+    <p style="color:#8888aa;font-size:0.8rem;margin:0 0 14px;">Loading a template will replace ALL current tasks.</p>
+    <div id="templateListContainer" style="overflow-y:auto;flex:1;">
+      <p style="color:#5555aa;text-align:center;padding:20px;">Loading templates...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+function openSaveTemplateModal() {
+  document.getElementById('templateNameInput').value = '';
+  document.getElementById('saveTemplateModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('templateNameInput').focus(), 100);
+}
+
+function openLoadTemplateModal() {
+  document.getElementById('loadTemplateModal').style.display = 'flex';
+  loadTemplateList();
+}
+
+async function submitSaveTemplate() {
+  const name = document.getElementById('templateNameInput').value.trim();
+  if (!name) { alert('Please enter a template name.'); return; }
+  const result = await apiCall('{% url "planner:audio_checklist_save_template" %}', { name });
+  if (result && result.ok) {
+    document.getElementById('saveTemplateModal').style.display = 'none';
+    showNotification('Template "' + name + '" saved!');
+  } else {
+    alert('Error: ' + (result?.error || 'Unknown'));
+  }
+}
+
+async function loadTemplateList() {
+  const container = document.getElementById('templateListContainer');
+  try {
+    const resp = await fetch('{% url "planner:audio_checklist_list_templates" %}');
+    const data = await resp.json();
+    if (!data.templates || data.templates.length === 0) {
+      container.innerHTML = '<p style="color:#5555aa;text-align:center;padding:20px;">No templates saved yet.</p>';
+      return;
+    }
+    container.innerHTML = data.templates.map(t => `
+      <div style="display:flex;align-items:center;background:#12122a;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;margin-bottom:6px;gap:10px;">
+        <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">${t.name}</span>
+        <button class="btn" style="padding:4px 12px;font-size:0.8rem;background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;"
+                onclick="confirmLoadTemplate(${t.id}, '${t.name.replace(/'/g, "\'")}')">Load</button>
+        <button class="btn danger" style="padding:4px 10px;font-size:0.8rem;"
+                onclick="confirmDeleteTemplate(${t.id}, '${t.name.replace(/'/g, "\'")}')">🗑</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = '<p style="color:#dc3545;">Error loading templates.</p>';
+  }
+}
+
+async function confirmLoadTemplate(templateId, name) {
+  if (!confirm('Load "' + name + '"? This will replace ALL current checklist tasks.')) return;
+  const result = await apiCall('{% url "planner:audio_checklist_load_template" %}', { template_id: templateId });
+  if (result && result.ok) {
+    document.getElementById('loadTemplateModal').style.display = 'none';
+    showNotification('Template loaded!');
+    loadData();
+  } else {
+    alert('Error: ' + (result?.error || 'Unknown'));
+  }
+}
+
+async function confirmDeleteTemplate(templateId, name) {
+  if (!confirm('Delete template "' + name + '"?')) return;
+  const result = await apiCall('{% url "planner:audio_checklist_delete_template" %}', { template_id: templateId });
+  if (result && result.ok) {
+    loadTemplateList();
+  } else {
+    alert('Error: ' + (result?.error || 'Unknown'));
+  }
+}
 </script>
 {% endblock %}
