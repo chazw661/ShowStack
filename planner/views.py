@@ -4068,40 +4068,47 @@ def comm_config_delete(request):
 # COMM Config — Export .cca
 # ─────────────────────────────────────────────────────────────
 def comm_config_export(request, config_id):
-    import json, os, tarfile, gzip, tempfile, shutil
+    import json, os, tarfile, gzip, tempfile, shutil, uuid
     from django.http import HttpResponse
     from django.conf import settings
 
     config = get_object_or_404(CommConfig, id=config_id)
 
-    # Load factory docs as base
+    # Load ALL factory docs as base - we keep everything and only replace what we customize
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'arcadia_factory_docs.json')
     with open(factory_path) as f:
-        docs = json.load(f)
+        factory_docs = json.load(f)
 
-    sys_id = config.system_id or 'ShowStack'
+    sys_id = config.system_id or uuid.uuid4().hex[:8]
     hw_id = config.hardware_id or 'ff080f1f'
-    owner_id = f'0.02.{sys_id}.0000.0000'
+    factory_sys_id = 'lKcw3zUU'  # The factory sys_id in our template
 
     def make_rev():
-        import uuid
         return f'1-{uuid.uuid4().hex}'
 
-    # ── Remove old system_id docs (keep hardware/layer docs) ──
-    old_sys_ids = set()
-    for doc_id in list(docs.keys()):
-        parts = doc_id.split('.')
-        if len(parts) >= 3 and parts[2] not in (hw_id, '!', 'A6AMk7Ur'):
-            old_sys_ids.add(parts[2])
+    def replace_sys_id(doc_id):
+        return doc_id.replace(factory_sys_id, sys_id)
 
-    for doc_id in list(docs.keys()):
-        parts = doc_id.split('.')
-        if len(parts) >= 3 and parts[2] in old_sys_ids:
-            del docs[doc_id]
+    # Start with a fresh copy of factory docs, replacing the factory sys_id with our sys_id
+    docs = {}
+    for doc_id, doc in factory_docs.items():
+        new_id = replace_sys_id(doc_id)
+        new_doc = json.loads(json.dumps(doc).replace(factory_sys_id, sys_id))
+        new_doc['_id'] = new_id
+        docs[new_id] = new_doc
 
-    # ── Build partyline docs ──
+    owner_id = f'0.02.{sys_id}.0000.0000'
+
+    # ── Replace partylines ──
+    # Remove old factory partylines
+    for doc_id in list(docs.keys()):
+        if doc_id.startswith(f'3.20.{sys_id}.') and doc_id != f'3.20.{sys_id}.!':
+            # keep the entity marker but remove data docs
+            if doc_id != f'3.20.!':
+                del docs[doc_id]
+
     partylines = list(config.partylines.all().order_by('channel_number'))
-    pl_id_map = {}  # channel_number -> doc_id
+    pl_id_map = {}
     for pl in partylines:
         doc_id = f'3.20.{sys_id}.0000.{pl.channel_number:04d}'
         pl_id_map[pl.channel_number] = doc_id
@@ -4118,27 +4125,24 @@ def comm_config_export(request, config_id):
             'type': 'partyline',
         }
 
-    # ── Build role docs ──
+    # ── Replace roles ──
+    for doc_id in list(docs.keys()):
+        if doc_id.startswith(f'3.23.{sys_id}.') and doc_id != f'3.23.!':
+            del docs[doc_id]
+
     roles = list(config.roles.all().order_by('role_number'))
-    role_id_map = {}  # role_number -> doc_id
+    role_id_map = {}
     for role in roles:
         doc_id = f'3.23.{sys_id}.0000.{role.role_number:04d}'
         role_id_map[role.role_number] = doc_id
 
-        # Build keysets
         keysets = []
         for key in role.keysets.all().order_by('key_index'):
             entities = []
             if key.partyline:
-                entities.append({
-                    'res': f'/api/1/connections/{key.partyline.channel_number}',
-                    'type': 0,
-                })
+                entities.append({'res': f'/api/1/connections/{key.partyline.channel_number}', 'type': 0})
             elif key.port_reference:
-                entities.append({
-                    'res': key.port_reference,
-                    'type': 1,
-                })
+                entities.append({'res': key.port_reference, 'type': 1})
 
             keyset_entry = {
                 'activationState': key.activation_state,
@@ -4151,7 +4155,6 @@ def comm_config_export(request, config_id):
                 keyset_entry['isReplyKey'] = True
             keysets.append(keyset_entry)
 
-        # Build settings based on device type
         settings_obj = {
             'displayBrightness': role.display_brightness,
             'headphoneGain': role.headphone_gain,
@@ -4162,7 +4165,6 @@ def comm_config_export(request, config_id):
             'sidetoneControl': role.sidetone_control,
             'sidetoneGain': role.sidetone_gain,
         }
-        # Merge any extended settings
         if role.extended_settings:
             settings_obj.update(role.extended_settings)
 
@@ -4181,9 +4183,16 @@ def comm_config_export(request, config_id):
             'type': role.device_type,
         }
 
-    # ── Build roleset docs ──
+    # ── Replace rolesets ──
+    for doc_id in list(docs.keys()):
+        if doc_id.startswith(f'3.88.{sys_id}.') and doc_id != f'3.88.!':
+            del docs[doc_id]
+    for doc_id in list(docs.keys()):
+        if doc_id.startswith(f'4.55.{sys_id}.'):
+            del docs[doc_id]
+
     rolesets = list(config.rolesets.all().order_by('roleset_number'))
-    rs_id_map = {}  # roleset_number -> doc_id
+    rs_id_map = {}
     for rs in rolesets:
         doc_id = f'3.88.{sys_id}.0000.{rs.roleset_number:04d}'
         rs_id_map[rs.roleset_number] = doc_id
@@ -4201,23 +4210,21 @@ def comm_config_export(request, config_id):
             'owner': owner_id,
             'type': 'Roleset',
         }
-
-        # Dynamic port ref for this roleset
         dp_id = f'4.55.{sys_id}.0000.{rs.roleset_number:04d}'
         docs[dp_id] = {
             '_id': dp_id,
             '_rev': make_rev(),
-            'data': {
-                'destination': doc_id,
-                'id': rs.roleset_number,
-                'type': 'roleset',
-            },
+            'data': {'destination': doc_id, 'id': rs.roleset_number, 'type': 'roleset'},
             'owner': owner_id,
             'type': 'roleset',
         }
 
-    # ── Build session docs ──
-    for session in config.sessions.all().order_by('session_type'):
+    # ── Replace sessions ──
+    for doc_id in list(docs.keys()):
+        if doc_id.startswith(f'3.99.{sys_id}.') and doc_id != f'3.99.!':
+            del docs[doc_id]
+
+    for session in config.sessions.all():
         if session.session_type == 'A.CCM':
             doc_id = f'3.99.{sys_id}.0000.0000'
             session_data = {
@@ -4228,10 +4235,14 @@ def comm_config_export(request, config_id):
             }
             owner = f'0.99.A6AMk7Ur.0000.0000'
         else:
-            # Owner is the roleset doc
-            rs_num = session.roleset.roleset_number if session.roleset else 0
+            rs_num = session.roleset.roleset_number if session.roleset else 1
+            # Use hex for roleset number in doc ID to match CCM format
             rs_hex = f'{rs_num:04d}'
-            doc_id = f'3.99.{sys_id}.{rs_hex}.0000'
+            # NEP session uses 0003 owner index
+            if session.session_type == 'S.NEP':
+                doc_id = f'3.99.{sys_id}.0003.0000'
+            else:
+                doc_id = f'3.99.{sys_id}.{rs_hex}.0000'
             session_data = {
                 'addressable': session.addressable,
                 'id': 0,
@@ -4252,9 +4263,8 @@ def comm_config_export(request, config_id):
             'type': session.session_type,
         }
 
-    # ── Update physical port settings ──
+    # ── Update physical port settings (keep factory port docs, just update settings) ──
     for port in config.port_assignments.all():
-        # Find matching factory port doc by label
         for doc_id, doc in docs.items():
             if doc_id.startswith('3.06.') and doc.get('data', {}).get('label') == port.port_label:
                 if port.port_type == '2W':
@@ -4268,29 +4278,6 @@ def comm_config_export(request, config_id):
                     })
                 break
 
-    # ── Build assignment docs (port to partyline) ──
-    for port in config.port_assignments.filter(partyline__isnull=False):
-        # Find port doc to get its gid
-        for doc_id, doc in list(docs.items()):
-            if doc_id.startswith('3.06.') and doc.get('data', {}).get('label') == port.port_label:
-                port_parts = doc_id.split('.')
-                if len(port_parts) >= 5:
-                    assign_id = f'4.44.{sys_id}.{port_parts[3]}.{port_parts[4]}'
-                    pl_ch = port.partyline.channel_number
-                    pl_doc_id = pl_id_map.get(pl_ch, '')
-                    docs[assign_id] = {
-                        '_id': assign_id,
-                        '_rev': make_rev(),
-                        'data': {
-                            'joinMode': port.join_mode,
-                            'source': doc_id,
-                            'destination': pl_doc_id,
-                        },
-                        'owner': pl_doc_id,
-                        'type': 'assignment',
-                    }
-                break
-
     # ── Write LevelDB and pack .cca ──
     tmp_dir = tempfile.mkdtemp()
     try:
@@ -4301,16 +4288,15 @@ def comm_config_export(request, config_id):
         seq = 0
         for doc_id, doc in sorted(docs.items()):
             seq += 1
-            seq_key = f'ÿby-sequenceÿ{seq:016d}'.encode()
+            seq_key = b'\xff' + b'by-sequence' + b'\xff' + f'{seq:016d}'.encode()
             content_bytes = json.dumps(doc).encode('utf-8')
-            db.put(seq_key, b'' + content_bytes)
-            db.put(f'ÿmeta-storeÿ{doc_id}'.encode(), str(seq).encode())
+            db.put(seq_key, b'\x00' + content_bytes)
+            db.put(b'\xff' + b'meta-store' + b'\xff' + doc_id.encode(), str(seq).encode())
 
         db.put(b'\xff' + b'meta-store' + b'\xff' + b'_local_doc_count', str(len(docs)).encode())
         db.put(b'\xff' + b'meta-store' + b'\xff' + b'_local_last_update_seq', str(seq).encode())
         db.close()
 
-        # Write support files
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
         from datetime import datetime, timezone
@@ -4319,20 +4305,17 @@ def comm_config_export(request, config_id):
         with open(os.path.join(tmp_dir, 'SystemEnvironment.json'), 'w') as f:
             json.dump({'system': sys_id, 'domain': sys_id, 'context': 'device'}, f)
 
-        # Create tar
         tar_path = os.path.join(tmp_dir, 'config.tar')
         with tarfile.open(tar_path, 'w') as tar:
             for item in ['pouchdb', 'datetime.txt', 'type.txt', 'SystemEnvironment.json']:
                 tar.add(os.path.join(tmp_dir, item), arcname=item)
 
-        # Gzip
-        cca_bytes = b''
-        with open(tar_path, 'rb') as f_in:
-            import io
-            buf = io.BytesIO()
-            with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=9) as gz:
-                gz.write(f_in.read())
-            cca_bytes = buf.getvalue()
+        import io
+        buf = io.BytesIO()
+        with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=9) as gz:
+            with open(tar_path, 'rb') as f:
+                gz.write(f.read())
+        cca_bytes = buf.getvalue()
 
         filename = f'{config.name.replace(" ", "_")}_{sys_id}.cca'
         response = HttpResponse(cca_bytes, content_type='application/octet-stream')
@@ -4345,24 +4328,6 @@ def comm_config_export(request, config_id):
         return HttpResponse(f'Export error: {str(e)}', status=500)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-
-  
-
-
-
-
-
-
-
-  #----Temporaty debug
-
-
-
-
-  # Add this to planner/views.py temporarily
-
-from django.http import HttpResponse
-from planner.models import Device
 
 def debug_device_ordering(request):
     """
