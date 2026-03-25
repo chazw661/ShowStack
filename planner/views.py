@@ -4289,16 +4289,34 @@ def comm_config_export(request, config_id):
         db_path = os.path.join(tmp_dir, 'pouchdb')
         db = plyvel.DB(db_path, create_if_missing=True)
 
+        SEP = b'\xc3\xbf'  # UTF-8 encoded \xff - PouchDB separator
         seq = 0
         for doc_id, doc in sorted(docs.items()):
             seq += 1
-            seq_key = b'\xc3\xbf' + b'by-sequence' + b'\xc3\xbf' + f'{seq:016d}'.encode()
-            content_bytes = json.dumps(doc).encode('utf-8')
-            db.put(seq_key, b'\x00' + content_bytes)
-            db.put(b'\xc3\xbf' + b'meta-store' + b'\xc3\xbf' + doc_id.encode(), str(seq).encode())
+            rev = doc.get('_rev', '1-0000000000000000')
+            rev_hash = rev.split('-')[1] if '-' in rev else rev
 
-        db.put(b'\xc3\xbf' + b'meta-store' + b'\xc3\xbf' + b'_local_doc_count', str(len(docs)).encode())
-        db.put(b'\xc3\xbf' + b'meta-store' + b'\xc3\xbf' + b'_local_last_update_seq', str(seq).encode())
+            # by-sequence: store full doc JSON (no prefix byte)
+            seq_key = SEP + b'by-sequence' + SEP + f'{seq:016d}'.encode()
+            db.put(seq_key, json.dumps(doc, separators=(',', ':')).encode('utf-8'))
+
+            # document-store: index by doc_id
+            doc_store_key = SEP + b'document-store' + SEP + doc_id.encode()
+            doc_store_val = json.dumps({
+                'id': doc_id,
+                'rev': rev,
+                'revisions': {'start': 1, 'ids': [rev_hash]},
+                'rev_tree': [{'pos': 1, 'ids': [rev_hash, {'status': 'available'}, []]}],
+                'rev_map': {rev: seq},
+                'winningRev': rev,
+                'deleted': False,
+                'seq': seq,
+            }, separators=(',', ':')).encode('utf-8')
+            db.put(doc_store_key, doc_store_val)
+
+        db.put(SEP + b'meta-store' + SEP + b'_local_doc_count', str(len(docs)).encode())
+        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(seq).encode())
+        db.put(SEP + b'meta-store' + SEP + b'_local_uuid', f'"{uuid.uuid4()}"'.encode())
         db.close()
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
