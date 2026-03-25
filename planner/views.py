@@ -4249,44 +4249,23 @@ def comm_config_export(request, config_id):
         'type': 'A.CCM',
     }
 
-    for session in config.sessions.all():
-        if session.session_type == 'A.CCM':
-            doc_id = f'3.99.{sys_id}.0000.0000'
-            session_data = {
-                'id': 0,
-                'label': session.label,
-                'profile': {'role': 'admin'},
-                'type': session.session_type,
-            }
-            owner = f'0.99.A6AMk7Ur.0000.0000'
-        else:
-            rs_num = session.roleset.roleset_number if session.roleset else 1
-            # Use hex for roleset number in doc ID to match CCM format
-            rs_hex = f'{rs_num:04d}'
-            # NEP session uses 0003 owner index
-            if session.session_type == 'S.NEP':
-                doc_id = f'3.99.{sys_id}.0003.0000'
-            else:
-                doc_id = f'3.99.{sys_id}.{rs_hex}.0000'
-            session_data = {
-                'addressable': session.addressable,
-                'id': 0,
-                'label': session.label,
-                'settings': {
-                    'defaultRole': (session.default_role.role_number + ROLE_OFFSET) if session.default_role else 13,
-                },
-                'type': session.session_type,
-            }
-            rs_doc_id = rs_id_map.get(rs_num, f'3.88.{sys_id}.0000.0001')
-            owner = rs_doc_id
-
-        docs[doc_id] = {
-            '_id': doc_id,
-            '_rev': make_rev(),
-            'data': session_data,
-            'owner': owner,
-            'type': session.session_type,
-        }
+    # Only write S.NEP session (A.CCM already injected above, B.FSII not used by Arcadia)
+    nep_session = config.sessions.filter(session_type='S.NEP').first()
+    nep_doc_id = f'3.99.{sys_id}.0003.0000'
+    rs_doc_id = f'3.88.{sys_id}.0000.0001'
+    docs[nep_doc_id] = {
+        '_id': nep_doc_id,
+        '_rev': make_rev(),
+        'data': {
+            'id': 0,
+            'type': 'S.NEP',
+            'label': nep_session.label if nep_session else 'Arcadia',
+            'settings': {'defaultRole': 13},
+            'addressable': False,
+        },
+        'owner': rs_doc_id,
+        'type': 'S.NEP',
+    }
 
     # ── Update physical port settings (keep factory port docs, just update settings) ──
     for port in config.port_assignments.all():
