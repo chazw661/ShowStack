@@ -4292,13 +4292,13 @@ def comm_config_export(request, config_id):
         seq = 0
         for doc_id, doc in sorted(docs.items()):
             seq += 1
-            seq_key = b'\xff' + b'by-sequence' + b'\xff' + f'{seq:016d}'.encode()
+            seq_key = b'\xc3\xbf' + b'by-sequence' + b'\xc3\xbf' + f'{seq:016d}'.encode()
             content_bytes = json.dumps(doc).encode('utf-8')
             db.put(seq_key, b'\x00' + content_bytes)
-            db.put(b'\xff' + b'meta-store' + b'\xff' + doc_id.encode(), str(seq).encode())
+            db.put(b'\xc3\xbf' + b'meta-store' + b'\xc3\xbf' + doc_id.encode(), str(seq).encode())
 
-        db.put(b'\xff' + b'meta-store' + b'\xff' + b'_local_doc_count', str(len(docs)).encode())
-        db.put(b'\xff' + b'meta-store' + b'\xff' + b'_local_last_update_seq', str(seq).encode())
+        db.put(b'\xc3\xbf' + b'meta-store' + b'\xc3\xbf' + b'_local_doc_count', str(len(docs)).encode())
+        db.put(b'\xc3\xbf' + b'meta-store' + b'\xc3\xbf' + b'_local_last_update_seq', str(seq).encode())
         db.close()
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
