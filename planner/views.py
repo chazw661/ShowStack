@@ -4287,22 +4287,42 @@ def comm_config_export(request, config_id):
     try:
         import plyvel
         db_path = os.path.join(tmp_dir, 'pouchdb')
+
+        # Copy factory pouchdb as base - preserves exact LevelDB format
+        factory_db_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'pouchdb_factory')
+        if os.path.exists(factory_db_path):
+            shutil.copytree(factory_db_path, db_path)
+        else:
+            os.makedirs(db_path)
+
         db = plyvel.DB(db_path, create_if_missing=True)
 
         SEP = b'\xc3\xbf'  # UTF-8 encoded \xff - PouchDB separator
-        seq = 0
-        for doc_id, doc in sorted(docs.items()):
-            seq += 1
+
+        # Find max existing seq number
+        max_seq = 0
+        for key, value in db:
+            if b'by-sequence' in key:
+                try:
+                    seq_num = int(key.split(SEP)[-1].decode())
+                    max_seq = max(max_seq, seq_num)
+                except:
+                    pass
+
+        seq_counter = [max_seq + 1]
+
+        def write_doc(doc):
+            doc_id = doc['_id']
             rev = doc.get('_rev', '1-0000000000000000')
             rev_hash = rev.split('-')[1] if '-' in rev else rev
+            seq = seq_counter[0]
+            seq_counter[0] += 1
 
-            # by-sequence: store full doc JSON (no prefix byte)
             seq_key = SEP + b'by-sequence' + SEP + f'{seq:016d}'.encode()
             db.put(seq_key, json.dumps(doc, separators=(',', ':')).encode('utf-8'))
 
-            # document-store: index by doc_id
             doc_store_key = SEP + b'document-store' + SEP + doc_id.encode()
-            doc_store_val = json.dumps({
+            db.put(doc_store_key, json.dumps({
                 'id': doc_id,
                 'rev': rev,
                 'revisions': {'start': 1, 'ids': [rev_hash]},
@@ -4311,12 +4331,15 @@ def comm_config_export(request, config_id):
                 'winningRev': rev,
                 'deleted': False,
                 'seq': seq,
-            }, separators=(',', ':')).encode('utf-8')
-            db.put(doc_store_key, doc_store_val)
+            }, separators=(',', ':')).encode('utf-8'))
 
-        db.put(SEP + b'meta-store' + SEP + b'_local_doc_count', str(len(docs)).encode())
-        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(seq).encode())
-        db.put(SEP + b'meta-store' + SEP + b'_local_uuid', f'"{uuid.uuid4()}"'.encode())
+        # Write all our custom docs
+        for doc in docs.values():
+            write_doc(doc)
+
+        total_docs = max_seq + len(docs)
+        db.put(SEP + b'meta-store' + SEP + b'_local_doc_count', str(total_docs).encode())
+        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(seq_counter[0] - 1).encode())
         db.close()
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
