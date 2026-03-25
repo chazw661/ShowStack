@@ -4079,6 +4079,14 @@ def comm_config_export(request, config_id):
     with open(factory_path) as f:
         factory_docs = json.load(f)
 
+    # Build per-device-type default settings from factory roles
+    device_defaults = {}
+    for fdoc_id, fdoc in factory_docs.items():
+        if '3.23.' in fdoc_id and fdoc_id != '3.23.!':
+            dtype = fdoc.get('type')
+            if dtype and dtype not in device_defaults:
+                device_defaults[dtype] = fdoc['data']['settings']
+
     sys_id = config.system_id or uuid.uuid4().hex[:8]
     hw_id = config.hardware_id or 'ff080f1f'
     factory_sys_id = 'lKcw3zUU'  # The factory sys_id in our template
