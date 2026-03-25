@@ -4133,16 +4133,17 @@ def comm_config_export(request, config_id):
             'type': 'partyline',
         }
 
-    # ── Replace roles ──
-    for doc_id in list(docs.keys()):
-        if doc_id.startswith(f'3.23.{sys_id}.') and doc_id != f'3.23.!':
-            del docs[doc_id]
+    # ── Add custom roles (keep factory defaults, add ours at offset 0x0100+) ──
+    # Factory roles 1-13 must stay intact for device compatibility
+    ROLE_OFFSET = 0x0100  # Our custom roles start at 256 to avoid factory collision
 
     roles = list(config.roles.all().order_by('role_number'))
     role_id_map = {}
     for role in roles:
-        doc_id = f'3.23.{sys_id}.0000.{role.role_number:04d}'
+        role_num = role.role_number + ROLE_OFFSET
+        doc_id = f'3.23.{sys_id}.0000.{role_num:04x}'
         role_id_map[role.role_number] = doc_id
+        role_id_map[f'hex_{role.role_number}'] = role_num
 
         keysets = []
         for key in role.keysets.all().order_by('key_index'):
@@ -4272,7 +4273,7 @@ def comm_config_export(request, config_id):
                 'id': 0,
                 'label': session.label,
                 'settings': {
-                    'defaultRole': session.default_role.role_number if session.default_role else 1,
+                    'defaultRole': (session.default_role.role_number + ROLE_OFFSET) if session.default_role else 13,
                 },
                 'type': session.session_type,
             }
