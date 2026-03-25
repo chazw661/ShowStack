@@ -4213,8 +4213,8 @@ def comm_config_export(request, config_id):
                 'addressable': rs.addressable,
                 'dpId': rs.roleset_number,
                 'id': rs.roleset_number,
-                'label': rs.label,
-                'name': rs.label,
+                'label': 'Arcadia',
+                'name': 'Arcadia',
                 'type': 'Roleset',
             },
             'owner': owner_id,
@@ -4241,7 +4241,7 @@ def comm_config_export(request, config_id):
         '_rev': make_rev(),
         'data': {
             'id': 0,
-            'label': 'CCM',
+            'label': 'admin',
             'profile': {'role': 'admin'},
             'type': 'A.CCM',
         },
@@ -4259,7 +4259,7 @@ def comm_config_export(request, config_id):
         'data': {
             'id': 0,
             'type': 'S.NEP',
-            'label': nep_session.label if nep_session else 'Arcadia',
+            'label': 'Arcadia',
             'settings': {'defaultRole': 13},
             'addressable': False,
         },
