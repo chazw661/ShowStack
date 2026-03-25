@@ -4224,6 +4224,21 @@ def comm_config_export(request, config_id):
         if doc_id.startswith(f'3.99.{sys_id}.') and doc_id != f'3.99.!':
             del docs[doc_id]
 
+    # Always inject the required A.CCM admin session
+    accm_doc_id = f'3.99.{sys_id}.0000.0000'
+    docs[accm_doc_id] = {
+        '_id': accm_doc_id,
+        '_rev': make_rev(),
+        'data': {
+            'id': 0,
+            'label': 'CCM',
+            'profile': {'role': 'admin'},
+            'type': 'A.CCM',
+        },
+        'owner': f'0.99.A6AMk7Ur.0000.0000',
+        'type': 'A.CCM',
+    }
+
     for session in config.sessions.all():
         if session.session_type == 'A.CCM':
             doc_id = f'3.99.{sys_id}.0000.0000'
