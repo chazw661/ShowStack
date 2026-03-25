@@ -4163,16 +4163,17 @@ def comm_config_export(request, config_id):
                 keyset_entry['isReplyKey'] = True
             keysets.append(keyset_entry)
 
-        settings_obj = {
+        # Start with factory defaults for this device type, then override
+        settings_obj = dict(device_defaults.get(role.device_type, {}))
+        settings_obj['keysets'] = keysets
+        settings_obj.update({
             'displayBrightness': role.display_brightness,
-            'headphoneGain': role.headphone_gain,
-            'headphoneLimit': role.headphone_limit,
-            'keysets': keysets,
             'masterVolume': role.master_volume,
             'micType': role.mic_type,
             'sidetoneControl': role.sidetone_control,
             'sidetoneGain': role.sidetone_gain,
-        }
+            'headphoneLimit': role.headphone_limit,
+        })
         if role.extended_settings:
             settings_obj.update(role.extended_settings)
 
