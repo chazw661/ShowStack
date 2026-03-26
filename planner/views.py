@@ -4068,18 +4068,23 @@ def comm_config_delete(request):
 # COMM Config — Export .cca
 # ─────────────────────────────────────────────────────────────
 def comm_config_export(request, config_id):
-    import json, os, tarfile, gzip, tempfile, shutil, uuid
+    import json, os, tarfile, gzip, tempfile, shutil, io
     from django.http import HttpResponse
     from django.conf import settings
+    from datetime import datetime, timezone
 
     config = get_object_or_404(CommConfig, id=config_id)
 
-    # Load ALL factory docs as base - we keep everything and only replace what we customize
+    # Factory sys_id must be preserved - Arcadia adopts it on restore
+    FACTORY_SYS_ID = 'lKcw3zUU'
+    SEP = b'\xc3\xbf'  # UTF-8 encoded \xff - PouchDB separator
+
+    # Load factory docs for device-type default settings
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'arcadia_factory_docs.json')
     with open(factory_path) as f:
         factory_docs = json.load(f)
 
-    # Build per-device-type default settings from factory roles
+    # Build per-device-type default settings
     device_defaults = {}
     for fdoc_id, fdoc in factory_docs.items():
         if '3.23.' in fdoc_id and fdoc_id != '3.23.!':
@@ -4087,236 +4092,40 @@ def comm_config_export(request, config_id):
             if dtype and dtype not in device_defaults:
                 device_defaults[dtype] = fdoc['data']['settings']
 
-    sys_id = config.system_id or uuid.uuid4().hex[:8]
-    hw_id = config.hardware_id or 'ff080f1f'
-    factory_sys_id = 'lKcw3zUU'  # The factory sys_id in our template
-
-    def make_rev():
-        return f'1-{uuid.uuid4().hex}'
-
-    def replace_sys_id(doc_id):
-        return doc_id.replace(factory_sys_id, sys_id)
-
-    # Start with a fresh copy of factory docs, replacing the factory sys_id with our sys_id
-    docs = {}
-    for doc_id, doc in factory_docs.items():
-        new_id = replace_sys_id(doc_id)
-        new_doc = json.loads(json.dumps(doc).replace(factory_sys_id, sys_id))
-        new_doc['_id'] = new_id
-        docs[new_id] = new_doc
-
-    owner_id = f'0.02.{sys_id}.0000.0000'
-
-    # ── Replace partylines ──
-    # Remove old factory partylines
-    for doc_id in list(docs.keys()):
-        if doc_id.startswith(f'3.20.{sys_id}.') and doc_id != f'3.20.{sys_id}.!':
-            # keep the entity marker but remove data docs
-            if doc_id != f'3.20.!':
-                del docs[doc_id]
-
-    partylines = list(config.partylines.all().order_by('channel_number'))
-    pl_id_map = {}
-    for pl in partylines:
-        doc_id = f'3.20.{sys_id}.0000.{pl.channel_number:04d}'
-        pl_id_map[pl.channel_number] = doc_id
-        docs[doc_id] = {
-            '_id': doc_id,
-            '_rev': make_rev(),
-            'data': {
-                'helixnetEnabled': pl.helixnet_enabled,
-                'id': pl.channel_number,
-                'label': pl.label,
-                'type': 'partyline',
-            },
-            'owner': owner_id,
-            'type': 'partyline',
-        }
-
-    # ── Add custom roles (keep factory defaults, add ours at offset 0x0100+) ──
-    # Factory roles 1-13 must stay intact for device compatibility
-    ROLE_OFFSET = 0x0100  # Our custom roles start at 256 to avoid factory collision
-
-    roles = list(config.roles.all().order_by('role_number'))
-    role_id_map = {}
-    for role in roles:
-        role_num = role.role_number + ROLE_OFFSET
-        doc_id = f'3.23.{sys_id}.0000.{role_num:04x}'
-        role_id_map[role.role_number] = doc_id
-        role_id_map[f'hex_{role.role_number}'] = role_num
-
-        keysets = []
-        for key in role.keysets.all().order_by('key_index'):
-            entities = []
-            if key.partyline:
-                entities.append({'res': f'/api/1/connections/{key.partyline.channel_number}', 'type': 0})
-            elif key.port_reference:
-                entities.append({'res': key.port_reference, 'type': 1})
-
-            keyset_entry = {
-                'activationState': key.activation_state,
-                'entities': entities,
-                'isCallKey': key.is_call_key,
-                'keysetIndex': key.key_index,
-                'talkBtnMode': key.talk_mode,
-            }
-            if key.is_reply_key:
-                keyset_entry['isReplyKey'] = True
-            keysets.append(keyset_entry)
-
-        # Start with factory defaults for this device type, then override
-        settings_obj = dict(device_defaults.get(role.device_type, {}))
-        settings_obj['keysets'] = keysets
-        settings_obj.update({
-            'displayBrightness': role.display_brightness,
-            'masterVolume': role.master_volume,
-            'micType': role.mic_type,
-            'sidetoneControl': role.sidetone_control,
-            'sidetoneGain': role.sidetone_gain,
-            'headphoneLimit': role.headphone_limit,
-        })
-        if role.extended_settings:
-            settings_obj.update(role.extended_settings)
-
-        docs[doc_id] = {
-            '_id': doc_id,
-            '_rev': make_rev(),
-            'data': {
-                'description': role.description or '',
-                'id': role.role_number,
-                'isDefault': role.is_default,
-                'label': role.label,
-                'settings': settings_obj,
-                'type': role.device_type,
-            },
-            'owner': owner_id,
-            'type': role.device_type,
-        }
-
-    # ── Replace rolesets ──
-    for doc_id in list(docs.keys()):
-        if doc_id.startswith(f'3.88.{sys_id}.') and doc_id != f'3.88.!':
-            del docs[doc_id]
-    for doc_id in list(docs.keys()):
-        if doc_id.startswith(f'4.55.{sys_id}.'):
-            del docs[doc_id]
-
-    rolesets = list(config.rolesets.all().order_by('roleset_number'))
-    rs_id_map = {}
-    for rs in rolesets:
-        doc_id = f'3.88.{sys_id}.0000.{rs.roleset_number:04d}'
-        rs_id_map[rs.roleset_number] = doc_id
-        docs[doc_id] = {
-            '_id': doc_id,
-            '_rev': make_rev(),
-            'data': {
-                'addressable': rs.addressable,
-                'dpId': rs.roleset_number,
-                'id': rs.roleset_number,
-                'label': 'Arcadia',
-                'name': 'Arcadia',
-                'type': 'Roleset',
-            },
-            'owner': owner_id,
-            'type': 'Roleset',
-        }
-        dp_id = f'4.55.{sys_id}.0000.{rs.roleset_number:04d}'
-        docs[dp_id] = {
-            '_id': dp_id,
-            '_rev': make_rev(),
-            'data': {'destination': doc_id, 'id': rs.roleset_number, 'type': 'roleset'},
-            'owner': owner_id,
-            'type': 'roleset',
-        }
-
-    # ── Replace sessions ──
-    for doc_id in list(docs.keys()):
-        if doc_id.startswith(f'3.99.{sys_id}.') and doc_id != f'3.99.!':
-            del docs[doc_id]
-
-    # Always inject the required A.CCM admin session
-    accm_doc_id = f'3.99.{sys_id}.0000.0000'
-    docs[accm_doc_id] = {
-        '_id': accm_doc_id,
-        '_rev': make_rev(),
-        'data': {
-            'id': 0,
-            'label': 'admin',
-            'profile': {'role': 'admin'},
-            'type': 'A.CCM',
-        },
-        'owner': f'0.99.A6AMk7Ur.0000.0000',
-        'type': 'A.CCM',
-    }
-
-    # Only write S.NEP session (A.CCM already injected above, B.FSII not used by Arcadia)
-    nep_session = config.sessions.filter(session_type='S.NEP').first()
-    nep_doc_id = f'3.99.{sys_id}.0003.0000'
-    rs_doc_id = f'3.88.{sys_id}.0000.0001'
-    docs[nep_doc_id] = {
-        '_id': nep_doc_id,
-        '_rev': make_rev(),
-        'data': {
-            'id': 0,
-            'type': 'S.NEP',
-            'label': 'Arcadia',
-            'settings': {'defaultRole': 13},
-            'addressable': False,
-        },
-        'owner': rs_doc_id,
-        'type': 'S.NEP',
-    }
-
-    # ── Update physical port settings (keep factory port docs, just update settings) ──
-    for port in config.port_assignments.all():
-        for doc_id, doc in docs.items():
-            if doc_id.startswith('3.06.') and doc.get('data', {}).get('label') == port.port_label:
-                if port.port_type == '2W':
-                    doc['data']['settings'].update({
-                        'joinMode': port.join_mode,
-                        'termination': port.termination_enabled,
-                    })
-                elif port.port_type == '4W':
-                    doc['data']['settings'].update({
-                        'joinMode': port.join_mode,
-                    })
-                break
-
-    # ── Write LevelDB and pack .cca ──
     tmp_dir = tempfile.mkdtemp()
     try:
         import plyvel
-        db_path = os.path.join(tmp_dir, 'pouchdb')
 
-        # Copy factory pouchdb as base - preserves exact LevelDB format
+        # Copy factory pouchdb as base
         factory_db_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'pouchdb_factory')
-        if os.path.exists(factory_db_path):
-            shutil.copytree(factory_db_path, db_path)
-        else:
-            os.makedirs(db_path)
+        db_path = os.path.join(tmp_dir, 'pouchdb')
+        shutil.copytree(factory_db_path, db_path)
 
-        db = plyvel.DB(db_path, create_if_missing=True)
+        db = plyvel.DB(db_path, create_if_missing=False)
 
-        SEP = b'\xc3\xbf'  # UTF-8 encoded \xff - PouchDB separator
-
-        # Find max existing seq number
+        # Read all existing docs and find max seq
+        existing_docs = {}
         max_seq = 0
         for key, value in db:
             if b'by-sequence' in key:
                 try:
                     seq_num = int(key.split(SEP)[-1].decode())
                     max_seq = max(max_seq, seq_num)
+                    v = value.decode('utf-8', errors='replace')
+                    doc = json.loads(v)
+                    if '_id' in doc:
+                        existing_docs[doc['_id']] = doc
                 except:
                     pass
 
-        seq_counter = [max_seq + 1]
+        next_seq = [max_seq + 1]
 
         def write_doc(doc):
             doc_id = doc['_id']
             rev = doc.get('_rev', '1-0000000000000000')
             rev_hash = rev.split('-')[1] if '-' in rev else rev
-            seq = seq_counter[0]
-            seq_counter[0] += 1
+            seq = next_seq[0]
+            next_seq[0] += 1
 
             seq_key = SEP + b'by-sequence' + SEP + f'{seq:016d}'.encode()
             db.put(seq_key, json.dumps(doc, separators=(',', ':')).encode('utf-8'))
@@ -4333,37 +4142,115 @@ def comm_config_export(request, config_id):
                 'seq': seq,
             }, separators=(',', ':')).encode('utf-8'))
 
-        # Write all our custom docs
-        for doc in docs.values():
+        # ── Update partylines in place ──
+        partylines = list(config.partylines.all().order_by('channel_number'))
+        for pl in partylines:
+            doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl.channel_number:04d}'
+            if doc_id in existing_docs:
+                doc = existing_docs[doc_id]
+                doc['data']['label'] = pl.label
+                doc['data']['helixnetEnabled'] = pl.helixnet_enabled
+                write_doc(doc)
+
+        # ── Update roles in place ──
+        # Map our roles to factory FSII-BP slots (slots 6+ are FSII-BP)
+        # Factory slots: 1=HMS, 2=HRM, 3=HKB, 4=HBP, 5=LQ-AIC, 6=FSII-BP, 7=NEP Station,
+        #                8=E-BP, 9=V12, 10=V24, 11=V32, 12=V12D, 13=NEP Arcadia
+        roles = list(config.roles.all().order_by('role_number'))
+        
+        # Assign our roles to factory slots based on device type
+        # Use slot 6 onwards for FSII-BP roles
+        fsii_slot = 6
+        for role in roles:
+            if role.device_type == 'FSII-BP':
+                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.{fsii_slot:04x}'
+                fsii_slot += 1
+            elif role.device_type == 'E-BP':
+                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0008'
+            elif role.device_type == 'HBP-2X':
+                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0004'
+            elif role.device_type == 'HKB-2X':
+                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0003'
+            elif role.device_type == 'HMS-4X':
+                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0001'
+            elif role.device_type == 'HRM-4X':
+                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0002'
+            else:
+                continue
+
+            if doc_id in existing_docs:
+                doc = existing_docs[doc_id]
+                doc['data']['label'] = role.label
+                doc['data']['isDefault'] = role.is_default
+
+                # Build keysets
+                keysets = []
+                for key in role.keysets.all().order_by('key_index'):
+                    entities = []
+                    if key.partyline:
+                        entities.append({'res': f'/api/1/connections/{key.partyline.channel_number}', 'type': 0})
+                    elif key.port_reference:
+                        entities.append({'res': key.port_reference, 'type': 1})
+
+                    keyset_entry = {
+                        'activationState': key.activation_state,
+                        'entities': entities,
+                        'isCallKey': key.is_call_key,
+                        'keysetIndex': key.key_index,
+                        'talkBtnMode': key.talk_mode,
+                    }
+                    if key.is_reply_key:
+                        keyset_entry['isReplyKey'] = True
+                    keysets.append(keyset_entry)
+
+                if keysets:
+                    doc['data']['settings']['keysets'] = keysets
+
+                write_doc(doc)
+
+        # ── Update roleset name ──
+        rs = config.rolesets.first()
+        if rs:
+            rs_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.0001'
+            if rs_doc_id in existing_docs:
+                doc = existing_docs[rs_doc_id]
+                doc['data']['label'] = rs.label
+                doc['data']['name'] = rs.label
+                write_doc(doc)
+
+        # ── Update S.NEP session ──
+        nep_session = config.sessions.filter(session_type='S.NEP').first()
+        nep_doc_id = f'3.99.{FACTORY_SYS_ID}.0003.0000'
+        if nep_doc_id in existing_docs:
+            doc = existing_docs[nep_doc_id]
+            if nep_session:
+                doc['data']['label'] = nep_session.label
             write_doc(doc)
 
-        total_docs = max_seq + len(docs)
-        db.put(SEP + b'meta-store' + SEP + b'_local_doc_count', str(total_docs).encode())
-        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(seq_counter[0] - 1).encode())
+        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(next_seq[0] - 1).encode())
         db.close()
 
+        # Write other files
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
-        from datetime import datetime, timezone
         with open(os.path.join(tmp_dir, 'datetime.txt'), 'w') as f:
             f.write(datetime.now(timezone.utc).strftime('%a %b %d %H:%M:%S UTC %Y'))
         with open(os.path.join(tmp_dir, 'SystemEnvironment.json'), 'w') as f:
-            json.dump({'system': sys_id, 'domain': sys_id, 'context': 'device'}, f)
+            f.write(json.dumps({'system': FACTORY_SYS_ID, 'domain': FACTORY_SYS_ID, 'context': 'device'}, separators=(',', ':')))
 
+        # Pack .cca
         tar_path = os.path.join(tmp_dir, 'config.tar')
         with tarfile.open(tar_path, 'w') as tar:
             for item in ['pouchdb', 'datetime.txt', 'type.txt', 'SystemEnvironment.json']:
                 tar.add(os.path.join(tmp_dir, item), arcname=item)
 
-        import io
         buf = io.BytesIO()
         with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=9) as gz:
             with open(tar_path, 'rb') as f:
                 gz.write(f.read())
-        cca_bytes = buf.getvalue()
 
-        filename = f'{config.name.replace(" ", "_")}_{sys_id}.cca'
-        response = HttpResponse(cca_bytes, content_type='application/octet-stream')
+        filename = f'{config.name.replace(" ", "_")}_{FACTORY_SYS_ID}.cca'
+        response = HttpResponse(buf.getvalue(), content_type='application/octet-stream')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
@@ -4373,6 +4260,7 @@ def comm_config_export(request, config_id):
         return HttpResponse(f'Export error: {str(e)}', status=500)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 def debug_device_ordering(request):
     """
