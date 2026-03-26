@@ -4097,8 +4097,13 @@ def comm_config_export(request, config_id):
         import plyvel
 
         # Copy factory pouchdb as base
+        # Check both dev and production (collectstatic) locations
         factory_db_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'pouchdb_factory')
+        if not os.path.exists(factory_db_path):
+            factory_db_path = os.path.join(settings.BASE_DIR, 'staticfiles', 'comm_config', 'pouchdb_factory')
         db_path = os.path.join(tmp_dir, 'pouchdb')
+        if not os.path.exists(factory_db_path):
+            return HttpResponse(f'Factory pouchdb not found at {factory_db_path}', status=500)
         shutil.copytree(factory_db_path, db_path)
 
         db = plyvel.DB(db_path, create_if_missing=False)
