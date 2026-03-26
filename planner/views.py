@@ -4068,7 +4068,7 @@ def comm_config_delete(request):
 # COMM Config — Export .cca
 # ─────────────────────────────────────────────────────────────
 def comm_config_export(request, config_id):
-    import json, os, tarfile, gzip, tempfile, shutil, io
+    import json, os, tarfile, gzip, tempfile, shutil, io, uuid
     from django.http import HttpResponse
     from django.conf import settings
     from datetime import datetime, timezone
@@ -4078,7 +4078,6 @@ def comm_config_export(request, config_id):
     FACTORY_SYS_ID = 'lKcw3zUU'
     SEP = b'\xc3\xbf'
 
-    # Load factory docs for device-type default settings
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'arcadia_factory_docs.json')
     with open(factory_path) as f:
         factory_docs = json.load(f)
@@ -4103,7 +4102,6 @@ def comm_config_export(request, config_id):
 
         db = plyvel.DB(db_path, create_if_missing=False)
 
-        # Read all existing docs and find max seq
         existing_docs = {}
         max_seq = 0
         for key, value in db:
@@ -4119,6 +4117,9 @@ def comm_config_export(request, config_id):
                     pass
 
         next_seq = [max_seq + 1]
+
+        def make_rev():
+            return f'1-{uuid.uuid4().hex}'
 
         def write_doc(doc):
             doc_id = doc['_id']
@@ -4136,13 +4137,9 @@ def comm_config_export(request, config_id):
                 'rev_map': {rev: seq}, 'winningRev': rev, 'deleted': False, 'seq': seq,
             }, separators=(',', ':')).encode('utf-8'))
 
-        import uuid
-        def make_rev():
-            return f'1-{uuid.uuid4().hex}'
-
         owner_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
 
-        # ── Update partylines (update existing factory slots, add new ones) ──
+        # ── Update partylines ──
         partylines = list(config.partylines.all().order_by('channel_number'))
         for pl in partylines:
             doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl.channel_number:04d}'
@@ -4158,15 +4155,25 @@ def comm_config_export(request, config_id):
                 }
             write_doc(doc)
 
-        # ── Write custom roles (starting at slot 0x000e to avoid factory slots 1-13) ──
-        ROLE_START = 0x000e
-        roles = list(config.roles.all().order_by('role_number'))
-        role_slot_map = {}
-        for i, role in enumerate(roles):
-            slot = ROLE_START + i
-            doc_id = f'3.23.{FACTORY_SYS_ID}.0000.{slot:04x}'
-            role_slot_map[role.id] = (slot, doc_id)
+        # ── Write roles, rolesets, sessions (one of each per role) ──
+        # Factory has roleset 1 and roles 1-13. Ours start at slot 2 for rolesets, 0x000e for roles.
+        ROLE_SLOT_START = 0x000e
+        ROLESET_SLOT_START = 2
+        SESSION_SLOT_START = 1  # B.FSII sessions use 3.99.SYSID.0002.XXXX
 
+        roles = list(config.roles.all().order_by('role_number'))
+
+        for i, role in enumerate(roles):
+            role_slot = ROLE_SLOT_START + i
+            roleset_slot = ROLESET_SLOT_START + i
+            session_slot = SESSION_SLOT_START + i
+
+            role_doc_id = f'3.23.{FACTORY_SYS_ID}.0000.{role_slot:04x}'
+            roleset_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.{roleset_slot:04x}'
+            session_doc_id = f'3.99.{FACTORY_SYS_ID}.0002.{session_slot:04x}'
+            dp_doc_id = f'4.55.{FACTORY_SYS_ID}.0000.{roleset_slot:04x}'
+
+            # Build keysets
             keysets = []
             for key in role.keysets.all().order_by('key_index'):
                 entities = []
@@ -4196,11 +4203,12 @@ def comm_config_export(request, config_id):
                 'headphoneLimit': role.headphone_limit,
             })
 
+            # Write role
             write_doc({
-                '_id': doc_id, '_rev': make_rev(),
+                '_id': role_doc_id, '_rev': make_rev(),
                 'data': {
                     'description': role.description or '',
-                    'id': slot,
+                    'id': role_slot,
                     'isDefault': False,
                     'label': role.label,
                     'settings': settings_obj,
@@ -4210,79 +4218,42 @@ def comm_config_export(request, config_id):
                 'type': role.device_type,
             })
 
-        # ── Write rolesets (one per role) ──
-        ROLESET_START = 2  # Factory has roleset 1, ours start at 2
-        rolesets = list(config.rolesets.all().order_by('roleset_number'))
-        roleset_doc_map = {}
+            # Write roleset
+            write_doc({
+                '_id': roleset_doc_id, '_rev': make_rev(),
+                'data': {
+                    'id': roleset_slot, 'type': 'Roleset',
+                    'name': role.label, 'dpId': roleset_slot,
+                    'label': role.label, 'addressable': True,
+                },
+                'owner': owner_id, 'type': 'Roleset',
+            })
 
-        # Update factory roleset 1 with our first roleset name
-        if rolesets:
-            rs = rolesets[0]
-            rs_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.0001'
-            if rs_doc_id in existing_docs:
-                doc = existing_docs[rs_doc_id]
-                doc['data']['label'] = rs.label
-                doc['data']['name'] = rs.label
-                write_doc(doc)
-                roleset_doc_map[rs.id] = (1, rs_doc_id)
+            # Write 4.55 dynamic port
+            write_doc({
+                '_id': dp_doc_id, '_rev': make_rev(),
+                'data': {'destination': roleset_doc_id, 'id': roleset_slot, 'type': 'roleset'},
+                'owner': owner_id, 'type': 'roleset',
+            })
 
-            for i, rs in enumerate(rolesets[1:], start=1):
-                rs_num = ROLESET_START + i - 1
-                rs_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.{rs_num:04x}'
-                roleset_doc_map[rs.id] = (rs_num, rs_doc_id)
-                write_doc({
-                    '_id': rs_doc_id, '_rev': make_rev(),
-                    'data': {'id': rs_num, 'type': 'Roleset', 'name': rs.label, 'dpId': rs_num, 'label': rs.label, 'addressable': rs.addressable},
-                    'owner': owner_id, 'type': 'Roleset',
-                })
-                # Write 4.55 dynamic port
-                dp_doc_id = f'4.55.{FACTORY_SYS_ID}.0000.{rs_num:04x}'
-                write_doc({
-                    '_id': dp_doc_id, '_rev': make_rev(),
-                    'data': {'destination': rs_doc_id, 'id': rs_num, 'type': 'roleset'},
-                    'owner': owner_id, 'type': 'roleset',
-                })
-
-        # ── Write sessions ──
-        # Always write A.CCM session
-        accm_doc_id = f'3.99.{FACTORY_SYS_ID}.0000.0000'
-        if accm_doc_id in existing_docs:
-            write_doc(existing_docs[accm_doc_id])
-
-        # Write S.NEP session (update factory)
-        nep_doc_id = f'3.99.{FACTORY_SYS_ID}.0003.0000'
-        if nep_doc_id in existing_docs:
-            doc = existing_docs[nep_doc_id]
-            nep_session = config.sessions.filter(session_type='S.NEP').first()
-            if nep_session:
-                doc['data']['label'] = nep_session.label
-            write_doc(doc)
-
-        # Write B.FSII sessions for each FreeSpeak beltpack role
-        fsii_sessions = list(config.sessions.filter(session_type='B.FSII').order_by('id'))
-        for i, session in enumerate(fsii_sessions):
-            rs_id = session.roleset_id if hasattr(session, 'roleset_id') else None
-            rs_num, rs_doc_id = roleset_doc_map.get(rs_id, (1, f'3.88.{FACTORY_SYS_ID}.0000.0001')) if rs_id else (1, f'3.88.{FACTORY_SYS_ID}.0000.0001')
-
-            # Default role for this session
-            default_role_slot = 6  # factory FSII-BP default
-            if session.default_role:
-                slot_info = role_slot_map.get(session.default_role_id)
-                if slot_info:
-                    default_role_slot = slot_info[0]
-
-            session_doc_id = f'3.99.{FACTORY_SYS_ID}.0002.{i:04x}'
+            # Write B.FSII session
             write_doc({
                 '_id': session_doc_id, '_rev': make_rev(),
                 'data': {
-                    'id': i, 'type': 'B.FSII', 'label': session.label,
+                    'id': session_slot, 'type': 'B.FSII',
+                    'label': role.label,
                     'auth': {'pin': {'provider': 'pin'}},
-                    'settings': {'defaultRole': default_role_slot},
-                    'addressable': session.addressable,
+                    'settings': {'defaultRole': role_slot},
+                    'addressable': False,
                 },
-                'owner': rs_doc_id,
+                'owner': roleset_doc_id,
                 'type': 'B.FSII',
             })
+
+        # ── Keep A.CCM and S.NEP sessions from factory ──
+        for doc_id in [f'3.99.{FACTORY_SYS_ID}.0000.0000', f'3.99.{FACTORY_SYS_ID}.0003.0000']:
+            if doc_id in existing_docs:
+                write_doc(existing_docs[doc_id])
 
         db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(next_seq[0] - 1).encode())
         db.close()
@@ -4316,6 +4287,7 @@ def comm_config_export(request, config_id):
         return HttpResponse(f'Export error: {str(e)}\n{traceback.format_exc()}', status=500)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 
 
