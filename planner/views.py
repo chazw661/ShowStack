@@ -4170,7 +4170,24 @@ def comm_config_export(request, config_id):
 
             role_doc_id = f'3.23.{FACTORY_SYS_ID}.0000.{role_slot:04x}'
             roleset_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.{roleset_slot:04x}'
-            session_doc_id = f'3.99.{FACTORY_SYS_ID}.0002.{session_slot:04x}'
+            # Session doc ID prefix by device type
+            SESSION_PREFIX_MAP = {
+                'B.FSII': '0002',
+                'B.HBP': '0008',
+                'B.HKB': '000a',
+                'S.NEP': '0003',
+            }
+            # Determine session type first (needed for prefix)
+            SESSION_TYPE_MAP2 = {
+                'FSII-BP': 'B.FSII', 'E-BP': 'B.FSII',
+                'HBP-2X': 'B.HBP', 'HKB-2X': 'B.HKB',
+                'HMS-4X': 'B.HBP', 'HRM-4X': 'B.HBP',
+                'V12': 'B.FSII', 'V24': 'B.FSII', 'V32': 'B.FSII', 'V12D': 'B.FSII',
+                'NEP': 'S.NEP', 'LQ-AIC': 'B.FSII',
+            }
+            _st = SESSION_TYPE_MAP2.get(role.device_type, 'B.FSII')
+            _prefix = SESSION_PREFIX_MAP.get(_st, '0002')
+            session_doc_id = f'3.99.{FACTORY_SYS_ID}.{_prefix}.{session_slot:04x}'
             dp_doc_id = f'4.55.{FACTORY_SYS_ID}.0000.{roleset_slot:04x}'
 
             # Build keysets
@@ -4236,18 +4253,35 @@ def comm_config_export(request, config_id):
                 'owner': owner_id, 'type': 'roleset',
             })
 
-            # Write B.FSII session
+            # Map device type to session type
+            SESSION_TYPE_MAP = {
+                'FSII-BP': 'B.FSII',
+                'E-BP': 'B.FSII',
+                'HBP-2X': 'B.HBP',
+                'HKB-2X': 'B.HKB',
+                'HMS-4X': 'B.HBP',
+                'HRM-4X': 'B.HBP',
+                'V12': 'B.FSII',
+                'V24': 'B.FSII',
+                'V32': 'B.FSII',
+                'V12D': 'B.FSII',
+                'NEP': 'S.NEP',
+                'LQ-AIC': 'B.FSII',
+            }
+            session_type = SESSION_TYPE_MAP.get(role.device_type, 'B.FSII')
+
+            # Write session
             write_doc({
                 '_id': session_doc_id, '_rev': make_rev(),
                 'data': {
-                    'id': session_slot, 'type': 'B.FSII',
+                    'id': session_slot, 'type': session_type,
                     'label': role.label,
                     'auth': {'pin': {'provider': 'pin'}},
                     'settings': {'defaultRole': role_slot},
                     'addressable': False,
                 },
                 'owner': roleset_doc_id,
-                'type': 'B.FSII',
+                'type': session_type,
             })
 
         # ── Keep A.CCM and S.NEP sessions from factory ──
