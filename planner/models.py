@@ -344,21 +344,19 @@ class Project(models.Model):
                             order=session.order
                         )
                         session_map[session.id] = new_session
-                
-                
-                
-                # Duplicate MicAssignments
-                for assignment in session.mic_assignments.all():
-                   new_assignment = MicAssignment.objects.create(
-                        session=new_session,
-                        rf_number=assignment.rf_number,
-                        mic_type=assignment.mic_type,
-                        presenter=presenter_map.get(assignment.presenter_id) if assignment.presenter_id else None,
-                        is_micd=assignment.is_micd,
-                        is_d_mic=assignment.is_d_mic,
-                        active_presenter_index=assignment.active_presenter_index,
-                        notes=assignment.notes
-                    )
+
+                        # Duplicate MicAssignments (INSIDE the session loop)
+                        for assignment in session.mic_assignments.all():
+                            new_assignment = MicAssignment.objects.create(
+                                session=new_session,
+                                rf_number=assignment.rf_number,
+                                mic_type=assignment.mic_type,
+                                presenter=presenter_map.get(assignment.presenter_id) if assignment.presenter_id else None,
+                                is_micd=assignment.is_micd,
+                                is_d_mic=assignment.is_d_mic,
+                                active_presenter_index=assignment.active_presenter_index,
+                                notes=assignment.notes
+                            )
             
             
                 # Duplicate MicShowInfo (OneToOne)
