@@ -4075,16 +4075,14 @@ def comm_config_export(request, config_id):
 
     config = get_object_or_404(CommConfig, id=config_id)
 
-    # Factory sys_id must be preserved - Arcadia adopts it on restore
     FACTORY_SYS_ID = 'lKcw3zUU'
-    SEP = b'\xc3\xbf'  # UTF-8 encoded \xff - PouchDB separator
+    SEP = b'\xc3\xbf'
 
     # Load factory docs for device-type default settings
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'static', 'comm_config', 'arcadia_factory_docs.json')
     with open(factory_path) as f:
         factory_docs = json.load(f)
 
-    # Build per-device-type default settings
     device_defaults = {}
     for fdoc_id, fdoc in factory_docs.items():
         if '3.23.' in fdoc_id and fdoc_id != '3.23.!':
@@ -4096,9 +4094,9 @@ def comm_config_export(request, config_id):
     try:
         import plyvel
 
-        # Copy factory pouchdb as base
         factory_db_path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config', 'pouchdb_factory')
         db_path = os.path.join(tmp_dir, 'pouchdb')
+
         if not os.path.exists(factory_db_path):
             return HttpResponse(f'Factory pouchdb not found at {factory_db_path}', status=500)
         shutil.copytree(factory_db_path, db_path)
@@ -4128,23 +4126,23 @@ def comm_config_export(request, config_id):
             rev_hash = rev.split('-')[1] if '-' in rev else rev
             seq = next_seq[0]
             next_seq[0] += 1
-
             seq_key = SEP + b'by-sequence' + SEP + f'{seq:016d}'.encode()
             db.put(seq_key, json.dumps(doc, separators=(',', ':')).encode('utf-8'))
-
             doc_store_key = SEP + b'document-store' + SEP + doc_id.encode()
             db.put(doc_store_key, json.dumps({
-                'id': doc_id,
-                'rev': rev,
+                'id': doc_id, 'rev': rev,
                 'revisions': {'start': 1, 'ids': [rev_hash]},
                 'rev_tree': [{'pos': 1, 'ids': [rev_hash, {'status': 'available'}, []]}],
-                'rev_map': {rev: seq},
-                'winningRev': rev,
-                'deleted': False,
-                'seq': seq,
+                'rev_map': {rev: seq}, 'winningRev': rev, 'deleted': False, 'seq': seq,
             }, separators=(',', ':')).encode('utf-8'))
 
-        # ── Update partylines in place ──
+        import uuid
+        def make_rev():
+            return f'1-{uuid.uuid4().hex}'
+
+        owner_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
+
+        # ── Update partylines (update existing factory slots, add new ones) ──
         partylines = list(config.partylines.all().order_by('channel_number'))
         for pl in partylines:
             doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl.channel_number:04d}'
@@ -4152,87 +4150,143 @@ def comm_config_export(request, config_id):
                 doc = existing_docs[doc_id]
                 doc['data']['label'] = pl.label
                 doc['data']['helixnetEnabled'] = pl.helixnet_enabled
-                write_doc(doc)
-
-        # ── Update roles in place ──
-        # Map our roles to factory FSII-BP slots (slots 6+ are FSII-BP)
-        # Factory slots: 1=HMS, 2=HRM, 3=HKB, 4=HBP, 5=LQ-AIC, 6=FSII-BP, 7=NEP Station,
-        #                8=E-BP, 9=V12, 10=V24, 11=V32, 12=V12D, 13=NEP Arcadia
-        roles = list(config.roles.all().order_by('role_number'))
-        
-        # Assign our roles to factory slots based on device type
-        # Use slot 6 onwards for FSII-BP roles
-        fsii_slot = 6
-        for role in roles:
-            if role.device_type == 'FSII-BP':
-                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.{fsii_slot:04x}'
-                fsii_slot += 1
-            elif role.device_type == 'E-BP':
-                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0008'
-            elif role.device_type == 'HBP-2X':
-                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0004'
-            elif role.device_type == 'HKB-2X':
-                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0003'
-            elif role.device_type == 'HMS-4X':
-                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0001'
-            elif role.device_type == 'HRM-4X':
-                doc_id = f'3.23.{FACTORY_SYS_ID}.0000.0002'
             else:
-                continue
+                doc = {
+                    '_id': doc_id, '_rev': make_rev(),
+                    'data': {'helixnetEnabled': pl.helixnet_enabled, 'id': pl.channel_number, 'label': pl.label, 'type': 'partyline'},
+                    'owner': owner_id, 'type': 'partyline',
+                }
+            write_doc(doc)
 
-            if doc_id in existing_docs:
-                doc = existing_docs[doc_id]
-                doc['data']['label'] = role.label
-                doc['data']['isDefault'] = role.is_default
+        # ── Write custom roles (starting at slot 0x000e to avoid factory slots 1-13) ──
+        ROLE_START = 0x000e
+        roles = list(config.roles.all().order_by('role_number'))
+        role_slot_map = {}
+        for i, role in enumerate(roles):
+            slot = ROLE_START + i
+            doc_id = f'3.23.{FACTORY_SYS_ID}.0000.{slot:04x}'
+            role_slot_map[role.id] = (slot, doc_id)
 
-                # Build keysets
-                keysets = []
-                for key in role.keysets.all().order_by('key_index'):
-                    entities = []
-                    if key.partyline:
-                        entities.append({'res': f'/api/1/connections/{key.partyline.channel_number}', 'type': 0})
-                    elif key.port_reference:
-                        entities.append({'res': key.port_reference, 'type': 1})
+            keysets = []
+            for key in role.keysets.all().order_by('key_index'):
+                entities = []
+                if key.partyline:
+                    entities.append({'res': f'/api/1/connections/{key.partyline.channel_number}', 'type': 0})
+                elif key.port_reference:
+                    entities.append({'res': key.port_reference, 'type': 1})
+                keyset_entry = {
+                    'activationState': key.activation_state,
+                    'entities': entities,
+                    'isCallKey': key.is_call_key,
+                    'keysetIndex': key.key_index,
+                    'talkBtnMode': key.talk_mode,
+                }
+                if key.is_reply_key:
+                    keyset_entry['isReplyKey'] = True
+                keysets.append(keyset_entry)
 
-                    keyset_entry = {
-                        'activationState': key.activation_state,
-                        'entities': entities,
-                        'isCallKey': key.is_call_key,
-                        'keysetIndex': key.key_index,
-                        'talkBtnMode': key.talk_mode,
-                    }
-                    if key.is_reply_key:
-                        keyset_entry['isReplyKey'] = True
-                    keysets.append(keyset_entry)
+            settings_obj = dict(device_defaults.get(role.device_type, {}))
+            settings_obj['keysets'] = keysets
+            settings_obj.update({
+                'displayBrightness': role.display_brightness,
+                'masterVolume': role.master_volume,
+                'micType': role.mic_type,
+                'sidetoneControl': role.sidetone_control,
+                'sidetoneGain': role.sidetone_gain,
+                'headphoneLimit': role.headphone_limit,
+            })
 
-                if keysets:
-                    doc['data']['settings']['keysets'] = keysets
+            write_doc({
+                '_id': doc_id, '_rev': make_rev(),
+                'data': {
+                    'description': role.description or '',
+                    'id': slot,
+                    'isDefault': False,
+                    'label': role.label,
+                    'settings': settings_obj,
+                    'type': role.device_type,
+                },
+                'owner': owner_id,
+                'type': role.device_type,
+            })
 
-                write_doc(doc)
+        # ── Write rolesets (one per role) ──
+        ROLESET_START = 2  # Factory has roleset 1, ours start at 2
+        rolesets = list(config.rolesets.all().order_by('roleset_number'))
+        roleset_doc_map = {}
 
-        # ── Update roleset name ──
-        rs = config.rolesets.first()
-        if rs:
+        # Update factory roleset 1 with our first roleset name
+        if rolesets:
+            rs = rolesets[0]
             rs_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.0001'
             if rs_doc_id in existing_docs:
                 doc = existing_docs[rs_doc_id]
                 doc['data']['label'] = rs.label
                 doc['data']['name'] = rs.label
                 write_doc(doc)
+                roleset_doc_map[rs.id] = (1, rs_doc_id)
 
-        # ── Update S.NEP session ──
-        nep_session = config.sessions.filter(session_type='S.NEP').first()
+            for i, rs in enumerate(rolesets[1:], start=1):
+                rs_num = ROLESET_START + i - 1
+                rs_doc_id = f'3.88.{FACTORY_SYS_ID}.0000.{rs_num:04x}'
+                roleset_doc_map[rs.id] = (rs_num, rs_doc_id)
+                write_doc({
+                    '_id': rs_doc_id, '_rev': make_rev(),
+                    'data': {'id': rs_num, 'type': 'Roleset', 'name': rs.label, 'dpId': rs_num, 'label': rs.label, 'addressable': rs.addressable},
+                    'owner': owner_id, 'type': 'Roleset',
+                })
+                # Write 4.55 dynamic port
+                dp_doc_id = f'4.55.{FACTORY_SYS_ID}.0000.{rs_num:04x}'
+                write_doc({
+                    '_id': dp_doc_id, '_rev': make_rev(),
+                    'data': {'destination': rs_doc_id, 'id': rs_num, 'type': 'roleset'},
+                    'owner': owner_id, 'type': 'roleset',
+                })
+
+        # ── Write sessions ──
+        # Always write A.CCM session
+        accm_doc_id = f'3.99.{FACTORY_SYS_ID}.0000.0000'
+        if accm_doc_id in existing_docs:
+            write_doc(existing_docs[accm_doc_id])
+
+        # Write S.NEP session (update factory)
         nep_doc_id = f'3.99.{FACTORY_SYS_ID}.0003.0000'
         if nep_doc_id in existing_docs:
             doc = existing_docs[nep_doc_id]
+            nep_session = config.sessions.filter(session_type='S.NEP').first()
             if nep_session:
                 doc['data']['label'] = nep_session.label
             write_doc(doc)
 
+        # Write B.FSII sessions for each FreeSpeak beltpack role
+        fsii_sessions = list(config.sessions.filter(session_type='B.FSII').order_by('id'))
+        for i, session in enumerate(fsii_sessions):
+            rs_id = session.roleset_id if hasattr(session, 'roleset_id') else None
+            rs_num, rs_doc_id = roleset_doc_map.get(rs_id, (1, f'3.88.{FACTORY_SYS_ID}.0000.0001')) if rs_id else (1, f'3.88.{FACTORY_SYS_ID}.0000.0001')
+
+            # Default role for this session
+            default_role_slot = 6  # factory FSII-BP default
+            if session.default_role:
+                slot_info = role_slot_map.get(session.default_role_id)
+                if slot_info:
+                    default_role_slot = slot_info[0]
+
+            session_doc_id = f'3.99.{FACTORY_SYS_ID}.0002.{i:04x}'
+            write_doc({
+                '_id': session_doc_id, '_rev': make_rev(),
+                'data': {
+                    'id': i, 'type': 'B.FSII', 'label': session.label,
+                    'auth': {'pin': {'provider': 'pin'}},
+                    'settings': {'defaultRole': default_role_slot},
+                    'addressable': session.addressable,
+                },
+                'owner': rs_doc_id,
+                'type': 'B.FSII',
+            })
+
         db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(next_seq[0] - 1).encode())
         db.close()
 
-        # Write other files
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
         with open(os.path.join(tmp_dir, 'datetime.txt'), 'w') as f:
@@ -4240,7 +4294,6 @@ def comm_config_export(request, config_id):
         with open(os.path.join(tmp_dir, 'SystemEnvironment.json'), 'w') as f:
             f.write(json.dumps({'system': FACTORY_SYS_ID, 'domain': FACTORY_SYS_ID, 'context': 'device'}, separators=(',', ':')))
 
-        # Pack .cca
         tar_path = os.path.join(tmp_dir, 'config.tar')
         with tarfile.open(tar_path, 'w') as tar:
             for item in ['pouchdb', 'datetime.txt', 'type.txt', 'SystemEnvironment.json']:
@@ -4259,9 +4312,11 @@ def comm_config_export(request, config_id):
     except ImportError:
         return HttpResponse('plyvel not installed on this server.', status=501)
     except Exception as e:
-        return HttpResponse(f'Export error: {str(e)}', status=500)
+        import traceback
+        return HttpResponse(f'Export error: {str(e)}\n{traceback.format_exc()}', status=500)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+
 
 
 def debug_device_ordering(request):
