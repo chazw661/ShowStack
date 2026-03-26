@@ -46,3 +46,4 @@ env/
 ENV/
 db.sqlite3
 db.sqlite3.backup
+!planner/data/comm_config/pouchdb_factory/*.log
