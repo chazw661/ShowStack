@@ -4161,7 +4161,9 @@ def comm_config_export(request, config_id):
         ROLESET_SLOT_START = 2
         SESSION_SLOT_START = 1  # B.FSII sessions use 3.99.SYSID.0002.XXXX
 
-        roles = list(config.roles.all().order_by('role_number'))
+        # Only export FSII-BP and E-BP roles - other types caused firmware crash on testing
+        SAFE_DEVICE_TYPES = {'FSII-BP', 'E-BP'}
+        roles = list(config.roles.filter(device_type__in=SAFE_DEVICE_TYPES).order_by('role_number'))
 
         for i, role in enumerate(roles):
             role_slot = ROLE_SLOT_START + i
