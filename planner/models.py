@@ -3766,15 +3766,11 @@ class CommConfigRole(models.Model):
         ('FSII-BP', 'FreeSpeak II Beltpack'),
         ('E-BP', 'FreeSpeak Edge Beltpack'),
         ('HBP-2X', 'HelixNet Beltpack (2-key)'),
-        ('HKB-2X', 'HelixNet Keypanel (2-key)'),
         ('HMS-4X', 'HMS Station (4-key)'),
         ('HRM-4X', 'HRM Remote (4-key)'),
-        ('NEP', 'Arcadia Station / Panel'),
         ('V12', 'V-Panel 12 Key'),
         ('V24', 'V-Panel 24 Key'),
         ('V32', 'V-Panel 32 Key'),
-        ('V12D', 'V-Panel 12 Key Desktop'),
-        ('LQ-AIC', 'Agent-IC'),
     ]
 
     MIC_TYPE_CHOICES = [
@@ -3828,9 +3824,9 @@ class CommConfigRole(models.Model):
     @property
     def max_keysets(self):
         limits = {
-            'FSII-BP': 5, 'E-BP': 9, 'HBP-2X': 2, 'HKB-2X': 4,
-            'HMS-4X': 4, 'HRM-4X': 4, 'NEP': 9, 'LQ-AIC': 6,
-            'V12': 12, 'V24': 24, 'V32': 32, 'V12D': 12,
+            'FSII-BP': 5, 'E-BP': 5, 'HBP-2X': 2,
+            'HMS-4X': 4, 'HRM-4X': 4,
+            'V12': 12, 'V24': 24, 'V32': 32,
         }
         return limits.get(self.device_type, 4)
 

@@ -4162,7 +4162,7 @@ def comm_config_export(request, config_id):
         SESSION_SLOT_START = 1  # B.FSII sessions use 3.99.SYSID.0002.XXXX
 
         # Only export FSII-BP and E-BP roles - other types caused firmware crash on testing
-        SAFE_DEVICE_TYPES = {'FSII-BP', 'E-BP', 'HBP-2X', 'HKB-2X', 'HMS-4X', 'HRM-4X'}
+        SAFE_DEVICE_TYPES = {'FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32'}
         roles = list(config.roles.filter(device_type__in=SAFE_DEVICE_TYPES).order_by('role_number'))
 
         for i, role in enumerate(roles):
@@ -4182,10 +4182,8 @@ def comm_config_export(request, config_id):
             # Determine session type first (needed for prefix)
             SESSION_TYPE_MAP2 = {
                 'FSII-BP': 'B.FSII', 'E-BP': 'B.FSII',
-                'HBP-2X': 'B.HBP', 'HKB-2X': 'B.HKB',
-                'HMS-4X': 'B.HBP', 'HRM-4X': 'B.HBP',
-                'V12': 'B.FSII', 'V24': 'B.FSII', 'V32': 'B.FSII', 'V12D': 'B.FSII',
-                'NEP': 'S.NEP', 'LQ-AIC': 'B.FSII',
+                'HBP-2X': 'B.HBP', 'HMS-4X': 'B.HBP', 'HRM-4X': 'B.HBP',
+                'V12': 'B.FSII', 'V24': 'B.FSII', 'V32': 'B.FSII',
             }
             _st = SESSION_TYPE_MAP2.get(role.device_type, 'B.FSII')
             _prefix = SESSION_PREFIX_MAP.get(_st, '0002')
@@ -4257,18 +4255,9 @@ def comm_config_export(request, config_id):
 
             # Map device type to session type
             SESSION_TYPE_MAP = {
-                'FSII-BP': 'B.FSII',
-                'E-BP': 'B.FSII',
-                'HBP-2X': 'B.HBP',
-                'HKB-2X': 'B.HKB',
-                'HMS-4X': 'B.HBP',
-                'HRM-4X': 'B.HBP',
-                'V12': 'B.FSII',
-                'V24': 'B.FSII',
-                'V32': 'B.FSII',
-                'V12D': 'B.FSII',
-                'NEP': 'S.NEP',
-                'LQ-AIC': 'B.FSII',
+                'FSII-BP': 'B.FSII', 'E-BP': 'B.FSII',
+                'HBP-2X': 'B.HBP', 'HMS-4X': 'B.HBP', 'HRM-4X': 'B.HBP',
+                'V12': 'B.FSII', 'V24': 'B.FSII', 'V32': 'B.FSII',
             }
             session_type = SESSION_TYPE_MAP.get(role.device_type, 'B.FSII')
 

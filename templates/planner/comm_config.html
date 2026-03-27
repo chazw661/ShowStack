@@ -739,7 +739,7 @@
                         onchange="saveKeyset({{ key.id }}, 'partyline', this.value)"
                         title="Partyline">
                   <option value="">— Unassigned —</option>
-                  {% if role.device_type in "HBP-2X,HKB-2X,HMS-4X,HRM-4X" %}
+                  {% if role.device_type in "HBP-2X,HMS-4X,HRM-4X" %}
                     {% for pl in helixnet_partylines %}
                     <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
                       CH{{ pl.channel_number }}: {{ pl.label }}
@@ -1071,7 +1071,6 @@
         </optgroup>
         <optgroup label="HelixNet">
           <option value="HBP-2X">HelixNet Beltpack (2-key)</option>
-          <option value="HKB-2X">HelixNet Keypanel (2-key)</option>
           <option value="HMS-4X">HMS Station (4-key)</option>
           <option value="HRM-4X">HRM Remote (4-key)</option>
         </optgroup>
@@ -1079,11 +1078,6 @@
           <option value="V12">V-Panel 12 Key</option>
           <option value="V24">V-Panel 24 Key</option>
           <option value="V32">V-Panel 32 Key</option>
-          <option value="V12D">V-Panel 12 Key Desktop</option>
-        </optgroup>
-        <optgroup label="Station">
-          <option value="NEP">Arcadia Station / Panel</option>
-          <option value="LQ-AIC">Agent-IC</option>
         </optgroup>
       </select>
     </div>
