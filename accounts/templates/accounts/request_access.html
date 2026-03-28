@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div style="max-width:500px;margin:60px auto;padding:20px;">
+  <h1>Request Access</h1>
+  <div style="background:#1e1e2e;padding:24px;border-radius:8px;margin:20px 0;">
+    <p><strong>Project:</strong> {{ project.name }}</p>
+    {% if project.start_date %}<p><strong>Start Date:</strong> {{ project.start_date }}</p>{% endif %}
+    {% if project.venue %}<p><strong>Venue:</strong> {{ project.venue }}</p>{% endif %}
+    <p><strong>Owner:</strong> {{ project.owner.get_full_name|default:project.owner.username }}</p>
+  </div>
+
+  {% if existing and existing.status == 'pending' %}
+    <div style="background:#2a4a2a;padding:16px;border-radius:6px;color:#7fff7f;">
+      ✅ Your request is pending. The project owner will be notified by email.
+    </div>
+  {% elif existing and existing.status == 'approved' %}
+    <div style="background:#2a4a2a;padding:16px;border-radius:6px;color:#7fff7f;">
+      ✅ You already have access to this project. <a href="/audiopatch/" style="color:#4a9eff;">Open ShowStack →</a>
+    </div>
+  {% elif existing and existing.status == 'denied' %}
+    <div style="background:#4a2a2a;padding:16px;border-radius:6px;color:#ff9f9f;margin-bottom:16px;">
+      Your previous request was denied. You may submit a new request below.
+    </div>
+    <form method="post">{% csrf_token %}
+      <textarea name="message" placeholder="Optional: add a note to the project owner"
+        style="width:100%;padding:10px;background:#111;color:#fff;border:1px solid #444;border-radius:6px;margin-bottom:12px;box-sizing:border-box;"></textarea>
+      <button type="submit" style="padding:12px 24px;background:#4a9eff;color:white;border:none;border-radius:6px;cursor:pointer;">
+        Request Access
+      </button>
+    </form>
+  {% else %}
+    <form method="post">{% csrf_token %}
+      <textarea name="message" placeholder="Optional: add a note to the project owner"
+        style="width:100%;padding:10px;background:#111;color:#fff;border:1px solid #444;border-radius:6px;margin-bottom:12px;box-sizing:border-box;"></textarea>
+      <button type="submit" style="padding:12px 24px;background:#4a9eff;color:white;border:none;border-radius:6px;cursor:pointer;">
+        Request Access to {{ project.name }}
+      </button>
+    </form>
+  {% endif %}
+
+  {% for msg in messages %}
+    <div style="margin-top:16px;padding:12px;background:#1e2e3e;border-radius:6px;color:#fff;">{{ msg }}</div>
+  {% endfor %}
+</div>
+{% endblock %}
