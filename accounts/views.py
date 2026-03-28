@@ -49,6 +49,10 @@ class ShowStackLoginView(LoginView):
         if next_url:
             return next_url
         return reverse_lazy('dashboard')
+
+    def get_redirect_url(self):
+        # Honor ?next= even when already logged in
+        return self.request.GET.get('next') or super().get_redirect_url()
     
     def form_invalid(self, form):
         messages.error(self.request, 'Invalid username or password.')
