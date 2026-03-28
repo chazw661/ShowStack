@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Access Requests — {{ project.name }}</h1>
+
+<h2>Pending ({{ pending.count }})</h2>
+{% if pending %}
+  {% for req in pending %}
+  <div style="background:#1e1e2e;padding:16px;border-radius:8px;margin-bottom:12px;">
+    <strong>{{ req.requester.get_full_name|default:req.requester.username }}</strong>
+    ({{ req.requester.email }}) — requested {{ req.requested_at|timesince }} ago
+    {% if req.message %}<p style="color:#aaa;">{{ req.message }}</p>{% endif %}
+    <form method="post" style="display:inline;">{% csrf_token %}
+      <input type="hidden" name="request_id" value="{{ req.id }}">
+      <input type="hidden" name="action" value="approve">
+      <select name="role" style="padding:6px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;margin-right:8px;">
+        <option value="viewer">Viewer</option>
+        <option value="editor">Editor</option>
+      </select>
+      <button type="submit" style="padding:8px 16px;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:8px;">
+        Approve
+      </button>
+    </form>
+    <form method="post" style="display:inline;">{% csrf_token %}
+      <input type="hidden" name="request_id" value="{{ req.id }}">
+      <input type="hidden" name="action" value="deny">
+      <button type="submit" style="padding:8px 16px;background:#cc4444;color:white;border:none;border-radius:4px;cursor:pointer;">
+        Deny
+      </button>
+    </form>
+  </div>
+  {% endfor %}
+{% else %}
+  <p style="color:#aaa;">No pending requests.</p>
+{% endif %}
+
+<h2>Reviewed</h2>
+{% for req in reviewed %}
+<div style="background:#111;padding:12px;border-radius:6px;margin-bottom:8px;color:#aaa;">
+  {{ req.requester.username }} — 
+  <strong style="color:{% if req.status == 'approved' %}#7fff7f{% else %}#ff9f9f{% endif %}">
+    {{ req.status|title }}
+  </strong>
+  {% if req.assigned_role %}as {{ req.assigned_role }}{% endif %}
+  — {{ req.reviewed_at|date:"M d, Y" }}
+</div>
+{% endfor %}
+{% endblock %}

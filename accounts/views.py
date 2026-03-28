@@ -410,3 +410,166 @@ def leave_project(request, project_id):
         messages.error(request, "Project membership not found.")
     
     return redirect('dashboard')
+
+
+from planner.models import ProjectAccessRequest
+from django.utils import timezone
+
+def project_request_access(request, invite_token):
+    """
+    Public link — crew member lands here, logs in if needed, submits access request.
+    """
+    from planner.models import Project
+    project = get_object_or_404(Project, invite_token=invite_token)
+
+    # Must be logged in
+    if not request.user.is_authenticated:
+        return redirect(f'/login/?next=/projects/request/{invite_token}/')
+
+    # Already a member or owner?
+    if project.owner == request.user:
+        messages.info(request, "You own this project.")
+        return redirect('/audiopatch/')
+
+    if ProjectMember.objects.filter(project=project, user=request.user).exists():
+        messages.info(request, f"You already have access to {project.name}.")
+        return redirect('/audiopatch/')
+
+    # Already submitted a request?
+    existing = ProjectAccessRequest.objects.filter(project=project, requester=request.user).first()
+
+    if request.method == 'POST':
+        if existing and existing.status == 'pending':
+            messages.info(request, "Your request is already pending approval.")
+        elif not existing or existing.status == 'denied':
+            msg = request.POST.get('message', '')
+            if existing:
+                existing.status = 'pending'
+                existing.message = msg
+                existing.reviewed_by = None
+                existing.reviewed_at = None
+                existing.assigned_role = None
+                existing.save()
+            else:
+                ProjectAccessRequest.objects.create(
+                    project=project,
+                    requester=request.user,
+                    message=msg,
+                )
+            # Notify project owner
+            send_access_request_email(project, request.user, request)
+            messages.success(request, f"Access request sent to {project.owner.get_full_name() or project.owner.username}. You'll get an email when it's approved.")
+        return redirect(f'/projects/request/{invite_token}/')
+
+    return render(request, 'accounts/request_access.html', {
+        'project': project,
+        'existing': existing,
+    })
+
+
+@login_required
+def project_access_requests(request, project_id):
+    """
+    Project owner sees all pending access requests and can approve/deny.
+    """
+    from planner.models import Project
+    project = get_object_or_404(Project, id=project_id)
+
+    if project.owner != request.user:
+        messages.error(request, "Only the project owner can manage access requests.")
+        return redirect('/audiopatch/')
+
+    if request.method == 'POST':
+        req_id = request.POST.get('request_id')
+        action = request.POST.get('action')  # 'approve' or 'deny'
+        role = request.POST.get('role', 'viewer')
+
+        access_req = get_object_or_404(ProjectAccessRequest, id=req_id, project=project)
+
+        if action == 'approve':
+            # Create ProjectMember
+            ProjectMember.objects.get_or_create(
+                project=project,
+                user=access_req.requester,
+                defaults={'role': role, 'invited_by': request.user}
+            )
+            # Add to Django group
+            from django.contrib.auth.models import Group
+            group_name = 'Editor' if role == 'editor' else 'Viewer'
+            try:
+                group = Group.objects.get(name=group_name)
+                access_req.requester.groups.add(group)
+            except Group.DoesNotExist:
+                pass
+
+            access_req.status = 'approved'
+            access_req.assigned_role = role
+            access_req.reviewed_by = request.user
+            access_req.reviewed_at = timezone.now()
+            access_req.save()
+            send_access_approved_email(access_req, request)
+            messages.success(request, f"{access_req.requester.username} approved as {role}.")
+
+        elif action == 'deny':
+            access_req.status = 'denied'
+            access_req.reviewed_by = request.user
+            access_req.reviewed_at = timezone.now()
+            access_req.save()
+            messages.info(request, f"{access_req.requester.username}'s request denied.")
+
+        return redirect(f'/projects/{project_id}/requests/')
+
+    pending = ProjectAccessRequest.objects.filter(project=project, status='pending')
+    reviewed = ProjectAccessRequest.objects.filter(project=project).exclude(status='pending')
+
+    return render(request, 'accounts/access_requests.html', {
+        'project': project,
+        'pending': pending,
+        'reviewed': reviewed,
+    })
+
+
+def send_access_request_email(project, requester, request):
+    import resend, os
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    approve_url = request.build_absolute_uri(f'/projects/{project.id}/requests/')
+    html = f"""
+    <h2>New Access Request — {project.name}</h2>
+    <p><strong>{requester.get_full_name() or requester.username}</strong> ({requester.email}) 
+    is requesting access to your ShowStack project.</p>
+    <p><a href="{approve_url}" style="display:inline-block;padding:12px 24px;background:#4a9eff;color:white;text-decoration:none;border-radius:6px;">
+    Review Request</a></p>
+    <p><small>ShowStack — Professional Audio Production Management</small></p>
+    """
+    try:
+        resend.Emails.send({
+            "from": "ShowStack <noreply@showstack.io>",
+            "to": [project.owner.email],
+            "subject": f"Access Request: {requester.get_full_name() or requester.username} wants to join {project.name}",
+            "html": html,
+        })
+    except Exception as e:
+        print(f"❌ Access request email error: {e}")
+
+
+def send_access_approved_email(access_req, request):
+    import resend, os
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    login_url = request.build_absolute_uri('/login/')
+    html = f"""
+    <h2>You've been granted access!</h2>
+    <p>Your request to join <strong>{access_req.project.name}</strong> has been approved.</p>
+    <p><strong>Your role:</strong> {access_req.get_assigned_role_display()}</p>
+    <p><a href="{login_url}" style="display:inline-block;padding:12px 24px;background:#4a9eff;color:white;text-decoration:none;border-radius:6px;">
+    Open ShowStack</a></p>
+    <p><small>ShowStack — Professional Audio Production Management</small></p>
+    """
+    try:
+        resend.Emails.send({
+            "from": "ShowStack <noreply@showstack.io>",
+            "to": [access_req.requester.email],
+            "subject": f"Access Approved: {access_req.project.name}",
+            "html": html,
+        })
+    except Exception as e:
+        print(f"❌ Approval email error: {e}")

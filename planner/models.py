@@ -33,6 +33,7 @@ class Project(models.Model):
     
     # Status
     is_archived = models.BooleanField(default=False)
+    invite_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     
     class Meta:
         ordering = ['-updated_at']
@@ -677,6 +678,41 @@ class ProjectMember(models.Model):
     
     def __str__(self):
         return f"{self.user.username} → {self.project.name} ({self.role})"
+    
+
+
+class ProjectAccessRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('denied', 'Denied'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='access_requests')
+    requester = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='access_requests')
+    requested_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='reviewed_access_requests'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    assigned_role = models.CharField(
+        max_length=20,
+        choices=[('editor', 'Editor'), ('viewer', 'Viewer')],
+        null=True, blank=True
+    )
+    message = models.TextField(blank=True, help_text="Optional message from requester")
+
+    class Meta:
+        unique_together = ('project', 'requester')
+        ordering = ['-requested_at']
+
+    def __str__(self):
+        return f"{self.requester.username} → {self.project.name} ({self.status})"
+
+    
+        
 
 #-----Console Model----
 

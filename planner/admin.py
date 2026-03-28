@@ -391,8 +391,23 @@ class ProjectAdmin(admin.ModelAdmin):
     list_filter = ['is_archived', 'start_date', 'end_date']
     search_fields = ['name', 'venue', 'client']
     actions = [duplicate_project_action]
-    readonly_fields = ['owner', 'created_at', 'updated_at']  # <-- owner is readonly
+    readonly_fields = ['owner', 'created_at', 'updated_at','invite_link']  
     exclude = []  # We'll set this dynamically
+
+
+    def invite_link(self, obj):
+        from django.urls import reverse
+        url = f"/projects/request/{obj.invite_token}/"
+        return mark_safe(f'<a href="{url}" target="_blank">{url}</a> &nbsp; <button onclick="navigator.clipboard.writeText(window.location.origin+\'{url}\');return false;" style="padding:4px 10px;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer;">Copy</button>')
+    invite_link.short_description = "Shareable Access Request Link"
+
+    def access_request_count(self, obj):
+        count = obj.access_requests.filter(status='pending').count()
+        if count:
+            url = f"/projects/{obj.id}/requests/"
+            return mark_safe(f'<a href="{url}" style="color:#ffaa44;">{count} pending</a>')
+        return "0"
+    access_request_count.short_description = "Access Requests"
     
     def get_exclude(self, request, obj=None):
         """Hide owner field on add form"""
