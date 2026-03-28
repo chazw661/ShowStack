@@ -477,7 +477,7 @@ def project_access_requests(request, project_id):
 
     if project.owner != request.user:
         messages.error(request, "Only the project owner can manage access requests.")
-        return redirect('/audiopatch/')
+        return redirect('/audiopatch/mic-tracker/')
 
     if request.method == 'POST':
         req_id = request.POST.get('request_id')
@@ -518,6 +518,15 @@ def project_access_requests(request, project_id):
             messages.info(request, f"{access_req.requester.username}'s request denied.")
 
         return redirect(f'/projects/{project_id}/requests/')
+
+    pending = ProjectAccessRequest.objects.filter(project=project, status='pending')
+    reviewed = ProjectAccessRequest.objects.filter(project=project).exclude(status='pending')
+
+    return render(request, 'accounts/access_requests.html', {
+        'project': project,
+        'pending': pending,
+        'reviewed': reviewed,
+    })
 
     pending = ProjectAccessRequest.objects.filter(project=project, status='pending')
     reviewed = ProjectAccessRequest.objects.filter(project=project).exclude(status='pending')
