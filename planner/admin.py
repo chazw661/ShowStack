@@ -398,7 +398,8 @@ class ProjectAdmin(admin.ModelAdmin):
     def invite_link(self, obj):
         from django.urls import reverse
         url = f"/projects/request/{obj.invite_token}/"
-        return mark_safe(f'<a href="{url}" target="_blank">{url}</a> &nbsp; <button onclick="navigator.clipboard.writeText(window.location.origin+\'{url}\');return false;" style="padding:4px 10px;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer;">Copy</button>')
+        full_url = f"https://showstack.io{url}"
+        return mark_safe(f'<input type="text" value="{full_url}" readonly style="width:420px;padding:4px 8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;margin-right:8px;" /> <button onclick="navigator.clipboard.writeText(\'{full_url}\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy\',2000);return false;" style="padding:4px 10px;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer;">Copy</button>')
     invite_link.short_description = "Shareable Access Request Link"
 
     def access_request_count(self, obj):
