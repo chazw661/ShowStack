@@ -430,6 +430,9 @@ class ProjectAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
+        ('Access & Sharing', {
+            'fields': ('invite_link',),
+        }),
     )
 
     class Media:
