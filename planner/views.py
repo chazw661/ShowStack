@@ -4307,8 +4307,8 @@ def comm_config_export(request, config_id):
                 'type': session_type,
             })
 
-        # ── Keep A.CCM and S.NEP sessions from factory ──
-        for doc_id in [f'3.99.{FACTORY_SYS_ID}.0000.0000', f'3.99.{FACTORY_SYS_ID}.0003.0000']:
+        # ── Keep S.NEP session from factory (skip A.CCM to preserve unit's credentials) ──
+        for doc_id in [f'3.99.{FACTORY_SYS_ID}.0003.0000']:
             if doc_id in existing_docs:
                 write_doc(existing_docs[doc_id])
 
