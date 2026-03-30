@@ -4243,7 +4243,6 @@ def comm_config_export(request, config_id):
                     'sidetoneControl': role.sidetone_control,
                     'sidetoneGain': role.sidetone_gain,
                     'headphoneLimit': role.headphone_limit,
-                })
             })
 
             # Write role
