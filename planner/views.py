@@ -4178,12 +4178,15 @@ def comm_config_export(request, config_id):
                 'B.HBP': '0008',
                 'B.HKB': '000a',
                 'S.NEP': '0003',
+                'P.V12': '000b',
+                'P.V24': '000c',
+                'P.V32': '000d',
             }
             # Determine session type first (needed for prefix)
             SESSION_TYPE_MAP2 = {
                 'FSII-BP': 'B.FSII', 'E-BP': 'B.FSII',
                 'HBP-2X': 'B.HBP', 'HMS-4X': 'B.HBP', 'HRM-4X': 'B.HBP',
-                'V12': 'B.FSII', 'V24': 'B.FSII', 'V32': 'B.FSII',
+                'V12': 'P.V12', 'V24': 'P.V24', 'V32': 'P.V32',
             }
             _st = SESSION_TYPE_MAP2.get(role.device_type, 'B.FSII')
             _prefix = SESSION_PREFIX_MAP.get(_st, '0002')
@@ -4257,7 +4260,7 @@ def comm_config_export(request, config_id):
             SESSION_TYPE_MAP = {
                 'FSII-BP': 'B.FSII', 'E-BP': 'B.FSII',
                 'HBP-2X': 'B.HBP', 'HMS-4X': 'B.HBP', 'HRM-4X': 'B.HBP',
-                'V12': 'B.FSII', 'V24': 'B.FSII', 'V32': 'B.FSII',
+                'V12': 'P.V12', 'V24': 'P.V24', 'V32': 'P.V32',
             }
             session_type = SESSION_TYPE_MAP.get(role.device_type, 'B.FSII')
 
