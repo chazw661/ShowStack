@@ -4099,6 +4099,10 @@ def comm_config_export(request, config_id):
         if not os.path.exists(factory_db_path):
             return HttpResponse(f'Factory pouchdb not found at {factory_db_path}', status=500)
         shutil.copytree(factory_db_path, db_path)
+        # Remove .ldb files — they contain credentials that overwrite unit password
+        for _ldb_f in os.listdir(db_path):
+            if _ldb_f.endswith('.ldb'):
+                os.remove(os.path.join(db_path, _ldb_f))
 
         db = plyvel.DB(db_path, create_if_missing=False)
 
@@ -4307,6 +4311,53 @@ def comm_config_export(request, config_id):
                 'type': session_type,
             })
 
+        # ── Export port settings (2W and 4W) ──
+        # port_gid maps to 3.06.SYSID.GROUP.SLOT:
+        # 2w_1→0000.0000, 2w_2→0000.0001, 2w_3→0001.0000, 2w_4→0001.0001
+        # 4w_1→0002.0000 ... 4w_8→0002.0007
+        PORT_GID_MAP = {
+            '2w_1': ('0000', '0000', 0), '2w_2': ('0000', '0001', 1),
+            '2w_3': ('0001', '0000', 0), '2w_4': ('0001', '0001', 1),
+            **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 9)},
+        }
+        PINOUT_MAP = {'4wire-x': 'matrix', '4wire': 'panel'}
+        for port in config.port_assignments.filter(port_type__in=['2W', '4W']).order_by('port_gid'):
+            gid_key = port.port_gid
+            if gid_key not in PORT_GID_MAP:
+                continue
+            grp, slot, hw_index = PORT_GID_MAP[gid_key]
+            doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
+            if doc_id not in existing_docs:
+                continue
+            doc = dict(existing_docs[doc_id])
+            data = dict(doc.get('data', {}))
+            data['label'] = port.port_label
+            if port.port_type == '2W':
+                data['settings'] = {
+                    'termination': port.termination_enabled,
+                    'inputGain': 0,
+                    'outputGain': 0,
+                    'joinMode': port.join_mode,
+                    'callSignal': True,
+                }
+            else:  # 4W
+                data['settings'] = {
+                    'inputGain': 0,
+                    'outputGain': 0,
+                    'joinMode': port.join_mode,
+                    'callSignal': port.receive_call_signal,
+                    'pinout': PINOUT_MAP.get(port.port_function, 'panel'),
+                    'serial': {
+                        'state': 'disabled', 'baudRate': 19200,
+                        'data': 8, 'parity': 0, 'stop': 1,
+                        'flowControl': 'none', 'framingType': 'Eclipse/4000',
+                    },
+                }
+            if port.partyline:
+                data['desc'] = f'{port.port_label} → {port.partyline.label}'
+            doc['data'] = data
+            doc['_rev'] = make_rev()
+            write_doc(doc)
         # ── Keep S.NEP session from factory (skip A.CCM to preserve unit's credentials) ──
         for doc_id in [f'3.99.{FACTORY_SYS_ID}.0003.0000']:
             if doc_id in existing_docs:
