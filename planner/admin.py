@@ -352,9 +352,12 @@ def duplicate_project_action(modeladmin, request, queryset):
                 return redirect(url)
                 
             except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                print(f"DUPLICATE ERROR: {tb}")
                 modeladmin.message_user(
                     request,
-                    f'Error duplicating project: {str(e)}',
+                    f'Error duplicating project: {str(e)} | Line: {tb.splitlines()[-3]}',
                     level=messages.ERROR
                 )
                 return
