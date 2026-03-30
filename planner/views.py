@@ -4265,15 +4265,22 @@ def comm_config_export(request, config_id):
             session_type = SESSION_TYPE_MAP.get(role.device_type, 'B.FSII')
 
             # Write session
+            # V-panel sessions always use id=0, slot 0000, no auth field (confirmed from CCM export)
+            is_vpanel = role.device_type in ('V12', 'V24', 'V32')
+            vpanel_doc_id = f'3.99.{FACTORY_SYS_ID}.{_prefix}.0000'
+            session_id_val = 0 if is_vpanel else session_slot
+            actual_session_doc_id = vpanel_doc_id if is_vpanel else session_doc_id
+            session_data = {
+                'id': session_id_val, 'type': session_type,
+                'label': role.label,
+                'settings': {'defaultRole': role_slot},
+                'addressable': False,
+            }
+            if not is_vpanel:
+                session_data['auth'] = {'pin': {'provider': 'pin'}}
             write_doc({
-                '_id': session_doc_id, '_rev': make_rev(),
-                'data': {
-                    'id': session_slot, 'type': session_type,
-                    'label': role.label,
-                    'auth': {'pin': {'provider': 'pin'}},
-                    'settings': {'defaultRole': role_slot},
-                    'addressable': False,
-                },
+                '_id': actual_session_doc_id, '_rev': make_rev(),
+                'data': session_data,
                 'owner': roleset_doc_id,
                 'type': session_type,
             })
