@@ -352,12 +352,16 @@ class Project(models.Model):
                                 session=new_session,
                                 rf_number=assignment.rf_number,
                                 mic_type=assignment.mic_type,
-                                presenter=presenter_map.get(assignment.presenter_id) if assignment.presenter_id else None,
                                 is_micd=assignment.is_micd,
                                 is_d_mic=assignment.is_d_mic,
                                 active_presenter_index=assignment.active_presenter_index,
                                 notes=assignment.notes
                             )
+                            # Duplicate PresenterSlots for this assignment
+                            for slot in assignment.presenter_slots.all():
+                                slot.pk = None
+                                slot.assignment = new_assignment
+                                slot.save()
             
             
                 # Duplicate MicShowInfo (OneToOne)
