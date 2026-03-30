@@ -359,8 +359,11 @@ class Project(models.Model):
                             )
                             # Duplicate PresenterSlots for this assignment
                             for slot in assignment.presenter_slots.all():
+                                old_presenter_id = slot.presenter_id
                                 slot.pk = None
                                 slot.assignment = new_assignment
+                                slot.presenter = presenter_map.get(old_presenter_id) if old_presenter_id else None
+                                slot.photo = None  # don't copy uploaded files
                                 slot.save()
             
             
