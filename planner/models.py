@@ -3930,6 +3930,8 @@ class CommConfigKeyset(models.Model):
 
     @property
     def key_letter(self):
+        if self.role.device_type in ('V12', 'V24', 'V32'):
+            return str(self.key_index + 1)
         return chr(65 + self.key_index) if self.key_index < 26 else str(self.key_index)
 
 
