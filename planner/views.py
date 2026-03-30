@@ -4194,6 +4194,7 @@ def comm_config_export(request, config_id):
             dp_doc_id = f'4.55.{FACTORY_SYS_ID}.0000.{roleset_slot:04x}'
 
             # Build keysets
+            is_vpanel = role.device_type in ('V12', 'V24', 'V32')
             keysets = []
             for key in role.keysets.all().order_by('key_index'):
                 entities = []
@@ -4201,26 +4202,48 @@ def comm_config_export(request, config_id):
                     entities.append({'res': f'/api/1/connections/{key.partyline.channel_number}', 'type': 0})
                 elif key.port_reference:
                     entities.append({'res': key.port_reference, 'type': 1})
-                keyset_entry = {
-                    'activationState': key.activation_state,
-                    'entities': entities,
-                    'isCallKey': key.is_call_key,
-                    'keysetIndex': key.key_index,
-                    'talkBtnMode': key.talk_mode,
-                }
-                if key.is_reply_key:
-                    keyset_entry['isReplyKey'] = True
+                if is_vpanel:
+                    if key.key_index == 0:
+                        keyset_entry = {
+                            'keysetIndex': key.key_index,
+                            'entities': entities,
+                            'isReplyKey': True,
+                            'isCallKey': False,
+                            'activationState': 'talk',
+                            'talkBtnMode': 'disabled',
+                            'colorIndex': None,
+                        }
+                    else:
+                        keyset_entry = {
+                            'keysetIndex': key.key_index,
+                            'entities': entities,
+                            'isCallKey': False,
+                            'activationState': 'talk',
+                            'talkBtnMode': 'latching',
+                            'colorIndex': None,
+                        }
+                else:
+                    keyset_entry = {
+                        'activationState': key.activation_state,
+                        'entities': entities,
+                        'isCallKey': key.is_call_key,
+                        'keysetIndex': key.key_index,
+                        'talkBtnMode': key.talk_mode,
+                    }
+                    if key.is_reply_key:
+                        keyset_entry['isReplyKey'] = True
                 keysets.append(keyset_entry)
-
             settings_obj = dict(device_defaults.get(role.device_type, {}))
             settings_obj['keysets'] = keysets
-            settings_obj.update({
-                'displayBrightness': role.display_brightness,
-                'masterVolume': role.master_volume,
-                'micType': role.mic_type,
-                'sidetoneControl': role.sidetone_control,
-                'sidetoneGain': role.sidetone_gain,
-                'headphoneLimit': role.headphone_limit,
+            if not is_vpanel:
+                settings_obj.update({
+                    'displayBrightness': role.display_brightness,
+                    'masterVolume': role.master_volume,
+                    'micType': role.mic_type,
+                    'sidetoneControl': role.sidetone_control,
+                    'sidetoneGain': role.sidetone_gain,
+                    'headphoneLimit': role.headphone_limit,
+                })
             })
 
             # Write role
