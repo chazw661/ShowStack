@@ -3788,7 +3788,7 @@ def _seed_factory_defaults(config):
             termination_enabled=False,
         )
     # 8x 4-Wire ports
-    for i in range(1, 9):
+    for i in range(1, 8):
         CommConfigPortAssignment.objects.create(
             config=config,
             port_type='4W',
@@ -4119,12 +4119,17 @@ def comm_config_export(request, config_id):
                         existing_docs[doc['_id']] = doc
                 except:
                     pass
-        # Delete A.CCM admin session — contains credentials that overwrite unit password
-        ACCM_KEY = SEP + b'document-store' + SEP + f'3.99.{FACTORY_SYS_ID}.0000.0000'.encode()
-        try:
-            db.delete(ACCM_KEY)
-        except:
-            pass
+        # Delete credential docs that would overwrite unit password on import
+        for cred_key in [
+            SEP + b'document-store' + SEP + b'admin/author.0.data.fixedGroup',
+            SEP + b'document-store' + SEP + b'admin/author.registry.nextId',
+            SEP + b'document-store' + SEP + f'3.99.{FACTORY_SYS_ID}.0000.0000'.encode(),
+        ]:
+            try:
+                db.delete(cred_key)
+            except:
+                pass
+        existing_docs.pop(f'3.99.{FACTORY_SYS_ID}.0000.0000', None)
 
         next_seq = [max_seq + 1]
 
@@ -4324,7 +4329,7 @@ def comm_config_export(request, config_id):
         PORT_GID_MAP = {
             '2w_1': ('0000', '0000', 0), '2w_2': ('0000', '0001', 1),
             '2w_3': ('0001', '0000', 0), '2w_4': ('0001', '0001', 1),
-            **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 9)},
+            **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 8)},
         }
         PINOUT_MAP = {'4wire-x': 'matrix', '4wire': 'panel'}
         owner_port_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
