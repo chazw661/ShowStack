@@ -4362,10 +4362,7 @@ def comm_config_export(request, config_id):
                 'type': session_type,
             })
 
-        # ── Keep A.CCM and S.NEP sessions from factory ──
-        for doc_id in [f'3.99.{FACTORY_SYS_ID}.0000.0000', f'3.99.{FACTORY_SYS_ID}.0003.0000']:
-            if doc_id in existing_docs:
-                write_doc(existing_docs[doc_id])
+        # Factory docs (including S.NEP) already written at start — no need to repeat
 
         _ms_key = SEP + b'meta-store' + SEP + b'_local_last_update_seq'
         _ms_val = str(next_seq[0] - 1).encode()
