@@ -4175,6 +4175,11 @@ def comm_config_export(request, config_id):
             # CCM writes one entry per batch (count=1) not bundled
             _write_record(struct.pack('<QI', seq, 1) + _enc(seq_key, seq_val))
             _write_record(struct.pack('<QI', seq, 1) + _enc(ds_key, ds_val))
+        # Write _local_uuid meta entry (CCM always writes this first at seq=0)
+        _uuid_key = SEP + b'meta-store' + SEP + b'_local_uuid'
+        _uuid_val = f'"{uuid.uuid4()}"'.encode()
+        _write_record(struct.pack('<QI', 0, 1) + _enc(_uuid_key, _uuid_val))
+
         owner_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
 
         # ── Update partylines ──
