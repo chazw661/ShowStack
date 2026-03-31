@@ -4118,7 +4118,7 @@ def comm_config_export(request, config_id):
                                     max_seq = max(max_seq, int(_sm.group(1)))
                         except: pass
                         break
-        existing_docs.pop(f'3.99.{FACTORY_SYS_ID}.0000.0000', None)
+        # Only remove fixedGroup (password hash) — keep A.CCM session doc (no password in it)
         existing_docs.pop('admin/author.0.data.fixedGroup', None)
         next_seq = [max_seq + 1]
         _crc32c = crcmod.predefined.mkCrcFun('crc-32c')
