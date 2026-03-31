@@ -4091,71 +4091,84 @@ def comm_config_export(request, config_id):
 
     tmp_dir = tempfile.mkdtemp()
     try:
-        import plyvel
-
+        import struct, crcmod, re as _re
         factory_db_path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config', 'pouchdb_factory')
-        db_path = os.path.join(tmp_dir, 'pouchdb')
-
         if not os.path.exists(factory_db_path):
             return HttpResponse(f'Factory pouchdb not found at {factory_db_path}', status=500)
-        shutil.copytree(factory_db_path, db_path)
-        # Zero out .ldb files — they contain credentials (fixedGroup) in an
-        # LevelDB SSTable format we cannot surgically edit. Zeroing forces plyvel
-        # to rebuild from the .log file which has our clean exported docs.
-        for _ldb_f in os.listdir(db_path):
-            if _ldb_f.endswith('.ldb'):
-                _ldb_full = os.path.join(db_path, _ldb_f)
-                with open(_ldb_full, 'wb') as _f:
-                    _f.write(b'\x00' * os.path.getsize(_ldb_full))
-
-        db = plyvel.DB(db_path, create_if_missing=False)
-
+        factory_log_path = os.path.join(factory_db_path, '000003.log')
+        with open(factory_log_path, 'rb') as _f:
+            _raw = _f.read()
+        _text = _raw.decode('utf-8', errors='replace')
         existing_docs = {}
         max_seq = 0
-        for key, value in db:
-            if b'by-sequence' in key:
-                try:
-                    seq_num = int(key.split(SEP)[-1].decode())
-                    max_seq = max(max_seq, seq_num)
-                    v = value.decode('utf-8', errors='replace')
-                    doc = json.loads(v)
-                    if '_id' in doc:
-                        existing_docs[doc['_id']] = doc
-                except:
-                    pass
-        # Delete credential docs that would overwrite unit password on import
-        for cred_key in [
-            SEP + b'document-store' + SEP + b'admin/author.0.data.fixedGroup',
-            SEP + b'document-store' + SEP + b'admin/author.registry.nextId',
-            SEP + b'document-store' + SEP + f'3.99.{FACTORY_SYS_ID}.0000.0000'.encode(),
-        ]:
-            try:
-                db.delete(cred_key)
-            except:
-                pass
+        for _m in _re.finditer(r'\{"_id"\s*:\s*"([^"]+)"', _text):
+            _si = _m.start()
+            _depth = 0
+            for _j in range(_si, min(_si+5000, len(_text))):
+                if _text[_j] == '{': _depth += 1
+                elif _text[_j] == '}':
+                    _depth -= 1
+                    if _depth == 0:
+                        try:
+                            _doc = json.loads(_text[_si:_j+1])
+                            if '_id' in _doc:
+                                existing_docs[_doc['_id']] = _doc
+                                _sm = _re.search(r'0000000000000(\d+)', _text[max(0,_si-200):_si])
+                                if _sm:
+                                    max_seq = max(max_seq, int(_sm.group(1)))
+                        except: pass
+                        break
         existing_docs.pop(f'3.99.{FACTORY_SYS_ID}.0000.0000', None)
-
+        existing_docs.pop('admin/author.0.data.fixedGroup', None)
         next_seq = [max_seq + 1]
-
+        _crc32c = crcmod.predefined.mkCrcFun('crc-32c')
+        BLOCK_SIZE = 32768
+        HEADER_SIZE = 7
+        _log_data = bytearray()
+        def _write_varint(buf, v):
+            while True:
+                b = v & 0x7f; v >>= 7
+                if v: buf.append(b | 0x80)
+                else: buf.append(b); break
+        def _write_record(data):
+            pos = 0; first = True
+            while pos < len(data) or first:
+                first = False
+                avail = BLOCK_SIZE - (len(_log_data) % BLOCK_SIZE)
+                if avail < HEADER_SIZE:
+                    _log_data.extend(b'\x00' * avail); avail = BLOCK_SIZE
+                frag_size = min(len(data) - pos, avail - HEADER_SIZE)
+                frag = data[pos:pos+frag_size]; pos += frag_size
+                if len(data) <= BLOCK_SIZE - HEADER_SIZE: rt = 1
+                elif pos == frag_size: rt = 2
+                elif pos >= len(data): rt = 4
+                else: rt = 3
+                hdr = struct.pack('<HB', len(frag), rt)
+                crc = struct.pack('<I', _crc32c(bytes([rt]) + frag))
+                _log_data.extend(crc + hdr + frag)
+        def _enc(key, val):
+            buf = bytearray([1])
+            _write_varint(buf, len(key)); buf.extend(key)
+            _write_varint(buf, len(val)); buf.extend(val)
+            return bytes(buf)
         def make_rev():
             return f'1-{uuid.uuid4().hex}'
-
         def write_doc(doc):
             doc_id = doc['_id']
-            rev = doc.get('_rev', '1-0000000000000000')
+            rev = doc.get('_rev', f'1-{uuid.uuid4().hex}')
             rev_hash = rev.split('-')[1] if '-' in rev else rev
-            seq = next_seq[0]
-            next_seq[0] += 1
+            seq = next_seq[0]; next_seq[0] += 1
             seq_key = SEP + b'by-sequence' + SEP + f'{seq:016d}'.encode()
-            db.put(seq_key, json.dumps(doc, separators=(',', ':')).encode('utf-8'))
-            doc_store_key = SEP + b'document-store' + SEP + doc_id.encode()
-            db.put(doc_store_key, json.dumps({
+            seq_val = json.dumps(doc, separators=(',', ':')).encode()
+            ds_key = SEP + b'document-store' + SEP + doc_id.encode()
+            ds_val = json.dumps({
                 'id': doc_id, 'rev': rev,
                 'revisions': {'start': 1, 'ids': [rev_hash]},
                 'rev_tree': [{'pos': 1, 'ids': [rev_hash, {'status': 'available'}, []]}],
                 'rev_map': {rev: seq}, 'winningRev': rev, 'deleted': False, 'seq': seq,
-            }, separators=(',', ':')).encode('utf-8'))
-
+            }, separators=(',', ':')).encode()
+            batch = struct.pack('<QI', seq, 2) + _enc(seq_key, seq_val) + _enc(ds_key, ds_val)
+            _write_record(batch)
         owner_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
 
         # ── Update partylines ──
@@ -4326,86 +4339,102 @@ def comm_config_export(request, config_id):
                 'type': session_type,
             })
 
-        # DISABLED: # ── Export port settings (2W and 4W) ──
-        # DISABLED: # port_gid maps to 3.06.SYSID.GROUP.SLOT:
-        # DISABLED: # 2w_1→0000.0000, 2w_2→0000.0001, 2w_3→0001.0000, 2w_4→0001.0001
-        # DISABLED: # ── Export port settings (2W, 4W, SA, PGM) — built from scratch ──
-        # DISABLED: PORT_GID_MAP = {
-        # DISABLED: '2w_1': ('0000', '0000', 0), '2w_2': ('0000', '0001', 1),
-        # DISABLED: '2w_3': ('0001', '0000', 0), '2w_4': ('0001', '0001', 1),
-        # DISABLED: **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 8)},
-        # DISABLED: }
-        # DISABLED: PINOUT_MAP = {'4wire-x': 'matrix', '4wire': 'panel'}
-        # DISABLED: owner_port_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
-        # DISABLED: for port in config.port_assignments.filter(port_type__in=['2W', '4W']).order_by('port_gid'):
-        # DISABLED: gid_key = port.port_gid
-        # DISABLED: if gid_key not in PORT_GID_MAP:
-        # DISABLED: continue
-        # DISABLED: grp, slot, hw_index = PORT_GID_MAP[gid_key]
-        # DISABLED: doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
-        # DISABLED: if port.port_type == '2W':
-        # DISABLED: port_data = {
-        # DISABLED: 'hwIndex': hw_index, 'label': port.port_label, 'type': '2W',
-        # DISABLED: 'settings': {
-        # DISABLED: 'termination': port.termination_enabled,
-        # DISABLED: 'inputGain': 0, 'outputGain': 0,
-        # DISABLED: 'joinMode': port.join_mode, 'callSignal': True,
-        # DISABLED: },
-        # DISABLED: 'id': hw_index, 'desc': port.port_label,
-        # DISABLED: }
-        # DISABLED: else:
-        # DISABLED: port_data = {
-        # DISABLED: 'hwIndex': hw_index, 'label': port.port_label, 'type': '4W',
-        # DISABLED: 'settings': {
-        # DISABLED: 'inputGain': 0, 'outputGain': 0,
-        # DISABLED: 'joinMode': port.join_mode,
-        # DISABLED: 'callSignal': port.receive_call_signal,
-        # DISABLED: 'pinout': PINOUT_MAP.get(port.port_function, 'panel'),
-        # DISABLED: 'serial': {'state': 'disabled', 'baudRate': 19200,
-        # DISABLED: 'data': 8, 'parity': 0, 'stop': 1,
-        # DISABLED: 'flowControl': 'none', 'framingType': 'Eclipse/4000'},
-        # DISABLED: },
-        # DISABLED: 'id': hw_index, 'desc': port.port_label,
-        # DISABLED: }
-        # DISABLED: write_doc({'_id': doc_id, '_rev': make_rev(),
-        # DISABLED: 'data': port_data, 'owner': owner_port_id, 'type': port.port_type})
-        # DISABLED: # SA port (group 0002 slot 0007)
-        # DISABLED: write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0007', '_rev': make_rev(),
-        # DISABLED: 'data': {'portId': 7, 'hwIndex': 7, 'label': 'SA', 'desc': 'SA', 'type': 'SA',
-        # DISABLED: 'settings': {'outputGain': 0, 'pinout': 'panel',
-        # DISABLED: 'splitLabel': {'otherPortId': 8, 'direction': 'output'}, 'joinMode': 'Listen'},
-        # DISABLED: 'id': 7},
-        # DISABLED: 'owner': owner_port_id, 'type': 'SA'})
-        # DISABLED: # PGM port (group 0002 slot 0008)
-        # DISABLED: write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0008', '_rev': make_rev(),
-        # DISABLED: 'data': {'portId': 8, 'hwIndex': 7, 'label': 'PGM', 'desc': 'PGM', 'type': 'PGM',
-        # DISABLED: 'settings': {'inputGain': 0, 'pinout': 'panel',
-        # DISABLED: 'splitLabel': {'otherPortId': 7, 'direction': 'input'}, 'joinMode': 'Talk'},
-        # DISABLED: 'id': 8},
-        # DISABLED: 'owner': owner_port_id, 'type': 'PGM'})
-        # DISABLED: # ── partyline.port assignment docs (4.44) — link ports to channels ──
-        # DISABLED: import uuid as _uuid
-        # DISABLED: for port in config.port_assignments.filter(
-        # DISABLED: port_type__in=['2W', '4W'], partyline__isnull=False).order_by('port_gid'):
-        # DISABLED: gid_key = port.port_gid
-        # DISABLED: if gid_key not in PORT_GID_MAP:
-        # DISABLED: continue
-        # DISABLED: grp, slot, hw_index = PORT_GID_MAP[gid_key]
-        # DISABLED: port_doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
-        # DISABLED: pl_slot = port.partyline.channel_number - 1
-        # DISABLED: pl_doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl_slot:04x}'
-        # DISABLED: assign_id = f'4.44.{FACTORY_SYS_ID}.{_uuid.uuid4().hex[:4]}.{_uuid.uuid4().hex[:4]}'
-        # DISABLED: write_doc({'_id': assign_id, '_rev': make_rev(),
-        # DISABLED: 'owner': port_doc_id, 'type': 'partyline.port',
-        # DISABLED: 'data': {'destination': pl_doc_id, 'joinMode': port.join_mode,
-        # DISABLED: 'type': 'partyline.port', 'id': port.partyline.channel_number}})
+        # ── Export port settings (2W and 4W) ──
+        # port_gid maps to 3.06.SYSID.GROUP.SLOT:
+        # 2w_1→0000.0000, 2w_2→0000.0001, 2w_3→0001.0000, 2w_4→0001.0001
+        # ── Export port settings (2W, 4W, SA, PGM) — built from scratch ──
+        PORT_GID_MAP = {
+            '2w_1': ('0000', '0000', 0), '2w_2': ('0000', '0001', 1),
+            '2w_3': ('0001', '0000', 0), '2w_4': ('0001', '0001', 1),
+            **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 8)},
+        }
+        PINOUT_MAP = {'4wire-x': 'matrix', '4wire': 'panel'}
+        owner_port_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
+        for port in config.port_assignments.filter(port_type__in=['2W', '4W']).order_by('port_gid'):
+            gid_key = port.port_gid
+            if gid_key not in PORT_GID_MAP:
+                continue
+            grp, slot, hw_index = PORT_GID_MAP[gid_key]
+            doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
+            if port.port_type == '2W':
+                port_data = {
+                    'hwIndex': hw_index, 'label': port.port_label, 'type': '2W',
+                    'settings': {
+                        'termination': port.termination_enabled,
+                        'inputGain': 0, 'outputGain': 0,
+                        'joinMode': port.join_mode, 'callSignal': True,
+                    },
+                    'id': hw_index, 'desc': port.port_label,
+                }
+            else:
+                port_data = {
+                    'hwIndex': hw_index, 'label': port.port_label, 'type': '4W',
+                    'settings': {
+                        'inputGain': 0, 'outputGain': 0,
+                        'joinMode': port.join_mode,
+                        'callSignal': port.receive_call_signal,
+                        'pinout': PINOUT_MAP.get(port.port_function, 'panel'),
+                        'serial': {'state': 'disabled', 'baudRate': 19200,
+                            'data': 8, 'parity': 0, 'stop': 1,
+                            'flowControl': 'none', 'framingType': 'Eclipse/4000'},
+                    },
+                    'id': hw_index, 'desc': port.port_label,
+                }
+            write_doc({'_id': doc_id, '_rev': make_rev(),
+                'data': port_data, 'owner': owner_port_id, 'type': port.port_type})
+        # SA port (group 0002 slot 0007)
+        write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0007', '_rev': make_rev(),
+            'data': {'portId': 7, 'hwIndex': 7, 'label': 'SA', 'desc': 'SA', 'type': 'SA',
+                'settings': {'outputGain': 0, 'pinout': 'panel',
+                    'splitLabel': {'otherPortId': 8, 'direction': 'output'}, 'joinMode': 'Listen'},
+                'id': 7},
+            'owner': owner_port_id, 'type': 'SA'})
+        # PGM port (group 0002 slot 0008)
+        write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0008', '_rev': make_rev(),
+            'data': {'portId': 8, 'hwIndex': 7, 'label': 'PGM', 'desc': 'PGM', 'type': 'PGM',
+                'settings': {'inputGain': 0, 'pinout': 'panel',
+                    'splitLabel': {'otherPortId': 7, 'direction': 'input'}, 'joinMode': 'Talk'},
+                'id': 8},
+            'owner': owner_port_id, 'type': 'PGM'})
+        # ── partyline.port assignment docs (4.44) — link ports to channels ──
+        import uuid as _uuid
+        for port in config.port_assignments.filter(
+                port_type__in=['2W', '4W'], partyline__isnull=False).order_by('port_gid'):
+            gid_key = port.port_gid
+            if gid_key not in PORT_GID_MAP:
+                continue
+            grp, slot, hw_index = PORT_GID_MAP[gid_key]
+            port_doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
+            pl_slot = port.partyline.channel_number - 1
+            pl_doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl_slot:04x}'
+            assign_id = f'4.44.{FACTORY_SYS_ID}.{_uuid.uuid4().hex[:4]}.{_uuid.uuid4().hex[:4]}'
+            write_doc({'_id': assign_id, '_rev': make_rev(),
+                'owner': port_doc_id, 'type': 'partyline.port',
+                'data': {'destination': pl_doc_id, 'joinMode': port.join_mode,
+                    'type': 'partyline.port', 'id': port.partyline.channel_number}})
         # ── Keep S.NEP session from factory (skip A.CCM to preserve unit's credentials) ──
         for doc_id in [f'3.99.{FACTORY_SYS_ID}.0003.0000']:
             if doc_id in existing_docs:
                 write_doc(existing_docs[doc_id])
 
-        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(next_seq[0] - 1).encode())
-        db.close()
+        # Write meta-store last_update_seq
+        _ms_key = SEP + b'meta-store' + SEP + b'_local_last_update_seq'
+        _ms_val = str(next_seq[0] - 1).encode()
+        _ms_batch = struct.pack('<QI', next_seq[0], 1) + _enc(_ms_key, _ms_val)
+        _write_record(_ms_batch)
+        # Write pouchdb directory with single log file (CCM format: MANIFEST-000002)
+        db_path = os.path.join(tmp_dir, 'pouchdb')
+        os.makedirs(db_path, exist_ok=True)
+        with open(os.path.join(db_path, '000003.log'), 'wb') as _f:
+            _f.write(bytes(_log_data))
+        with open(os.path.join(db_path, 'MANIFEST-000002'), 'wb') as _f:
+            _f.write(bytes.fromhex('56f9b8f81c0001011a6c6576656c64622e4279746577697365436f6d70617261746f72a49c8bbe0800010203090003040400'))
+        with open(os.path.join(db_path, 'CURRENT'), 'wb') as _f:
+            _f.write(b'MANIFEST-000002\n')
+        with open(os.path.join(db_path, 'LOCK'), 'wb') as _f:
+            _f.write(b'')
+        with open(os.path.join(db_path, 'LOG'), 'wb') as _f:
+            _f.write(b'')
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
