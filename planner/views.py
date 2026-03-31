@@ -4119,6 +4119,12 @@ def comm_config_export(request, config_id):
                         existing_docs[doc['_id']] = doc
                 except:
                     pass
+        # Delete A.CCM admin session — contains credentials that overwrite unit password
+        ACCM_KEY = SEP + b'document-store' + SEP + f'3.99.{FACTORY_SYS_ID}.0000.0000'.encode()
+        try:
+            db.delete(ACCM_KEY)
+        except:
+            pass
 
         next_seq = [max_seq + 1]
 
