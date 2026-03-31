@@ -4121,25 +4121,6 @@ def comm_config_export(request, config_id):
         existing_docs.pop(f'3.99.{FACTORY_SYS_ID}.0000.0000', None)
         existing_docs.pop('admin/author.0.data.fixedGroup', None)
         next_seq = [max_seq + 1]
-        # Write ALL factory docs into our log first (device identity, licenses, etc.)
-        # Our write_doc calls below will overlay/update the ones we care about
-        _factory_written = set()
-        for _fid, _fdoc in existing_docs.items():
-            _frev = _fdoc.get('_rev', f'1-{uuid.uuid4().hex}')
-            _frev_hash = _frev.split('-')[1] if '-' in _frev else _frev
-            _fseq = next_seq[0]; next_seq[0] += 1
-            _fsk = SEP + b'by-sequence' + SEP + f'{_fseq:016d}'.encode()
-            _fsv = json.dumps(_fdoc, separators=(',', ':')).encode()
-            _fdk = SEP + b'document-store' + SEP + _fid.encode()
-            _fdv = json.dumps({
-                'id': _fid, 'rev': _frev,
-                'revisions': {'start': 1, 'ids': [_frev_hash]},
-                'rev_tree': [{'pos': 1, 'ids': [_frev_hash, {'status': 'available'}, []]}],
-                'rev_map': {_frev: _fseq}, 'winningRev': _frev, 'deleted': False, 'seq': _fseq,
-            }, separators=(',', ':')).encode()
-            _write_record(struct.pack('<QI', _fseq, 1) + _enc(_fsk, _fsv))
-            _write_record(struct.pack('<QI', _fseq, 1) + _enc(_fdk, _fdv))
-            _factory_written.add(_fid)
         _crc32c = crcmod.predefined.mkCrcFun('crc-32c')
         BLOCK_SIZE = 32768
         HEADER_SIZE = 7
@@ -4192,6 +4173,26 @@ def comm_config_export(request, config_id):
             }, separators=(',', ':')).encode()
             _write_record(struct.pack('<QI', seq, 1) + _enc(seq_key, seq_val))
             _write_record(struct.pack('<QI', seq, 1) + _enc(ds_key, ds_val))
+
+        # Write ALL factory docs into our log first (device identity, licenses, etc.)
+        # Our write_doc calls below will overlay/update the ones we care about
+        _factory_written = set()
+        for _fid, _fdoc in existing_docs.items():
+            _frev = _fdoc.get('_rev', f'1-{uuid.uuid4().hex}')
+            _frev_hash = _frev.split('-')[1] if '-' in _frev else _frev
+            _fseq = next_seq[0]; next_seq[0] += 1
+            _fsk = SEP + b'by-sequence' + SEP + f'{_fseq:016d}'.encode()
+            _fsv = json.dumps(_fdoc, separators=(',', ':')).encode()
+            _fdk = SEP + b'document-store' + SEP + _fid.encode()
+            _fdv = json.dumps({
+                'id': _fid, 'rev': _frev,
+                'revisions': {'start': 1, 'ids': [_frev_hash]},
+                'rev_tree': [{'pos': 1, 'ids': [_frev_hash, {'status': 'available'}, []]}],
+                'rev_map': {_frev: _fseq}, 'winningRev': _frev, 'deleted': False, 'seq': _fseq,
+            }, separators=(',', ':')).encode()
+            _write_record(struct.pack('<QI', _fseq, 1) + _enc(_fsk, _fsv))
+            _write_record(struct.pack('<QI', _fseq, 1) + _enc(_fdk, _fdv))
+            _factory_written.add(_fid)
 
         owner_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
 
