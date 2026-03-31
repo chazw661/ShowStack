@@ -4099,8 +4099,14 @@ def comm_config_export(request, config_id):
         if not os.path.exists(factory_db_path):
             return HttpResponse(f'Factory pouchdb not found at {factory_db_path}', status=500)
         shutil.copytree(factory_db_path, db_path)
-        # Note: .ldb files are kept — they contain device identity docs the Arcadia needs
-        # Credentials are deleted via plyvel after DB open (see below)
+        # Zero out .ldb files — they contain credentials (fixedGroup) in an
+        # LevelDB SSTable format we cannot surgically edit. Zeroing forces plyvel
+        # to rebuild from the .log file which has our clean exported docs.
+        for _ldb_f in os.listdir(db_path):
+            if _ldb_f.endswith('.ldb'):
+                _ldb_full = os.path.join(db_path, _ldb_f)
+                with open(_ldb_full, 'wb') as _f:
+                    _f.write(b'\x00' * os.path.getsize(_ldb_full))
 
         db = plyvel.DB(db_path, create_if_missing=False)
 
