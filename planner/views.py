@@ -4155,6 +4155,106 @@ def comm_config_export(request, config_id):
                 }
             write_doc(doc)
 
+        # ── Write 3.06 port docs ──
+        PORT_GID_MAP = {
+            '2w_1': ('0000.0000', '2W',  0, '0000.0000', 0),
+            '2w_2': ('0000.0001', '2W',  1, '0000.0000', 1),
+            '2w_3': ('0001.0000', '2W',  0, '0001.0000', 0),
+            '2w_4': ('0001.0001', '2W',  1, '0001.0000', 1),
+            '4w_1': ('0002.0000', '4W',  0, '0002.0000', 0),
+            '4w_2': ('0002.0001', '4W',  1, '0002.0000', 1),
+            '4w_3': ('0002.0002', '4W',  2, '0002.0000', 2),
+            '4w_4': ('0002.0003', '4W',  3, '0002.0000', 3),
+            '4w_5': ('0002.0004', '4W',  4, '0002.0000', 4),
+            '4w_6': ('0002.0005', '4W',  5, '0002.0000', 5),
+            '4w_7': ('0002.0006', '4W',  6, '0002.0000', 6),
+            'sa':   ('0002.0007', 'SA',  7, '0002.0000', 7),
+            'pgm':  ('0002.0008', 'PGM', 7, '0002.0000', 8),
+        }
+
+        import random as _random, string as _string
+        def make_4char():
+            return ''.join(_random.choices(_string.ascii_letters + _string.digits, k=4))
+
+        port_assignments = list(config.port_assignments.select_related('partyline').all())
+        written_port_gids = set()
+
+        for pa in port_assignments:
+            gid = pa.port_gid
+            if gid not in PORT_GID_MAP or gid in written_port_gids:
+                continue
+            written_port_gids.add(gid)
+            doc_suffix, ptype, hw_index, owner_suffix, slot_int = PORT_GID_MAP[gid]
+            doc_id = f'3.06.{FACTORY_SYS_ID}.{doc_suffix}'
+            owner  = f'2.05.{FACTORY_SYS_ID}.{owner_suffix}'
+            label  = pa.port_label or f'{ptype} Port {slot_int + 1}'
+            if ptype == '2W':
+                data = {
+                    'hwIndex': hw_index, 'label': label, 'type': '2W',
+                    'settings': {
+                        'termination': pa.termination_enabled,
+                        'inputGain': 0, 'outputGain': 0,
+                        'joinMode': pa.join_mode, 'callSignal': True,
+                    },
+                    'id': hw_index, 'desc': label,
+                }
+            elif ptype == '4W':
+                data = {
+                    'hwIndex': hw_index, 'label': label, 'type': '4W',
+                    'settings': {
+                        'inputGain': 0, 'outputGain': 0,
+                        'joinMode': pa.join_mode, 'callSignal': True,
+                        'pinout': 'panel',
+                        'serial': {
+                            'state': 'disabled', 'baudRate': 19200,
+                            'data': 8, 'parity': 0, 'stop': 1,
+                            'flowControl': 'none', 'framingType': 'Eclipse/4000',
+                        },
+                    },
+                    'id': hw_index, 'desc': label,
+                }
+            elif ptype == 'SA':
+                data = {
+                    'portId': 7, 'hwIndex': 7, 'label': label, 'desc': label, 'type': 'SA',
+                    'settings': {
+                        'outputGain': 0, 'pinout': 'panel',
+                        'splitLabel': {'otherPortId': 8, 'direction': 'output'},
+                        'joinMode': 'Listen',
+                    },
+                    'id': 7,
+                }
+            elif ptype == 'PGM':
+                data = {
+                    'portId': 8, 'hwIndex': 7, 'label': label, 'desc': label, 'type': 'PGM',
+                    'settings': {
+                        'inputGain': 0, 'pinout': 'panel',
+                        'splitLabel': {'otherPortId': 7, 'direction': 'input'},
+                        'joinMode': 'Talk',
+                    },
+                    'id': 8,
+                }
+            else:
+                continue
+            write_doc({'_id': doc_id, '_rev': make_rev(), 'owner': owner, 'type': ptype, 'data': data})
+
+        # ── Write 4.44 partyline.port assignment docs ──
+        for pa in port_assignments:
+            gid = pa.port_gid
+            if gid not in PORT_GID_MAP or not pa.partyline:
+                continue
+            write_doc({
+                '_id': f'4.44.{FACTORY_SYS_ID}.{make_4char()}.{make_4char()}',
+                '_rev': make_rev(),
+                'owner': f'3.06.{FACTORY_SYS_ID}.{PORT_GID_MAP[gid][0]}',
+                'type': 'partyline.port',
+                'data': {
+                    'destination': f'3.20.{FACTORY_SYS_ID}.0000.{pa.partyline.channel_number:04x}',
+                    'joinMode': pa.join_mode,
+                    'type': 'partyline.port',
+                    'id': pa.partyline.channel_number,
+                },
+            })
+
         # ── Write roles, rolesets, sessions (one of each per role) ──
         # Factory has roleset 1 and roles 1-13. Ours start at slot 2 for rolesets, 0x000e for roles.
         ROLE_SLOT_START = 0x000e
