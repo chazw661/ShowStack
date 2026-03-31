@@ -4326,79 +4326,79 @@ def comm_config_export(request, config_id):
                 'type': session_type,
             })
 
-        # ── Export port settings (2W and 4W) ──
-        # port_gid maps to 3.06.SYSID.GROUP.SLOT:
-        # 2w_1→0000.0000, 2w_2→0000.0001, 2w_3→0001.0000, 2w_4→0001.0001
-        # ── Export port settings (2W, 4W, SA, PGM) — built from scratch ──
-        PORT_GID_MAP = {
-            '2w_1': ('0000', '0000', 0), '2w_2': ('0000', '0001', 1),
-            '2w_3': ('0001', '0000', 0), '2w_4': ('0001', '0001', 1),
-            **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 8)},
-        }
-        PINOUT_MAP = {'4wire-x': 'matrix', '4wire': 'panel'}
-        owner_port_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
-        for port in config.port_assignments.filter(port_type__in=['2W', '4W']).order_by('port_gid'):
-            gid_key = port.port_gid
-            if gid_key not in PORT_GID_MAP:
-                continue
-            grp, slot, hw_index = PORT_GID_MAP[gid_key]
-            doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
-            if port.port_type == '2W':
-                port_data = {
-                    'hwIndex': hw_index, 'label': port.port_label, 'type': '2W',
-                    'settings': {
-                        'termination': port.termination_enabled,
-                        'inputGain': 0, 'outputGain': 0,
-                        'joinMode': port.join_mode, 'callSignal': True,
-                    },
-                    'id': hw_index, 'desc': port.port_label,
-                }
-            else:
-                port_data = {
-                    'hwIndex': hw_index, 'label': port.port_label, 'type': '4W',
-                    'settings': {
-                        'inputGain': 0, 'outputGain': 0,
-                        'joinMode': port.join_mode,
-                        'callSignal': port.receive_call_signal,
-                        'pinout': PINOUT_MAP.get(port.port_function, 'panel'),
-                        'serial': {'state': 'disabled', 'baudRate': 19200,
-                            'data': 8, 'parity': 0, 'stop': 1,
-                            'flowControl': 'none', 'framingType': 'Eclipse/4000'},
-                    },
-                    'id': hw_index, 'desc': port.port_label,
-                }
-            write_doc({'_id': doc_id, '_rev': make_rev(),
-                'data': port_data, 'owner': owner_port_id, 'type': port.port_type})
-        # SA port (group 0002 slot 0007)
-        write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0007', '_rev': make_rev(),
-            'data': {'portId': 7, 'hwIndex': 7, 'label': 'SA', 'desc': 'SA', 'type': 'SA',
-                'settings': {'outputGain': 0, 'pinout': 'panel',
-                    'splitLabel': {'otherPortId': 8, 'direction': 'output'}, 'joinMode': 'Listen'},
-                'id': 7},
-            'owner': owner_port_id, 'type': 'SA'})
-        # PGM port (group 0002 slot 0008)
-        write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0008', '_rev': make_rev(),
-            'data': {'portId': 8, 'hwIndex': 7, 'label': 'PGM', 'desc': 'PGM', 'type': 'PGM',
-                'settings': {'inputGain': 0, 'pinout': 'panel',
-                    'splitLabel': {'otherPortId': 7, 'direction': 'input'}, 'joinMode': 'Talk'},
-                'id': 8},
-            'owner': owner_port_id, 'type': 'PGM'})
-        # ── partyline.port assignment docs (4.44) — link ports to channels ──
-        import uuid as _uuid
-        for port in config.port_assignments.filter(
-                port_type__in=['2W', '4W'], partyline__isnull=False).order_by('port_gid'):
-            gid_key = port.port_gid
-            if gid_key not in PORT_GID_MAP:
-                continue
-            grp, slot, hw_index = PORT_GID_MAP[gid_key]
-            port_doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
-            pl_slot = port.partyline.channel_number - 1
-            pl_doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl_slot:04x}'
-            assign_id = f'4.44.{FACTORY_SYS_ID}.{_uuid.uuid4().hex[:4]}.{_uuid.uuid4().hex[:4]}'
-            write_doc({'_id': assign_id, '_rev': make_rev(),
-                'owner': port_doc_id, 'type': 'partyline.port',
-                'data': {'destination': pl_doc_id, 'joinMode': port.join_mode,
-                    'type': 'partyline.port', 'id': port.partyline.channel_number}})
+        # DISABLED: # ── Export port settings (2W and 4W) ──
+        # DISABLED: # port_gid maps to 3.06.SYSID.GROUP.SLOT:
+        # DISABLED: # 2w_1→0000.0000, 2w_2→0000.0001, 2w_3→0001.0000, 2w_4→0001.0001
+        # DISABLED: # ── Export port settings (2W, 4W, SA, PGM) — built from scratch ──
+        # DISABLED: PORT_GID_MAP = {
+        # DISABLED: '2w_1': ('0000', '0000', 0), '2w_2': ('0000', '0001', 1),
+        # DISABLED: '2w_3': ('0001', '0000', 0), '2w_4': ('0001', '0001', 1),
+        # DISABLED: **{f'4w_{i}': ('0002', f'{i-1:04x}', i-1) for i in range(1, 8)},
+        # DISABLED: }
+        # DISABLED: PINOUT_MAP = {'4wire-x': 'matrix', '4wire': 'panel'}
+        # DISABLED: owner_port_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
+        # DISABLED: for port in config.port_assignments.filter(port_type__in=['2W', '4W']).order_by('port_gid'):
+        # DISABLED: gid_key = port.port_gid
+        # DISABLED: if gid_key not in PORT_GID_MAP:
+        # DISABLED: continue
+        # DISABLED: grp, slot, hw_index = PORT_GID_MAP[gid_key]
+        # DISABLED: doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
+        # DISABLED: if port.port_type == '2W':
+        # DISABLED: port_data = {
+        # DISABLED: 'hwIndex': hw_index, 'label': port.port_label, 'type': '2W',
+        # DISABLED: 'settings': {
+        # DISABLED: 'termination': port.termination_enabled,
+        # DISABLED: 'inputGain': 0, 'outputGain': 0,
+        # DISABLED: 'joinMode': port.join_mode, 'callSignal': True,
+        # DISABLED: },
+        # DISABLED: 'id': hw_index, 'desc': port.port_label,
+        # DISABLED: }
+        # DISABLED: else:
+        # DISABLED: port_data = {
+        # DISABLED: 'hwIndex': hw_index, 'label': port.port_label, 'type': '4W',
+        # DISABLED: 'settings': {
+        # DISABLED: 'inputGain': 0, 'outputGain': 0,
+        # DISABLED: 'joinMode': port.join_mode,
+        # DISABLED: 'callSignal': port.receive_call_signal,
+        # DISABLED: 'pinout': PINOUT_MAP.get(port.port_function, 'panel'),
+        # DISABLED: 'serial': {'state': 'disabled', 'baudRate': 19200,
+        # DISABLED: 'data': 8, 'parity': 0, 'stop': 1,
+        # DISABLED: 'flowControl': 'none', 'framingType': 'Eclipse/4000'},
+        # DISABLED: },
+        # DISABLED: 'id': hw_index, 'desc': port.port_label,
+        # DISABLED: }
+        # DISABLED: write_doc({'_id': doc_id, '_rev': make_rev(),
+        # DISABLED: 'data': port_data, 'owner': owner_port_id, 'type': port.port_type})
+        # DISABLED: # SA port (group 0002 slot 0007)
+        # DISABLED: write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0007', '_rev': make_rev(),
+        # DISABLED: 'data': {'portId': 7, 'hwIndex': 7, 'label': 'SA', 'desc': 'SA', 'type': 'SA',
+        # DISABLED: 'settings': {'outputGain': 0, 'pinout': 'panel',
+        # DISABLED: 'splitLabel': {'otherPortId': 8, 'direction': 'output'}, 'joinMode': 'Listen'},
+        # DISABLED: 'id': 7},
+        # DISABLED: 'owner': owner_port_id, 'type': 'SA'})
+        # DISABLED: # PGM port (group 0002 slot 0008)
+        # DISABLED: write_doc({'_id': f'3.06.{FACTORY_SYS_ID}.0002.0008', '_rev': make_rev(),
+        # DISABLED: 'data': {'portId': 8, 'hwIndex': 7, 'label': 'PGM', 'desc': 'PGM', 'type': 'PGM',
+        # DISABLED: 'settings': {'inputGain': 0, 'pinout': 'panel',
+        # DISABLED: 'splitLabel': {'otherPortId': 7, 'direction': 'input'}, 'joinMode': 'Talk'},
+        # DISABLED: 'id': 8},
+        # DISABLED: 'owner': owner_port_id, 'type': 'PGM'})
+        # DISABLED: # ── partyline.port assignment docs (4.44) — link ports to channels ──
+        # DISABLED: import uuid as _uuid
+        # DISABLED: for port in config.port_assignments.filter(
+        # DISABLED: port_type__in=['2W', '4W'], partyline__isnull=False).order_by('port_gid'):
+        # DISABLED: gid_key = port.port_gid
+        # DISABLED: if gid_key not in PORT_GID_MAP:
+        # DISABLED: continue
+        # DISABLED: grp, slot, hw_index = PORT_GID_MAP[gid_key]
+        # DISABLED: port_doc_id = f'3.06.{FACTORY_SYS_ID}.{grp}.{slot}'
+        # DISABLED: pl_slot = port.partyline.channel_number - 1
+        # DISABLED: pl_doc_id = f'3.20.{FACTORY_SYS_ID}.0000.{pl_slot:04x}'
+        # DISABLED: assign_id = f'4.44.{FACTORY_SYS_ID}.{_uuid.uuid4().hex[:4]}.{_uuid.uuid4().hex[:4]}'
+        # DISABLED: write_doc({'_id': assign_id, '_rev': make_rev(),
+        # DISABLED: 'owner': port_doc_id, 'type': 'partyline.port',
+        # DISABLED: 'data': {'destination': pl_doc_id, 'joinMode': port.join_mode,
+        # DISABLED: 'type': 'partyline.port', 'id': port.partyline.channel_number}})
         # ── Keep S.NEP session from factory (skip A.CCM to preserve unit's credentials) ──
         for doc_id in [f'3.99.{FACTORY_SYS_ID}.0003.0000']:
             if doc_id in existing_docs:
