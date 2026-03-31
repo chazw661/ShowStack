@@ -4100,19 +4100,20 @@ def comm_config_export(request, config_id):
         _text = _raw.decode('utf-8', errors='replace')
         existing_docs = {}
         max_seq = 0
-        for _m in _re.finditer(r'\{"_id"\s*:\s*"([^"]+)"', _text):
-            _si = _m.start()
+        # Parse by-sequence docs — use \x01{ as delimiter since _id may be last key
+        for _m in _re.finditer(b'\x01{', _raw):
+            _si = _m.start() + 1
             _depth = 0
-            for _j in range(_si, min(_si+5000, len(_text))):
-                if _text[_j] == '{': _depth += 1
-                elif _text[_j] == '}':
+            for _j in range(_si, min(_si+10000, len(_raw))):
+                if _raw[_j:_j+1] == b'{': _depth += 1
+                elif _raw[_j:_j+1] == b'}':
                     _depth -= 1
                     if _depth == 0:
                         try:
-                            _doc = json.loads(_text[_si:_j+1])
-                            if '_id' in _doc:
+                            _doc = json.loads(_raw[_si:_j+1].decode('utf-8', errors='replace'))
+                            if '_id' in _doc and _doc['_id'] not in existing_docs:
                                 existing_docs[_doc['_id']] = _doc
-                                _sm = _re.search(r'0000000000000(\d+)', _text[max(0,_si-200):_si])
+                                _sm = _re.search(rb'0000000000000(\d+)', _raw[max(0,_si-50):_si])
                                 if _sm:
                                     max_seq = max(max_seq, int(_sm.group(1)))
                         except: pass
