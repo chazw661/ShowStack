@@ -4328,11 +4328,34 @@ def comm_config_export(request, config_id):
                     db.delete(_k)
         except: pass
         db.close()
-        # Remove ldb files after close — they contain fixedGroup/passwordHash
-        # which resets the unit password on import.
+        # Remove ldb files and replace MANIFEST after close
+        # ldb contains fixedGroup/passwordHash which resets unit password
+        # Replace MANIFEST-000004 with clean MANIFEST-000002 (log-only format)
         for _ldb_f in os.listdir(db_path):
             if _ldb_f.endswith('.ldb'):
                 os.remove(os.path.join(db_path, _ldb_f))
+        # Rewrite MANIFEST and CURRENT to match single-log format
+        _clean_manifest = bytes.fromhex('56f9b8f81c0001011a6c6576656c64622e4279746577697365436f6d70617261746f72a49c8bbe0800010203090003040400')
+        with open(os.path.join(db_path, 'MANIFEST-000002'), 'wb') as _f:
+            _f.write(_clean_manifest)
+        # Remove old MANIFEST-000004 if it exists
+        _old_manifest = os.path.join(db_path, 'MANIFEST-000004')
+        if os.path.exists(_old_manifest):
+            os.remove(_old_manifest)
+        with open(os.path.join(db_path, 'CURRENT'), 'w') as _f:
+            _f.write('MANIFEST-000002\n')
+        # Rename log file to 000003.log (MANIFEST-000002 format)
+        _old_log = os.path.join(db_path, '000006.log')
+        _new_log = os.path.join(db_path, '000003.log')
+        if os.path.exists(_old_log):
+            os.rename(_old_log, _new_log)
+        # Remove LOG.old and other plyvel artifacts
+        for _extra in ['LOG.old', 'LOG']:
+            _ep = os.path.join(db_path, _extra)
+            if os.path.exists(_ep):
+                os.remove(_ep)
+        with open(os.path.join(db_path, 'LOG'), 'wb') as _f:
+            _f.write(b'')
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
