@@ -4157,19 +4157,19 @@ def comm_config_export(request, config_id):
 
         # ── Write 3.06 port docs ──
         PORT_GID_MAP = {
-            '2w_1': ('0000.0000', '2W',  0, '0000.0000', 0),
-            '2w_2': ('0000.0001', '2W',  1, '0000.0000', 1),
-            '2w_3': ('0001.0000', '2W',  0, '0001.0000', 0),
-            '2w_4': ('0001.0001', '2W',  1, '0001.0000', 1),
-            '4w_1': ('0002.0000', '4W',  0, '0002.0000', 0),
-            '4w_2': ('0002.0001', '4W',  1, '0002.0000', 1),
-            '4w_3': ('0002.0002', '4W',  2, '0002.0000', 2),
-            '4w_4': ('0002.0003', '4W',  3, '0002.0000', 3),
-            '4w_5': ('0002.0004', '4W',  4, '0002.0000', 4),
-            '4w_6': ('0002.0005', '4W',  5, '0002.0000', 5),
-            '4w_7': ('0002.0006', '4W',  6, '0002.0000', 6),
-            'sa':   ('0002.0007', 'SA',  7, '0002.0000', 7),
-            'pgm':  ('0002.0008', 'PGM', 7, '0002.0000', 8),
+            '2w_1': ('0000.0000', '2W',  0, '0000.0000', 0, 135208704),
+            '2w_2': ('0000.0001', '2W',  1, '0000.0000', 1, 135208705),
+            '2w_3': ('0001.0000', '2W',  0, '0001.0000', 0, 135208706),
+            '2w_4': ('0001.0001', '2W',  1, '0001.0000', 1, 135208707),
+            '4w_1': ('0002.0000', '4W',  0, '0002.0000', 0, 135208708),
+            '4w_2': ('0002.0001', '4W',  1, '0002.0000', 1, 135208709),
+            '4w_3': ('0002.0002', '4W',  2, '0002.0000', 2, 135208710),
+            '4w_4': ('0002.0003', '4W',  3, '0002.0000', 3, 135208711),
+            '4w_5': ('0002.0004', '4W',  4, '0002.0000', 4, 135208712),
+            '4w_6': ('0002.0005', '4W',  5, '0002.0000', 5, 135208713),
+            '4w_7': ('0002.0006', '4W',  6, '0002.0000', 6, 135208714),
+            'sa':   ('0002.0007', 'SA',  7, '0002.0000', 7, 135208715),
+            'pgm':  ('0002.0008', 'PGM', 7, '0002.0000', 8, 135208716),
         }
 
         import random as _random, string as _string
@@ -4184,7 +4184,7 @@ def comm_config_export(request, config_id):
             if gid not in PORT_GID_MAP or gid in written_port_gids:
                 continue
             written_port_gids.add(gid)
-            doc_suffix, ptype, hw_index, owner_suffix, slot_int = PORT_GID_MAP[gid]
+            doc_suffix, ptype, hw_index, owner_suffix, slot_int, user_id = PORT_GID_MAP[gid]
             doc_id = f'3.06.{FACTORY_SYS_ID}.{doc_suffix}'
             owner  = f'2.05.{FACTORY_SYS_ID}.{owner_suffix}'
             label  = pa.port_label or f'{ptype} Port {slot_int + 1}'
@@ -4196,7 +4196,7 @@ def comm_config_export(request, config_id):
                         'inputGain': 0, 'outputGain': 0,
                         'joinMode': pa.join_mode, 'callSignal': True,
                     },
-                    'id': hw_index, 'desc': label,
+                    'id': hw_index, 'desc': label, 'userId': user_id,
                 }
             elif ptype == '4W':
                 data = {
@@ -4211,7 +4211,7 @@ def comm_config_export(request, config_id):
                             'flowControl': 'none', 'framingType': 'Eclipse/4000',
                         },
                     },
-                    'id': hw_index, 'desc': label,
+                    'id': hw_index, 'desc': label, 'userId': user_id,
                 }
             elif ptype == 'SA':
                 data = {
@@ -4221,7 +4221,7 @@ def comm_config_export(request, config_id):
                         'splitLabel': {'otherPortId': 8, 'direction': 'output'},
                         'joinMode': 'Listen',
                     },
-                    'id': 7,
+                    'id': 7, 'userId': user_id,
                 }
             elif ptype == 'PGM':
                 data = {
@@ -4231,7 +4231,7 @@ def comm_config_export(request, config_id):
                         'splitLabel': {'otherPortId': 7, 'direction': 'input'},
                         'joinMode': 'Talk',
                     },
-                    'id': 8,
+                    'id': 8, 'userId': user_id,
                 }
             else:
                 continue
