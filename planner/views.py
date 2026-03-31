@@ -4335,7 +4335,7 @@ def comm_config_export(request, config_id):
             with open(_ldb_path, "rb") as _f:
                 _ldb = _f.read()
             _factory_hash = b"8d90a8dcfd7605877229f8d6cba55ed55070167b"
-            _correct_hash = b"c1cf642814e885d689db77f1ec0c5324318e4a35"
+            _correct_hash = b"037ee3346d037c4054be32e888f5330a8ba777f7"  # hash for 04312B48
             if _factory_hash in _ldb:
                 _ldb = _ldb.replace(_factory_hash, _correct_hash)
                 with open(_ldb_path, "wb") as _f:
