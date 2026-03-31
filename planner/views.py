@@ -4328,7 +4328,18 @@ def comm_config_export(request, config_id):
                     db.delete(_k)
         except: pass
         db.close()
-        # NOTE: password reset on import is a known limitation
+        # Patch ldb to replace factory hash with correct default password hash
+        # Factory pouchdb has wrong hash; correct is SHA1 of Arcadia default password
+        import glob as _glob
+        for _ldb_path in _glob.glob(os.path.join(db_path, "*.ldb")):
+            with open(_ldb_path, "rb") as _f:
+                _ldb = _f.read()
+            _factory_hash = b"8d90a8dcfd7605877229f8d6cba55ed55070167b"
+            _correct_hash = b"c1cf642814e885d689db77f1ec0c5324318e4a35"
+            if _factory_hash in _ldb:
+                _ldb = _ldb.replace(_factory_hash, _correct_hash)
+                with open(_ldb_path, "wb") as _f:
+                    _f.write(_ldb)
         # The ldb contains fixedGroup/passwordHash from factory pouchdb
         # Future work: find a way to strip credentials without breaking LevelDB format
 
