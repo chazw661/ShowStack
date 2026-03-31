@@ -4348,8 +4348,23 @@ def comm_config_export(request, config_id):
             if doc_id in existing_docs:
                 write_doc(existing_docs[doc_id])
 
-        db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(next_seq[0] - 1).encode())
-        db.close()
+        # Write meta-store last_update_seq
+        _ms_key = SEP + b'meta-store' + SEP + b'_local_last_update_seq'
+        _ms_val = str(next_seq[0] - 1).encode()
+        _write_record(struct.pack('<QI', next_seq[0], 1) + _enc(_ms_key, _ms_val))
+        # Write pouchdb directory with single log file (CCM format: MANIFEST-000002)
+        db_path = os.path.join(tmp_dir, 'pouchdb')
+        os.makedirs(db_path, exist_ok=True)
+        with open(os.path.join(db_path, '000003.log'), 'wb') as _f:
+            _f.write(bytes(_log_data))
+        with open(os.path.join(db_path, 'MANIFEST-000002'), 'wb') as _f:
+            _f.write(bytes.fromhex('56f9b8f81c0001011a6c6576656c64622e4279746577697365436f6d70617261746f72a49c8bbe0800010203090003040400'))
+        with open(os.path.join(db_path, 'CURRENT'), 'wb') as _f:
+            _f.write(b'MANIFEST-000002\n')
+        with open(os.path.join(db_path, 'LOCK'), 'wb') as _f:
+            _f.write(b'')
+        with open(os.path.join(db_path, 'LOG'), 'wb') as _f:
+            _f.write(b'')
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
