@@ -4174,10 +4174,12 @@ def comm_config_export(request, config_id):
             _write_record(struct.pack('<QI', seq, 1) + _enc(seq_key, seq_val))
             _write_record(struct.pack('<QI', seq, 1) + _enc(ds_key, ds_val))
 
-        # Write ALL factory docs into our log first (device identity, licenses, etc.)
-        # Our write_doc calls below will overlay/update the ones we care about
+        # Write factory docs — skip hardware-specific docs (wrong physical unit)
+        # Only include docs with lKcw3zUU sys_id or wildcard (!) IDs
         _factory_written = set()
         for _fid, _fdoc in existing_docs.items():
+            if not (_fid.endswith('!') or 'lKcw3zUU' in _fid or _fid.startswith('_local') or _fid.startswith('admin')):
+                continue
             _frev = _fdoc.get('_rev', f'1-{uuid.uuid4().hex}')
             _frev_hash = _frev.split('-')[1] if '-' in _frev else _frev
             _fseq = next_seq[0]; next_seq[0] += 1
