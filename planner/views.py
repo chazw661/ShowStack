@@ -4313,18 +4313,21 @@ def comm_config_export(request, config_id):
                 write_doc(existing_docs[doc_id])
 
         db.put(SEP + b'meta-store' + SEP + b'_local_last_update_seq', str(next_seq[0] - 1).encode())
+        # Delete fixedGroup before closing — prevents password reset on import
+        # Arcadia uses this doc to set password; if absent it keeps existing password
+        try:
+            for _fg_key in [
+                SEP + b'document-store' + SEP + b'admin/author.0.data.fixedGroup',
+                SEP + b'by-sequence' + SEP + b'admin/author.0.data.fixedGroup',
+            ]:
+                try: db.delete(_fg_key)
+                except: pass
+            # Also delete via plyvel iterator to catch any key format
+            for _k, _v in db:
+                if b'fixedGroup' in _k:
+                    db.delete(_k)
+        except: pass
         db.close()
-        # Patch ldb files to remove factory password hash
-        # The hash 8d90a8...167b is the factory default password
-        import glob as _glob
-        for _ldb_path in _glob.glob(os.path.join(db_path, "*.ldb")):
-            with open(_ldb_path, "rb") as _f:
-                _ldb = _f.read()
-            _factory_hash = b"8d90a8dcfd7605877229f8d6cba55ed55070167b"
-            if _factory_hash in _ldb:
-                _ldb = _ldb.replace(_factory_hash, b"0" * len(_factory_hash))
-                with open(_ldb_path, "wb") as _f:
-                    _f.write(_ldb)
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
