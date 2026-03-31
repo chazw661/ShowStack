@@ -4328,6 +4328,11 @@ def comm_config_export(request, config_id):
                     db.delete(_k)
         except: pass
         db.close()
+        # Remove ldb files after close — they contain fixedGroup/passwordHash
+        # which resets the unit password on import.
+        for _ldb_f in os.listdir(db_path):
+            if _ldb_f.endswith('.ldb'):
+                os.remove(os.path.join(db_path, _ldb_f))
 
         with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
             f.write('NEP-ARCADIA')
