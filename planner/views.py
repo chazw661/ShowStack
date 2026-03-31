@@ -4153,6 +4153,11 @@ def comm_config_export(request, config_id):
             return bytes(buf)
         def make_rev():
             return f'1-{uuid.uuid4().hex}'
+        # Write _local_uuid meta entry (CCM always writes this first)
+        _uuid_key = SEP + b'meta-store' + SEP + b'_local_uuid'
+        _uuid_val = f'"{uuid.uuid4()}"'.encode()
+        _write_record(struct.pack('<QI', 0, 1) + _enc(_uuid_key, _uuid_val))
+
         def write_doc(doc):
             doc_id = doc['_id']
             rev = doc.get('_rev', f'1-{uuid.uuid4().hex}')
@@ -4167,8 +4172,9 @@ def comm_config_export(request, config_id):
                 'rev_tree': [{'pos': 1, 'ids': [rev_hash, {'status': 'available'}, []]}],
                 'rev_map': {rev: seq}, 'winningRev': rev, 'deleted': False, 'seq': seq,
             }, separators=(',', ':')).encode()
-            batch = struct.pack('<QI', seq, 2) + _enc(seq_key, seq_val) + _enc(ds_key, ds_val)
-            _write_record(batch)
+            # CCM writes one entry per batch (count=1) not bundled
+            _write_record(struct.pack('<QI', seq, 1) + _enc(seq_key, seq_val))
+            _write_record(struct.pack('<QI', seq, 1) + _enc(ds_key, ds_val))
         owner_id = f'0.02.{FACTORY_SYS_ID}.0000.0000'
 
         # ── Update partylines ──
