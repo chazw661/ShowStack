@@ -1327,6 +1327,7 @@ function saveLanField(lanId, field, value) {
 function activateTab(panelName) {
   document.querySelectorAll('.cc-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.cc-tab-panel').forEach(p => p.classList.remove('active'));
+  if (panelName === 'network') { setTimeout(initNetworkPorts, 50); }
   const tab = document.querySelector('[data-panel="' + panelName + '"]');
   if (tab) {
     tab.classList.add('active');
