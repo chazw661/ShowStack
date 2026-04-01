@@ -4077,11 +4077,14 @@ class CommConfigDanteChannel(models.Model):
 class CommConfigNetworkPort(models.Model):
     """One row per physical LAN port (1-4) on the Arcadia."""
     TRAFFIC_TYPE_CHOICES = [
-        ('disabled',       'Disabled'),
-        ('admin',          'Management'),
-        ('aes67',          'AES67'),
-        ('aes67Secondary', 'AES67 Secondary'),
-        ('danteprim',      'Dante Primary'),
+        ('disabled', 'Disabled'),
+        ('admin',    'Management'),
+        ('aes67',    'AES67'),
+        ('dante',    'Dante'),
+    ]
+    DANTE_REDUNDANCY_CHOICES = [
+        ('primary',   'Primary'),
+        ('secondary', 'Secondary'),
     ]
     MODE_CHOICES = [
         ('dhcp',   'DHCP (Dynamic)'),
@@ -4098,6 +4101,7 @@ class CommConfigNetworkPort(models.Model):
     dns1         = models.CharField(max_length=15, blank=True, default='')
     dns2         = models.CharField(max_length=15, blank=True, default='')
     ptp_follower_mode = models.BooleanField(default=False)
+    dante_redundancy = models.CharField(max_length=10, choices=[('primary','Primary'),('secondary','Secondary')], default='primary')
 
     class Meta:
         verbose_name = "Network Port"

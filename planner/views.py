@@ -5213,7 +5213,7 @@ def comm_config_update_lan(request):
     data = json.loads(request.body)
     from planner.models import CommConfigNetworkPort
     lan = CommConfigNetworkPort.objects.get(id=data['lan_id'])
-    allowed = {'mode', 'static_ip', 'netmask', 'gateway', 'dns1', 'dns2', 'rear_connector', 'ptp_follower_mode'}
+    allowed = {'mode', 'static_ip', 'netmask', 'gateway', 'dns1', 'dns2', 'traffic_type', 'ptp_follower_mode', 'dante_redundancy'}
     for field, value in data.items():
         if field in allowed:
             setattr(lan, field, value)

@@ -961,12 +961,11 @@
       <div class="cc-lan-body open" id="lan-body-{{ port.id }}">
         <div class="cc-lan-row">
           <label>Traffic Type</label>
-          <select onchange="saveLanField({{ port.id }}, 'traffic_type', this.value); updateBadge({{ port.id }}, this)">
+          <select id="tt-{{ port.id }}" onchange="saveLanField({{ port.id }}, 'traffic_type', this.value); updateBadge({{ port.id }}, this); toggleDanteFields({{ port.id }}, this.value)">
             <option value="disabled" {% if port.traffic_type == 'disabled' %}selected{% endif %}>Disabled</option>
             <option value="admin" {% if port.traffic_type == 'admin' %}selected{% endif %}>Management</option>
             <option value="aes67" {% if port.traffic_type == 'aes67' %}selected{% endif %}>AES67</option>
-            <option value="aes67Secondary" {% if port.traffic_type == 'aes67Secondary' %}selected{% endif %}>AES67 Secondary</option>
-            <option value="danteprim" {% if port.traffic_type == 'danteprim' %}selected{% endif %}>Dante Primary</option>
+            <option value="dante" {% if port.traffic_type == 'dante' %}selected{% endif %}>Dante</option>
           </select>
         </div>
         <div class="cc-lan-row">
@@ -1003,13 +1002,25 @@
               onblur="saveLanField({{ port.id }}, 'dns2', this.value)">
           </div>
         </div>
-        {% if port.traffic_type == 'aes67' or port.traffic_type == 'aes67Secondary' %}
-        <div class="cc-lan-row">
-          <label>PTP Follower</label>
-          <input type="checkbox" {% if port.ptp_follower_mode %}checked{% endif %}
-            onchange="saveLanField({{ port.id }}, 'ptp_follower_mode', this.checked)">
+        <div id="ptp-{{ port.id }}" {% if port.traffic_type != 'aes67' %}style="display:none"{% endif %}>
+          <div class="cc-lan-row">
+            <label>PTP Follower</label>
+            <input type="checkbox" {% if port.ptp_follower_mode %}checked{% endif %}
+              onchange="saveLanField({{ port.id }}, 'ptp_follower_mode', this.checked)">
+          </div>
         </div>
-        {% endif %}
+        <div id="dante-{{ port.id }}" {% if port.traffic_type != 'dante' %}style="display:none"{% endif %}>
+          <div class="cc-lan-row">
+            <label>Redundancy</label>
+            <div class="cc-lan-mode-toggle">
+              <button class="{% if port.dante_redundancy == 'primary' %}active{% endif %}"
+                onclick="saveLanField({{ port.id }}, 'dante_redundancy', 'primary'); this.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active')); this.classList.add('active')">Primary</button>
+              <button class="{% if port.dante_redundancy == 'secondary' %}active{% endif %}"
+                onclick="saveLanField({{ port.id }}, 'dante_redundancy', 'secondary'); this.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active')); this.classList.add('active')">Secondary</button>
+            </div>
+          </div>
+          <p style="font-size:0.75rem;color:#7a9ab0;margin:4px 0 0 140px;">Dante network config requires Audinate Dante Controller software.</p>
+        </div>
       </div>
     </div>
     {% endfor %}
@@ -1279,6 +1290,14 @@ function setLanMode(lanId, mode, btn) {
   const badge = document.getElementById('badge-' + lanId);
   if (badge) badge.textContent = mode === 'dhcp' ? 'DHCP (Dynamic)' : 'Static';
   saveLanField(lanId, 'mode', mode);
+}
+function toggleDanteFields(portId, trafficType) {
+  const staticFields = document.getElementById('static-' + portId);
+  const modeRow = staticFields ? staticFields.previousElementSibling : null;
+  const ptp = document.getElementById('ptp-' + portId);
+  const dante = document.getElementById('dante-' + portId);
+  if (dante) dante.style.display = trafficType === 'dante' ? '' : 'none';
+  if (ptp) ptp.style.display = trafficType === 'aes67' ? '' : 'none';
 }
 function updateBadge(portId, select) {
   const badge = document.getElementById('badge-' + portId);
