@@ -4156,6 +4156,14 @@ def comm_config_export(request, config_id):
             write_doc(doc)
 
         # ── Write 3.06 port docs ──
+        # Detect hardware sys_id from existing factory 3.06 docs
+        hw_sys_id = FACTORY_SYS_ID  # fallback
+        for _doc_id in existing_docs:
+            if _doc_id.startswith('3.06.') and _doc_id != '3.06.!':
+                _parts = _doc_id.split('.')
+                if len(_parts) == 5:
+                    hw_sys_id = _parts[2]
+                    break
         PORT_GID_MAP = {
             '2w_1': ('0000.0000', '2W',  0, '0000.0000', 0, 135208704),
             '2w_2': ('0000.0001', '2W',  1, '0000.0000', 1, 135208705),
@@ -4185,8 +4193,8 @@ def comm_config_export(request, config_id):
                 continue
             written_port_gids.add(gid)
             doc_suffix, ptype, hw_index, owner_suffix, slot_int, user_id = PORT_GID_MAP[gid]
-            doc_id = f'3.06.{FACTORY_SYS_ID}.{doc_suffix}'
-            owner  = f'2.05.{FACTORY_SYS_ID}.{owner_suffix}'
+            doc_id = f'3.06.{hw_sys_id}.{doc_suffix}'
+            owner  = f'2.05.{hw_sys_id}.{owner_suffix}'
             label  = pa.port_label or f'{ptype} Port {slot_int + 1}'
             if ptype == '2W':
                 data = {
@@ -4245,7 +4253,7 @@ def comm_config_export(request, config_id):
             write_doc({
                 '_id': f'4.44.{FACTORY_SYS_ID}.{make_4char()}.{make_4char()}',
                 '_rev': make_rev(),
-                'owner': f'3.06.{FACTORY_SYS_ID}.{PORT_GID_MAP[gid][0]}',
+                'owner': f'3.06.{hw_sys_id}.{PORT_GID_MAP[gid][0]}',
                 'type': 'partyline.port',
                 'data': {
                     'destination': f'3.20.{FACTORY_SYS_ID}.0000.{pa.partyline.channel_number:04x}',
