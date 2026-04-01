@@ -968,6 +968,7 @@
             <option value="dante" {% if port.traffic_type == 'dante' %}selected{% endif %}>Dante</option>
           </select>
         </div>
+        <div id="ip-fields-{{ port.id }}" {% if port.traffic_type == "dante" %}style="display:none"{% endif %}>
         <div class="cc-lan-row">
           <label>Mode</label>
           <div class="cc-lan-mode-toggle">
@@ -1001,6 +1002,7 @@
             <input type="text" value="{{ port.dns2 }}"
               onblur="saveLanField({{ port.id }}, 'dns2', this.value)">
           </div>
+        </div>
         </div>
         <div id="ptp-{{ port.id }}" {% if port.traffic_type != 'aes67' %}style="display:none"{% endif %}>
           <div class="cc-lan-row">
@@ -1292,10 +1294,10 @@ function setLanMode(lanId, mode, btn) {
   saveLanField(lanId, 'mode', mode);
 }
 function toggleDanteFields(portId, trafficType) {
-  const staticFields = document.getElementById('static-' + portId);
-  const modeRow = staticFields ? staticFields.previousElementSibling : null;
+  const ipFields = document.getElementById('ip-fields-' + portId);
   const ptp = document.getElementById('ptp-' + portId);
   const dante = document.getElementById('dante-' + portId);
+  if (ipFields) ipFields.style.display = trafficType === 'dante' ? 'none' : '';
   if (dante) dante.style.display = trafficType === 'dante' ? '' : 'none';
   if (ptp) ptp.style.display = trafficType === 'aes67' ? '' : 'none';
 }
