@@ -31,3 +31,7 @@ def add_class(bound_field, css_class):
     widget.attrs["class"] = (existing + " " + css_class).strip()
     # re-render the field with the updated attrs
     return mark_safe(bound_field.as_widget())
+
+@register.filter
+def get_item(dictionary, key):
+    return dictionary.get(key)
