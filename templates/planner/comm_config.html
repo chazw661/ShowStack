@@ -1280,6 +1280,14 @@
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
 // ── Network LAN ──
+function initNetworkPorts() {
+  document.querySelectorAll('[id^="tt-"]').forEach(function(sel) {
+    var portId = sel.id.replace('tt-', '');
+    toggleDanteFields(portId, sel.value);
+  });
+}
+document.addEventListener('DOMContentLoaded', initNetworkPorts);
+
 function toggleLan(header) {
   const body = header.nextElementSibling;
   body.classList.toggle('open');
