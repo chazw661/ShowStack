@@ -943,58 +943,6 @@
       {% endif %}
     </div>
 
-  </div>
-
-<!-- ── SETTINGS PANEL ── -->
-      <div class="cc-field-group">
-        <label class="cc-field-label">Wireless Region</label>
-        <select class="cc-field-input" onchange="saveSetting('wireless_region', this.value)">
-          {% for val, label in config.WIRELESS_REGION_CHOICES %}
-          <option value="{{ val }}" {% if config.wireless_region == val %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">Battery Type</label>
-        <select class="cc-field-input" onchange="saveSetting('battery_type', this.value)">
-          {% for val, label in config.BATTERY_TYPE_CHOICES %}
-          <option value="{{ val }}" {% if config.battery_type == val %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">Role Sorting</label>
-        <select class="cc-field-input" onchange="saveSetting('role_sorting', this.value)">
-          {% for val, label in config.ROLE_SORTING_CHOICES %}
-          <option value="{{ val }}" {% if config.role_sorting == val %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-    <div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">Admin PIN</label>
-        <input class="cc-field-input" type="password" value="{{ config.admin_pin }}"
-               onblur="saveSetting('admin_pin', this.value)" placeholder="••••">
-      </div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">OTA PIN</label>
-        <input class="cc-field-input" type="password" value="{{ config.ota_pin }}"
-               onblur="saveSetting('ota_pin', this.value)" placeholder="••••">
-      </div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">System ID</label>
-        <input class="cc-field-input" value="{{ config.system_id }}"
-               readonly style="opacity:0.5;cursor:default;" title="Auto-generated on save">
-      </div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">Hardware ID</label>
-        <input class="cc-field-input" value="{{ config.hardware_id|default:'— set on import —' }}"
-               readonly style="opacity:0.5;cursor:default;" title="Derived from device MAC">
-      </div>
-    </div>
-  </div>
-</div>
 
 
 {% endif %}{# end editor view #}
