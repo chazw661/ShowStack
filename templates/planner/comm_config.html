@@ -680,9 +680,6 @@
     <div class="cc-tab active" data-panel="partylines">Partylines</div>
     <div class="cc-tab" data-panel="roles">Roles</div>
     <div class="cc-tab" data-panel="ports">Ports</div>
-    <div class="cc-tab" data-panel="network">Network</div>
-    <div class="cc-tab" data-panel="settings">Settings</div>
-    <div class="cc-tab" data-panel="sessions">Sessions</div>
   </div>
 
   <!-- ── PARTYLINES PANEL ── -->
@@ -949,15 +946,6 @@
   </div>
 
 <!-- ── SETTINGS PANEL ── -->
-<div class="cc-tab-panel" id="panel-network">
-  {% if config %}
-  <div style="padding:16px;">
-    {% for port in network_ports %}
-    <div class="cc-lan-card">
-      <div class="cc-lan-header" onclick="toggleLan(this)">
-        <h4>Port {{ port.port_number }}</h4>
-        <span class="cc-lan-badge" id="badge-{{ port.id }}">{{ port.get_traffic_type_display }} — {{ port.get_mode_display }}</span>
-      </div>
       <div class="cc-lan-body open" id="lan-body-{{ port.id }}">
         <div class="cc-lan-row">
           <label>Traffic Type</label>
@@ -1032,14 +1020,6 @@
   {% endif %}
 </div>
 
-<div class="cc-tab-panel" id="panel-settings">
-  <div class="cc-settings-grid">
-    <div>
-      <div class="cc-field-group">
-        <label class="cc-field-label">Configuration Name</label>
-        <input class="cc-field-input" value="{{ config.name }}"
-               onblur="saveSetting('name', this.value)">
-      </div>
       <div class="cc-field-group">
         <label class="cc-field-label">Wireless Region</label>
         <select class="cc-field-input" onchange="saveSetting('wireless_region', this.value)">
@@ -1091,36 +1071,7 @@
 </div>
 
   <!-- ── SESSIONS PANEL ── -->
-  <div class="cc-tab-panel" id="panel-sessions">
-    {% if sessions %}
-      {% for session in sessions %}
-      <div class="cc-session-block" id="session-block-{{ session.id }}">
-        <div class="cc-session-row">
-          <span class="cc-session-type-badge">{{ session.get_session_type_display }}</span>
-          <input class="cc-session-label-input"
-                 value="{{ session.label }}"
-                 onblur="saveSessionLabel({{ session.id }}, this.value)"
-                 onkeydown="if(event.key=='Enter')this.blur()">
-          <select class="cc-port-select" onchange="saveSessionField({{ session.id }}, 'roleset', this.value)" title="Roleset">
-            <option value="">— No Roleset —</option>
-            {% for rs in rolesets %}
-            <option value="{{ rs.id }}" {% if session.roleset_id == rs.id %}selected{% endif %}>{{ rs.label }}</option>
-            {% endfor %}
-          </select>
-          <select class="cc-port-select" onchange="saveSessionField({{ session.id }}, 'default_role', this.value)" title="Default Role">
-            <option value="">— No Default —</option>
-            {% for role in all_roles %}
-            <option value="{{ role.id }}" {% if session.default_role_id == role.id %}selected{% endif %}>{{ role.label }} ({{ role.device_type }})</option>
-            {% endfor %}
-          </select>
-          <label class="cc-port-toggle">
-            <input type="checkbox" {% if session.addressable %}checked{% endif %}
-                   onchange="saveSessionField({{ session.id }}, 'addressable', this.checked)">
-            Addressable
-          </label>
-          <button class="cc-pl-delete" onclick="deleteSession({{ session.id }})" title="Delete session">✕</button>
         </div>
-      </div>
       {% endfor %}
     {% else %}
       <p style="color:#5555aa;text-align:center;padding:40px;">No sessions defined.</p>
