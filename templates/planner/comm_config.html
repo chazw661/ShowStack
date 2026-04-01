@@ -543,6 +543,24 @@
   .cc-session-type { font-size: 0.8rem; color: #f0a500; font-family: monospace; min-width: 80px; }
   .cc-session-detail { flex: 1; font-size: 0.85rem; color: #c0c0c0; }
 
+  /* ── Network tab ── */
+  .cc-lan-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .cc-lan-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; user-select: none; }
+  .cc-lan-header h4 { margin: 0; font-size: 0.9rem; color: #c8d8e8; font-weight: 600; }
+  .cc-lan-badge { font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; background: rgba(100,180,255,0.15); color: #7ab8e8; }
+  .cc-lan-body { padding: 16px; border-top: 1px solid rgba(255,255,255,0.06); display: none; }
+  .cc-lan-body.open { display: block; }
+  .cc-lan-row { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .cc-lan-row label { font-size: 0.8rem; color: #8a9ab0; text-align: right; }
+  .cc-lan-row input, .cc-lan-row select { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; color: #e0e8f0; padding: 5px 8px; font-size: 0.82rem; width: 100%; }
+  .cc-lan-mode-toggle { display: flex; gap: 0; }
+  .cc-lan-mode-toggle button { flex: 1; padding: 5px 0; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.04); color: #8a9ab0; cursor: pointer; transition: all 0.15s; }
+  .cc-lan-mode-toggle button:first-child { border-radius: 4px 0 0 4px; }
+  .cc-lan-mode-toggle button:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+  .cc-lan-mode-toggle button.active { background: rgba(100,180,255,0.2); color: #7ab8e8; border-color: #4a88b8; }
+  .cc-static-fields { display: none; }
+  .cc-static-fields.visible { display: contents; }
+
   /* ── Settings tab ── */
   .cc-settings-grid {
     display: grid;
@@ -661,6 +679,7 @@
     <div class="cc-tab active" data-panel="partylines">Partylines</div>
     <div class="cc-tab" data-panel="roles">Roles</div>
     <div class="cc-tab" data-panel="ports">Ports</div>
+    <div class="cc-tab" data-panel="network">Network</div>
     <div class="cc-tab" data-panel="settings">Settings</div>
     <div class="cc-tab" data-panel="sessions">Sessions</div>
   </div>
@@ -929,6 +948,70 @@
   </div>
 
 <!-- ── SETTINGS PANEL ── -->
+<div class="cc-tab-panel" id="panel-network">
+  {% if config %}
+  <div style="padding:16px;">
+    {% for iface, label, badge in lan_items %}
+    {% with lan=lans|get_item:iface %}
+    {% if lan %}
+    <div class="cc-lan-card">
+      <div class="cc-lan-header" onclick="toggleLan(this)">
+        <h4>{{ label }}</h4>
+        <span class="cc-lan-badge" id="badge-{{ lan.id }}">{{ lan.get_mode_display }}</span>
+      </div>
+      <div class="cc-lan-body" id="lan-body-{{ lan.id }}">
+        <div class="cc-lan-row">
+          <label>Mode</label>
+          <div class="cc-lan-mode-toggle">
+            <button class="{% if lan.mode == 'dhcp' %}active{% endif %}" onclick="setLanMode({{ lan.id }}, 'dhcp', this)">DHCP</button>
+            <button class="{% if lan.mode == 'static' %}active{% endif %}" onclick="setLanMode({{ lan.id }}, 'static', this)">Static</button>
+          </div>
+        </div>
+        <div class="cc-static-fields {% if lan.mode == 'static' %}visible{% endif %}" id="static-{{ lan.id }}">
+          <div class="cc-lan-row">
+            <label>IP Address</label>
+            <input type="text" value="{{ lan.static_ip }}" placeholder="e.g. 192.168.1.100"
+              onblur="saveLanField({{ lan.id }}, 'static_ip', this.value)">
+          </div>
+          <div class="cc-lan-row">
+            <label>Subnet Mask</label>
+            <input type="text" value="{{ lan.netmask }}" placeholder="e.g. 255.255.255.0"
+              onblur="saveLanField({{ lan.id }}, 'netmask', this.value)">
+          </div>
+          <div class="cc-lan-row">
+            <label>Gateway</label>
+            <input type="text" value="{{ lan.gateway }}" placeholder="e.g. 192.168.1.1"
+              onblur="saveLanField({{ lan.id }}, 'gateway', this.value)">
+          </div>
+          <div class="cc-lan-row">
+            <label>Primary DNS</label>
+            <input type="text" value="{{ lan.dns1 }}" placeholder=""
+              onblur="saveLanField({{ lan.id }}, 'dns1', this.value)">
+          </div>
+          <div class="cc-lan-row">
+            <label>Secondary DNS</label>
+            <input type="text" value="{{ lan.dns2 }}" placeholder=""
+              onblur="saveLanField({{ lan.id }}, 'dns2', this.value)">
+          </div>
+        </div>
+        {% if iface == "aes67" or iface == "aes67Secondary" %}
+        <div class="cc-lan-row">
+          <label>PTP Follower</label>
+          <input type="checkbox" {% if lan.ptp_follower_mode %}checked{% endif %}
+            onchange="saveLanField({{ lan.id }}, 'ptp_follower_mode', this.checked)">
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:#666;padding:16px;">Select a config to edit network settings.</p>
+  {% endif %}
+</div>
+
 <div class="cc-tab-panel" id="panel-settings">
   <div class="cc-settings-grid">
     <div>
@@ -1175,6 +1258,30 @@
 
 <script>
 const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+// ── Network LAN ──
+function toggleLan(header) {
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+function setLanMode(lanId, mode, btn) {
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const staticFields = document.getElementById('static-' + lanId);
+  if (staticFields) staticFields.classList.toggle('visible', mode === 'static');
+  const badge = document.getElementById('badge-' + lanId);
+  if (badge) badge.textContent = mode === 'dhcp' ? 'DHCP (Dynamic)' : 'Static';
+  saveLanField(lanId, 'mode', mode);
+}
+function saveLanField(lanId, field, value) {
+  const payload = { lan_id: lanId };
+  payload[field] = value;
+  fetch('{% url "planner:comm_config_update_lan" %}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+    body: JSON.stringify(payload),
+  });
+}
 
 // ── Tab switching ──
 function activateTab(panelName) {

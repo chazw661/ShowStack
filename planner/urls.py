@@ -70,6 +70,7 @@ urlpatterns = [
      path('comm-config/role/add/', views.comm_config_add_role, name='comm_config_add_role'),
      path('comm-config/role/chips/', views.comm_config_role_chips, name='comm_config_role_chips'),
      path('comm-config/port/assign/', views.comm_config_assign_port, name='comm_config_assign_port'),
+     path('comm-config/lan/update/', views.comm_config_update_lan, name='comm_config_update_lan'),
      path('comm-config/dante/add/', views.comm_config_add_dante, name='comm_config_add_dante'),
      path('comm-config/dante/update/', views.comm_config_update_dante, name='comm_config_update_dante'),
      path('comm-config/dante/delete/', views.comm_config_delete_dante, name='comm_config_delete_dante'),

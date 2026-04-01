@@ -4071,3 +4071,42 @@ class CommConfigDanteChannel(models.Model):
     def __str__(self):
         pl = self.partyline.label if self.partyline else 'Unassigned'
         return f"Dante {self.direction} {self.channel_number}: {self.label} → {pl}"
+
+
+class CommConfigLAN(models.Model):
+    """LAN/network interface settings for a CommConfig. One row per interface."""
+    INTERFACE_CHOICES = [
+        ('admin',          'LAN 1 — Management'),
+        ('aes67',          'LAN 2 — AES67'),
+        ('aes67Secondary', 'LAN 3 — AES67 Secondary'),
+        ('danteprim',      'LAN 4 — Dante Primary'),
+    ]
+    MODE_CHOICES = [
+        ('dhcp',   'DHCP (Dynamic)'),
+        ('static', 'Static'),
+    ]
+    REAR_CONNECTOR_CHOICES = [
+        (1,   'Connector 1'),
+        (2,   'Connector 2'),
+        (255, 'None'),
+    ]
+
+    config    = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='lans')
+    interface = models.CharField(max_length=20, choices=INTERFACE_CHOICES)
+    mode      = models.CharField(max_length=10, choices=MODE_CHOICES, default='dhcp')
+    static_ip = models.CharField(max_length=15, blank=True, default='')
+    netmask   = models.CharField(max_length=15, blank=True, default='')
+    gateway   = models.CharField(max_length=15, blank=True, default='')
+    dns1      = models.CharField(max_length=15, blank=True, default='')
+    dns2      = models.CharField(max_length=15, blank=True, default='')
+    rear_connector    = models.IntegerField(choices=REAR_CONNECTOR_CHOICES, default=1)
+    ptp_follower_mode = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Config LAN"
+        verbose_name_plural = "Config LANs"
+        ordering = ['interface']
+        unique_together = [['config', 'interface']]
+
+    def __str__(self):
+        return f"{self.config} / {self.get_interface_display()}"

@@ -1904,6 +1904,17 @@ def comm_config_view(request, config_id=None):
                 helixnet_partylines = config.partylines.filter(helixnet_enabled=True).order_by('channel_number')
                 roles = config.roles.all().order_by('device_type', 'label')
                 ports = config.port_assignments.all().order_by('port_type', 'port_label')
+                # Auto-create LAN rows if missing
+                existing_ifaces = set(config.lans.values_list('interface', flat=True))
+                LAN_DEFAULTS = [
+                    ('admin',          1, 1),
+                    ('aes67',          2, 2),
+                    ('aes67Secondary', 255, 3),
+                    ('danteprim',      255, 4),
+                ]
+                for iface, rear, _ in LAN_DEFAULTS:
+                    if iface not in existing_ifaces:
+                        CommConfigLAN.objects.create(config=config, interface=iface, rear_connector=rear)
                 dante_channels = config.dante_channels.all().order_by('direction', 'channel_number')
                 sessions = config.sessions.all().order_by('session_type')
                 rolesets = config.rolesets.all().order_by('roleset_number')
@@ -1938,6 +1949,13 @@ def comm_config_view(request, config_id=None):
                 'roles_by_type': roles_by_type,
                 'ports': ports,
                 'ports_by_type': ports_by_type,
+                'lans': {lan.interface: lan for lan in config.lans.all()} if config else {},
+                'lan_items': [
+                    ('admin',          'LAN 1 — Management', 'Management'),
+                    ('aes67',          'LAN 2 — AES67',      'AES67'),
+                    ('aes67Secondary', 'LAN 3 — AES67 Secondary', 'AES67 Sec'),
+                    ('danteprim',      'LAN 4 — Dante Primary',   'Dante'),
+                ],
                 'dante_channels': dante_channels if config_id else [],
                 'sessions': sessions,
                 'rolesets': rolesets if config_id else [],
@@ -4415,6 +4433,35 @@ def comm_config_export(request, config_id):
                 'type': session_type,
             })
 
+        # ── Update 1.03 device doc network settings ──
+        lan_map = {lan.interface: lan for lan in config.lans.all()}
+        dev_doc_id = f'1.03.{hw_sys_id}.0000.0000'
+        if dev_doc_id in existing_docs:
+            dev_doc = existing_docs[dev_doc_id]
+            network = dev_doc.get('data', {}).get('settings', {}).get('network', [])
+            for entry in network:
+                iface = entry.get('interface')
+                lan = lan_map.get(iface)
+                if not lan:
+                    continue
+                entry['mode'] = 'dhcp' if lan.mode == 'dhcp' else 'static'
+                if lan.mode == 'static':
+                    entry['staticIP'] = lan.static_ip
+                    entry['netmask']  = lan.netmask
+                    entry['gateway']  = lan.gateway
+                    entry['dns1']     = lan.dns1
+                    entry['dns2']     = lan.dns2
+                else:
+                    entry['staticIP'] = ''
+                    entry['netmask']  = ''
+                    entry['gateway']  = ''
+                    entry['dns1']     = ''
+                    entry['dns2']     = ''
+                if iface in ('aes67', 'aes67Secondary'):
+                    entry['ptpFollowerMode'] = lan.ptp_follower_mode
+            dev_doc['_rev'] = make_rev()
+            write_doc(dev_doc)
+
         # ── Keep A.CCM and S.NEP sessions from factory ──
         for doc_id in [f'3.99.{FACTORY_SYS_ID}.0000.0000', f'3.99.{FACTORY_SYS_ID}.0003.0000']:
             if doc_id in existing_docs:
@@ -5165,3 +5212,18 @@ def dashboard_stats(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@login_required
+def comm_config_update_lan(request):
+    import json
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    data = json.loads(request.body)
+    from planner.models import CommConfigLAN
+    lan = CommConfigLAN.objects.get(id=data['lan_id'])
+    allowed = {'mode', 'static_ip', 'netmask', 'gateway', 'dns1', 'dns2', 'rear_connector', 'ptp_follower_mode'}
+    for field, value in data.items():
+        if field in allowed:
+            setattr(lan, field, value)
+    lan.save()
+    return JsonResponse({'ok': True})
