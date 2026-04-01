@@ -32,7 +32,7 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
-from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask, CommConfigLAN
+from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask, CommConfigNetworkPort
 from .models import Amp, AmpDivider, Location
 import hashlib
 import os
@@ -1905,16 +1905,10 @@ def comm_config_view(request, config_id=None):
                 roles = config.roles.all().order_by('device_type', 'label')
                 ports = config.port_assignments.all().order_by('port_type', 'port_label')
                 # Auto-create LAN rows if missing
-                existing_ifaces = set(config.lans.values_list('interface', flat=True))
-                LAN_DEFAULTS = [
-                    ('admin',          1, 1),
-                    ('aes67',          2, 2),
-                    ('aes67Secondary', 255, 3),
-                    ('danteprim',      255, 4),
-                ]
-                for iface, rear, _ in LAN_DEFAULTS:
-                    if iface not in existing_ifaces:
-                        CommConfigLAN.objects.create(config=config, interface=iface, rear_connector=rear)
+                existing_ports = set(config.network_ports.values_list('port_number', flat=True))
+                for port_num, traffic in [(1, 'admin'), (2, 'aes67'), (3, 'disabled'), (4, 'disabled')]:
+                    if port_num not in existing_ports:
+                        CommConfigNetworkPort.objects.create(config=config, port_number=port_num, traffic_type=traffic)
                 dante_channels = config.dante_channels.all().order_by('direction', 'channel_number')
                 sessions = config.sessions.all().order_by('session_type')
                 rolesets = config.rolesets.all().order_by('roleset_number')
@@ -1949,13 +1943,8 @@ def comm_config_view(request, config_id=None):
                 'roles_by_type': roles_by_type,
                 'ports': ports,
                 'ports_by_type': ports_by_type,
-                'lans': {lan.interface: lan for lan in config.lans.all()} if config else {},
-                'lan_items': [
-                    ('admin',          'LAN 1 — Management', 'Management'),
-                    ('aes67',          'LAN 2 — AES67',      'AES67'),
-                    ('aes67Secondary', 'LAN 3 — AES67 Secondary', 'AES67 Sec'),
-                    ('danteprim',      'LAN 4 — Dante Primary',   'Dante'),
-                ],
+                'network_ports': list(config.network_ports.order_by('port_number')) if config else [],
+
                 'dante_channels': dante_channels if config_id else [],
                 'sessions': sessions,
                 'rolesets': rolesets if config_id else [],
@@ -4434,33 +4423,34 @@ def comm_config_export(request, config_id):
             })
 
         # ── Update 1.03 device doc network settings ──
-        lan_map = {lan.interface: lan for lan in config.lans.all()}
+        ports_by_type = {p.traffic_type: p for p in config.network_ports.all()}
         dev_doc_id = f'1.03.{hw_sys_id}.0000.0000'
         if dev_doc_id in existing_docs:
             dev_doc = existing_docs[dev_doc_id]
             network = dev_doc.get('data', {}).get('settings', {}).get('network', [])
             for entry in network:
                 iface = entry.get('interface')
-                lan = lan_map.get(iface)
-                if not lan:
-                    continue
-                entry['rearConnector'] = lan.rear_connector
+                # Find which physical port carries this traffic type
+                port = ports_by_type.get(iface)
+                # rearConnector: port_number if assigned, else 255
+                entry['rearConnector'] = port.port_number if port else 255
                 if iface not in ('danteprim', 'dantesec'):
-                    entry['mode'] = 'dhcp' if lan.mode == 'dhcp' else 'static'
-                    if lan.mode == 'static':
-                        entry['staticIP'] = lan.static_ip
-                        entry['netmask']  = lan.netmask
-                        entry['gateway']  = lan.gateway
-                        entry['dns1']     = lan.dns1
-                        entry['dns2']     = lan.dns2
-                    else:
-                        entry['staticIP'] = ''
-                        entry['netmask']  = ''
-                        entry['gateway']  = ''
-                        entry['dns1']     = ''
-                        entry['dns2']     = ''
-                if iface in ('aes67', 'aes67Secondary'):
-                    entry['ptpFollowerMode'] = lan.ptp_follower_mode
+                    if port:
+                        entry['mode'] = 'dhcp' if port.mode == 'dhcp' else 'static'
+                        if port.mode == 'static':
+                            entry['staticIP'] = port.static_ip
+                            entry['netmask']  = port.netmask
+                            entry['gateway']  = port.gateway
+                            entry['dns1']     = port.dns1
+                            entry['dns2']     = port.dns2
+                        else:
+                            entry['staticIP'] = ''
+                            entry['netmask']  = ''
+                            entry['gateway']  = ''
+                            entry['dns1']     = ''
+                            entry['dns2']     = ''
+                    if iface in ('aes67', 'aes67Secondary') and port:
+                        entry['ptpFollowerMode'] = port.ptp_follower_mode
             dev_doc['_rev'] = make_rev()
             write_doc(dev_doc)
 
@@ -5221,8 +5211,8 @@ def comm_config_update_lan(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     data = json.loads(request.body)
-    from planner.models import CommConfigLAN
-    lan = CommConfigLAN.objects.get(id=data['lan_id'])
+    from planner.models import CommConfigNetworkPort
+    lan = CommConfigNetworkPort.objects.get(id=data['lan_id'])
     allowed = {'mode', 'static_ip', 'netmask', 'gateway', 'dns1', 'dns2', 'rear_connector', 'ptp_follower_mode'}
     for field, value in data.items():
         if field in allowed:

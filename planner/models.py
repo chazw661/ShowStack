@@ -4071,42 +4071,39 @@ class CommConfigDanteChannel(models.Model):
     def __str__(self):
         pl = self.partyline.label if self.partyline else 'Unassigned'
         return f"Dante {self.direction} {self.channel_number}: {self.label} → {pl}"
+        return f"{self.config} / {self.get_interface_display()}"
 
 
-class CommConfigLAN(models.Model):
-    """LAN/network interface settings for a CommConfig. One row per interface."""
-    INTERFACE_CHOICES = [
-        ('admin',          'LAN 1 — Management'),
-        ('aes67',          'LAN 2 — AES67'),
-        ('aes67Secondary', 'LAN 3 — AES67 Secondary'),
-        ('danteprim',      'LAN 4 — Dante Primary'),
+class CommConfigNetworkPort(models.Model):
+    """One row per physical LAN port (1-4) on the Arcadia."""
+    TRAFFIC_TYPE_CHOICES = [
+        ('disabled',       'Disabled'),
+        ('admin',          'Management'),
+        ('aes67',          'AES67'),
+        ('aes67Secondary', 'AES67 Secondary'),
+        ('danteprim',      'Dante Primary'),
     ]
     MODE_CHOICES = [
         ('dhcp',   'DHCP (Dynamic)'),
         ('static', 'Static'),
     ]
-    REAR_CONNECTOR_CHOICES = [
-        (1,   'Connector 1'),
-        (2,   'Connector 2'),
-        (255, 'None'),
-    ]
 
-    config    = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='lans')
-    interface = models.CharField(max_length=20, choices=INTERFACE_CHOICES)
-    mode      = models.CharField(max_length=10, choices=MODE_CHOICES, default='dhcp')
-    static_ip = models.CharField(max_length=15, blank=True, default='')
-    netmask   = models.CharField(max_length=15, blank=True, default='')
-    gateway   = models.CharField(max_length=15, blank=True, default='')
-    dns1      = models.CharField(max_length=15, blank=True, default='')
-    dns2      = models.CharField(max_length=15, blank=True, default='')
-    rear_connector    = models.IntegerField(choices=REAR_CONNECTOR_CHOICES, default=1)
+    config       = models.ForeignKey(CommConfig, on_delete=models.CASCADE, related_name='network_ports')
+    port_number  = models.IntegerField()  # 1-4
+    traffic_type = models.CharField(max_length=20, choices=TRAFFIC_TYPE_CHOICES, default='disabled')
+    mode         = models.CharField(max_length=10, choices=MODE_CHOICES, default='dhcp')
+    static_ip    = models.CharField(max_length=15, blank=True, default='')
+    netmask      = models.CharField(max_length=15, blank=True, default='')
+    gateway      = models.CharField(max_length=15, blank=True, default='')
+    dns1         = models.CharField(max_length=15, blank=True, default='')
+    dns2         = models.CharField(max_length=15, blank=True, default='')
     ptp_follower_mode = models.BooleanField(default=False)
 
     class Meta:
-        verbose_name = "Config LAN"
-        verbose_name_plural = "Config LANs"
-        ordering = ['interface']
-        unique_together = [['config', 'interface']]
+        verbose_name = "Network Port"
+        verbose_name_plural = "Network Ports"
+        ordering = ['port_number']
+        unique_together = [['config', 'port_number']]
 
     def __str__(self):
-        return f"{self.config} / {self.get_interface_display()}"
+        return f"{self.config} / Port {self.port_number} ({self.get_traffic_type_display()})"

@@ -952,70 +952,66 @@
 <div class="cc-tab-panel" id="panel-network">
   {% if config %}
   <div style="padding:16px;">
-    {% for iface, label, badge in lan_items %}
-    {% with lan=lans|get_item:iface %}
-    {% if lan %}
+    {% for port in network_ports %}
     <div class="cc-lan-card">
       <div class="cc-lan-header" onclick="toggleLan(this)">
-        <h4>{{ label }}</h4>
-        <span class="cc-lan-badge" id="badge-{{ lan.id }}">{{ lan.get_mode_display }}</span>
+        <h4>Port {{ port.port_number }}</h4>
+        <span class="cc-lan-badge" id="badge-{{ port.id }}">{{ port.get_traffic_type_display }} — {{ port.get_mode_display }}</span>
       </div>
-      <div class="cc-lan-body open" id="lan-body-{{ lan.id }}">
+      <div class="cc-lan-body open" id="lan-body-{{ port.id }}">
         <div class="cc-lan-row">
-          <label>Connector</label>
-          <select onchange="saveLanField({{ lan.id }}, 'rear_connector', parseInt(this.value))">
-            <option value="1" {% if lan.rear_connector == 1 %}selected{% endif %}>LAN 1</option>
-            <option value="2" {% if lan.rear_connector == 2 %}selected{% endif %}>LAN 2</option>
-            <option value="3" {% if lan.rear_connector == 3 %}selected{% endif %}>LAN 3</option>
-            <option value="4" {% if lan.rear_connector == 4 %}selected{% endif %}>LAN 4</option>
-            <option value="255" {% if lan.rear_connector == 255 %}selected{% endif %}>Disabled</option>
+          <label>Traffic Type</label>
+          <select onchange="saveLanField({{ port.id }}, 'traffic_type', this.value); updateBadge({{ port.id }}, this)">
+            <option value="disabled" {% if port.traffic_type == 'disabled' %}selected{% endif %}>Disabled</option>
+            <option value="admin" {% if port.traffic_type == 'admin' %}selected{% endif %}>Management</option>
+            <option value="aes67" {% if port.traffic_type == 'aes67' %}selected{% endif %}>AES67</option>
+            <option value="aes67Secondary" {% if port.traffic_type == 'aes67Secondary' %}selected{% endif %}>AES67 Secondary</option>
+            <option value="danteprim" {% if port.traffic_type == 'danteprim' %}selected{% endif %}>Dante Primary</option>
           </select>
         </div>
         <div class="cc-lan-row">
           <label>Mode</label>
           <div class="cc-lan-mode-toggle">
-            <button class="{% if lan.mode == 'dhcp' %}active{% endif %}" onclick="setLanMode({{ lan.id }}, 'dhcp', this)">DHCP</button>
-            <button class="{% if lan.mode == 'static' %}active{% endif %}" onclick="setLanMode({{ lan.id }}, 'static', this)">Static</button>
+            <button class="{% if port.mode == 'dhcp' %}active{% endif %}" onclick="setLanMode({{ port.id }}, 'dhcp', this)">DHCP</button>
+            <button class="{% if port.mode == 'static' %}active{% endif %}" onclick="setLanMode({{ port.id }}, 'static', this)">Static</button>
           </div>
         </div>
-        <div class="cc-static-fields {% if lan.mode == 'static' %}visible{% endif %}" id="static-{{ lan.id }}">
+        <div class="cc-static-fields {% if port.mode == 'static' %}visible{% endif %}" id="static-{{ port.id }}">
           <div class="cc-lan-row">
             <label>IP Address</label>
-            <input type="text" value="{{ lan.static_ip }}" placeholder="e.g. 192.168.1.100"
-              onblur="saveLanField({{ lan.id }}, 'static_ip', this.value)">
+            <input type="text" value="{{ port.static_ip }}" placeholder="e.g. 192.168.1.100"
+              onblur="saveLanField({{ port.id }}, 'static_ip', this.value)">
           </div>
           <div class="cc-lan-row">
             <label>Subnet Mask</label>
-            <input type="text" value="{{ lan.netmask }}" placeholder="e.g. 255.255.255.0"
-              onblur="saveLanField({{ lan.id }}, 'netmask', this.value)">
+            <input type="text" value="{{ port.netmask }}" placeholder="e.g. 255.255.255.0"
+              onblur="saveLanField({{ port.id }}, 'netmask', this.value)">
           </div>
           <div class="cc-lan-row">
             <label>Gateway</label>
-            <input type="text" value="{{ lan.gateway }}" placeholder="e.g. 192.168.1.1"
-              onblur="saveLanField({{ lan.id }}, 'gateway', this.value)">
+            <input type="text" value="{{ port.gateway }}" placeholder="e.g. 192.168.1.1"
+              onblur="saveLanField({{ port.id }}, 'gateway', this.value)">
           </div>
           <div class="cc-lan-row">
             <label>Primary DNS</label>
-            <input type="text" value="{{ lan.dns1 }}" placeholder=""
-              onblur="saveLanField({{ lan.id }}, 'dns1', this.value)">
+            <input type="text" value="{{ port.dns1 }}"
+              onblur="saveLanField({{ port.id }}, 'dns1', this.value)">
           </div>
           <div class="cc-lan-row">
             <label>Secondary DNS</label>
-            <input type="text" value="{{ lan.dns2 }}" placeholder=""
-              onblur="saveLanField({{ lan.id }}, 'dns2', this.value)">
+            <input type="text" value="{{ port.dns2 }}"
+              onblur="saveLanField({{ port.id }}, 'dns2', this.value)">
           </div>
         </div>
-        {% if iface == "aes67" or iface == "aes67Secondary" %}
+        {% if port.traffic_type == 'aes67' or port.traffic_type == 'aes67Secondary' %}
         <div class="cc-lan-row">
           <label>PTP Follower</label>
-          <input type="checkbox" {% if lan.ptp_follower_mode %}checked{% endif %}
-            onchange="saveLanField({{ lan.id }}, 'ptp_follower_mode', this.checked)">
+          <input type="checkbox" {% if port.ptp_follower_mode %}checked{% endif %}
+            onchange="saveLanField({{ port.id }}, 'ptp_follower_mode', this.checked)">
         </div>
         {% endif %}
       </div>
     </div>
-    {% endif %}
-    {% endwith %}
     {% endfor %}
   </div>
   {% else %}
@@ -1283,6 +1279,10 @@ function setLanMode(lanId, mode, btn) {
   const badge = document.getElementById('badge-' + lanId);
   if (badge) badge.textContent = mode === 'dhcp' ? 'DHCP (Dynamic)' : 'Static';
   saveLanField(lanId, 'mode', mode);
+}
+function updateBadge(portId, select) {
+  const badge = document.getElementById('badge-' + portId);
+  if (badge) badge.textContent = select.options[select.selectedIndex].text;
 }
 function saveLanField(lanId, field, value) {
   const payload = { lan_id: lanId };
