@@ -960,7 +960,17 @@
         <h4>{{ label }}</h4>
         <span class="cc-lan-badge" id="badge-{{ lan.id }}">{{ lan.get_mode_display }}</span>
       </div>
-      <div class="cc-lan-body" id="lan-body-{{ lan.id }}">
+      <div class="cc-lan-body open" id="lan-body-{{ lan.id }}">
+        <div class="cc-lan-row">
+          <label>Connector</label>
+          <select onchange="saveLanField({{ lan.id }}, 'rear_connector', parseInt(this.value))">
+            <option value="1" {% if lan.rear_connector == 1 %}selected{% endif %}>LAN 1</option>
+            <option value="2" {% if lan.rear_connector == 2 %}selected{% endif %}>LAN 2</option>
+            <option value="3" {% if lan.rear_connector == 3 %}selected{% endif %}>LAN 3</option>
+            <option value="4" {% if lan.rear_connector == 4 %}selected{% endif %}>LAN 4</option>
+            <option value="255" {% if lan.rear_connector == 255 %}selected{% endif %}>Disabled</option>
+          </select>
+        </div>
         <div class="cc-lan-row">
           <label>Mode</label>
           <div class="cc-lan-mode-toggle">
