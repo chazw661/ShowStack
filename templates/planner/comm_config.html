@@ -996,39 +996,6 @@
   </div>
 </div>
 
-  <!-- ── SESSIONS PANEL ── -->
-        </div>
-      {% endfor %}
-    {% else %}
-      <p style="color:#5555aa;text-align:center;padding:40px;">No sessions defined.</p>
-    {% endif %}
-    <button class="cc-btn cc-btn-secondary" style="margin-top:12px;" onclick="openAddSessionModal({{ config.id }})">+ Add Session</button>
-
-    <!-- Rolesets sub-section -->
-    <div style="margin-top:32px;">
-      <div class="cc-role-group-label" style="color:#a0a0cc;margin-bottom:10px;">ROLESETS</div>
-      {% if rolesets %}
-        {% for rs in rolesets %}
-        <div class="cc-session-row" id="roleset-block-{{ rs.id }}">
-          <input class="cc-session-label-input" style="min-width:160px;"
-                 value="{{ rs.label }}"
-                 onblur="saveRolesetLabel({{ rs.id }}, this.value)"
-                 onkeydown="if(event.key=='Enter')this.blur()">
-          <span style="font-size:0.75rem;color:#5555aa;">Roleset #{{ rs.roleset_number }}</span>
-          <label class="cc-port-toggle">
-            <input type="checkbox" {% if rs.addressable %}checked{% endif %}
-                   onchange="saveRolesetField({{ rs.id }}, 'addressable', this.checked)">
-            Addressable
-          </label>
-          <button class="cc-pl-delete" onclick="deleteRoleset({{ rs.id }})" title="Delete roleset">✕</button>
-        </div>
-        {% endfor %}
-      {% else %}
-        <p style="color:#5555aa;font-size:0.85rem;">No rolesets defined.</p>
-      {% endif %}
-      <button class="cc-btn cc-btn-secondary" style="margin-top:8px;padding:5px 12px;font-size:0.8rem;" onclick="addRoleset({{ config.id }})">+ Add Roleset</button>
-    </div>
-  </div>
 
 {% endif %}{# end editor view #}
 
