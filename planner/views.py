@@ -32,7 +32,7 @@ from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
 from .models import Project
-from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask
+from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask, CommConfigLAN
 from .models import Amp, AmpDivider, Location
 import hashlib
 import os
