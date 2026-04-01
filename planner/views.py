@@ -4444,19 +4444,21 @@ def comm_config_export(request, config_id):
                 lan = lan_map.get(iface)
                 if not lan:
                     continue
-                entry['mode'] = 'dhcp' if lan.mode == 'dhcp' else 'static'
-                if lan.mode == 'static':
-                    entry['staticIP'] = lan.static_ip
-                    entry['netmask']  = lan.netmask
-                    entry['gateway']  = lan.gateway
-                    entry['dns1']     = lan.dns1
-                    entry['dns2']     = lan.dns2
-                else:
-                    entry['staticIP'] = ''
-                    entry['netmask']  = ''
-                    entry['gateway']  = ''
-                    entry['dns1']     = ''
-                    entry['dns2']     = ''
+                entry['rearConnector'] = lan.rear_connector
+                if iface not in ('danteprim', 'dantesec'):
+                    entry['mode'] = 'dhcp' if lan.mode == 'dhcp' else 'static'
+                    if lan.mode == 'static':
+                        entry['staticIP'] = lan.static_ip
+                        entry['netmask']  = lan.netmask
+                        entry['gateway']  = lan.gateway
+                        entry['dns1']     = lan.dns1
+                        entry['dns2']     = lan.dns2
+                    else:
+                        entry['staticIP'] = ''
+                        entry['netmask']  = ''
+                        entry['gateway']  = ''
+                        entry['dns1']     = ''
+                        entry['dns2']     = ''
                 if iface in ('aes67', 'aes67Secondary'):
                     entry['ptpFollowerMode'] = lan.ptp_follower_mode
             dev_doc['_rev'] = make_rev()
