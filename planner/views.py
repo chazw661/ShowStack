@@ -5220,3 +5220,159 @@ def comm_config_update_lan(request):
             setattr(lan, field, value)
     lan.save()
     return JsonResponse({'ok': True})
+
+# ─────────────────────────────────────────────────────────────
+# COMM Config — Templates
+# ─────────────────────────────────────────────────────────────
+@require_POST
+def comm_config_save_as_template(request):
+    import json as _j
+    try:
+        data = _j.loads(request.body)
+        config_id = data.get('config_id')
+        template_name = data.get('template_name', '').strip()
+        if not config_id or not template_name:
+            return JsonResponse({'error': 'Missing config_id or template_name'}, status=400)
+        src = CommConfig.objects.get(id=config_id)
+
+        # Delete existing template with same name
+        CommConfig.objects.filter(is_template=True, template_name=template_name).delete()
+
+        # Create template record (no project)
+        tmpl = CommConfig.objects.create(
+            project=None,
+            name=template_name,
+            template_name=template_name,
+            is_template=True,
+            device_type=src.device_type,
+            wireless_region=src.wireless_region,
+            wireless_id=src.wireless_id,
+            admin_pin=src.admin_pin,
+            ota_pin=src.ota_pin,
+            display_brightness=src.display_brightness,
+            touch_sensitivity=src.touch_sensitivity,
+            battery_type=src.battery_type,
+            dsp_plc_state=src.dsp_plc_state,
+            disable_http=src.disable_http,
+            role_sorting=src.role_sorting,
+            antenna_0_connector=src.antenna_0_connector,
+            antenna_1_connector=src.antenna_1_connector,
+        )
+
+        # Copy partylines
+        pl_map = {}
+        for pl in src.partylines.all():
+            new_pl = CommConfigPartyline.objects.create(
+                config=tmpl, channel_number=pl.channel_number,
+                label=pl.label, helixnet_enabled=pl.helixnet_enabled,
+            )
+            pl_map[pl.id] = new_pl
+
+        # Copy roles + keysets
+        for role in src.roles.all():
+            new_role = CommConfigRole.objects.create(
+                config=tmpl, label=role.label, device_type=role.device_type,
+                role_number=role.role_number, description=role.description,
+                display_brightness=role.display_brightness, master_volume=role.master_volume,
+                mic_type=role.mic_type, sidetone_control=role.sidetone_control,
+                sidetone_gain=role.sidetone_gain, headphone_limit=role.headphone_limit,
+            )
+            for key in role.keysets.all():
+                CommConfigKeyset.objects.create(
+                    role=new_role, key_index=key.key_index,
+                    partyline=pl_map.get(key.partyline_id),
+                    activation_state=key.activation_state,
+                    talk_mode=key.talk_mode,
+                    is_call_key=key.is_call_key,
+                    is_reply_key=key.is_reply_key,
+                    port_reference=key.port_reference,
+                )
+
+        # Copy port assignments
+        for pa in src.port_assignments.all():
+            CommConfigPortAssignment.objects.create(
+                config=tmpl, port_type=pa.port_type, port_label=pa.port_label,
+                port_gid=pa.port_gid,
+                partyline=pl_map.get(pa.partyline_id),
+                join_mode=pa.join_mode, port_function=pa.port_function,
+                receive_call_signal=pa.receive_call_signal, output_level=pa.output_level,
+                mode_2w=pa.mode_2w, power_enabled=pa.power_enabled,
+                termination_enabled=pa.termination_enabled,
+            )
+
+        return JsonResponse({'ok': True, 'template_id': tmpl.id, 'template_name': template_name})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_GET
+def comm_config_list_templates(request):
+    templates = CommConfig.objects.filter(is_template=True).order_by('template_name').values('id', 'template_name', 'device_type')
+    return JsonResponse({'templates': list(templates)})
+
+
+@require_POST
+def comm_config_load_template(request):
+    import json as _j
+    try:
+        data = _j.loads(request.body)
+        template_id = data.get('template_id')
+        current_project = getattr(request, 'current_project', None)
+        if not template_id or not current_project:
+            return JsonResponse({'error': 'Missing template_id or project'}, status=400)
+        tmpl = CommConfig.objects.get(id=template_id, is_template=True)
+
+        name = data.get('name', tmpl.template_name).strip() or tmpl.template_name
+        config = CommConfig.objects.create(
+            project=current_project, name=name, device_type=tmpl.device_type,
+            wireless_region=tmpl.wireless_region, wireless_id=tmpl.wireless_id,
+            admin_pin=tmpl.admin_pin, ota_pin=tmpl.ota_pin,
+            display_brightness=tmpl.display_brightness, touch_sensitivity=tmpl.touch_sensitivity,
+            battery_type=tmpl.battery_type, dsp_plc_state=tmpl.dsp_plc_state,
+            disable_http=tmpl.disable_http, role_sorting=tmpl.role_sorting,
+            antenna_0_connector=tmpl.antenna_0_connector, antenna_1_connector=tmpl.antenna_1_connector,
+        )
+
+        pl_map = {}
+        for pl in tmpl.partylines.all():
+            new_pl = CommConfigPartyline.objects.create(
+                config=config, channel_number=pl.channel_number,
+                label=pl.label, helixnet_enabled=pl.helixnet_enabled,
+            )
+            pl_map[pl.id] = new_pl
+
+        for role in tmpl.roles.all():
+            new_role = CommConfigRole.objects.create(
+                config=config, label=role.label, device_type=role.device_type,
+                role_number=role.role_number, description=role.description,
+                display_brightness=role.display_brightness, master_volume=role.master_volume,
+                mic_type=role.mic_type, sidetone_control=role.sidetone_control,
+                sidetone_gain=role.sidetone_gain, headphone_limit=role.headphone_limit,
+            )
+            for key in role.keysets.all():
+                CommConfigKeyset.objects.create(
+                    role=new_role, key_index=key.key_index,
+                    partyline=pl_map.get(key.partyline_id),
+                    activation_state=key.activation_state,
+                    talk_mode=key.talk_mode,
+                    is_call_key=key.is_call_key,
+                    is_reply_key=key.is_reply_key,
+                    port_reference=key.port_reference,
+                )
+
+        for pa in tmpl.port_assignments.all():
+            CommConfigPortAssignment.objects.create(
+                config=config, port_type=pa.port_type, port_label=pa.port_label,
+                port_gid=pa.port_gid,
+                partyline=pl_map.get(pa.partyline_id),
+                join_mode=pa.join_mode, port_function=pa.port_function,
+                receive_call_signal=pa.receive_call_signal, output_level=pa.output_level,
+                mode_2w=pa.mode_2w, power_enabled=pa.power_enabled,
+                termination_enabled=pa.termination_enabled,
+            )
+
+        return JsonResponse({'ok': True, 'config_id': config.id})
+    except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Template not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

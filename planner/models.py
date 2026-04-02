@@ -724,7 +724,7 @@ class ProjectAccessRequest(models.Model):
 #-----Console Model----
 
 class Console(models.Model):
-    project = models.ForeignKey('Project', on_delete=models.CASCADE)
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, null=True, blank=True)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='consoles') 
     name = models.CharField(max_length=100)
@@ -3709,6 +3709,8 @@ class CommConfig(models.Model):
         max_length=100,
         help_text="Configuration name (e.g., 'GJS Corporate Template')"
     )
+    is_template = models.BooleanField(default=False)
+    template_name = models.CharField(max_length=100, blank=True)
     device_type = models.CharField(
         max_length=20,
         choices=DEVICE_TYPE_CHOICES,

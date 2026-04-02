@@ -615,6 +615,7 @@
           + New Configuration ▾
         </button>
         <div class="cc-dropdown-menu" id="newConfigMenu">
+          <div id="template-dropdown-items"></div>
           <div class="cc-dropdown-item" onclick="createConfig('arcadia')">
             📡 Arcadia Base Station
           </div>
@@ -671,6 +672,7 @@
     </h2>
     <div style="display:flex;gap:8px;">
       <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
+      <button class="cc-btn cc-btn-secondary" onclick="saveAsTemplate({{ config.id }})">⭐ Save as Template</button>
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
     </div>
@@ -1166,6 +1168,52 @@ document.addEventListener('click', e => {
 });
 
 // ── Create config ──
+// ── COMM Config Templates ──
+function saveAsTemplate(configId) {
+  const name = prompt('Template name:', '');
+  if (name === null) return;
+  if (!name.trim()) { alert('Please enter a name.'); return; }
+  fetch('{% url "planner:comm_config_save_as_template" %}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify({config_id: configId, template_name: name.trim()}),
+  }).then(r => r.json()).then(data => {
+    if (data.ok) alert('Template "' + data.template_name + '" saved!');
+    else alert('Error: ' + (data.error || 'Unknown'));
+  });
+}
+
+function loadTemplateDropdown() {
+  fetch('{% url "planner:comm_config_list_templates" %}')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('template-dropdown-items');
+      if (!el || !data.templates || data.templates.length === 0) return;
+      let html = '<div style="padding:6px 12px;font-size:0.7rem;color:#5555aa;text-transform:uppercase;letter-spacing:0.05em;">From Template</div>';
+      data.templates.forEach(t => {
+        html += `<div class="cc-dropdown-item" onclick="loadTemplate(${t.id}, '${t.template_name.replace(/'/g, "\'")}')">📋 ${t.template_name}</div>`;
+      });
+      html += '<div style="border-top:1px solid #2a2a4a;margin:4px 0;"></div>';
+      el.innerHTML = html;
+    });
+}
+
+function loadTemplate(templateId, templateName) {
+  const name = prompt('Config name:', templateName);
+  if (name === null) return;
+  if (!name.trim()) { alert('Please enter a name.'); return; }
+  fetch('{% url "planner:comm_config_load_template" %}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify({template_id: templateId, name: name.trim()}),
+  }).then(r => r.json()).then(data => {
+    if (data.config_id) window.location.href = `/audiopatch/comm-config/${data.config_id}/`;
+    else alert('Error: ' + (data.error || 'Unknown'));
+  });
+}
+
+document.addEventListener('DOMContentLoaded', loadTemplateDropdown);
+
 function createConfig(deviceType) {
   const name = prompt('Config name:', '');
   if (name === null) return;
