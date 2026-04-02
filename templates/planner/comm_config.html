@@ -633,7 +633,7 @@
   <div class="cc-grid">
     {% for cfg in configs %}
     <a class="cc-card" href="{% url 'planner:comm_config_editor' cfg.id %}">
-      <div class="cc-card-title">{{ cfg.device_type|default:"Arcadia" }} — {{ cfg.system_id|default:"—" }}</div>
+      <div class="cc-card-title">{{ cfg.name }}</div>
       <div class="cc-card-meta">Created {{ cfg.created_at|date:"M j, Y" }}</div>
       <div class="cc-card-stats">
         <div class="cc-stat">
