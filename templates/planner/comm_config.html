@@ -667,7 +667,7 @@
       <span style="color:#5555aa;font-weight:400;font-size:1rem">/ {{ config.system_id|default:"—" }}</span>
     </h2>
     <div style="display:flex;gap:8px;">
-      <button class="cc-btn cc-btn-secondary" onclick="openCrewNamesModal()">👥 Crew Names</button>
+      <a class="cc-btn cc-btn-secondary" href="/audiopatch/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
     </div>
@@ -1041,29 +1041,6 @@
   </div>
 </div>
 <!-- ── Crew Names Modal ── -->
-<div id="crewNamesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:400px;max-width:500px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h3 style="color:#e0e0e0;margin:0;font-size:1.1rem;">👥 Crew Names</h3>
-      <button class="cc-btn cc-btn-secondary" style="padding:4px 10px;" onclick="closeCrewNamesModal()">✕</button>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;">
-      <input id="newCrewNameInput" class="cc-field-input" placeholder="Add new crew name..." style="flex:1;"
-             onkeydown="if(event.key==='Enter')addCrewName()">
-      <button class="cc-btn cc-btn-primary" onclick="addCrewName()">+ Add</button>
-    </div>
-    <div id="crewNamesList_modal" style="overflow-y:auto;flex:1;">
-      {% for cn in crew_names %}
-      <div class="cc-crew-name-row" id="crew-name-{{ cn.id }}">
-        <span class="cc-crew-name-text">{{ cn.name }}</span>
-        <button class="cc-pl-delete" onclick="deleteCrewName({{ cn.id }})">✕</button>
-      </div>
-      {% empty %}
-      <p style="color:#5555aa;font-size:0.85rem;text-align:center;padding:20px;">No crew names yet. Add some above.</p>
-      {% endfor %}
-    </div>
-  </div>
-</div>
 
 <!-- Hidden CSRF -->
 <form class="cc-csrf">{% csrf_token %}</form>
@@ -1498,13 +1475,7 @@ function submitAddRole() {
     }
   });
 }
-function openCrewNamesModal() {
-  document.getElementById('crewNamesModal').style.display = 'flex';
-  document.getElementById('newCrewNameInput').focus();
-}
-function closeCrewNamesModal() {
-  document.getElementById('crewNamesModal').style.display = 'none';
-}
+
 function addCrewName() {
   const input = document.getElementById('newCrewNameInput');
   const name = input.value.trim();
