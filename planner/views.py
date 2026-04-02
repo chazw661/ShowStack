@@ -3679,9 +3679,10 @@ def comm_config_create(request):
         if not current_project:
             return JsonResponse({'error': 'No active project'}, status=400)
 
+        name = data.get('name', '').strip() or f"New {device_type.title()} Config"
         config = CommConfig.objects.create(
             project=current_project,
-            name=f"New {device_type.title()} Config",
+            name=name,
             device_type=device_type,
         )
 

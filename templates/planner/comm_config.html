@@ -1167,10 +1167,13 @@ document.addEventListener('click', e => {
 
 // ── Create config ──
 function createConfig(deviceType) {
+  const name = prompt('Config name:', '');
+  if (name === null) return;
+  if (!name.trim()) { alert('Please enter a name.'); return; }
   fetch('{% url "planner:comm_config_create" %}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-    body: JSON.stringify({ device_type: deviceType, project_id: {{ current_project.id|default:'null' }} })
+    body: JSON.stringify({ device_type: deviceType, name: name.trim(), project_id: {{ current_project.id|default:'null' }} })
   })
   .then(r => r.json())
   .then(data => {
