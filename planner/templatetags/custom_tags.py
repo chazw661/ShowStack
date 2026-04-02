@@ -35,3 +35,8 @@ def add_class(bound_field, css_class):
 @register.filter
 def get_item(dictionary, key):
     return dictionary.get(key)
+
+@register.filter
+def chunk(lst, n):
+    lst = list(lst)
+    return [lst[i:i+n] for i in range(0, len(lst), n)]

@@ -755,8 +755,45 @@
                 <button class="cc-btn cc-btn-danger" style="padding:4px 10px;font-size:0.75rem;" onclick="event.stopPropagation();deleteRole({{ role.id }})">🗑 Delete Role</button>
               </div>
             </div>
-            {% if role.device_type in 'V12,V24,V32' %}<div class="cc-keyset-grid-vpanel-wrapper">{% endif %}
-            <div class="{% if role.device_type in 'V12,V24,V32' %}cc-keyset-grid-vpanel{% else %}cc-keyset-grid{% endif %}">
+            {% if role.device_type in 'V12,V24,V32' %}
+            <div class="cc-keyset-grid-vpanel-wrapper">
+              {% for row in role.keysets.all|chunk:12 %}
+              <div class="cc-keyset-grid-vpanel">
+                {% for key in row %}
+                <div class="cc-keyset-row" id="keyset-row-{{ key.id }}">
+                  <div class="cc-key-letter">{{ key.key_letter }}</div>
+                  <select class="cc-key-select cc-key-partyline"
+                          onchange="saveKeyset({{ key.id }}, 'partyline', this.value)"
+                          title="Partyline">
+                    <option value="">— Unassigned —</option>
+                    {% for pl in partylines %}
+                    <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
+                      CH{{ pl.channel_number }}: {{ pl.label }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <select class="cc-key-select cc-key-activation"
+                          onchange="saveKeyset({{ key.id }}, 'activation_state', this.value)"
+                          title="Activation">
+                    <option value="talkforcelisten" {% if key.activation_state == "talkforcelisten" %}selected{% endif %}>Talk + FL</option>
+                    <option value="talklisten" {% if key.activation_state == "talklisten" %}selected{% endif %}>Talk + Listen</option>
+                    <option value="talk" {% if key.activation_state == "talk" %}selected{% endif %}>Talk Only</option>
+                    <option value="listen" {% if key.activation_state == "listen" %}selected{% endif %}>Listen Only</option>
+                  </select>
+                  <select class="cc-key-select cc-key-talkmode"
+                          onchange="saveKeyset({{ key.id }}, 'talk_mode', this.value)"
+                          title="Talk Mode">
+                    <option value="latching" {% if key.talk_mode == "latching" %}selected{% endif %}>Latching</option>
+                    <option value="non-latching" {% if key.talk_mode == "non-latching" %}selected{% endif %}>Momentary</option>
+                    <option value="disabled" {% if key.talk_mode == "disabled" %}selected{% endif %}>Disabled</option>
+                  </select>
+                </div>
+                {% endfor %}
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="cc-keyset-grid">
               {% for key in role.keysets.all %}
               <div class="cc-keyset-row" id="keyset-row-{{ key.id }}">
                 <div class="cc-key-letter">{{ key.key_letter }}</div>
@@ -796,7 +833,7 @@
               </div>
               {% endfor %}
             </div>
-            {% if role.device_type in 'V12,V24,V32' %}</div>{% endif %}
+            {% endif %}
           </div>
         </div>
         {% endfor %}
