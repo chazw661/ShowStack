@@ -616,8 +616,8 @@
           <div class="cc-dropdown-item" onclick="createConfig('arcadia')">
             📡 Arcadia Base Station
           </div>
-          <div class="cc-dropdown-item cc-dropdown-item--disabled">
-            📻 FreeSpeak II <span class="badge">Soon</span>
+          <div class="cc-dropdown-item" onclick="createConfig('freespeak')">
+            📻 FreeSpeak II
           </div>
           <div class="cc-dropdown-item cc-dropdown-item--disabled">
             🔗 HelixNet <span class="badge">Soon</span>
@@ -670,7 +670,11 @@
     <div style="display:flex;gap:8px;">
       <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
       <button class="cc-btn cc-btn-secondary" onclick="openSaveTemplateModal({{ config.id }})">💾 Save as Template</button>
+      {% if config.device_type == 'freespeak' %}
+      <a class="cc-btn cc-btn-success" href="{% url 'planner:comm_config_export_freespeak' config.id %}" style="text-decoration:none;">⬇ Export .cca</a>
+      {% else %}
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
+      {% endif %}
       <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
     </div>
   </div>

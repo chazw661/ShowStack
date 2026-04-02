@@ -3687,11 +3687,25 @@ def comm_config_create(request):
         )
 
         # Seed factory defaults
-        _seed_factory_defaults(config)
+        if config.device_type == 'freespeak':
+            _seed_freespeak_defaults(config)
+        else:
+            _seed_factory_defaults(config)
 
         return JsonResponse({'ok': True, 'config_id': config.id})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+def _seed_freespeak_defaults(config):
+    """Populate a new FreeSpeak config with 12 default channels."""
+    for ch in range(1, 13):
+        CommConfigPartyline.objects.create(
+            config=config,
+            channel_number=ch,
+            label=f'Channel {ch}',
+            helixnet_enabled=False,
+        )
 
 
 def _seed_factory_defaults(config):
@@ -5376,3 +5390,63 @@ def comm_config_load_template(request):
         return JsonResponse({'error': 'Template not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+# ─────────────────────────────────────────────────────────────
+# FreeSpeak II .cca Export
+# ─────────────────────────────────────────────────────────────
+@login_required
+def comm_config_export_freespeak(request, config_id):
+    import json, os, tarfile, gzip, tempfile, shutil, io
+    from django.http import HttpResponse
+    from django.conf import settings
+    from datetime import datetime, timezone
+
+    config = get_object_or_404(CommConfig, id=config_id)
+    factory_path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config', 'fsii_factory')
+
+    if not os.path.exists(factory_path):
+        return HttpResponse('FreeSpeak factory files not found', status=500)
+
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        db_dir = os.path.join(tmp_dir, 'db')
+        shutil.copytree(factory_path, db_dir)
+
+        # Update channel labels from ShowStack partylines
+        channels = {pl.channel_number: pl.label for pl in config.partylines.all()}
+        connections_path = os.path.join(db_dir, 'connections')
+        new_lines = []
+        with open(connections_path) as f:
+            for line in f:
+                obj = json.loads(line.strip())
+                if obj['val']['type'] == 'partyline':
+                    ch_id = obj['val']['id']
+                    if ch_id in channels:
+                        obj['val']['label'] = channels[ch_id]
+                new_lines.append(json.dumps(obj, separators=(',', ':')))
+        with open(connections_path, 'w') as f:
+            f.write('\n'.join(new_lines))
+
+        # Write datetime and type
+        with open(os.path.join(tmp_dir, 'datetime.txt'), 'w') as f:
+            f.write(datetime.now(timezone.utc).strftime('%a %b %d %H:%M:%S UTC %Y'))
+        with open(os.path.join(tmp_dir, 'type.txt'), 'w') as f:
+            f.write('FSII')
+
+        tar_path = os.path.join(tmp_dir, 'config.tar')
+        with tarfile.open(tar_path, 'w') as tar:
+            tar.add(db_dir, arcname='db')
+            tar.add(os.path.join(tmp_dir, 'datetime.txt'), arcname='datetime.txt')
+            tar.add(os.path.join(tmp_dir, 'type.txt'), arcname='type.txt')
+
+        buf = io.BytesIO()
+        with gzip.GzipFile(fileobj=buf, mode='wb', compresslevel=9) as gz:
+            with open(tar_path, 'rb') as f:
+                gz.write(f.read())
+
+        filename = f'{config.name.replace(" ", "_")}.cca'
+        response = HttpResponse(buf.getvalue(), content_type='application/octet-stream')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+    finally:
+        shutil.rmtree(tmp_dir)

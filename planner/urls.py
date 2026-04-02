@@ -71,6 +71,7 @@ urlpatterns = [
      path('comm-config/role/chips/', views.comm_config_role_chips, name='comm_config_role_chips'),
      path('comm-config/port/assign/', views.comm_config_assign_port, name='comm_config_assign_port'),
      path('comm-config/lan/update/', views.comm_config_update_lan, name='comm_config_update_lan'),
+     path('comm-config/<int:config_id>/export-freespeak/', views.comm_config_export_freespeak, name='comm_config_export_freespeak'),
      path('comm-config/template/save/', views.comm_config_save_as_template, name='comm_config_save_as_template'),
      path('comm-config/template/list/', views.comm_config_list_templates, name='comm_config_list_templates'),
      path('comm-config/template/load/', views.comm_config_load_template, name='comm_config_load_template'),
