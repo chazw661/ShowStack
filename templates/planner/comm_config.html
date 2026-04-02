@@ -393,6 +393,8 @@
     white-space: nowrap;
   }
   .cc-key-chip.assigned { background: #0e2a4a; color: #6ab4ff; border-color: #2a5a8a; font-weight: 600; }
+  .cc-role-keyset-vpanel { flex-wrap: wrap; max-width: 100%; }
+  .cc-role-keyset-vpanel .cc-key-chip { flex: 0 0 calc(100% / 12 - 5px); text-align: center; }
 
   /* ── Ports tab ── */
   .cc-port-group { margin-bottom: 24px; }
@@ -721,7 +723,7 @@
             <span class="cc-role-name">
               <span class="cc-role-name-display" id="role-name-{{ role.id }}">{{ role.label }}</span>
             </span>
-            <div class="cc-role-keyset" id="role-chips-{{ role.id }}">
+            <div class="cc-role-keyset {% if role.device_type in 'V12,V24,V32' %}cc-role-keyset-vpanel{% endif %}" id="role-chips-{{ role.id }}">
               {% for key in role.keysets.all %}
               <span class="cc-key-chip {% if key.partyline %}assigned{% endif %}">
                 {{ key.key_letter }}{% if key.partyline %}: {{ key.partyline.label|truncatechars:8 }}{% endif %}
