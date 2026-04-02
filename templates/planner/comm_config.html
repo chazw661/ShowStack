@@ -609,6 +609,7 @@
       </button>
       <input type="file" id="ccaUploadInput" accept=".cca" style="display:none">
 
+      <button class="cc-btn cc-btn-secondary" onclick="openLoadTemplateModal()">📂 Templates</button>
       <!-- New Config dropdown -->
       <div class="cc-dropdown">
         <button class="cc-btn cc-btn-primary" onclick="toggleDropdown()">
@@ -1723,3 +1724,34 @@ function addRoleset(configId) {
 }
 </script>
 {% endblock %}
+
+<!-- ── Save Template Modal ── -->
+<div id="saveTemplateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:360px;max-width:440px;width:90%;">
+    <h3 style="color:#e0e0e0;margin:0 0 20px;font-size:1.1rem;">⭐ Save as Template</h3>
+    <input type="hidden" id="saveTemplateConfigId">
+    <div style="margin-bottom:20px;">
+      <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Template Name</label>
+      <input id="saveTemplateNameInput" style="width:100%;box-sizing:border-box;background:#1e1e3a;border:1px solid #3a3a5a;border-radius:6px;color:#e0e0e0;padding:8px 10px;font-size:0.875rem;outline:none;"
+             placeholder="e.g. GJS Corporate Standard"
+             onkeydown="if(event.key==='Enter')submitSaveTemplate()">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="cc-btn cc-btn-secondary" onclick="document.getElementById('saveTemplateModal').style.display='none'">Cancel</button>
+      <button class="cc-btn cc-btn-success" onclick="submitSaveTemplate()">Save Template</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Load Template Modal ── -->
+<div id="loadTemplateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:380px;max-width:480px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:#e0e0e0;margin:0;font-size:1.1rem;">📂 Load Template</h3>
+      <button class="cc-btn cc-btn-secondary" style="padding:4px 10px;" onclick="document.getElementById('loadTemplateModal').style.display='none'">✕</button>
+    </div>
+    <div id="ccTemplateListContainer" style="overflow-y:auto;flex:1;">
+      <p style="color:#5555aa;text-align:center;padding:20px;">Loading templates...</p>
+    </div>
+  </div>
+</div>
