@@ -3894,11 +3894,17 @@ def comm_config_update_keyset(request):
         if field not in allowed:
             return JsonResponse({'error': f'Field "{field}" not editable'}, status=400)
         if field == 'partyline':
-            if value:
+            if value == 'call':
+                key.partyline = None
+                key.is_call_key = True
+                key.entity_type = None
+            elif value:
                 key.partyline = CommConfigPartyline.objects.get(id=value)
+                key.is_call_key = False
                 key.entity_type = 0
             else:
                 key.partyline = None
+                key.is_call_key = False
                 key.entity_type = None
         else:
             setattr(key, field, value)
@@ -5414,6 +5420,7 @@ def comm_config_export_freespeak(request, config_id):
 
         # Update channel labels from ShowStack partylines
         channels = {pl.channel_number: pl.label for pl in config.partylines.all()}
+        ch_id_map = {pl.channel_number: pl.id for pl in config.partylines.all()}
         connections_path = os.path.join(db_dir, 'connections')
         new_lines = []
         with open(connections_path) as f:
@@ -5426,6 +5433,108 @@ def comm_config_export_freespeak(request, config_id):
                 new_lines.append(json.dumps(obj, separators=(',', ':')))
         with open(connections_path, 'w') as f:
             f.write('\n'.join(new_lines))
+
+        # Write roles from ShowStack data
+        roles_path = os.path.join(db_dir, 'roles')
+        # Read factory roles to keep non-FSII-BP/E-BP types
+        factory_roles = []
+        with open(roles_path) as f:
+            for line in f:
+                obj = json.loads(line.strip())
+                if obj['val']['type'] not in ('FSII-BP', 'E-BP'):
+                    factory_roles.append(obj)
+
+        showstack_roles = []
+        next_id = 1000
+        for role in config.roles.all().order_by('role_number'):
+            if role.device_type not in ('FSII-BP', 'E-BP'):
+                continue
+            keysets = []
+            for key in role.keysets.all().order_by('key_index'):
+                if key.is_call_key:
+                    keyset = {
+                        'keysetIndex': key.key_index,
+                        'connections': [{'res': '/api/1/special/call'}],
+                        'activationState': 'listen',
+                        'isReplyKey': False,
+                        'isCallKey': True,
+                        'talkBtnMode': 'disabled',
+                    }
+                elif key.is_reply_key:
+                    keyset = {
+                        'keysetIndex': key.key_index,
+                        'connections': [],
+                        'isReplyKey': True,
+                        'isCallKey': False,
+                        'activationState': 'talk',
+                        'talkBtnMode': 'disabled',
+                    }
+                elif key.partyline:
+                    keyset = {
+                        'keysetIndex': key.key_index,
+                        'connections': [{'res': f'/api/1/connections/{key.partyline.channel_number}'}],
+                        'activationState': key.activation_state,
+                        'isReplyKey': False,
+                        'isCallKey': False,
+                        'talkBtnMode': key.talk_mode,
+                    }
+                else:
+                    keyset = {
+                        'keysetIndex': key.key_index,
+                        'connections': [],
+                        'activationState': key.activation_state,
+                        'isReplyKey': False,
+                        'isCallKey': False,
+                        'talkBtnMode': key.talk_mode,
+                    }
+                keysets.append(keyset)
+
+            role_obj = {
+                'key': str(next_id),
+                'val': {
+                    'id': next_id,
+                    'type': role.device_type,
+                    'label': role.label,
+                    'description': role.description or '',
+                    'isDefault': False,
+                    'settings': {
+                        'keysets': keysets,
+                        'groups': [],
+                        'headphoneLimit': 0,
+                        'sidetoneGain': -9.6,
+                        'sidetoneControl': 'tracking',
+                        'masterVolume': -9.6,
+                        'lineInVolume': 0,
+                        'portInputGain': 0,
+                        'portOutputGain': 0,
+                        'micEchoCancellation': False,
+                        'masterVolumeOperation': False,
+                        'batteryAlarmMode': 'vibrate+audio',
+                        'lowBatteryThreshold': 25,
+                        'callAlertMode': 'off',
+                        'outOfRangeAlarm': 'off',
+                        'displayBrightness': 'veryhigh',
+                        'displayDimTimeout': 30,
+                        'displayOffTimeout': 30,
+                        'listenAgainAutoDelete': 240,
+                        'listenAgainRecordTime': 15,
+                        'replyTalkAutoClear': 10,
+                        'menuLevel': 'normal',
+                        'latchingTalkKeys': True,
+                        'dimmedTallies': False,
+                        'partyLineDisplayMode': False,
+                        'menuKeyMode': 'switchvolctrl',
+                        'eavesdropping': False,
+                        'useLocalSettings': False,
+                    }
+                }
+            }
+            showstack_roles.append(role_obj)
+            next_id += 1
+
+        with open(roles_path, 'w') as f:
+            for obj in factory_roles + showstack_roles:
+                f.write(json.dumps(obj, separators=(',', ':')) + '\n')
 
         # Write datetime and type
         with open(os.path.join(tmp_dir, 'datetime.txt'), 'w') as f:

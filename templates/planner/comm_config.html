@@ -769,6 +769,9 @@
                           onchange="saveKeyset({{ key.id }}, 'partyline', this.value)"
                           title="Partyline">
                     <option value="">— Unassigned —</option>
+                    {% if config.device_type == 'freespeak' %}
+                    <option value="call" {% if key.is_call_key %}selected{% endif %}>📞 Call Key</option>
+                    {% endif %}
                     {% for pl in partylines %}
                     <option value="{{ pl.id }}" {% if key.partyline_id == pl.id %}selected{% endif %}>
                       CH{{ pl.channel_number }}: {{ pl.label }}
@@ -1009,6 +1012,10 @@
       <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Device Type</label>
       <select id="addRoleDeviceType" class="cc-field-input" style="width:100%;box-sizing:border-box;">
         <option value="">— Select device type —</option>
+        {% if config and config.device_type == 'freespeak' %}
+        <option value="FSII-BP">FreeSpeak II Beltpack (4-key)</option>
+        <option value="E-BP">FreeSpeak Edge Beltpack (8-key)</option>
+        {% else %}
         <optgroup label="FreeSpeak">
           <option value="FSII-BP">FreeSpeak II Beltpack</option>
           <option value="E-BP">FreeSpeak Edge Beltpack</option>
@@ -1023,6 +1030,7 @@
           <option value="V24">V-Panel 24 Key</option>
           <option value="V32">V-Panel 32 Key</option>
         </optgroup>
+        {% endif %}
       </select>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
