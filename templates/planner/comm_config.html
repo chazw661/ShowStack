@@ -666,7 +666,7 @@
   <div class="cc-editor-header">
     <a class="cc-back-btn" href="{% url 'planner:comm_config' %}">← All Configs</a>
     <h2 class="cc-editor-title">
-      {{ config.device_type|default:"Arcadia" }}
+      {{ config.name }}
       <span style="color:#5555aa;font-weight:400;font-size:1rem">/ {{ config.system_id|default:"—" }}</span>
     </h2>
     <div style="display:flex;gap:8px;">
