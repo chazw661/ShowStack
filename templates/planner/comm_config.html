@@ -339,8 +339,9 @@
     font-weight: 500;
   }
   .cc-keyset-grid { display: flex; flex-direction: column; gap: 6px; }
-  .cc-keyset-grid-vpanel { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; direction: rtl; }
-  .cc-keyset-grid-vpanel .cc-keyset-row { flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px; background: rgba(255,255,255,0.04); border-radius: 6px; direction: ltr; }
+  .cc-keyset-grid-vpanel-wrapper { display: flex; flex-direction: column-reverse; }
+  .cc-keyset-grid-vpanel { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; }
+  .cc-keyset-grid-vpanel .cc-keyset-row { flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px; background: rgba(255,255,255,0.04); border-radius: 6px; }
   .cc-keyset-grid-vpanel .cc-key-letter { font-size: 0.75rem; font-weight: 600; color: #7a9ec8; margin-bottom: 2px; }
   .cc-keyset-grid-vpanel .cc-key-select { width: 100%; min-width: 0; font-size: 0.72rem; }
   .cc-keyset-row {
@@ -754,6 +755,7 @@
                 <button class="cc-btn cc-btn-danger" style="padding:4px 10px;font-size:0.75rem;" onclick="event.stopPropagation();deleteRole({{ role.id }})">🗑 Delete Role</button>
               </div>
             </div>
+            {% if role.device_type in 'V12,V24,V32' %}<div class="cc-keyset-grid-vpanel-wrapper">{% endif %}
             <div class="{% if role.device_type in 'V12,V24,V32' %}cc-keyset-grid-vpanel{% else %}cc-keyset-grid{% endif %}">
               {% for key in role.keysets.all %}
               <div class="cc-keyset-row" id="keyset-row-{{ key.id }}">
@@ -794,6 +796,7 @@
               </div>
               {% endfor %}
             </div>
+            {% if role.device_type in 'V12,V24,V32' %}</div>{% endif %}
           </div>
         </div>
         {% endfor %}
