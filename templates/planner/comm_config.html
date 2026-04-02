@@ -667,7 +667,7 @@
       <span style="color:#5555aa;font-weight:400;font-size:1rem">/ {{ config.system_id|default:"—" }}</span>
     </h2>
     <div style="display:flex;gap:8px;">
-      <a class="cc-btn cc-btn-secondary" href="/audiopatch/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
+      <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
     </div>
@@ -1410,6 +1410,7 @@ function handleCrewKeydown(event, roleId) {
 
 function saveRoleName(roleId, newLabel) {
   if (!newLabel.trim()) return;
+  addCrewNameIfNew(newLabel.trim());
   fetch('{% url "planner:comm_config_update_role" %}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
