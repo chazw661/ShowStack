@@ -615,8 +615,7 @@
           + New Configuration ▾
         </button>
         <div class="cc-dropdown-menu" id="newConfigMenu">
-          <div id="template-dropdown-items"></div>
-          <div style="padding:6px 12px;font-size:0.7rem;color:#5555aa;text-transform:uppercase;letter-spacing:0.05em;">New Blank Config</div>
+
           <div class="cc-dropdown-item" onclick="createConfig('arcadia')">
             📡 Arcadia Base Station
           </div>
@@ -673,7 +672,7 @@
     </h2>
     <div style="display:flex;gap:8px;">
       <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
-      <button class="cc-btn cc-btn-secondary" onclick="saveAsTemplate({{ config.id }})">⭐ Save as Template</button>
+      <button class="cc-btn cc-btn-secondary" onclick="openSaveTemplateModal({{ config.id }})">💾 Save as Template</button>
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
     </div>
@@ -1170,17 +1169,25 @@ document.addEventListener('click', e => {
 
 // ── Create config ──
 // ── COMM Config Templates ──
-function saveAsTemplate(configId) {
-  const name = prompt('Template name:', '');
-  if (name === null) return;
-  if (!name.trim()) { alert('Please enter a name.'); return; }
+function openSaveTemplateModal(configId) {
+  document.getElementById('saveTemplateConfigId').value = configId;
+  document.getElementById('saveTemplateNameInput').value = '';
+  document.getElementById('saveTemplateModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('saveTemplateNameInput').focus(), 100);
+}
+function submitSaveTemplate() {
+  const name = document.getElementById('saveTemplateNameInput').value.trim();
+  const configId = document.getElementById('saveTemplateConfigId').value;
+  if (!name) { alert('Please enter a template name.'); return; }
   fetch('{% url "planner:comm_config_save_as_template" %}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-    body: JSON.stringify({config_id: configId, template_name: name.trim()}),
+    body: JSON.stringify({config_id: configId, template_name: name}),
   }).then(r => r.json()).then(data => {
-    if (data.ok) alert('Template "' + data.template_name + '" saved!');
-    else alert('Error: ' + (data.error || 'Unknown'));
+    if (data.ok) {
+      document.getElementById('saveTemplateModal').style.display = 'none';
+      alert('Template "' + data.template_name + '" saved!');
+    } else alert('Error: ' + (data.error || 'Unknown'));
   });
 }
 
@@ -1199,10 +1206,31 @@ function loadTemplateDropdown() {
     });
 }
 
+function openLoadTemplateModal() {
+  document.getElementById('loadTemplateModal').style.display = 'flex';
+  fetch('{% url "planner:comm_config_list_templates" %}')
+    .then(r => r.json())
+    .then(data => {
+      const container = document.getElementById('ccTemplateListContainer');
+      if (!data.templates || data.templates.length === 0) {
+        container.innerHTML = '<p style="color:#5555aa;text-align:center;padding:20px;">No templates saved yet.</p>';
+        return;
+      }
+      container.innerHTML = data.templates.map(t => `
+        <div style="display:flex;align-items:center;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;margin-bottom:6px;gap:10px;">
+          <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">📋 ${t.template_name}</span>
+          <button class="cc-btn cc-btn-secondary" style="padding:4px 12px;font-size:0.8rem;"
+                  onclick="loadTemplate(${t.id}, '${t.template_name.replace(/'/g, "\'")}')">Load</button>
+        </div>
+      `).join('');
+    });
+}
+
 function loadTemplate(templateId, templateName) {
   const name = prompt('Config name:', templateName);
   if (name === null) return;
   if (!name.trim()) { alert('Please enter a name.'); return; }
+  document.getElementById('loadTemplateModal').style.display = 'none';
   fetch('{% url "planner:comm_config_load_template" %}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
