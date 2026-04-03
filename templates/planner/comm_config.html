@@ -674,7 +674,7 @@
       <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
       <button class="cc-btn cc-btn-secondary" onclick="openSaveTemplateModal({{ config.id }})">💾 Save as Template</button>
       {% if config.device_type == 'freespeak' %}
-      <a class="cc-btn cc-btn-success" href="{% url 'planner:comm_config_export_freespeak' config.id %}" style="text-decoration:none;color:#fff;">⬇ Export .cca</a>
+      <button class="cc-btn cc-btn-success" onclick="window.location.href='{% url 'planner:comm_config_export_freespeak' config.id %}'">⬇ Export .cca</button>
       {% else %}
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       {% endif %}
