@@ -5524,41 +5524,39 @@ def comm_config_export_freespeak(request, config_id):
             '2w_3': ('2W', 3), '2w_4': ('2W', 3),
         }
         devices_path = os.path.join(db_dir, 'devices')
-        new_device_lines = []
+        # FSII stores multiple history entries — parse all, only modify the last
         with open(devices_path) as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                obj = json.loads(line.strip())
-                for iface in obj['val'].get('audioInterfaces', []):
-                    # Update 2W interface-level mode and power
-                    for gid, (itype, hw) in MODE_MAP.items():
-                        if iface['type'] == itype and iface['hwIndex'] == hw:
-                            pa = port_assignments.get(gid)
-                            if pa and 'settings' in iface:
-                                iface['settings']['mode'] = 'RTS' if pa.mode_2w == 'rts' else 'ClearCom'
-                                iface['settings']['power'] = pa.power_enabled
-                    for port in iface.get('ports', []):
-                        for gid, (itype, hw, pidx) in FSII_GID_MAP.items():
-                            if iface['type'] == itype and iface['hwIndex'] == hw and port['hwIndex'] == pidx:
-                                pa = port_assignments.get(gid)
-                                if pa:
-                                    if pa.partyline:
-                                        port['connections'] = {str(pa.partyline.channel_number): {'connectionState': 0}}
-                                    else:
-                                        port['connections'] = {}
-                                    if pa.port_label:
-                                        port['label'] = pa.port_label
-                                    if itype == '2W':
-                                        port['settings']['callSignal'] = pa.receive_call_signal
-                                        port['settings']['termination'] = pa.termination_enabled
-                                    elif itype == '4W':
-                                        port['settings']['callSignal'] = pa.receive_call_signal
-                                        # Port function: 4wire-x=to matrix, 4wire=to panel
-                                        port['settings']['pinout'] = 'matrix' if pa.port_function == '4wire-x' else 'panel'
-                new_device_lines.append(json.dumps(obj, separators=(',', ':')))
+            all_lines = [l for l in f if l.strip()]
+        all_objs = [json.loads(l) for l in all_lines]
+        # Only update the last device entry
+        obj = all_objs[-1]
+        for iface in obj['val'].get('audioInterfaces', []):
+            for gid, (itype, hw) in MODE_MAP.items():
+                if iface['type'] == itype and iface['hwIndex'] == hw:
+                    pa = port_assignments.get(gid)
+                    if pa and 'settings' in iface:
+                        iface['settings']['mode'] = 'RTS' if pa.mode_2w == 'rts' else 'ClearCom'
+                        iface['settings']['power'] = pa.power_enabled
+            for port in iface.get('ports', []):
+                for gid, (itype, hw, pidx) in FSII_GID_MAP.items():
+                    if iface['type'] == itype and iface['hwIndex'] == hw and port['hwIndex'] == pidx:
+                        pa = port_assignments.get(gid)
+                        if pa:
+                            if pa.partyline:
+                                port['connections'] = {str(pa.partyline.channel_number): {'connectionState': 0}}
+                            else:
+                                port['connections'] = {}
+                            if pa.port_label:
+                                port['label'] = pa.port_label
+                            if itype == '2W':
+                                port['settings']['callSignal'] = pa.receive_call_signal
+                                port['settings']['termination'] = pa.termination_enabled
+                            elif itype == '4W':
+                                port['settings']['callSignal'] = pa.receive_call_signal
+                                port['settings']['pinout'] = 'matrix' if pa.port_function == '4wire-x' else 'panel'
+        all_objs[-1] = obj
         with open(devices_path, 'w') as f:
-            f.write('\n'.join(new_device_lines) + '\n')
+            f.write('\n'.join(json.dumps(o, separators=(',', ':')) for o in all_objs) + '\n')
 
         # Write roles from ShowStack data
         roles_path = os.path.join(db_dir, 'roles')
