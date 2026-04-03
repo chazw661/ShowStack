@@ -4699,7 +4699,9 @@ class ShowDayAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
-        return super().has_delete_permission(request, obj)  
+        if ProjectMember.objects.filter(user=request.user, role='owner').exists():
+            return True
+        return super().has_delete_permission(request, obj) 
 
     class Media:
         css = {
@@ -4865,7 +4867,9 @@ class MicSessionAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
-        return super().has_delete_permission(request, obj)    
+        if ProjectMember.objects.filter(user=request.user, role='owner').exists():
+            return True
+        return super().has_delete_permission(request, obj)
 
     class Media:
         css = {
@@ -4938,6 +4942,8 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
             return True
         if request.user.groups.filter(name='Viewer').exists():
             return False
+        if ProjectMember.objects.filter(user=request.user, role='owner').exists():
+            return True
         return super().has_delete_permission(request, obj)
     
     class Media:
