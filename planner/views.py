@@ -5531,28 +5531,31 @@ def comm_config_export_freespeak(request, config_id):
                     continue
                 obj = json.loads(line.strip())
                 for iface in obj['val'].get('audioInterfaces', []):
-                    # Update 2W interface mode
+                    # Update 2W interface-level mode and power
                     for gid, (itype, hw) in MODE_MAP.items():
                         if iface['type'] == itype and iface['hwIndex'] == hw:
                             pa = port_assignments.get(gid)
                             if pa and 'settings' in iface:
                                 iface['settings']['mode'] = 'RTS' if pa.mode_2w == 'rts' else 'ClearCom'
+                                iface['settings']['power'] = pa.power_enabled
                     for port in iface.get('ports', []):
                         for gid, (itype, hw, pidx) in FSII_GID_MAP.items():
                             if iface['type'] == itype and iface['hwIndex'] == hw and port['hwIndex'] == pidx:
                                 pa = port_assignments.get(gid)
-                                if pa and pa.partyline:
-                                    port['connections'] = {str(pa.partyline.channel_number): {'connectionState': 0}}
+                                if pa:
+                                    if pa.partyline:
+                                        port['connections'] = {str(pa.partyline.channel_number): {'connectionState': 0}}
+                                    else:
+                                        port['connections'] = {}
                                     if pa.port_label:
                                         port['label'] = pa.port_label
-                                    # Port settings
                                     if itype == '2W':
                                         port['settings']['callSignal'] = pa.receive_call_signal
                                         port['settings']['termination'] = pa.termination_enabled
                                     elif itype == '4W':
                                         port['settings']['callSignal'] = pa.receive_call_signal
-                                else:
-                                    port['connections'] = {}
+                                        # Port function: 4wire-x=to matrix, 4wire=to panel
+                                        port['settings']['pinout'] = 'matrix' if pa.port_function == '4wire-x' else 'panel'
                 new_device_lines.append(json.dumps(obj, separators=(',', ':')))
         with open(devices_path, 'w') as f:
             f.write('\n'.join(new_device_lines) + '\n')
