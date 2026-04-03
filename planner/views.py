@@ -1909,6 +1909,25 @@ def comm_config_view(request, config_id=None):
                 for port_num, traffic in [(1, 'admin'), (2, 'aes67'), (3, 'disabled'), (4, 'disabled')]:
                     if port_num not in existing_ports:
                         CommConfigNetworkPort.objects.create(config=config, port_number=port_num, traffic_type=traffic)
+                # Auto-seed FreeSpeak ports if missing
+                if config.device_type == 'freespeak' and not config.port_assignments.exists():
+                    fsii_port_defaults = [
+                        ('2W', '2W Port A', '2w_1'),
+                        ('2W', '2W Port B', '2w_2'),
+                        ('2W', '2W Port C', '2w_3'),
+                        ('2W', '2W Port D', '2w_4'),
+                        ('4W', '4W Port 1', '4w_1'),
+                        ('4W', '4W Port 2', '4w_2'),
+                        ('4W', '4W Port 3', '4w_3'),
+                        ('4W', '4W Port 4', '4w_4'),
+                        ('SA', 'SA', 'sa'),
+                        ('PGM', 'PGM', 'pgm'),
+                    ]
+                    for port_type, label, gid in fsii_port_defaults:
+                        CommConfigPortAssignment.objects.create(
+                            config=config, port_type=port_type,
+                            port_label=label, port_gid=gid,
+                        )
                 dante_channels = config.dante_channels.all().order_by('direction', 'channel_number')
                 sessions = config.sessions.all().order_by('session_type')
                 rolesets = config.rolesets.all().order_by('roleset_number')
