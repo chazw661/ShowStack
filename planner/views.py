@@ -5554,6 +5554,7 @@ def comm_config_export_freespeak(request, config_id):
                             elif itype == '4W':
                                 port['settings']['callSignal'] = pa.receive_call_signal
                                 port['settings']['pinout'] = 'matrix' if pa.port_function == '4wire-x' else 'panel'
+                        break  # stop checking other gids once matched
         all_objs[-1] = obj
         with open(devices_path, 'w') as f:
             f.write('\n'.join(json.dumps(o, separators=(',', ':')) for o in all_objs) + '\n')
