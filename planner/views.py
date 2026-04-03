@@ -3698,13 +3698,33 @@ def comm_config_create(request):
 
 
 def _seed_freespeak_defaults(config):
-    """Populate a new FreeSpeak config with 12 default channels."""
+    """Populate a new FreeSpeak config with 12 default channels and ports."""
     for ch in range(1, 13):
         CommConfigPartyline.objects.create(
             config=config,
             channel_number=ch,
             label=f'Channel {ch}',
             helixnet_enabled=False,
+        )
+    # Seed ports
+    port_defaults = [
+        ('2W', '2W Port A', '2w_1'),
+        ('2W', '2W Port B', '2w_2'),
+        ('2W', '2W Port C', '2w_3'),
+        ('2W', '2W Port D', '2w_4'),
+        ('4W', '4W Port 1', '4w_1'),
+        ('4W', '4W Port 2', '4w_2'),
+        ('4W', '4W Port 3', '4w_3'),
+        ('4W', '4W Port 4', '4w_4'),
+        ('SA', 'SA',        'sa'),
+        ('PGM', 'PGM',      'pgm'),
+    ]
+    for port_type, label, gid in port_defaults:
+        CommConfigPortAssignment.objects.create(
+            config=config,
+            port_type=port_type,
+            port_label=label,
+            port_gid=gid,
         )
 
 
@@ -5436,6 +5456,39 @@ def comm_config_export_freespeak(request, config_id):
                 new_lines.append(json.dumps(obj, separators=(',', ':')))
         with open(connections_path, 'w') as f:
             f.write('\n'.join(new_lines))
+
+        # Update port assignments in devices file
+        port_assignments = {pa.port_gid: pa for pa in config.port_assignments.select_related('partyline').all()}
+        FSII_GID_MAP = {
+            '2w_1': ('2W', 2, 0), '2w_2': ('2W', 2, 1),
+            '2w_3': ('2W', 3, 0), '2w_4': ('2W', 3, 1),
+            '4w_1': ('4W', 0, 0), '4w_2': ('4W', 0, 1),
+            '4w_3': ('4W', 1, 0), '4w_4': ('4W', 1, 1),
+            'sa':   ('E1', 4, 1), 'pgm':  ('E1', 4, 0),
+        }
+        devices_path = os.path.join(db_dir, 'devices')
+        new_device_lines = []
+        with open(devices_path) as f:
+            for line in f:
+                obj = json.loads(line.strip())
+                for iface in obj['val'].get('audioInterfaces', []):
+                    for port in iface.get('ports', []):
+                        # Find matching gid
+                        for gid, (itype, hw, pidx) in FSII_GID_MAP.items():
+                            if iface['type'] == itype and iface['hwIndex'] == hw and port['hwIndex'] == pidx:
+                                pa = port_assignments.get(gid)
+                                if pa and pa.partyline:
+                                    port['connections'] = {
+                                        f'/api/1/connections/{pa.partyline.channel_number}': {
+                                            'joinMode': pa.join_mode
+                                        }
+                                    }
+                                    port['label'] = pa.port_label
+                                else:
+                                    port['connections'] = {}
+                new_device_lines.append(json.dumps(obj, separators=(',', ':')))
+        with open(devices_path, 'w') as f:
+            f.write('\n'.join(new_device_lines))
 
         # Write roles from ShowStack data
         roles_path = os.path.join(db_dir, 'roles')
