@@ -247,7 +247,11 @@ class BaseEquipmentAdmin(BaseAdmin):
             return True
         
         if obj is None:
-            return self._is_premium_owner(request) or self._user_has_editor_access(request)
+            return (
+                self._is_premium_owner(request) or 
+                self._user_has_editor_access(request) or
+                ProjectMember.objects.filter(user=request.user, role='owner').exists()
+    )
         
         # Check specific object permission
         # Handle both Project and Equipment objects, including nested children
