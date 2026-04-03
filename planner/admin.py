@@ -251,12 +251,17 @@ class BaseEquipmentAdmin(BaseAdmin):
                 self._is_premium_owner(request) or 
                 self._user_has_editor_access(request) or
                 ProjectMember.objects.filter(user=request.user, role='owner').exists()
-    )
+            )
         
         # Check specific object permission
-        # Handle both Project and Equipment objects, including nested children
         if obj.__class__.__name__ == 'Project':
             project = obj
+        elif obj.__class__.__name__ == 'MicSession':
+            project = obj.day.project
+        elif obj.__class__.__name__ == 'MicAssignment':
+            project = obj.session.day.project
+        elif obj.__class__.__name__ == 'MicGroup':
+            project = obj.session.day.project
         elif hasattr(obj, 'project'):
             project = obj.project
         elif hasattr(obj, 'array'):  # SpeakerCabinet
@@ -265,8 +270,9 @@ class BaseEquipmentAdmin(BaseAdmin):
             project = obj.prediction.project
         else:
             project = None
+
         role = self._get_user_role_for_project(request, project)
-        return role in ['owner', 'editor']  # Viewers can't delete
+        return role in ['owner', 'editor']
     
 
 
