@@ -5509,6 +5509,54 @@ def comm_config_export_freespeak(request, config_id):
         with open(devices_path, 'w') as f:
             f.write('\n'.join(new_device_lines))
 
+        # Update port assignments in devices file
+        port_assignments = {pa.port_gid: pa for pa in config.port_assignments.select_related('partyline').all()}
+        FSII_GID_MAP = {
+            '2w_1': ('2W', 2, 0), '2w_2': ('2W', 2, 1),
+            '2w_3': ('2W', 3, 0), '2w_4': ('2W', 3, 1),
+            '4w_1': ('4W', 0, 0), '4w_2': ('4W', 0, 1),
+            '4w_3': ('4W', 1, 0), '4w_4': ('4W', 1, 1),
+            'sa':   ('E1', 4, 1), 'pgm':  ('E1', 4, 0),
+        }
+        # 2W interface-level mode setting
+        MODE_MAP = {
+            '2w_1': ('2W', 2), '2w_2': ('2W', 2),
+            '2w_3': ('2W', 3), '2w_4': ('2W', 3),
+        }
+        devices_path = os.path.join(db_dir, 'devices')
+        new_device_lines = []
+        with open(devices_path) as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                obj = json.loads(line.strip())
+                for iface in obj['val'].get('audioInterfaces', []):
+                    # Update 2W interface mode
+                    for gid, (itype, hw) in MODE_MAP.items():
+                        if iface['type'] == itype and iface['hwIndex'] == hw:
+                            pa = port_assignments.get(gid)
+                            if pa and 'settings' in iface:
+                                iface['settings']['mode'] = 'RTS' if pa.mode_2w == 'rts' else 'ClearCom'
+                    for port in iface.get('ports', []):
+                        for gid, (itype, hw, pidx) in FSII_GID_MAP.items():
+                            if iface['type'] == itype and iface['hwIndex'] == hw and port['hwIndex'] == pidx:
+                                pa = port_assignments.get(gid)
+                                if pa and pa.partyline:
+                                    port['connections'] = {str(pa.partyline.channel_number): {'connectionState': 0}}
+                                    if pa.port_label:
+                                        port['label'] = pa.port_label
+                                    # Port settings
+                                    if itype == '2W':
+                                        port['settings']['callSignal'] = pa.receive_call_signal
+                                        port['settings']['termination'] = pa.termination_enabled
+                                    elif itype == '4W':
+                                        port['settings']['callSignal'] = pa.receive_call_signal
+                                else:
+                                    port['connections'] = {}
+                new_device_lines.append(json.dumps(obj, separators=(',', ':')))
+        with open(devices_path, 'w') as f:
+            f.write('\n'.join(new_device_lines) + '\n')
+
         # Write roles from ShowStack data
         roles_path = os.path.join(db_dir, 'roles')
         # Read factory roles to keep non-FSII-BP/E-BP types
