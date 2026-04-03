@@ -870,11 +870,13 @@
             <option value="{{ pl.id }}" {% if port.partyline_id == pl.id %}selected{% endif %}>CH{{ pl.channel_number }}: {{ pl.label }}</option>
             {% endfor %}
           </select>
+          {% if config.device_type != 'freespeak' %}
           <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'join_mode', this.value)">
             <option value="Talk-Listen" {% if port.join_mode == 'Talk-Listen' %}selected{% endif %}>Talk+Listen</option>
             <option value="Talk" {% if port.join_mode == 'Talk' %}selected{% endif %}>Talk Only</option>
             <option value="Listen" {% if port.join_mode == 'Listen' %}selected{% endif %}>Listen Only</option>
           </select>
+          {% endif %}
         </div>
         <div class="cc-port-row-extra">
           <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'mode_2w', this.value)" title="Mode">
@@ -912,21 +914,25 @@
             <option value="{{ pl.id }}" {% if port.partyline_id == pl.id %}selected{% endif %}>CH{{ pl.channel_number }}: {{ pl.label }}</option>
             {% endfor %}
           </select>
+          {% if config.device_type != 'freespeak' %}
           <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'join_mode', this.value)">
             <option value="Talk-Listen" {% if port.join_mode == 'Talk-Listen' %}selected{% endif %}>Talk+Listen</option>
             <option value="Talk" {% if port.join_mode == 'Talk' %}selected{% endif %}>Talk Only</option>
             <option value="Listen" {% if port.join_mode == 'Listen' %}selected{% endif %}>Listen Only</option>
           </select>
+          {% endif %}
         </div>
         <div class="cc-port-row-extra">
           <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'port_function', this.value)" title="Port Function">
             <option value="4wire-x" {% if port.port_function == '4wire-x' %}selected{% endif %}>4-Wire-X (To Matrix)</option>
             <option value="4wire" {% if port.port_function == '4wire' %}selected{% endif %}>4-Wire (To Panel)</option>
           </select>
+          {% if config.device_type != 'freespeak' %}
           <select class="cc-port-select cc-port-select-sm" onchange="savePortField({{ port.id }}, 'output_level', this.value)" title="Output Level">
             <option value="line" {% if port.output_level == 'line' %}selected{% endif %}>Line Level</option>
             <option value="mic" {% if port.output_level == 'mic' %}selected{% endif %}>Mic Level</option>
           </select>
+          {% endif %}
           <label class="cc-port-toggle">
             <input type="checkbox" {% if port.receive_call_signal %}checked{% endif %}
                    onchange="savePortField({{ port.id }}, 'receive_call_signal', this.checked)">
@@ -938,6 +944,7 @@
     </div>
 
     <!-- Dante Channels -->
+    {% if config.device_type != "freespeak" %}
     <div class="cc-port-group">
       <div class="cc-port-group-label" style="display:flex;align-items:center;justify-content:space-between;">
         <span>Dante Channels</span>
@@ -990,6 +997,7 @@
         <p style="color:#5555aa;font-size:0.85rem;padding:10px 0;">No Dante channels configured. Click + Add Channel to create one.</p>
       {% endif %}
     </div>
+    {% endif %}{# /freespeak dante hide #}
 
 
 
