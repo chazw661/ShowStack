@@ -3869,7 +3869,7 @@ class CommConfigRole(models.Model):
     @property
     def max_keysets(self):
         limits = {
-            'FSII-BP': 5, 'E-BP': 5, 'HBP-2X': 2,
+            'FSII-BP': 5, 'E-BP': 9, 'HBP-2X': 2,
             'HMS-4X': 4, 'HRM-4X': 4,
             'V12': 12, 'V24': 24, 'V32': 32,
         }

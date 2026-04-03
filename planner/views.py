@@ -3973,12 +3973,15 @@ def comm_config_add_role(request):
             label=label,
         )
         # Seed empty keysets based on device max_keysets
+        reply_key_index = role.max_keysets - 1 if device_type in ('FSII-BP', 'E-BP') else None
         for i in range(role.max_keysets):
+            is_reply = (i == reply_key_index)
             CommConfigKeyset.objects.create(
                 role=role,
                 key_index=i,
-                activation_state='talkforcelisten',
-                talk_mode='latching',
+                activation_state='talk' if is_reply else 'talkforcelisten',
+                talk_mode='disabled' if is_reply else 'latching',
+                is_reply_key=is_reply,
             )
         return JsonResponse({'ok': True, 'role_id': role.id})
     except CommConfig.DoesNotExist:
