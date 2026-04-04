@@ -3867,6 +3867,7 @@ class CommConfigRole(models.Model):
     device_type = models.CharField(max_length=10, choices=DEVICE_TYPE_CHOICES)
     label = models.CharField(max_length=20)
     description = models.CharField(max_length=100, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
     is_default = models.BooleanField(default=False)
 
     # Audio settings
