@@ -313,74 +313,102 @@ class Project(models.Model):
                 notes=presenter.notes
             )
                 presenter_map[presenter.id] = new_presenter
-            
+            # 6. Duplicate Mic Tracker System
+            # Duplicate Presenters first (needed for sessions)
+            presenter_map = {}
+            for presenter in self.presenters.all():
+                new_presenter = Presenter.objects.create(
+                    project=new_project,
+                    name=presenter.name,
+                    notes=presenter.notes
+                )
+                presenter_map[presenter.id] = new_presenter
+
             # Duplicate ShowDays
             showday_map = {}
             for showday in self.showday_set.all():
                 new_showday = ShowDay.objects.create(
-                project=new_project,
-                date=showday.date,
-                name=showday.name,
-                is_collapsed=showday.is_collapsed,
-                order=showday.order
-            )
+                    project=new_project,
+                    date=showday.date,
+                    name=showday.name,
+                    is_collapsed=showday.is_collapsed,
+                    order=showday.order
+                )
                 showday_map[showday.id] = new_showday
-            
-            # Duplicate MicSessions
-            # Duplicate MicSessions (through ShowDays)
-                session_map = {}
-                for old_showday_id, new_showday in showday_map.items():
-                    old_showday = ShowDay.objects.get(id=old_showday_id)
-                    for session in old_showday.sessions.all():
-                        new_session = MicSession.objects.create(
-                            day=new_showday,
-                            name=session.name,
-                            session_type=session.session_type,
-                            start_time=session.start_time,
-                            end_time=session.end_time,
-                            location=session.location,
-                            notes=session.notes,
-                            num_mics=session.num_mics,
-                            column_position=session.column_position,
-                            order=session.order
-                        )
-                        session_map[session.id] = new_session
 
-                        # Duplicate MicAssignments (INSIDE the session loop)
-                        for assignment in session.mic_assignments.all():
-                            new_assignment = MicAssignment.objects.create(
-                                session=new_session,
-                                rf_number=assignment.rf_number,
-                                mic_type=assignment.mic_type,
-                                is_micd=assignment.is_micd,
-                                is_d_mic=assignment.is_d_mic,
-                                active_presenter_index=assignment.active_presenter_index,
-                                notes=assignment.notes
-                            )
-                            # Duplicate PresenterSlots for this assignment
-                            for slot in assignment.presenter_slots.all():
-                                old_presenter_id = slot.presenter_id
-                                slot.pk = None
-                                slot.assignment = new_assignment
-                                slot.presenter = presenter_map.get(old_presenter_id) if old_presenter_id else None
-                                slot.photo = None  # don't copy uploaded files
-                                slot.save()
-            
-            
-                # Duplicate MicShowInfo (OneToOne)
-                if hasattr(self, 'mic_show_info'):
-                    MicShowInfo.objects.update_or_create(
-                        project=new_project,
-                        defaults={
-                            'show_name': self.mic_show_info.show_name,
-                            'venue_name': self.mic_show_info.venue_name,
-                            'ballroom_name': self.mic_show_info.ballroom_name,
-                            'start_date': self.mic_show_info.start_date,
-                            'end_date': self.mic_show_info.end_date,
-                            'default_mics_per_session': self.mic_show_info.default_mics_per_session,
-                            'default_session_duration': self.mic_show_info.default_session_duration
-                        }
+            # Duplicate MicSessions (through ShowDays)
+            session_map = {}
+            for old_showday_id, new_showday in showday_map.items():
+                old_showday = ShowDay.objects.get(id=old_showday_id)
+                for session in old_showday.sessions.all():
+                    new_session = MicSession.objects.create(
+                        day=new_showday,
+                        name=session.name,
+                        session_type=session.session_type,
+                        start_time=session.start_time,
+                        end_time=session.end_time,
+                        location=session.location,
+                        notes=session.notes,
+                        num_mics=session.num_mics,
+                        column_position=session.column_position,
+                        order=session.order
                     )
+                    session_map[session.id] = new_session
+
+                    # Duplicate MicGroups for this session and build group_map
+                    group_map = {}
+                    for group in session.mic_groups.all():
+                        new_group = MicGroup.objects.create(
+                            session=new_session,
+                            name=group.name,
+                            color=group.color
+                        )
+                        group_map[group.id] = new_group
+
+                    # Duplicate MicAssignments
+                    for assignment in session.mic_assignments.all():
+                        new_assignment = MicAssignment.objects.create(
+                            session=new_session,
+                            rf_number=assignment.rf_number,
+                            mic_type=assignment.mic_type,
+                            is_micd=assignment.is_micd,
+                            is_d_mic=assignment.is_d_mic,
+                            active_presenter_index=assignment.active_presenter_index,
+                            notes=assignment.notes,
+                            group=group_map.get(assignment.group_id) if assignment.group_id else None
+                        )
+
+                        # Duplicate PresenterSlots for this assignment
+                        for slot in assignment.presenter_slots.all():
+                            PresenterSlot.objects.create(
+                                assignment=new_assignment,
+                                presenter=presenter_map.get(slot.presenter_id) if slot.presenter_id else None,
+                                order=slot.order,
+                                is_active=slot.is_active,
+                                mic_type=slot.mic_type,
+                                placement=slot.placement,
+                                sensitivity=slot.sensitivity,
+                                output_level=slot.output_level,
+                                notes=slot.notes,
+                                photo=None,  # don't copy uploaded files
+                                group=group_map.get(slot.group_id) if slot.group_id else None,
+                                a2_group=group_map.get(slot.a2_group_id) if slot.a2_group_id else None
+                            )
+
+            # Duplicate MicShowInfo (OneToOne)
+            if hasattr(self, 'mic_show_info'):
+                MicShowInfo.objects.update_or_create(
+                    project=new_project,
+                    defaults={
+                        'show_name': self.mic_show_info.show_name,
+                        'venue_name': self.mic_show_info.venue_name,
+                        'ballroom_name': self.mic_show_info.ballroom_name,
+                        'start_date': self.mic_show_info.start_date,
+                        'end_date': self.mic_show_info.end_date,
+                        'default_mics_per_session': self.mic_show_info.default_mics_per_session,
+                        'default_session_duration': self.mic_show_info.default_session_duration
+                    }
+                )
             
                 # 7. Duplicate Soundvision/PA System
         # First duplicate SoundvisionPredictions
