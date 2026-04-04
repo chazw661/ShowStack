@@ -2820,7 +2820,7 @@ def ip_address_report(request):
                             'admin_url': f'/audiopatch/comm-config/{config.id}/',
                         }
                         for role in config.roles.filter(
-                            device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X']
+                            device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32']
                         ).order_by('role_number')
                     ]
                 }
@@ -2828,7 +2828,7 @@ def ip_address_report(request):
                     project=current_project, is_template=False
                 ).order_by('name')
                 if config.roles.filter(
-                    device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X']
+                    device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32']
                 ).exists()
             ],
             {
