@@ -3471,6 +3471,23 @@ def export_ip_address_report_csv(request):
     
     writer.writerow([])  # Blank line
     
+    # ==================== COMM CONFIG BELTPACKS ====================
+    comm_configs = CommConfig.objects.filter(is_template=False).order_by('name')
+    for config in comm_configs:
+        roles = config.roles.filter(
+            device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32']
+        ).order_by('role_number')
+        if roles.exists():
+            writer.writerow([f'COMM CONFIG — {config.name.upper()}'])
+            writer.writerow(['Role Name', 'Device Type', 'IP Address'])
+            for role in roles:
+                writer.writerow([
+                    role.label,
+                    role.get_device_type_display(),
+                    role.ip_address or ''
+                ])
+            writer.writerow([])
+
     # ==================== COMM BELT PACKS (HARDWIRED) ====================
     writer.writerow(['COMM BELT PACKS (HARDWIRED)'])
     writer.writerow(['BP #', 'Position', 'Name', 'IP Address'])

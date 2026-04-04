@@ -34,6 +34,8 @@ def generate_ip_address_report_pdf():
     Amp = apps.get_model('planner', 'Amp')
     SystemProcessor = apps.get_model('planner', 'SystemProcessor')
     CommBeltPack = apps.get_model('planner', 'CommBeltPack')
+    CommConfig = apps.get_model('planner', 'CommConfig')
+    CommConfigRole = apps.get_model('planner', 'CommConfigRole')
     
     buf = BytesIO()
     doc = SimpleDocTemplate(
@@ -216,6 +218,36 @@ def generate_ip_address_report_pdf():
     
     elements.append(Spacer(1, 0.2*inch))
     
+    # ==================== COMM CONFIG BELTPACKS ====================
+    comm_configs = CommConfig.objects.filter(is_template=False).order_by('name')
+    for config in comm_configs:
+        roles = config.roles.filter(
+            device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32']
+        ).order_by('role_number')
+        if roles.exists():
+            section = Paragraph(f"COMM CONFIG — {config.name.upper()}", section_style)
+            elements.append(section)
+            role_data = [['Role Name', 'Device Type', 'IP Address']]
+            for role in roles:
+                ip = role.ip_address if role.ip_address else '—'
+                role_data.append([
+                    role.label,
+                    role.get_device_type_display(),
+                    str(ip),
+                ])
+            role_table = Table(role_data, colWidths=[2.5*inch, 2.5*inch, 2.5*inch])
+            role_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), BRAND_BLUE),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,-1), 9),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f5f5f5')]),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#dddddd')),
+                ('PADDING', (0,0), (-1,-1), 6),
+            ]))
+            elements.append(role_table)
+            elements.append(Spacer(1, 12))
+
     # ==================== COMM BELT PACKS (HARDWIRED) ====================
     section = Paragraph("COMM BELT PACKS (HARDWIRED)", section_style)
     elements.append(section)
