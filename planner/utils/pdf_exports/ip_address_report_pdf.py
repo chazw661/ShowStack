@@ -18,7 +18,7 @@ except ImportError:
     DARK_GRAY = colors.HexColor('#333333')
 
 
-def generate_ip_address_report_pdf():
+def generate_ip_address_report_pdf(project=None):
     """
     Generate comprehensive IP Address Report PDF for all modules.
     Lists all IP addresses organized by module type with summary.
