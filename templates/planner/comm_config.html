@@ -1428,6 +1428,7 @@ function saveSetting(field, value) {
 
 // ── Export ──
 function exportCca(configId) {
+  if (!confirm('⚠️ PASSWORD WARNING\n\nImporting this file will reset your Arcadia password to the factory default:\n\n04312B48\n\nMake sure you have this password available before loading the file on the unit.\n\nContinue with export?')) return;
   window.location.href = `/audiopatch/comm-config/${configId}/export/`;
 }
 
