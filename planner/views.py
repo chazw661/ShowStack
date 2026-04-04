@@ -3395,6 +3395,7 @@ def export_ip_address_report_csv(request):
     import csv
 
     from .models import Console, Device, Amp, SystemProcessor, CommBeltPack
+    current_project = getattr(request, 'current_project', None)
     
     # Create the HttpResponse object with CSV header
     response = HttpResponse(content_type='text/csv')
@@ -3406,7 +3407,7 @@ def export_ip_address_report_csv(request):
     writer.writerow(['MIXING CONSOLES'])
     writer.writerow(['Console Name', 'Primary IP Address', 'Secondary IP Address'])
     
-    consoles = Console.objects.all().order_by('name')
+    consoles = Console.objects.filter(project=current_project).order_by('name') if current_project else Console.objects.none()
     if consoles.exists():
         for console in consoles:
             writer.writerow([
@@ -3423,7 +3424,7 @@ def export_ip_address_report_csv(request):
     writer.writerow(['I/O DEVICES'])
     writer.writerow(['Device Name', 'Primary IP Address', 'Secondary IP Address'])
     
-    devices = Device.objects.all().order_by('name')
+    devices = Device.objects.filter(project=current_project).order_by('name') if current_project else Device.objects.none()
     if devices.exists():
         for device in devices:
             writer.writerow([
@@ -3440,7 +3441,7 @@ def export_ip_address_report_csv(request):
     writer.writerow(['AMPLIFIERS'])
     writer.writerow(['Amplifier Name', 'Location', 'IP Address (AVB Network)'])
     
-    amps = Amp.objects.all().order_by('location__name', 'name')
+    amps = Amp.objects.filter(project=current_project).order_by('location__name', 'name') if current_project else Amp.objects.none()
     if amps.exists():
         for amp in amps:
             writer.writerow([
@@ -3457,7 +3458,7 @@ def export_ip_address_report_csv(request):
     writer.writerow(['SYSTEM PROCESSORS'])
     writer.writerow(['Processor Name', 'Type', 'IP Address (AVB Network)'])
     
-    processors = SystemProcessor.objects.all().order_by('device_type', 'name')
+    processors = SystemProcessor.objects.filter(project=current_project).order_by('device_type', 'name') if current_project else SystemProcessor.objects.none()
     if processors.exists():
         for processor in processors:
             device_type = processor.get_device_type_display() if hasattr(processor, 'get_device_type_display') else processor.device_type
@@ -3472,7 +3473,7 @@ def export_ip_address_report_csv(request):
     writer.writerow([])  # Blank line
     
     # ==================== COMM CONFIG BELTPACKS ====================
-    comm_configs = CommConfig.objects.filter(is_template=False).order_by('name')
+    comm_configs = CommConfig.objects.filter(project=current_project, is_template=False).order_by('name') if current_project else CommConfig.objects.none()
     for config in comm_configs:
         roles = config.roles.filter(
             device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32']
@@ -3492,7 +3493,7 @@ def export_ip_address_report_csv(request):
     writer.writerow(['COMM BELT PACKS (HARDWIRED)'])
     writer.writerow(['BP #', 'Position', 'Name', 'IP Address'])
     
-    belt_packs = CommBeltPack.objects.filter(system_type='HARDWIRED').order_by('bp_number')
+    belt_packs = CommBeltPack.objects.filter(project=current_project, system_type='HARDWIRED').order_by('bp_number') if current_project else CommBeltPack.objects.none()
     if belt_packs.exists():
         for bp in belt_packs:
             writer.writerow([
