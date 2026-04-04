@@ -411,65 +411,65 @@ class Project(models.Model):
                 )
             
                 # 7. Duplicate Soundvision/PA System
-        # First duplicate SoundvisionPredictions
-        prediction_map = {}
-        for prediction in SoundvisionPrediction.objects.filter(project=self):
-            new_showday = showday_map.get(prediction.show_day_id) if prediction.show_day_id else None
-            
-            new_prediction = SoundvisionPrediction.objects.create(
-                project=new_project,
-                show_day=new_showday,
-                file_name=prediction.file_name,
-                version=prediction.version,
-                date_generated=prediction.date_generated,
-                raw_data=prediction.raw_data,
-                notes=prediction.notes
-            )
-            prediction_map[prediction.id] = new_prediction
-            
-            # Duplicate Speaker Arrays for this prediction
-            for array in prediction.speaker_arrays.all():
-                new_array = SpeakerArray.objects.create(
-                    prediction=new_prediction,
-                    source_name=array.source_name,
-                    array_base_name=array.array_base_name,
-                    symmetry_type=array.symmetry_type,
-                    group_context=array.group_context,
-                    configuration=array.configuration,
-                    bumper_type=array.bumper_type,
-                    position_x=array.position_x,
-                    position_y=array.position_y,
-                    position_z=array.position_z,
-                    site_angle=array.site_angle,
-                    azimuth=array.azimuth,
-                    top_site=array.top_site,
-                    bottom_site=array.bottom_site,
-                    num_motors=array.num_motors,
-                    front_pickup_position=array.front_pickup_position,
-                    rear_pickup_position=array.rear_pickup_position,
-                    front_motor_load_lb=array.front_motor_load_lb,
-                    rear_motor_load_lb=array.rear_motor_load_lb,
-                    total_weight_lb=array.total_weight_lb,
-                    enclosure_weight_lb=array.enclosure_weight_lb,
-                    bottom_elevation=array.bottom_elevation,
-                    spatial_dimensions=array.spatial_dimensions,
-                    mbar_hole=array.mbar_hole,
-                    is_single_point=array.is_single_point,
-                    bumper_angle=array.bumper_angle
+            # First duplicate SoundvisionPredictions
+            prediction_map = {}
+            for prediction in SoundvisionPrediction.objects.filter(project=self):
+                new_showday = showday_map.get(prediction.show_day_id) if prediction.show_day_id else None
+                
+                new_prediction = SoundvisionPrediction.objects.create(
+                    project=new_project,
+                    show_day=new_showday,
+                    file_name=prediction.file_name,
+                    version=prediction.version,
+                    date_generated=prediction.date_generated,
+                    raw_data=prediction.raw_data,
+                    notes=prediction.notes
                 )
-            
-            # Duplicate Speaker Cabinets
-            for cabinet in array.cabinets.all():
-                SpeakerCabinet.objects.create(
-                    array=new_array,
-                    position_number=cabinet.position_number,
-                    speaker_model=cabinet.speaker_model,
-                    angle_to_next=cabinet.angle_to_next,
-                    site_angle=cabinet.site_angle,
-                    top_z=cabinet.top_z,
-                    bottom_z=cabinet.bottom_z,
-                    panflex_setting=cabinet.panflex_setting
-                )
+                prediction_map[prediction.id] = new_prediction
+                
+                # Duplicate Speaker Arrays for this prediction
+                for array in prediction.speaker_arrays.all():
+                    new_array = SpeakerArray.objects.create(
+                        prediction=new_prediction,
+                        source_name=array.source_name,
+                        array_base_name=array.array_base_name,
+                        symmetry_type=array.symmetry_type,
+                        group_context=array.group_context,
+                        configuration=array.configuration,
+                        bumper_type=array.bumper_type,
+                        position_x=array.position_x,
+                        position_y=array.position_y,
+                        position_z=array.position_z,
+                        site_angle=array.site_angle,
+                        azimuth=array.azimuth,
+                        top_site=array.top_site,
+                        bottom_site=array.bottom_site,
+                        num_motors=array.num_motors,
+                        front_pickup_position=array.front_pickup_position,
+                        rear_pickup_position=array.rear_pickup_position,
+                        front_motor_load_lb=array.front_motor_load_lb,
+                        rear_motor_load_lb=array.rear_motor_load_lb,
+                        total_weight_lb=array.total_weight_lb,
+                        enclosure_weight_lb=array.enclosure_weight_lb,
+                        bottom_elevation=array.bottom_elevation,
+                        spatial_dimensions=array.spatial_dimensions,
+                        mbar_hole=array.mbar_hole,
+                        is_single_point=array.is_single_point,
+                        bumper_angle=array.bumper_angle
+                    )
+                
+                    # Duplicate Speaker Cabinets
+                    for cabinet in array.cabinets.all():
+                        SpeakerCabinet.objects.create(
+                            array=new_array,
+                            position_number=cabinet.position_number,
+                            speaker_model=cabinet.speaker_model,
+                            angle_to_next=cabinet.angle_to_next,
+                            site_angle=cabinet.site_angle,
+                            top_z=cabinet.top_z,
+                            bottom_z=cabinet.bottom_z,
+                            panflex_setting=cabinet.panflex_setting
+                        )
             
            
             
