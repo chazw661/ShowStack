@@ -587,7 +587,7 @@ class Project(models.Model):
             # Note: PAZone has unique=True on name, so we need to generate unique names
             pa_zone_map = {}
             for pa_zone in PAZone.objects.filter(project=self):
-                new_location = location_map.get(pa_zone.location_id) if pa_zone.location_id else None
+                
                 
                 # Generate unique name for the new zone
                 base_name = pa_zone.name
@@ -600,8 +600,6 @@ class Project(models.Model):
                 new_pa_zone = PAZone.objects.create(
                     project=new_project,
                     name=new_name,
-                    description=pa_zone.description,
-                    location=new_location,
                     sort_order=pa_zone.sort_order,
                     zone_type=pa_zone.zone_type
                 )
