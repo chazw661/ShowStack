@@ -2805,28 +2805,32 @@ def ip_address_report(request):
                     for processor in processors
                 ]
             },
-            {
-                'name': 'COMM Config Beltpacks',
-                'model_name': 'commconfigrole',
-                'app_label': 'planner',
-                'items': [
-                    {
-                        'id': role.id,
-                        'name': role.label,
-                        'position': f'{config.name} — {role.get_device_type_display()}',
-                        'crew_name': '—',
-                        'ip_address': role.ip_address or '',
-                        'has_dual_ip': False,
-                        'admin_url': f'/audiopatch/comm-config/{config.id}/',
-                    }
-                    for config in CommConfig.objects.filter(
-                        project=current_project, is_template=False
-                    ).order_by('name')
-                    for role in config.roles.filter(
-                        device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X']
-                    ).order_by('role_number')
-                ]
-            },
+            *[
+                {
+                    'name': f'COMM Config — {config.name}',
+                    'model_name': 'commconfigrole',
+                    'app_label': 'planner',
+                    'items': [
+                        {
+                            'id': role.id,
+                            'name': role.label,
+                            'position': role.get_device_type_display(),
+                            'ip_address': role.ip_address or '',
+                            'has_dual_ip': False,
+                            'admin_url': f'/audiopatch/comm-config/{config.id}/',
+                        }
+                        for role in config.roles.filter(
+                            device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X']
+                        ).order_by('role_number')
+                    ]
+                }
+                for config in CommConfig.objects.filter(
+                    project=current_project, is_template=False
+                ).order_by('name')
+                if config.roles.filter(
+                    device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X']
+                ).exists()
+            ],
             {
                 'name': 'COMM Belt Packs (Hardwired)',
                 'model_name': 'commbeltpack',

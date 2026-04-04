@@ -251,6 +251,8 @@
                     {% elif module.model_name == "commbeltpack" %}
                         <th>Position</th>
                         <th>Crew Name</th>
+                    {% elif module.model_name == "commconfigrole" %}
+                        <th>Device Type</th>
                     {% endif %}
                     
                     {% if module.items.0.has_dual_ip %}
@@ -276,6 +278,8 @@
                     {% elif module.model_name == "commbeltpack" %}
                         <td><span class="device-info">{{ item.position }}</span></td>
                         <td><span class="device-info">{{ item.crew_name }}</span></td>
+                    {% elif module.model_name == "commconfigrole" %}
+                        <td><span class="device-info">{{ item.position }}</span></td>
                     {% endif %}
                     
                     {% if item.has_dual_ip %}
