@@ -110,7 +110,7 @@ def generate_ip_address_report_pdf(project=None):
     section = Paragraph("MIXING CONSOLES", section_style)
     elements.append(section)
     
-    consoles = Console.objects.filter(project=project) if project else Console.objects.none().order_by('name')
+    consoles = Console.objects.filter(project=project).order_by('name') if project else Console.objects.none()
     
     if consoles.exists():
         console_data = [['Console Name', 'Primary IP Address', 'Secondary IP Address']]
@@ -138,7 +138,7 @@ def generate_ip_address_report_pdf(project=None):
     section = Paragraph("I/O DEVICES", section_style)
     elements.append(section)
     
-    devices = Device.objects.filter(project=project) if project else Device.objects.none().order_by('name')
+    devices = Device.objects.filter(project=project).order_by('name') if project else Device.objects.none()
     
     if devices.exists():
         device_data = [['Device Name', 'Primary IP Address', 'Secondary IP Address']]
@@ -166,7 +166,7 @@ def generate_ip_address_report_pdf(project=None):
     section = Paragraph("AMPLIFIERS", section_style)
     elements.append(section)
     
-    amps = Amp.objects.filter(project=project) if project else Amp.objects.none().order_by('location__name', 'name')
+    amps = Amp.objects.filter(project=project).order_by('location__name', 'name') if project else Amp.objects.none()
     
     if amps.exists():
         amp_data = [['Amplifier Name', 'Location', 'IP Address (AVB Network)']]
@@ -194,7 +194,7 @@ def generate_ip_address_report_pdf(project=None):
     section = Paragraph("SYSTEM PROCESSORS", section_style)
     elements.append(section)
     
-    processors = SystemProcessor.objects.filter(project=project) if project else SystemProcessor.objects.none().order_by('device_type', 'name')
+    processors = SystemProcessor.objects.filter(project=project).order_by('device_type', 'name') if project else SystemProcessor.objects.none()
     
     if processors.exists():
         processor_data = [['Processor Name', 'Type', 'IP Address (AVB Network)']]
@@ -219,7 +219,7 @@ def generate_ip_address_report_pdf(project=None):
     elements.append(Spacer(1, 0.2*inch))
     
     # ==================== COMM CONFIG BELTPACKS ====================
-    comm_configs = CommConfig.objects.filter(project=project, is_template=False) if project else CommConfig.objects.none().order_by('name')
+    comm_configs = CommConfig.objects.filter(project=project, is_template=False).order_by('name') if project else CommConfig.objects.none()
     for config in comm_configs:
         roles = config.roles.filter(
             device_type__in=['FSII-BP', 'E-BP', 'HBP-2X', 'HMS-4X', 'HRM-4X', 'V12', 'V24', 'V32']
@@ -252,7 +252,7 @@ def generate_ip_address_report_pdf(project=None):
     section = Paragraph("COMM BELT PACKS (HARDWIRED)", section_style)
     elements.append(section)
     
-    belt_packs = CommBeltPack.objects.filter(project=project, system_type='HARDWIRED') if project else CommBeltPack.objects.none().order_by('bp_number')
+    belt_packs = CommBeltPack.objects.filter(project=project, system_type='HARDWIRED').order_by('bp_number') if project else CommBeltPack.objects.none()
     
     if belt_packs.exists():
         bp_data = [['BP #', 'Position', 'Name', 'IP Address']]
