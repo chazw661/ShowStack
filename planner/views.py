@@ -3376,7 +3376,7 @@ def export_ip_address_report_pdf(request):
 
     
     # Generate PDF
-    buf = generate_ip_address_report_pdf()
+    buf = generate_ip_address_report_pdf(project=getattr(request, "current_project", None))
     
     # Return as download
     response = HttpResponse(buf.getvalue(), content_type='application/pdf')
