@@ -425,11 +425,11 @@
                     <div class="stat-label">Amp Groups</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="total-amps">0</div>
+                    <div class="stat-value" id="total-amps">{{ total_amps_count }}</div>
                     <div class="stat-label">Total Amplifiers</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="total-power">0kW</div>
+                    <div class="stat-value" id="total-power">{{ total_peak_power_kw }}kW</div>
                     <div class="stat-label">Peak Power</div>
                 </div>
             </div>
@@ -720,20 +720,7 @@
             return cookieValue;
         }
         
-        // Calculate totals on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            // Calculate total amplifiers
-            let totalAmps = 0;
-            let totalPower = 0;
-            
-            {% for assignment in assignments %}
-            totalAmps += {{ assignment.quantity }};
-            totalPower += {{ assignment.get_power_details.total.peak_watts|default:0 }};
-            {% endfor %}
-            
-            document.getElementById('total-amps').textContent = totalAmps;
-            document.getElementById('total-power').textContent = (totalPower / 1000).toFixed(1) + 'kW';
-        });
+        // Totals are now rendered server-side
         
         
 // Close modal when clicking outside

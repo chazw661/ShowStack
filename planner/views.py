@@ -2020,6 +2020,15 @@ def power_distribution_calculator(request, plan_id=None):
     # Calculate phase distribution
     phase_loads = calculate_phase_distribution(plan)
     
+    # Calculate totals server-side to avoid template JS errors
+    total_amps_count = sum(a.quantity for a in assignments)
+    total_peak_power = 0
+    for a in assignments:
+        try:
+            total_peak_power += a.get_power_details()['total']['peak_watts']
+        except Exception:
+            pass
+
     context = {
         'plan': plan,
         'amplifier_profiles': amplifier_profiles,
@@ -2027,6 +2036,8 @@ def power_distribution_calculator(request, plan_id=None):
         'phase_loads': phase_loads,
         'duty_cycles': AmplifierAssignment.DUTY_CYCLES,
         'service_types': PowerDistributionPlan.SERVICE_TYPES,
+        'total_amps_count': total_amps_count,
+        'total_peak_power_kw': round(total_peak_power / 1000, 1),
     }
     
     return render(request, 'planner/power_distribution_calculator.html', context)
