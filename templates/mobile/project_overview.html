@@ -90,74 +90,7 @@
             </div>
         </a>
         
-        <!-- COMM - Ready in Phase 4 -->
-        <a href="{% url 'mobile:comm_list' project.id %}" class="module-tile module-available">
-            <div class="module-icon">🎧</div>
-            <div class="module-info">
-                <span class="module-name">COMM</span>
-                <span class="module-count">
-                    {% if comm_count %}{{ comm_count }} pack{% if comm_count != 1 %}s{% endif %}{% else %}—{% endif %}
-                </span>
-            </div>
-            <div class="module-arrow">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9,18 15,12 9,6"/>
-                </svg>
-            </div>
-        </a>
-        
-        <!-- RF Frequencies - Phase 6 -->
-        <div class="module-tile module-coming-soon">
-            <div class="module-icon">📻</div>
-            <div class="module-info">
-                <span class="module-name">RF Frequencies</span>
-                <span class="module-count">Coming Soon</span>
-            </div>
-        </div>
-        
-        <!-- Consoles - View Only for now -->
-        <div class="module-tile module-view-only">
-            <div class="module-icon">🎛️</div>
-            <div class="module-info">
-                <span class="module-name">Consoles</span>
-                <span class="module-count">
-                    {% if console_count %}{{ console_count }}{% else %}—{% endif %}
-                </span>
-            </div>
-        </div>
-        
-        <!-- Amplifiers - View Only for now -->
-        <div class="module-tile module-view-only">
-            <div class="module-icon">🔊</div>
-            <div class="module-info">
-                <span class="module-name">Amplifiers</span>
-                <span class="module-count">
-                    {% if amplifier_count %}{{ amplifier_count }}{% else %}—{% endif %}
-                </span>
-            </div>
-        </div>
-        
-        <!-- Processors - View Only for now -->
-        <div class="module-tile module-view-only">
-            <div class="module-icon">⚙️</div>
-            <div class="module-info">
-                <span class="module-name">Processors</span>
-                <span class="module-count">
-                    {% if processor_count %}{{ processor_count }}{% else %}—{% endif %}
-                </span>
-            </div>
-        </div>
-        
-        <!-- PA Cables - View Only for now -->
-        <div class="module-tile module-view-only">
-            <div class="module-icon">🔌</div>
-            <div class="module-info">
-                <span class="module-name">PA Cables</span>
-                <span class="module-count">
-                    {% if cable_count %}{{ cable_count }}{% else %}—{% endif %}
-                </span>
-            </div>
-        </div>
+
     </div>
     
     <!-- Quick Actions -->
