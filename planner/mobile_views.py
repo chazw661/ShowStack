@@ -351,7 +351,7 @@ def mic_tracker_sessions(request, project_id, day_id):
     for session in sessions:
         assignments = session.mic_assignments.all()
         total = assignments.count()
-        assigned = assignments.exclude(presenter__isnull=True).count()
+        assigned = assignments.filter(is_micd=True).count()
         session_data.append({
             'session': session,
             'total_mics': total,
