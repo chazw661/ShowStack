@@ -1005,7 +1005,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         # GET request - show template library
         accessible_projects = Project.objects.filter(
             models.Q(owner=request.user) |
-            models.Q(projectmembership__user=request.user)
+            models.Q(projectmember__user=request.user)
         ).distinct()
         all_templates = Console.objects.filter(is_template=True, project__in=accessible_projects).select_related('project').annotate(
             inputs_count=Count('consoleinput', distinct=True),
