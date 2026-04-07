@@ -56,6 +56,9 @@ from django.contrib import admin, messages
 from django.db.models import Max, Count
 from .models import CommBeltPack, CommBeltPackChannel
 
+from .models import DanteConsoleConfig, DanteDeviceConfig, DanteSubscription
+
+
 
 
 
@@ -748,7 +751,24 @@ class ConsoleStereoOutputInline(admin.TabularInline):
         return PrepopulatedFormSet   
 
 
+class DanteConsoleConfigInline(admin.StackedInline):
+    model = DanteConsoleConfig
+    extra = 0
+    max_num = 1
+    can_delete = True
+    verbose_name = "Dante Configuration"
+    verbose_name_plural = "Dante Configuration"
+    fields = ['dante_name', 'sample_rate', 'encoding', 'tx_channel_count', 'rx_channel_count', 'tx_channel_labels', 'rx_channel_labels', 'is_clock_master', 'clock_subdomain']
 
+class DanteDeviceConfigInline(admin.StackedInline):
+    model = DanteDeviceConfig
+    extra = 0
+    max_num = 1
+    can_delete = True
+    verbose_name = "Dante Configuration"
+    verbose_name_plural = "Dante Configuration"
+    fields = ['dante_name', 'sample_rate', 'encoding', 'tx_channel_count', 'rx_channel_count', 'tx_channel_labels', 'rx_channel_labels', 'is_clock_master', 'clock_subdomain']
+    
 
 
 class ConsoleAdmin(BaseEquipmentAdmin):
@@ -766,6 +786,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         ConsoleAuxOutputInline,
         ConsoleMatrixOutputInline,
         ConsoleStereoOutputInline,
+        DanteConsoleConfigInline
     ]
     
     actions = ['export_yamaha_rivage_csvs',]
@@ -982,7 +1003,11 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                     return redirect('admin:console_template_library')
         
         # GET request - show template library
-        all_templates = Console.objects.filter(is_template=True).select_related('project').annotate(
+        accessible_projects = Project.objects.filter(
+            models.Q(owner=request.user) |
+            models.Q(projectmembership__user=request.user)
+        ).distinct()
+        all_templates = Console.objects.filter(is_template=True, project__in=accessible_projects).select_related('project').annotate(
             inputs_count=Count('consoleinput', distinct=True),
             aux_count=Count('consoleauxoutput', distinct=True),
             matrix_count=Count('consolematrixoutput', distinct=True),
@@ -1161,8 +1186,7 @@ class DeviceOutputInline(BaseEquipmentInline):
     ordering = ['output_number']
     fields = ['output_number', 'signal_name']
     template = "admin/planner/device_output_grid.html"
-
-
+   
     def get_queryset(self, request):
         """Order by output_number to ensure grid positions match"""
         qs = super().get_queryset(request)
@@ -1200,7 +1224,7 @@ class DeviceOutputInline(BaseEquipmentInline):
 
 
 class DeviceAdmin(BaseEquipmentAdmin):
-    inlines = [DeviceInputInline, DeviceOutputInline]
+    inlines = [DeviceInputInline, DeviceOutputInline, DanteDeviceConfigInline]
     list_display = ['name','primary_ip_address', 'secondary_ip_address', 'device_actions',]
     #list_filter = ['location',]  
     search_fields = ['name'] 
@@ -1213,14 +1237,10 @@ class DeviceAdmin(BaseEquipmentAdmin):
 
 
     def get_fields(self, request, obj=None):
-        """
-        On the add form (obj is None) show name + counts.
-        On the change form, everything is in the title/inlines,
-        so show no fields above the inlines.
-        """
         if obj is None:
-            return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'input_count', 'output_count']
-        return ['name', 'location','primary_ip_address', 'secondary_ip_address']
+            return ['name', 'location', 'parent_console', 'primary_ip_address', 'secondary_ip_address', 'input_count', 'output_count']
+        return ['name', 'location', 'parent_console', 'primary_ip_address', 'secondary_ip_address']
+    
     def get_form(self, request, obj=None, **kwargs):
         if obj is None:
             kwargs['form'] = NameOnlyForm
@@ -5940,3 +5960,12 @@ class CommConfigAdmin(admin.ModelAdmin):
         from django.shortcuts import redirect
         return redirect('planner:comm_config')
 showstack_admin_site.register(CommConfig, CommConfigAdmin)
+
+
+
+
+
+
+
+
+
