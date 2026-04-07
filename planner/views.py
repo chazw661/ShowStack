@@ -3817,9 +3817,6 @@ def _seed_factory_defaults(config):
     # Format: (role_number, device_type, label, is_default, keysets)
     # keysets: list of (key_index, partyline_ch_or_None, activation, talk_mode)
     role_defaults = []
-        # Arcadia station
-        (13, 'NEP',     'Station',   True,  [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-    ]
 
     roles = {}
     for role_num, dev_type, label, is_default, keysets in role_defaults:
