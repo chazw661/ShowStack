@@ -911,6 +911,16 @@ from django.db import models
 class Device(models.Model):
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
+    parent_console = models.ForeignKey(          # ← ADD THIS
+        'Console',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='slot_devices',
+        verbose_name="Parent Console",
+        help_text="For slot cards (e.g. Rivage Dante cards) — the console this card belongs to.",
+    )
+    name = models.CharField(max_length=200)
     name = models.CharField(max_length=200)
     input_count = models.PositiveIntegerField(default=0)
     output_count = models.PositiveIntegerField(default=0)
@@ -4140,3 +4150,395 @@ class CommConfigNetworkPort(models.Model):
 
     def __str__(self):
         return f"{self.config} / Port {self.port_number} ({self.get_traffic_type_display()})"
+
+
+
+
+
+
+# ==============================================================================
+# DANTE SUBSCRIPTION PLANNER MODELS
+# Append these to the bottom of planner/models.py
+# ==============================================================================
+
+# ── Shared constants ──────────────────────────────────────────────────────────
+
+DANTE_SAMPLE_RATE_CHOICES = [
+    (44100, '44.1 kHz'),
+    (48000, '48 kHz'),
+    (88200, '88.2 kHz'),
+    (96000, '96 kHz'),
+]
+
+DANTE_ENCODING_CHOICES = [
+    (16, '16-bit'),
+    (24, '24-bit'),
+    (32, '32-bit'),
+]
+
+
+# ── Thin OneToOne extensions on existing models ───────────────────────────────
+
+class DanteConsoleConfig(models.Model):
+    """
+    Adds Dante-specific fields to an existing Console record.
+    OneToOne so we never duplicate the device list.
+    """
+    console = models.OneToOneField(
+        'Console',
+        on_delete=models.CASCADE,
+        related_name='dante_config',
+    )
+
+    # Identity on the Dante network
+    dante_name = models.CharField(
+        max_length=100,
+        help_text="Dante network device name — must match exactly (case-sensitive).",
+    )
+
+    # Audio format
+    sample_rate = models.IntegerField(
+        choices=DANTE_SAMPLE_RATE_CHOICES,
+        default=48000,
+        verbose_name="Sample Rate",
+    )
+    encoding = models.IntegerField(
+        choices=DANTE_ENCODING_CHOICES,
+        default=24,
+        verbose_name="Bit Depth",
+    )
+
+    # Channel counts — drives label list length & grid dimensions
+    tx_channel_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="TX Channel Count",
+        help_text="Number of Dante send (TX) channels this device advertises.",
+    )
+    rx_channel_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="RX Channel Count",
+        help_text="Number of Dante receive (RX) channels this device has.",
+    )
+
+    # Per-channel labels — list of strings, index 0 = channel 1
+    # Empty string in the list means "use the auto-generated default"
+    tx_channel_labels = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="TX Channel Labels",
+        help_text='JSON list of TX channel names. e.g. ["Main L", "Main R", ""]',
+    )
+    rx_channel_labels = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="RX Channel Labels",
+        help_text='JSON list of RX channel names.',
+    )
+
+    # Clock / sync
+    is_clock_master = models.BooleanField(
+        default=False,
+        verbose_name="Clock Master",
+        help_text="Designate this device as the Dante clock master.",
+    )
+    clock_subdomain = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        verbose_name="Clock Subdomain",
+        help_text="Dante clock subdomain (leave blank for default subdomain).",
+    )
+
+    class Meta:
+        verbose_name = "Dante Console Config"
+        verbose_name_plural = "Dante Console Configs"
+
+    def __str__(self):
+        return f"Dante: {self.dante_name} ({self.console.name})"
+
+    # ── Label helpers ──────────────────────────────────────────────────────────
+
+    def get_tx_label(self, channel_number: int) -> str:
+        """
+        Return the TX label for a 1-indexed channel.
+        Falls back to '<dante_name> NN' if the slot is empty or missing.
+        """
+        idx = channel_number - 1
+        labels = self.tx_channel_labels or []
+        if 0 <= idx < len(labels) and labels[idx]:
+            return labels[idx]
+        return f"{self.dante_name} {channel_number:02d}"
+
+    def get_rx_label(self, channel_number: int) -> str:
+        """Return the RX label for a 1-indexed channel."""
+        idx = channel_number - 1
+        labels = self.rx_channel_labels or []
+        if 0 <= idx < len(labels) and labels[idx]:
+            return labels[idx]
+        return f"{self.dante_name} {channel_number:02d}"
+
+    def tx_labels_full(self) -> list[str]:
+        """Resolved label list (length == tx_channel_count), no blanks."""
+        return [self.get_tx_label(i + 1) for i in range(self.tx_channel_count)]
+
+    def rx_labels_full(self) -> list[str]:
+        """Resolved label list (length == rx_channel_count), no blanks."""
+        return [self.get_rx_label(i + 1) for i in range(self.rx_channel_count)]
+
+
+class DanteDeviceConfig(models.Model):
+    """
+    Adds Dante-specific fields to an existing Device (I/O Device) record.
+    Mirrors DanteConsoleConfig exactly so views can treat both uniformly.
+    """
+    device = models.OneToOneField(
+        'Device',
+        on_delete=models.CASCADE,
+        related_name='dante_config',
+    )
+
+    dante_name = models.CharField(
+        max_length=100,
+        help_text="Dante network device name — must match exactly (case-sensitive).",
+    )
+    sample_rate = models.IntegerField(
+        choices=DANTE_SAMPLE_RATE_CHOICES,
+        default=48000,
+        verbose_name="Sample Rate",
+    )
+    encoding = models.IntegerField(
+        choices=DANTE_ENCODING_CHOICES,
+        default=24,
+        verbose_name="Bit Depth",
+    )
+    tx_channel_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="TX Channel Count",
+    )
+    rx_channel_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="RX Channel Count",
+    )
+    tx_channel_labels = models.JSONField(default=list, blank=True, verbose_name="TX Channel Labels")
+    rx_channel_labels = models.JSONField(default=list, blank=True, verbose_name="RX Channel Labels")
+    is_clock_master = models.BooleanField(default=False, verbose_name="Clock Master")
+    clock_subdomain = models.CharField(max_length=50, blank=True, default='', verbose_name="Clock Subdomain")
+
+    class Meta:
+        verbose_name = "Dante Device Config"
+        verbose_name_plural = "Dante Device Configs"
+
+    def __str__(self):
+        return f"Dante: {self.dante_name} ({self.device.name})"
+
+    def get_tx_label(self, channel_number: int) -> str:
+        idx = channel_number - 1
+        labels = self.tx_channel_labels or []
+        if 0 <= idx < len(labels) and labels[idx]:
+            return labels[idx]
+        return f"{self.dante_name} {channel_number:02d}"
+
+    def get_rx_label(self, channel_number: int) -> str:
+        idx = channel_number - 1
+        labels = self.rx_channel_labels or []
+        if 0 <= idx < len(labels) and labels[idx]:
+            return labels[idx]
+        return f"{self.dante_name} {channel_number:02d}"
+
+    def tx_labels_full(self) -> list[str]:
+        return [self.get_tx_label(i + 1) for i in range(self.tx_channel_count)]
+
+    def rx_labels_full(self) -> list[str]:
+        return [self.get_rx_label(i + 1) for i in range(self.rx_channel_count)]
+
+
+# ── Subscription model ────────────────────────────────────────────────────────
+
+class DanteSubscription(models.Model):
+    """
+    One row = one Dante subscription (one RX channel subscribed to one TX channel).
+
+    Both the RX side and TX side can be either a Console or a Device.
+    Exactly one of {rx_console, rx_device} must be non-null.
+    Exactly one of {tx_console, tx_device} must be non-null.
+
+    Channel numbers are 1-indexed to match Dante Controller's danteId attribute.
+    Channel names are stored denormalised for fast XML export — they shadow the
+    labels stored on DanteConsoleConfig / DanteDeviceConfig, but can be
+    individually overridden here without touching the config.
+
+    XML export shape (receiver side, per Dante Controller preset v3.0.0):
+        <rxchannel danteId="{rx_channel}" mediaType="audio">
+            <n>{rx_channel_name}</n>
+            <subscribed_channel>{tx_channel_name}</subscribed_channel>
+            <subscribed_device>{tx_dante_name}</subscribed_device>
+        </rxchannel>
+    """
+
+    project = models.ForeignKey(
+        'Project',
+        on_delete=models.CASCADE,
+        related_name='dante_subscriptions',
+    )
+
+    # ── RX side ────────────────────────────────────────────────────────────────
+    rx_console = models.ForeignKey(
+        'Console',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='dante_rx_subscriptions',
+        verbose_name="RX Console",
+    )
+    rx_device = models.ForeignKey(
+        'Device',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='dante_rx_subscriptions',
+        verbose_name="RX Device",
+    )
+    rx_channel = models.PositiveIntegerField(verbose_name="RX Channel #")
+    rx_channel_name = models.CharField(
+        max_length=100,
+        verbose_name="RX Channel Name",
+        help_text="Name as it appears on the RX device's Dante channel.",
+    )
+
+    # ── TX side ────────────────────────────────────────────────────────────────
+    tx_console = models.ForeignKey(
+        'Console',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='dante_tx_subscriptions',
+        verbose_name="TX Console",
+    )
+    tx_device = models.ForeignKey(
+        'Device',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='dante_tx_subscriptions',
+        verbose_name="TX Device",
+    )
+    tx_channel = models.PositiveIntegerField(verbose_name="TX Channel #")
+    tx_channel_name = models.CharField(
+        max_length=100,
+        verbose_name="TX Channel Name",
+        help_text="TX channel name that will appear in subscribed_channel tag.",
+    )
+
+    # ── Optional note ──────────────────────────────────────────────────────────
+    notes = models.CharField(max_length=200, blank=True, default='')
+
+    class Meta:
+        verbose_name = "Dante Subscription"
+        verbose_name_plural = "Dante Subscriptions"
+        # Uniqueness: each RX channel can only be subscribed to one source
+        # We use a DB constraint via clean() rather than unique_together because
+        # the RX device is expressed as two nullable FK columns.
+        ordering = ['rx_console', 'rx_device', 'rx_channel']
+
+    def __str__(self):
+        return (
+            f"{self.rx_dante_name} RX{self.rx_channel} ← "
+            f"{self.tx_dante_name} TX{self.tx_channel}"
+        )
+
+    # ── Convenience properties ─────────────────────────────────────────────────
+
+    @property
+    def rx_dante_name(self) -> str:
+        """The Dante device name of the receiving side."""
+        if self.rx_console_id:
+            try:
+                return self.rx_console.dante_config.dante_name
+            except DanteConsoleConfig.DoesNotExist:
+                return self.rx_console.name
+        if self.rx_device_id:
+            try:
+                return self.rx_device.dante_config.dante_name
+            except DanteDeviceConfig.DoesNotExist:
+                return self.rx_device.name
+        return "Unknown"
+
+    @property
+    def tx_dante_name(self) -> str:
+        """The Dante device name of the transmitting side."""
+        if self.tx_console_id:
+            try:
+                return self.tx_console.dante_config.dante_name
+            except DanteConsoleConfig.DoesNotExist:
+                return self.tx_console.name
+        if self.tx_device_id:
+            try:
+                return self.tx_device.dante_config.dante_name
+            except DanteDeviceConfig.DoesNotExist:
+                return self.tx_device.name
+        return "Unknown"
+
+    @property
+    def rx_entity(self):
+        """Return the Console or Device on the RX side."""
+        return self.rx_console if self.rx_console_id else self.rx_device
+
+    @property
+    def tx_entity(self):
+        """Return the Console or Device on the TX side."""
+        return self.tx_console if self.tx_console_id else self.tx_device
+
+    @property
+    def rx_entity_type(self) -> str:
+        """'console' or 'device'"""
+        return 'console' if self.rx_console_id else 'device'
+
+    @property
+    def tx_entity_type(self) -> str:
+        return 'console' if self.tx_console_id else 'device'
+
+    # ── Validation ─────────────────────────────────────────────────────────────
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        # Exactly one RX source
+        rx_set = bool(self.rx_console_id) + bool(self.rx_device_id)
+        if rx_set != 1:
+            raise ValidationError(
+                "A subscription must have exactly one RX device: "
+                "set either rx_console OR rx_device, not both (or neither)."
+            )
+
+        # Exactly one TX source
+        tx_set = bool(self.tx_console_id) + bool(self.tx_device_id)
+        if tx_set != 1:
+            raise ValidationError(
+                "A subscription must have exactly one TX device: "
+                "set either tx_console OR tx_device, not both (or neither)."
+            )
+
+        # RX and TX must not be the same device
+        rx_id = (self.rx_entity_type, self.rx_console_id or self.rx_device_id)
+        tx_id = (self.tx_entity_type, self.tx_console_id or self.tx_device_id)
+        if rx_id == tx_id:
+            raise ValidationError("RX and TX device cannot be the same.")
+
+        # Channel numbers must be ≥ 1
+        if self.rx_channel < 1:
+            raise ValidationError("RX channel number must be ≥ 1.")
+        if self.tx_channel < 1:
+            raise ValidationError("TX channel number must be ≥ 1.")
+
+        # Duplicate RX channel check: a given RX channel on a given device
+        # can only appear once (one sub per input slot).
+        qs = DanteSubscription.objects.filter(
+            project=self.project,
+            rx_console=self.rx_console,
+            rx_device=self.rx_device,
+            rx_channel=self.rx_channel,
+        ).exclude(pk=self.pk)
+        if qs.exists():
+            raise ValidationError(
+                f"RX channel {self.rx_channel} on this device already has a subscription."
+            )
