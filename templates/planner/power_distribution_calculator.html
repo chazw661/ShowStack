@@ -728,7 +728,7 @@
             
             {% for assignment in assignments %}
             totalAmps += {{ assignment.quantity }};
-            totalPower += {{ assignment.get_power_details.total.peak_watts }};
+            totalPower += {{ assignment.get_power_details.total.peak_watts|default:0 }};
             {% endfor %}
             
             document.getElementById('total-amps').textContent = totalAmps;
