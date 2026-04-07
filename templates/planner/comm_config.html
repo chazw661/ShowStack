@@ -1289,11 +1289,10 @@ function savePartylineName(input) {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
     body: JSON.stringify({ partyline_id: plId, label: newLabel })
   }).then(r => r.json()).then(data => {
-  }).then(r => r.json()).then(data => {
     if (!data.ok) { alert('Save failed'); return; }
     // Update all dropdown options referencing this partyline
     document.querySelectorAll('option').forEach(opt => {
-      if (opt.value === plId) {
+      if (opt.value === String(plId)) {
         const parts = opt.text.split(': ');
         if (parts.length >= 2) opt.text = parts[0] + ': ' + newLabel;
       }
