@@ -3816,20 +3816,7 @@ def _seed_factory_defaults(config):
     # ── Roles ──
     # Format: (role_number, device_type, label, is_default, keysets)
     # keysets: list of (key_index, partyline_ch_or_None, activation, talk_mode)
-    role_defaults = [
-        (1,  'FSII-BP', 'BP 1',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (2,  'FSII-BP', 'BP 2',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (3,  'FSII-BP', 'BP 3',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (4,  'FSII-BP', 'BP 4',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (5,  'FSII-BP', 'BP 5',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (6,  'FSII-BP', 'BP 6',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (7,  'FSII-BP', 'BP 7',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (8,  'FSII-BP', 'BP 8',      False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        # V-Series
-        (9,  'V12',     'V12 Panel', False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (10, 'V24',     'V24 Panel', False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (11, 'V32',     'V32 Panel', False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
-        (12, 'V12D',    'V12D Panel',False, [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
+    role_defaults = [),
         # Arcadia station
         (13, 'NEP',     'Station',   True,  [(0,1,'talkforcelisten','latching'),(1,2,'talkforcelisten','latching'),(2,3,'talkforcelisten','latching'),(3,4,'talkforcelisten','latching')]),
     ]
@@ -5728,3 +5715,9 @@ def comm_config_export_freespeak(request, config_id):
         return response
     finally:
         shutil.rmtree(tmp_dir)
+
+
+
+
+
+
