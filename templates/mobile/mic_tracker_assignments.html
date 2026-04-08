@@ -45,16 +45,14 @@
         <div class="presenters-list">
             {% if assignment.presenter %}
             <!-- Primary Presenter -->
-            <div class="presenter-row {% if assignment.is_micd %}micd{% endif %}" data-key="micd-{{ assignment.id }}-{{ assignment.presenter.id }}" data-server-micd="{{ assignment.is_micd|yesno:'true,false' }}">
+            <div class="presenter-row">
                 <span class="presenter-name">{{ assignment.presenter.name }}</span>
-                <button class="micd-btn {% if assignment.is_micd %}active{% endif %}" onclick="toggleMicd(this)">MIC'D</button>
             </div>
             
             <!-- Shared Presenters -->
             {% for shared in assignment.shared_presenters.all %}
-            <div class="presenter-row shared" data-key="micd-{{ assignment.id }}-{{ shared.id }}">
+            <div class="presenter-row shared">
                 <span class="presenter-name">{{ shared.name }}</span>
-                <button class="micd-btn" onclick="toggleMicd(this)">MIC'D</button>
             </div>
             {% endfor %}
             
@@ -84,18 +82,7 @@
 </div>
 
 <!-- Quick Stats Footer -->
-{% if assignments %}
-<div class="stats-footer">
-    <div class="stat">
-        <span class="stat-value" id="total-count">{{ assignments|length }}</span>
-        <span class="stat-label">Mics</span>
-    </div>
-    <div class="stat">
-        <span class="stat-value" id="micd-count">0</span>
-        <span class="stat-label">MIC'D</span>
-    </div>
-</div>
-{% endif %}
+
 
 {% endblock %}
 
