@@ -45,9 +45,9 @@
         <div class="presenters-list">
             {% if assignment.presenter %}
             <!-- Primary Presenter -->
-            <div class="presenter-row" data-key="micd-{{ assignment.id }}-{{ assignment.presenter.id }}">
+            <div class="presenter-row {% if assignment.is_micd %}micd{% endif %}" data-key="micd-{{ assignment.id }}-{{ assignment.presenter.id }}" data-server-micd="{{ assignment.is_micd|yesno:'true,false' }}">
                 <span class="presenter-name">{{ assignment.presenter.name }}</span>
-                <button class="micd-btn" onclick="toggleMicd(this)">MIC'D</button>
+                <button class="micd-btn {% if assignment.is_micd %}active{% endif %}" onclick="toggleMicd(this)">MIC'D</button>
             </div>
             
             <!-- Shared Presenters -->
@@ -111,11 +111,12 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadMicdStates() {
+    // State is initialized server-side via template - no localStorage needed
+    // Just ensure button active class matches row micd class
     document.querySelectorAll('.presenter-row[data-key]').forEach(row => {
-        const key = row.dataset.key;
-        if (localStorage.getItem(key) === 'true') {
-            row.classList.add('micd');
-            row.querySelector('.micd-btn').classList.add('active');
+        if (row.classList.contains('micd')) {
+            const btn = row.querySelector('.micd-btn');
+            if (btn) btn.classList.add('active');
         }
     });
 }
