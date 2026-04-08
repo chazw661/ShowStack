@@ -1150,6 +1150,8 @@ def update_mic_assignment(request):
         
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
         current_project_id = request.session.get('current_project')
+        if not current_project_id and hasattr(request, 'current_project') and request.current_project:
+            current_project_id = request.current_project.id
         
         if field in ('is_micd', 'is_d_mic'):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
