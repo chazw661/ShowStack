@@ -589,7 +589,6 @@ def mic_tracker_view(request):
 
         
     # Custom prefetch to order shared presenters by through table ID
-        from django.db.models import Prefetch
 
     from django.db.models import Prefetch
     days = days.prefetch_related(
