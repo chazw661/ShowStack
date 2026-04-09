@@ -875,7 +875,45 @@ function toggleSession(sessionId, event) {
     const isCollapsed = body.classList.contains('collapsed');
     body.classList.toggle('collapsed', !isCollapsed);
     if (icon) icon.classList.toggle('collapsed', !isCollapsed);
+    // Save collapsed state
+    saveMicTrackerState();
 }
+
+function saveMicTrackerState() {
+    // Save each session's collapsed state
+    const states = {};
+    document.querySelectorAll('[id^="session-body-"]').forEach(body => {
+        const sid = body.id.replace('session-body-', '');
+        states[sid] = body.classList.contains('collapsed');
+    });
+    localStorage.setItem('mic-tracker-collapsed', JSON.stringify(states));
+    localStorage.setItem('mic-tracker-scroll', window.scrollY);
+}
+
+function restoreMicTrackerState() {
+    // Restore collapsed states
+    const statesRaw = localStorage.getItem('mic-tracker-collapsed');
+    if (statesRaw) {
+        try {
+            const states = JSON.parse(statesRaw);
+            Object.entries(states).forEach(([sid, collapsed]) => {
+                const body = document.getElementById('session-body-' + sid);
+                const icon = document.getElementById('session-collapse-' + sid);
+                if (body) {
+                    body.classList.toggle('collapsed', collapsed);
+                    if (icon) icon.classList.toggle('collapsed', collapsed);
+                }
+            });
+        } catch(e) {}
+    }
+    // Restore scroll position
+    const scroll = localStorage.getItem('mic-tracker-scroll');
+    if (scroll) {
+        window.scrollTo(0, parseInt(scroll));
+    }
+}
+
+document.addEventListener('DOMContentLoaded', restoreMicTrackerState);
 
 function toggleDay(dayId, headerEl) {
     const dayEl = headerEl.closest('.mtt-day');
