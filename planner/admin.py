@@ -585,11 +585,17 @@ class ConsoleInputInline(admin.TabularInline):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+        from django.db.models import Case, When, IntegerField, Value
         from django.db.models.functions import Cast
-        from django.db.models import IntegerField
+        # Safe cast - non-numeric input_ch values sort to end
         return qs.annotate(
-            input_ch_int=Cast('input_ch', IntegerField())
-        ).order_by('input_ch_int')
+            input_ch_int=Case(
+                When(input_ch__regex=r'^\d+$',
+                     then=Cast('input_ch', IntegerField())),
+                default=Value(99999),
+                output_field=IntegerField()
+            )
+        ).order_by('input_ch_int', 'input_ch')
 
     def get_extra(self, request, obj=None, **kwargs):
         """Return 144 for new consoles, 0 for existing"""
