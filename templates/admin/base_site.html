@@ -125,12 +125,427 @@ html[data-theme="auto"] {
             <span style="color: #4ecca3; font-weight: 600; font-size: 14px;">{{ current_project.name }}</span>
         </div>
     {% endif %}
+        <button onclick="helpOpen()" style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;" onmouseover="this.style.color='#00ff88';this.style.borderColor='#00ff88'" onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">? Help</button>
+
     
     {{ block.super }}
 {% endblock %}
 
 
 {% block extrahead %}
+
+<!-- Help Modal -->
+<div id="help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;width:780px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #2e2e2e;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="color:#888;font-size:12px;">You are on:</span>
+        <select id="help-module-select" onchange="helpSwitchModule(this.value)"
+          style="background:#111;border:1px solid #444;border-radius:6px;color:#ccc;font-size:13px;padding:4px 8px;cursor:pointer;">
+          <option value="projects">Projects & Invitations</option>
+            <option value="locations">Equip Locations</option>
+            <option value="consoles">Consoles</option>
+            <option value="devices">I/O Devices</option>
+            <option value="amp">Amplifier Assignments</option>
+            <option value="system-processors">System Processors</option>
+            <option value="cable">PA Cable Schedule</option>
+            <option value="comm-belt">COMM Belt Pack</option>
+            <option value="comm-config">COMM Config</option>
+            <option value="mic">Mic Tracker</option>
+            <option value="soundvision">Soundvision</option>
+            <option value="power">Power Distribution</option>
+            <option value="checklist">Audio Checklist</option>
+        </select>
+      </div>
+      <button onclick="helpClose()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;padding:2px 8px;border-radius:4px;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">&#x2715;</button>
+    </div>
+
+    <div style="display:flex;flex:1;min-height:0;overflow:hidden;">
+      <div id="help-fn-list" style="width:200px;flex-shrink:0;border-right:1px solid #2e2e2e;padding:10px 0;overflow-y:auto;background:#111;"></div>
+      <div id="help-steps-pane" style="flex:1;padding:20px 24px;overflow-y:auto;background:#1a1a1a;"></div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+.help-fn-item{padding:8px 14px;font-size:12px;color:#999;cursor:pointer;border-left:2px solid transparent;}
+.help-fn-item:hover{background:#1a1a1a;color:#ccc;}
+.help-fn-item.active{background:#1a1a1a;color:#4a9eff;font-weight:500;border-left-color:#4a9eff;}
+.help-step{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;}
+.help-step-num{width:22px;height:22px;border-radius:50%;background:#1a3a5e;color:#4a9eff;font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+.help-step-text{font-size:13px;color:#ccc;line-height:1.55;}
+.help-step-text em{font-style:normal;font-weight:500;color:#e0e0e0;}
+.help-tip{margin-top:14px;padding:10px 12px;background:#111;border-radius:6px;border:1px solid #2e2e2e;font-size:11px;color:#888;line-height:1.5;}
+.help-tip strong{color:#aaa;}
+.help-fn-label{font-size:10px;font-weight:bold;color:#555;text-transform:uppercase;letter-spacing:0.06em;padding:0 14px 8px;}
+</style>
+
+<script>
+const HELP_DATA = {
+  mic:{fns:[
+    {name:"Add a show day",desc:"Create a date entry to organize sessions under.",steps:["Open <em>Mic Tracker</em> from the Show Days sidebar link.","Click <em>+ Add Day</em> in the top right.","Select the show date and enter a label (e.g., 'Show Day 1').","Click <em>Save</em>. The day appears as a collapsible row in the tracker."],tip:"Add one day per show date. All sessions for that day live under it."},
+    {name:"Add a session",desc:"Create a named session block under a show day.",steps:["Expand a show day by clicking its row.","Click <em>+ Add Session</em>.","Enter a session name (e.g., 'AM General Session', 'Awards Dinner').","Click <em>Save</em>. The session appears as a tab inside that day."],tip:"Each session gets its own A1 and A2 tab views. Sessions represent discrete mic turnovers during the day."},
+    {name:"Assign a presenter to a mic slot",desc:"Assign a presenter to an RF channel slot from the A2 card view.",steps:["Open a session and click the <em>A2</em> tab.","Find the RF slot number you want to assign.","Click the <em>Primary</em> presenter dropdown and select or type the presenter name.","Set <em>Type</em>, <em>Placement</em>, <em>Sensitivity</em>, and <em>Output Level</em> as needed.","To assign a second presenter to the same mic, click <em>+ Add Presenter</em> at the bottom of the card.","Click <em>Save</em>."],tip:"Presenters added from the A2 card are automatically added to the master Presenters list — no separate entry needed."},
+    {name:"Manage the presenter list",desc:"Add and manage presenters independently of mic slot assignments.",steps:["Click the <em>Presenters</em> button in the top right of Mic Tracker.","Click <em>Add Presenter</em> and enter the presenter's name.","Click <em>Save</em>. They are now available to select from any mic slot dropdown across all sessions.","Alternatively, typing a new name directly into an A2 card slot will add them to the list automatically."],tip:"Building the presenter list ahead of show day makes A2 card assignment faster — names are ready to select from the dropdown without typing."},
+    {name:"Mark a mic as mic'd",desc:"Flag a slot as physically mic'd and ready.",steps:["Locate the slot in <em>A2</em> card view or <em>A1</em> list view.","Click the <em>MIC'D</em> toggle on the slot.","If the slot has multiple presenters assigned, the <em>MIC'D</em> button is at the bottom of the card, next to the previous and next presenter navigation buttons.","The slot updates immediately — no save required."],tip:"Use MIC'D status during show day to track which presenters are wearing a mic at any given moment."},
+    {name:"Switch between A1 and A2 views",desc:"Toggle between FOH list view and A2 detail card view.",steps:["Click the <em>A1</em> tab for the condensed list view used at front-of-house.","Click the <em>A2</em> tab for the full card view with photo, placement, sensitivity, and notes fields."],tip:"A1 is designed for fast FOH reference during a session. A2 is for A2 setup and detailed mic notes."},
+    {name:"Work in A1 view",desc:"Use the FOH list view to monitor mic status during a live session.",steps:["Click the <em>A1</em> tab to enter list view.","Each row shows the RF number, mic type, presenter name, MIC'D status, and notes at a glance.","MIC'D status updates live as the A2 operator toggles it from their A2 card view — no refresh needed.","To create colored groups for visual organization, click <em>Manage Groups</em>.","Click <em>Add Group</em>, enter a group name, and select a color.","Assign mic slots to the group — they will display with that color in A1 view for fast visual identification during the show."],tip:"Groups are useful for separating mic pools by session type, stage zone, or crew role — for example, color-coding panel mics differently from handheld mics."},
+    {name:"Add presenter notes",desc:"Log mic preferences, allergies, or setup tips for a slot.",steps:["Open the session in <em>A2</em> view.","Click the <em>Notes</em> field on the relevant slot.","Enter any notes (e.g., 'prefers lapel on right', 'hearing aid left ear').","Notes save automatically."]},
+    {name:"Export the mic sheet",desc:"Download a PDF or CSV of the session's mic assignments.",steps:["Click <em>Export PDF</em> for a formatted printable mic sheet.","Click <em>Export CSV</em> for a spreadsheet version.","Both exports reflect the current state of all sessions under the active show day."]}
+    ]},
+  "comm-config":{fns:[
+    {name:"Add a device",desc:"Register an Arcadia mainframe, FSII beltpack, or antenna.",steps:["Open <em>COMM Config</em> and go to the <em>Devices</em> tab.","Click <em>Add Device</em>.","Select the device type from the dropdown.","Enter a device label and hardware sys_id if known.","Click <em>Save</em>."],tip:"The Arcadia sys_id must match the value from the factory PouchDB — not the default placeholder."},
+    {name:"Assign ports",desc:"Set port functions and labels for each device.",steps:["Go to the <em>Ports</em> tab.","Select a device from the left panel.","For each port, choose a function: <em>2W, 4W, SA,</em> or <em>PGM</em>.","Enter a plain-language label for the port.","Changes save per port automatically."]},
+    {name:"Configure partylines",desc:"Define channel groups shared across multiple users.",steps:["Go to the <em>Partylines</em> tab.","Click <em>Add Partyline</em>.","Enter a name (e.g., 'Show Call', 'Lighting').","Select the member ports for this partyline.","Click <em>Save</em>."]},
+    {name:"Define roles",desc:"Create named user roles and assign their channel access.",steps:["Go to the <em>Roles</em> tab.","Click <em>Add Role</em>.","Enter the role name (e.g., 'FOH', 'A2', 'Director').","Assign the channels this role can access.","Click <em>Save</em>."]},
+    {name:"Export a .cca file",desc:"Generate a Clear-Com config archive ready to import into Designer.",steps:["Confirm <em>Ports</em>, <em>Partylines</em>, and <em>Roles</em> are fully configured.","Click <em>Export .cca</em>.","The archive downloads to your device.","In Clear-Com Designer, go to <em>File &gt; Import</em> and select the file.","Verify the import preview before applying to hardware."],tip:"Always validate the import in Designer on a test frame before deploying to show hardware."},
+    {name:"Import crew names from CSV",desc:"Bulk load crew member names into COMM Config from a spreadsheet.",steps:["Create a CSV file with all crew names in <em>Column A</em> — one name per row, first and last name together (e.g., John Smith).","No header row is needed.","Click <em>Import CSV</em> in the COMM Config module.","Select your CSV file.","Names import and populate the crew name list automatically."]}
+  ]},
+  "comm-belt":{fns:[
+    {name:"Add a belt pack role",desc:"Create a named crew position with its own channel layout.",steps:["Click <em>Add Belt Pack</em>.","Enter a role name (e.g., FOH, A2, Playback).","Select the manufacturer.","Click <em>Save</em>."]},
+    {name:"Assign channels",desc:"Configure which channels each role hears and talks on.",steps:["Select a belt pack role from the list.","Click <em>Add Channel</em>.","Enter the channel label, key assignment (A or B), and listen level.","Repeat for each channel.","Changes save automatically."]},
+    {name:"Export a belt pack sheet",desc:"Download a printable assignment reference for your crew.",steps:["Click <em>Export PDF</em>.","The sheet downloads formatted by role.","Print and leave a copy on the intercom rack at load-in."]},
+    {name:"Import crew names from CSV",desc:"Bulk load crew member names into the belt pack module from a spreadsheet.",steps:["Create a CSV file with all crew names in <em>Column A</em> — one name per row, first and last name together (e.g., John Smith).","No header row is needed.","Click <em>Import CSV</em> in the COMM Belt Pack module.","Select your CSV file.","Names import and populate the crew name list automatically."]}
+  ]},
+  
+  amp:{fns:[
+    {name:"Add an amplifier",desc:"Register an amp to a rack location.",steps:["Click <em>Add Amplifier</em>.","Enter the model name and rack location.","Enter the number of output channels.","Click <em>Save</em>."]},
+    {name:"Assign outputs to zones",desc:"Map each amp channel to a speaker zone or enclosure.",steps:["Select an amplifier from the list.","For each output, enter the zone name and speaker destination.","For NL8 outputs, select the correct pin pair.","Changes save per output."],tip:"Use the same zone naming convention as in the PA Cable Schedule to keep the two in agreement."},
+    {name:"Export the assignment sheet",desc:"Generate a printable amp-to-zone reference.",steps:["Click <em>Export</em>.","The sheet downloads grouped by rack location.","Use it to label amp racks or include it in your System Report."]}
+  ]},
+  cable:{fns:[
+    {name:"Add a cable run",desc:"Document a single loudspeaker cable from amp output to speaker.",steps:["Click <em>Add Run</em>.","Enter the source (amp and output number) and destination.","Enter the cable length and connector type.","Click <em>Save</em>. A unique run ID is assigned automatically."]},
+    {name:"Add a fan-out leg",desc:"Model a single amp output feeding multiple enclosures.",steps:["Select an existing run.","Click <em>Add Leg</em>.","Enter the leg's destination and cable length.","Repeat for each enclosure.","Safety margin indicators update automatically."],tip:"The safety flag turns amber when cable resistance approaches the threshold for your load impedance."},
+    {name:"Export the schedule",desc:"Download the cable schedule as PDF or CSV.",steps:["Click <em>Export PDF</em> for a formatted show-file version.","Click <em>Export CSV</em> for procurement or label-maker workflows.","Run numbers in the CSV map directly to cable tags."]}
+  ]},
+  soundvision:{fns:[
+    {name:"Upload a prediction",desc:"Import an L'Acoustics Soundvision PDF export.",steps:["Click <em>Upload Prediction</em>.","Select your Soundvision PDF export from your device.","ShowStack parses the file and displays the array summary.","Arrays are displayed in groups as they were created in Soundvision. Ground Speakers are imported by default — if you are flying the PA and don't need them, you can delete those groups from the prediction view.","Review the parsed arrays and correct any label mismatches."],tip:"Upload the array summary PDF. SPL map images are attached as-is."},
+    {name:"View array data",desc:"Inspect hang positions, splay angles, and coverage targets.",steps:["After uploading, array data appears in the Soundvision pane.","Each array lists its hang position and splay configuration.","Click an array to expand enclosure-level detail."]},
+    {name:"Include in System Report",desc:"Add prediction data to the project's consolidated PDF.",steps:["Navigate to <em>System Report</em> from the project menu.","Enable the <em>Soundvision</em> section toggle.","Generate the report — array data and SPL images will be included."]}
+  ]},
+  checklist:{fns:[
+    {name:"Work through a tab",desc:"Complete role-specific tasks at load-in or showtime.",steps:["Select the <em>Prep</em>, <em>FOH</em>, or <em>A2</em> tab for your role.","Check off each item as completed.","Progress saves automatically — a page reload won't lose your state.","Work top-to-bottom. The list is in intended sequence."],tip:"Prep is for load-in day. FOH and A2 tabs are designed to be run at showtime, in order."},
+    {name:"Add a custom item",desc:"Add a show-specific task not in the default list.",steps:["Go to the tab where the item belongs.","Click <em>Add Item</em> at the bottom of the list.","Type the task text.","Press <em>Enter</em> or click <em>Save</em>."]},
+    {name:"Reset for next show",desc:"Clear all check states without losing your item list.",steps:["Click <em>Reset All</em>.","Confirm the reset in the dialog.","All check states clear. Your item list stays intact."]},
+    {name:"Save a checklist template",desc:"Store the current task list as a reusable template for future shows.",steps:["Build out your FOH, A2, and Prep task lists to your standard show configuration.","Click <em>Save as Template</em> at the top of the checklist.","Enter a template name (e.g., 'Corporate Standard').","Click <em>Save Template</em>. The template is saved and available to load on any future project."],tip:"Save a template once you have a checklist dialed in for your typical show type — it eliminates rebuilding from scratch every event."},
+    {name:"Load a checklist template",desc:"Apply a saved template to populate the current project's task list.",steps:["Click <em>Load Template</em> at the top of the checklist.","Select a saved template from the list.","Click <em>Load</em>. The template replaces all current tasks across all tabs."],tip:"Loading a template will replace ALL current tasks. If you have show-specific tasks already added, save those first as their own template before loading a new one."}
+  ]},
+  ip:{fns:[
+    {name:"Add a device",desc:"Register a networked device with its IP and subnet.",steps:["Click <em>Add Device</em>.","Enter the device name, IP address, subnet mask, and gateway.","Set the address type to <em>Static</em> or <em>DHCP</em>.","Click <em>Save</em>. Duplicate IPs are flagged immediately."],tip:"Document gateway and VLAN info in the Notes field — critical for on-site troubleshooting."},
+    {name:"Edit an entry",desc:"Update a device's IP or label after a network change.",steps:["Click any row in the IP table to open it.","Update the relevant fields.","Click <em>Save</em>."]},
+    {name:"Resolve a conflict",desc:"Fix a duplicate IP assignment flagged by the system.",steps:["Conflicting rows are marked with a red indicator automatically.","Click the flagged row to open it.","Correct the IP address.","Click <em>Save</em>. The flag clears once the conflict is resolved."]}
+  ]},
+  report:{fns:[
+    {name:"Generate a system report",desc:"Export a consolidated PDF covering all selected module data.",steps:["Click <em>System Report</em> from the project menu.","Toggle which sections to include: Amps, Cables, IPs, COMM Config, Soundvision.","Click <em>Generate PDF</em>.","The report downloads with a cover page and all selected sections."],tip:"Export at load-in for a pre-show record and again post-show for an as-built archive."},
+    {name:"Create a trimmed report",desc:"Export only the sections relevant to a specific audience.",steps:["Open <em>System Report</em>.","Disable sections you don't need.","Click <em>Generate PDF</em>.","Only enabled sections appear in the output."]}
+  ]},
+
+  projects:{fns:[
+  
+  {
+    name:"Invite a team member",
+    desc:"Give another user access to your project.",
+    steps:[
+      "Navigate to your project's detail page.",
+      "Click <em>Invite Member</em>.",
+      "Enter the user's email address and select their role: <em>Editor</em> or <em>Viewer</em>.",
+      "Click <em>Send Invite</em>. They receive an email with an activation link.",
+      "Once they accept, they appear in the project's member list."
+    ],
+    tip:"Editors can add and edit equipment. Viewers can see everything but cannot make changes."
+  },
+  {
+    name:"Switch projects",
+    desc:"Change which project you are currently working in.",
+    steps:[
+      "Find the <em>Project</em> dropdown in the top nav bar.",
+      "Select the project you want to work in.",
+      "The page reloads and all module data now reflects the selected project."
+    ]
+  },
+  {
+    name:"Duplicate a project",
+    desc:"Copy an existing project as a starting point for a new show.",
+    steps:[
+      "Open the project you want to copy from the Projects list.",
+      "Click <em>Duplicate Project</em>.",
+      "Enter a name for the new project.",
+      "Click <em>Confirm</em>. All equipment, configs, and assignments are copied to the new project."
+    ],
+    tip:"Duplicating is the fastest way to set up a repeat event at the same venue — duplicate, then adjust what changed."
+  }
+]},
+locations:{fns:[
+  {
+    name:"Add a location",
+    desc:"Define a physical equipment area for the show.",
+    steps:[
+      "Click <em>Equip Locations</em> in the sidebar.",
+      "Click <em>Add Equip Location</em>.",
+      "Enter a descriptive name (e.g., FOH Rack, Stage Rack, Broadcast, Distributed).",
+      "Add an optional description for clarity.",
+      "Click <em>Save</em>."
+    ],
+    tip:"Create all locations before adding consoles, amps, or devices — equipment gets assigned to a location on creation."
+  },
+  {
+    name:"Edit a location name",
+    desc:"Rename a location after it has been created.",
+    steps:[
+      "Click <em>Equip Locations</em> in the sidebar.",
+      "Click the location you want to rename.",
+      "Update the name field.",
+      "Click <em>Save</em>. All equipment assigned to this location updates automatically."
+    ]
+  }
+]},
+consoles:{fns:[
+  {
+    name:"Add a console",
+    desc:"Register a mixing console to the project.",
+    steps:[
+      "Click <em>Consoles</em> in the sidebar.",
+      "Click <em>Add Console</em>.",
+      "Enter the console name and assign it to a location.",
+      "Enter primary and secondary IP addresses if applicable.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Add console inputs",
+    desc:"Document the input channel list for a console.",
+    steps:[
+      "Open a console from the Consoles list.",
+      "Scroll to the <em>Console Inputs</em> inline section.",
+      "For each channel, enter the Dante number, input channel, source name, group, and DCA assignment.",
+      "Use Enter to tab between fields quickly.",
+      "Click <em>Save</em> at the bottom when done."
+    ],
+    tip:"Use Enter to move between fields like a spreadsheet — it's faster than clicking."
+  },
+  {
+    name:"Add aux outputs",
+    desc:"Document the aux bus assignments for a console.",
+    steps:[
+      "Open a console from the Consoles list.",
+      "Scroll to the <em>Console Aux Outputs</em> inline section.",
+      "For each aux, enter the Dante number, aux number, name, and mono/stereo setting.",
+      "Set the bus type to <em>Fixed</em> or <em>Variable</em>.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Add matrix outputs",
+    desc:"Document matrix bus assignments for a console.",
+    steps:[
+      "Open a console from the Consoles list.",
+      "Scroll to the <em>Console Matrix Outputs</em> inline section.",
+      "For each matrix, enter the Dante number, matrix number, name, and destination.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Export a Rivage CSV",
+    desc:"Generate a Yamaha Rivage-compatible input list CSV.",
+    steps:[
+      "Open the console you want to export.",
+      "Click <em>Export Rivage CSV</em>.",
+      "The file downloads ready for import into the Rivage console's input list."
+    ],
+   name:"Save a console template",
+    desc:"Mark a console as a reusable template for future projects.",
+    steps:[
+      "Open the console you want to save as a template.",
+      "Check the <em>Is Template</em> checkbox near the top of the console form.",
+      "Click <em>Save</em>. The console is now stored in the Template Library and available across all your projects."
+    ],
+    tip:"Any console can be a template — name it clearly (e.g., 'Rivage PM7 - Standard Corporate') so it's easy to identify in the library."
+  },
+  {
+    name:"Load a console template",
+    desc:"Import a saved template into a console to populate its inputs and outputs.",
+    steps:[
+      "Open the console you want to populate.",
+      "Click <em>Template Library</em>.",
+      "Browse the saved templates and select the one you want to use.",
+      "Click <em>Import</em>. The console's inputs and outputs are populated from the template.",
+      "Review the imported channels and adjust anything show-specific before saving."
+    ],
+    tip:"Importing a template overwrites the console's existing inputs and outputs. Make sure the console is empty or that you intend to replace its current layout."
+     }
+   ]},  
+devices:{fns:[
+  {
+    name:"Add an I/O device",
+    desc:"Register a stage box, I/O rack, or other Dante device.",
+    steps:[
+      "Click <em>I/O Devices</em> in the sidebar.",
+      "Click <em>Add Device</em>.",
+      "Enter the device name and assign it to a location.",
+      "Enter input and output channel counts.",
+      "Enter primary IP address.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Add device inputs",
+    desc:"Label the input channels on a device.",
+    steps:[
+      "Open a device from the I/O Devices list.",
+      "Scroll to the <em>Device Inputs</em> inline section.",
+      "For each input, enter the input number and signal name.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Add device outputs",
+    desc:"Label the output channels on a device.",
+    steps:[
+      "Open a device from the I/O Devices list.",
+      "Scroll to the <em>Device Outputs</em> inline section.",
+      "For each output, enter the output number and signal name.",
+      "Click <em>Save</em>."
+    ]
+  }
+]},
+"system-processors":{fns:[
+  {
+    name:"Add a system processor",
+    desc:"Register a P1 or Galaxy processor to the project.",
+    steps:[
+      "Click <em>System Processors</em> in the sidebar.",
+      "Click <em>Add System Processor</em>.",
+      "Enter a name and assign a location.",
+      "Click <em>Save</em>.",
+      "Open the saved processor and add a <em>P1 Processor</em> or <em>Galaxy Processor</em> inline record to configure inputs and outputs."
+    ]
+  },
+  {
+    name:"Configure P1 inputs and outputs",
+    desc:"Document signal routing for an L'Acoustics P1 processor.",
+    steps:[
+      "Open a System Processor that has a P1 assigned.",
+      "Scroll to the <em>P1 Inputs</em> inline section and enter each input's signal name and source.",
+      "Scroll to the <em>P1 Outputs</em> inline section and enter each output's destination and speaker zone.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Configure Galaxy inputs and outputs",
+    desc:"Document signal routing for a Galaxy processor.",
+    steps:[
+      "Open a System Processor that has a Galaxy assigned.",
+      "Scroll to the <em>Galaxy Inputs</em> inline and enter input signal names.",
+      "Scroll to the <em>Galaxy Outputs</em> inline and enter output destinations.",
+      "Click <em>Save</em>."
+    ]
+  }
+]},
+power:{fns:[
+  {
+    name:"Create a power distribution plan",
+    desc:"Set up a power plan to track amplifier load and circuit assignments.",
+    steps:[
+      "Click <em>Power Distribution Plans</em> in the sidebar.",
+      "Click <em>Add Power Distribution Plan</em>.",
+      "Enter a plan name and assign it to a location.",
+      "Click <em>Save</em>."
+    ]
+  },
+  {
+    name:"Add an amplifier to a plan",
+    desc:"Assign amplifiers to circuits within a power distribution plan.",
+    steps:[
+      "Open a Power Distribution Plan.",
+      "Scroll to the <em>Amplifier Assignments</em> inline section.",
+      "Click the <em>Amplifier</em> dropdown — many common amp models are already built into the system and available to select immediately.",
+      "If your amp model is not listed, you will need to create an Amplifier Profile first (see <em>Create an amplifier profile</em> below).",
+      "Select the amp, assign it to a circuit number, and enter the circuit breaker rating.",
+      "The plan calculates total load per circuit automatically.",
+      "Click <em>Save</em>."
+    ],
+    tip:"Keep circuit load below 80% of the breaker rating to stay within NEC guidelines."
+  },
+  {
+    name:"Create an amplifier profile",
+    desc:"Add a new amp model to the system so it can be used in power distribution plans.",
+    steps:[
+      "Click <em>Amplifier Profiles</em> in the sidebar.",
+      "Click <em>Add Amplifier Profile</em>.",
+      "Enter the amp model name.",
+      "Enter the amp's idle and full-load current draw in amps — this information is in the amp's spec sheet.",
+      "Click <em>Save</em>. The new profile is now available in the Amplifier dropdown inside any Power Distribution Plan."
+    ],
+    tip:"Check the existing profiles list before creating a new one — your amp model may already be in the system."
+  }
+]},
+};
+
+const _helpSlugMap = {
+    'commbeltpack':'comm-belt','commbeltpackchannel':'comm-belt',
+    'commconfig':'comm-config','commchannel':'comm-config','commposition':'comm-config','commcrewname':'comm-config',
+    'commconfigpartyline':'comm-config','commconfigrole':'comm-config','commconfigkeyset':'comm-config',
+    'showday':'mic','micsession':'mic','micassignment':'mic','micgroup':'mic','micshowinfo':'mic','presenter':'mic','presenterslot':'mic',
+    'amp':'amp','ampmodel':'amp','ampchannel':'amp','ampdivider':'amp',
+    'pacableschedule':'cable','pazone':'cable','pafanout':'cable',
+    'soundvisionprediction':'soundvision','speakerarray':'soundvision','speakercabinet':'soundvision',
+    'audiochecklist':'checklist',
+    'project':'projects','projectmember':'projects','invitation':'projects',
+    'location':'locations',
+    'console':'consoles','consoleinput':'consoles','consoleauxoutput':'consoles','consolematrixoutput':'consoles','consolestereooutput':'consoles',
+    'device':'devices','deviceinput':'devices','deviceoutput':'devices',
+    'systemprocessor':'system-processors','p1processor':'system-processors','galaxyprocessor':'system-processors',
+    'p1input':'system-processors','p1output':'system-processors','galaxyinput':'system-processors','galaxyoutput':'system-processors',
+    'powerdistributionplan':'power','amplifierprofile':'power','amplifierassignment':'power',
+
+};
+const _helpPathParts = window.location.pathname.split('/').filter(Boolean);
+let helpCurrentModule = 'mic';
+
+
+
+for (const part of _helpPathParts) {
+    if (_helpSlugMap[part.toLowerCase()]) { helpCurrentModule = _helpSlugMap[part.toLowerCase()]; break; }
+}
+let helpCurrentFn = 0;
+
+function helpRenderFnList(){
+  const fns = HELP_DATA[helpCurrentModule].fns;
+  document.getElementById('help-fn-list').innerHTML =
+    '<div class="help-fn-label">Functions</div>' +
+    fns.map((f,i)=>`<div class="help-fn-item${i===helpCurrentFn?' active':''}" onclick="helpSelectFn(${i})">${f.name}</div>`).join('');
+}
+
+function helpRenderSteps(){
+  const fn = HELP_DATA[helpCurrentModule].fns[helpCurrentFn];
+  document.getElementById('help-steps-pane').innerHTML =
+    `<div style="font-size:14px;font-weight:500;color:#e0e0e0;margin-bottom:4px;">${fn.name}</div>` +
+    `<div style="font-size:12px;color:#888;margin-bottom:16px;line-height:1.5;">${fn.desc}</div>` +
+    fn.steps.map((s,i)=>`<div class="help-step"><div class="help-step-num">${i+1}</div><div class="help-step-text">${s}</div></div>`).join('') +
+    (fn.tip?`<div class="help-tip"><strong>Tip: </strong>${fn.tip}</div>`:'');
+}
+
+function helpSelectFn(i){helpCurrentFn=i;helpRenderFnList();helpRenderSteps();}
+
+function helpSwitchModule(mod){helpCurrentModule=mod;helpCurrentFn=0;helpRenderFnList();helpRenderSteps();}
+
+function helpOpen(){
+  helpCurrentFn=0;
+  document.getElementById('help-module-select').value=helpCurrentModule;
+  document.getElementById('help-overlay').style.display='flex';
+  helpRenderFnList();
+  helpRenderSteps();
+}
+
+function helpClose(){document.getElementById('help-overlay').style.display='none';}
+
+document.addEventListener('DOMContentLoaded',function(){
+  document.getElementById('help-overlay').addEventListener('click',function(e){if(e.target===this)helpClose();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')helpClose();});
+});
+</script>
 {{ block.super }}
 
 
