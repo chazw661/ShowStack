@@ -73,29 +73,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MON-01 | — | Pending |
-| MON-02 | — | Pending |
-| MON-03 | — | Pending |
-| MON-04 | — | Pending |
-| DAN-01 | — | Pending |
-| DAN-02 | — | Pending |
-| SW-01 | — | Pending |
-| SW-02 | — | Pending |
-| SW-03 | — | Pending |
-| SW-04 | — | Pending |
-| DASH-01 | — | Pending |
-| DASH-02 | — | Pending |
-| DASH-03 | — | Pending |
-| DASH-04 | — | Pending |
-| INFRA-01 | — | Pending |
-| INFRA-02 | — | Pending |
-| INFRA-03 | — | Pending |
+| MON-01 | Phase 3 | Pending |
+| MON-02 | Phase 1 | Pending |
+| MON-03 | Phase 1 | Pending |
+| MON-04 | Phase 3 | Pending |
+| DAN-01 | Phase 3 | Pending |
+| DAN-02 | Phase 3 | Pending |
+| SW-01 | Phase 2 | Pending |
+| SW-02 | Phase 2 | Pending |
+| SW-03 | Phase 2 | Pending |
+| SW-04 | Phase 2 | Pending |
+| DASH-01 | Phase 1 | Pending |
+| DASH-02 | Phase 1 | Pending |
+| DASH-03 | Phase 1 | Pending |
+| DASH-04 | Phase 2 | Pending |
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| INFRA-03 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17
+- Mapped to phases: 17
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-21*
-*Last updated: 2026-04-21 after initial definition*
+*Last updated: 2026-04-21 after roadmap creation*
