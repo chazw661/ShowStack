@@ -28,7 +28,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The session history timeline shows each up/down state change with a timestamp for the current show day
   4. Running `python manage.py run_monitor` starts background ICMP polling; stopping it halts all polling cleanly
   5. When the laptop is not on the show network, the dashboard shows a clear "not connected to show network" message rather than silent empty status
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Models, migration, admin, run_monitor command
+- [ ] 01-02-PLAN.md — Views (SSE, scan, device management) and URL wiring
+- [ ] 01-03-PLAN.md — Dashboard template (HTML/CSS/JS)
 **UI hint**: yes
 
 ### Phase 2: Switch SNMP
@@ -63,6 +67,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/3 | Not started | - |
 | 2. Switch SNMP | 0/TBD | Not started | - |
 | 3. Dante | 0/TBD | Not started | - |
