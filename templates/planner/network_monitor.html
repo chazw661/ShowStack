@@ -1,0 +1,1751 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Network Health Monitor - {{ current_project.name|default:"ShowStack" }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; Network Health Monitor
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+/* ===== CSS CUSTOM PROPERTIES ===== */
+:root {
+    --bg-base:       #0f0f1a;
+    --bg-card:       #181828;
+    --bg-raised:     #1e1e32;
+    --bg-input:      #252540;
+    --border:        #2a2a45;
+    --border-bright: #3a3a60;
+    --accent-blue:   #4a9eff;
+    --accent-green:  #00e676;
+    --accent-amber:  #ffab00;
+    --accent-red:    #ff5252;
+    --text-primary:  #e8e8f0;
+    --text-secondary:#9090b0;
+    --text-dim:      #505070;
+}
+
+/* ===== BOX SIZING RESET ===== */
+.nhm-root * { box-sizing: border-box; }
+
+/* ===== ROOT CONTAINER ===== */
+.nhm-root {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 0 0 60px;
+    position: relative;
+}
+
+/* ===== HEADER ===== */
+.nhm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-wrap: wrap;
+}
+
+.nhm-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    white-space: nowrap;
+}
+
+.nhm-project-name {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.nhm-header-left { display: flex; flex-direction: column; }
+
+.nhm-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ===== STATUS DOTS ===== */
+.nhm-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.nhm-dot--online  { background: var(--accent-green); }
+.nhm-dot--flapping { background: var(--accent-amber); }
+.nhm-dot--offline  { background: var(--accent-red); animation: nhm-pulse 2s infinite; }
+.nhm-dot--unknown  { background: var(--text-dim); }
+
+@keyframes nhm-pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+/* ===== ALERT BANNERS ===== */
+#nhm-alerts { display: flex; flex-direction: column; }
+
+.nhm-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 24px;
+    min-height: 48px;
+    background: var(--bg-raised);
+    border-left: 4px solid var(--accent-red);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    transition: max-height 0.2s ease, opacity 0.2s ease;
+    max-height: 200px;
+}
+
+.nhm-alert.nhm-dismissing {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.nhm-alert-body { flex: 1; }
+.nhm-alert-device {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.nhm-alert-detail {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.nhm-alert-dismiss {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.nhm-alert-dismiss:hover {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+.nhm-alert-dismiss:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+/* ===== DOMAIN ROLLUP BAR ===== */
+#nhm-rollup {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 24px;
+    height: 40px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.nhm-rollup-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-right: 4px;
+}
+
+.nhm-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+
+.nhm-pill--healthy {
+    background: rgba(0, 230, 118, 0.12);
+    border-color: rgba(0, 230, 118, 0.35);
+    color: var(--accent-green);
+}
+
+.nhm-pill--degraded {
+    background: rgba(255, 171, 0, 0.12);
+    border-color: rgba(255, 171, 0, 0.35);
+    color: var(--accent-amber);
+}
+
+.nhm-pill--offline-state {
+    background: rgba(255, 82, 82, 0.12);
+    border-color: rgba(255, 82, 82, 0.35);
+    color: var(--accent-red);
+}
+
+.nhm-pill--placeholder {
+    background: var(--bg-raised);
+    border-color: var(--border);
+    color: var(--text-dim);
+    cursor: default;
+}
+
+/* ===== SCAN CONTROLS ===== */
+.nhm-scan-area {
+    padding: 0 24px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+}
+
+.nhm-scan-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0;
+    flex-wrap: wrap;
+}
+
+.nhm-select {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    min-width: 180px;
+    cursor: pointer;
+}
+
+.nhm-select:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-color: var(--accent-blue);
+}
+
+.nhm-btn {
+    padding: 7px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.nhm-btn:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+.nhm-btn--primary {
+    background: var(--accent-blue);
+    color: #fff;
+}
+
+.nhm-btn--primary:hover { background: #3a8eef; }
+
+.nhm-btn--primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.nhm-btn--danger {
+    background: transparent;
+    border: 1px solid var(--accent-red);
+    color: var(--accent-red);
+}
+
+.nhm-btn--danger:hover { background: rgba(255, 82, 82, 0.08); }
+
+.nhm-btn--ghost {
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    color: var(--text-secondary);
+}
+
+.nhm-btn--ghost:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+.nhm-scan-status {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* CSS spinner for scanning state */
+.nhm-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: nhm-spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+@keyframes nhm-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ===== SCAN RESULTS ===== */
+#nhm-scan-results {
+    display: none;
+    padding: 12px 0 16px;
+    border-top: 1px solid var(--border);
+}
+
+.nhm-scan-result-count {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.nhm-scan-result-list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.nhm-scan-result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-raised);
+}
+
+.nhm-scan-result-item:last-child { border-bottom: none; }
+
+.nhm-scan-result-item input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.nhm-scan-result-ip {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 130px;
+}
+
+.nhm-scan-result-latency {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    flex: 1;
+}
+
+.nhm-scan-result-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 5px;
+}
+
+.nhm-scan-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.nhm-scan-domain-select {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.nhm-scan-domain-select:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+/* ===== MAIN CONTENT ===== */
+.nhm-content { padding: 24px; }
+
+/* ===== EMPTY STATE ===== */
+.nhm-empty {
+    background: var(--bg-card);
+    border: 1px solid var(--border-bright);
+    border-radius: 6px;
+    padding: 32px;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.nhm-empty-heading {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 10px;
+}
+
+.nhm-empty-body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 16px;
+}
+
+.nhm-empty-code {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--accent-blue);
+    background: var(--bg-raised);
+    padding: 6px 12px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 6px;
+}
+
+/* ===== DOMAIN SECTIONS ===== */
+.nhm-domain {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.nhm-domain-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    min-height: 44px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s ease;
+}
+
+.nhm-domain-header:hover { background: var(--bg-raised); }
+
+.nhm-domain-header:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+
+.nhm-domain-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.nhm-domain-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 2px 8px;
+}
+
+.nhm-domain-toggle {
+    font-size: 12px;
+    color: var(--text-dim);
+    width: 20px;
+    text-align: center;
+    transition: transform 0.15s ease;
+}
+
+.nhm-domain-body {
+    overflow: hidden;
+    max-height: 2000px;
+    transition: max-height 0.2s ease;
+}
+
+.nhm-domain--collapsed .nhm-domain-body {
+    max-height: 0;
+}
+
+.nhm-domain--collapsed .nhm-domain-header {
+    border-bottom: none;
+}
+
+.nhm-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+    padding: 12px;
+}
+
+/* ===== DEVICE CARDS ===== */
+.nhm-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+    cursor: pointer;
+}
+
+.nhm-card:hover { border-color: var(--border-bright); }
+
+.nhm-card--expanded { border-color: var(--border-bright); }
+
+.nhm-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    min-height: 40px;
+}
+
+.nhm-card-name {
+    font-size: 14px;
+    color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nhm-card-latency {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.nhm-card-detail {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.2s ease;
+    border-top: 1px solid transparent;
+}
+
+.nhm-card--expanded .nhm-card-detail {
+    max-height: 500px;
+    border-top-color: var(--border);
+}
+
+.nhm-card-detail-inner {
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.nhm-card-detail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.nhm-card-detail-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.nhm-card-detail-value {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: right;
+}
+
+.nhm-card-status-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.nhm-card-remove {
+    background: transparent;
+    border: none;
+    color: var(--accent-red);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 4px 0;
+    text-align: left;
+    transition: opacity 0.15s ease;
+    margin-top: 4px;
+}
+
+.nhm-card-remove:hover { opacity: 0.7; }
+
+.nhm-card-remove:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+/* Empty domain state */
+.nhm-domain-empty {
+    padding: 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+/* ===== TIMELINE ===== */
+.nhm-timeline {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 16px;
+    overflow: hidden;
+}
+
+.nhm-timeline-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    min-height: 44px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+}
+
+.nhm-timeline-header:hover { background: var(--bg-raised); }
+
+.nhm-timeline-header:focus {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+}
+
+.nhm-timeline-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    flex: 1;
+}
+
+.nhm-timeline-toggle {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.nhm-timeline-body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.25s ease;
+    border-top: 1px solid transparent;
+}
+
+.nhm-timeline--expanded .nhm-timeline-body {
+    max-height: 400px;
+    border-top-color: var(--border);
+}
+
+#nhm-timeline-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.nhm-timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    min-height: 36px;
+    font-size: 14px;
+}
+
+.nhm-timeline-row:last-child { border-bottom: none; }
+
+.nhm-timeline-row:nth-child(even) { background: var(--bg-card); }
+.nhm-timeline-row:nth-child(odd)  { background: var(--bg-base); }
+
+.nhm-timeline-ts {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.nhm-timeline-device {
+    font-size: 14px;
+    color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nhm-timeline-event {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.nhm-timeline-empty {
+    padding: 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+/* ===== SSE CONNECTION INDICATOR ===== */
+#nhm-sse-status {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: none;
+}
+
+.nhm-sse-reconnecting {
+    font-size: 11px;
+    color: var(--accent-amber);
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    letter-spacing: 0.06em;
+}
+
+.nhm-sse-paused {
+    font-size: 13px;
+    color: var(--accent-amber);
+    background: var(--bg-raised);
+    border: 1px solid rgba(255, 171, 0, 0.35);
+    border-radius: 4px;
+    padding: 8px 14px;
+}
+
+/* ===== CONFIRM DIALOG (simple) ===== */
+.nhm-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nhm-confirm-box {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-bright);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.nhm-confirm-text {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin: 0 0 20px;
+}
+
+.nhm-confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="nhm-root" id="nhm-root">
+
+  <!-- ===== ALERT BANNERS ===== -->
+  <div id="nhm-alerts">
+    {% for device in active_alerts %}
+    <div class="nhm-alert" id="nhm-alert-{{ device.id }}" role="alert">
+      <span class="nhm-dot nhm-dot--offline" aria-label="{{ device.label }}: offline"></span>
+      <div class="nhm-alert-body">
+        <div class="nhm-alert-device">{{ device.label }} offline</div>
+        <div class="nhm-alert-detail">
+          Failed {{ device.consecutive_failures }} consecutive poll{{ device.consecutive_failures|pluralize }}. Last seen
+          {% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}.
+        </div>
+      </div>
+      <button class="nhm-alert-dismiss"
+              onclick="dismissAlert({{ device.id }})"
+              aria-label="Dismiss alert for {{ device.label }}">
+        Dismiss alert
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ===== HEADER with SCAN CONTROLS ===== -->
+  <div class="nhm-header">
+    <div class="nhm-header-left">
+      <div class="nhm-title">Network Health Monitor</div>
+      {% if current_project %}
+      <div class="nhm-project-name">{{ current_project.name }}</div>
+      {% endif %}
+    </div>
+    <div class="nhm-header-right nhm-scan-controls" id="nhm-scan-controls">
+      {% if has_project %}
+      <select class="nhm-select" id="nhm-nic-select" aria-label="Select network interface">
+        <option value="">-- Select Interface --</option>
+        {% for nic in nics %}
+        <option value="{{ nic.interface }}"
+                data-subnet="{{ nic.subnet }}"
+                data-ip="{{ nic.ip }}">
+          {{ nic.display }}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="nhm-btn nhm-btn--primary" id="nhm-scan-btn"
+              onclick="startScan()" aria-label="Start network scan">
+        Start Scan
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ===== DOMAIN ROLLUP BAR ===== -->
+  <div id="nhm-rollup">
+    <span class="nhm-rollup-label">Status</span>
+    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-la-network">
+      <span class="nhm-dot nhm-dot--unknown" id="nhm-rollup-dot-la" aria-label="LA Network status"></span>
+      LA Network: <span id="nhm-rollup-la">{{ domain_counts.la_network.online|default:0 }}/{{ domain_counts.la_network.total|default:0 }}</span>
+    </span>
+    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-dante"
+          title="Dante monitoring coming in Phase 2">
+      <span class="nhm-dot nhm-dot--unknown" aria-label="Dante: Phase 2 placeholder"></span>
+      Dante: <span id="nhm-rollup-dante">0/0</span>
+    </span>
+    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-switches"
+          title="Switch monitoring coming in Phase 2">
+      <span class="nhm-dot nhm-dot--unknown" aria-label="Switches: Phase 2 placeholder"></span>
+      Switches: <span id="nhm-rollup-switches">0/0</span>
+    </span>
+  </div>
+
+  <!-- ===== SCAN RESULTS (inline, below header) ===== -->
+  {% if has_project %}
+  <div class="nhm-scan-area">
+    <div id="nhm-scan-results">
+      <div class="nhm-scan-result-count" id="nhm-scan-result-count"></div>
+      <ul class="nhm-scan-result-list" id="nhm-scan-result-list"></ul>
+      <div class="nhm-scan-add-row">
+        <select class="nhm-scan-domain-select" id="nhm-scan-domain" aria-label="Assign domain to selected devices">
+          <option value="la_network">LA Network</option>
+          <option value="dante">Dante</option>
+          <option value="switch">Switches</option>
+          <option value="unknown">Unknown</option>
+        </select>
+        <button class="nhm-btn nhm-btn--primary" id="nhm-add-btn"
+                onclick="addToMonitor()" disabled
+                aria-label="Add selected devices to monitor">
+          Add to Monitor
+        </button>
+        <span class="nhm-scan-status" id="nhm-scan-status-text"></span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <div class="nhm-content">
+
+    {% if not has_project %}
+    <!-- No active project state -->
+    <div class="nhm-empty">
+      <div class="nhm-empty-heading">No project selected</div>
+      <div class="nhm-empty-body">Select a project from the admin sidebar to use the Network Health Monitor.</div>
+    </div>
+
+    {% elif not monitor_running and not devices %}
+    <!-- Monitor not running, no devices -->
+    <div class="nhm-empty" id="nhm-empty-state">
+      <div class="nhm-empty-heading">Monitor is not running. Start it with: python manage.py run_monitor</div>
+      <div class="nhm-empty-body">
+        Launch the background monitor to begin tracking device reachability on your show network.
+      </div>
+      <div class="nhm-empty-code">python manage.py run_monitor --project-id {{ current_project.id }}</div>
+    </div>
+
+    {% elif monitor_running and not devices %}
+    <!-- Monitor running, no devices discovered yet -->
+    <div class="nhm-empty" id="nhm-empty-state">
+      <div class="nhm-empty-heading">Not connected to show network</div>
+      <div class="nhm-empty-body">
+        No devices are being monitored. Run a scan to discover devices on your network.
+      </div>
+      <button class="nhm-btn nhm-btn--ghost" onclick="document.getElementById('nhm-nic-select').focus(); window.scrollTo({top:0,behavior:'smooth'});">
+        Select Network Interface
+      </button>
+    </div>
+
+    {% else %}
+    <!-- Device domain sections -->
+
+    <!-- LA Network section -->
+    <div class="nhm-domain" id="nhm-domain-la-network" data-domain="la_network">
+      <div class="nhm-domain-header" tabindex="0" role="button"
+           aria-expanded="true" aria-controls="nhm-domain-body-la-network"
+           onclick="toggleDomain('la-network', this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){toggleDomain('la-network', this);}">
+        <span class="nhm-domain-name">LA Network</span>
+        <span class="nhm-domain-badge" id="nhm-badge-la-network">
+          {{ domain_counts.la_network.total|default:0 }} device{{ domain_counts.la_network.total|default:0|pluralize }}
+        </span>
+        <span class="nhm-domain-toggle" aria-hidden="true" id="nhm-toggle-la-network">&#9650;</span>
+      </div>
+      <div class="nhm-domain-body" id="nhm-domain-body-la-network">
+        <div class="nhm-card-grid" id="nhm-grid-la-network">
+          {% for device in devices %}{% if device.domain == 'la_network' %}
+          <div class="nhm-card" id="nhm-device-{{ device.id }}"
+               data-domain="{{ device.domain }}"
+               data-status="{{ device.last_known_state }}"
+               onclick="toggleCard({{ device.id }})"
+               tabindex="0" role="button"
+               aria-expanded="false"
+               onkeydown="if(event.key==='Enter'||event.key===' '){toggleCard({{ device.id }});}">
+            <div class="nhm-card-header">
+              <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
+                    aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
+              <span class="nhm-card-name">{{ device.label }}</span>
+              <span class="nhm-card-latency">
+                {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
+              </span>
+            </div>
+            <div class="nhm-card-detail">
+              <div class="nhm-card-detail-inner">
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">IP</span>
+                  <span class="nhm-card-detail-value">{{ device.ip_address }}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Last Seen</span>
+                  <span class="nhm-card-detail-value">
+                    {% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}
+                  </span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Status</span>
+                  <span class="nhm-card-status-label">{{ device.last_known_state|default:'unknown' }}</span>
+                </div>
+                {% if device.consecutive_failures > 0 %}
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Failures</span>
+                  <span class="nhm-card-detail-value">{{ device.consecutive_failures }}</span>
+                </div>
+                {% endif %}
+                <button class="nhm-card-remove"
+                        onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
+                        aria-label="Remove {{ device.label }} from monitor">
+                  Remove from monitor
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endif %}{% endfor %}
+          {% with la_count=0 %}
+          {% for device in devices %}{% if device.domain == 'la_network' %}{% with la_count=la_count|add:1 %}{% endwith %}{% endif %}{% endfor %}
+          {% endwith %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Dante section (Phase 2 placeholder) -->
+    <div class="nhm-domain" id="nhm-domain-dante" data-domain="dante">
+      <div class="nhm-domain-header" tabindex="0" role="button"
+           aria-expanded="true" aria-controls="nhm-domain-body-dante"
+           onclick="toggleDomain('dante', this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){toggleDomain('dante', this);}">
+        <span class="nhm-domain-name">Dante</span>
+        <span class="nhm-domain-badge" id="nhm-badge-dante">Phase 2</span>
+        <span class="nhm-domain-toggle" aria-hidden="true" id="nhm-toggle-dante">&#9650;</span>
+      </div>
+      <div class="nhm-domain-body" id="nhm-domain-body-dante">
+        <div class="nhm-card-grid" id="nhm-grid-dante">
+          {% for device in devices %}{% if device.domain == 'dante' %}
+          <div class="nhm-card" id="nhm-device-{{ device.id }}"
+               data-domain="{{ device.domain }}"
+               data-status="{{ device.last_known_state }}"
+               onclick="toggleCard({{ device.id }})"
+               tabindex="0" role="button" aria-expanded="false"
+               onkeydown="if(event.key==='Enter'||event.key===' '){toggleCard({{ device.id }});}">
+            <div class="nhm-card-header">
+              <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
+                    aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
+              <span class="nhm-card-name">{{ device.label }}</span>
+              <span class="nhm-card-latency">
+                {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
+              </span>
+            </div>
+            <div class="nhm-card-detail">
+              <div class="nhm-card-detail-inner">
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">IP</span>
+                  <span class="nhm-card-detail-value">{{ device.ip_address }}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Last Seen</span>
+                  <span class="nhm-card-detail-value">{% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Status</span>
+                  <span class="nhm-card-status-label">{{ device.last_known_state|default:'unknown' }}</span>
+                </div>
+                <button class="nhm-card-remove"
+                        onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
+                        aria-label="Remove {{ device.label }} from monitor">
+                  Remove from monitor
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endif %}{% endfor %}
+          <div class="nhm-domain-empty" id="nhm-dante-placeholder">
+            Dante monitoring is coming in Phase 2. Devices assigned to "Dante" domain will appear here.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Switches section (Phase 2 placeholder) -->
+    <div class="nhm-domain" id="nhm-domain-switches" data-domain="switch">
+      <div class="nhm-domain-header" tabindex="0" role="button"
+           aria-expanded="true" aria-controls="nhm-domain-body-switches"
+           onclick="toggleDomain('switches', this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){toggleDomain('switches', this);}">
+        <span class="nhm-domain-name">Switches</span>
+        <span class="nhm-domain-badge" id="nhm-badge-switches">Phase 2</span>
+        <span class="nhm-domain-toggle" aria-hidden="true" id="nhm-toggle-switches">&#9650;</span>
+      </div>
+      <div class="nhm-domain-body" id="nhm-domain-body-switches">
+        <div class="nhm-card-grid" id="nhm-grid-switches">
+          {% for device in devices %}{% if device.domain == 'switch' %}
+          <div class="nhm-card" id="nhm-device-{{ device.id }}"
+               data-domain="{{ device.domain }}"
+               data-status="{{ device.last_known_state }}"
+               onclick="toggleCard({{ device.id }})"
+               tabindex="0" role="button" aria-expanded="false"
+               onkeydown="if(event.key==='Enter'||event.key===' '){toggleCard({{ device.id }});}">
+            <div class="nhm-card-header">
+              <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
+                    aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
+              <span class="nhm-card-name">{{ device.label }}</span>
+              <span class="nhm-card-latency">
+                {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
+              </span>
+            </div>
+            <div class="nhm-card-detail">
+              <div class="nhm-card-detail-inner">
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">IP</span>
+                  <span class="nhm-card-detail-value">{{ device.ip_address }}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Last Seen</span>
+                  <span class="nhm-card-detail-value">{% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Status</span>
+                  <span class="nhm-card-status-label">{{ device.last_known_state|default:'unknown' }}</span>
+                </div>
+                <button class="nhm-card-remove"
+                        onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
+                        aria-label="Remove {{ device.label }} from monitor">
+                  Remove from monitor
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endif %}{% endfor %}
+          <div class="nhm-domain-empty" id="nhm-switches-placeholder">
+            Switch monitoring is coming in Phase 2. Devices assigned to "Switches" domain will appear here.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% endif %}
+
+    <!-- ===== SESSION HISTORY TIMELINE ===== -->
+    <div class="nhm-timeline" id="nhm-timeline">
+      <div class="nhm-timeline-header" tabindex="0" role="button"
+           aria-expanded="false" aria-controls="nhm-timeline-body"
+           onclick="toggleTimeline()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){toggleTimeline();}">
+        <span class="nhm-timeline-label">Session History</span>
+        <span class="nhm-timeline-toggle" aria-hidden="true" id="nhm-timeline-toggle">&#9660;</span>
+      </div>
+      <div class="nhm-timeline-body" id="nhm-timeline-body">
+        <ol id="nhm-timeline-list" reversed>
+          {% for event in recent_events %}
+          <li class="nhm-timeline-row">
+            <span class="nhm-timeline-ts">{{ event.occurred_at|date:"H:i:s" }}</span>
+            <span class="nhm-dot
+              {% if event.event_type == 'ONLINE' %}nhm-dot--online
+              {% elif event.event_type == 'OFFLINE' %}nhm-dot--offline
+              {% else %}nhm-dot--unknown{% endif %}"
+              aria-hidden="true"></span>
+            <span class="nhm-timeline-device">
+              {% if event.device %}{{ event.device.label }}{% else %}System{% endif %}
+            </span>
+            <span class="nhm-timeline-event">
+              {% if event.event_type == 'ONLINE' %}came online
+              {% elif event.event_type == 'OFFLINE' %}went offline
+              {% elif event.event_type == 'SCAN_STARTED' %}Network scan started
+              {% elif event.event_type == 'MONITOR_STARTED' %}Monitor started
+              {% else %}{{ event.event_type }}{% endif %}
+            </span>
+          </li>
+          {% empty %}
+          <li class="nhm-timeline-empty">No events this session.</li>
+          {% endfor %}
+        </ol>
+      </div>
+    </div>
+
+  </div><!-- /.nhm-content -->
+
+</div><!-- /.nhm-root -->
+
+<!-- ===== SSE CONNECTION STATUS INDICATOR ===== -->
+<div id="nhm-sse-status"></div>
+
+<script>
+// ===== INITIALISATION DATA FROM DJANGO CONTEXT =====
+const NHM_DEVICES = {{ devices_json|safe }};
+const NHM_EVENTS  = {{ recent_events_json|safe }};
+const NHM_NICS    = {{ nics_json|safe }};
+const NHM_DOMAIN_COUNTS = {{ domain_counts_json|safe }};
+
+// ===== CSRF TOKEN EXTRACTION =====
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+const csrfToken = getCookie('csrftoken');
+
+// ===== SSE EVENT SOURCE =====
+let sseSource = null;
+let sseRetries = 0;
+const SSE_MAX_RETRIES = 5;
+
+function connectSSE() {
+    sseSource = new EventSource('/audiopatch/network-monitor/stream/');
+
+    sseSource.onopen = function() {
+        sseRetries = 0;
+        hideSseStatus();
+    };
+
+    sseSource.onmessage = function(e) {
+        if (!e.data || e.data.trim() === '') return; // heartbeat comment
+        let data;
+        try { data = JSON.parse(e.data); } catch(err) { return; }
+        if (!data || !data.type) return;
+        switch (data.type) {
+            case 'STATUS_SNAPSHOT': handleStatusSnapshot(data); break;
+            case 'ONLINE':          handleOnlineEvent(data);    break;
+            case 'OFFLINE':         handleOfflineEvent(data);   break;
+            case 'SCAN_STARTED':    prependTimelineEvent(data); break;
+            case 'MONITOR_STARTED': prependTimelineEvent(data); break;
+        }
+    };
+
+    sseSource.onerror = function() {
+        sseSource.close();
+        sseRetries++;
+        if (sseRetries >= SSE_MAX_RETRIES) {
+            showSsePaused();
+            return;
+        }
+        showSseReconnecting();
+        const delay = Math.min(1000 * Math.pow(2, sseRetries - 1), 10000);
+        setTimeout(connectSSE, delay);
+    };
+}
+
+function showSseReconnecting() {
+    const el = document.getElementById('nhm-sse-status');
+    el.innerHTML = '<div class="nhm-sse-reconnecting">Reconnecting&#8230;</div>';
+    el.style.display = 'block';
+}
+
+function showSsePaused() {
+    const el = document.getElementById('nhm-sse-status');
+    el.innerHTML = '<div class="nhm-sse-paused">Live updates paused &#8212; reload page</div>';
+    el.style.display = 'block';
+}
+
+function hideSseStatus() {
+    const el = document.getElementById('nhm-sse-status');
+    el.style.display = 'none';
+    el.innerHTML = '';
+}
+
+// ===== EVENT HANDLERS =====
+function handleStatusSnapshot(data) {
+    if (!data.devices) return;
+    data.devices.forEach(function(dev) {
+        updateStatusDot(dev.device_id, dev.status, dev.latency_ms);
+    });
+    updateRollupBar();
+}
+
+function handleOnlineEvent(data) {
+    updateStatusDot(data.device_id, 'online', null);
+    updateRollupBar();
+    prependTimelineEvent(data);
+}
+
+function handleOfflineEvent(data) {
+    updateStatusDot(data.device_id, 'offline', null);
+    updateRollupBar();
+    showAlertBanner(data.device_name, data.device_id, data.occurred_at);
+    prependTimelineEvent(data);
+}
+
+// ===== DOM UPDATE FUNCTIONS =====
+function updateStatusDot(deviceId, status, latencyMs) {
+    const card = document.getElementById('nhm-device-' + deviceId);
+    if (!card) return;
+
+    // Update dot
+    const dot = card.querySelector('.nhm-dot');
+    if (dot) {
+        dot.className = 'nhm-dot nhm-dot--' + (status || 'unknown');
+        const name = card.querySelector('.nhm-card-name');
+        dot.setAttribute('aria-label', (name ? name.textContent.trim() : ('Device ' + deviceId)) + ': ' + (status || 'unknown'));
+    }
+
+    // Update latency text
+    const latEl = card.querySelector('.nhm-card-latency');
+    if (latEl) {
+        if (latencyMs !== null && latencyMs !== undefined) {
+            latEl.textContent = latencyMs.toFixed(1) + ' ms';
+        }
+    }
+
+    // Update status label in expanded detail
+    const statusLabel = card.querySelector('.nhm-card-status-label');
+    if (statusLabel) {
+        statusLabel.textContent = statusLabelText(status, 0);
+    }
+
+    // Store status on card element for rollup counting
+    card.dataset.status = status || 'unknown';
+}
+
+function statusLabelText(status, failures) {
+    switch(status) {
+        case 'online':    return 'online';
+        case 'offline':   return 'offline';
+        case 'flapping':  return 'Confirming\u2026 (' + failures + '/3 failures)';
+        default:          return 'unknown';
+    }
+}
+
+function updateRollupBar() {
+    // Count devices per domain by reading DOM state
+    const domains = {
+        'la_network': { online: 0, total: 0 },
+        'dante':      { online: 0, total: 0 },
+        'switch':     { online: 0, total: 0 },
+    };
+
+    document.querySelectorAll('.nhm-card[data-domain][data-status]').forEach(function(card) {
+        const domain = card.dataset.domain;
+        const status = card.dataset.status;
+        if (domains[domain] !== undefined) {
+            domains[domain].total++;
+            if (status === 'online') domains[domain].online++;
+        }
+    });
+
+    // Update LA Network pill
+    const laEl = document.getElementById('nhm-rollup-la');
+    if (laEl) laEl.textContent = domains.la_network.online + '/' + domains.la_network.total;
+    updatePillColor('nhm-pill-la-network', 'nhm-rollup-dot-la', domains.la_network);
+
+    // Dante and Switches remain placeholder in Phase 1
+}
+
+function getPillStatus(counts) {
+    if (counts.total === 0) return 'unknown';
+    if (counts.online === counts.total) return 'healthy';
+    if (counts.online === 0) return 'offline-state';
+    return 'degraded';
+}
+
+function updatePillColor(pillId, dotId, counts) {
+    const pill = document.getElementById(pillId);
+    const dot  = document.getElementById(dotId);
+    if (!pill) return;
+
+    const status = getPillStatus(counts);
+    pill.className = 'nhm-pill nhm-pill--' + (status === 'unknown' ? 'placeholder' : status);
+
+    if (dot) {
+        dot.className = 'nhm-dot nhm-dot--' + (
+            status === 'healthy'      ? 'online'   :
+            status === 'degraded'     ? 'flapping' :
+            status === 'offline-state'? 'offline'  : 'unknown'
+        );
+    }
+}
+
+function showAlertBanner(deviceName, deviceId, occurredAt) {
+    const alerts = document.getElementById('nhm-alerts');
+    // Avoid duplicate banners
+    if (document.getElementById('nhm-alert-' + deviceId)) return;
+
+    const ts = occurredAt ? new Date(occurredAt).toLocaleTimeString() : '';
+    const div = document.createElement('div');
+    div.className = 'nhm-alert';
+    div.id = 'nhm-alert-' + deviceId;
+    div.setAttribute('role', 'alert');
+    div.innerHTML =
+        '<span class="nhm-dot nhm-dot--offline" aria-label="' + escHtml(deviceName) + ': offline"></span>' +
+        '<div class="nhm-alert-body">' +
+          '<div class="nhm-alert-device">' + escHtml(deviceName) + ' offline</div>' +
+          '<div class="nhm-alert-detail">Last seen ' + escHtml(ts) + '.</div>' +
+        '</div>' +
+        '<button class="nhm-alert-dismiss" onclick="dismissAlert(' + deviceId + ')" ' +
+                'aria-label="Dismiss alert for ' + escHtml(deviceName) + '">' +
+          'Dismiss alert' +
+        '</button>';
+    alerts.appendChild(div);
+}
+
+function dismissAlert(deviceId) {
+    const el = document.getElementById('nhm-alert-' + deviceId);
+    if (!el) return;
+    el.classList.add('nhm-dismissing');
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 250);
+}
+
+function prependTimelineEvent(eventData) {
+    const list = document.getElementById('nhm-timeline-list');
+    if (!list) return;
+
+    // Remove "no events" placeholder if present
+    const empty = list.querySelector('.nhm-timeline-empty');
+    if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
+
+    const li = document.createElement('li');
+    li.className = 'nhm-timeline-row';
+
+    const ts = eventData.occurred_at ? new Date(eventData.occurred_at).toLocaleTimeString() : '';
+    const dotClass = eventData.type === 'ONLINE' ? 'online' :
+                     eventData.type === 'OFFLINE' ? 'offline' : 'unknown';
+    const eventLabel = eventTypeLabel(eventData.type);
+
+    li.innerHTML =
+        '<span class="nhm-timeline-ts">' + escHtml(ts) + '</span>' +
+        '<span class="nhm-dot nhm-dot--' + dotClass + '" aria-hidden="true"></span>' +
+        '<span class="nhm-timeline-device">' + escHtml(eventData.device_name || 'System') + '</span>' +
+        '<span class="nhm-timeline-event">' + escHtml(eventLabel) + '</span>';
+
+    // Prepend (most recent first)
+    list.insertBefore(li, list.firstChild);
+
+    // Trim to max 20 rows
+    while (list.children.length > 20) {
+        list.removeChild(list.lastChild);
+    }
+}
+
+function eventTypeLabel(type) {
+    switch(type) {
+        case 'ONLINE':           return 'came online';
+        case 'OFFLINE':          return 'went offline';
+        case 'SCAN_STARTED':     return 'Network scan started';
+        case 'MONITOR_STARTED':  return 'Monitor started';
+        default:                 return type;
+    }
+}
+
+// ===== SCAN FLOW =====
+function startScan() {
+    const nicSelect = document.getElementById('nhm-nic-select');
+    const scanBtn   = document.getElementById('nhm-scan-btn');
+    const selected  = nicSelect ? nicSelect.options[nicSelect.selectedIndex] : null;
+
+    if (!selected || !selected.value) {
+        alert('Please select a network interface first.');
+        return;
+    }
+
+    const iface  = selected.value;
+    const subnet = selected.dataset.subnet;
+
+    scanBtn.disabled = true;
+    scanBtn.innerHTML = '<span class="nhm-spinner" aria-hidden="true"></span>Scanning\u2026';
+
+    const statusText = document.getElementById('nhm-scan-status-text');
+    if (statusText) statusText.textContent = '';
+
+    fetch('/audiopatch/network-monitor/scan/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ interface: iface, subnet: subnet }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Start Scan';
+        renderScanResults(data);
+    })
+    .catch(function(err) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Start Scan';
+        if (statusText) statusText.textContent = 'Scan failed. Try again.';
+        console.error('Scan error:', err);
+    });
+}
+
+function renderScanResults(data) {
+    const results = data.devices || [];
+    const resultsArea = document.getElementById('nhm-scan-results');
+    const countEl     = document.getElementById('nhm-scan-result-count');
+    const listEl      = document.getElementById('nhm-scan-result-list');
+    const addBtn      = document.getElementById('nhm-add-btn');
+
+    if (!resultsArea) return;
+
+    countEl.textContent = results.length + ' device' + (results.length === 1 ? '' : 's') +
+                          ' found \u2014 select to monitor';
+    listEl.innerHTML = '';
+
+    if (results.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'nhm-scan-result-item';
+        li.style.color = 'var(--text-dim)';
+        li.textContent = 'No devices responded on ' + (data.subnet || 'subnet') + '.';
+        listEl.appendChild(li);
+        if (addBtn) addBtn.disabled = true;
+        resultsArea.style.display = 'block';
+        return;
+    }
+
+    results.forEach(function(dev, idx) {
+        const li = document.createElement('li');
+        li.className = 'nhm-scan-result-item';
+
+        const cbId = 'nhm-scan-cb-' + idx;
+        const cb   = document.createElement('input');
+        cb.type    = 'checkbox';
+        cb.id      = cbId;
+        cb.value   = dev.ip;
+        cb.dataset.latency = dev.latency_ms !== undefined ? dev.latency_ms : '';
+        if (dev.already_monitored) {
+            cb.checked  = true;
+            cb.disabled = true;
+        }
+        cb.addEventListener('change', updateAddButton);
+
+        const label = document.createElement('label');
+        label.htmlFor = cbId;
+
+        const ipSpan = document.createElement('span');
+        ipSpan.className = 'nhm-scan-result-ip';
+        ipSpan.textContent = dev.ip;
+
+        const latencySpan = document.createElement('span');
+        latencySpan.className = 'nhm-scan-result-latency';
+        latencySpan.textContent = dev.latency_ms !== undefined ? dev.latency_ms.toFixed(1) + ' ms' : '';
+
+        label.appendChild(ipSpan);
+        label.appendChild(latencySpan);
+
+        li.appendChild(cb);
+        li.appendChild(label);
+
+        if (dev.already_monitored) {
+            const tag = document.createElement('span');
+            tag.className = 'nhm-scan-result-tag';
+            tag.textContent = 'Monitoring';
+            li.appendChild(tag);
+        }
+
+        listEl.appendChild(li);
+    });
+
+    if (addBtn) addBtn.disabled = true;
+    resultsArea.style.display = 'block';
+}
+
+function updateAddButton() {
+    const addBtn = document.getElementById('nhm-add-btn');
+    if (!addBtn) return;
+    const anyChecked = document.querySelectorAll('#nhm-scan-result-list input[type="checkbox"]:checked:not(:disabled)').length > 0;
+    addBtn.disabled = !anyChecked;
+}
+
+function addToMonitor() {
+    const domainEl = document.getElementById('nhm-scan-domain');
+    const domain   = domainEl ? domainEl.value : 'la_network';
+    const checked  = document.querySelectorAll('#nhm-scan-result-list input[type="checkbox"]:checked:not(:disabled)');
+
+    const devices = [];
+    checked.forEach(function(cb) {
+        devices.push({ ip: cb.value, label: cb.value, domain: domain });
+    });
+
+    if (devices.length === 0) return;
+
+    const addBtn = document.getElementById('nhm-add-btn');
+    if (addBtn) { addBtn.disabled = true; addBtn.textContent = 'Adding\u2026'; }
+
+    fetch('/audiopatch/network-monitor/devices/add/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ devices: devices }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        // Reload page to pick up new devices
+        window.location.reload();
+    })
+    .catch(function(err) {
+        if (addBtn) { addBtn.disabled = false; addBtn.textContent = 'Add to Monitor'; }
+        console.error('Add devices error:', err);
+    });
+}
+
+// ===== DEVICE REMOVAL =====
+function removeDevice(deviceId, deviceName) {
+    showConfirmDialog(
+        'Remove ' + deviceName + '? This device will no longer be monitored. It can be re-added via a new scan.',
+        'Remove',
+        'Keep Monitoring',
+        function() {
+            fetch('/audiopatch/network-monitor/devices/' + deviceId + '/remove/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+            })
+            .then(function(r) { return r.json(); })
+            .then(function() {
+                // Remove card from DOM
+                const card = document.getElementById('nhm-device-' + deviceId);
+                if (card && card.parentNode) card.parentNode.removeChild(card);
+                updateRollupBar();
+                // Remove alert if present
+                dismissAlert(deviceId);
+            })
+            .catch(function(err) { console.error('Remove device error:', err); });
+        }
+    );
+}
+
+// Simple confirm dialog (no native confirm — styled overlay)
+function showConfirmDialog(message, confirmLabel, cancelLabel, onConfirm) {
+    const existing = document.getElementById('nhm-confirm-overlay');
+    if (existing) existing.parentNode.removeChild(existing);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'nhm-confirm-overlay';
+    overlay.id = 'nhm-confirm-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'nhm-confirm-box';
+
+    const text = document.createElement('p');
+    text.className = 'nhm-confirm-text';
+    text.textContent = message;
+
+    const actions = document.createElement('div');
+    actions.className = 'nhm-confirm-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'nhm-btn nhm-btn--ghost';
+    cancelBtn.textContent = cancelLabel || 'Cancel';
+    cancelBtn.onclick = function() {
+        document.body.removeChild(overlay);
+    };
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'nhm-btn nhm-btn--danger';
+    confirmBtn.textContent = confirmLabel || 'Confirm';
+    confirmBtn.onclick = function() {
+        document.body.removeChild(overlay);
+        onConfirm();
+    };
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    box.appendChild(text);
+    box.appendChild(actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    // Close on overlay backdrop click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) document.body.removeChild(overlay);
+    });
+
+    confirmBtn.focus();
+}
+
+// ===== DOMAIN COLLAPSE TOGGLE =====
+function toggleDomain(slug, headerEl) {
+    const domain = document.getElementById('nhm-domain-' + slug);
+    if (!domain) return;
+    const collapsed = domain.classList.toggle('nhm-domain--collapsed');
+    const toggle    = document.getElementById('nhm-toggle-' + slug);
+    if (toggle)   toggle.innerHTML = collapsed ? '&#9660;' : '&#9650;';
+    if (headerEl) headerEl.setAttribute('aria-expanded', String(!collapsed));
+    localStorage.setItem('nhm_domain_' + slug + '_collapsed', collapsed ? '1' : '0');
+}
+
+// ===== TIMELINE TOGGLE =====
+function toggleTimeline() {
+    const timeline = document.getElementById('nhm-timeline');
+    if (!timeline) return;
+    const expanded = timeline.classList.toggle('nhm-timeline--expanded');
+    const toggle   = document.getElementById('nhm-timeline-toggle');
+    if (toggle) toggle.innerHTML = expanded ? '&#9650;' : '&#9660;';
+    const header = timeline.querySelector('.nhm-timeline-header');
+    if (header) header.setAttribute('aria-expanded', String(expanded));
+    localStorage.setItem('nhm_timeline_expanded', expanded ? '1' : '0');
+}
+
+// ===== DEVICE CARD EXPAND/COLLAPSE =====
+function toggleCard(deviceId) {
+    const card = document.getElementById('nhm-device-' + deviceId);
+    if (!card) return;
+    const expanded = card.classList.toggle('nhm-card--expanded');
+    localStorage.setItem('nhm_card_' + deviceId + '_expanded', expanded ? '1' : '0');
+}
+
+// ===== ESCAPE HTML =====
+function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ===== RESTORE LOCALSTORAGE STATE =====
+function restoreLocalStorageState() {
+    // Domain sections
+    ['la-network', 'dante', 'switches'].forEach(function(slug) {
+        const saved = localStorage.getItem('nhm_domain_' + slug + '_collapsed');
+        if (saved === '1') {
+            const domain = document.getElementById('nhm-domain-' + slug);
+            const toggle = document.getElementById('nhm-toggle-' + slug);
+            const header = domain && domain.querySelector('.nhm-domain-header');
+            if (domain) {
+                domain.classList.add('nhm-domain--collapsed');
+                if (toggle) toggle.innerHTML = '&#9660;';
+                if (header) header.setAttribute('aria-expanded', 'false');
+            }
+        }
+    });
+
+    // Device cards
+    document.querySelectorAll('.nhm-card[id^="nhm-device-"]').forEach(function(card) {
+        const idPart = card.id.replace('nhm-device-', '');
+        if (localStorage.getItem('nhm_card_' + idPart + '_expanded') === '1') {
+            card.classList.add('nhm-card--expanded');
+        }
+    });
+
+    // Timeline
+    if (localStorage.getItem('nhm_timeline_expanded') === '1') {
+        const timeline = document.getElementById('nhm-timeline');
+        const toggle   = document.getElementById('nhm-timeline-toggle');
+        const header   = timeline && timeline.querySelector('.nhm-timeline-header');
+        if (timeline) {
+            timeline.classList.add('nhm-timeline--expanded');
+            if (toggle) toggle.innerHTML = '&#9650;';
+            if (header) header.setAttribute('aria-expanded', 'true');
+        }
+    }
+}
+
+// ===== INITIALISE ROLLUP ON PAGE LOAD =====
+function initRollupFromContext() {
+    // Seed rollup counts from server-rendered context if available
+    const counts = NHM_DOMAIN_COUNTS;
+    if (counts && counts.la_network) {
+        const laEl = document.getElementById('nhm-rollup-la');
+        if (laEl) laEl.textContent = (counts.la_network.online || 0) + '/' + (counts.la_network.total || 0);
+        updatePillColor('nhm-pill-la-network', 'nhm-rollup-dot-la', counts.la_network);
+    }
+}
+
+// ===== BOOT =====
+document.addEventListener('DOMContentLoaded', function() {
+    restoreLocalStorageState();
+    initRollupFromContext();
+    connectSSE();
+});
+</script>
+{% endblock %}
