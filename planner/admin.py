@@ -20,6 +20,7 @@ from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
 from . import admin_ordering
 from .models import ConsoleStereoOutput
+from .models import MonitorSession, DiscoveredDevice, PollResult, DeviceEvent
 from django.urls import path
 
 # Python standard library imports
@@ -5966,6 +5967,46 @@ class CommConfigAdmin(admin.ModelAdmin):
         from django.shortcuts import redirect
         return redirect('planner:comm_config')
 showstack_admin_site.register(CommConfig, CommConfigAdmin)
+
+
+# --- Network Health Monitor Admin ---
+
+class MonitorSessionAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'project', 'started_at', 'ended_at')
+    list_filter = ('project',)
+    readonly_fields = ('started_at',)
+
+class DiscoveredDeviceAdmin(admin.ModelAdmin):
+    list_display = ('label', 'ip_address', 'domain', 'last_known_state', 'consecutive_failures', 'is_active', 'project')
+    list_filter = ('domain', 'last_known_state', 'is_active', 'project')
+    search_fields = ('label', 'ip_address')
+
+class PollResultAdmin(admin.ModelAdmin):
+    list_display = ('device', 'is_reachable', 'latency_ms', 'polled_at')
+    list_filter = ('is_reachable', 'session')
+    readonly_fields = ('device', 'session', 'polled_at', 'is_reachable', 'latency_ms')
+
+    def has_add_permission(self, request):
+        return False  # Append-only — created by run_monitor
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+class DeviceEventAdmin(admin.ModelAdmin):
+    list_display = ('event_type', 'device', 'occurred_at', 'session')
+    list_filter = ('event_type', 'session')
+    readonly_fields = ('device', 'session', 'occurred_at', 'event_type', 'details')
+
+    def has_add_permission(self, request):
+        return False  # Append-only — created by run_monitor
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+showstack_admin_site.register(MonitorSession, MonitorSessionAdmin)
+showstack_admin_site.register(DiscoveredDevice, DiscoveredDeviceAdmin)
+showstack_admin_site.register(PollResult, PollResultAdmin)
+showstack_admin_site.register(DeviceEvent, DeviceEventAdmin)
 
 
 

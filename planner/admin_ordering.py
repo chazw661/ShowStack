@@ -63,7 +63,9 @@ def ordered_get_app_list(request, app_label=None):
         'p1output',           # Child of P1 Processor
         'galaxyinput',        # Child of Galaxy Processor
         'galaxyoutput',       # Child of Galaxy Processor
-        
+        'pollresult',         # Child of MonitorSession/DiscoveredDevice
+        'deviceevent',        # Child of MonitorSession/DiscoveredDevice
+
     }
 
     # Models to always hide from sidebar (accessible via direct URL)
@@ -137,6 +139,12 @@ def ordered_get_app_list(request, app_label=None):
         'galaxyprocessor': 33,
         'galaxyinput': 34,
         'galaxyoutput': 35,
+
+        # Network Health Monitor (36-39)
+        'monitorsession': 36,
+        'discovereddevice': 37,
+        'pollresult': 38,
+        'deviceevent': 39,
     }
     
     for app in app_list:
