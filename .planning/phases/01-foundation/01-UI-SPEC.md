@@ -56,20 +56,22 @@ Declared values (multiples of 4 only):
 Exceptions:
 - Status dots: 12px diameter (not a spacing value — a size value, derived from legibility requirement)
 - Touch targets for collapse toggles: minimum 44px height (accessibility)
-- Alert banner: full viewport width, 0 horizontal margin, 12px vertical padding
+- Alert banner: full viewport width, 0 horizontal margin, 8px vertical padding (sm token), min-height: 48px
 
 ---
 
 ## Typography
 
+Two weights only: 400 (normal) and 700 (bold).
+
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 14px | 400 | 1.5 | Device name, IP address, timestamp text |
-| Label | 11px | 600 | 1.0 | Section headings, meta labels (uppercase + letter-spacing: 0.10em) |
+| Label | 11px | 700 | 1.0 | Section headings, meta labels (uppercase + letter-spacing: 0.10em) |
 | Heading | 16px | 700 | 1.2 | Page title, domain group heading, alert title |
-| Mono | 13px | 400 | 1.4 | IP addresses, latency values, timestamp values (font-family: 'SFMono-Regular', Consolas, monospace) |
+| Mono | 12px | 400 | 1.4 | IP addresses, latency values, timestamp values (font-family: 'SFMono-Regular', Consolas, monospace) |
 
-Source: mic_tracker.html uses 9px/600 uppercase labels, 13px body, 16px/700 module title. This spec aligns to those patterns and raises body to 14px for denser monitoring data.
+Source: mic_tracker.html uses 9px/700 uppercase labels, 13px body, 16px/700 module title. This spec aligns to those patterns and raises body to 14px for denser monitoring data. Mono set to 12px to maintain clear separation from 14px body text.
 
 No more than 4 type sizes in use simultaneously on a single view.
 
@@ -130,7 +132,7 @@ Position: fixed to top of `nhm-root` content area, below the page header.
 Layout: horizontal flex row, single line, wraps on narrow viewports.
 Content: one pill per domain — "LA Network: 8/8", "Switches: 3/3". Healthy=green fill, partial=amber, none/unknown=red.
 Pill anatomy: `[dot] [Domain Name]: [online]/[total]`
-Font: Label — 11px/600 uppercase.
+Font: Label — 11px/700 uppercase.
 Height: 40px.
 Border: 1px solid `--border` below the bar.
 
@@ -158,8 +160,8 @@ Click anywhere on card: expand to detail view (inline expansion, not modal).
 
 Expands below the collapsed row within the same card.
 Additional rows (each 14px/400):
-- IP address (mono 13px)
-- Last seen timestamp (mono 13px, dim color)
+- IP address (mono 12px)
+- Last seen timestamp (mono 12px, dim color)
 - Poll count / failure count
 - "Remove from monitor" button (ghost, danger-colored text)
 
@@ -170,7 +172,7 @@ Expanded state indicated by: card border changes to `--border-bright`, backgroun
 Position: top of `nhm-root`, above domain rollup bar. Hidden when no active alerts.
 Height: auto, min 48px.
 Background: `--bg-raised` with left border 4px solid `--accent-red`.
-Content: `[red dot pulse] [Device Name] offline — [timestamp] [Dismiss button]`
+Content: `[red dot pulse] [Device Name] offline — [timestamp] [Dismiss alert button]`
 Multiple alerts: stack vertically, each as a separate banner row.
 Dismiss: removes from banner. Does not suppress future alerts for that device.
 Font: heading 16px/700 for device name, body 14px/400 for detail.
@@ -178,7 +180,7 @@ Font: heading 16px/700 for device name, body 14px/400 for detail.
 ### 6. Session History Timeline
 
 Layout: ordered list below the domain sections, collapsed by default.
-Toggle: "Session History ▼" — 11px/600 uppercase label, click to expand.
+Toggle: "Session History ▼" — 11px/700 uppercase label, click to expand.
 Each event row: `[timestamp mono] [dot color] [device name] [event type] [details]`
 Event types and labels:
 - `ONLINE` → "came online"
@@ -186,7 +188,7 @@ Event types and labels:
 - `SCAN_STARTED` → "Network scan started"
 - `MONITOR_STARTED` → "Monitor started"
 Row height: 36px. Alternating row: `--bg-card` / `--bg-base`.
-Timestamp: mono 13px, `--text-dim`.
+Timestamp: mono 12px, `--text-dim`.
 Max visible without scroll: 20 rows. Scroll within the timeline container.
 
 ### 7. "Not on Show Network" State
@@ -203,7 +205,7 @@ Background: `--bg-card`. Border: 1px solid `--border-bright`. Border-radius: 6px
 
 Position: header action area, right side, inline with page title.
 NIC selector: `<select>` styled to match `--bg-input`, `--text-primary`, `--border-bright`. Width: auto, min 160px.
-"Start Scan" button: primary blue (`--accent-blue`), 11px/600 uppercase, padding 7px 14px, border-radius 4px.
+"Start Scan" button: primary blue (`--accent-blue`), 11px/700 uppercase, padding 7px 14px, border-radius 4px.
 "Scanning..." state: button disabled, text "Scanning…", spinner (CSS border animation, no image).
 Scan result count: inline text "14 devices found — select to monitor" (body 14px, `--text-secondary`).
 
@@ -222,11 +224,11 @@ Scan result count: inline text "14 devices found — select to monitor" (body 14
 | Monitor not started | "Monitor is not running. Start it with: python manage.py run_monitor" |
 | Alert: device offline | "{Device Name} offline" |
 | Alert detail | "Failed {N} consecutive polls. Last seen {timestamp}." |
-| Alert dismiss button | "Dismiss" |
+| Alert dismiss button | "Dismiss alert" |
 | Destructive: remove device | "Remove from monitor" |
 | Destructive confirmation | "Remove {Device Name}? This device will no longer be monitored. It can be re-added via a new scan." |
 | Destructive confirm button | "Remove" |
-| Destructive cancel button | "Cancel" |
+| Destructive cancel button | "Keep Monitoring" |
 | Session history toggle | "Session History" |
 | History event: online | "came online" |
 | History event: offline | "went offline" |
@@ -257,7 +259,7 @@ No spinner on connected state — silence = healthy for the SSE connection.
 
 ### Alert Dismiss Behavior
 
-Clicking "Dismiss" on an alert banner: removes the banner row with a `opacity 0` + `max-height 0` CSS transition (0.2s). Does NOT reset the failure counter or change the device card status dot. The device card remains red until the device comes back online.
+Clicking "Dismiss alert" on an alert banner: removes the banner row with a `opacity 0` + `max-height 0` CSS transition (0.2s). Does NOT reset the failure counter or change the device card status dot. The device card remains red until the device comes back online.
 
 ### Discovery Flow (Scan UI Interaction)
 
