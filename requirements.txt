@@ -18,3 +18,5 @@ whitenoise==6.11.0
 resend
 plyvel
 crcmod
+icmplib>=3.0,<4.0
+netifaces>=0.11

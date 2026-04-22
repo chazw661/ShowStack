@@ -4542,3 +4542,120 @@ class DanteSubscription(models.Model):
             raise ValidationError(
                 f"RX channel {self.rx_channel} on this device already has a subscription."
             )
+
+
+# --- Network Health Monitor Models ---
+
+class MonitorSession(models.Model):
+    project = models.ForeignKey('Project', on_delete=models.CASCADE,
+                                related_name='monitor_sessions')
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"Session {self.pk} — {self.project} ({self.started_at:%Y-%m-%d %H:%M})"
+
+
+class DiscoveredDevice(models.Model):
+    DOMAIN_CHOICES = [
+        ('la_network', 'LA Network'),
+        ('dante', 'Dante'),
+        ('switch', 'Switch'),
+        ('unknown', 'Unknown'),
+    ]
+    STATE_CHOICES = [
+        ('online', 'Online'),
+        ('offline', 'Offline'),
+        ('unknown', 'Unknown'),
+    ]
+    project = models.ForeignKey('Project', on_delete=models.CASCADE,
+                                related_name='discovered_devices')
+    label = models.CharField(max_length=100, blank=True)
+    ip_address = models.GenericIPAddressField()
+    domain = models.CharField(max_length=20, choices=DOMAIN_CHOICES, default='unknown')
+    is_active = models.BooleanField(default=True)
+    consecutive_failures = models.PositiveIntegerField(default=0)
+    last_known_state = models.CharField(max_length=10, choices=STATE_CHOICES, default='unknown')
+    last_seen = models.DateTimeField(null=True, blank=True)
+    discovered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('project', 'ip_address')]
+        ordering = ['domain', 'label', 'ip_address']
+
+    def __str__(self):
+        return f"{self.label or self.ip_address} ({self.domain})"
+
+    def status(self):
+        if self.last_known_state == 'online':
+            return 'online'
+        if 0 < self.consecutive_failures < 3:
+            return 'flapping'
+        if self.consecutive_failures >= 3:
+            return 'offline'
+        return 'unknown'
+
+    def as_status_dict(self):
+        return {
+            'device_id': self.pk,
+            'label': self.label or self.ip_address,
+            'ip': self.ip_address,
+            'domain': self.domain,
+            'status': self.status(),
+            'consecutive_failures': self.consecutive_failures,
+            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
+        }
+
+
+class PollResult(models.Model):
+    device = models.ForeignKey(DiscoveredDevice, on_delete=models.CASCADE,
+                               related_name='poll_results')
+    session = models.ForeignKey(MonitorSession, on_delete=models.CASCADE,
+                                related_name='poll_results')
+    polled_at = models.DateTimeField(auto_now_add=True)
+    is_reachable = models.BooleanField()
+    latency_ms = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['device', 'polled_at']),
+            models.Index(fields=['session', 'polled_at']),
+        ]
+
+    def __str__(self):
+        state = 'up' if self.is_reachable else 'down'
+        return f"{self.device} {state} @ {self.polled_at:%H:%M:%S}"
+
+
+class DeviceEvent(models.Model):
+    EVENT_CHOICES = [
+        ('ONLINE', 'Came online'),
+        ('OFFLINE', 'Went offline'),
+        ('SCAN_STARTED', 'Network scan started'),
+        ('MONITOR_STARTED', 'Monitor started'),
+    ]
+    device = models.ForeignKey(DiscoveredDevice, on_delete=models.CASCADE,
+                               related_name='events', null=True, blank=True)
+    session = models.ForeignKey(MonitorSession, on_delete=models.CASCADE,
+                                related_name='events')
+    occurred_at = models.DateTimeField(auto_now_add=True)
+    event_type = models.CharField(max_length=30, choices=EVENT_CHOICES)
+    details = models.JSONField(default=dict)
+
+    class Meta:
+        indexes = [models.Index(fields=['session', 'occurred_at'])]
+        ordering = ['-occurred_at']
+
+    def as_sse_dict(self):
+        return {
+            'id': self.pk,
+            'type': self.event_type,
+            'device_id': self.device_id,
+            'device_name': self.device.label if self.device else None,
+            'occurred_at': self.occurred_at.isoformat(),
+            'details': self.details,
+        }
