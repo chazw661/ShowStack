@@ -30,9 +30,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. When the laptop is not on the show network, the dashboard shows a clear "not connected to show network" message rather than silent empty status
 **Plans:** 3 plans
 Plans:
-- [ ] 01-01-PLAN.md — Models, migration, admin, run_monitor command
-- [ ] 01-02-PLAN.md — Views (SSE, scan, device management) and URL wiring
-- [ ] 01-03-PLAN.md — Dashboard template (HTML/CSS/JS)
+- [x] 01-01-PLAN.md — Models, migration, admin, run_monitor command
+- [x] 01-02-PLAN.md — Views (SSE, scan, device management) and URL wiring
+- [x] 01-03-PLAN.md — Dashboard template (HTML/CSS/JS)
 **UI hint**: yes
 
 ### Phase 2: Switch SNMP
