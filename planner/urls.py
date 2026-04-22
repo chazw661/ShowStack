@@ -247,12 +247,16 @@ urlpatterns = [
      path('audiochecklist/template/load/', audio_checklist_load_template, name='audio_checklist_load_template'),
      path('audiochecklist/template/delete/', audio_checklist_delete_template, name='audio_checklist_delete_template'),
 
-    # Network Health Monitor
+    # Network Health Monitor — Dashboard (session auth)
     path('network-monitor/', views_monitor.network_monitor_view, name='network_monitor'),
     path('network-monitor/stream/', views_monitor.monitor_stream_view, name='monitor_stream'),
-    path('network-monitor/scan/', views_monitor.trigger_scan_view, name='network_monitor_scan'),
-    path('network-monitor/devices/add/', views_monitor.add_monitor_devices_view, name='add_monitor_devices'),
-    path('network-monitor/devices/<int:device_id>/remove/', views_monitor.remove_monitor_device_view, name='remove_monitor_device'),
+
+    # Network Health Monitor — Agent API (Bearer token auth)
+    path('network-monitor/api/heartbeat/', views_monitor.agent_heartbeat, name='agent_heartbeat'),
+    path('network-monitor/api/stop/', views_monitor.agent_stop, name='agent_stop'),
+    path('network-monitor/api/scan-results/', views_monitor.agent_scan_results, name='agent_scan_results'),
+    path('network-monitor/api/poll-results/', views_monitor.agent_poll_results, name='agent_poll_results'),
+    path('network-monitor/api/remove-device/', views_monitor.agent_remove_device, name='agent_remove_device'),
 ]
 
 from django.conf import settings

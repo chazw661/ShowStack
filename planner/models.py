@@ -34,6 +34,8 @@ class Project(models.Model):
     # Status
     is_archived = models.BooleanField(default=False)
     invite_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    agent_api_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False,
+                                     help_text="API key for the local network monitor agent")
     
     class Meta:
         ordering = ['-updated_at']

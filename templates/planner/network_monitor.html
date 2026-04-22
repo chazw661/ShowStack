@@ -289,6 +289,14 @@
 
 .nhm-btn--danger:hover { background: rgba(255, 82, 82, 0.08); }
 
+.nhm-btn--success {
+    background: var(--accent-green);
+    color: #0f0f1a;
+    font-weight: 700;
+}
+.nhm-btn--success:hover { background: #3ddc84; }
+.nhm-btn--success:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .nhm-btn--ghost {
     background: transparent;
     border: 1px solid var(--border-bright);
@@ -439,10 +447,62 @@
     font-size: 12px;
     color: var(--accent-blue);
     background: var(--bg-raised);
-    padding: 6px 12px;
+    padding: 8px 12px;
     border-radius: 4px;
     display: inline-block;
-    margin-top: 6px;
+    word-break: break-all;
+}
+
+.nhm-empty-code-block {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    padding: 16px;
+    margin: 16px 0;
+    text-align: left;
+    max-width: 700px;
+}
+
+.nhm-empty-code-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.nhm-empty-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
+.nhm-copy-btn {
+    margin-left: 8px;
+    padding: 4px 12px !important;
+    font-size: 11px !important;
+}
+
+/* Agent status indicator in header */
+.nhm-agent-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 16px;
+    border-radius: 4px;
+    border: 1px solid var(--border-default);
+}
+
+.nhm-agent--connected {
+    color: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.nhm-agent--disconnected {
+    color: var(--text-secondary);
 }
 
 /* ===== DOMAIN SECTIONS ===== */
@@ -838,22 +898,13 @@
       <div class="nhm-project-name">{{ current_project.name }}</div>
       {% endif %}
     </div>
-    <div class="nhm-header-right nhm-scan-controls" id="nhm-scan-controls">
+    <div class="nhm-header-right" id="nhm-agent-status">
       {% if has_project %}
-      <select class="nhm-select" id="nhm-nic-select" aria-label="Select network interface">
-        <option value="">-- Select Interface --</option>
-        {% for nic in nics %}
-        <option value="{{ nic.interface }}"
-                data-subnet="{{ nic.subnet }}"
-                data-ip="{{ nic.ip }}">
-          {{ nic.display }}
-        </option>
-        {% endfor %}
-      </select>
-      <button class="nhm-btn nhm-btn--primary" id="nhm-scan-btn"
-              onclick="startScan()" aria-label="Start network scan">
-        Start Scan
-      </button>
+      <span class="nhm-agent-indicator {% if monitor_running %}nhm-agent--connected{% else %}nhm-agent--disconnected{% endif %}"
+            id="nhm-agent-indicator">
+        <span class="nhm-dot {% if monitor_running %}nhm-dot--online{% else %}nhm-dot--unknown{% endif %}"></span>
+        {% if monitor_running %}Agent Connected{% else %}Agent Not Connected{% endif %}
+      </span>
       {% endif %}
     </div>
   </div>
@@ -865,41 +916,15 @@
       <span class="nhm-dot nhm-dot--unknown" id="nhm-rollup-dot-la" aria-label="LA Network status"></span>
       LA Network: <span id="nhm-rollup-la">{{ domain_counts.la_network.online|default:0 }}/{{ domain_counts.la_network.total|default:0 }}</span>
     </span>
-    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-dante"
-          title="Dante monitoring coming in Phase 2">
-      <span class="nhm-dot nhm-dot--unknown" aria-label="Dante: Phase 2 placeholder"></span>
-      Dante: <span id="nhm-rollup-dante">0/0</span>
+    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-dante">
+      <span class="nhm-dot nhm-dot--unknown" id="nhm-rollup-dot-dante" aria-label="Dante status"></span>
+      Dante: <span id="nhm-rollup-dante">{{ domain_counts.dante.online|default:0 }}/{{ domain_counts.dante.total|default:0 }}</span>
     </span>
-    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-switches"
-          title="Switch monitoring coming in Phase 2">
-      <span class="nhm-dot nhm-dot--unknown" aria-label="Switches: Phase 2 placeholder"></span>
-      Switches: <span id="nhm-rollup-switches">0/0</span>
+    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-switches">
+      <span class="nhm-dot nhm-dot--unknown" id="nhm-rollup-dot-switches" aria-label="Switches status"></span>
+      Switches: <span id="nhm-rollup-switches">{{ domain_counts.switch.online|default:0 }}/{{ domain_counts.switch.total|default:0 }}</span>
     </span>
   </div>
-
-  <!-- ===== SCAN RESULTS (inline, below header) ===== -->
-  {% if has_project %}
-  <div class="nhm-scan-area">
-    <div id="nhm-scan-results">
-      <div class="nhm-scan-result-count" id="nhm-scan-result-count"></div>
-      <ul class="nhm-scan-result-list" id="nhm-scan-result-list"></ul>
-      <div class="nhm-scan-add-row">
-        <select class="nhm-scan-domain-select" id="nhm-scan-domain" aria-label="Assign domain to selected devices">
-          <option value="la_network">LA Network</option>
-          <option value="dante">Dante</option>
-          <option value="switch">Switches</option>
-          <option value="unknown">Unknown</option>
-        </select>
-        <button class="nhm-btn nhm-btn--primary" id="nhm-add-btn"
-                onclick="addToMonitor()" disabled
-                aria-label="Add selected devices to monitor">
-          Add to Monitor
-        </button>
-        <span class="nhm-scan-status" id="nhm-scan-status-text"></span>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
   <!-- ===== MAIN CONTENT ===== -->
   <div class="nhm-content">
@@ -912,25 +937,20 @@
     </div>
 
     {% elif not monitor_running and not devices %}
-    <!-- Monitor not running, no devices -->
+    <!-- Agent not connected, no devices -->
     <div class="nhm-empty" id="nhm-empty-state">
-      <div class="nhm-empty-heading">Monitor is not running. Start it with: python manage.py run_monitor</div>
+      <div class="nhm-empty-heading">Connect the Monitor Agent</div>
       <div class="nhm-empty-body">
-        Launch the background monitor to begin tracking device reachability on your show network.
+        Run the monitor agent on a laptop connected to your show network. The agent scans for devices and pushes status updates to this dashboard.
       </div>
-      <div class="nhm-empty-code">python manage.py run_monitor --project-id {{ current_project.id }}</div>
-    </div>
-
-    {% elif monitor_running and not devices %}
-    <!-- Monitor running, no devices discovered yet -->
-    <div class="nhm-empty" id="nhm-empty-state">
-      <div class="nhm-empty-heading">Not connected to show network</div>
-      <div class="nhm-empty-body">
-        No devices are being monitored. Run a scan to discover devices on your network.
+      <div class="nhm-empty-code-block">
+        <div class="nhm-empty-code-label">Run on show laptop:</div>
+        <code class="nhm-empty-code" id="nhm-agent-cmd">python manage.py run_monitor --api-key {{ agent_api_key }} --scan --server https://showstack.io</code>
+        <button class="nhm-btn nhm-btn--ghost nhm-copy-btn" onclick="copyAgentCmd()" aria-label="Copy command">Copy</button>
       </div>
-      <button class="nhm-btn nhm-btn--ghost" onclick="document.getElementById('nhm-nic-select').focus(); window.scrollTo({top:0,behavior:'smooth'});">
-        Select Network Interface
-      </button>
+      <div class="nhm-empty-note">
+        The API key is unique to this project. The agent needs <code>icmplib</code> and <code>netifaces</code> installed.
+      </div>
     </div>
 
     {% else %}
@@ -1194,18 +1214,24 @@ let sseRetries = 0;
 const SSE_MAX_RETRIES = 5;
 
 function connectSSE() {
+    console.log('[NHM-SSE] Connecting to /audiopatch/network-monitor/stream/');
     sseSource = new EventSource('/audiopatch/network-monitor/stream/');
 
     sseSource.onopen = function() {
+        console.log('[NHM-SSE] Connection opened');
         sseRetries = 0;
         hideSseStatus();
     };
 
     sseSource.onmessage = function(e) {
-        if (!e.data || e.data.trim() === '') return; // heartbeat comment
+        if (!e.data || e.data.trim() === '') return;
         let data;
-        try { data = JSON.parse(e.data); } catch(err) { return; }
+        try { data = JSON.parse(e.data); } catch(err) {
+            console.warn('[NHM-SSE] Failed to parse:', e.data);
+            return;
+        }
         if (!data || !data.type) return;
+        console.log('[NHM-SSE] Event:', data.type, data);
         switch (data.type) {
             case 'STATUS_SNAPSHOT': handleStatusSnapshot(data); break;
             case 'ONLINE':          handleOnlineEvent(data);    break;
@@ -1215,15 +1241,18 @@ function connectSSE() {
         }
     };
 
-    sseSource.onerror = function() {
+    sseSource.onerror = function(e) {
+        console.error('[NHM-SSE] Error, readyState:', sseSource.readyState, e);
         sseSource.close();
         sseRetries++;
         if (sseRetries >= SSE_MAX_RETRIES) {
+            console.error('[NHM-SSE] Max retries reached, pausing');
             showSsePaused();
             return;
         }
         showSseReconnecting();
         const delay = Math.min(1000 * Math.pow(2, sseRetries - 1), 10000);
+        console.log('[NHM-SSE] Reconnecting in', delay, 'ms');
         setTimeout(connectSSE, delay);
     };
 }
@@ -1325,12 +1354,18 @@ function updateRollupBar() {
         }
     });
 
-    // Update LA Network pill
+    // Update all domain pills
     const laEl = document.getElementById('nhm-rollup-la');
     if (laEl) laEl.textContent = domains.la_network.online + '/' + domains.la_network.total;
     updatePillColor('nhm-pill-la-network', 'nhm-rollup-dot-la', domains.la_network);
 
-    // Dante and Switches remain placeholder in Phase 1
+    const danteEl = document.getElementById('nhm-rollup-dante');
+    if (danteEl) danteEl.textContent = domains.dante.online + '/' + domains.dante.total;
+    updatePillColor('nhm-pill-dante', 'nhm-rollup-dot-dante', domains.dante);
+
+    const switchEl = document.getElementById('nhm-rollup-switches');
+    if (switchEl) switchEl.textContent = domains.switch.online + '/' + domains.switch.total;
+    updatePillColor('nhm-pill-switches', 'nhm-rollup-dot-switches', domains.switch);
 }
 
 function getPillStatus(counts) {
@@ -1425,6 +1460,17 @@ function eventTypeLabel(type) {
         case 'SCAN_STARTED':     return 'Network scan started';
         case 'MONITOR_STARTED':  return 'Monitor started';
         default:                 return type;
+    }
+}
+
+// ===== AGENT HELPERS =====
+function copyAgentCmd() {
+    const code = document.getElementById('nhm-agent-cmd');
+    if (code) {
+        navigator.clipboard.writeText(code.textContent).then(function() {
+            const btn = code.nextElementSibling;
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy'; }, 2000); }
+        });
     }
 }
 

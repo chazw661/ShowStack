@@ -1,76 +1,55 @@
 # planner/views_monitor.py
+#
+# Network Health Monitor — cloud-side views.
+#
+# Architecture:
+#   - A local agent runs on the engineer's show laptop (run_monitor command)
+#   - The agent scans networks, pings devices, and POSTs results here
+#   - This file serves the dashboard (read-only) and receives agent data
+#   - SSE pushes live updates to the browser from the database
+#
+# Auth:
+#   - Dashboard views: Django session auth (@login_required)
+#   - Agent API endpoints: Project agent_api_key (Bearer token)
 
 import json
 import time
-import ipaddress
 
 from django.shortcuts import render
 from django.http import JsonResponse, StreamingHttpResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
+from django.db import close_old_connections
+from django.utils import timezone
 
 from .models import (
-    MonitorSession, DiscoveredDevice, PollResult, DeviceEvent,
+    Project, MonitorSession, DiscoveredDevice, PollResult, DeviceEvent,
 )
 
 
 # ──────────────────────────────────────────────
-# Utility functions — NIC detection and sweep
+# Agent authentication helper
 # ──────────────────────────────────────────────
 
-def get_scannable_nics():
-    """Return list of NIC options for the scan UI dropdown.
-    Each entry: {'interface': str, 'ip': str, 'subnet': str, 'display': str}
+def _authenticate_agent(request):
+    """Authenticate agent via Bearer token (project agent_api_key).
+    Returns (project, None) on success or (None, JsonResponse) on failure.
     """
-    import netifaces
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None, JsonResponse({'error': 'Missing Authorization header'}, status=401)
 
-    result = []
-    for iface in netifaces.interfaces():
-        addrs = netifaces.ifaddresses(iface)
-        if netifaces.AF_INET not in addrs:
-            continue
-        for addr in addrs[netifaces.AF_INET]:
-            ip = addr['addr']
-            netmask = addr.get('netmask', '')
-            if ip.startswith('127.') or ip.startswith('169.254.') or not netmask:
-                continue
-            network = ipaddress.IPv4Network(f'{ip}/{netmask}', strict=False)
-            # Cap sweep at /24 to avoid enormous subnets on corporate networks
-            if network.prefixlen < 24:
-                network = ipaddress.IPv4Network(f'{ip}/24', strict=False)
-            result.append({
-                'interface': iface,
-                'ip': ip,
-                'subnet': str(network),
-                'display': f'{iface} ({ip} — {network})',
-            })
-    return result
-
-
-def sweep_subnet(subnet_cidr):
-    """Ping all hosts in a subnet. Returns list of responding hosts.
-    Each entry: {'ip': str, 'latency_ms': float}
-    """
-    import icmplib
-
-    network = ipaddress.IPv4Network(subnet_cidr, strict=False)
-    hosts = [str(h) for h in network.hosts()]
-    results = icmplib.multiping(
-        hosts,
-        count=1,
-        timeout=1,
-        privileged=False,
-        concurrent_tasks=100,
-    )
-    return [
-        {'ip': r.address, 'latency_ms': round(r.avg_rtt, 2)}
-        for r in results
-        if r.is_alive
-    ]
+    token = auth_header[7:].strip()
+    try:
+        project = Project.objects.get(agent_api_key=token)
+        return project, None
+    except Project.DoesNotExist:
+        return None, JsonResponse({'error': 'Invalid API key'}, status=403)
 
 
 # ──────────────────────────────────────────────
-# Dashboard view — initial page render
+# Dashboard view — initial page render (read-only)
 # ──────────────────────────────────────────────
 
 @login_required
@@ -78,7 +57,7 @@ def network_monitor_view(request):
     """Main dashboard page. Renders current snapshot from DB."""
     current_project = getattr(request, 'current_project', None)
 
-    # Get active session (if monitor is running)
+    # Get active session (if agent is running)
     active_session = None
     if current_project:
         active_session = MonitorSession.objects.filter(
@@ -111,7 +90,7 @@ def network_monitor_view(request):
             ).select_related('device').order_by('-occurred_at')[:50]
         )
 
-    # Active alerts: devices offline in current session that haven't come back
+    # Active alerts: devices offline that haven't come back
     active_alerts = []
     if current_project:
         active_alerts = list(
@@ -121,12 +100,6 @@ def network_monitor_view(request):
                 last_known_state='offline',
             )
         )
-
-    # NIC list for scan dropdown
-    try:
-        nics = get_scannable_nics()
-    except Exception:
-        nics = []
 
     context = {
         'current_project': current_project,
@@ -138,10 +111,9 @@ def network_monitor_view(request):
         'recent_events': recent_events,
         'recent_events_json': json.dumps([e.as_sse_dict() for e in recent_events]),
         'active_alerts': active_alerts,
-        'nics': nics,
-        'nics_json': json.dumps(nics),
         'has_project': current_project is not None,
         'monitor_running': active_session is not None,
+        'agent_api_key': str(current_project.agent_api_key) if current_project else '',
     }
     return render(request, 'planner/network_monitor.html', context)
 
@@ -158,14 +130,15 @@ def monitor_stream_view(request):
     def event_generator():
         last_event_id = 0
 
-        # Find active session
-        session = None
-        if current_project:
-            session = MonitorSession.objects.filter(
-                project=current_project, ended_at__isnull=True
-            ).first()
-
         while True:
+            close_old_connections()
+
+            session = None
+            if current_project:
+                session = MonitorSession.objects.filter(
+                    project=current_project, ended_at__isnull=True
+                ).first()
+
             if session and current_project:
                 # Stream new events
                 events = DeviceEvent.objects.filter(
@@ -176,7 +149,7 @@ def monitor_stream_view(request):
                     last_event_id = ev.id
                     yield f"data: {json.dumps(ev.as_sse_dict())}\n\n"
 
-                # Also send periodic status snapshot for all devices
+                # Periodic status snapshot for all devices
                 devices = DiscoveredDevice.objects.filter(
                     project=current_project, is_active=True
                 )
@@ -199,131 +172,222 @@ def monitor_stream_view(request):
 
 
 # ──────────────────────────────────────────────
-# Scan endpoint — NIC-based subnet sweep
+# Agent API — receives data from local agent
+# All endpoints use Bearer token auth (agent_api_key)
 # ──────────────────────────────────────────────
 
-@login_required
+@csrf_exempt
 @require_POST
-def trigger_scan_view(request):
-    """Scan a subnet for responding hosts. Returns JSON list of discovered IPs."""
-    try:
-        current_project = getattr(request, 'current_project', None)
-        if not current_project:
-            return JsonResponse({'error': 'No active project'}, status=400)
+def agent_heartbeat(request):
+    """Agent calls this to start/resume a session and report it's alive.
+    POST /audiopatch/network-monitor/api/heartbeat/
+    Body: {"agent_version": "1.0"}
+    Returns: session_id, project_name
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
 
-        data = json.loads(request.body)
-        selected_interface = data.get('interface', '')
-        selected_subnet = data.get('subnet', '')
-
-        # Validate: interface must be from our detected NIC list (per D-07)
-        valid_nics = get_scannable_nics()
-        valid_subnets = {n['subnet'] for n in valid_nics}
-        if selected_subnet not in valid_subnets:
-            return JsonResponse(
-                {'error': 'Invalid subnet. Select a detected network interface.'},
-                status=400
-            )
-
-        # Log scan event if session exists
-        active_session = MonitorSession.objects.filter(
-            project=current_project, ended_at__isnull=True
-        ).first()
-        if active_session:
-            DeviceEvent.objects.create(
-                session=active_session,
-                event_type='SCAN_STARTED',
-                details={'subnet': selected_subnet, 'interface': selected_interface},
-            )
-
-        # Perform sweep
-        results = sweep_subnet(selected_subnet)
-
-        # Annotate results with "already monitored" flag
-        existing_ips = set(
-            DiscoveredDevice.objects.filter(
-                project=current_project, is_active=True
-            ).values_list('ip_address', flat=True)
+    session, created = MonitorSession.objects.get_or_create(
+        project=project, ended_at__isnull=True,
+        defaults={'started_at': timezone.now()}
+    )
+    if created:
+        DeviceEvent.objects.create(
+            session=session, event_type='MONITOR_STARTED',
+            details={'source': 'agent'},
         )
-        for r in results:
-            r['already_monitored'] = r['ip'] in existing_ips
 
-        return JsonResponse({
-            'ok': True,
-            'subnet': selected_subnet,
-            'devices': results,
-            'count': len(results),
-        })
-
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({
+        'ok': True,
+        'session_id': session.pk,
+        'project_name': project.name,
+        'created': created,
+    })
 
 
-# ──────────────────────────────────────────────
-# Device management — add and remove
-# ──────────────────────────────────────────────
-
-@login_required
+@csrf_exempt
 @require_POST
-def add_monitor_devices_view(request):
-    """Add discovered devices to monitoring. Expects JSON: {devices: [{ip, label, domain}]}"""
-    try:
-        current_project = getattr(request, 'current_project', None)
-        if not current_project:
-            return JsonResponse({'error': 'No active project'}, status=400)
+def agent_stop(request):
+    """Agent calls this when shutting down to close the session.
+    POST /audiopatch/network-monitor/api/stop/
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
 
-        data = json.loads(request.body)
-        devices_to_add = data.get('devices', [])
-        added = 0
+    session = MonitorSession.objects.filter(
+        project=project, ended_at__isnull=True
+    ).first()
+    if session:
+        session.ended_at = timezone.now()
+        session.save(update_fields=['ended_at'])
 
-        for dev in devices_to_add:
-            ip = dev.get('ip', '').strip()
-            if not ip:
-                continue
-            obj, created = DiscoveredDevice.objects.get_or_create(
-                project=current_project,
-                ip_address=ip,
-                defaults={
-                    'label': dev.get('label', ''),
-                    'domain': dev.get('domain', 'unknown'),
-                    'is_active': True,
-                }
-            )
-            if not created and not obj.is_active:
-                # Re-activate previously removed device
+    return JsonResponse({'ok': True, 'status': 'stopped'})
+
+
+@csrf_exempt
+@require_POST
+def agent_scan_results(request):
+    """Agent pushes discovered devices from a network scan.
+    POST /audiopatch/network-monitor/api/scan-results/
+    Body: {"devices": [{"ip": "...", "label": "...", "domain": "dante", "latency_ms": 1.2}]}
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    data = json.loads(request.body)
+    devices_data = data.get('devices', [])
+    added = 0
+    updated = 0
+
+    for dev in devices_data:
+        ip = dev.get('ip', '').strip()
+        if not ip:
+            continue
+        obj, created = DiscoveredDevice.objects.get_or_create(
+            project=project,
+            ip_address=ip,
+            defaults={
+                'label': dev.get('label', ''),
+                'domain': dev.get('domain', 'unknown'),
+                'is_active': True,
+            }
+        )
+        if created:
+            added += 1
+        else:
+            # Update label/domain if provided and device exists
+            changed = False
+            if dev.get('label') and dev['label'] != obj.label:
+                obj.label = dev['label']
+                changed = True
+            if dev.get('domain') and dev['domain'] != obj.domain:
+                obj.domain = dev['domain']
+                changed = True
+            if not obj.is_active:
                 obj.is_active = True
-                obj.label = dev.get('label', obj.label)
-                obj.domain = dev.get('domain', obj.domain)
                 obj.consecutive_failures = 0
                 obj.last_known_state = 'unknown'
+                changed = True
+            if changed:
                 obj.save()
-            if created:
-                added += 1
+                updated += 1
 
-        return JsonResponse({'ok': True, 'added': added})
+    # Log scan event
+    session = MonitorSession.objects.filter(
+        project=project, ended_at__isnull=True
+    ).first()
+    if session:
+        DeviceEvent.objects.create(
+            session=session, event_type='SCAN_STARTED',
+            details={'device_count': len(devices_data), 'added': added},
+        )
 
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'ok': True, 'added': added, 'updated': updated})
 
 
-@login_required
+@csrf_exempt
 @require_POST
-def remove_monitor_device_view(request, device_id):
-    """Deactivate a device from monitoring. Does not delete — can be re-added via scan."""
-    try:
-        current_project = getattr(request, 'current_project', None)
-        if not current_project:
-            return JsonResponse({'error': 'No active project'}, status=400)
+def agent_poll_results(request):
+    """Agent pushes poll results for all monitored devices.
+    POST /audiopatch/network-monitor/api/poll-results/
+    Body: {"results": [{"ip": "...", "is_alive": true, "latency_ms": 1.2}, ...]}
 
-        device = DiscoveredDevice.objects.filter(
-            pk=device_id, project=current_project
-        ).first()
+    The cloud handles N=3 state machine logic — the agent just reports raw results.
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    session = MonitorSession.objects.filter(
+        project=project, ended_at__isnull=True
+    ).first()
+    if not session:
+        return JsonResponse({'error': 'No active session. Call /api/heartbeat/ first.'}, status=400)
+
+    data = json.loads(request.body)
+    results = data.get('results', [])
+
+    # Build IP → device map for this project
+    active_devices = {
+        d.ip_address: d
+        for d in DiscoveredDevice.objects.filter(project=project, is_active=True)
+    }
+
+    events_created = []
+
+    for r in results:
+        ip = r.get('ip', '').strip()
+        device = active_devices.get(ip)
         if not device:
-            return JsonResponse({'error': 'Device not found'}, status=404)
+            continue
 
-        device.is_active = False
-        device.save(update_fields=['is_active'])
+        is_up = r.get('is_alive', False)
+        latency = r.get('latency_ms')
 
-        return JsonResponse({'ok': True, 'device_id': device_id})
+        # Write poll result
+        PollResult.objects.create(
+            device=device, session=session,
+            is_reachable=is_up, latency_ms=latency,
+        )
 
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        # N=3 state machine — runs on the cloud side
+        prev_state = device.last_known_state
+
+        if is_up:
+            if prev_state != 'online':
+                ev = DeviceEvent.objects.create(
+                    device=device, session=session,
+                    event_type='ONLINE',
+                    details={'latency_ms': latency},
+                )
+                events_created.append(ev.as_sse_dict())
+            device.consecutive_failures = 0
+            device.last_known_state = 'online'
+            device.last_seen = timezone.now()
+        else:
+            device.consecutive_failures = (device.consecutive_failures or 0) + 1
+            if device.consecutive_failures == 3:
+                device.last_known_state = 'offline'
+                ev = DeviceEvent.objects.create(
+                    device=device, session=session,
+                    event_type='OFFLINE',
+                    details={'consecutive_failures': device.consecutive_failures},
+                )
+                events_created.append(ev.as_sse_dict())
+
+        device.save(update_fields=['consecutive_failures', 'last_known_state', 'last_seen'])
+
+    return JsonResponse({
+        'ok': True,
+        'processed': len(results),
+        'events': events_created,
+    })
+
+
+@csrf_exempt
+@require_POST
+def agent_remove_device(request):
+    """Agent removes a device from monitoring.
+    POST /audiopatch/network-monitor/api/remove-device/
+    Body: {"ip": "..."}
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    data = json.loads(request.body)
+    ip = data.get('ip', '').strip()
+
+    device = DiscoveredDevice.objects.filter(
+        project=project, ip_address=ip
+    ).first()
+    if not device:
+        return JsonResponse({'error': 'Device not found'}, status=404)
+
+    device.is_active = False
+    device.save(update_fields=['is_active'])
+
+    return JsonResponse({'ok': True, 'ip': ip})
