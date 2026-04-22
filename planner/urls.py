@@ -6,6 +6,7 @@ from django.urls import path, include
 from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_all_locations_pdf
 from planner.utils.pdf_exports.system_report import export_system_report
 from .views import populate_amp_models_view
+from . import views_monitor
 
 from .views import (
      audio_checklist_view,
@@ -246,10 +247,12 @@ urlpatterns = [
      path('audiochecklist/template/load/', audio_checklist_load_template, name='audio_checklist_load_template'),
      path('audiochecklist/template/delete/', audio_checklist_delete_template, name='audio_checklist_delete_template'),
 
-      
-    
-
-   
+    # Network Health Monitor
+    path('network-monitor/', views_monitor.network_monitor_view, name='network_monitor'),
+    path('network-monitor/stream/', views_monitor.monitor_stream_view, name='monitor_stream'),
+    path('network-monitor/scan/', views_monitor.trigger_scan_view, name='network_monitor_scan'),
+    path('network-monitor/devices/add/', views_monitor.add_monitor_devices_view, name='add_monitor_devices'),
+    path('network-monitor/devices/<int:device_id>/remove/', views_monitor.remove_monitor_device_view, name='remove_monitor_device'),
 ]
 
 from django.conf import settings
