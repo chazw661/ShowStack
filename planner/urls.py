@@ -253,6 +253,7 @@ urlpatterns = [
 
     # Network Health Monitor — Dashboard management (session auth)
     path('network-monitor/devices/<int:device_id>/remove/', views_monitor.dashboard_remove_device, name='dashboard_remove_device'),
+    path('network-monitor/devices/<int:device_id>/reassign/', views_monitor.dashboard_reassign_device, name='dashboard_reassign_device'),
     path('network-monitor/request-scan/', views_monitor.dashboard_request_scan, name='dashboard_request_scan'),
 
     # Network Health Monitor — Agent API (Bearer token auth)

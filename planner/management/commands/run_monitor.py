@@ -216,7 +216,14 @@ class Command(BaseCommand):
                     self.stdout.write(f'  Scanning link-local on {iface} ({ip})...')
                     devices = self._discover_link_local()
                     for d in devices:
-                        d['domain'] = 'dante'  # link-local devices are typically Dante
+                        d['domain'] = 'dante'
+                    # Include this machine's own link-local IP (ARP doesn't list self)
+                    own_ips = {d['ip'] for d in devices}
+                    if ip not in own_ips:
+                        devices.append({
+                            'ip': ip, 'label': ip, 'domain': 'dante',
+                            'latency_ms': 0.0,
+                        })
                     all_devices.extend(devices)
                     continue
 

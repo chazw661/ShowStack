@@ -91,7 +91,8 @@
 .nhm-dot--online  { background: var(--accent-green); }
 .nhm-dot--flapping { background: var(--accent-amber); }
 .nhm-dot--offline  { background: var(--accent-red); animation: nhm-pulse 2s infinite; }
-.nhm-dot--unknown  { background: var(--text-dim); }
+.nhm-dot--unknown      { background: var(--text-dim); }
+.nhm-dot--unreachable  { background: var(--text-dim); opacity: 0.5; }
 
 @keyframes nhm-pulse {
     0%   { opacity: 1; }
@@ -505,6 +506,47 @@
     color: var(--text-secondary);
 }
 
+/* ===== ADD DEVICE BAR ===== */
+.nhm-add-device-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.nhm-input {
+    background: var(--bg-page);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    width: 200px;
+}
+
+.nhm-input--label {
+    width: 150px;
+}
+
+.nhm-input:focus {
+    border-color: var(--accent-blue);
+}
+
+.nhm-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+.nhm-select--small {
+    width: auto;
+    min-width: 120px;
+}
+
 /* ===== DOMAIN SECTIONS ===== */
 .nhm-domain {
     background: var(--bg-card);
@@ -914,6 +956,29 @@
     </div>
   </div>
 
+  <!-- ===== ADD DEVICE FORM ===== -->
+  {% if has_project %}
+  <div class="nhm-add-device-bar" id="nhm-add-device-bar">
+    <input type="text" class="nhm-input" id="nhm-add-ip"
+           placeholder="IP Address (e.g. 192.168.0.239)"
+           aria-label="Device IP address"
+           onkeydown="if(event.key==='Enter') addManualDevice();">
+    <input type="text" class="nhm-input nhm-input--label" id="nhm-add-label"
+           placeholder="Label (optional)"
+           aria-label="Device label"
+           onkeydown="if(event.key==='Enter') addManualDevice();">
+    <select class="nhm-select nhm-select--small" id="nhm-add-domain" aria-label="Device domain">
+      <option value="switch">Switch</option>
+      <option value="dante">Dante</option>
+      <option value="la_network">LA Network</option>
+      <option value="unknown">Unknown</option>
+    </select>
+    <button class="nhm-btn nhm-btn--primary" onclick="addManualDevice()" aria-label="Add device">
+      Add Device
+    </button>
+  </div>
+  {% endif %}
+
   <!-- ===== DOMAIN ROLLUP BAR ===== -->
   <div id="nhm-rollup">
     <span class="nhm-rollup-label">Status</span>
@@ -929,6 +994,12 @@
       <span class="nhm-dot nhm-dot--unknown" id="nhm-rollup-dot-switches" aria-label="Switches status"></span>
       Switches: <span id="nhm-rollup-switches">{{ domain_counts.switch.online|default:0 }}/{{ domain_counts.switch.total|default:0 }}</span>
     </span>
+    {% if domain_counts.unknown.total %}
+    <span class="nhm-pill nhm-pill--placeholder" id="nhm-pill-unassigned">
+      <span class="nhm-dot nhm-dot--unknown" id="nhm-rollup-dot-unassigned" aria-label="Unassigned status"></span>
+      Unassigned: <span id="nhm-rollup-unassigned">{{ domain_counts.unknown.total|default:0 }}</span>
+    </span>
+    {% endif %}
   </div>
 
   <!-- ===== MAIN CONTENT ===== -->
@@ -986,7 +1057,7 @@
             <div class="nhm-card-header">
               <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
                     aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
-              <span class="nhm-card-name">{{ device.label }}</span>
+              <span class="nhm-card-name">{{ device.label|default:device.ip_address }}</span>
               <span class="nhm-card-latency">
                 {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
               </span>
@@ -1051,7 +1122,7 @@
             <div class="nhm-card-header">
               <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
                     aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
-              <span class="nhm-card-name">{{ device.label }}</span>
+              <span class="nhm-card-name">{{ device.label|default:device.ip_address }}</span>
               <span class="nhm-card-latency">
                 {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
               </span>
@@ -1108,7 +1179,7 @@
             <div class="nhm-card-header">
               <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
                     aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
-              <span class="nhm-card-name">{{ device.label }}</span>
+              <span class="nhm-card-name">{{ device.label|default:device.ip_address }}</span>
               <span class="nhm-card-latency">
                 {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
               </span>
@@ -1139,6 +1210,74 @@
           <div class="nhm-domain-empty" id="nhm-switches-placeholder">
             Switch monitoring is coming in Phase 2. Devices assigned to "Switches" domain will appear here.
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unassigned section — devices discovered but not yet assigned to a domain -->
+    {% for device in devices %}{% if device.domain == 'unknown' %}{% with has_unknown=True %}{% endwith %}{% endif %}{% endfor %}
+    <div class="nhm-domain" id="nhm-domain-unassigned" data-domain="unknown">
+      <div class="nhm-domain-header" tabindex="0" role="button"
+           aria-expanded="true" aria-controls="nhm-domain-body-unassigned"
+           onclick="toggleDomain('unassigned', this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){toggleDomain('unassigned', this);}">
+        <span class="nhm-domain-name">Unassigned</span>
+        <span class="nhm-domain-badge" id="nhm-badge-unassigned">
+          {{ domain_counts.unknown.total|default:0 }} device{{ domain_counts.unknown.total|default:0|pluralize }}
+        </span>
+        <span class="nhm-domain-toggle" aria-hidden="true" id="nhm-toggle-unassigned">&#9650;</span>
+      </div>
+      <div class="nhm-domain-body" id="nhm-domain-body-unassigned">
+        <div class="nhm-card-grid" id="nhm-grid-unassigned">
+          {% for device in devices %}{% if device.domain == 'unknown' %}
+          <div class="nhm-card" id="nhm-device-{{ device.id }}"
+               data-domain="unknown"
+               data-status="{{ device.last_known_state }}"
+               onclick="toggleCard({{ device.id }})"
+               tabindex="0" role="button" aria-expanded="false"
+               onkeydown="if(event.key==='Enter'||event.key===' '){toggleCard({{ device.id }});}">
+            <div class="nhm-card-header">
+              <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
+                    aria-label="{{ device.label|default:device.ip_address }}: {{ device.last_known_state|default:'unknown' }}"></span>
+              <span class="nhm-card-name">{{ device.label|default:device.ip_address }}</span>
+              <span class="nhm-card-latency">&mdash;</span>
+            </div>
+            <div class="nhm-card-detail">
+              <div class="nhm-card-detail-inner">
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">IP</span>
+                  <span class="nhm-card-detail-value">{{ device.ip_address }}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Last Seen</span>
+                  <span class="nhm-card-detail-value">{% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Status</span>
+                  <span class="nhm-card-detail-value nhm-card-status-label">{{ device.last_known_state|default:"unknown" }}</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Assign to</span>
+                  <span class="nhm-card-detail-value">
+                    <select class="nhm-select nhm-select--small nhm-assign-domain"
+                            onchange="event.stopPropagation(); reassignDevice({{ device.id }}, this.value)"
+                            onclick="event.stopPropagation();">
+                      <option value="unknown" selected>Unassigned</option>
+                      <option value="la_network">LA Network</option>
+                      <option value="dante">Dante</option>
+                      <option value="switch">Switch</option>
+                    </select>
+                  </span>
+                </div>
+                <a href="#" class="nhm-card-remove"
+                   onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|default:device.ip_address|escapejs }}')"
+                   aria-label="Remove {{ device.label|default:device.ip_address }} from monitor">
+                  Remove from monitor
+                </a>
+              </div>
+            </div>
+          </div>
+          {% endif %}{% endfor %}
         </div>
       </div>
     </div>
@@ -1333,6 +1472,7 @@ function updateRollupBar() {
         'la_network': { online: 0, total: 0 },
         'dante':      { online: 0, total: 0 },
         'switch':     { online: 0, total: 0 },
+        'unknown':    { online: 0, total: 0 },
     };
 
     document.querySelectorAll('.nhm-card[data-domain][data-status]').forEach(function(card) {
@@ -1356,6 +1496,9 @@ function updateRollupBar() {
     const switchEl = document.getElementById('nhm-rollup-switches');
     if (switchEl) switchEl.textContent = domains.switch.online + '/' + domains.switch.total;
     updatePillColor('nhm-pill-switches', 'nhm-rollup-dot-switches', domains.switch);
+
+    const unEl = document.getElementById('nhm-rollup-unassigned');
+    if (unEl) unEl.textContent = domains.unknown.total;
 }
 
 function getPillStatus(counts) {
@@ -1483,6 +1626,65 @@ function requestRescan() {
         btn.disabled = false;
         btn.textContent = 'Re-scan Network';
     });
+}
+
+function reassignDevice(deviceId, newDomain) {
+    fetch('/audiopatch/network-monitor/devices/' + deviceId + '/reassign/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+        body: JSON.stringify({domain: newDomain}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            // Reload page to move card to correct section
+            location.reload();
+        }
+    })
+    .catch(function(err) { console.error('Reassign error:', err); });
+}
+
+function addManualDevice() {
+    const ipInput = document.getElementById('nhm-add-ip');
+    const labelInput = document.getElementById('nhm-add-label');
+    const domainSelect = document.getElementById('nhm-add-domain');
+
+    const ip = (ipInput.value || '').trim();
+    if (!ip) { ipInput.focus(); return; }
+
+    // Basic IP validation
+    if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+        alert('Enter a valid IP address');
+        ipInput.focus();
+        return;
+    }
+
+    const label = (labelInput.value || '').trim();
+    const domain = domainSelect.value;
+
+    fetch('/audiopatch/network-monitor/api/scan-results/', {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer {{ agent_api_key }}',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            devices: [{ ip: ip, label: label || ip, domain: domain }]
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            ipInput.value = '';
+            labelInput.value = '';
+            // Device will appear on next poll cycle (2 seconds)
+            ipInput.placeholder = 'Added! Will appear shortly...';
+            setTimeout(function() { ipInput.placeholder = 'IP Address (e.g. 192.168.0.239)'; }, 3000);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown'));
+        }
+    })
+    .catch(function(err) { alert('Network error: ' + err.message); });
 }
 
 function copyAgentCmd() {

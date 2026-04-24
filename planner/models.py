@@ -4593,6 +4593,9 @@ class DiscoveredDevice(models.Model):
         return f"{self.label or self.ip_address} ({self.domain})"
 
     def status(self):
+        # Never-seen devices show as unreachable (grey), not offline (red)
+        if self.last_seen is None and self.last_known_state != 'online':
+            return 'unreachable'
         if self.last_known_state == 'online':
             return 'online'
         if 0 < self.consecutive_failures < 3:

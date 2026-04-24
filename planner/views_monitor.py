@@ -68,7 +68,8 @@ def network_monitor_view(request):
     devices = []
     domain_counts = {'la_network': {'online': 0, 'total': 0},
                      'dante': {'online': 0, 'total': 0},
-                     'switch': {'online': 0, 'total': 0}}
+                     'switch': {'online': 0, 'total': 0},
+                     'unknown': {'online': 0, 'total': 0}}
     if current_project:
         devices = list(
             DiscoveredDevice.objects.filter(
@@ -76,7 +77,7 @@ def network_monitor_view(request):
             ).order_by('domain', 'label', 'ip_address')
         )
         for d in devices:
-            dom = d.domain if d.domain in domain_counts else 'la_network'
+            dom = d.domain if d.domain in domain_counts else 'unknown'
             domain_counts[dom]['total'] += 1
             if d.status() == 'online':
                 domain_counts[dom]['online'] += 1
@@ -90,7 +91,8 @@ def network_monitor_view(request):
             ).select_related('device').order_by('-occurred_at')[:50]
         )
 
-    # Active alerts: devices offline that haven't come back
+    # Active alerts: only devices that WERE online and went offline
+    # Never-seen devices (last_seen=None) show as "unreachable" — no alert
     active_alerts = []
     if current_project:
         active_alerts = list(
@@ -98,6 +100,7 @@ def network_monitor_view(request):
                 project=current_project,
                 is_active=True,
                 last_known_state='offline',
+                last_seen__isnull=False,  # must have been online at some point
             )
         )
 
@@ -185,6 +188,31 @@ def dashboard_remove_device(request, device_id):
     device.is_active = False
     device.save(update_fields=['is_active'])
     return JsonResponse({'ok': True, 'device_id': device_id})
+
+
+@login_required
+@require_POST
+def dashboard_reassign_device(request, device_id):
+    """Change a device's domain assignment (e.g., unknown → switch)."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    device = DiscoveredDevice.objects.filter(
+        pk=device_id, project=current_project
+    ).first()
+    if not device:
+        return JsonResponse({'error': 'Device not found'}, status=404)
+
+    data = json.loads(request.body)
+    new_domain = data.get('domain', '')
+    valid_domains = ['la_network', 'dante', 'switch', 'unknown']
+    if new_domain not in valid_domains:
+        return JsonResponse({'error': f'Invalid domain. Use: {valid_domains}'}, status=400)
+
+    device.domain = new_domain
+    device.save(update_fields=['domain'])
+    return JsonResponse({'ok': True, 'device_id': device_id, 'domain': new_domain})
 
 
 @login_required
@@ -392,12 +420,15 @@ def agent_poll_results(request):
             device.consecutive_failures = (device.consecutive_failures or 0) + 1
             if device.consecutive_failures == 3:
                 device.last_known_state = 'offline'
-                ev = DeviceEvent.objects.create(
-                    device=device, session=session,
-                    event_type='OFFLINE',
-                    details={'consecutive_failures': device.consecutive_failures},
-                )
-                events_created.append(ev.as_sse_dict())
+                # Only fire OFFLINE alert if device was previously online
+                # Never-seen devices (last_seen=None) stay "unreachable" — no alert
+                if device.last_seen is not None:
+                    ev = DeviceEvent.objects.create(
+                        device=device, session=session,
+                        event_type='OFFLINE',
+                        details={'consecutive_failures': device.consecutive_failures},
+                    )
+                    events_created.append(ev.as_sse_dict())
 
         device.save(update_fields=['consecutive_failures', 'last_known_state', 'last_seen'])
 
