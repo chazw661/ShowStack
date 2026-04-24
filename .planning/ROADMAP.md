@@ -45,7 +45,11 @@ Plans:
   3. Port error counters accumulate over time and are visible per port
   4. A bandwidth warning indicator appears on a port when utilization exceeds the configured threshold (default 70%/90%)
   5. Show mode toggle (Setup / Show / Wrap) suppresses non-critical alerts when set to Setup or Wrap
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 02-01-PLAN.md — Models, migration, admin, API endpoints, URL wiring
+- [ ] 02-02-PLAN.md — Agent SNMP thread restructure and pysnmp integration
+- [ ] 02-03-PLAN.md — Dashboard template (settings panel, show mode, switch cards, port tables)
 **UI hint**: yes
 
 ### Phase 3: Dante
@@ -67,6 +71,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
-| 2. Switch SNMP | 0/TBD | Not started | - |
+| 1. Foundation | 3/3 | Complete | - |
+| 2. Switch SNMP | 0/3 | Planning complete | - |
 | 3. Dante | 0/TBD | Not started | - |
