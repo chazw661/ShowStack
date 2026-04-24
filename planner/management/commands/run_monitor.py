@@ -146,6 +146,21 @@ class Command(BaseCommand):
                                 self.stderr.write(self.style.ERROR(f'  ✗ {name} OFFLINE'))
                             elif etype == 'ONLINE':
                                 self.stdout.write(self.style.SUCCESS(f'  ✓ {name} ONLINE'))
+
+                        # Check if dashboard requested a re-scan
+                        if result.get('scan_requested'):
+                            self.stdout.write(self.style.WARNING(
+                                '\n⚡ Re-scan requested from dashboard...'
+                            ))
+                            discovered = self._scan_all_nics()
+                            if discovered:
+                                self.stdout.write(f'Found {len(discovered)} devices')
+                                http_requests.post(
+                                    f'{base_url}/scan-results/',
+                                    headers=headers,
+                                    json={'devices': discovered},
+                                    timeout=30,
+                                )
                     else:
                         self.stderr.write(self.style.WARNING(
                             f'Poll push failed ({resp.status_code})'
@@ -279,50 +294,29 @@ class Command(BaseCommand):
         ]
 
     def _poll_devices(self, base_url, headers):
-        """Ping all active devices for this project and return results."""
+        """Fetch registered device IPs from the server, ping them locally,
+        return results for the cloud to process."""
         import icmplib
 
-        # Get device list from the server
-        # We could cache this, but for now query every cycle is fine
+        # Fetch the device list from the API
         try:
-            # Use the scan-results endpoint's GET behavior... actually we need
-            # a device list. For now, we'll keep a local cache updated on scan.
-            # The agent maintains its own device list from the last scan.
-            pass
+            resp = http_requests.get(
+                f'{base_url}/devices/',
+                headers=headers, timeout=10,
+            )
+            if resp.status_code != 200:
+                return []
+            device_ips = resp.json().get('devices', [])
         except Exception:
-            pass
-
-        # For now, ping all IPs we know about from the local ARP/scan cache
-        # In production, we'd fetch the device list from the API
-        # For the MVP, re-scan to get current device list
-        all_ips = []
-        import netifaces
-
-        for iface in netifaces.interfaces():
-            addrs = netifaces.ifaddresses(iface)
-            if netifaces.AF_INET not in addrs:
-                continue
-            for addr in addrs[netifaces.AF_INET]:
-                ip = addr['addr']
-                if ip.startswith('127.'):
-                    continue
-                # For link-local, use ARP discovery
-                if ip.startswith('169.254.'):
-                    discovered = self._discover_link_local()
-                    all_ips.extend([d['ip'] for d in discovered])
-
-        # Also get the known device list from the last scan results
-        # by querying what we've already registered
-        # For now, use ARP-discovered IPs
-        if not all_ips:
             return []
 
-        # Deduplicate
-        all_ips = list(set(all_ips))
+        if not device_ips:
+            return []
 
+        # Ping all registered devices locally
         try:
             results = icmplib.multiping(
-                all_ips, count=1, timeout=2,
+                device_ips, count=1, timeout=2,
                 privileged=False, concurrent_tasks=50,
             )
         except Exception:

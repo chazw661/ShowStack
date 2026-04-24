@@ -249,7 +249,11 @@ urlpatterns = [
 
     # Network Health Monitor — Dashboard (session auth)
     path('network-monitor/', views_monitor.network_monitor_view, name='network_monitor'),
-    path('network-monitor/stream/', views_monitor.monitor_stream_view, name='monitor_stream'),
+    path('network-monitor/status/', views_monitor.monitor_status_view, name='monitor_status'),
+
+    # Network Health Monitor — Dashboard management (session auth)
+    path('network-monitor/devices/<int:device_id>/remove/', views_monitor.dashboard_remove_device, name='dashboard_remove_device'),
+    path('network-monitor/request-scan/', views_monitor.dashboard_request_scan, name='dashboard_request_scan'),
 
     # Network Health Monitor — Agent API (Bearer token auth)
     path('network-monitor/api/heartbeat/', views_monitor.agent_heartbeat, name='agent_heartbeat'),
@@ -257,6 +261,7 @@ urlpatterns = [
     path('network-monitor/api/scan-results/', views_monitor.agent_scan_results, name='agent_scan_results'),
     path('network-monitor/api/poll-results/', views_monitor.agent_poll_results, name='agent_poll_results'),
     path('network-monitor/api/remove-device/', views_monitor.agent_remove_device, name='agent_remove_device'),
+    path('network-monitor/api/devices/', views_monitor.agent_device_list, name='agent_device_list'),
 ]
 
 from django.conf import settings

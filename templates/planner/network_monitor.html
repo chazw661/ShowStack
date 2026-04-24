@@ -900,6 +900,11 @@
     </div>
     <div class="nhm-header-right" id="nhm-agent-status">
       {% if has_project %}
+      <button class="nhm-btn nhm-btn--primary" id="nhm-rescan-btn"
+              onclick="requestRescan()" aria-label="Request network re-scan"
+              {% if not monitor_running %}disabled title="Start the agent first"{% endif %}>
+        Re-scan Network
+      </button>
       <span class="nhm-agent-indicator {% if monitor_running %}nhm-agent--connected{% else %}nhm-agent--disconnected{% endif %}"
             id="nhm-agent-indicator">
         <span class="nhm-dot {% if monitor_running %}nhm-dot--online{% else %}nhm-dot--unknown{% endif %}"></span>
@@ -1188,7 +1193,6 @@
 // ===== INITIALISATION DATA FROM DJANGO CONTEXT =====
 const NHM_DEVICES = {{ devices_json|safe }};
 const NHM_EVENTS  = {{ recent_events_json|safe }};
-const NHM_NICS    = {{ nics_json|safe }};
 const NHM_DOMAIN_COUNTS = {{ domain_counts_json|safe }};
 
 // ===== CSRF TOKEN EXTRACTION =====
@@ -1208,93 +1212,79 @@ function getCookie(name) {
 }
 const csrfToken = getCookie('csrftoken');
 
-// ===== SSE EVENT SOURCE =====
-let sseSource = null;
-let sseRetries = 0;
-const SSE_MAX_RETRIES = 5;
+// ===== AJAX POLLING =====
+let lastEventId = 0;
+let pollTimer = null;
+const POLL_INTERVAL = 2000; // 2 seconds
 
-function connectSSE() {
-    console.log('[NHM-SSE] Connecting to /audiopatch/network-monitor/stream/');
-    sseSource = new EventSource('/audiopatch/network-monitor/stream/');
+function startPolling() {
+    pollStatus(); // immediate first poll
+    pollTimer = setInterval(pollStatus, POLL_INTERVAL);
+}
 
-    sseSource.onopen = function() {
-        console.log('[NHM-SSE] Connection opened');
-        sseRetries = 0;
-        hideSseStatus();
-    };
+function pollStatus() {
+    fetch('/audiopatch/network-monitor/status/?last_event_id=' + lastEventId)
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) return;
 
-    sseSource.onmessage = function(e) {
-        if (!e.data || e.data.trim() === '') return;
-        let data;
-        try { data = JSON.parse(e.data); } catch(err) {
-            console.warn('[NHM-SSE] Failed to parse:', e.data);
-            return;
+        // Update all device status dots
+        if (data.devices) {
+            data.devices.forEach(function(dev) {
+                updateStatusDot(dev.device_id, dev.status, dev.latency_ms);
+            });
+            updateRollupBar();
         }
-        if (!data || !data.type) return;
-        console.log('[NHM-SSE] Event:', data.type, data);
-        switch (data.type) {
-            case 'STATUS_SNAPSHOT': handleStatusSnapshot(data); break;
-            case 'ONLINE':          handleOnlineEvent(data);    break;
-            case 'OFFLINE':         handleOfflineEvent(data);   break;
-            case 'SCAN_STARTED':    prependTimelineEvent(data); break;
-            case 'MONITOR_STARTED': prependTimelineEvent(data); break;
+
+        // Update agent connection indicator
+        const indicator = document.getElementById('nhm-agent-indicator');
+        if (indicator) {
+            const dot = indicator.querySelector('.nhm-dot');
+            if (data.monitor_running) {
+                indicator.className = 'nhm-agent-indicator nhm-agent--connected';
+                if (dot) dot.className = 'nhm-dot nhm-dot--online';
+                indicator.lastChild.textContent = ' Agent Connected';
+            } else {
+                indicator.className = 'nhm-agent-indicator nhm-agent--disconnected';
+                if (dot) dot.className = 'nhm-dot nhm-dot--unknown';
+                indicator.lastChild.textContent = ' Agent Not Connected';
+            }
         }
-    };
 
-    sseSource.onerror = function(e) {
-        console.error('[NHM-SSE] Error, readyState:', sseSource.readyState, e);
-        sseSource.close();
-        sseRetries++;
-        if (sseRetries >= SSE_MAX_RETRIES) {
-            console.error('[NHM-SSE] Max retries reached, pausing');
-            showSsePaused();
-            return;
+        // Process new events
+        if (data.events && data.events.length > 0) {
+            data.events.forEach(function(ev) {
+                if (ev.type === 'OFFLINE') {
+                    showAlertBanner(ev.device_name, ev.device_id, ev.occurred_at);
+                } else if (ev.type === 'ONLINE') {
+                    dismissAlertForDevice(ev.device_id);
+                }
+                prependTimelineEvent(ev);
+            });
         }
-        showSseReconnecting();
-        const delay = Math.min(1000 * Math.pow(2, sseRetries - 1), 10000);
-        console.log('[NHM-SSE] Reconnecting in', delay, 'ms');
-        setTimeout(connectSSE, delay);
-    };
-}
 
-function showSseReconnecting() {
-    const el = document.getElementById('nhm-sse-status');
-    el.innerHTML = '<div class="nhm-sse-reconnecting">Reconnecting&#8230;</div>';
-    el.style.display = 'block';
-}
+        // Track last event ID for next poll
+        if (data.last_event_id) {
+            lastEventId = data.last_event_id;
+        }
 
-function showSsePaused() {
-    const el = document.getElementById('nhm-sse-status');
-    el.innerHTML = '<div class="nhm-sse-paused">Live updates paused &#8212; reload page</div>';
-    el.style.display = 'block';
-}
-
-function hideSseStatus() {
-    const el = document.getElementById('nhm-sse-status');
-    el.style.display = 'none';
-    el.innerHTML = '';
-}
-
-// ===== EVENT HANDLERS =====
-function handleStatusSnapshot(data) {
-    if (!data.devices) return;
-    data.devices.forEach(function(dev) {
-        updateStatusDot(dev.device_id, dev.status, dev.latency_ms);
+        // Hide empty state if devices exist
+        const emptyEl = document.getElementById('nhm-empty-state');
+        if (emptyEl && data.devices && data.devices.length > 0) {
+            emptyEl.style.setProperty('display', 'none', 'important');
+        }
+    })
+    .catch(function(err) {
+        console.warn('[NHM] Poll error:', err.message);
     });
-    updateRollupBar();
 }
 
-function handleOnlineEvent(data) {
-    updateStatusDot(data.device_id, 'online', null);
-    updateRollupBar();
-    prependTimelineEvent(data);
-}
-
-function handleOfflineEvent(data) {
-    updateStatusDot(data.device_id, 'offline', null);
-    updateRollupBar();
-    showAlertBanner(data.device_name, data.device_id, data.occurred_at);
-    prependTimelineEvent(data);
+function dismissAlertForDevice(deviceId) {
+    const banner = document.getElementById('nhm-alert-' + deviceId);
+    if (banner) {
+        banner.style.setProperty('opacity', '0', 'important');
+        setTimeout(function() { banner.remove(); }, 300);
+    }
 }
 
 // ===== DOM UPDATE FUNCTIONS =====
@@ -1464,6 +1454,37 @@ function eventTypeLabel(type) {
 }
 
 // ===== AGENT HELPERS =====
+function requestRescan() {
+    const btn = document.getElementById('nhm-rescan-btn');
+    btn.disabled = true;
+    btn.textContent = 'Scan requested...';
+
+    fetch('/audiopatch/network-monitor/request-scan/', {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'Content-Type': 'application/json'},
+        body: JSON.stringify({}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            btn.textContent = 'Scanning...';
+            // Re-enable after 15 seconds (scan takes time)
+            setTimeout(function() {
+                btn.disabled = false;
+                btn.textContent = 'Re-scan Network';
+            }, 15000);
+        } else {
+            alert(data.error || 'Could not request scan');
+            btn.disabled = false;
+            btn.textContent = 'Re-scan Network';
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.textContent = 'Re-scan Network';
+    });
+}
+
 function copyAgentCmd() {
     const code = document.getElementById('nhm-agent-cmd');
     if (code) {
@@ -1791,7 +1812,7 @@ function initRollupFromContext() {
 document.addEventListener('DOMContentLoaded', function() {
     restoreLocalStorageState();
     initRollupFromContext();
-    connectSSE();
+    startPolling();
 });
 </script>
 {% endblock %}

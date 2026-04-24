@@ -119,56 +119,94 @@ def network_monitor_view(request):
 
 
 # ──────────────────────────────────────────────
-# SSE stream — live status updates
+# Status polling endpoint — replaces SSE
 # ──────────────────────────────────────────────
 
 @login_required
-def monitor_stream_view(request):
-    """SSE endpoint. Streams DeviceEvent rows and periodic status snapshots."""
+def monitor_status_view(request):
+    """Returns current device status + recent events as JSON.
+    The browser polls this every 2 seconds via fetch().
+    Much more reliable than SSE with Django's threaded dev server.
+    """
     current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'ok': False, 'error': 'No project'})
 
-    def event_generator():
-        last_event_id = 0
+    # Get last_event_id from query param (browser tracks this)
+    last_event_id = int(request.GET.get('last_event_id', '0'))
 
-        while True:
-            close_old_connections()
+    # Active session?
+    session = MonitorSession.objects.filter(
+        project=current_project, ended_at__isnull=True
+    ).first()
 
-            session = None
-            if current_project:
-                session = MonitorSession.objects.filter(
-                    project=current_project, ended_at__isnull=True
-                ).first()
-
-            if session and current_project:
-                # Stream new events
-                events = DeviceEvent.objects.filter(
-                    session=session,
-                    id__gt=last_event_id,
-                ).order_by('id').select_related('device')[:50]
-                for ev in events:
-                    last_event_id = ev.id
-                    yield f"data: {json.dumps(ev.as_sse_dict())}\n\n"
-
-                # Periodic status snapshot for all devices
-                devices = DiscoveredDevice.objects.filter(
-                    project=current_project, is_active=True
-                )
-                snapshot = {
-                    'type': 'STATUS_SNAPSHOT',
-                    'devices': [d.as_status_dict() for d in devices],
-                }
-                yield f"data: {json.dumps(snapshot)}\n\n"
-
-            # Heartbeat to keep connection alive
-            yield ": heartbeat\n\n"
-            time.sleep(2)
-
-    response = StreamingHttpResponse(
-        event_generator(), content_type='text/event-stream'
+    # All active devices with current status
+    devices = list(
+        DiscoveredDevice.objects.filter(
+            project=current_project, is_active=True
+        )
     )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
+
+    # New events since last poll
+    new_events = []
+    if session:
+        events = DeviceEvent.objects.filter(
+            session=session, id__gt=last_event_id,
+        ).order_by('id').select_related('device')[:50]
+        new_events = [ev.as_sse_dict() for ev in events]
+
+    return JsonResponse({
+        'ok': True,
+        'monitor_running': session is not None,
+        'devices': [d.as_status_dict() for d in devices],
+        'events': new_events,
+        'last_event_id': new_events[-1]['id'] if new_events else last_event_id,
+    })
+
+
+# ──────────────────────────────────────────────
+# Dashboard management endpoints (session auth)
+# ──────────────────────────────────────────────
+
+@login_required
+@require_POST
+def dashboard_remove_device(request, device_id):
+    """Remove a device from monitoring (dashboard action, session auth)."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    device = DiscoveredDevice.objects.filter(
+        pk=device_id, project=current_project
+    ).first()
+    if not device:
+        return JsonResponse({'error': 'Device not found'}, status=404)
+
+    device.is_active = False
+    device.save(update_fields=['is_active'])
+    return JsonResponse({'ok': True, 'device_id': device_id})
+
+
+@login_required
+@require_POST
+def dashboard_request_scan(request):
+    """Set a scan-requested flag that the agent picks up on its next poll cycle."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    session = MonitorSession.objects.filter(
+        project=current_project, ended_at__isnull=True
+    ).first()
+
+    if not session:
+        return JsonResponse({'error': 'No active agent session. Start the agent first.'}, status=400)
+
+    # Store the scan request in the session notes field as a simple flag
+    session.notes = 'SCAN_REQUESTED'
+    session.save(update_fields=['notes'])
+
+    return JsonResponse({'ok': True, 'status': 'scan_requested'})
 
 
 # ──────────────────────────────────────────────
@@ -188,11 +226,14 @@ def agent_heartbeat(request):
     if err:
         return err
 
-    session, created = MonitorSession.objects.get_or_create(
-        project=project, ended_at__isnull=True,
-        defaults={'started_at': timezone.now()}
-    )
-    if created:
+    # Find existing open session or create new one
+    session = MonitorSession.objects.filter(
+        project=project, ended_at__isnull=True
+    ).first()
+    created = False
+    if not session:
+        session = MonitorSession.objects.create(project=project)
+        created = True
         DeviceEvent.objects.create(
             session=session, event_type='MONITOR_STARTED',
             details={'source': 'agent'},
@@ -360,10 +401,18 @@ def agent_poll_results(request):
 
         device.save(update_fields=['consecutive_failures', 'last_known_state', 'last_seen'])
 
+    # Check if dashboard requested a re-scan
+    scan_requested = False
+    if session.notes == 'SCAN_REQUESTED':
+        scan_requested = True
+        session.notes = ''
+        session.save(update_fields=['notes'])
+
     return JsonResponse({
         'ok': True,
         'processed': len(results),
         'events': events_created,
+        'scan_requested': scan_requested,
     })
 
 
@@ -391,3 +440,23 @@ def agent_remove_device(request):
     device.save(update_fields=['is_active'])
 
     return JsonResponse({'ok': True, 'ip': ip})
+
+
+@csrf_exempt
+def agent_device_list(request):
+    """Agent fetches the list of active devices to poll.
+    GET /audiopatch/network-monitor/api/devices/
+    Returns: list of IPs the agent should ping each cycle.
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    devices = DiscoveredDevice.objects.filter(
+        project=project, is_active=True
+    ).values_list('ip_address', flat=True)
+
+    return JsonResponse({
+        'ok': True,
+        'devices': list(devices),
+    })
