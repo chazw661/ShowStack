@@ -63,6 +63,8 @@ Phase 2 exceptions:
 - Port table: `table-layout: fixed` with columns declared below under Component Inventory
 - Bandwidth bar: 6px height (purely visual, not a spacing token)
 - Gear icon button: 32px × 32px clickable area (min touch target honored by outer button padding)
+- Port table expanded area inner padding: 12px (exception from 8px sm — accommodates table visual breathing room without full md gap)
+- SNMP not-configured / unreachable prompt padding: 20px (exception from 16px md — centers small prompt text within the expanded card trough)
 
 ---
 
@@ -72,12 +74,12 @@ Inherited from Phase 1 (no changes):
 
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
-| Body | 14px | 400 | 1.5 | Device name, port table cell values, settings form labels |
+| Body | 14px | 400 | 1.5 | Device name, port table cell values, settings form labels, mode banner text, settings empty state |
 | Label | 11px | 700 | 1.0 | Section headings, port table column headers (uppercase + letter-spacing: 0.10em) |
 | Heading | 16px | 700 | 1.2 | Domain group heading, settings panel title, switch card summary |
 | Mono | 12px | 400 | 1.4 | IP addresses, port numbers, bandwidth %, error counter values |
 
-No more than 4 type sizes in use simultaneously. Phase 2 introduces no new sizes.
+4 type sizes in use. Phase 2 introduces no new sizes. The mode banner and settings empty state use 14px body (not 13px).
 
 ---
 
@@ -96,16 +98,16 @@ All tokens inherited from Phase 1. No new hues.
 | Accent blue (10%) | `--accent-blue` | `#4a9eff` | Settings save button, gear icon on hover, focus rings |
 | Status green | `--accent-green` | `#00e676` | Port up status dot, bandwidth <70% color, switch card healthy |
 | Status amber | `--accent-amber` | `#ffab00` | Port warning (bandwidth 70-90%), Setup/Wrap mode banner, mode badge |
-| Status red | `--accent-red` | `#ff5252` | Port down/error status dot, bandwidth >90% color, offline alert |
+| Status red | `--accent-red` | `#ff5252` | Port down/error status dot, bandwidth >90% color, offline alert, inline error messages |
 | Text primary | `--text-primary` | `#e8e8f0` | Switch name, port table values, settings headings |
 | Text secondary | `--text-secondary` | `#9090b0` | Port count summary, settings field hints, mode toggle inactive labels |
-| Text dim | `--text-dim` | `#505070` | Port table column headers, timestamp values, error counter secondary |
+| Text dim | `--text-dim` | `#505070` | Port table column headers, timestamp values, error counter secondary, settings empty state |
 
 **Accent blue reserved for:** Settings save/apply button, gear icon hover state, all focus outlines on interactive elements. Not used on status dots or mode toggle.
 
 **Amber reserved for:** Bandwidth 70-90% cells, Setup/Wrap mode banner, mode toggle active indicator when in Setup or Wrap mode.
 
-**Destructive (red):** "Remove from monitor" button on switch cards, bandwidth >90% cells, port down dots. Not used for warning-level states.
+**Destructive (red):** "Remove from monitor" button on switch cards, bandwidth >90% cells, port down dots, inline form error messages. Not used for warning-level states.
 
 ---
 
@@ -171,7 +173,7 @@ Anatomy: full-width bar, left border 4px solid `--accent-amber`, background `rgb
 
 Content: `[amber dot 8px] "Setup mode — non-critical alerts suppressed"` (replace "Setup" with "Wrap" when in Wrap mode).
 
-Font: 13px/400, color `--accent-amber`.
+Font: 14px/400, color `--accent-amber`.
 
 CSS class: `nhm-mode-banner`. Hidden via `display: none` when mode is "Show". No animation — instant show/hide with JS class toggle on `nhm-root`.
 
@@ -186,6 +188,7 @@ Hover: `border-color: --border-bright`, `color: --accent-blue`.
 Focus ring: `outline: 2px solid var(--accent-blue); outline-offset: 2px`.
 CSS class: `nhm-settings-btn`.
 `aria-label`: "Open monitor settings".
+Tooltip: `title="Settings"` attribute on the button element (native browser tooltip on hover).
 
 **Settings panel:**
 Layout: fixed right-side panel, `position: fixed`, `top: 0`, `right: 0`, `height: 100vh`, `width: 320px`. Slides in from the right: CSS `transform: translateX(100%)` → `translateX(0)`, `transition: transform 0.2s ease`.
@@ -217,7 +220,7 @@ Backdrop: `position: fixed`, `inset: 0`, `background: rgba(0,0,0,0.4)`, z-index 
 
 6. Section: "Configured Switches" (label 11px/700 uppercase, `--text-dim`, padding 16px 16px 8px).
    List of manually-added switch IPs with inline "Remove" text button (`--accent-red`, 11px/700 uppercase).
-   Empty state: "No switches added manually." (13px, `--text-dim`).
+   Empty state: "No switches added manually." (14px/400, `--text-dim`).
 
 7. Footer: "Save Settings" button — `nhm-btn nhm-btn--primary`, full width, pinned to panel bottom via `margin-top: auto` on the flex column panel body.
    Padding: 16px.
@@ -253,7 +256,7 @@ Per-port table anatomy:
 ```
 
 Table element: `<table class="nhm-port-table">`. `table-layout: fixed`. `width: 100%`. Border-collapse: collapse.
-Table padding wrapper: 12px padding on the expanded area inner div.
+Table padding wrapper: 12px padding on the expanded area inner div (see Spacing exceptions).
 
 Column widths (fixed):
 | Column | Width | Content |
@@ -286,7 +289,7 @@ Enter a community string in Monitor Settings to see port data.
 [Open Settings]
 ```
 
-Layout: centered within the expanded area, 20px padding.
+Layout: centered within the expanded area, 20px padding (see Spacing exceptions).
 Heading: 14px/400, `--text-secondary`.
 Button "Open Settings": `nhm-btn nhm-btn--ghost`, opens the settings panel.
 
@@ -320,6 +323,7 @@ Inherited from Phase 1, with Phase 2 additions:
 | Mode banner: Setup | "Setup mode — non-critical alerts suppressed" |
 | Mode banner: Wrap | "Wrap mode — non-critical alerts suppressed" |
 | Gear button aria-label | "Open monitor settings" |
+| Gear button tooltip | "Settings" |
 | Settings panel title | "Monitor Settings" |
 | Settings: community string label | "Community String" |
 | Settings: community string placeholder | "public" |
@@ -332,6 +336,9 @@ Inherited from Phase 1, with Phase 2 additions:
 | Settings: configured list empty | "No switches added manually." |
 | Settings: save CTA | "Save Settings" |
 | Settings: remove item | "Remove" |
+| Settings: save error | "Couldn't save settings. Check your connection and try again." |
+| Settings: add switch error (invalid IP) | "Enter a valid IP address." |
+| Settings: add switch error (duplicate) | "{IP} is already being monitored." |
 | Switch card: port summary | "{N} ports — {N} up — {N} err" |
 | Switch card: SNMP not configured heading | "SNMP not configured" |
 | Switch card: SNMP not configured body | "Enter a community string in Monitor Settings to see port data." |
@@ -362,8 +369,8 @@ Inherited from Phase 1, with Phase 2 additions:
 
 - Clicking gear icon: adds `nhm-settings-panel--open` to panel, adds backdrop to DOM, traps focus inside panel.
 - Clicking backdrop or pressing Escape: removes `nhm-settings-panel--open`, removes backdrop.
-- Saving settings: `POST /audiopatch/network-monitor/api/snmp-settings/` with `{"community_string": "..."}`. On success: close panel, show inline success indicator (brief green border flash on gear button, 0.5s). On error: inline error message below save button (14px/400, `--accent-red`).
-- Adding manual switch: `POST /audiopatch/network-monitor/api/add-switch/` with `{"ip": "...", "label": "..."}`. On success: IP appears in configured switches list within panel. Input fields clear.
+- Saving settings: `POST /audiopatch/network-monitor/api/snmp-settings/` with `{"community_string": "..."}`. On success: close panel, show inline success indicator (brief green border flash on gear button, 0.5s). On error: inline error message below save button (14px/400, `--accent-red`) — copy: "Couldn't save settings. Check your connection and try again."
+- Adding manual switch: `POST /audiopatch/network-monitor/api/add-switch/` with `{"ip": "...", "label": "..."}`. On success: IP appears in configured switches list within panel. Input fields clear. On validation error (invalid IP): inline error below IP input (14px/400, `--accent-red`) — copy: "Enter a valid IP address." On duplicate IP error: inline error below IP input — copy: "{IP} is already being monitored."
 - Focus trap: Tab key cycles focus within panel while open. Escape always closes.
 - `aria-modal="true"` on panel, `role="dialog"`, `aria-label="Monitor Settings"`.
 
@@ -402,6 +409,7 @@ Inherited from Phase 1, with Phase 2 additions:
 - Bandwidth cells: plain text percentage plus screen-reader-only text `<span class="sr-only">({threshold status})</span>` — e.g., "45% (ok)", "85% (warning)", "95% (critical)".
 - Mode banner: `role="status"` so screen readers announce mode changes.
 - All new buttons: visible focus ring via `outline: 2px solid var(--accent-blue); outline-offset: 2px`.
+- Gear icon button: `title="Settings"` provides native tooltip on hover for sighted users; `aria-label="Open monitor settings"` provides full context for screen readers.
 
 `.sr-only` utility class (add once to stylesheet):
 ```css
