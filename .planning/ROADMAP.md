@@ -61,7 +61,11 @@ Plans:
   2. The dashboard identifies which Dante device is the clock master
   3. Per-device clock lock/unlock status is displayed with an advisory label indicating confidence level
   4. Pre-show health check compares discovered Dante devices against the project-defined device list and flags any missing or unexpected devices
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — Dante model fields, migration, DantePoller agent thread
+- [ ] 03-02-PLAN.md — Agent Dante results endpoint, health check endpoint, status view extension
+- [ ] 03-03-PLAN.md — Dashboard Dante UI (cards, ghost cards, advisory, health check panel)
 **UI hint**: yes
 
 ## Progress
@@ -73,4 +77,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | - |
 | 2. Switch SNMP | 0/3 | Planning complete | - |
-| 3. Dante | 0/TBD | Not started | - |
+| 3. Dante | 0/3 | Planning complete | - |
