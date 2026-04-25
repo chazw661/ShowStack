@@ -1880,6 +1880,11 @@ function pollStatus() {
             updateSwitchCards(data.switch_ports, data.snmp_configured !== undefined ? data.snmp_configured : snmpConfigured);
         }
 
+        // Phase 3: Dante card updates
+        if (data.dante_data !== undefined) {
+            updateDanteCards(data.dante_data, data.devices || []);
+        }
+
         // Update agent connection indicator
         const indicator = document.getElementById('nhm-agent-indicator');
         if (indicator) {
@@ -1997,6 +2002,18 @@ function updateRollupBar() {
     const danteEl = document.getElementById('nhm-rollup-dante');
     if (danteEl) danteEl.textContent = domains.dante.online + '/' + domains.dante.total;
     updatePillColor('nhm-pill-dante', 'nhm-rollup-dot-dante', domains.dante);
+    var dantePill = document.getElementById('nhm-pill-dante');
+    if (dantePill && domains.dante.total > 0) {
+        dantePill.classList.remove('nhm-pill--placeholder');
+    }
+    var danteBadge = document.getElementById('nhm-badge-dante');
+    if (danteBadge) {
+        if (domains.dante.total > 0) {
+            danteBadge.textContent = domains.dante.online + '/' + domains.dante.total;
+        } else {
+            danteBadge.textContent = '0/0';
+        }
+    }
 
     const switchEl = document.getElementById('nhm-rollup-switches');
     if (switchEl) switchEl.textContent = domains.switch.online + '/' + domains.switch.total;
@@ -2700,12 +2717,270 @@ function updateSwitchCards(switchPorts, snmpConfiguredFlag) {
     });
 }
 
+// ===== PHASE 3: DANTE CARD RENDERING =====================================
+
+function updateDanteCards(danteData, devices) {
+    /* Update Dante card clock badges and channel counts from poll data.
+       danteData = {deviceId: {dante_device_name, clock_role, tx_channels, rx_channels}}
+       devices = full device list from poll (for creating new cards dynamically)
+    */
+    var grid = document.getElementById('nhm-grid-dante');
+    var advisory = document.getElementById('nhm-dante-advisory');
+    var emptyMsg = document.getElementById('nhm-dante-empty');
+
+    // Count dante devices for empty state
+    var danteDevices = devices.filter(function(d) { return d.domain === 'dante'; });
+    var hasDante = danteDevices.length > 0;
+
+    // Show/hide advisory and empty message
+    if (advisory) advisory.style.setProperty('display', hasDante ? 'block' : 'none', 'important');
+    if (emptyMsg) emptyMsg.style.setProperty('display', hasDante ? 'none' : 'block', 'important');
+
+    // Show/hide health check panel
+    var hcPanel = document.getElementById('nhm-healthcheck');
+    if (hcPanel) hcPanel.style.setProperty('display', hasDante ? 'block' : 'none', 'important');
+
+    // Update existing cards and create new ones
+    danteDevices.forEach(function(dev) {
+        var cardId = 'nhm-device-' + dev.device_id;
+        var card = document.getElementById(cardId);
+        var dd = danteData[String(dev.device_id)] || {};
+
+        if (!card) {
+            // Create new Dante card dynamically
+            card = createDanteCard(dev, dd);
+            // Insert before ghost cards (which are at the end)
+            var firstGhost = grid.querySelector('.nhm-card--ghost');
+            if (firstGhost) {
+                grid.insertBefore(card, firstGhost);
+            } else {
+                grid.appendChild(card);
+            }
+        }
+
+        // Update clock badge
+        var clockRole = dd.clock_role || 'unknown';
+        var badgeEl = document.getElementById('nhm-clock-' + dev.device_id);
+        if (badgeEl) {
+            badgeEl.className = 'nhm-clock-badge nhm-clock-badge--' + clockRole;
+            badgeEl.textContent = clockRole.toUpperCase();
+            badgeEl.setAttribute('aria-label', 'Clock role: ' + clockRole.charAt(0).toUpperCase() + clockRole.slice(1));
+        }
+
+        // Update channel count (collapsed)
+        var chEl = document.getElementById('nhm-channels-' + dev.device_id);
+        if (chEl) {
+            if (dd.tx_channels != null && dd.rx_channels != null) {
+                chEl.textContent = dd.tx_channels + 'x' + dd.rx_channels;
+                chEl.setAttribute('aria-label', 'Channels: ' + dd.tx_channels + ' transmit, ' + dd.rx_channels + ' receive');
+            } else {
+                chEl.textContent = '';
+                chEl.removeAttribute('aria-label');
+            }
+        }
+
+        // Update clock detail (expanded)
+        var clockDetail = document.getElementById('nhm-clock-detail-' + dev.device_id);
+        if (clockDetail) {
+            clockDetail.textContent = clockRole.charAt(0).toUpperCase() + clockRole.slice(1);
+            // Color to match badge
+            if (clockRole === 'master') clockDetail.style.setProperty('color', 'var(--accent-green)', 'important');
+            else if (clockRole === 'locked') clockDetail.style.setProperty('color', 'var(--accent-green)', 'important');
+            else if (clockRole === 'unlocked') clockDetail.style.setProperty('color', 'var(--accent-amber)', 'important');
+            else clockDetail.style.setProperty('color', 'var(--text-dim)', 'important');
+        }
+
+        // Update channel detail (expanded)
+        var chDetail = document.getElementById('nhm-channels-detail-' + dev.device_id);
+        if (chDetail) {
+            if (dd.tx_channels != null && dd.rx_channels != null) {
+                chDetail.textContent = 'TX: ' + dd.tx_channels + ' / RX: ' + dd.rx_channels;
+            } else {
+                chDetail.innerHTML = '&mdash;';
+            }
+        }
+    });
+
+    // Remove cards for devices no longer in the dante list (became inactive)
+    var existingCards = grid.querySelectorAll('.nhm-card:not(.nhm-card--ghost)');
+    var activeIds = new Set(danteDevices.map(function(d) { return 'nhm-device-' + d.device_id; }));
+    existingCards.forEach(function(card) {
+        if (!activeIds.has(card.id)) {
+            card.remove();
+        }
+    });
+}
+
+function createDanteCard(dev, dd) {
+    var clockRole = (dd && dd.clock_role) || 'unknown';
+    var card = document.createElement('div');
+    card.className = 'nhm-card';
+    card.id = 'nhm-device-' + dev.device_id;
+    card.setAttribute('data-domain', 'dante');
+    card.setAttribute('data-status', dev.status || 'unknown');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-expanded', 'false');
+    card.onclick = function() { toggleCard(dev.device_id); };
+    card.onkeydown = function(e) {
+        if (e.key === 'Enter' || e.key === ' ') toggleCard(dev.device_id);
+    };
+
+    var chText = '';
+    if (dd && dd.tx_channels != null && dd.rx_channels != null) {
+        chText = dd.tx_channels + 'x' + dd.rx_channels;
+    }
+
+    card.innerHTML =
+        '<div class="nhm-card-header">' +
+            '<span class="nhm-dot nhm-dot--' + (dev.status || 'unknown') + '" aria-label="' + escapeHtml(dev.label || dev.ip) + ': ' + (dev.status || 'unknown') + '"></span>' +
+            '<span class="nhm-card-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(dev.label || dev.ip) + '</span>' +
+            '<span class="nhm-clock-badge nhm-clock-badge--' + clockRole + '" id="nhm-clock-' + dev.device_id + '" aria-label="Clock role: ' + clockRole.charAt(0).toUpperCase() + clockRole.slice(1) + '">' + clockRole.toUpperCase() + '</span>' +
+            '<span class="nhm-card-channels" id="nhm-channels-' + dev.device_id + '">' + escapeHtml(chText) + '</span>' +
+            '<span class="nhm-card-expand-arrow" aria-hidden="true">&#9660;</span>' +
+        '</div>' +
+        '<div class="nhm-card-detail">' +
+            '<div class="nhm-card-detail-inner">' +
+                '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">IP</span><span class="nhm-card-detail-value">' + escapeHtml(dev.ip) + '</span></div>' +
+                '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Clock</span><span class="nhm-card-detail-value" id="nhm-clock-detail-' + dev.device_id + '">' + clockRole.charAt(0).toUpperCase() + clockRole.slice(1) + '</span></div>' +
+                '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Channels</span><span class="nhm-card-detail-value" id="nhm-channels-detail-' + dev.device_id + '">' + (chText ? 'TX: ' + dd.tx_channels + ' / RX: ' + dd.rx_channels : '&mdash;') + '</span></div>' +
+                '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Last Seen</span><span class="nhm-card-detail-value">' + (dev.last_seen ? new Date(dev.last_seen).toLocaleTimeString() : 'never') + '</span></div>' +
+                '<button class="nhm-card-remove" onclick="event.stopPropagation(); removeDevice(' + dev.device_id + ', \'' + (dev.label || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" aria-label="Remove ' + escapeHtml(dev.label || dev.ip) + ' from monitor">Remove from monitor</button>' +
+            '</div>' +
+        '</div>';
+
+    return card;
+}
+
+// ===== PHASE 3: HEALTH CHECK PANEL =======================================
+
+var healthCheckManualOverride = false;
+
+function runHealthCheck() {
+    var btn = document.getElementById('nhm-hc-recheck');
+    if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
+
+    fetch('/audiopatch/network-monitor/api/health-check/')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.ok) return;
+        renderHealthCheckResults(data);
+        // Auto-expand if issues (D-08), unless user manually toggled
+        if (data.status === 'issues' && !healthCheckManualOverride) {
+            expandHealthCheck(true);
+        } else if (data.status === 'ok' && !healthCheckManualOverride) {
+            expandHealthCheck(false);
+        }
+        healthCheckManualOverride = false;
+        // Render ghost cards for missing devices (D-03)
+        renderGhostCards(data.missing || []);
+    })
+    .catch(function(err) { console.error('Health check error:', err); })
+    .finally(function() {
+        if (btn) { btn.disabled = false; btn.textContent = 'Re-check'; }
+    });
+}
+
+function renderHealthCheckResults(data) {
+    var icon = document.getElementById('nhm-hc-icon');
+    var content = document.getElementById('nhm-hc-content');
+    if (!content) return;
+
+    if (data.status === 'ok') {
+        if (icon) {
+            icon.innerHTML = '&#10004;';
+            icon.className = 'nhm-healthcheck-icon nhm-healthcheck-icon--ok';
+        }
+        content.innerHTML = '<div class="nhm-healthcheck-summary nhm-healthcheck-summary--ok">All ' + data.total_found + ' Dante devices present.</div>';
+    } else {
+        if (icon) {
+            icon.innerHTML = '&#9888;';
+            icon.className = 'nhm-healthcheck-icon nhm-healthcheck-icon--issues';
+        }
+        var html = '';
+        (data.missing || []).forEach(function(name) {
+            html += '<div class="nhm-hc-row">' +
+                '<span class="nhm-hc-dot nhm-hc-dot--missing" aria-label="missing"></span>' +
+                '<span class="nhm-hc-name">' + escapeHtml(name) + '</span>' +
+                '<span class="nhm-hc-desc">&mdash; Missing (expected but not found on network)</span>' +
+            '</div>';
+        });
+        (data.unexpected || []).forEach(function(name) {
+            html += '<div class="nhm-hc-row">' +
+                '<span class="nhm-hc-dot nhm-hc-dot--unexpected" aria-label="unexpected"></span>' +
+                '<span class="nhm-hc-name">' + escapeHtml(name) + '</span>' +
+                '<span class="nhm-hc-desc">&mdash; Unexpected (found on network but not in project)</span>' +
+            '</div>';
+        });
+        content.innerHTML = html;
+    }
+}
+
+function toggleHealthCheck() {
+    healthCheckManualOverride = true;
+    var body = document.getElementById('nhm-healthcheck-body');
+    var isExpanded = body && body.classList.contains('nhm-healthcheck-body--expanded');
+    expandHealthCheck(!isExpanded);
+}
+
+function expandHealthCheck(expand) {
+    var body = document.getElementById('nhm-healthcheck-body');
+    var toggle = document.getElementById('nhm-hc-toggle');
+    var header = document.querySelector('.nhm-healthcheck-header');
+    if (!body) return;
+    if (expand) {
+        body.classList.add('nhm-healthcheck-body--expanded');
+        if (toggle) toggle.innerHTML = '&#9650;';
+        if (header) header.setAttribute('aria-expanded', 'true');
+    } else {
+        body.classList.remove('nhm-healthcheck-body--expanded');
+        if (toggle) toggle.innerHTML = '&#9660;';
+        if (header) header.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(text));
+    return div.innerHTML;
+}
+
+// ===== PHASE 3: GHOST CARDS ==============================================
+
+function renderGhostCards(missingNames) {
+    var grid = document.getElementById('nhm-grid-dante');
+    if (!grid) return;
+
+    // Remove existing ghost cards
+    var existing = grid.querySelectorAll('.nhm-card--ghost');
+    existing.forEach(function(el) { el.remove(); });
+
+    // Create ghost cards for each missing device
+    missingNames.forEach(function(name) {
+        var ghost = document.createElement('div');
+        ghost.className = 'nhm-card nhm-card--ghost';
+        ghost.setAttribute('aria-label', name + ': missing from network');
+
+        ghost.innerHTML =
+            '<div class="nhm-card-header">' +
+                '<span class="nhm-dot nhm-dot--unreachable" aria-label="' + escapeHtml(name) + ': unreachable"></span>' +
+                '<span class="nhm-card-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(name) + '</span>' +
+                '<span class="nhm-clock-badge nhm-clock-badge--unknown" aria-label="Clock role: Unknown">UNKNOWN</span>' +
+                '<span class="nhm-card-expand-arrow" aria-hidden="true">&#9660;</span>' +
+            '</div>';
+
+        grid.appendChild(ghost);
+    });
+}
+
 // ===== BOOT =====
 document.addEventListener('DOMContentLoaded', function() {
     restoreLocalStorageState();
     initRollupFromContext();
     updateShowModeUI(currentShowMode);
     startPolling();
+    // Phase 3: Auto-run health check on page load (D-07)
+    setTimeout(function() { runHealthCheck(); }, 1000);
 });
 </script>
 {% endblock %}
