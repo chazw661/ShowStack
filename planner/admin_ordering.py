@@ -65,6 +65,7 @@ def ordered_get_app_list(request, app_label=None):
         'galaxyoutput',       # Child of Galaxy Processor
         'pollresult',         # Child of MonitorSession/DiscoveredDevice
         'deviceevent',        # Child of MonitorSession/DiscoveredDevice
+        'switchportsnapshot', # Child of MonitorSession/DiscoveredDevice
 
     }
 
@@ -140,11 +141,13 @@ def ordered_get_app_list(request, app_label=None):
         'galaxyinput': 34,
         'galaxyoutput': 35,
 
-        # Network Health Monitor (36-39)
+        # Network Health Monitor (36-41)
         'monitorsession': 36,
         'discovereddevice': 37,
         'pollresult': 38,
         'deviceevent': 39,
+        'projectsnmpconfig': 40,
+        'switchportsnapshot': 41,
     }
     
     for app in app_list:
