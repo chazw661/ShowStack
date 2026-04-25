@@ -47,21 +47,42 @@ except ImportError:
 
 
 async def _async_discover_dante(timeout=3.0):
-    """Discover Dante devices via mDNS using netaudio DanteBrowser."""
+    """Discover Dante devices via mDNS using netaudio DanteBrowser.
+    After mDNS discovery, queries each device for clock status and channel counts."""
     browser = DanteBrowser(mdns_timeout=timeout)
     devices = await browser.get_devices()
+
+    # Query each device for clock status and channel counts (UDP per-device queries)
+    for server_name, device in devices.items():
+        try:
+            await device.get_clocking_status()
+        except Exception:
+            pass  # clock_role stays None if query fails
+        try:
+            await device.get_tx_channels()
+        except Exception:
+            pass
+        try:
+            await device.get_rx_channels()
+        except Exception:
+            pass
+
     results = []
     for server_name, device in devices.items():
-        # Map PTP role to clock_role per D-04 / RESEARCH.md Open Question 3:
-        # "Leader" -> "master", "Follower" -> "locked", None -> "unknown"
-        ptp_role = getattr(device, 'ptp_v1_role', None)
-        if ptp_role == 'Leader':
+        # Map clock_role from get_clocking_status() — populated as
+        # "Leader"/"Follower"/"Boundary Clock" etc. by netaudio parser
+        raw_role = getattr(device, 'clock_role', None) or ''
+        raw_role_lower = raw_role.lower()
+        if 'leader' in raw_role_lower or raw_role_lower == 'master':
             clock_role = 'master'
-        elif ptp_role == 'Follower':
+        elif 'follower' in raw_role_lower or 'locked' in raw_role_lower or 'slave' in raw_role_lower:
             clock_role = 'locked'
+        elif 'unlocked' in raw_role_lower:
+            clock_role = 'unlocked'
         else:
             clock_role = 'unknown'
 
+        # server_name is the Dante device hostname from mDNS
         results.append({
             'name': device.name or server_name,
             'ip': str(device.ipv4) if device.ipv4 else None,

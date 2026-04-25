@@ -2872,8 +2872,6 @@ function runHealthCheck() {
             expandHealthCheck(false);
         }
         healthCheckManualOverride = false;
-        // Render ghost cards for missing devices (D-03)
-        renderGhostCards(data.missing || []);
     })
     .catch(function(err) { console.error('Health check error:', err); })
     .finally(function() {
