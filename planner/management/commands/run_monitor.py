@@ -46,26 +46,42 @@ except ImportError:
     NETAUDIO_AVAILABLE = False
 
 
-async def _async_discover_dante(timeout=3.0):
+async def _async_discover_dante(timeout=3.0, interface_ip=None, log_fn=None):
     """Discover Dante devices via mDNS using netaudio DanteBrowser.
-    After mDNS discovery, queries each device for clock status and channel counts."""
+    After mDNS discovery, queries each device for clock status and channel counts.
+
+    Args:
+        interface_ip: IP of the network interface to bind mDNS discovery to.
+                      Prevents discovering devices on other interfaces (e.g. WiFi).
+        log_fn: Optional callable for logging (receives string messages).
+    """
+    # Restrict mDNS discovery to a specific interface if provided
+    if interface_ip:
+        from netaudio.common.app_config import settings as netaudio_settings
+        netaudio_settings.interface_ip = interface_ip
+
     browser = DanteBrowser(mdns_timeout=timeout)
     devices = await browser.get_devices()
 
     # Query each device for clock status and channel counts (UDP per-device queries)
     for server_name, device in devices.items():
         try:
-            await device.get_clocking_status()
-        except Exception:
-            pass  # clock_role stays None if query fails
+            result = await device.get_clocking_status()
+            if log_fn:
+                log_fn(f'  [Dante] {server_name} clock: {getattr(device, "clock_role", None)} (raw: {result})')
+        except Exception as e:
+            if log_fn:
+                log_fn(f'  [Dante] {server_name} clock query failed: {e}')
         try:
             await device.get_tx_channels()
-        except Exception:
-            pass
+        except Exception as e:
+            if log_fn:
+                log_fn(f'  [Dante] {server_name} tx_channels query failed: {e}')
         try:
             await device.get_rx_channels()
-        except Exception:
-            pass
+        except Exception as e:
+            if log_fn:
+                log_fn(f'  [Dante] {server_name} rx_channels query failed: {e}')
 
     results = []
     for server_name, device in devices.items():
@@ -213,6 +229,8 @@ class Command(BaseCommand):
                             help='Run a network scan before starting polling')
         parser.add_argument('--scan-only', action='store_true',
                             help='Run a network scan and exit (no polling)')
+        parser.add_argument('--dante-interface', type=str, default=None,
+                            help='IP of the Dante network interface (restricts mDNS discovery to this interface)')
 
     def handle(self, *args, **options):
         api_key = options['api_key']
@@ -221,6 +239,7 @@ class Command(BaseCommand):
         base_url = f'{server}/audiopatch/network-monitor/api'
         scan = options['scan'] or options['scan_only']
         scan_only = options['scan_only']
+        self._dante_interface = options.get('dante_interface')
 
         headers = {
             'Authorization': f'Bearer {api_key}',
@@ -513,10 +532,20 @@ class Command(BaseCommand):
             return
 
         DANTE_INTERVAL = 30
+        iface = getattr(self, '_dante_interface', None)
+        if iface:
+            self.stdout.write(f'[Dante] Binding mDNS discovery to interface {iface}')
+        else:
+            self.stdout.write('[Dante] Discovering on all interfaces (use --dante-interface to restrict)')
+
+        def _log(msg):
+            self.stderr.write(msg)
 
         while not stop_event.is_set():
             try:
-                devices = asyncio.run(_async_discover_dante(timeout=3.0))
+                devices = asyncio.run(_async_discover_dante(
+                    timeout=3.0, interface_ip=iface, log_fn=_log,
+                ))
             except Exception as e:
                 self.stderr.write(self.style.WARNING(f'[Dante] Discovery error: {e}'))
                 stop_event.wait(timeout=DANTE_INTERVAL)
