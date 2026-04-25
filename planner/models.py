@@ -4554,6 +4554,11 @@ class MonitorSession(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    show_mode = models.CharField(
+        max_length=10,
+        choices=[('setup', 'Setup'), ('show', 'Show'), ('wrap', 'Wrap')],
+        default='show',
+    )
 
     class Meta:
         ordering = ['-started_at']
@@ -4642,6 +4647,10 @@ class DeviceEvent(models.Model):
         ('OFFLINE', 'Went offline'),
         ('SCAN_STARTED', 'Network scan started'),
         ('MONITOR_STARTED', 'Monitor started'),
+        ('PORT_DOWN', 'Switch port went down'),
+        ('PORT_UP', 'Switch port came up'),
+        ('BW_WARNING', 'Bandwidth threshold exceeded'),
+        ('BW_CRITICAL', 'Bandwidth critical threshold exceeded'),
     ]
     device = models.ForeignKey(DiscoveredDevice, on_delete=models.CASCADE,
                                related_name='events', null=True, blank=True)
@@ -4664,3 +4673,54 @@ class DeviceEvent(models.Model):
             'occurred_at': self.occurred_at.isoformat(),
             'details': self.details,
         }
+
+
+# -- Phase 2 models ---------------------------------------------------------
+
+class ProjectSNMPConfig(models.Model):
+    """Per-project SNMP v2c community string (per D-02). One row per project."""
+    project = models.OneToOneField(
+        'Project', on_delete=models.CASCADE,
+        related_name='snmp_config',
+    )
+    community_string = models.CharField(
+        max_length=255, default='public',
+        help_text="SNMP v2c community string for all switches in this project.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"SNMP config for {self.project}"
+
+
+class SwitchPortSnapshot(models.Model):
+    """Latest port-level SNMP data per poll cycle.
+    update_or_create(device, session, port_index) — one row per port, replaced each cycle."""
+    device = models.ForeignKey(
+        'DiscoveredDevice', on_delete=models.CASCADE,
+        related_name='port_snapshots',
+    )
+    session = models.ForeignKey(
+        'MonitorSession', on_delete=models.CASCADE,
+        related_name='port_snapshots',
+    )
+    port_index = models.PositiveIntegerField()
+    port_description = models.CharField(max_length=100, blank=True)
+    oper_status = models.CharField(
+        max_length=10,
+        choices=[('up', 'Up'), ('down', 'Down'), ('unknown', 'Unknown')],
+        default='unknown',
+    )
+    speed_mbps = models.PositiveIntegerField(null=True, blank=True)
+    bandwidth_pct = models.FloatField(null=True, blank=True)
+    error_count = models.PositiveBigIntegerField(default=0)
+    polled_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('device', 'session', 'port_index')]
+        indexes = [
+            models.Index(fields=['device', 'session']),
+        ]
+
+    def __str__(self):
+        return f"{self.device} port {self.port_index} ({self.oper_status})"
