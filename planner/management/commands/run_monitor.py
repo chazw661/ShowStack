@@ -37,6 +37,44 @@ try:
 except ImportError:
     PYSNMP_AVAILABLE = False
 
+# ── Dante mDNS discovery (module-level, called via asyncio.run) ──────────────
+
+try:
+    from netaudio.dante.browser import DanteBrowser
+    NETAUDIO_AVAILABLE = True
+except ImportError:
+    NETAUDIO_AVAILABLE = False
+
+
+async def _async_discover_dante(timeout=3.0):
+    """Discover Dante devices via mDNS using netaudio DanteBrowser."""
+    browser = DanteBrowser(mdns_timeout=timeout)
+    devices = await browser.get_devices()
+    results = []
+    for server_name, device in devices.items():
+        # Map PTP role to clock_role per D-04 / RESEARCH.md Open Question 3:
+        # "Leader" -> "master", "Follower" -> "locked", None -> "unknown"
+        ptp_role = getattr(device, 'ptp_v1_role', None)
+        if ptp_role == 'Leader':
+            clock_role = 'master'
+        elif ptp_role == 'Follower':
+            clock_role = 'locked'
+        else:
+            clock_role = 'unknown'
+
+        results.append({
+            'name': device.name or server_name,
+            'ip': str(device.ipv4) if device.ipv4 else None,
+            'server_name': server_name,
+            'model_id': getattr(device, 'model_id', '') or '',
+            'sample_rate': getattr(device, 'sample_rate', None),
+            'mac_address': getattr(device, 'mac_address', '') or '',
+            'tx_count': getattr(device, 'tx_count', None),
+            'rx_count': getattr(device, 'rx_count', None),
+            'clock_role': clock_role,
+        })
+    return results
+
 IF_MIB_ROOTS = {
     'oper_status':   '1.3.6.1.2.1.2.2.1.8',
     'high_speed':    '1.3.6.1.2.1.31.1.1.1.15',
@@ -228,7 +266,7 @@ class Command(BaseCommand):
                 return
 
         # ── Step 3: Start polling threads ──
-        self.stdout.write(f'\nStarting polling. ICMP every {interval}s, SNMP every 30s. Press Ctrl+C to stop.')
+        self.stdout.write(f'\nStarting polling. ICMP every {interval}s, SNMP every 30s, Dante every 30s. Press Ctrl+C to stop.')
 
         stop_event = threading.Event()
 
@@ -242,9 +280,15 @@ class Command(BaseCommand):
             args=(stop_event, base_url, headers),
             daemon=True, name='SNMPPoller',
         )
+        dante_thread = threading.Thread(
+            target=self._dante_loop,
+            args=(stop_event, base_url, headers),
+            daemon=True, name='DantePoller',
+        )
 
         icmp_thread.start()
         snmp_thread.start()
+        dante_thread.start()
 
         try:
             while not stop_event.is_set():
@@ -255,6 +299,7 @@ class Command(BaseCommand):
 
         icmp_thread.join(timeout=5)
         snmp_thread.join(timeout=5)
+        dante_thread.join(timeout=5)
 
         # Shutdown
         try:
@@ -437,6 +482,55 @@ class Command(BaseCommand):
             self.stderr.write(self.style.WARNING('[SNMP] Lost connection. Retrying next cycle...'))
         except Exception as e:
             self.stderr.write(self.style.WARNING(f'[SNMP] Push error: {e}'))
+
+    def _dante_loop(self, stop_event, base_url, headers):
+        """Dante mDNS discovery thread — discovers devices every 30 seconds."""
+        if not NETAUDIO_AVAILABLE:
+            self.stderr.write(self.style.WARNING(
+                'netaudio not installed -- Dante discovery disabled. Install: pip install "netaudio==0.2.4"'
+            ))
+            return
+
+        DANTE_INTERVAL = 30
+
+        while not stop_event.is_set():
+            try:
+                devices = asyncio.run(_async_discover_dante(timeout=3.0))
+            except Exception as e:
+                self.stderr.write(self.style.WARNING(f'[Dante] Discovery error: {e}'))
+                stop_event.wait(timeout=DANTE_INTERVAL)
+                continue
+
+            if devices:
+                self._push_dante_results(base_url, headers, devices)
+
+            stop_event.wait(timeout=DANTE_INTERVAL)
+
+    def _push_dante_results(self, base_url, headers, results):
+        """POST /api/dante-results/ — push Dante mDNS discovery data."""
+        try:
+            resp = http_requests.post(
+                f'{base_url}/dante-results/',
+                headers=headers,
+                json={'results': results},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                events = data.get('events', [])
+                for ev in events:
+                    etype = ev.get('type', '')
+                    name = ev.get('device_name', '')
+                    if etype == 'DANTE_DISCOVERED':
+                        self.stdout.write(self.style.SUCCESS(f'  [Dante] Discovered: {name}'))
+                    elif etype == 'DANTE_LOST':
+                        self.stderr.write(self.style.WARNING(f'  [Dante] Lost: {name}'))
+            else:
+                self.stderr.write(self.style.WARNING(f'[Dante] Push failed ({resp.status_code})'))
+        except http_requests.ConnectionError:
+            self.stderr.write(self.style.WARNING('[Dante] Lost connection. Retrying next cycle...'))
+        except Exception as e:
+            self.stderr.write(self.style.WARNING(f'[Dante] Push error: {e}'))
 
     def _scan_all_nics(self):
         """Scan all active NICs for responding devices."""
