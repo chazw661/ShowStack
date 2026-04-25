@@ -1059,30 +1059,6 @@
     font-size: 14px; color: var(--accent-red);
     margin-top: 4px; display: none;
 }
-.nhm-settings-list {
-    padding: 0 16px;
-    list-style: none; margin: 0;
-}
-.nhm-settings-list-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px; color: var(--text-primary);
-}
-.nhm-settings-list-item:last-child { border-bottom: none; }
-.nhm-settings-list-remove {
-    background: none; border: none;
-    color: var(--accent-red);
-    font-size: 11px; font-weight: 700;
-    text-transform: uppercase;
-    cursor: pointer;
-}
-.nhm-settings-list-empty {
-    padding: 0 16px 12px;
-    font-size: 14px; color: var(--text-dim);
-}
 .nhm-settings-footer {
     padding: 16px;
     margin-top: auto;
@@ -1626,24 +1602,6 @@
       <input type="text" id="nhm-community-string" class="nhm-input" placeholder="public">
       <div class="nhm-settings-hint">Shared by all switches in this project.</div>
     </div>
-
-    <div class="nhm-settings-section-label">Manual Switch Entry</div>
-    <div class="nhm-settings-field">
-      <label for="nhm-switch-ip">Switch IP Address</label>
-      <input type="text" id="nhm-switch-ip" class="nhm-input" placeholder="192.168.1.1">
-      <div class="nhm-error" id="nhm-switch-ip-error"></div>
-    </div>
-    <div class="nhm-settings-field">
-      <label for="nhm-switch-label">Label (optional)</label>
-      <input type="text" id="nhm-switch-label" class="nhm-input" placeholder="">
-    </div>
-    <div class="nhm-settings-field">
-      <button class="nhm-btn--primary" onclick="addSwitch()" style="width:100%">Add Switch</button>
-    </div>
-
-    <div class="nhm-settings-section-label">Configured Switches</div>
-    <ul class="nhm-settings-list" id="nhm-switch-list"></ul>
-    <div class="nhm-settings-list-empty" id="nhm-switch-list-empty">No switches added manually.</div>
 
     <div class="nhm-settings-footer">
       <button class="nhm-btn--primary" onclick="saveSettings()">Save Settings</button>
@@ -2387,7 +2345,6 @@ function updateShowModeUI(mode) {
 function openSettings() {
     document.getElementById('nhm-settings-panel').classList.add('nhm-settings-panel--open');
     document.getElementById('nhm-settings-backdrop').classList.add('nhm-settings-backdrop--visible');
-    refreshSwitchList();
     document.getElementById('nhm-community-string').focus();
 }
 
@@ -2434,86 +2391,6 @@ function saveSettings() {
     .catch(function() {
         errEl.textContent = "Couldn't save settings. Check your connection and try again.";
         errEl.style.setProperty('display', 'block', 'important');
-    });
-}
-
-function addSwitch() {
-    var ip = document.getElementById('nhm-switch-ip').value.trim();
-    var label = document.getElementById('nhm-switch-label').value.trim();
-    var errEl = document.getElementById('nhm-switch-ip-error');
-    errEl.style.setProperty('display', 'none', 'important');
-    if (!ip) {
-        errEl.textContent = 'Enter a valid IP address.';
-        errEl.style.setProperty('display', 'block', 'important');
-        return;
-    }
-    fetch('/audiopatch/network-monitor/add-switch/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify({ip: ip, label: label}),
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.ok) {
-            document.getElementById('nhm-switch-ip').value = '';
-            document.getElementById('nhm-switch-label').value = '';
-            refreshSwitchList();
-        } else {
-            errEl.textContent = data.error || 'Enter a valid IP address.';
-            errEl.style.setProperty('display', 'block', 'important');
-        }
-    })
-    .catch(function() {
-        errEl.textContent = "Couldn't add switch. Check your connection.";
-        errEl.style.setProperty('display', 'block', 'important');
-    });
-}
-
-function refreshSwitchList() {
-    fetch('/audiopatch/network-monitor/status/')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (!data.ok) return;
-        var list = document.getElementById('nhm-switch-list');
-        var empty = document.getElementById('nhm-switch-list-empty');
-        var switches = (data.devices || []).filter(function(d) { return d.domain === 'switch'; });
-        list.innerHTML = '';
-        if (switches.length === 0) {
-            empty.style.setProperty('display', 'block', 'important');
-        } else {
-            empty.style.setProperty('display', 'none', 'important');
-            switches.forEach(function(sw) {
-                var li = document.createElement('li');
-                li.className = 'nhm-settings-list-item';
-                var nameSpan = document.createElement('span');
-                nameSpan.textContent = sw.label || sw.ip;
-                var ipSpan = document.createElement('span');
-                ipSpan.style.setProperty('color', 'var(--text-dim)', 'important');
-                ipSpan.style.setProperty('font-size', '12px', 'important');
-                ipSpan.textContent = ' ' + sw.ip;
-                nameSpan.appendChild(ipSpan);
-                var removeBtn = document.createElement('button');
-                removeBtn.className = 'nhm-settings-list-remove';
-                removeBtn.textContent = 'Remove';
-                removeBtn.addEventListener('click', function() { removeSwitch(sw.device_id, sw.label || sw.ip); });
-                li.appendChild(nameSpan);
-                li.appendChild(removeBtn);
-                list.appendChild(li);
-            });
-        }
-    });
-}
-
-function removeSwitch(deviceId, name) {
-    if (!confirm('Remove ' + name + '? This switch will no longer be monitored by SNMP.')) return;
-    fetch('/audiopatch/network-monitor/devices/' + deviceId + '/remove/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
-        body: JSON.stringify({}),
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.ok) refreshSwitchList();
     });
 }
 
