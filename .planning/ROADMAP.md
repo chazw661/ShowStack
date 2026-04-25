@@ -47,9 +47,9 @@ Plans:
   5. Show mode toggle (Setup / Show / Wrap) suppresses non-critical alerts when set to Setup or Wrap
 **Plans:** 3 plans
 Plans:
-- [ ] 02-01-PLAN.md — Models, migration, admin, API endpoints, URL wiring
-- [ ] 02-02-PLAN.md — Agent SNMP thread restructure and pysnmp integration
-- [ ] 02-03-PLAN.md — Dashboard template (settings panel, show mode, switch cards, port tables)
+- [x] 02-01-PLAN.md — Models, migration, admin, API endpoints, URL wiring
+- [x] 02-02-PLAN.md — Agent SNMP thread restructure and pysnmp integration
+- [x] 02-03-PLAN.md — Dashboard template (settings panel, show mode, switch cards, port tables)
 **UI hint**: yes
 
 ### Phase 3: Dante
