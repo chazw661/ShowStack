@@ -1155,6 +1155,183 @@
     white-space: nowrap;
     border: 0;
 }
+
+/* -- Phase 3: Dante clock role badges ------------------------------------ */
+.nhm-clock-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    line-height: 1.0;
+    padding: 4px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.nhm-clock-badge--master {
+    background: var(--accent-green);
+    color: var(--bg-base);
+}
+.nhm-clock-badge--locked {
+    background: rgba(0, 230, 118, 0.12);
+    color: var(--accent-green);
+    border: 1px solid rgba(0, 230, 118, 0.3);
+}
+.nhm-clock-badge--unlocked {
+    background: rgba(255, 171, 0, 0.12);
+    color: var(--accent-amber);
+    border: 1px solid rgba(255, 171, 0, 0.3);
+}
+.nhm-clock-badge--unknown {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+
+/* -- Phase 3: Dante card channel count ----------------------------------- */
+.nhm-card-channels {
+    font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* -- Phase 3: Ghost cards (missing project devices) ---------------------- */
+.nhm-card--ghost {
+    opacity: 0.45;
+    pointer-events: none;
+    cursor: default;
+}
+.nhm-card--ghost .nhm-card-expand-arrow {
+    display: none;
+}
+
+/* -- Phase 3: Advisory footnote ------------------------------------------ */
+.nhm-dante-advisory {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+.nhm-dante-advisory[role="note"] {
+    /* Ensure it inherits properly */
+}
+
+/* -- Phase 3: Health check panel ----------------------------------------- */
+.nhm-healthcheck {
+    margin-bottom: 8px;
+}
+.nhm-healthcheck-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+}
+.nhm-healthcheck-header:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+.nhm-healthcheck-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-dim);
+    flex: 1;
+}
+.nhm-healthcheck-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+.nhm-healthcheck-icon--ok { color: var(--accent-green); }
+.nhm-healthcheck-icon--issues { color: var(--accent-red); }
+.nhm-healthcheck-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+.nhm-healthcheck-body.nhm-healthcheck-body--expanded {
+    max-height: 400px;
+}
+.nhm-healthcheck-summary {
+    padding: 8px 16px;
+    font-size: 14px;
+}
+.nhm-healthcheck-summary--ok {
+    color: var(--accent-green);
+}
+.nhm-hc-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 4px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.nhm-hc-row:nth-child(odd) {
+    background: var(--bg-raised);
+}
+.nhm-hc-row:nth-child(even) {
+    background: var(--bg-card);
+}
+.nhm-hc-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.nhm-hc-dot--missing { background: var(--accent-red); }
+.nhm-hc-dot--unexpected { background: var(--accent-amber); }
+.nhm-hc-name {
+    font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+.nhm-hc-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* -- Phase 3: Re-check button -------------------------------------------- */
+.nhm-btn--recheck {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.nhm-btn--recheck:hover {
+    border-color: var(--accent-blue);
+    color: var(--text-primary);
+}
+.nhm-btn--recheck:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+.nhm-btn--recheck:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* -- Phase 3: Health check toggle arrow ---------------------------------- */
+.nhm-healthcheck-toggle {
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    transition: transform 0.25s ease;
+}
 </style>
 {% endblock %}
 
@@ -1365,17 +1542,42 @@
       </div>
     </div>
 
-    <!-- Dante section (Phase 2 placeholder) -->
+    <!-- Dante section (Phase 3) -->
     <div class="nhm-domain" id="nhm-domain-dante" data-domain="dante">
       <div class="nhm-domain-header" tabindex="0" role="button"
            aria-expanded="true" aria-controls="nhm-domain-body-dante"
            onclick="toggleDomain('dante', this)"
            onkeydown="if(event.key==='Enter'||event.key===' '){toggleDomain('dante', this);}">
         <span class="nhm-domain-name">Dante</span>
-        <span class="nhm-domain-badge" id="nhm-badge-dante">Phase 2</span>
+        <span class="nhm-domain-badge" id="nhm-badge-dante">0/0</span>
         <span class="nhm-domain-toggle" aria-hidden="true" id="nhm-toggle-dante">&#9650;</span>
       </div>
       <div class="nhm-domain-body" id="nhm-domain-body-dante">
+
+        <!-- Advisory footnote (D-05) -->
+        <div class="nhm-dante-advisory" role="note" id="nhm-dante-advisory" style="display:none;">
+          Clock status is advisory &mdash; verify on hardware before showtime.
+        </div>
+
+        <!-- Health check panel (D-07, D-08) -->
+        <div class="nhm-healthcheck" id="nhm-healthcheck" style="display:none;">
+          <div class="nhm-healthcheck-header" tabindex="0" role="button"
+               aria-expanded="false" aria-controls="nhm-healthcheck-body"
+               onclick="toggleHealthCheck()"
+               onkeydown="if(event.key==='Enter'||event.key===' '){toggleHealthCheck();}">
+            <span class="nhm-healthcheck-icon" id="nhm-hc-icon" aria-hidden="true">&#10004;</span>
+            <span class="nhm-healthcheck-title">Pre-Show Health Check</span>
+            <button class="nhm-btn--recheck" id="nhm-hc-recheck"
+                    onclick="event.stopPropagation(); runHealthCheck()"
+                    aria-label="Re-check Dante health">Re-check</button>
+            <span class="nhm-healthcheck-toggle" id="nhm-hc-toggle" aria-hidden="true">&#9660;</span>
+          </div>
+          <div class="nhm-healthcheck-body" id="nhm-healthcheck-body">
+            <div id="nhm-hc-content"></div>
+          </div>
+        </div>
+
+        <!-- Dante device card grid -->
         <div class="nhm-card-grid" id="nhm-grid-dante">
           {% for device in devices %}{% if device.domain == 'dante' %}
           <div class="nhm-card" id="nhm-device-{{ device.id }}"
@@ -1387,10 +1589,11 @@
             <div class="nhm-card-header">
               <span class="nhm-dot nhm-dot--{{ device.last_known_state|default:'unknown' }}"
                     aria-label="{{ device.label }}: {{ device.last_known_state|default:'unknown' }}"></span>
-              <span class="nhm-card-name">{{ device.label|default:device.ip_address }}</span>
-              <span class="nhm-card-latency">
-                {% if device.last_latency_ms %}{{ device.last_latency_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}
-              </span>
+              <span class="nhm-card-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ device.label|default:device.ip_address }}</span>
+              <span class="nhm-clock-badge nhm-clock-badge--unknown" id="nhm-clock-{{ device.id }}"
+                    aria-label="Clock role: Unknown">UNKNOWN</span>
+              <span class="nhm-card-channels" id="nhm-channels-{{ device.id }}"></span>
+              <span class="nhm-card-expand-arrow" aria-hidden="true">&#9660;</span>
             </div>
             <div class="nhm-card-detail">
               <div class="nhm-card-detail-inner">
@@ -1399,12 +1602,16 @@
                   <span class="nhm-card-detail-value">{{ device.ip_address }}</span>
                 </div>
                 <div class="nhm-card-detail-row">
-                  <span class="nhm-card-detail-label">Last Seen</span>
-                  <span class="nhm-card-detail-value">{% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}</span>
+                  <span class="nhm-card-detail-label">Clock</span>
+                  <span class="nhm-card-detail-value" id="nhm-clock-detail-{{ device.id }}">Unknown</span>
                 </div>
                 <div class="nhm-card-detail-row">
-                  <span class="nhm-card-detail-label">Status</span>
-                  <span class="nhm-card-status-label">{{ device.last_known_state|default:'unknown' }}</span>
+                  <span class="nhm-card-detail-label">Channels</span>
+                  <span class="nhm-card-detail-value" id="nhm-channels-detail-{{ device.id }}">&mdash;</span>
+                </div>
+                <div class="nhm-card-detail-row">
+                  <span class="nhm-card-detail-label">Last Seen</span>
+                  <span class="nhm-card-detail-value">{% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}</span>
                 </div>
                 <button class="nhm-card-remove"
                         onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
@@ -1415,10 +1622,11 @@
             </div>
           </div>
           {% endif %}{% endfor %}
-          <div class="nhm-domain-empty" id="nhm-dante-placeholder">
-            Dante monitoring is coming in Phase 2. Devices assigned to "Dante" domain will appear here.
+          <div class="nhm-domain-empty" id="nhm-dante-empty" style="display:none;">
+            No Dante devices discovered. Ensure the monitor agent is running and your laptop is on the Dante network.
           </div>
         </div>
+
       </div>
     </div>
 
