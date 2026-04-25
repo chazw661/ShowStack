@@ -1559,23 +1559,6 @@
           Clock status is advisory &mdash; verify on hardware before showtime.
         </div>
 
-        <!-- Health check panel (D-07, D-08) -->
-        <div class="nhm-healthcheck" id="nhm-healthcheck" style="display:none;">
-          <div class="nhm-healthcheck-header" tabindex="0" role="button"
-               aria-expanded="false" aria-controls="nhm-healthcheck-body"
-               onclick="toggleHealthCheck()"
-               onkeydown="if(event.key==='Enter'||event.key===' '){toggleHealthCheck();}">
-            <span class="nhm-healthcheck-icon" id="nhm-hc-icon" aria-hidden="true">&#10004;</span>
-            <span class="nhm-healthcheck-title">Pre-Show Health Check</span>
-            <button class="nhm-btn--recheck" id="nhm-hc-recheck"
-                    onclick="event.stopPropagation(); runHealthCheck()"
-                    aria-label="Re-check Dante health">Re-check</button>
-            <span class="nhm-healthcheck-toggle" id="nhm-hc-toggle" aria-hidden="true">&#9660;</span>
-          </div>
-          <div class="nhm-healthcheck-body" id="nhm-healthcheck-body">
-            <div id="nhm-hc-content"></div>
-          </div>
-        </div>
 
         <!-- Dante device card grid -->
         <div class="nhm-card-grid" id="nhm-grid-dante">
@@ -2736,9 +2719,6 @@ function updateDanteCards(danteData, devices) {
     if (advisory) advisory.style.setProperty('display', hasDante ? 'block' : 'none', 'important');
     if (emptyMsg) emptyMsg.style.setProperty('display', hasDante ? 'none' : 'block', 'important');
 
-    // Show/hide health check panel
-    var hcPanel = document.getElementById('nhm-healthcheck');
-    if (hcPanel) hcPanel.style.setProperty('display', hasDante ? 'block' : 'none', 'important');
 
     // Update existing cards and create new ones
     danteDevices.forEach(function(dev) {
@@ -2749,13 +2729,7 @@ function updateDanteCards(danteData, devices) {
         if (!card) {
             // Create new Dante card dynamically
             card = createDanteCard(dev, dd);
-            // Insert before ghost cards (which are at the end)
-            var firstGhost = grid.querySelector('.nhm-card--ghost');
-            if (firstGhost) {
-                grid.insertBefore(card, firstGhost);
-            } else {
-                grid.appendChild(card);
-            }
+            grid.appendChild(card);
         }
 
         // Update clock badge
@@ -2852,123 +2826,10 @@ function createDanteCard(dev, dd) {
     return card;
 }
 
-// ===== PHASE 3: HEALTH CHECK PANEL =======================================
-
-var healthCheckManualOverride = false;
-
-function runHealthCheck() {
-    var btn = document.getElementById('nhm-hc-recheck');
-    if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
-
-    fetch('/audiopatch/network-monitor/api/health-check/')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (!data.ok) return;
-        renderHealthCheckResults(data);
-        // Auto-expand if issues (D-08), unless user manually toggled
-        if (data.status === 'issues' && !healthCheckManualOverride) {
-            expandHealthCheck(true);
-        } else if (data.status === 'ok' && !healthCheckManualOverride) {
-            expandHealthCheck(false);
-        }
-        healthCheckManualOverride = false;
-    })
-    .catch(function(err) { console.error('Health check error:', err); })
-    .finally(function() {
-        if (btn) { btn.disabled = false; btn.textContent = 'Re-check'; }
-    });
-}
-
-function renderHealthCheckResults(data) {
-    var icon = document.getElementById('nhm-hc-icon');
-    var content = document.getElementById('nhm-hc-content');
-    if (!content) return;
-
-    if (data.status === 'ok') {
-        if (icon) {
-            icon.innerHTML = '&#10004;';
-            icon.className = 'nhm-healthcheck-icon nhm-healthcheck-icon--ok';
-        }
-        content.innerHTML = '<div class="nhm-healthcheck-summary nhm-healthcheck-summary--ok">All ' + data.total_found + ' Dante devices present.</div>';
-    } else {
-        if (icon) {
-            icon.innerHTML = '&#9888;';
-            icon.className = 'nhm-healthcheck-icon nhm-healthcheck-icon--issues';
-        }
-        var html = '';
-        (data.missing || []).forEach(function(name) {
-            html += '<div class="nhm-hc-row">' +
-                '<span class="nhm-hc-dot nhm-hc-dot--missing" aria-label="missing"></span>' +
-                '<span class="nhm-hc-name">' + escapeHtml(name) + '</span>' +
-                '<span class="nhm-hc-desc">&mdash; Missing (expected but not found on network)</span>' +
-            '</div>';
-        });
-        (data.unexpected || []).forEach(function(name) {
-            html += '<div class="nhm-hc-row">' +
-                '<span class="nhm-hc-dot nhm-hc-dot--unexpected" aria-label="unexpected"></span>' +
-                '<span class="nhm-hc-name">' + escapeHtml(name) + '</span>' +
-                '<span class="nhm-hc-desc">&mdash; Unexpected (found on network but not in project)</span>' +
-            '</div>';
-        });
-        content.innerHTML = html;
-    }
-}
-
-function toggleHealthCheck() {
-    healthCheckManualOverride = true;
-    var body = document.getElementById('nhm-healthcheck-body');
-    var isExpanded = body && body.classList.contains('nhm-healthcheck-body--expanded');
-    expandHealthCheck(!isExpanded);
-}
-
-function expandHealthCheck(expand) {
-    var body = document.getElementById('nhm-healthcheck-body');
-    var toggle = document.getElementById('nhm-hc-toggle');
-    var header = document.querySelector('.nhm-healthcheck-header');
-    if (!body) return;
-    if (expand) {
-        body.classList.add('nhm-healthcheck-body--expanded');
-        if (toggle) toggle.innerHTML = '&#9650;';
-        if (header) header.setAttribute('aria-expanded', 'true');
-    } else {
-        body.classList.remove('nhm-healthcheck-body--expanded');
-        if (toggle) toggle.innerHTML = '&#9660;';
-        if (header) header.setAttribute('aria-expanded', 'false');
-    }
-}
-
 function escapeHtml(text) {
     var div = document.createElement('div');
     div.appendChild(document.createTextNode(text));
     return div.innerHTML;
-}
-
-// ===== PHASE 3: GHOST CARDS ==============================================
-
-function renderGhostCards(missingNames) {
-    var grid = document.getElementById('nhm-grid-dante');
-    if (!grid) return;
-
-    // Remove existing ghost cards
-    var existing = grid.querySelectorAll('.nhm-card--ghost');
-    existing.forEach(function(el) { el.remove(); });
-
-    // Create ghost cards for each missing device
-    missingNames.forEach(function(name) {
-        var ghost = document.createElement('div');
-        ghost.className = 'nhm-card nhm-card--ghost';
-        ghost.setAttribute('aria-label', name + ': missing from network');
-
-        ghost.innerHTML =
-            '<div class="nhm-card-header">' +
-                '<span class="nhm-dot nhm-dot--unreachable" aria-label="' + escapeHtml(name) + ': unreachable"></span>' +
-                '<span class="nhm-card-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(name) + '</span>' +
-                '<span class="nhm-clock-badge nhm-clock-badge--unknown" aria-label="Clock role: Unknown">UNKNOWN</span>' +
-                '<span class="nhm-card-expand-arrow" aria-hidden="true">&#9660;</span>' +
-            '</div>';
-
-        grid.appendChild(ghost);
-    });
 }
 
 // ===== BOOT =====
@@ -2977,8 +2838,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initRollupFromContext();
     updateShowModeUI(currentShowMode);
     startPolling();
-    // Phase 3: Auto-run health check on page load (D-07)
-    setTimeout(function() { runHealthCheck(); }, 1000);
 });
 </script>
 {% endblock %}
