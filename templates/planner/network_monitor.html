@@ -905,6 +905,280 @@
     gap: 8px;
     justify-content: flex-end;
 }
+
+/* -- Phase 2: Show Mode Toggle ------------------------------------------ */
+.nhm-mode-toggle {
+    display: inline-flex;
+    height: 36px;
+    margin-left: auto;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+.nhm-mode-btn {
+    padding: 0 16px;
+    width: 56px;
+    height: 36px;
+    background: var(--bg-raised);
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.nhm-mode-btn:last-child { border-right: none; }
+.nhm-mode-btn:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    z-index: 1;
+}
+.nhm-mode-btn--active-show {
+    background: rgba(0, 230, 118, 0.12);
+    border-color: rgba(0, 230, 118, 0.35);
+    color: var(--accent-green);
+}
+.nhm-mode-btn--active-amber {
+    background: rgba(255, 171, 0, 0.12);
+    border-color: rgba(255, 171, 0, 0.35);
+    color: var(--accent-amber);
+}
+
+/* -- Phase 2: Mode Banner ------------------------------------------------ */
+.nhm-mode-banner {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-left: 4px solid var(--accent-amber);
+    background: rgba(255, 171, 0, 0.08);
+    font-size: 14px;
+    color: var(--accent-amber);
+}
+.nhm-mode-banner--visible { display: flex; }
+.nhm-mode-banner-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent-amber);
+    flex-shrink: 0;
+}
+
+/* -- Phase 2: Settings Panel --------------------------------------------- */
+.nhm-settings-btn {
+    width: 32px; height: 32px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.nhm-settings-btn:hover {
+    border-color: var(--border-bright);
+    color: var(--accent-blue);
+}
+.nhm-settings-btn:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+.nhm-settings-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 1400;
+}
+.nhm-settings-backdrop--visible { display: block; }
+.nhm-settings-panel {
+    position: fixed;
+    top: 0; right: 0;
+    height: 100vh; width: 320px;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    box-shadow: -4px 0 16px rgba(0,0,0,0.4);
+    z-index: 1500;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+.nhm-settings-panel--open { transform: translateX(0); }
+
+.nhm-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+}
+.nhm-settings-title {
+    font-size: 16px; font-weight: 700;
+    color: var(--text-primary);
+}
+.nhm-settings-close {
+    width: 32px; height: 32px;
+    background: none; border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+}
+.nhm-settings-close:hover { color: var(--text-primary); }
+.nhm-settings-close:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+.nhm-settings-section-label {
+    padding: 16px 16px 8px;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-dim);
+}
+.nhm-settings-field {
+    padding: 0 16px 12px;
+}
+.nhm-settings-field label {
+    display: block;
+    font-size: 14px; color: var(--text-primary);
+    margin-bottom: 4px;
+}
+.nhm-settings-hint {
+    font-size: 12px; color: var(--text-dim);
+    margin-top: 4px;
+}
+.nhm-settings-field .nhm-error {
+    font-size: 14px; color: var(--accent-red);
+    margin-top: 4px; display: none;
+}
+.nhm-settings-list {
+    padding: 0 16px;
+    list-style: none; margin: 0;
+}
+.nhm-settings-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px; color: var(--text-primary);
+}
+.nhm-settings-list-item:last-child { border-bottom: none; }
+.nhm-settings-list-remove {
+    background: none; border: none;
+    color: var(--accent-red);
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.nhm-settings-list-empty {
+    padding: 0 16px 12px;
+    font-size: 14px; color: var(--text-dim);
+}
+.nhm-settings-footer {
+    padding: 16px;
+    margin-top: auto;
+}
+
+/* -- Phase 2: Switch Card Enhancements ----------------------------------- */
+.nhm-card-port-summary {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+    padding-right: 8px;
+}
+.nhm-card-expand-arrow {
+    font-size: 12px;
+    color: var(--text-dim);
+    transition: transform 0.25s ease;
+}
+.nhm-card--expanded .nhm-card-expand-arrow {
+    transform: rotate(180deg);
+}
+
+/* -- Phase 2: Port Table ------------------------------------------------- */
+.nhm-port-table-wrap {
+    padding: 12px;
+}
+.nhm-port-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+.nhm-port-table th {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    color: var(--text-dim);
+    text-align: left;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--border);
+}
+.nhm-port-table th:nth-child(1) { width: 40px; }
+.nhm-port-table th:nth-child(2) { width: 36px; }
+.nhm-port-table th:nth-child(3) { width: 72px; }
+
+.nhm-port-row {
+    min-height: 36px;
+    border-bottom: 1px solid var(--border);
+    cursor: default;
+}
+.nhm-port-row:last-child { border-bottom: none; }
+.nhm-port-row:nth-child(odd) { background: var(--bg-raised); }
+.nhm-port-row:nth-child(even) { background: var(--bg-card); }
+
+.nhm-port-cell {
+    padding: 8px 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+.nhm-port-cell--num { color: var(--text-dim); }
+.nhm-port-cell--status { text-align: center; }
+.nhm-port-cell--status .nhm-dot {
+    width: 12px; height: 12px;
+    display: inline-block;
+}
+
+.nhm-bw--ok   { color: var(--accent-green); }
+.nhm-bw--warn { color: var(--accent-amber); }
+.nhm-bw--crit { color: var(--accent-red); }
+
+/* -- Phase 2: SNMP State Prompts ----------------------------------------- */
+.nhm-port-table--unconfigured {
+    padding: 20px;
+    text-align: center;
+}
+.nhm-port-table--unconfigured h4 {
+    font-size: 14px; font-weight: 400;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+}
+.nhm-port-table--unconfigured p {
+    font-size: 14px; color: var(--text-dim);
+    margin: 0 0 12px;
+}
+
+/* -- Phase 2: Accessibility ---------------------------------------------- */
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+}
 </style>
 {% endblock %}
 
