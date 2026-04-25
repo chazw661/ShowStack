@@ -9,15 +9,19 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Device Monitoring
 
-- [ ] **MON-01**: Dante devices auto-discovered on the network via mDNS without manual IP entry
+- [x] **MON-01
+**: Dante devices auto-discovered on the network via mDNS without manual IP entry
 - [ ] **MON-02**: All project devices show up/down reachability status via ICMP ping
 - [ ] **MON-03**: Monitor targets pull IP addresses from existing ShowStack device records (Console, Device, Amp) via FK
-- [ ] **MON-04**: Pre-show health check compares discovered devices against project-defined device list
+- [x] **MON-04
+**: Pre-show health check compares discovered devices against project-defined device list
 
 ### Dante
 
-- [ ] **DAN-01**: Dashboard identifies the Dante clock master device on the network
-- [ ] **DAN-02**: Per-device clock lock/unlock status displayed (advisory — depends on netaudio protocol confidence)
+- [x] **DAN-01
+**: Dashboard identifies the Dante clock master device on the network
+- [x] **DAN-02
+**: Per-device clock lock/unlock status displayed (advisory — depends on netaudio protocol confidence)
 
 ### Switch Monitoring
 
