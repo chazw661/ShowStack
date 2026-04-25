@@ -721,22 +721,27 @@ def agent_dante_results(request):
             )
             events_created.append(ev.as_sse_dict())
 
-    # Mark Dante devices NOT in this discovery cycle as potentially lost.
-    # ICMP is authoritative for reachability; this only fires a DANTE_LOST event
-    # to signal the device disappeared from Dante discovery.
+    # Clean up duplicate Dante records: same device name but different IP.
+    # Keeps the record matching the current discovery IP, removes stale duplicates.
+    seen_names = {}  # name -> current ip
+    for entry in results:
+        name = entry.get('name', '')
+        ip = entry.get('ip')
+        if name and ip:
+            seen_names[name] = ip
+    for name, current_ip in seen_names.items():
+        DiscoveredDevice.objects.filter(
+            project=project, domain='dante', dante_device_name=name,
+        ).exclude(ip_address=current_ip).delete()
+
+    # Deactivate Dante devices NOT in this discovery cycle
     stale_dante = DiscoveredDevice.objects.filter(
         project=project, domain='dante', is_active=True,
     ).exclude(ip_address__in=seen_ips)
 
     for device in stale_dante:
-        if device.dante_device_name and device.last_known_state == 'online':
-            ev = DeviceEvent.objects.create(
-                device=device,
-                session=session,
-                event_type='DANTE_LOST',
-                details={'name': device.dante_device_name, 'ip': device.ip_address},
-            )
-            events_created.append(ev.as_sse_dict())
+        device.is_active = False
+        device.save(update_fields=['is_active'])
 
     return JsonResponse({'ok': True, 'events': events_created})
 

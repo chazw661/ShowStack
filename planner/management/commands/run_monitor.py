@@ -83,10 +83,12 @@ async def _async_discover_dante(timeout=3.0, interface_ip=None, log_fn=None):
             if log_fn:
                 log_fn(f'  [Dante] {server_name} rx_channels query failed: {e}')
 
-    results = []
+    # Build results, deduplicating by device name.
+    # Same physical device may appear with multiple IPs (link-local + routed).
+    # Prefer 169.254.x.x (primary Dante network) over routed IPs.
+    seen_names = {}  # name -> result dict
     for server_name, device in devices.items():
-        # Map clock_role from get_clocking_status() — populated as
-        # "Leader"/"Follower"/"Boundary Clock" etc. by netaudio parser
+        # Map clock_role from get_clocking_status()
         raw_role = getattr(device, 'clock_role', None) or ''
         raw_role_lower = raw_role.lower()
         if 'leader' in raw_role_lower or raw_role_lower == 'master':
@@ -98,10 +100,11 @@ async def _async_discover_dante(timeout=3.0, interface_ip=None, log_fn=None):
         else:
             clock_role = 'unknown'
 
-        # server_name is the Dante device hostname from mDNS
-        results.append({
-            'name': device.name or server_name,
-            'ip': str(device.ipv4) if device.ipv4 else None,
+        name = device.name or server_name
+        ip = str(device.ipv4) if device.ipv4 else None
+        entry = {
+            'name': name,
+            'ip': ip,
             'server_name': server_name,
             'model_id': getattr(device, 'model_id', '') or '',
             'sample_rate': getattr(device, 'sample_rate', None),
@@ -109,8 +112,17 @@ async def _async_discover_dante(timeout=3.0, interface_ip=None, log_fn=None):
             'tx_count': getattr(device, 'tx_count', None),
             'rx_count': getattr(device, 'rx_count', None),
             'clock_role': clock_role,
-        })
-    return results
+        }
+
+        if name in seen_names:
+            # Keep the link-local IP (169.254.x.x) over routed IPs
+            existing_ip = seen_names[name]['ip'] or ''
+            if ip and ip.startswith('169.254.') and not existing_ip.startswith('169.254.'):
+                seen_names[name] = entry
+        else:
+            seen_names[name] = entry
+
+    return list(seen_names.values())
 
 IF_MIB_ROOTS = {
     'oper_status':   '1.3.6.1.2.1.2.2.1.8',
