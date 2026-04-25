@@ -263,6 +263,15 @@ urlpatterns = [
     path('network-monitor/api/poll-results/', views_monitor.agent_poll_results, name='agent_poll_results'),
     path('network-monitor/api/remove-device/', views_monitor.agent_remove_device, name='agent_remove_device'),
     path('network-monitor/api/devices/', views_monitor.agent_device_list, name='agent_device_list'),
+
+    # Network Health Monitor — Phase 2: SNMP (dashboard)
+    path('network-monitor/snmp-settings/', views_monitor.dashboard_snmp_settings, name='dashboard_snmp_settings'),
+    path('network-monitor/add-switch/', views_monitor.dashboard_add_switch, name='dashboard_add_switch'),
+    path('network-monitor/show-mode/', views_monitor.dashboard_set_show_mode, name='dashboard_set_show_mode'),
+
+    # Network Health Monitor — Phase 2: SNMP (agent)
+    path('network-monitor/api/snmp-settings/', views_monitor.agent_snmp_settings, name='agent_snmp_settings'),
+    path('network-monitor/api/snmp-results/', views_monitor.agent_snmp_results, name='agent_snmp_results'),
 ]
 
 from django.conf import settings

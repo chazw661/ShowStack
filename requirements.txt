@@ -21,3 +21,4 @@ crcmod
 icmplib>=3.0,<4.0
 netifaces>=0.11
 requests>=2.33,<3.0
+pysnmp>=7.1,<8.0

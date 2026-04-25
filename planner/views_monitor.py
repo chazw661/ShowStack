@@ -12,6 +12,7 @@
 #   - Dashboard views: Django session auth (@login_required)
 #   - Agent API endpoints: Project agent_api_key (Bearer token)
 
+import ipaddress
 import json
 import time
 
@@ -25,6 +26,7 @@ from django.utils import timezone
 
 from .models import (
     Project, MonitorSession, DiscoveredDevice, PollResult, DeviceEvent,
+    ProjectSNMPConfig, SwitchPortSnapshot,
 )
 
 
@@ -117,6 +119,8 @@ def network_monitor_view(request):
         'has_project': current_project is not None,
         'monitor_running': active_session is not None,
         'agent_api_key': str(current_project.agent_api_key) if current_project else '',
+        'snmp_configured': ProjectSNMPConfig.objects.filter(project=current_project).exists() if current_project else False,
+        'show_mode': active_session.show_mode if active_session else 'show',
     }
     return render(request, 'planner/network_monitor.html', context)
 
@@ -164,6 +168,25 @@ def monitor_status_view(request):
         'devices': [d.as_status_dict() for d in devices],
         'events': new_events,
         'last_event_id': new_events[-1]['id'] if new_events else last_event_id,
+        'show_mode': session.show_mode if session else 'show',
+        'switch_ports': {
+            str(device.pk): [
+                {
+                    'port_index': snap.port_index,
+                    'port_description': snap.port_description,
+                    'oper_status': snap.oper_status,
+                    'speed_mbps': snap.speed_mbps,
+                    'bandwidth_pct': snap.bandwidth_pct,
+                    'error_count': snap.error_count,
+                }
+                for snap in device.port_snapshots.filter(session=session).order_by('port_index')
+            ]
+            for device in devices
+            if device.domain == 'switch'
+        } if session else {},
+        'snmp_configured': ProjectSNMPConfig.objects.filter(
+            project=current_project
+        ).exists() if current_project else False,
     })
 
 
@@ -491,3 +514,205 @@ def agent_device_list(request):
         'ok': True,
         'devices': list(devices),
     })
+
+
+# ──────────────────────────────────────────────
+# Phase 2: SNMP endpoints
+# ──────────────────────────────────────────────
+
+@csrf_exempt
+def agent_snmp_settings(request):
+    """Agent fetches SNMP community string and switch IPs.
+    GET /audiopatch/network-monitor/api/snmp-settings/
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    try:
+        config = ProjectSNMPConfig.objects.get(project=project)
+        community_string = config.community_string
+    except ProjectSNMPConfig.DoesNotExist:
+        return JsonResponse({'ok': True, 'configured': False, 'community_string': None, 'switches': []})
+
+    switches = list(
+        DiscoveredDevice.objects.filter(
+            project=project, domain='switch', is_active=True
+        ).values('pk', 'ip_address', 'label')
+    )
+    return JsonResponse({
+        'ok': True,
+        'configured': True,
+        'community_string': community_string,
+        'switches': [{'id': s['pk'], 'ip': s['ip_address'], 'label': s['label']} for s in switches],
+    })
+
+
+@csrf_exempt
+@require_POST
+def agent_snmp_results(request):
+    """Agent pushes SNMP port data for switches.
+    POST /audiopatch/network-monitor/api/snmp-results/
+    Body: {"results": [{"device_id": N, "error": null|"string", "ports": [{"port_index": N,
+           "port_description": "...", "oper_status": "up"|"down", "speed_mbps": N,
+           "bandwidth_pct": N.N, "error_count": N}, ...]}]}
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    session = MonitorSession.objects.filter(project=project, ended_at__isnull=True).first()
+    if not session:
+        return JsonResponse({'error': 'No active session.'}, status=400)
+
+    data = json.loads(request.body)
+    results = data.get('results', [])
+    suppress_non_critical = session.show_mode in ('setup', 'wrap')
+    events_created = []
+
+    for switch_data in results:
+        device_id = switch_data.get('device_id')
+        device = DiscoveredDevice.objects.filter(pk=device_id, project=project, is_active=True).first()
+        if not device:
+            continue
+
+        snmp_error = switch_data.get('error')
+        if snmp_error:
+            # SNMP unreachable — skip port snapshots
+            continue
+
+        ports = switch_data.get('ports', [])
+        for port_data in ports:
+            port_idx = port_data.get('port_index')
+            if port_idx is None:
+                continue
+
+            oper_status = port_data.get('oper_status', 'unknown')
+            speed = port_data.get('speed_mbps')
+            bw_pct = port_data.get('bandwidth_pct')
+            err_count = port_data.get('error_count', 0)
+            port_desc = port_data.get('port_description', '')
+
+            # Get previous snapshot for change detection
+            prev = SwitchPortSnapshot.objects.filter(
+                device=device, session=session, port_index=port_idx
+            ).first()
+            prev_status = prev.oper_status if prev else None
+
+            SwitchPortSnapshot.objects.update_or_create(
+                device=device, session=session, port_index=port_idx,
+                defaults={
+                    'port_description': port_desc,
+                    'oper_status': oper_status,
+                    'speed_mbps': speed,
+                    'bandwidth_pct': bw_pct,
+                    'error_count': err_count,
+                },
+            )
+
+            # Non-critical events — suppressed in setup/wrap per D-08
+            if not suppress_non_critical:
+                if prev_status and prev_status != oper_status:
+                    event_type = 'PORT_UP' if oper_status == 'up' else 'PORT_DOWN'
+                    ev = DeviceEvent.objects.create(
+                        device=device, session=session,
+                        event_type=event_type,
+                        details={'port_index': port_idx, 'port_description': port_desc},
+                    )
+                    events_created.append(ev.as_sse_dict())
+                if bw_pct is not None and bw_pct > 90:
+                    ev = DeviceEvent.objects.create(
+                        device=device, session=session,
+                        event_type='BW_CRITICAL',
+                        details={'port_index': port_idx, 'bandwidth_pct': bw_pct},
+                    )
+                    events_created.append(ev.as_sse_dict())
+                elif bw_pct is not None and bw_pct > 70:
+                    ev = DeviceEvent.objects.create(
+                        device=device, session=session,
+                        event_type='BW_WARNING',
+                        details={'port_index': port_idx, 'bandwidth_pct': bw_pct},
+                    )
+                    events_created.append(ev.as_sse_dict())
+
+    return JsonResponse({'ok': True, 'events': events_created})
+
+
+@login_required
+@require_POST
+def dashboard_snmp_settings(request):
+    """Save SNMP community string for the project (per D-01, D-02)."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    data = json.loads(request.body)
+    community_string = data.get('community_string', '').strip()
+    if not community_string:
+        return JsonResponse({'error': 'Community string cannot be empty'}, status=400)
+    if len(community_string) > 255:
+        return JsonResponse({'error': 'Community string too long (max 255 chars)'}, status=400)
+
+    config, _ = ProjectSNMPConfig.objects.get_or_create(project=current_project)
+    config.community_string = community_string
+    config.save(update_fields=['community_string', 'updated_at'])
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_POST
+def dashboard_add_switch(request):
+    """Manually add a switch IP to monitoring (per D-04)."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    data = json.loads(request.body)
+    ip = data.get('ip', '').strip()
+    label = data.get('label', '').strip()
+
+    # Validate IP
+    try:
+        ipaddress.ip_address(ip)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Enter a valid IP address.'}, status=400)
+
+    # Check duplicate
+    existing = DiscoveredDevice.objects.filter(project=current_project, ip_address=ip).first()
+    if existing:
+        if existing.is_active and existing.domain == 'switch':
+            return JsonResponse({'error': f'{ip} is already being monitored.'}, status=400)
+        # Reactivate and reassign to switch domain
+        existing.domain = 'switch'
+        existing.is_active = True
+        existing.label = label or existing.label
+        existing.save(update_fields=['domain', 'is_active', 'label'])
+        return JsonResponse({'ok': True, 'device_id': existing.pk, 'ip': ip, 'label': existing.label})
+
+    device = DiscoveredDevice.objects.create(
+        project=current_project, ip_address=ip, label=label,
+        domain='switch', is_active=True,
+    )
+    return JsonResponse({'ok': True, 'device_id': device.pk, 'ip': ip, 'label': device.label})
+
+
+@login_required
+@require_POST
+def dashboard_set_show_mode(request):
+    """Set the show mode (Setup/Show/Wrap) on the active MonitorSession (per D-07, D-08)."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    data = json.loads(request.body)
+    mode = data.get('mode', '').strip().lower()
+    if mode not in ('setup', 'show', 'wrap'):
+        return JsonResponse({'error': 'Invalid mode. Use: setup, show, wrap'}, status=400)
+
+    session = MonitorSession.objects.filter(project=current_project, ended_at__isnull=True).first()
+    if not session:
+        return JsonResponse({'error': 'No active monitor session.'}, status=400)
+
+    session.show_mode = mode
+    session.save(update_fields=['show_mode'])
+    return JsonResponse({'ok': True, 'show_mode': mode})

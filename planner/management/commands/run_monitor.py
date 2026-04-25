@@ -15,14 +15,129 @@ Network Health Monitor dashboard). All network scanning and ICMP polling
 happens locally on this machine. Results are POSTed to the ShowStack API.
 """
 import time
-import signal
 import ipaddress
 import subprocess
 import json
+import threading
+import asyncio
 
 import requests as http_requests  # renamed to avoid shadowing Django requests
 
 from django.core.management.base import BaseCommand
+
+
+# ── SNMP polling functions (module-level, called via asyncio.run) ─────────────
+
+try:
+    from pysnmp.hlapi.asyncio import (
+        SnmpEngine, CommunityData, UdpTransportTarget,
+        ContextData, ObjectType, ObjectIdentity, walk_cmd,
+    )
+    PYSNMP_AVAILABLE = True
+except ImportError:
+    PYSNMP_AVAILABLE = False
+
+IF_MIB_ROOTS = {
+    'oper_status':   '1.3.6.1.2.1.2.2.1.8',
+    'high_speed':    '1.3.6.1.2.1.31.1.1.1.15',
+    'hc_in_octets':  '1.3.6.1.2.1.31.1.1.1.6',
+    'hc_out_octets': '1.3.6.1.2.1.31.1.1.1.10',
+    'in_errors':     '1.3.6.1.2.1.2.2.1.14',
+    'if_descr':      '1.3.6.1.2.1.2.2.1.2',
+}
+
+
+async def _async_walk_subtree(snmp_engine, community, transport, oid_root):
+    """Walk one IF-MIB subtree via GETNEXT/walk_cmd.
+    Returns {port_index: value_string} or None on error."""
+    rows = {}
+    try:
+        async for (err_indication, err_status, err_index, var_binds) in walk_cmd(
+            snmp_engine,
+            CommunityData(community),
+            transport,
+            ContextData(),
+            ObjectType(ObjectIdentity(oid_root)),
+            lexicographicMode=False,
+        ):
+            if err_indication or err_status:
+                return None
+            for name, val in var_binds:
+                oid_str = str(name)
+                port_idx = int(oid_str.split('.')[-1])
+                rows[port_idx] = val.prettyPrint()
+    except Exception:
+        return None
+    return rows
+
+
+async def _async_poll_switch(ip, community):
+    """Poll all IF-MIB subtrees for a single switch.
+    Returns {port_idx: {field: val}} or None if SNMP unreachable."""
+    snmp_engine = SnmpEngine()
+    try:
+        transport = await UdpTransportTarget.create((ip, 161), timeout=5, retries=1)
+
+        tables = {}
+        for field_name, oid_root in IF_MIB_ROOTS.items():
+            result = await _async_walk_subtree(snmp_engine, community, transport, oid_root)
+            if result is None and field_name == 'oper_status':
+                # Cannot even get port status — switch is SNMP-unreachable
+                return None
+            if result is not None:
+                tables[field_name] = result
+
+        # Merge tables into per-port dicts
+        ports = {}
+        oper_table = tables.get('oper_status', {})
+        for port_idx in oper_table:
+            oper_val = oper_table[port_idx]
+            # ifOperStatus: '1'=up, '2'=down
+            oper_status = 'up' if str(oper_val) == '1' else 'down'
+            speed_raw = tables.get('high_speed', {}).get(port_idx, '0')
+            speed_mbps = int(speed_raw) if str(speed_raw).isdigit() else 0
+            in_octets = int(tables.get('hc_in_octets', {}).get(port_idx, '0') or '0')
+            out_octets = int(tables.get('hc_out_octets', {}).get(port_idx, '0') or '0')
+            in_errors = int(tables.get('in_errors', {}).get(port_idx, '0') or '0')
+            port_descr = str(tables.get('if_descr', {}).get(port_idx, ''))
+
+            ports[port_idx] = {
+                'oper_status': oper_status,
+                'speed_mbps': speed_mbps,
+                'hc_in_octets': in_octets,
+                'hc_out_octets': out_octets,
+                'in_errors': in_errors,
+                'port_description': port_descr,
+            }
+        return ports
+    finally:
+        snmp_engine.closeDispatcher()
+
+
+async def _async_poll_all_switches(switches, community):
+    """Poll all switches. Returns list of per-switch result dicts."""
+    results = []
+    for sw in switches:
+        port_data = await _async_poll_switch(sw['ip'], community)
+        results.append({
+            'device_id': sw['id'],
+            'ip': sw['ip'],
+            'ports': port_data,  # None if SNMP unreachable
+        })
+    return results
+
+
+def _compute_bandwidth_pct(curr_in, prev_in, curr_out, prev_out, prev_ts, curr_ts, speed_mbps):
+    """RFC 2863 bandwidth utilization from counter deltas. Returns 0.0-100.0 or None."""
+    interval = curr_ts - prev_ts
+    if interval <= 0 or not speed_mbps:
+        return None
+    delta_in = (curr_in - prev_in) % (2 ** 64)
+    delta_out = (curr_out - prev_out) % (2 ** 64)
+    link_bps = speed_mbps * 1_000_000
+    pct = (max(delta_in, delta_out) * 8 / (link_bps * interval)) * 100
+    # Use 2 decimal places to preserve small values that round to 0 with 1dp
+    return min(round(pct, 2), 100.0)
 
 
 class Command(BaseCommand):
@@ -112,21 +227,47 @@ class Command(BaseCommand):
                 self.stdout.write('Scan complete. Exiting (--scan-only).')
                 return
 
-        # ── Step 3: Polling loop ──
-        self.stdout.write(f'\nStarting ICMP polling (interval={interval}s). Press Ctrl+C to stop.')
+        # ── Step 3: Start polling threads ──
+        self.stdout.write(f'\nStarting polling. ICMP every {interval}s, SNMP every 30s. Press Ctrl+C to stop.')
 
-        running = True
+        stop_event = threading.Event()
 
-        def handle_signal(sig, frame):
-            nonlocal running
-            running = False
+        icmp_thread = threading.Thread(
+            target=self._icmp_loop,
+            args=(stop_event, base_url, headers, interval),
+            daemon=True, name='ICMPPoller',
+        )
+        snmp_thread = threading.Thread(
+            target=self._snmp_loop,
+            args=(stop_event, base_url, headers),
+            daemon=True, name='SNMPPoller',
+        )
 
-        signal.signal(signal.SIGINT, handle_signal)
-        signal.signal(signal.SIGTERM, handle_signal)
+        icmp_thread.start()
+        snmp_thread.start()
 
-        while running:
+        try:
+            while not stop_event.is_set():
+                stop_event.wait(timeout=1)
+        except KeyboardInterrupt:
+            self.stdout.write('\nShutting down...')
+            stop_event.set()
+
+        icmp_thread.join(timeout=5)
+        snmp_thread.join(timeout=5)
+
+        # Shutdown
+        try:
+            http_requests.post(f'{base_url}/stop/', headers=headers,
+                               json={}, timeout=5)
+        except Exception:
+            pass
+        self.stdout.write(self.style.SUCCESS('Monitor agent stopped.'))
+
+    def _icmp_loop(self, stop_event, base_url, headers, interval):
+        """ICMP polling — existing logic moved from flat while-loop."""
+        while not stop_event.is_set():
             poll_results = self._poll_devices(base_url, headers)
-
             if poll_results:
                 try:
                     resp = http_requests.post(
@@ -138,20 +279,15 @@ class Command(BaseCommand):
                     if resp.status_code == 200:
                         result = resp.json()
                         events = result.get('events', [])
-                        # Print state changes
                         for ev in events:
                             etype = ev.get('type', '')
                             name = ev.get('device_name', ev.get('device_id', ''))
                             if etype == 'OFFLINE':
-                                self.stderr.write(self.style.ERROR(f'  ✗ {name} OFFLINE'))
+                                self.stderr.write(self.style.ERROR(f'  OFFLINE: {name}'))
                             elif etype == 'ONLINE':
-                                self.stdout.write(self.style.SUCCESS(f'  ✓ {name} ONLINE'))
-
-                        # Check if dashboard requested a re-scan
+                                self.stdout.write(self.style.SUCCESS(f'  ONLINE: {name}'))
                         if result.get('scan_requested'):
-                            self.stdout.write(self.style.WARNING(
-                                '\n⚡ Re-scan requested from dashboard...'
-                            ))
+                            self.stdout.write(self.style.WARNING('\nRe-scan requested from dashboard...'))
                             discovered = self._scan_all_nics()
                             if discovered:
                                 self.stdout.write(f'Found {len(discovered)} devices')
@@ -162,30 +298,145 @@ class Command(BaseCommand):
                                     timeout=30,
                                 )
                     else:
-                        self.stderr.write(self.style.WARNING(
-                            f'Poll push failed ({resp.status_code})'
-                        ))
+                        self.stderr.write(self.style.WARNING(f'Poll push failed ({resp.status_code})'))
                 except http_requests.ConnectionError:
-                    self.stderr.write(self.style.WARNING(
-                        'Lost connection to ShowStack. Retrying next cycle...'
-                    ))
+                    self.stderr.write(self.style.WARNING('Lost connection to ShowStack. Retrying next cycle...'))
                 except Exception as e:
                     self.stderr.write(self.style.WARNING(f'Error: {e}'))
 
-            # Wait for next cycle
-            for _ in range(interval * 10):  # check running every 0.1s
-                if not running:
-                    break
-                time.sleep(0.1)
+            # Wait with stop_event check
+            stop_event.wait(timeout=interval)
 
-        # ── Shutdown ──
-        self.stdout.write('\nShutting down...')
+    def _snmp_loop(self, stop_event, base_url, headers):
+        """SNMP polling thread — polls switch-domain devices every 30 seconds."""
+        if not PYSNMP_AVAILABLE:
+            self.stderr.write(self.style.WARNING(
+                'pysnmp not installed — SNMP polling disabled. Install: pip install "pysnmp>=7.1,<8.0"'
+            ))
+            return
+
+        SNMP_INTERVAL = 30
+        prev_counters = {}  # {(device_id, port_idx): {'in': N, 'out': N, 'ts': float}}
+
+        while not stop_event.is_set():
+            snmp_settings = self._fetch_snmp_settings(base_url, headers)
+            if not snmp_settings or not snmp_settings.get('configured'):
+                stop_event.wait(timeout=SNMP_INTERVAL)
+                continue
+
+            community = snmp_settings['community_string']
+            switches = snmp_settings.get('switches', [])
+            if not switches:
+                stop_event.wait(timeout=SNMP_INTERVAL)
+                continue
+
+            # Poll all switches via asyncio.run (safe — this thread has no event loop)
+            try:
+                raw_results = asyncio.run(_async_poll_all_switches(switches, community))
+            except Exception as e:
+                self.stderr.write(self.style.WARNING(f'[SNMP] Poll error: {e}'))
+                stop_event.wait(timeout=SNMP_INTERVAL)
+                continue
+
+            # Process results: compute bandwidth from deltas, build push payload
+            now = time.time()
+            push_results = []
+            for sw_result in raw_results:
+                device_id = sw_result['device_id']
+                port_data = sw_result['ports']
+
+                if port_data is None:
+                    # SNMP unreachable
+                    push_results.append({
+                        'device_id': device_id,
+                        'error': 'SNMP unreachable',
+                        'ports': [],
+                    })
+                    self.stderr.write(self.style.WARNING(
+                        f'  [SNMP] {sw_result["ip"]}: unreachable'
+                    ))
+                    continue
+
+                ports_payload = []
+                for port_idx, pdata in sorted(port_data.items()):
+                    # Compute bandwidth from counter deltas
+                    counter_key = (device_id, port_idx)
+                    prev = prev_counters.get(counter_key)
+                    bw_pct = None
+                    if prev:
+                        bw_pct = _compute_bandwidth_pct(
+                            pdata['hc_in_octets'], prev['in'],
+                            pdata['hc_out_octets'], prev['out'],
+                            prev['ts'], now,
+                            pdata['speed_mbps'],
+                        )
+                    # Store current counters for next cycle
+                    prev_counters[counter_key] = {
+                        'in': pdata['hc_in_octets'],
+                        'out': pdata['hc_out_octets'],
+                        'ts': now,
+                    }
+
+                    ports_payload.append({
+                        'port_index': port_idx,
+                        'port_description': pdata.get('port_description', ''),
+                        'oper_status': pdata['oper_status'],
+                        'speed_mbps': pdata['speed_mbps'],
+                        'bandwidth_pct': bw_pct,
+                        'error_count': pdata['in_errors'],
+                    })
+
+                push_results.append({
+                    'device_id': device_id,
+                    'error': None,
+                    'ports': ports_payload,
+                })
+
+            # Push to Django API
+            if push_results:
+                self._push_snmp_results(base_url, headers, push_results)
+
+            stop_event.wait(timeout=SNMP_INTERVAL)
+
+    def _fetch_snmp_settings(self, base_url, headers):
+        """GET /api/snmp-settings/ — returns community string + switch IP list."""
         try:
-            http_requests.post(f'{base_url}/stop/', headers=headers,
-                               json={}, timeout=5)
+            resp = http_requests.get(
+                f'{base_url}/snmp-settings/',
+                headers=headers, timeout=10,
+            )
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception:
-            pass
-        self.stdout.write(self.style.SUCCESS('Monitor agent stopped.'))
+            return None
+
+    def _push_snmp_results(self, base_url, headers, results):
+        """POST /api/snmp-results/ — push port data for all switches."""
+        try:
+            resp = http_requests.post(
+                f'{base_url}/snmp-results/',
+                headers=headers,
+                json={'results': results},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                events = data.get('events', [])
+                for ev in events:
+                    etype = ev.get('type', '')
+                    name = ev.get('device_name', ev.get('device_id', ''))
+                    port = ev.get('details', {}).get('port_index', '')
+                    if etype == 'PORT_DOWN':
+                        self.stderr.write(self.style.WARNING(f'  [SNMP] {name} port {port} DOWN'))
+                    elif etype == 'PORT_UP':
+                        self.stdout.write(self.style.SUCCESS(f'  [SNMP] {name} port {port} UP'))
+            else:
+                self.stderr.write(self.style.WARNING(f'[SNMP] Push failed ({resp.status_code})'))
+        except http_requests.ConnectionError:
+            self.stderr.write(self.style.WARNING('[SNMP] Lost connection. Retrying next cycle...'))
+        except Exception as e:
+            self.stderr.write(self.style.WARNING(f'[SNMP] Push error: {e}'))
 
     def _scan_all_nics(self):
         """Scan all active NICs for responding devices."""
