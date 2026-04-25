@@ -272,6 +272,12 @@ urlpatterns = [
     # Network Health Monitor — Phase 2: SNMP (agent)
     path('network-monitor/api/snmp-settings/', views_monitor.agent_snmp_settings, name='agent_snmp_settings'),
     path('network-monitor/api/snmp-results/', views_monitor.agent_snmp_results, name='agent_snmp_results'),
+
+    # Network Health Monitor — Phase 3: Dante (dashboard)
+    path('network-monitor/api/health-check/', views_monitor.health_check_view, name='health_check'),
+
+    # Network Health Monitor — Phase 3: Dante (agent)
+    path('network-monitor/api/dante-results/', views_monitor.agent_dante_results, name='agent_dante_results'),
 ]
 
 from django.conf import settings
