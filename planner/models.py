@@ -4579,6 +4579,12 @@ class DiscoveredDevice(models.Model):
         ('offline', 'Offline'),
         ('unknown', 'Unknown'),
     ]
+    CLOCK_ROLE_CHOICES = [
+        ('master', 'Master'),
+        ('locked', 'Locked'),
+        ('unlocked', 'Unlocked'),
+        ('unknown', 'Unknown'),
+    ]
     project = models.ForeignKey('Project', on_delete=models.CASCADE,
                                 related_name='discovered_devices')
     label = models.CharField(max_length=100, blank=True)
@@ -4589,6 +4595,20 @@ class DiscoveredDevice(models.Model):
     last_known_state = models.CharField(max_length=10, choices=STATE_CHOICES, default='unknown')
     last_seen = models.DateTimeField(null=True, blank=True)
     discovered_at = models.DateTimeField(auto_now_add=True)
+
+    # Phase 3: Dante-specific fields
+    dante_device_name = models.CharField(max_length=200, blank=True,
+        help_text="Device name from Dante mDNS discovery (may differ from label)")
+    clock_role = models.CharField(max_length=20, choices=CLOCK_ROLE_CHOICES, default='unknown',
+        help_text="PTP clock role: master, locked, unlocked, or unknown (advisory)")
+    tx_channel_count = models.PositiveIntegerField(null=True, blank=True,
+        help_text="Dante transmit channel count from protocol query")
+    rx_channel_count = models.PositiveIntegerField(null=True, blank=True,
+        help_text="Dante receive channel count from protocol query")
+    dante_model_id = models.CharField(max_length=50, blank=True,
+        help_text="Dante hardware model identifier from mDNS")
+    dante_mac_address = models.CharField(max_length=20, blank=True,
+        help_text="Dante interface MAC address from mDNS")
 
     class Meta:
         unique_together = [('project', 'ip_address')]
@@ -4610,7 +4630,7 @@ class DiscoveredDevice(models.Model):
         return 'unknown'
 
     def as_status_dict(self):
-        return {
+        d = {
             'device_id': self.pk,
             'label': self.label or self.ip_address,
             'ip': self.ip_address,
@@ -4619,6 +4639,14 @@ class DiscoveredDevice(models.Model):
             'consecutive_failures': self.consecutive_failures,
             'last_seen': self.last_seen.isoformat() if self.last_seen else None,
         }
+        if self.domain == 'dante':
+            d.update({
+                'dante_device_name': self.dante_device_name,
+                'clock_role': self.clock_role,
+                'tx_channels': self.tx_channel_count,
+                'rx_channels': self.rx_channel_count,
+            })
+        return d
 
 
 class PollResult(models.Model):
@@ -4651,6 +4679,8 @@ class DeviceEvent(models.Model):
         ('PORT_UP', 'Switch port came up'),
         ('BW_WARNING', 'Bandwidth threshold exceeded'),
         ('BW_CRITICAL', 'Bandwidth critical threshold exceeded'),
+        ('DANTE_DISCOVERED', 'Dante device discovered'),
+        ('DANTE_LOST', 'Dante device lost'),
     ]
     device = models.ForeignKey(DiscoveredDevice, on_delete=models.CASCADE,
                                related_name='events', null=True, blank=True)
