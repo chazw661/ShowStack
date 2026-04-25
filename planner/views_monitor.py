@@ -27,6 +27,7 @@ from django.utils import timezone
 from .models import (
     Project, MonitorSession, DiscoveredDevice, PollResult, DeviceEvent,
     ProjectSNMPConfig, SwitchPortSnapshot,
+    Console, Device, Amp,
 )
 
 
@@ -184,6 +185,16 @@ def monitor_status_view(request):
             for device in devices
             if device.domain == 'switch'
         } if session else {},
+        'dante_data': {
+            str(device.pk): {
+                'dante_device_name': device.dante_device_name,
+                'clock_role': device.clock_role,
+                'tx_channels': device.tx_channel_count,
+                'rx_channels': device.rx_channel_count,
+            }
+            for device in devices
+            if device.domain == 'dante'
+        },
         'snmp_configured': ProjectSNMPConfig.objects.filter(
             project=current_project
         ).exists() if current_project else False,
@@ -636,6 +647,147 @@ def agent_snmp_results(request):
                     events_created.append(ev.as_sse_dict())
 
     return JsonResponse({'ok': True, 'events': events_created})
+
+
+# ──────────────────────────────────────────────
+# Phase 3: Dante endpoints
+# ──────────────────────────────────────────────
+
+@csrf_exempt
+@require_POST
+def agent_dante_results(request):
+    """Agent pushes Dante mDNS discovery data.
+    POST /audiopatch/network-monitor/api/dante-results/
+    Body: {"results": [{"name": "...", "ip": "...", "clock_role": "...", ...}, ...]}
+    """
+    project, err = _authenticate_agent(request)
+    if err:
+        return err
+
+    session = MonitorSession.objects.filter(project=project, ended_at__isnull=True).first()
+    if not session:
+        return JsonResponse({'error': 'No active session.'}, status=400)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    results = data.get('results', [])
+    if not isinstance(results, list):
+        return JsonResponse({'error': 'results must be a list'}, status=400)
+
+    events_created = []
+    seen_ips = set()
+
+    for entry in results:
+        ip = entry.get('ip')
+        name = entry.get('name', '')
+        if not ip:
+            continue
+
+        seen_ips.add(ip)
+
+        # Validate clock_role value
+        clock_role = entry.get('clock_role', 'unknown')
+        if clock_role not in ('master', 'locked', 'unlocked', 'unknown'):
+            clock_role = 'unknown'
+
+        device, created = DiscoveredDevice.objects.update_or_create(
+            project=project,
+            ip_address=ip,
+            defaults={
+                'domain': 'dante',
+                'label': name,
+                'dante_device_name': name,
+                'clock_role': clock_role,
+                'tx_channel_count': entry.get('tx_count'),
+                'rx_channel_count': entry.get('rx_count'),
+                'dante_model_id': entry.get('model_id', ''),
+                'dante_mac_address': entry.get('mac_address', ''),
+                'is_active': True,
+                'last_seen': timezone.now(),
+                'last_known_state': 'online',
+                'consecutive_failures': 0,
+            },
+        )
+
+        if created:
+            ev = DeviceEvent.objects.create(
+                device=device,
+                session=session,
+                event_type='DANTE_DISCOVERED',
+                details={'name': name, 'ip': ip, 'clock_role': clock_role},
+            )
+            events_created.append(ev.as_sse_dict())
+
+    # Mark Dante devices NOT in this discovery cycle as potentially lost.
+    # ICMP is authoritative for reachability; this only fires a DANTE_LOST event
+    # to signal the device disappeared from Dante discovery.
+    stale_dante = DiscoveredDevice.objects.filter(
+        project=project, domain='dante', is_active=True,
+    ).exclude(ip_address__in=seen_ips)
+
+    for device in stale_dante:
+        if device.dante_device_name and device.last_known_state == 'online':
+            ev = DeviceEvent.objects.create(
+                device=device,
+                session=session,
+                event_type='DANTE_LOST',
+                details={'name': device.dante_device_name, 'ip': device.ip_address},
+            )
+            events_created.append(ev.as_sse_dict())
+
+    return JsonResponse({'ok': True, 'events': events_created})
+
+
+@login_required
+def health_check_view(request):
+    """GET /audiopatch/network-monitor/api/health-check/
+    Compares discovered Dante devices against project device records.
+    Returns missing (expected but not found) and unexpected (found but not in project).
+    Per D-09: presence-based matching using case-insensitive name comparison.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'ok': False, 'error': 'No project'})
+
+    # Discovered Dante devices (active, domain='dante')
+    discovered_names = set(
+        DiscoveredDevice.objects.filter(
+            project=current_project, domain='dante', is_active=True,
+        ).values_list('dante_device_name', flat=True)
+    )
+    # Remove empty strings
+    discovered_names.discard('')
+
+    # Expected project devices — check Console, Device, and Amp names.
+    # Per D-09, any name match counts; per RESEARCH.md A4, we match against
+    # all project device names (not just Dante-flagged ones).
+    expected_names = set()
+    for Model in [Console, Device, Amp]:
+        expected_names.update(
+            Model.objects.filter(project=current_project)
+            .values_list('name', flat=True)
+        )
+    # Remove empty strings
+    expected_names.discard('')
+
+    # Case-insensitive matching per D-09 / RESEARCH.md Pitfall 5
+    discovered_lower = {n.lower(): n for n in discovered_names}
+    expected_lower = {n.lower(): n for n in expected_names}
+
+    missing = [expected_lower[n] for n in expected_lower if n not in discovered_lower]
+    unexpected = [discovered_lower[n] for n in discovered_lower if n not in expected_lower]
+
+    return JsonResponse({
+        'ok': True,
+        'status': 'ok' if not missing and not unexpected else 'issues',
+        'missing': sorted(missing),
+        'unexpected': sorted(unexpected),
+        'total_expected': len(expected_names),
+        'total_found': len(discovered_names),
+    })
 
 
 @login_required
