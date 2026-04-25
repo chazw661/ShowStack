@@ -20,7 +20,7 @@ from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
 from . import admin_ordering
 from .models import ConsoleStereoOutput
-from .models import MonitorSession, DiscoveredDevice, PollResult, DeviceEvent
+from .models import MonitorSession, DiscoveredDevice, PollResult, DeviceEvent, ProjectSNMPConfig, SwitchPortSnapshot
 from django.urls import path
 
 # Python standard library imports
@@ -6007,6 +6007,28 @@ showstack_admin_site.register(MonitorSession, MonitorSessionAdmin)
 showstack_admin_site.register(DiscoveredDevice, DiscoveredDeviceAdmin)
 showstack_admin_site.register(PollResult, PollResultAdmin)
 showstack_admin_site.register(DeviceEvent, DeviceEventAdmin)
+
+
+class ProjectSNMPConfigAdmin(admin.ModelAdmin):
+    list_display = ('project', 'community_string', 'updated_at')
+    list_filter = ('project',)
+    search_fields = ('project__name',)
+
+
+class SwitchPortSnapshotAdmin(admin.ModelAdmin):
+    list_display = ('device', 'port_index', 'oper_status', 'speed_mbps', 'bandwidth_pct', 'error_count', 'polled_at')
+    list_filter = ('oper_status', 'session')
+    readonly_fields = ('device', 'session', 'port_index', 'port_description', 'oper_status', 'speed_mbps', 'bandwidth_pct', 'error_count', 'polled_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+showstack_admin_site.register(ProjectSNMPConfig, ProjectSNMPConfigAdmin)
+showstack_admin_site.register(SwitchPortSnapshot, SwitchPortSnapshotAdmin)
 
 
 
