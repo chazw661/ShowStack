@@ -1216,6 +1216,7 @@
     </div>
     <div class="nhm-header-right" id="nhm-agent-status">
       {% if has_project %}
+      <button class="nhm-settings-btn" onclick="openSettings()" title="Settings" aria-label="Open monitor settings">&#x2699;</button>
       <button class="nhm-btn nhm-btn--primary" id="nhm-rescan-btn"
               onclick="requestRescan()" aria-label="Request network re-scan"
               {% if not monitor_running %}disabled title="Start the agent first"{% endif %}>
@@ -1274,6 +1275,20 @@
       Unassigned: <span id="nhm-rollup-unassigned">{{ domain_counts.unknown.total|default:0 }}</span>
     </span>
     {% endif %}
+    <div class="nhm-mode-toggle" role="group" aria-label="Show mode">
+      <button class="nhm-mode-btn{% if show_mode == 'setup' %} nhm-mode-btn--active-amber{% endif %}"
+              data-mode="setup" onclick="setShowMode('setup')" aria-pressed="{% if show_mode == 'setup' %}true{% else %}false{% endif %}">Setup</button>
+      <button class="nhm-mode-btn{% if show_mode == 'show' or not show_mode %} nhm-mode-btn--active-show{% endif %}"
+              data-mode="show" onclick="setShowMode('show')" aria-pressed="{% if show_mode == 'show' or not show_mode %}true{% else %}false{% endif %}">Show</button>
+      <button class="nhm-mode-btn{% if show_mode == 'wrap' %} nhm-mode-btn--active-amber{% endif %}"
+              data-mode="wrap" onclick="setShowMode('wrap')" aria-pressed="{% if show_mode == 'wrap' %}true{% else %}false{% endif %}">Wrap</button>
+    </div>
+  </div>
+
+  <!-- ===== MODE BANNER ===== -->
+  <div class="nhm-mode-banner{% if show_mode == 'setup' or show_mode == 'wrap' %} nhm-mode-banner--visible{% endif %}" id="nhm-mode-banner" role="status">
+    <span class="nhm-mode-banner-dot"></span>
+    <span id="nhm-mode-banner-text">{% if show_mode == 'setup' %}Setup mode — non-critical alerts suppressed{% elif show_mode == 'wrap' %}Wrap mode — non-critical alerts suppressed{% endif %}</span>
   </div>
 
   <!-- ===== MAIN CONTENT ===== -->
@@ -1597,6 +1612,45 @@
 
   </div><!-- /.nhm-content -->
 
+  <!-- ===== SETTINGS PANEL ===== -->
+  <div class="nhm-settings-backdrop" id="nhm-settings-backdrop" onclick="closeSettings()"></div>
+  <div class="nhm-settings-panel" id="nhm-settings-panel" role="dialog" aria-modal="true" aria-label="Monitor Settings">
+    <div class="nhm-settings-header">
+      <span class="nhm-settings-title">Monitor Settings</span>
+      <button class="nhm-settings-close" onclick="closeSettings()" aria-label="Close settings">&times;</button>
+    </div>
+
+    <div class="nhm-settings-section-label">SNMP Credentials</div>
+    <div class="nhm-settings-field">
+      <label for="nhm-community-string">Community String</label>
+      <input type="text" id="nhm-community-string" class="nhm-input" placeholder="public">
+      <div class="nhm-settings-hint">Shared by all switches in this project.</div>
+    </div>
+
+    <div class="nhm-settings-section-label">Manual Switch Entry</div>
+    <div class="nhm-settings-field">
+      <label for="nhm-switch-ip">Switch IP Address</label>
+      <input type="text" id="nhm-switch-ip" class="nhm-input" placeholder="192.168.1.1">
+      <div class="nhm-error" id="nhm-switch-ip-error"></div>
+    </div>
+    <div class="nhm-settings-field">
+      <label for="nhm-switch-label">Label (optional)</label>
+      <input type="text" id="nhm-switch-label" class="nhm-input" placeholder="">
+    </div>
+    <div class="nhm-settings-field">
+      <button class="nhm-btn--primary" onclick="addSwitch()" style="width:100%">Add Switch</button>
+    </div>
+
+    <div class="nhm-settings-section-label">Configured Switches</div>
+    <ul class="nhm-settings-list" id="nhm-switch-list"></ul>
+    <div class="nhm-settings-list-empty" id="nhm-switch-list-empty">No switches added manually.</div>
+
+    <div class="nhm-settings-footer">
+      <button class="nhm-btn--primary" onclick="saveSettings()">Save Settings</button>
+      <div class="nhm-error" id="nhm-settings-save-error" style="margin-top:8px"></div>
+    </div>
+  </div>
+
 </div><!-- /.nhm-root -->
 
 <!-- ===== SSE CONNECTION STATUS INDICATOR ===== -->
@@ -1647,6 +1701,17 @@ function pollStatus() {
                 updateStatusDot(dev.device_id, dev.status, dev.latency_ms);
             });
             updateRollupBar();
+        }
+
+        // Phase 2: show mode sync
+        if (data.show_mode && data.show_mode !== currentShowMode) {
+            currentShowMode = data.show_mode;
+            localStorage.setItem('nhm_show_mode', data.show_mode);
+            updateShowModeUI(data.show_mode);
+        }
+        // Phase 2: switch port data
+        if (data.switch_ports !== undefined) {
+            updateSwitchCards(data.switch_ports, data.snmp_configured !== undefined ? data.snmp_configured : snmpConfigured);
         }
 
         // Update agent connection indicator
@@ -2284,10 +2349,277 @@ function initRollupFromContext() {
     }
 }
 
+// ===== PHASE 2: SHOW MODE ================================================
+let currentShowMode = localStorage.getItem('nhm_show_mode') || '{{ show_mode|default:"show" }}';
+
+function setShowMode(mode) {
+    currentShowMode = mode;
+    localStorage.setItem('nhm_show_mode', mode);
+    updateShowModeUI(mode);
+    fetch('/audiopatch/network-monitor/show-mode/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({mode: mode}),
+    }).catch(function(err) { console.warn('[NHM] Show mode save error:', err); });
+}
+
+function updateShowModeUI(mode) {
+    document.querySelectorAll('.nhm-mode-btn').forEach(function(btn) {
+        btn.classList.remove('nhm-mode-btn--active-show', 'nhm-mode-btn--active-amber');
+        var pressed = btn.dataset.mode === mode;
+        btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+        if (pressed) {
+            btn.classList.add(mode === 'show' ? 'nhm-mode-btn--active-show' : 'nhm-mode-btn--active-amber');
+        }
+    });
+    var banner = document.getElementById('nhm-mode-banner');
+    var bannerText = document.getElementById('nhm-mode-banner-text');
+    if (mode === 'show') {
+        banner.classList.remove('nhm-mode-banner--visible');
+    } else {
+        banner.classList.add('nhm-mode-banner--visible');
+        var modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1);
+        bannerText.textContent = modeLabel + ' mode \u2014 non-critical alerts suppressed';
+    }
+}
+
+// ===== PHASE 2: SETTINGS PANEL ===========================================
+function openSettings() {
+    document.getElementById('nhm-settings-panel').classList.add('nhm-settings-panel--open');
+    document.getElementById('nhm-settings-backdrop').classList.add('nhm-settings-backdrop--visible');
+    refreshSwitchList();
+    document.getElementById('nhm-community-string').focus();
+}
+
+function closeSettings() {
+    document.getElementById('nhm-settings-panel').classList.remove('nhm-settings-panel--open');
+    document.getElementById('nhm-settings-backdrop').classList.remove('nhm-settings-backdrop--visible');
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        var panel = document.getElementById('nhm-settings-panel');
+        if (panel.classList.contains('nhm-settings-panel--open')) {
+            closeSettings();
+        }
+    }
+});
+
+function saveSettings() {
+    var cs = document.getElementById('nhm-community-string').value.trim();
+    var errEl = document.getElementById('nhm-settings-save-error');
+    errEl.style.setProperty('display', 'none', 'important');
+    if (!cs) {
+        errEl.textContent = 'Community string cannot be empty.';
+        errEl.style.setProperty('display', 'block', 'important');
+        return;
+    }
+    fetch('/audiopatch/network-monitor/snmp-settings/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({community_string: cs}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            closeSettings();
+            var gear = document.querySelector('.nhm-settings-btn');
+            gear.style.setProperty('border-color', 'var(--accent-green)', 'important');
+            setTimeout(function() { gear.style.removeProperty('border-color'); }, 500);
+        } else {
+            errEl.textContent = data.error || "Couldn't save settings. Check your connection and try again.";
+            errEl.style.setProperty('display', 'block', 'important');
+        }
+    })
+    .catch(function() {
+        errEl.textContent = "Couldn't save settings. Check your connection and try again.";
+        errEl.style.setProperty('display', 'block', 'important');
+    });
+}
+
+function addSwitch() {
+    var ip = document.getElementById('nhm-switch-ip').value.trim();
+    var label = document.getElementById('nhm-switch-label').value.trim();
+    var errEl = document.getElementById('nhm-switch-ip-error');
+    errEl.style.setProperty('display', 'none', 'important');
+    if (!ip) {
+        errEl.textContent = 'Enter a valid IP address.';
+        errEl.style.setProperty('display', 'block', 'important');
+        return;
+    }
+    fetch('/audiopatch/network-monitor/add-switch/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({ip: ip, label: label}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            document.getElementById('nhm-switch-ip').value = '';
+            document.getElementById('nhm-switch-label').value = '';
+            refreshSwitchList();
+        } else {
+            errEl.textContent = data.error || 'Enter a valid IP address.';
+            errEl.style.setProperty('display', 'block', 'important');
+        }
+    })
+    .catch(function() {
+        errEl.textContent = "Couldn't add switch. Check your connection.";
+        errEl.style.setProperty('display', 'block', 'important');
+    });
+}
+
+function refreshSwitchList() {
+    fetch('/audiopatch/network-monitor/status/')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.ok) return;
+        var list = document.getElementById('nhm-switch-list');
+        var empty = document.getElementById('nhm-switch-list-empty');
+        var switches = (data.devices || []).filter(function(d) { return d.domain === 'switch'; });
+        list.innerHTML = '';
+        if (switches.length === 0) {
+            empty.style.setProperty('display', 'block', 'important');
+        } else {
+            empty.style.setProperty('display', 'none', 'important');
+            switches.forEach(function(sw) {
+                var li = document.createElement('li');
+                li.className = 'nhm-settings-list-item';
+                var nameSpan = document.createElement('span');
+                nameSpan.textContent = sw.label || sw.ip;
+                var ipSpan = document.createElement('span');
+                ipSpan.style.setProperty('color', 'var(--text-dim)', 'important');
+                ipSpan.style.setProperty('font-size', '12px', 'important');
+                ipSpan.textContent = ' ' + sw.ip;
+                nameSpan.appendChild(ipSpan);
+                var removeBtn = document.createElement('button');
+                removeBtn.className = 'nhm-settings-list-remove';
+                removeBtn.textContent = 'Remove';
+                removeBtn.addEventListener('click', function() { removeSwitch(sw.device_id, sw.label || sw.ip); });
+                li.appendChild(nameSpan);
+                li.appendChild(removeBtn);
+                list.appendChild(li);
+            });
+        }
+    });
+}
+
+function removeSwitch(deviceId, name) {
+    if (!confirm('Remove ' + name + '? This switch will no longer be monitored by SNMP.')) return;
+    fetch('/audiopatch/network-monitor/devices/' + deviceId + '/remove/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({}),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) refreshSwitchList();
+    });
+}
+
+// ===== PHASE 2: SWITCH PORT TABLE RENDERING ==============================
+var snmpConfigured = {{ snmp_configured|yesno:"true,false" }};
+
+function updateSwitchCards(switchPorts, snmpConfiguredFlag) {
+    snmpConfigured = snmpConfiguredFlag;
+    document.querySelectorAll('.nhm-card[data-domain="switch"]').forEach(function(card) {
+        var deviceId = card.id.replace('nhm-device-', '');
+        var ports = switchPorts[deviceId];
+        var summaryEl = card.querySelector('.nhm-card-port-summary');
+        var detailInner = card.querySelector('.nhm-card-detail-inner');
+        if (!detailInner) return;
+        if (!summaryEl) {
+            summaryEl = document.createElement('span');
+            summaryEl.className = 'nhm-card-port-summary';
+            var header = card.querySelector('.nhm-card-header');
+            var arrow = header.querySelector('.nhm-card-expand-arrow');
+            if (arrow) {
+                header.insertBefore(summaryEl, arrow);
+            } else {
+                var arrowSpan = document.createElement('span');
+                arrowSpan.className = 'nhm-card-expand-arrow';
+                arrowSpan.textContent = '\u25BC';
+                header.appendChild(summaryEl);
+                header.appendChild(arrowSpan);
+            }
+            var latency = header.querySelector('.nhm-card-latency');
+            if (latency) latency.style.setProperty('display', 'none', 'important');
+        }
+        if (!snmpConfigured) {
+            summaryEl.textContent = '';
+            detailInner.innerHTML = '<div class="nhm-port-table--unconfigured"><h4>SNMP not configured</h4><p>Enter a community string in Monitor Settings to see port data.</p><button class="nhm-btn--ghost" onclick="openSettings()">Open Settings</button></div>';
+            return;
+        }
+        if (!ports || ports.length === 0) {
+            var devStatus = card.dataset.status;
+            if (devStatus !== 'unreachable' && devStatus !== 'unknown') {
+                summaryEl.textContent = 'SNMP unreachable';
+                summaryEl.style.setProperty('color', 'var(--accent-amber)', 'important');
+            } else {
+                summaryEl.textContent = '';
+            }
+            detailInner.innerHTML = '<div class="nhm-port-table--unconfigured"><h4>SNMP unreachable</h4><p>Check the community string in Monitor Settings.</p><button class="nhm-btn--ghost" onclick="openSettings()">Open Settings</button></div>';
+            return;
+        }
+        var upCount = 0, errCount = 0;
+        ports.forEach(function(p) {
+            if (p.oper_status === 'up') upCount++;
+            if (p.error_count > 0) errCount++;
+        });
+        summaryEl.textContent = ports.length + ' ports \u2014 ' + upCount + ' up \u2014 ' + errCount + ' err';
+        summaryEl.style.removeProperty('color');
+        var existingTable = detailInner.querySelector('.nhm-port-table');
+        if (!existingTable) {
+            var wrap = document.createElement('div');
+            wrap.className = 'nhm-port-table-wrap';
+            var table = document.createElement('table');
+            table.className = 'nhm-port-table';
+            table.innerHTML = '<thead><tr><th scope="col">#</th><th scope="col">Status</th><th scope="col">Speed</th><th scope="col">Bandwidth</th></tr></thead><tbody></tbody>';
+            wrap.appendChild(table);
+            detailInner.innerHTML = '';
+            detailInner.appendChild(wrap);
+            existingTable = table;
+        }
+        var tbody = existingTable.querySelector('tbody');
+        ports.forEach(function(p, i) {
+            var row = tbody.rows[i];
+            if (!row) {
+                row = tbody.insertRow();
+                row.className = 'nhm-port-row';
+                row.innerHTML = '<td class="nhm-port-cell nhm-port-cell--num"></td><td class="nhm-port-cell nhm-port-cell--status"></td><td class="nhm-port-cell nhm-port-cell--speed"></td><td class="nhm-port-cell nhm-port-cell--bw"></td>';
+            }
+            row.title = 'Errors: ' + (p.error_count || 0) + ' since session start';
+            row.cells[0].textContent = p.port_index;
+            var dotClass = p.oper_status === 'up' ? 'nhm-dot--online' : p.oper_status === 'down' ? 'nhm-dot--offline' : 'nhm-dot--unknown';
+            row.cells[1].innerHTML = '<span class="nhm-dot ' + dotClass + '" aria-label="' + p.port_index + ': ' + p.oper_status + '"></span>';
+            var speed = p.speed_mbps;
+            var speedText = '\u2014';
+            if (speed === 10000) speedText = '10G';
+            else if (speed === 1000) speedText = '1G';
+            else if (speed === 100) speedText = '100M';
+            else if (speed === 10) speedText = '10M';
+            else if (speed && speed > 0) speedText = speed + 'M';
+            row.cells[2].textContent = speedText;
+            var bw = p.bandwidth_pct;
+            if (bw !== null && bw !== undefined) {
+                var bwClass = bw > 90 ? 'nhm-bw--crit' : bw > 70 ? 'nhm-bw--warn' : 'nhm-bw--ok';
+                var srLabel = bw > 90 ? 'critical' : bw > 70 ? 'warning' : 'ok';
+                row.cells[3].innerHTML = '<span class="' + bwClass + '">' + bw + '%</span><span class="sr-only">(' + srLabel + ')</span>';
+            } else {
+                row.cells[3].textContent = '\u2014';
+            }
+        });
+        while (tbody.rows.length > ports.length) {
+            tbody.deleteRow(tbody.rows.length - 1);
+        }
+    });
+}
+
 // ===== BOOT =====
 document.addEventListener('DOMContentLoaded', function() {
     restoreLocalStorageState();
     initRollupFromContext();
+    updateShowModeUI(currentShowMode);
     startPolling();
 });
 </script>
