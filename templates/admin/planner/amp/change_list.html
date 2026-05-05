@@ -130,6 +130,24 @@
             border-radius: 2px;
             vertical-align: middle;
         }
+        .amp-row-actions {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .amp-row-delete {
+            background: rgba(255,82,82,0.08);
+            border: 1px solid #ff525244;
+            color: #ff5252;
+            padding: 2px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 16px;
+        }
+        .amp-row-delete:hover {
+            background: rgba(255,82,82,0.2);
+            border-color: #ff5252;
+        }
 
         /* ── Inline expand detail row ── */
         .amp-details-row td {
@@ -479,6 +497,7 @@
                             <th>Model</th>
                             <th>IP Address</th>
                             <th>Color</th>
+                            <th style="width:50px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -498,9 +517,16 @@
                                 <span class="color-swatch" style="background-color: {{ amp.color }};"></span>
                                 {% else %}—{% endif %}
                             </td>
+                            <td class="amp-row-actions">
+                                <button type="button"
+                                        class="amp-row-delete"
+                                        title="Delete amp"
+                                        data-amp-id="{{ amp.id }}"
+                                        data-amp-name="{{ amp.name|escape }}">✕</button>
+                            </td>
                         </tr>
                         <tr class="amp-details-row" id="amp-details-{{ amp.id }}" style="display:none;">
-                            <td colspan="5">
+                            <td colspan="6">
                                 <div class="amp-details"></div>
                             </td>
                         </tr>
@@ -607,6 +633,27 @@
             $('.amp-details-row').hide().find('.amp-details').hide().removeClass('show');
             $('.expand-icon').removeClass('expanded');
         };
+
+        // ── Delete amp row ──────────────────────────────────────────────
+        $(document).on('click', '.amp-row-delete', function(e) {
+            e.stopPropagation();
+            var $btn = $(this);
+            var ampId = $btn.data('amp-id');
+            var ampName = $btn.data('amp-name') || 'this amp';
+            if (!window.confirm('Delete "' + ampName + '"? This cannot be undone.')) return;
+            $btn.prop('disabled', true).text('…');
+            $.ajax({
+                url: '/admin/planner/amp/' + ampId + '/delete/',
+                type: 'POST',
+                data: { post: 'yes' },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' },
+                success: function() { location.reload(); },
+                error: function(xhr) {
+                    $btn.prop('disabled', false).text('✕');
+                    alert('Could not delete amp (HTTP ' + xhr.status + ').');
+                }
+            });
+        });
 
         // ── Amp row expand/collapse ─────────────────────────────────────
         $(document).on('click', '.amp-row', function(e) {
@@ -734,7 +781,7 @@
 
         function makeDividerRow(locId, d) {
             var $tr = $('<tr class="amp-divider-row"></tr>').attr('data-divider-id', d.id);
-            var $cell = $('<td colspan="4" class="amp-divider-cell"></td>');
+            var $cell = $('<td colspan="5" class="amp-divider-cell"></td>');
             $cell.append('<span class="amp-divider-line"></span>');
             var $input = $('<input class="amp-divider-label" type="text">').val(d.label||'').attr('placeholder','— divider label —');
             $input.on('blur', function() { saveDividerLabel(locId, d.id, $(this).val()); });

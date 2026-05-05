@@ -60,9 +60,8 @@ Three Django apps inside the `audiopatch` project:
 
 | File | Lines | Contains |
 |---|---|---|
-| `planner/models.py` | ~4500 | All equipment models, Project/ProjectMember, Dante models |
+| `planner/models.py` | ~4500 | All equipment models, Project/ProjectMember. Also contains orphan `DanteConsoleConfig`/`DanteDeviceConfig`/`DanteSubscription` from the scrapped Dante Subscription Planner — models and migrations remain, no views or templates. |
 | `planner/views.py` | ~5700 | All planner views (mic tracker, COMM config, power dist, IP, exports, etc.) |
-| `planner/views_dante.py` | — | Dante Subscription Planner views (frozen — see §7) |
 | `planner/admin.py` | ~6000 | All ModelAdmin classes, inlines, custom change_list actions |
 | `planner/admin_site.py` | — | `ShowStackAdminSite` class → `showstack_admin_site` instance |
 | `planner/admin_ordering.py` | — | Monkey-patches `get_app_list` for sidebar ordering + viewer filtering |
@@ -106,7 +105,7 @@ Implemented via Django groups and `BaseEquipmentAdmin`:
 ### Deployment
 - Pushing to `main` on GitHub triggers automatic Railway redeploy.
 - Solo development typically goes straight to `main`; use feature branches only when the work is risky or spans multiple sessions.
-- `Procfile`: `collectstatic --noinput && migrate && gunicorn`
+- **Railway uses `railway.json`'s `startCommand`, NOT the `Procfile`.** Editing the Procfile alone will have no effect in production. The active startCommand runs: `collectstatic --noinput && migrate && create_initial_superuser && setup_user_groups && load_amp_profiles && gunicorn`. Update `railway.json` (and keep the Procfile in sync) when changing deploy steps.
 
 ---
 
@@ -124,8 +123,6 @@ Implemented via Django groups and `BaseEquipmentAdmin`:
 | Power Distribution Calculator | |
 | Soundvision Predictions | L'Acoustics PDF parsing |
 | IP Address Management | |
-| Dante Subscription Planner | **Development halted.** Do not iterate unless Charlie explicitly reopens. |
-| Network Health Monitor | **Current active module** — see Network Health Monitor section below |
 | Console Templates | |
 | Mobile interface | Mounted at `/m/` |
 
@@ -167,33 +164,6 @@ Partylines, Roles, and Ports tabs are working for **both** Arcadia and FreeSpeak
 
 ---
 
-## Dante Subscription Planner — FROZEN
-
-**Do not iterate on this module, refactor it, or propose new features** unless Charlie explicitly reopens it. If a beta tester hits a bug, ask Charlie before spending time — the answer may be to hide the module rather than fix it.
-
-Architecture (reference only): `DanteConsoleConfig`/`DanteDeviceConfig` are OneToOne extensions; `DanteSubscription` references Console and Device FKs; XML export targets Dante Controller preset v3.0.0.
-
----
-
-## Network Health Monitor — ACTIVE DEVELOPMENT
-
-**New module, early stage. This is the current primary focus.**
-
-### Scope
-- **Switches** — port status, link speed/duplex, bandwidth utilization, error counters, PoE state
-- **VLANs** — configuration visibility, connectivity checks, isolation verification
-- **Device uptime** — reachability, response time, up/down state tracking across all project devices
-
-### Integration with existing modules
-**Prefer foreign keys to existing device models over duplicating device records.** Confirm the integration pattern with Charlie before introducing new device tables.
-
-### Constraints
-- Session-based project-scoping pattern.
-- Admin registration on `showstack_admin_site`; update `admin_ordering.py`.
-- Role-based permissions: viewers see status; editors+ modify thresholds/acknowledge alerts.
-
----
-
 ## Coding Conventions & Gotchas
 
 ### Overriding Django admin CSS from JavaScript
@@ -222,15 +192,10 @@ Runs in `Procfile` on every Railway deploy. If static files are missing in prod,
 
 ## Active Work Queue
 
-**Primary focus:** Network Health Monitor module — active new development.
-
 **Ongoing:**
 - Beta tester bug fixes across: Console Templates, Power Distribution Calculator, Mic Tracker, mobile interface (`/m/`)
 - COMM Config: invite-by-link flow for project access (partially built)
 - COMM Config: 4W port 1/4 function swap fix in FSII export (confirm with Charlie before touching)
-
-**Frozen:**
-- Dante Subscription Planner — do not iterate.
 
 ---
 
