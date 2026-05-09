@@ -1,105 +1,90 @@
-# Requirements: ShowStack Network Health Monitor
+# Milestone v2.0 Requirements — Multitrack Session Builder
 
-**Defined:** 2026-04-21
-**Core Value:** An engineer can look at one screen and know instantly whether every network on the show is healthy, and get alerted immediately when something goes wrong.
+**Defined:** 2026-05-09
+**Core Value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
 
-## v1 Requirements
+Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; this file is the falsifiable, user-centric ledger that the roadmap maps phases against.
 
-Requirements for initial release. Each maps to roadmap phases.
+## v2.0 Requirements
 
-### Device Monitoring
+### Session Management — MTS
 
-- [x] **MON-01
-**: Dante devices auto-discovered on the network via mDNS without manual IP entry
-- [ ] **MON-02**: All project devices show up/down reachability status via ICMP ping
-- [ ] **MON-03**: Monitor targets pull IP addresses from existing ShowStack device records (Console, Device, Amp) via FK
-- [x] **MON-04
-**: Pre-show health check compares discovered devices against project-defined device list
+- [ ] **MTS-01**: User can create a new MultitrackSession by picking a project console, target DAW (Reaper or Nuendo Live), feed-source mode (`console_dante` / `rio_direct` / `custom`), and track-order mode (`console` / `dante`).
+- [ ] **MTS-02**: User can name a session and rename it later; name is unique per project.
+- [ ] **MTS-03**: User can list all sessions for the current project on a module landing page, with create/duplicate/delete actions.
+- [ ] **MTS-04**: User can edit session metadata (name, target DAW, feed source, track-order mode, recorder capacity, notes) without losing track customizations.
+- [ ] **MTS-05**: User can delete a session and its tracks.
+- [ ] **MTS-06**: User can duplicate an existing session into a new one as a starting point.
 
-### Dante
+### Track Editor — TRK
 
-- [x] **DAN-01
-**: Dashboard identifies the Dante clock master device on the network
-- [x] **DAN-02
-**: Per-device clock lock/unlock status displayed (advisory — depends on netaudio protocol confidence)
+- [ ] **TRK-01**: User can see all tracks for a session in an ordered list, with track number, source channel ref (and channel type — input / aux / matrix / group / FX return / cue), resolved label, resolved color, enabled state, and notes.
+- [ ] **TRK-02**: User can enable / disable individual tracks; only enabled tracks appear in exports.
+- [ ] **TRK-03**: User can override a track's label (overrides the source channel's name).
+- [ ] **TRK-04**: User can override a track's color via a swatch picker (overrides the source channel's color).
+- [ ] **TRK-05**: User can reorder tracks via drag-and-drop; the new order persists.
+- [ ] **TRK-06**: User can add a track to a session at any time by picking from any available console channel — **input channels, Aux outputs, Matrix outputs, Group outputs, FX returns, and Cue outputs are all first-class selectable sources**, not just the initial seed list. Channels are presented grouped by type with type filters.
+- [ ] **TRK-07**: User can add a manual track that has no source channel (e.g. click track, room mic, talkback return) with a hand-entered label and color.
+- [ ] **TRK-08**: User can remove a track from the session — works for both manual tracks and tracks tied to a console source channel (removal does not delete the underlying ConsoleChannel).
+- [ ] **TRK-09**: User can bulk include or exclude all Aux, Matrix, and Group source channels via collapsible section toggles; bulk toggles seed the selection, and individual tracks can still be added or removed afterwards via TRK-06 / TRK-08.
+- [ ] **TRK-10**: When `recorder_capacity` is set, the editor shows a count vs capacity ("47 / 64"); over-capacity is highlighted red ("72 / 64 — 8 over") but does not block export.
 
-### Switch Monitoring
+### Reaper Exporter — RPP
 
-- [ ] **SW-01**: Switch port up/down status and link speed displayed via SNMP polling
-- [ ] **SW-02**: Per-project SNMP credential configuration (community string for v2c, auth/priv for v3)
-- [ ] **SW-03**: Port error counter tracking over time
-- [ ] **SW-04**: Bandwidth utilization warnings at configurable thresholds (default 70%/90%)
+- [ ] **RPP-01**: User can export the current session as a Reaper `.RPP` project file with one track per enabled track.
+- [ ] **RPP-02**: Track names in the exported `.RPP` match each track's resolved label.
+- [ ] **RPP-03**: Track colors in the exported `.RPP` match each track's resolved color, mapped from Yamaha palette to Reaper packed RGB.
+- [ ] **RPP-04**: Track order in the exported `.RPP` matches the session's `track_order_mode`.
+- [ ] **RPP-05**: User can also export a Reaper track template (`.RTrackTemplate`) to merge into an existing project.
 
-### Dashboard & Alerts
+### Nuendo Live Exporter — NLP
 
-- [ ] **DASH-01**: At-a-glance green/yellow/red status indicators per network domain
-- [ ] **DASH-02**: Critical alerts for device offline and clock loss with confirm-before-firing (N=3 consecutive failures)
-- [ ] **DASH-03**: Session history timeline showing state changes with timestamps during show day
-- [ ] **DASH-04**: Show mode toggle (Setup / Show / Wrap) suppresses non-critical alerts during load-in/out
+- [ ] **NLP-01**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
+- [ ] **NLP-02**: The exported `.nlpr` loads in Nuendo Live 3 without errors.
+- [ ] **NLP-03**: Each track's name renders correctly inside Nuendo Live (outer `Name` and inner `DeviceAttributes → Name → String` match).
+- [ ] **NLP-04**: Each track's color renders correctly using a `Farb` palette index (Yamaha CL/QL → Farb mapping table from the spec).
+- [ ] **NLP-05**: Tracks with no assigned color export with `Farb` omitted, so they use the Nuendo Live default appearance.
+- [ ] **NLP-06**: All `ID` and `RuntimeID` values in the exported file are unique within the document.
 
-### Infrastructure
+### Console CSV Import — CSV
 
-- [ ] **INFRA-01**: `run_monitor` management command runs background polling with daemon threads per protocol
-- [ ] **INFRA-02**: SSE push delivers live status updates to dashboard without page refresh
-- [ ] **INFRA-03**: Local network prerequisite detection with clear messaging when not on show network
+- [ ] **CSV-01**: User can upload a Yamaha CL/QL channel-name CSV (Studio Manager / CL Editor / Console File Converter export) and have it populate or update the console's channels in ShowStack.
+- [ ] **CSV-02**: User can upload a Yamaha Rivage PM channel-labels CSV and have it populate or update the console's channels.
+- [ ] **CSV-03**: Imported channel labels and colors map onto existing `ConsoleChannel` records when present, otherwise create new ones; user is shown a per-row diff summary before commit.
+- [ ] **CSV-04**: Import errors surface clearly per row (missing required field, unsupported color code) without aborting the whole import.
+- [ ] **CSV-05**: After a successful import, user lands in the session editor with the imported channels available as track sources.
 
-## v2 Requirements
+### Templates — TPL
 
-Deferred to future release. Tracked but not in current roadmap.
+- [ ] **TPL-01**: User can save the current session's structure (target DAW, feed source, track-order mode, include-aux/matrix/groups flags, color scheme, naming pattern) as a named `MultitrackTemplate` scoped to the project.
+- [ ] **TPL-02**: User can apply a template to a new session, seeding the track list and metadata; user can still override per-track values after.
+- [ ] **TPL-03**: User can list, rename, and delete templates from the module landing page.
+- [ ] **TPL-04**: Template save / load buttons, placement, and modal behavior visually and behaviorally match existing ShowStack template patterns (e.g. Comm Config, Mic Tracker).
 
-### Mobile & Export
+### Polish — POL
 
-- **MOBILE-01**: Mobile-optimized status view at `/m/` for A2s on phones
-- **EXPORT-01**: Session history export as PDF/CSV for post-show documentation
-- **EXPORT-02**: Pre-show health check report export
+- [ ] **POL-01**: Each `ConsoleChannel` carries a `default_record` boolean; new sessions pre-check tracks where `default_record=True` so engineers don't have to re-enable the obvious ones each gig.
+- [ ] **POL-02**: Each `ConsoleChannel` carries a `default_record_color` (hex) used as the seed color for new tracks unless overridden.
 
-### Advanced Monitoring
+## Future Requirements (deferred to v2.1+)
 
-- **ADV-01**: Cross-domain event correlation (multiple devices on same switch port = one grouped alert)
-- **ADV-02**: Dante multicast bandwidth monitoring
-- **ADV-03**: EEE detection on switch ports carrying Dante traffic
+- **PT-01**: Pro Tools session-data `.txt` or AAF exporter — deferred until tester access secured (Pro Tools Intro free-tier viability or beta-tester recruit).
+- **M7CL-01**: Yamaha M7CL channel import — deferred until a CSV export path is confirmed; if none, a `.M7C` binary parser is separate work.
+- **Other-Console**: DiGiCo, Allen & Heath, Avid console families — separate effort if/when demand surfaces.
 
-## Out of Scope
+## Out of Scope (explicit exclusions)
 
-| Feature | Reason |
-|---------|--------|
-| Remote/cloud monitoring of on-site networks | Monitoring requires direct local network access from the laptop |
-| Dante subscription management | Frozen Dante Subscription Planner module handles that domain |
-| Amplifier DSP control or configuration | LA Network Manager handles that; this module monitors connectivity only |
-| VLAN configuration or switch provisioning | Read-only monitoring, not management |
-| Django Channels / WebSockets | SSE via StreamingHttpResponse is simpler and sufficient for one-directional push |
-| Redis / Celery | Runs locally on laptop; APScheduler or management command handles background polling |
-| TimescaleDB | Event volumes at show scale don't justify a separate time-series database |
+These were considered and deliberately excluded from v2.0. Reopening any of them needs a milestone-boundary decision.
+
+- Setlist / song-marker timeline generation in exported sessions
+- File-naming pattern automation for recorded files (only naming the *tracks*, not the captured files)
+- Recording-rig modeling (recorders, interfaces) inside ShowStack
+- Show notes / per-recording-session log
+- Virtual-soundcheck asset tracking (file-management workflow)
+- Post-show delivery automation (cloud links, manifests)
+- Real-time DAW control (transport, marker drop) — replaces no vendor protocol
+- A replacement for the Yamaha Console Extension protocol — this exporter sits *alongside* it, not against it
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| MON-01 | Phase 3 | Pending |
-| MON-02 | Phase 1 | Pending |
-| MON-03 | Phase 1 | Pending |
-| MON-04 | Phase 3 | Pending |
-| DAN-01 | Phase 3 | Pending |
-| DAN-02 | Phase 3 | Pending |
-| SW-01 | Phase 2 | Pending |
-| SW-02 | Phase 2 | Pending |
-| SW-03 | Phase 2 | Pending |
-| SW-04 | Phase 2 | Pending |
-| DASH-01 | Phase 1 | Pending |
-| DASH-02 | Phase 1 | Pending |
-| DASH-03 | Phase 1 | Pending |
-| DASH-04 | Phase 2 | Pending |
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-
-**Coverage:**
-- v1 requirements: 17 total
-- Mapped to phases: 17
-- Unmapped: 0
-
----
-*Requirements defined: 2026-04-21*
-*Last updated: 2026-04-21 after roadmap creation*
+Mapping of REQ-IDs to phases is filled in by the roadmapper; this section is intentionally empty until ROADMAP.md is created.
