@@ -1,80 +1,128 @@
-# Roadmap: ShowStack Network Health Monitor
+# Roadmap: ShowStack v2.0 — Multitrack Session Builder
 
 ## Overview
 
-Three phases build the monitor from the ground up. Phase 1 proves the full poll-to-dashboard pipeline using ICMP — the simplest protocol — and delivers a working dashboard with LA Network amp reachability, live SSE updates, session history, and alerts. Phase 2 adds switch SNMP monitoring and the show mode toggle. Phase 3 completes the Dante domain with mDNS auto-discovery, clock status, and the pre-show health check. All three phases run locally from the engineer's laptop on the show network.
+Five phases convert ShowStack console channel data into ready-to-use multitrack
+recording sessions for Reaper and Nuendo Live. Phase ordering is taken from the
+canonical spec (`multitrack_session_builder_spec.md`) and is deliberate:
+
+1. **Phase 1** ships the core data model, the full track editor, and the Reaper
+   exporter together. Reaper's `.RPP` is plain text and the easiest format to
+   validate; the track editor is the user-visible heart of the module, so it
+   must work end-to-end before any importer or second exporter goes in.
+2. **Phase 2** layers CSV import on top of an editor that already works, so the
+   importer's job is reduced to populating ShowStack's existing `ConsoleChannel`
+   records — no new editor UX needed.
+3. **Phase 3** adds reusable `MultitrackTemplate`s only after sessions exist to
+   save *from*. Matching ShowStack's existing template UX (Comm Config, Mic
+   Tracker) is required, not a stretch goal.
+4. **Phase 4** ships the Nuendo Live `.nlpr` exporter — highest-risk format
+   (XML template injection via `lxml`, opaque IDs and Farb palette indices),
+   so it lands last of the major work, after the core flow is proven.
+5. **Phase 5** is a small-surface polish pass adding `default_record` and
+   `default_record_color` to `ConsoleChannel` so engineers don't re-tick the
+   obvious tracks every gig.
+
+Coarse granularity (per `.planning/config.json`); 5 phases sits at the upper
+end of that band but is justified because each phase delivers an independently
+verifiable user capability and the spec's phase boundaries hold up against the
+requirement dependencies.
+
+### Note on requirement-to-phase placement vs spec wording
+
+The spec's "Phase 5 — Polish" bullet list mentions drag-reorder, capacity bar,
+color picker, and bulk toggles. Those are written into REQUIREMENTS.md as
+first-class track-editor behaviors (TRK-04, TRK-05, TRK-09, TRK-10). They
+belong with the Phase 1 track editor — the editor is not "done" without them
+from the user's perspective. Phase 5 is therefore narrowed to the only
+genuinely channel-model-level seed work: `default_record` and
+`default_record_color` (POL-01, POL-02).
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Integer phases (1, 2, 3, 4, 5): Planned milestone work
+- Decimal phases (e.g. 2.1): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - ICMP pipeline, SSE dashboard, session history, and alert system
-- [ ] **Phase 2: Switch SNMP** - SNMP switch port monitoring, credentials, bandwidth warnings, and show mode
-- [ ] **Phase 3: Dante** - mDNS discovery, clock status, and pre-show health check
+- [ ] **Phase 1: Core Sessions, Track Editor & Reaper Export** - Models, full track editor, and `.RPP` / `.RTrackTemplate` export
+- [ ] **Phase 2: Console CSV Import** - Yamaha CL/QL and Rivage PM channel-label CSV ingestion into `ConsoleChannel`
+- [ ] **Phase 3: Multitrack Templates** - Save/apply reusable session structures, matching existing ShowStack template UX
+- [ ] **Phase 4: Nuendo Live Export** - `.nlpr` template-injection exporter with Yamaha→Farb color mapping
+- [ ] **Phase 5: Channel Record Defaults** - `default_record` and `default_record_color` seed flags on `ConsoleChannel`
 
 ## Phase Details
 
-### Phase 1: Foundation
-**Goal**: Engineer can see live reachability status for all LA Network amps on a single dashboard, with alerts on device offline and a session history timeline
+### Phase 1: Core Sessions, Track Editor & Reaper Export
+**Goal**: Engineer can build a multitrack session from any project console's existing channel data and export a working Reaper project file
 **Depends on**: Nothing (first phase)
-**Requirements**: MON-02, MON-03, DASH-01, DASH-02, DASH-03, INFRA-01, INFRA-02, INFRA-03
+**Requirements**: MTS-01, MTS-02, MTS-03, MTS-04, MTS-05, MTS-06, TRK-01, TRK-02, TRK-03, TRK-04, TRK-05, TRK-06, TRK-07, TRK-08, TRK-09, TRK-10, RPP-01, RPP-02, RPP-03, RPP-04, RPP-05
 **Success Criteria** (what must be TRUE):
-  1. Engineer opens the dashboard and sees green/yellow/red reachability status for each amp, updating live without a page refresh
-  2. If an amp goes offline for 3 consecutive polls, a critical alert fires; no alert fires on a single flap
-  3. The session history timeline shows each up/down state change with a timestamp for the current show day
-  4. Running `python manage.py run_monitor` starts background ICMP polling; stopping it halts all polling cleanly
-  5. When the laptop is not on the show network, the dashboard shows a clear "not connected to show network" message rather than silent empty status
-**Plans:** 3 plans
-Plans:
-- [x] 01-01-PLAN.md — Models, migration, admin, run_monitor command
-- [x] 01-02-PLAN.md — Views (SSE, scan, device management) and URL wiring
-- [x] 01-03-PLAN.md — Dashboard template (HTML/CSS/JS)
+  1. Engineer lands on the Multitrack Session Builder page, sees all sessions for the current project, and can create, duplicate, rename, or delete one
+  2. In the track editor, the engineer can include input channels, Aux outputs, Matrix outputs, Group outputs, FX returns, and Cue outputs as tracks; bulk-toggle Aux/Matrix/Group sections; add a manual track with no source channel; and remove any track without affecting the underlying console channel
+  3. Engineer can override per-track label and color, drag-reorder the track list, enable/disable individual tracks, and see a "47 / 64" count vs `recorder_capacity` (turning red when over)
+  4. Engineer clicks "Export to Reaper" and downloads a `.RPP` (and optionally `.RTrackTemplate`) where track names match the resolved labels, track colors match the resolved colors mapped to Reaper packed RGB, and the track order matches the session's `track_order_mode`
+  5. Opening the exported `.RPP` in Reaper produces a project with one track per enabled MultitrackTrack, no errors, names and colors as configured
+**Plans**: TBD
 **UI hint**: yes
 
-### Phase 2: Switch SNMP
-**Goal**: Engineer can monitor switch port status, link speed, and bandwidth utilization via SNMP, and suppress non-critical alerts during load-in and load-out
+### Phase 2: Console CSV Import
+**Goal**: Engineer can populate or update a console's channel list from a Yamaha CL/QL or Rivage PM CSV export, then immediately use those channels as track sources in the editor built in Phase 1
 **Depends on**: Phase 1
-**Requirements**: SW-01, SW-02, SW-03, SW-04, DASH-04
+**Requirements**: CSV-01, CSV-02, CSV-03, CSV-04, CSV-05
 **Success Criteria** (what must be TRUE):
-  1. Each configured switch shows per-port up/down status and link speed on the dashboard
-  2. Engineer can enter SNMP credentials (v2c community string or v3 auth/priv) per project and have them persist
-  3. Port error counters accumulate over time and are visible per port
-  4. A bandwidth warning indicator appears on a port when utilization exceeds the configured threshold (default 70%/90%)
-  5. Show mode toggle (Setup / Show / Wrap) suppresses non-critical alerts when set to Setup or Wrap
-**Plans:** 3 plans
-Plans:
-- [x] 02-01-PLAN.md — Models, migration, admin, API endpoints, URL wiring
-- [x] 02-02-PLAN.md — Agent SNMP thread restructure and pysnmp integration
-- [x] 02-03-PLAN.md — Dashboard template (settings panel, show mode, switch cards, port tables)
-**UI hint**: yes
+  1. Engineer uploads a Yamaha CL/QL channel-name CSV (Studio Manager / CL Editor / Console File Converter) and the channels populate or update on the matching console in ShowStack
+  2. Engineer uploads a Yamaha Rivage PM channel-labels CSV and the channels populate or update on the matching console
+  3. Before commit, the engineer sees a per-row diff summary (created vs updated vs unchanged) and any per-row errors (missing fields, unsupported color codes) without the entire import aborting
+  4. After a successful import, the engineer lands directly in the session editor with the imported channels available as track sources
+**Plans**: TBD
 
-### Phase 3: Dante
-**Goal**: Dante devices auto-discover on the network, show reachability and clock status, and the engineer can run a pre-show health check comparing discovered devices against the project device list
-**Depends on**: Phase 2
-**Requirements**: MON-01, MON-04, DAN-01, DAN-02
+### Phase 3: Multitrack Templates
+**Goal**: Engineer can save a working session's structure as a reusable template scoped to the project and apply it to seed new sessions on any console
+**Depends on**: Phase 1
+**Requirements**: TPL-01, TPL-02, TPL-03, TPL-04
 **Success Criteria** (what must be TRUE):
-  1. Dante devices appear on the dashboard automatically via mDNS without the engineer entering IP addresses manually
-  2. The dashboard identifies which Dante device is the clock master
-  3. Per-device clock lock/unlock status is displayed with an advisory label indicating confidence level
-  4. Pre-show health check compares discovered Dante devices against the project-defined device list and flags any missing or unexpected devices
-**Plans:** 3 plans
-Plans:
-- [ ] 03-01-PLAN.md — Dante model fields, migration, DantePoller agent thread
-- [ ] 03-02-PLAN.md — Agent Dante results endpoint, health check endpoint, status view extension
-- [ ] 03-03-PLAN.md — Dashboard Dante UI (cards, ghost cards, advisory, health check panel)
+  1. Engineer saves the current session's structure (target DAW, feed source, track-order mode, include-aux/matrix/groups flags, color scheme, naming pattern) as a named `MultitrackTemplate` for the current project
+  2. Engineer applies a template to a new session and the track list and metadata are seeded; per-track values can still be overridden afterward
+  3. Engineer can list, rename, and delete templates from the module landing page
+  4. The save/load buttons, placement, and modal behavior visually and behaviorally match the existing ShowStack template patterns (Comm Config, Mic Tracker)
+**Plans**: TBD
+
+### Phase 4: Nuendo Live Export
+**Goal**: Engineer can export the current session as a Nuendo Live 3 `.nlpr` file that opens cleanly with correct names and palette colors
+**Depends on**: Phase 1
+**Requirements**: NLP-01, NLP-02, NLP-03, NLP-04, NLP-05, NLP-06
+**Success Criteria** (what must be TRUE):
+  1. Engineer clicks "Export to Nuendo Live" and downloads a `.nlpr` produced by the bundled empty-template injection path (no from-scratch synthesis)
+  2. Opening the exported `.nlpr` in Nuendo Live 3 succeeds with no errors and shows one track per enabled MultitrackTrack
+  3. Each track's outer `Name` and inner `DeviceAttributes → Name → String` render the resolved track label correctly inside Nuendo Live
+  4. Tracks with an assigned color render using the correct Farb palette index per the Yamaha→Nuendo mapping table; tracks with no assigned color render in Nuendo Live's default appearance (Farb omitted)
+  5. Every `ID` and `RuntimeID` in the exported document is unique within that document
+**Plans**: TBD
+
+### Phase 5: Channel Record Defaults
+**Goal**: Engineers stop re-ticking the same obvious tracks every gig — channels carry per-channel `default_record` and `default_record_color` seed flags that pre-populate new sessions
+**Depends on**: Phase 1
+**Requirements**: POL-01, POL-02
+**Success Criteria** (what must be TRUE):
+  1. Engineer can set `default_record` (boolean) and `default_record_color` (hex) on each `ConsoleChannel` from the channel admin/edit UI
+  2. Creating a new MultitrackSession pre-checks (enables) tracks whose source channel has `default_record=True`
+  3. New tracks seeded from a channel with `default_record_color` set use that hex as the seed color, while still allowing per-track override afterward
+**Plans**: TBD
 **UI hint**: yes
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+(Phases 2, 3, 4, and 5 each depend only on Phase 1 and could in principle run
+in parallel, but solo dev means sequential execution per the spec's order.)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/3 | Complete | - |
-| 2. Switch SNMP | 0/3 | Planning complete | - |
-| 3. Dante | 0/3 | Planning complete | - |
+| 1. Core Sessions, Track Editor & Reaper Export | 0/0 | Not started | - |
+| 2. Console CSV Import | 0/0 | Not started | - |
+| 3. Multitrack Templates | 0/0 | Not started | - |
+| 4. Nuendo Live Export | 0/0 | Not started | - |
+| 5. Channel Record Defaults | 0/0 | Not started | - |

@@ -87,4 +87,47 @@ These were considered and deliberately excluded from v2.0. Reopening any of them
 
 ## Traceability
 
-Mapping of REQ-IDs to phases is filled in by the roadmapper; this section is intentionally empty until ROADMAP.md is created.
+Mapping of REQ-IDs to phases (filled in 2026-05-09 by `/gsd-roadmap` for the v2.0 Multitrack Session Builder milestone).
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| MTS-01 | Phase 1 | Pending |
+| MTS-02 | Phase 1 | Pending |
+| MTS-03 | Phase 1 | Pending |
+| MTS-04 | Phase 1 | Pending |
+| MTS-05 | Phase 1 | Pending |
+| MTS-06 | Phase 1 | Pending |
+| TRK-01 | Phase 1 | Pending |
+| TRK-02 | Phase 1 | Pending |
+| TRK-03 | Phase 1 | Pending |
+| TRK-04 | Phase 1 | Pending |
+| TRK-05 | Phase 1 | Pending |
+| TRK-06 | Phase 1 | Pending |
+| TRK-07 | Phase 1 | Pending |
+| TRK-08 | Phase 1 | Pending |
+| TRK-09 | Phase 1 | Pending |
+| TRK-10 | Phase 1 | Pending |
+| RPP-01 | Phase 1 | Pending |
+| RPP-02 | Phase 1 | Pending |
+| RPP-03 | Phase 1 | Pending |
+| RPP-04 | Phase 1 | Pending |
+| RPP-05 | Phase 1 | Pending |
+| CSV-01 | Phase 2 | Pending |
+| CSV-02 | Phase 2 | Pending |
+| CSV-03 | Phase 2 | Pending |
+| CSV-04 | Phase 2 | Pending |
+| CSV-05 | Phase 2 | Pending |
+| TPL-01 | Phase 3 | Pending |
+| TPL-02 | Phase 3 | Pending |
+| TPL-03 | Phase 3 | Pending |
+| TPL-04 | Phase 3 | Pending |
+| NLP-01 | Phase 4 | Pending |
+| NLP-02 | Phase 4 | Pending |
+| NLP-03 | Phase 4 | Pending |
+| NLP-04 | Phase 4 | Pending |
+| NLP-05 | Phase 4 | Pending |
+| NLP-06 | Phase 4 | Pending |
+| POL-01 | Phase 5 | Pending |
+| POL-02 | Phase 5 | Pending |
+
+**Coverage:** 38 / 38 v2.0 requirements mapped to exactly one phase. No orphans.
