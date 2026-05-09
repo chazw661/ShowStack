@@ -1,72 +1,82 @@
-# ShowStack Network Health Monitor
+# ShowStack
 
 ## What This Is
 
-A real-time network monitoring module for ShowStack that gives live audio engineers a single dashboard to monitor all show-critical networks — Dante, L'Acoustics LA Network (Milan/AVB), and entertainment switches. Runs from any laptop on the show network with ShowStack open in the browser.
+A Django 5.x multi-tenant SaaS platform for professional live audio production management. ShowStack stores the project data — consoles, channels, patches, amplifiers, comm config, IP plans — that a lead A1 engineer needs across corporate events, tours, and broadcast, and converts that data into the deliverables every show actually requires: Yamaha console session files, Clear-Com `.cca` configs, Reaper / Nuendo recording sessions, PDF exports, and more.
+
+Deployed at https://showstack.io. Sole developer: Charlie Lawson. Legal owner: Lawson Design & Engineering (USPTO Class 42 trademark filed 2026-03-19).
 
 ## Core Value
 
-An engineer can look at one screen and know instantly whether every network on the show is healthy, and get alerted immediately when something goes wrong.
+ShowStack knows your patch, your labels, and your gear. Once entered, that data drives every export your show needs — no double-entry, no copy-paste between vendor tools, no rebuilding the same session from scratch on every gig.
 
 ## Requirements
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Yamaha Rivage PM CSV export (11-file Console File Converter format)
+- [x] Clear-Com Arcadia `.cca` offline config export — first software to do this
+- [x] Clear-Com FreeSpeak II `.cca` offline config export
+- [x] Mic Tracker, Power Distribution Calculator, IP Address Management, Console Templates
+- [x] Soundvision Predictions PDF parsing (L'Acoustics)
+- [x] Mobile interface (`/m/`) for the most-used views
+- [x] Session-based project scoping (`CurrentProjectMiddleware`)
+- [x] Role-based permissions (superuser / premium owner / editor / viewer)
+- [x] Custom admin site (`showstack_admin_site`)
+- [x] Per-row delete on amplifier change list (issue #1, fixed 2026-05-09)
 
 ### Active
 
-- [ ] Dante device discovery and connectivity monitoring (IP addresses, reachability)
-- [ ] Dante clock status monitoring (master/slave, lock state, latency)
-- [ ] LA Network device connectivity confirmation (amplifier reachability)
-- [ ] Switch monitoring via SNMP (port status, link speed, error counters)
-- [ ] At-a-glance dashboard with green/yellow/red status indicators
-- [ ] Active alerts with notifications for critical issues (device drops, clock failures)
-- [ ] Session history — timeline of network state changes during a show day
-- [ ] Works from any laptop on the show network running ShowStack in a browser
-- [ ] Integration with existing ShowStack project-scoping (session-based multi-tenancy)
+(See Current Milestone below for the active capability under construction.)
 
 ### Out of Scope
 
-- Remote/cloud-based monitoring of on-site networks — requires direct network access from the browser/laptop
-- Dante subscription management — the frozen Dante Subscription Planner module handles that domain
-- Amplifier DSP control or configuration — LA Network Manager handles that; this module only monitors connectivity
-- VLAN configuration or switch provisioning — read-only monitoring, not management
+- Real-time DAW or console transport control — ShowStack is a *planning* and *export* tool, not a live-control surface
+- Audio metering, signal analysis, or any audio-stream processing
+- Console families outside Yamaha CL/QL/Rivage PM — separate effort if/when demand surfaces
+- Network monitoring inside ShowStack — moved to a standalone-app architecture (v1.0 scrapped)
+- Replacing vendor tools that already work well (Dante Controller, LA Network Manager, Studio Manager) — ShowStack feeds them, doesn't replace them
+
+## Current Milestone: v2.0 Multitrack Session Builder
+
+**Goal:** Convert ShowStack console channel data into ready-to-use multitrack recording sessions for Reaper and Nuendo Live, with reusable templates and a per-session track editor.
+
+**Target features:**
+- Core data model: `MultitrackSession` + `MultitrackTrack` per project, referencing existing `Device` (console) and console channels
+- Reaper `.RPP` exporter — plain text, simpler, ships first
+- Nuendo Live `.nlpr` exporter via `lxml` template injection (XML structure + 16-color `Farb` palette already decoded in spec)
+- CSV import for Yamaha CL/QL and Rivage PM channel labels (M7CL deferred until CSV path confirmed)
+- `MultitrackTemplate` for reusable session structures across consoles, mirroring existing ShowStack template UX
+- Track editor: drag-reorder, per-track override (label/color), bulk Aux/Matrix/Group toggles, capacity warning vs configurable recorder limit
+- Pro Tools support deferred to v2.1 pending tester access
+
+**Source-of-truth spec:** `multitrack_session_builder_spec.md` (in repo root)
 
 ## Context
 
-ShowStack is an existing Django 5.x multi-tenant SaaS platform for live audio production management. The Network Health Monitor is a new module being added to the existing codebase. It must follow ShowStack's established patterns:
+ShowStack is in beta with live-audio engineer testers. The Multitrack Session Builder is the first new module since the Network Health Monitor was scrapped — that work moved to a separate standalone application. The standalone is its own codebase outside ShowStack.
 
-- Session-based project scoping via `CurrentProjectMiddleware`
-- Custom admin site (`showstack_admin_site`)
-- Role-based permissions (superuser, premium owner, editor, viewer)
-- Railway deployment for the web app, but monitoring requires local network access
+**Key architectural decisions (carry forward from existing modules):**
+- Session-based project scoping via `CurrentProjectMiddleware` — views and querysets scope themselves to `request.current_project`, never via URL-routed project IDs.
+- All admin registers on `showstack_admin_site`, not `admin.site`. `admin_ordering.py` controls sidebar grouping and must be updated when new admin-registered models land.
+- Templates extend `admin/base_site.html` for the dark theme.
+- `BaseEquipmentAdmin` provides role-based permission filtering — extend it, don't reimplement.
 
-**Key architectural decision:** The monitoring runs from a laptop on the show network. There is no separate agent or service — the engineer opens ShowStack in a browser on a machine connected to the Dante/LANet/switch networks. The backend (Django running locally or the browser itself) polls devices directly.
-
-**Target networks on a typical large-format show:**
-- **Dante** — mDNS-discoverable, well-documented control protocol, Python libraries available for discovery and status queries
-- **LA Network (Milan/AVB)** — L'Acoustics amplifiers with IP addresses, reachability confirmable via ping/ARP, no public API for deep telemetry
-- **Entertainment switches** — Luminex, Cisco, Netgear — SNMP v2c/v3 for port status, error counters, bandwidth, PoE
-
-**Prior work:** The CLAUDE.md references a Network Health Monitor section (§7b) as the current active development focus. Some early design thinking exists but no code has been written yet.
+**Deployment:** Railway uses `railway.json`'s `startCommand` (NOT the Procfile). Push to `main` triggers automatic redeploy.
 
 ## Constraints
 
-- **Existing codebase:** Must integrate with ShowStack's Django architecture, not be a standalone tool
-- **Network access:** Monitoring requires the laptop running ShowStack to be physically on the show networks
-- **Protocol limitations:** LA Network has no public API — connectivity confirmation only (ping/ARP), not deep amp telemetry
-- **Browser security:** Direct SNMP/mDNS from the browser is not possible — backend Django process must handle network polling
-- **Multi-network:** Show networks are often VLANed (Dante on one VLAN, control on another) — the monitoring laptop may need access to multiple VLANs
+- **Existing-codebase integration:** new modules must coexist with the monolithic `planner` app (~5700-line views.py, ~6000-line admin.py, ~4500-line models.py). Prefer foreign keys to existing models over duplicating data.
+- **Beta-tester sensitivity:** breaking changes to existing modules need beta-tester coordination. New modules are additive and lower-risk.
+- **Solo development:** no merge gates beyond Charlie's review; CI is light. Compensate with explicit verification gates in GSD phase plans.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Local agent model (laptop on network) | ShowStack runs on Railway but show networks are local; engineer's laptop bridges the gap | — Pending |
-| Active alerts, not passive status | Engineers need to be notified of problems during a show, not just check periodically | — Pending |
-| Session history for show day | Post-show troubleshooting and documentation require knowing when things went down/up | — Pending |
-| LA Network = connectivity only | No public API for deep telemetry; reachability is still valuable | — Pending |
+| Each ShowStack module is its own GSD milestone (v2.0, v2.1, ...) under a single ShowStack-as-platform project | One-module-per-project cluttered planning; unifying makes cross-module work tractable | In effect from 2026-05-09 |
+| Network Health Monitor scrapped from ShowStack | WiFi/Dante NIC conflicts make cloud-hosted monitoring impossible — moved to standalone-app architecture | v1.0 closed without ship |
+| Multitrack Session Builder selected as v2.0 | Strong differentiation against flaky Yamaha-Steinberg native integration; Reaper has no first-party path | Pending |
 
 ## Evolution
 
@@ -86,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-21 after initialization*
+*Last updated: 2026-05-09 — pivoted from Network Monitor (v1.0 scrapped) to ShowStack-as-platform with v2.0 Multitrack Session Builder*
