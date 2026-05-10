@@ -896,14 +896,171 @@ class ConsoleStereoOutput(models.Model):
     name = models.CharField(max_length=100, blank=True, null=True)
     dante_number = models.IntegerField(null=True, blank=True)
     omni_out = models.CharField(max_length=100, blank=True, null=True)
-    
+
     def __str__(self):
         return f"{self.get_stereo_type_display()} - {self.name}"
-    
+
     class Meta:
-        ordering = ['stereo_type']   
-   
-    
+        ordering = ['stereo_type']
+
+
+
+# ──────────────────────────────────────────────────────────────────
+# Multitrack Session Builder (Phase 1 of v2.0)
+# Discriminator pattern per CONTEXT.md D-01: no FK to channel models;
+# (source_type, source_id) is the discriminator. post_delete signals
+# in planner/signals.py convert orphans to source_type='manual'.
+# ──────────────────────────────────────────────────────────────────
+
+class MultitrackSession(models.Model):
+    """A multitrack recording session built from a console's channels.
+
+    Discriminator-based track sourcing (no FK constraint to channel models)
+    keeps beta-tester data safe — D-01 / D-02. Spec correction D-13: console
+    is a FK to planner.Console (not Device).
+    """
+    TARGET_DAW_CHOICES = [
+        ('reaper', 'Reaper'),
+        ('nuendo_live', 'Nuendo Live'),  # disabled in UI until Phase 4 ships
+    ]
+    FEED_SOURCE_CHOICES = [
+        ('console_dante', 'Console Dante card'),
+        ('rio_direct', 'RIO direct'),
+        ('custom', 'Custom'),
+    ]
+    TRACK_ORDER_MODE_CHOICES = [
+        ('console', 'Console channel order'),
+        ('dante', 'Dante stream order'),
+        ('custom', 'Custom (drag order)'),
+    ]
+
+    project = models.ForeignKey(
+        'Project', on_delete=models.CASCADE, related_name='multitrack_sessions'
+    )
+    console = models.ForeignKey(
+        'Console', on_delete=models.CASCADE, related_name='multitrack_sessions'
+    )
+    name = models.CharField(max_length=100)
+    target_daw = models.CharField(
+        max_length=20, choices=TARGET_DAW_CHOICES, default='reaper'
+    )
+    feed_source = models.CharField(
+        max_length=20, choices=FEED_SOURCE_CHOICES, default='console_dante'
+    )
+    track_order_mode = models.CharField(
+        max_length=10, choices=TRACK_ORDER_MODE_CHOICES, default='console'
+    )
+    recorder_capacity = models.PositiveIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Multitrack Session"
+        verbose_name_plural = "Multitrack Sessions"
+        ordering = ['-updated_at', 'name']
+        unique_together = [('project', 'name')]
+
+
+# Module-level discriminator → model class dispatch (D-01 / D-14).
+def _source_model_for(source_type):
+    """Map MultitrackTrack.source_type to the corresponding channel model class."""
+    if source_type == 'input':
+        return ConsoleInput
+    if source_type == 'aux':
+        return ConsoleAuxOutput
+    if source_type == 'matrix':
+        return ConsoleMatrixOutput
+    if source_type == 'stereo':
+        return ConsoleStereoOutput
+    return None  # 'manual' or unknown
+
+
+class MultitrackTrack(models.Model):
+    """One row of a session's track list. Source channel referenced by
+    (source_type, source_id) discriminator (D-01) — no FK constraint."""
+    SOURCE_TYPE_CHOICES = [
+        ('input', 'Input'),
+        ('aux', 'Aux Output'),
+        ('matrix', 'Matrix Output'),
+        ('stereo', 'Stereo Output'),
+        ('manual', 'Manual'),
+    ]
+
+    session = models.ForeignKey(
+        MultitrackSession, on_delete=models.CASCADE, related_name='tracks'
+    )
+    track_number = models.PositiveIntegerField(default=1)
+    source_type = models.CharField(max_length=10, choices=SOURCE_TYPE_CHOICES)
+    source_id = models.PositiveIntegerField(null=True, blank=True)
+    label_override = models.CharField(max_length=100, blank=True, default='')
+    color_override = models.CharField(max_length=7, blank=True, default='')
+    enabled = models.BooleanField(default=True)
+    notes = models.CharField(max_length=200, blank=True, default='')
+
+    @property
+    def resolved_source(self):
+        """D-14: return the live channel-model instance, or None for manual / orphan."""
+        model = _source_model_for(self.source_type)
+        if model is None or self.source_id is None:
+            return None
+        return model.objects.filter(pk=self.source_id).first()
+
+    @property
+    def resolved_label(self):
+        """D-14: label_override → channel name field → channel number → '(untitled)'."""
+        if self.label_override:
+            return self.label_override
+        src = self.resolved_source
+        if src is None:
+            return '(untitled)'
+        if self.source_type == 'input':
+            return src.source or src.input_ch or (
+                f'Input {src.dante_number}' if src.dante_number else '(untitled)'
+            )
+        if self.source_type == 'aux':
+            return src.name or f'Aux {src.aux_number}'
+        if self.source_type == 'matrix':
+            return src.name or f'Matrix {src.matrix_number}'
+        if self.source_type == 'stereo':
+            return src.name or src.get_stereo_type_display()
+        return '(untitled)'
+
+    @property
+    def resolved_color(self):
+        """D-14 / D-06: color_override only in Phase 1 (Phase 5 may extend)."""
+        return self.color_override or None
+
+    @property
+    def resolved_dante_number(self):
+        """D-14: int Dante stream number across all source types, or None.
+        ConsoleInput.dante_number is CharField; the other three are IntegerField —
+        normalise both via int() with try/except.
+        """
+        src = self.resolved_source
+        if src is None or not getattr(src, 'dante_number', None):
+            return None
+        try:
+            return int(src.dante_number)
+        except (ValueError, TypeError):
+            return None
+
+    def __str__(self):
+        return f"#{self.track_number} {self.resolved_label}"
+
+    class Meta:
+        verbose_name = "Multitrack Track"
+        verbose_name_plural = "Multitrack Tracks"
+        ordering = ['track_number']
+        indexes = [
+            models.Index(
+                fields=['source_type', 'source_id'],
+                name='mts_track_src_idx',
+            ),
+        ]
 
 
     # planner/models.py
