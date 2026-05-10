@@ -78,9 +78,9 @@ The Multitrack module inherits the Django admin font stack and declares **exactl
 | Heading | 20px (1.25rem) | 600 (semibold) | 1.2 | Editor session title, modal title, dashboard section titles |
 | Display | 28px (1.75rem) | 600 (semibold) | 1.2 | Empty-state heading on the dashboard ("No sessions yet") and major page titles |
 
-**Monospace exceptions (accepted, not new sizes):** channel numbers (`IN 1`, `IN 47`), source-type badges, hex color codes, and capacity ratios (`47 / 64`) render in `font-family: monospace` at the **Body** size (14px) with weight 600. This matches `cc-port-gid`, `cc-port-badge`, `cc-key-letter` in `comm_config.html`.
+**Monospace exceptions (accepted, not new sizes):** channel numbers (`IN 1`, `IN 47`), source-type badges, hex color codes, and capacity ratios (`47 / 64`) render in `font-family: monospace`. Monospace exceptions render at Label (12px) or Body (14px) with weight 600. This matches `cc-port-gid`, `cc-port-badge`, `cc-key-letter` in `comm_config.html`.
 
-**Weight rule:** No italics. No oblique. No weight 300 or 700 outside monospace badges. Two weights only: 400 and 600.
+**Weight rule:** No italics. No oblique. Two weights only: 400 and 600.
 
 **Line-height rule:** All multi-line copy (notes textarea, error messages, empty-state body) uses 1.5. All short single-line labels and headings use 1.2–1.4.
 
@@ -137,7 +137,7 @@ The module uses the established ShowStack dark palette. Roles below are **bindin
 | `stereo` | `#2a1a3a` | `#a070ff` | `#4a3a6a` |
 | `manual` | `#2a2a2a` | `#c0c0c0` | `#444444` |
 
-These mirror the cc-port-badge convention in `comm_config.html` (lines 469–470). Badge content is the uppercase short token: `INPUT`, `AUX`, `MTX`, `ST`, `MANUAL`. Font: monospace 12px weight 700.
+These mirror the cc-port-badge convention in `comm_config.html` (lines 469–470). Badge content is the uppercase short token: `INPUT`, `AUX`, `MTX`, `ST`, `MANUAL`. Font: monospace 12px weight 600.
 
 ---
 
