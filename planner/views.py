@@ -63,9 +63,12 @@ from .models import (
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
     Device, Device, SystemProcessor, Amp, Location, PACableSchedule, PAZone,
-    ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile, 
-    AmplifierAssignment
+    ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile,
+    AmplifierAssignment,
+    MultitrackSession, MultitrackTrack,
+    ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
 )
+from .forms import MultitrackSessionForm
 
 def console_detail(request, console_id):
     console = get_object_or_404(Console, pk=console_id)
@@ -5731,7 +5734,347 @@ def comm_config_export_freespeak(request, config_id):
         shutil.rmtree(tmp_dir)
 
 
+# ──────────────────────────────────────────────────────────────────
+# Multitrack Session Builder (Phase 1 of v2.0)
+# All views project-scoped via request.current_project (CurrentProjectMiddleware).
+# All page renders use @staff_member_required; POST mutate endpoints use @require_POST.
+# ──────────────────────────────────────────────────────────────────
+
+@staff_member_required
+def multitrack_dashboard(request):
+    """List view of MultitrackSessions for the current project (MTS-03).
+
+    Renders the dashboard with the session-card grid. Empty state shown
+    when no sessions exist for the current project.
+    """
+    current_project = getattr(request, 'current_project', None)
+    sessions = (
+        MultitrackSession.objects.filter(project=current_project)
+        .select_related('console')
+        .order_by('-updated_at')
+        if current_project else MultitrackSession.objects.none()
+    )
+    return render(request, 'planner/multitrack/dashboard.html', {
+        'sessions': sessions,
+        'current_project': current_project,
+    })
 
 
+def _build_picker_data(session, existing_tracks):
+    """Build the four channel lists for the picker, with already-added rows hidden (D-09).
+
+    Returns a dict {inputs: [...], aux: [...], matrix: [...], stereo: [...]}
+    where each list is [{id, label, channel_number, dante_number}, ...].
+    """
+    used_ids = {
+        'input': {t.source_id for t in existing_tracks if t.source_type == 'input' and t.source_id},
+        'aux': {t.source_id for t in existing_tracks if t.source_type == 'aux' and t.source_id},
+        'matrix': {t.source_id for t in existing_tracks if t.source_type == 'matrix' and t.source_id},
+        'stereo': {t.source_id for t in existing_tracks if t.source_type == 'stereo' and t.source_id},
+    }
+    console = session.console
+    return {
+        'inputs': [
+            {
+                'id': c.id,
+                'label': c.source or c.input_ch or (f'Input {c.dante_number}' if c.dante_number else f'Input {c.id}'),
+                'channel_number': c.input_ch or '',
+                'dante_number': c.dante_number or '',
+            }
+            for c in ConsoleInput.objects.filter(console=console)
+            .exclude(id__in=used_ids['input']).order_by('id')
+        ],
+        'aux': [
+            {
+                'id': c.id,
+                'label': c.name or f'Aux {c.aux_number}',
+                'channel_number': c.aux_number or '',
+                'dante_number': c.dante_number,
+            }
+            for c in ConsoleAuxOutput.objects.filter(console=console)
+            .exclude(id__in=used_ids['aux']).order_by('id')
+        ],
+        'matrix': [
+            {
+                'id': c.id,
+                'label': c.name or f'Matrix {c.matrix_number}',
+                'channel_number': c.matrix_number or '',
+                'dante_number': c.dante_number,
+            }
+            for c in ConsoleMatrixOutput.objects.filter(console=console)
+            .exclude(id__in=used_ids['matrix']).order_by('id')
+        ],
+        'stereo': [
+            {
+                'id': c.id,
+                'label': c.name or c.get_stereo_type_display(),
+                'channel_number': c.stereo_type or '',
+                'dante_number': c.dante_number,
+            }
+            for c in ConsoleStereoOutput.objects.filter(console=console)
+            .exclude(id__in=used_ids['stereo']).order_by('id')
+        ],
+    }
+
+
+def _editor_context(session, tracks=None, **extras):
+    """Build the canonical context dict for the multitrack editor template.
+
+    SHARED HELPER — every render of `planner/multitrack/editor.html` MUST go
+    through this function. The template binds to a fixed contract; if any
+    caller forgets a key, the template silently degrades. Centralising the
+    contract here closes that gap.
+
+    Args:
+      session: MultitrackSession instance (required).
+      tracks: optional iterable of MultitrackTrack rows. If None, defaults
+              to `list(session.tracks.all().order_by('track_number'))` so the
+              normal page render path stays a one-liner. Callers that need a
+              filtered set (e.g. the no-enabled-tracks export fallback) pass
+              their own queryset.
+      **extras: any additional context keys the caller wants to merge in
+                (e.g. `export_error='...'`, `auto_open_picker=False`).
+                Extras take precedence over computed defaults.
+
+    Returns:
+      dict with keys: session, tracks, picker_data_json, auto_open_picker,
+                      total_count, over_count, plus any extras.
+
+    Computed defaults:
+      - tracks: session.tracks ordered by track_number (when not supplied)
+      - picker_data_json: json.dumps(_build_picker_data(session, tracks))
+      - auto_open_picker: True iff tracks list is empty (D-12)
+      - total_count: len(tracks)
+      - over_count: max(0, total_count - session.recorder_capacity) when
+                    recorder_capacity is set; else 0. Used by the editor
+                    template's capacity bar to render the "— N over capacity"
+                    suffix without inline {% widthratio %} arithmetic.
+    """
+    if tracks is None:
+        tracks = list(session.tracks.all().order_by('track_number'))
+    else:
+        tracks = list(tracks)
+
+    total_count = len(tracks)
+    capacity = session.recorder_capacity
+    over_count = (total_count - capacity) if (capacity is not None and total_count > capacity) else 0
+
+    ctx = {
+        'session': session,
+        'tracks': tracks,
+        'picker_data_json': json.dumps(_build_picker_data(session, tracks)),
+        'auto_open_picker': total_count == 0,   # D-12
+        'total_count': total_count,
+        'over_count': over_count,
+    }
+    ctx.update(extras)
+    return ctx
+
+
+@staff_member_required
+def multitrack_editor(request, session_id):
+    """Editor view of a single MultitrackSession (TRK-01..10, RPP-01/05).
+
+    Page render only — Sortable.js + AJAX endpoints in Plan 04 mutate state.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    session = (
+        MultitrackSession.objects
+        .filter(id=session_id, project=current_project)   # IDOR-safe combined filter
+        .select_related('console')
+        .first()
+    )
+    if not session:
+        return redirect('planner:multitrack_dashboard')
+
+    return render(request, 'planner/multitrack/editor.html', _editor_context(session))
+
+
+@staff_member_required
+def multitrack_create_view(request):
+    """GET: render new-session form. POST: create + redirect to editor (MTS-01, D-12)."""
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    if request.method == 'POST':
+        form = MultitrackSessionForm(request.POST, request=request)
+        if form.is_valid():
+            session = form.save()
+            return redirect('planner:multitrack_editor', session_id=session.id)
+    else:
+        form = MultitrackSessionForm(request=request)
+
+    return render(request, 'planner/multitrack/new_session.html', {
+        'form': form,
+        'mode': 'create',
+    })
+
+
+@staff_member_required
+def multitrack_edit_view(request, session_id):
+    """GET / POST edit-metadata form (MTS-04). Tracks are NOT touched.
+
+    On success, redirect to the editor.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    session = MultitrackSession.objects.filter(
+        id=session_id, project=current_project
+    ).first()
+    if not session:
+        return redirect('planner:multitrack_dashboard')
+
+    if request.method == 'POST':
+        form = MultitrackSessionForm(request.POST, instance=session, request=request)
+        if form.is_valid():
+            form.save()
+            return redirect('planner:multitrack_editor', session_id=session.id)
+    else:
+        form = MultitrackSessionForm(instance=session, request=request)
+
+    return render(request, 'planner/multitrack/new_session.html', {
+        'form': form,
+        'session': session,
+        'mode': 'edit',
+    })
+
+
+@require_POST
+def multitrack_duplicate(request, session_id):
+    """POST: duplicate the session + all tracks under a new name (MTS-06).
+
+    Body: JSON {new_name: '...'} (UI-SPEC duplicate-modal). New session
+    name is required; defaults to '{original} (copy)' if blank.
+    Returns JSON {ok, redirect_url} or {error, status: 4xx}.
+    """
+    try:
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        source = MultitrackSession.objects.filter(
+            id=session_id, project=current_project
+        ).first()
+        if not source:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+
+        data = json.loads(request.body or '{}')
+        new_name = (data.get('new_name') or '').strip() or f'{source.name} (copy)'
+
+        # Uniqueness check (mirrors form clean_name)
+        if MultitrackSession.objects.filter(
+            project=current_project, name=new_name
+        ).exists():
+            return JsonResponse({
+                'error': f'A session named "{new_name}" already exists in this project. '
+                         f'Pick a different name.',
+            }, status=409)
+
+        # Copy session
+        new_session = MultitrackSession.objects.create(
+            project=current_project,
+            console=source.console,
+            name=new_name,
+            target_daw=source.target_daw,
+            feed_source=source.feed_source,
+            track_order_mode=source.track_order_mode,
+            recorder_capacity=source.recorder_capacity,
+            notes=source.notes,
+        )
+        # Copy tracks (bulk_create — single INSERT)
+        new_tracks = [
+            MultitrackTrack(
+                session=new_session,
+                track_number=t.track_number,
+                source_type=t.source_type,
+                source_id=t.source_id,
+                label_override=t.label_override,
+                color_override=t.color_override,
+                enabled=t.enabled,
+                notes=t.notes,
+            )
+            for t in source.tracks.all().order_by('track_number')
+        ]
+        MultitrackTrack.objects.bulk_create(new_tracks)
+
+        return JsonResponse({
+            'ok': True,
+            'session_id': new_session.id,
+            'redirect_url': reverse('planner:multitrack_editor', args=[new_session.id]),
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_rename(request, session_id):
+    """POST: rename a session (MTS-02).
+
+    Body: JSON {name: '...'}. Returns {ok, name} or {error, status: 409} on
+    unique-together conflict.
+    """
+    try:
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        session = MultitrackSession.objects.filter(
+            id=session_id, project=current_project
+        ).first()
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+
+        data = json.loads(request.body or '{}')
+        new_name = (data.get('name') or '').strip()
+        if not new_name:
+            return JsonResponse({'error': 'Name is required.'}, status=400)
+        if len(new_name) > 100:
+            return JsonResponse({'error': 'Name must be 100 characters or fewer.'}, status=400)
+
+        if MultitrackSession.objects.filter(
+            project=current_project, name=new_name
+        ).exclude(pk=session.pk).exists():
+            return JsonResponse({
+                'error': f'A session named "{new_name}" already exists in this project. '
+                         f'Pick a different name.',
+            }, status=409)
+
+        session.name = new_name
+        session.save(update_fields=['name', 'updated_at'])
+        return JsonResponse({'ok': True, 'name': new_name})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_delete(request, session_id):
+    """POST: delete a session and (via CASCADE) all its tracks (MTS-05).
+
+    Returns JSON {ok, redirect_url} so the JS can navigate after success.
+    """
+    try:
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        session = MultitrackSession.objects.filter(
+            id=session_id, project=current_project
+        ).first()
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+
+        session.delete()   # CASCADE on MultitrackTrack.session FK handles tracks
+        return JsonResponse({
+            'ok': True,
+            'redirect_url': reverse('planner:multitrack_dashboard'),
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
