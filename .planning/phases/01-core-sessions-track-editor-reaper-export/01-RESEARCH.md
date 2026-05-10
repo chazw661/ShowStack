@@ -1067,44 +1067,51 @@ In this research, the table is non-empty but all assumptions are LOW-risk and do
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-These should land in the planner's "Claude's Discretion" — not as decisions:
+All seven questions below were resolved during /gsd-discuss-phase (see 01-CONTEXT.md). The recommendations were accepted and locked. Listed here for traceability.
 
 1. **`MultitrackSession.notes` — required field?**
    - What we know: `multitrack_session_builder_spec.md` lists `notes = TextField(blank=True)` on `MultitrackSession`.
    - What's unclear: UI-SPEC § "+ New Session" Flow shows a "Notes (optional)" field — confirmed it should exist.
    - Recommendation: include it. `notes = TextField(blank=True, default='')`.
+   - **RESOLVED:** optional `TextField(blank=True, default='')` (matches CONTEXT.md spec patterns).
 
 2. **`MultitrackTrack.notes` — `CharField` or `TextField`?**
    - What we know: spec says `notes = CharField(max_length=200, blank=True)`. UI-SPEC describes per-track inline notes as short.
    - What's unclear: 200 chars feels right for a track-row inline field; nothing forces this.
    - Recommendation: `CharField(max_length=200, blank=True, default='')` per spec.
+   - **RESOLVED:** `TextField(blank=True, default='')` — engineers may write multi-line notes.
 
 3. **Edit metadata flow — full Django change form or inline modal?**
    - What we know: UI-SPEC § "Editor" lists "Edit metadata" as a tertiary action (plain link styling).
    - What's unclear: Does it open a dedicated form page (consistent with new-session form) or a modal?
    - Recommendation: dedicated form page at `/audiopatch/multitrack/<id>/edit/` — reuses the new-session form's template — simpler.
+   - **RESOLVED:** simple page (`/audiopatch/multitrack/<id>/edit/`) using same form template as create — matches existing planner module precedent.
 
 4. **What does the per-card dropdown's "Rename" do?**
    - What we know: UI-SPEC dashboard has Duplicate / Rename / Delete in the per-card dropdown.
    - What's unclear: Rename = inline text-edit on the card, or a small modal like Duplicate?
    - Recommendation: small modal matching Duplicate's pattern (single field, prefilled, primary "Rename" + Cancel).
+   - **RESOLVED:** opens an inline modal that posts a single `name` field to `/audiopatch/multitrack/<id>/rename/`.
 
 5. **`track_order_mode='dante'` ordering when channels have no Dante number.**
    - What we know: `dante_number` is nullable on all four channel models.
    - What's unclear: Where do channels with `dante_number=NULL` sort in `dante` mode? End? Hidden?
    - Recommendation: sort to end (after channels with numbers), then apply `track_number` as tiebreak. Manual tracks (also no Dante number) sort behind those.
+   - **RESOLVED:** null-Dante channels sort to the END of the list, then by track_number ascending; manual tracks sort after all real channels (also by track_number).
 
 6. **Does `Export to Reaper` produce `.RPP` or `.RTrackTemplate` by default?**
    - What we know: UI-SPEC has both as separate buttons (`[Export to Reaper]` primary, `[Export Track Template (.RTrackTemplate)]` secondary).
    - What's unclear: Is the primary button definitely `.RPP`?
    - Recommendation: yes — `.RPP` is the primary Reaper export per UI-SPEC. `.RTrackTemplate` is for "merge into existing project" workflows.
+   - **RESOLVED:** `.RPP` is the primary export from the editor toolbar; `.RTrackTemplate` is a secondary action (separate dropdown item or separate button).
 
 7. **`track_order_mode` mid-session change — preserve manual track positions?**
    - What we know: Custom mode uses `track_number`. Channel/Dante modes compute order on read.
    - What's unclear: If engineer drags in custom mode, then switches to channel mode, then back to custom, do drag positions persist?
    - Recommendation: yes — `track_number` is always saved on drag. Mode switches never mutate `track_number`. Mode purely controls render order.
+   - **RESOLVED:** changing mode does NOT renumber track_number; the sort-key for display is computed at render time. Switching to `custom` preserves the current order; switching back to `channel` or `dante` resorts on the resolved channel/dante number, with manual tracks sorted at the end by track_number.
 
 ---
 
