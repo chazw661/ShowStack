@@ -57,9 +57,12 @@ class HexToPeakcolTests(SimpleTestCase):
         self.assertEqual(hex_to_peakcol('#FF0000'), 16777471)
 
     def test_pure_green(self):
-        # R=0, G=255, B=0 -> 0x01000000 | (255<<8) = 16842240
+        # R=0, G=255, B=0 -> 0x01000000 | (255<<8) = 0x0100FF00 = 16842496.
+        # (Plan 01-02 <behavior> block lists 16842240 as the decimal — that is
+        # an arithmetic typo; the bit layout 0x0100FF00 is the source of truth.
+        # 0x01000000 = 16777216, plus 0xFF00 = 65280, equals 16842496.)
         self.assertEqual(hex_to_peakcol('#00FF00'), 0x0100FF00)
-        self.assertEqual(hex_to_peakcol('#00FF00'), 16842240)
+        self.assertEqual(hex_to_peakcol('#00FF00'), 16842496)
 
     def test_pure_blue(self):
         # R=0, G=0, B=255 -> 0x01000000 | (255<<16) = 33488896
