@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: Roadmap created (5 phases, 38 requirements, 100% coverage)
-last_updated: "2026-05-10T00:02:04.105Z"
-last_activity: 2026-05-09 — Roadmap drafted from `multitrack_session_builder_spec.md`
+status: executing
+last_updated: "2026-05-10T22:50:55.793Z"
+last_activity: 2026-05-10 -- Phase 01 execution started
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** v2.0 Multitrack Session Builder — roadmap created, awaiting plan-phase
+**Current focus:** Phase 01 — core-sessions-track-editor-reaper-export
 
 ## Current Position
 
-Phase: Not started (roadmap complete, ready for `/gsd-plan-phase 1`)
-Plan: —
-Status: Roadmap created (5 phases, 38 requirements, 100% coverage)
-Last activity: 2026-05-09 — Roadmap drafted from `multitrack_session_builder_spec.md`
+Phase: 01 (core-sessions-track-editor-reaper-export) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 01
+Last activity: 2026-05-10 -- Phase 01 execution started
 
 Progress: [          ] 0%
 
@@ -69,3 +69,5 @@ relevant plans land:
 3. **Phase 3 — color-scheme template semantics**: do `MultitrackTemplate.color_scheme` entries apply by name pattern (regex on channel name) or are they manual-only? Spec leaves this open.
 4. **Phase 4 — Nuendo Live template fixture**: Charlie must generate and commit `fixtures/nuendo_live_3_template.nlpr` (a fresh empty Nuendo Live 3 session with one default audio track) before the exporter can be implemented. The spec confirms `lxml` (not stdlib ElementTree) is required to preserve formatting.
 5. **Phase 4 — Rivage→Farb color mapping table** is not yet defined in the spec (only Yamaha CL/QL→Farb is). Either build the Rivage table during Phase 4 or accept that Rivage tracks export with `Farb` omitted in v2.0.
+
+**Planned Phase:** 01 (core-sessions-track-editor-reaper-export) — 6 plans — 2026-05-10T17:28:13.466Z

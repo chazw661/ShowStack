@@ -107,7 +107,10 @@ def ordered_get_app_list(request, app_label=None):
         'commposition': 13,
         'commcrewname': 14,
         'commchannel': 15,
-        
+
+        # Multitrack Session Builder (12.7)
+        'multitracksession': 12.7,
+
         # Show Mic Tracker (16-20)
         'showday': 16,
         'micsession': 17,
