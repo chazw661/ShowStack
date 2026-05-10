@@ -1081,7 +1081,7 @@ All seven questions below were resolved during /gsd-discuss-phase (see 01-CONTEX
    - What we know: spec says `notes = CharField(max_length=200, blank=True)`. UI-SPEC describes per-track inline notes as short.
    - What's unclear: 200 chars feels right for a track-row inline field; nothing forces this.
    - Recommendation: `CharField(max_length=200, blank=True, default='')` per spec.
-   - **RESOLVED:** `TextField(blank=True, default='')` — engineers may write multi-line notes.
+   - **RESOLVED:** `CharField(max_length=200, blank=True, default='')` — keeps notes single-line short for the manual-track inline form (D-11) and consistent with the 200-char cap enforced in Plan 04's `multitrack_add_tracks` validator. If long-form notes become a need in v2.1, migrate to TextField at that point — additive only.
 
 3. **Edit metadata flow — full Django change form or inline modal?**
    - What we know: UI-SPEC § "Editor" lists "Edit metadata" as a tertiary action (plain link styling).
@@ -1093,7 +1093,7 @@ All seven questions below were resolved during /gsd-discuss-phase (see 01-CONTEX
    - What we know: UI-SPEC dashboard has Duplicate / Rename / Delete in the per-card dropdown.
    - What's unclear: Rename = inline text-edit on the card, or a small modal like Duplicate?
    - Recommendation: small modal matching Duplicate's pattern (single field, prefilled, primary "Rename" + Cancel).
-   - **RESOLVED:** opens an inline modal that posts a single `name` field to `/audiopatch/multitrack/<id>/rename/`.
+   - **RESOLVED:** browser-native `window.prompt('Rename session:', currentName)` matching `mtsDuplicateSession`'s prompt-based UX. Trade-off: not styled to the dark-admin shell, but consistent with the existing `mtsDuplicateSession` flow and zero added template/CSS surface for Phase 1. A styled inline modal can replace both prompt() calls in v2.0.1 polish without breaking the URL contract.
 
 5. **`track_order_mode='dante'` ordering when channels have no Dante number.**
    - What we know: `dante_number` is nullable on all four channel models.
