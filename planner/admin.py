@@ -35,6 +35,7 @@ from django.db import models
 # Model imports (add the mic tracking models to your existing model imports)
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
+from .models import MultitrackSession, MultitrackTrack
 from .models import Location, Amp, AmpChannel, AmpDivider
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
@@ -5893,11 +5894,57 @@ class DarkThemeAdminMixin:
     
 
 
+# ──────────────────────────────────────────────────────────────────
+# Multitrack Session Builder admin (Phase 1 of v2.0)
+# Subclasses BaseEquipmentAdmin so save_model auto-fills project from
+# request.current_project (admin.py:98). Bounces to the custom UI at
+# /audiopatch/multitrack/ — the rich editor lives there, not in admin.
+# ──────────────────────────────────────────────────────────────────
+
+class MultitrackSessionAdmin(BaseEquipmentAdmin):
+    list_display = ['name', 'console', 'target_daw', 'feed_source', 'updated_at']
+    list_filter = ['target_daw', 'feed_source', 'track_order_mode']
+    search_fields = ['name', 'console__name']
+    fieldsets = (
+        ('Session', {
+            'fields': ('name', 'console', 'target_daw', 'feed_source',
+                       'track_order_mode', 'recorder_capacity', 'notes'),
+        }),
+    )
+
+    def changelist_view(self, request, extra_context=None):
+        """Bounce admin changelist to the custom UI (matches CommConfigAdmin)."""
+        from django.shortcuts import redirect
+        return redirect('planner:multitrack_dashboard')
+
+    def has_add_permission(self, request):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
     # ==================== REGISTER ALL MODELS ====================
 from planner.admin_site import showstack_admin_site
 
 # Register all equipment admin classes
 showstack_admin_site.register(Console, ConsoleAdmin)
+showstack_admin_site.register(MultitrackSession, MultitrackSessionAdmin)
 showstack_admin_site.register(Device, DeviceAdmin)
 showstack_admin_site.register(AmpModel, AmpModelAdmin)
 showstack_admin_site.register(Amp, AmpAdmin)
