@@ -8,6 +8,7 @@ from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
 from .models import  ConsoleStereoOutput
 from .models import PACableSchedule, PAZone, CommPosition, CommCrewName, CommBeltPack
+from .models import Console, MultitrackSession
 
 
 
@@ -1120,5 +1121,102 @@ class CommBeltPackAdminForm(forms.ModelForm):
         
         if commit:
             instance.save()
-        
+
+        return instance
+
+
+# ─── Multitrack Session Form (Phase 1 v2.0) ────────────────────────────────────
+
+class MultitrackSessionForm(forms.ModelForm):
+    """ModelForm for creating / editing MultitrackSession (MTS-01, MTS-04).
+
+    The `request` kwarg is REQUIRED — used to scope the console queryset
+    to the current project. Pass via `MultitrackSessionForm(data, request=request)`.
+    """
+
+    class Meta:
+        model = MultitrackSession
+        fields = [
+            'name',
+            'console',
+            'target_daw',
+            'feed_source',
+            'track_order_mode',
+            'recorder_capacity',
+            'notes',
+        ]
+        widgets = {
+            'target_daw': forms.RadioSelect(),
+            'feed_source': forms.RadioSelect(),
+            'track_order_mode': forms.RadioSelect(),
+            'notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
+        super().__init__(*args, **kwargs)
+
+        # D-13: scope console queryset to current_project
+        if request is not None and getattr(request, 'current_project', None):
+            self.fields['console'].queryset = Console.objects.filter(
+                project=request.current_project
+            )
+        else:
+            self.fields['console'].queryset = Console.objects.none()
+
+        # Disable Nuendo Live choice in Phase 1 (UI-SPEC: "(coming v2.0)")
+        # We render this in the template; here we just ensure the form
+        # validates if Reaper is picked. The template marks the radio
+        # disabled — server-side, we additionally refuse `nuendo_live`.
+        # (Belt + suspenders against a tampered POST.)
+
+        # Required-asterisk styling (UI-SPEC: required fields show *)
+        for fname in ('name', 'console', 'target_daw', 'feed_source', 'track_order_mode'):
+            if fname in self.fields:
+                self.fields[fname].required = True
+
+        self.fields['recorder_capacity'].required = False
+        self.fields['notes'].required = False
+
+    def clean_target_daw(self):
+        """Phase 1 ships Reaper only; Nuendo Live arrives in Phase 4."""
+        value = self.cleaned_data.get('target_daw')
+        if value == 'nuendo_live':
+            raise forms.ValidationError(
+                'Nuendo Live export ships in v2.0 Phase 4. '
+                'Pick Reaper for now.'
+            )
+        return value
+
+    def clean_name(self):
+        """MTS-02 unique-per-project name validation.
+
+        UI-SPEC error string is binding — copy verbatim.
+        """
+        name = (self.cleaned_data.get('name') or '').strip()
+        if not name:
+            raise forms.ValidationError('Name is required.')
+        if self.request is None or not getattr(self.request, 'current_project', None):
+            raise forms.ValidationError('No active project — cannot validate name.')
+
+        existing = MultitrackSession.objects.filter(
+            project=self.request.current_project,
+            name=name,
+        )
+        if self.instance.pk:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise forms.ValidationError(
+                f'A session named "{name}" already exists in this project. '
+                f'Pick a different name.'
+            )
+        return name
+
+    def save(self, commit=True):
+        """Auto-fill project from request.current_project on create."""
+        instance = super().save(commit=False)
+        if not instance.pk and self.request is not None:
+            instance.project = self.request.current_project
+        if commit:
+            instance.save()
         return instance
