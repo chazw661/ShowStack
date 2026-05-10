@@ -64,7 +64,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Engineer can override per-track label and color, drag-reorder the track list, enable/disable individual tracks, and see a "47 / 64" count vs `recorder_capacity` (turning red when over)
   4. Engineer clicks "Export to Reaper" and downloads a `.RPP` (and optionally `.RTrackTemplate`) where track names match the resolved labels, track colors match the resolved colors mapped to Reaper packed RGB, and the track order matches the session's `track_order_mode`
   5. Opening the exported `.RPP` in Reaper produces a project with one track per enabled MultitrackTrack, no errors, names and colors as configured
-**Plans**: TBD
+**Plans**: 6 plans
+- [ ] 01-01-PLAN.md — Foundation: models, migration, signals, admin, admin_ordering (Wave 1)
+- [ ] 01-02-PLAN.md — Reaper exporter utility (Wave 2, parallel-safe)
+- [ ] 01-03-PLAN.md — Forms + page-render views + URL stubs (Wave 2)
+- [ ] 01-04-PLAN.md — AJAX endpoints + Reaper export views (Wave 3)
+- [ ] 01-05-PLAN.md — Templates: dashboard, editor, new_session + four partials (Wave 4)
+- [ ] 01-06-PLAN.md — JS controller + Sortable.js vendor + multitrack.css (Wave 4, parallel with 05)
 **UI hint**: yes
 
 ### Phase 2: Console CSV Import
@@ -121,7 +127,7 @@ in parallel, but solo dev means sequential execution per the spec's order.)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Sessions, Track Editor & Reaper Export | 0/0 | Not started | - |
+| 1. Core Sessions, Track Editor & Reaper Export | 0/6 | Planned (6 plans, 4 waves) | - |
 | 2. Console CSV Import | 0/0 | Not started | - |
 | 3. Multitrack Templates | 0/0 | Not started | - |
 | 4. Nuendo Live Export | 0/0 | Not started | - |
