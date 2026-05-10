@@ -94,6 +94,35 @@ urlpatterns = [
      path('comm-config/<int:config_id>/export/', views.comm_config_export, name='comm_config_export'),
      path('comm-config/delete/', views.comm_config_delete, name='comm_config_delete'),
 
+    # ──────────────────────────────────────────────────────────────
+    # Multitrack Session Builder (Phase 1 of v2.0)
+    # All under /audiopatch/multitrack/* (audiopatch/urls.py mounts
+    # planner.urls at /audiopatch/).
+    # ──────────────────────────────────────────────────────────────
+
+    # Page-render
+    path('multitrack/', views.multitrack_dashboard, name='multitrack_dashboard'),
+    path('multitrack/new/', views.multitrack_create_view, name='multitrack_create'),
+    path('multitrack/<int:session_id>/', views.multitrack_editor, name='multitrack_editor'),
+    path('multitrack/<int:session_id>/edit/', views.multitrack_edit_view, name='multitrack_edit'),
+
+    # AJAX mutate (this plan)
+    path('multitrack/<int:session_id>/duplicate/', views.multitrack_duplicate, name='multitrack_duplicate'),
+    path('multitrack/<int:session_id>/rename/', views.multitrack_rename, name='multitrack_rename'),
+    path('multitrack/<int:session_id>/delete/', views.multitrack_delete, name='multitrack_delete'),
+
+    # AJAX mutate (Plan 04 will add):
+    #   multitrack/<id>/reorder/        -> multitrack_reorder
+    #   multitrack/<id>/add-tracks/     -> multitrack_add_tracks
+    #   multitrack/<id>/capacity/       -> multitrack_capacity_check
+    #   multitrack/track/set-color/     -> multitrack_set_color
+    #   multitrack/track/set-label/     -> multitrack_set_label
+    #   multitrack/track/set-enabled/   -> multitrack_set_enabled
+    #   multitrack/track/remove/        -> multitrack_remove_track
+    # File downloads (Plan 04 will add):
+    #   multitrack/<id>/export.rpp/             -> multitrack_export_rpp
+    #   multitrack/<id>/export.rtracktemplate/  -> multitrack_export_rtracktemplate
+
     # Dashboard
     path('admin/', admin.site.urls),
     path('dashboard/', SystemDashboardView.as_view(), name='system-dashboard'),
