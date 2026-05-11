@@ -1,0 +1,55 @@
+<div class="mts-track-row{% if not track.enabled %} mts-track-row--disabled{% endif %}"
+     data-track-id="{{ track.id }}"
+     data-source-type="{{ track.source_type }}"
+     data-source-id="{{ track.source_id|default:'' }}">
+
+  <span class="mts-drag" aria-label="Drag to reorder" tabindex="0">⋮⋮</span>
+
+  <input type="checkbox" class="mts-enable-checkbox"
+         aria-label="Enable this track in exports"
+         {% if track.enabled %}checked{% endif %}
+         onchange="mtsSetEnabled({{ track.id }}, this.checked)">
+
+  <span class="mts-track-num">#{{ track.track_number }}</span>
+
+  <span class="mts-badge mts-badge--{{ track.source_type }}">
+    {% if track.source_type == 'input' %}INPUT{% elif track.source_type == 'aux' %}AUX{% elif track.source_type == 'matrix' %}MTX{% elif track.source_type == 'stereo' %}ST{% else %}MANUAL{% endif %}
+  </span>
+
+  <div class="mts-track-label-cell" onclick="mtsEditLabel({{ track.id }}, this)">
+    <span class="mts-track-label-display">{{ track.resolved_label }}</span>
+    {% if track.label_override and track.resolved_source %}
+      <span class="mts-track-source-fallback">↳ {% with src=track.resolved_source %}{% if track.source_type == 'input' %}{{ src.source|default:src.input_ch|default:'' }}{% else %}{{ src.name|default:'' }}{% endif %}{% endwith %}</span>
+    {% endif %}
+    <input type="text" class="mts-track-label-input" style="display:none"
+           value="{{ track.label_override }}"
+           placeholder="Override label…"
+           maxlength="100"
+           data-track-id="{{ track.id }}"
+           onblur="mtsSaveLabel({{ track.id }}, this.value)"
+           onkeydown="if(event.key==='Enter'){this.blur();}else if(event.key==='Escape'){mtsCancelLabel(this, {{ track.id }});}">
+  </div>
+
+  <button type="button"
+          class="mts-swatch{% if not track.color_override %} mts-swatch--empty{% endif %}"
+          data-track-id="{{ track.id }}"
+          data-color="{{ track.color_override }}"
+          title="{% if track.color_override %}Click to change. Right-click to clear.{% else %}Click to override color{% endif %}"
+          onclick="mtsOpenColorPicker(event, {{ track.id }})"
+          oncontextmenu="event.preventDefault(); mtsClearColor({{ track.id }});">
+    {% if track.color_override %}<span data-swatch-fill></span>{% else %}<span class="mts-swatch__empty-mark">⊘</span>{% endif %}
+  </button>
+
+  {# Notes column — DISPLAY ONLY in Phase 1.
+     Per checker decision (BLOCKER WARNING 3), notes are writable only at
+     creation time via the picker's manual-tab inline form (D-11). Editing
+     notes on existing tracks is deferred (no `multitrack_set_notes`
+     endpoint exists in Plan 04). Rendering an editable affordance here
+     would misleadingly imply edit-ability. Plain `<span>` is correct. #}
+  <span class="mts-track-notes-display" data-track-id="{{ track.id }}">{{ track.notes }}</span>
+
+  <button type="button" class="mts-remove-btn"
+          aria-label="Remove track"
+          title="Remove from session (does not delete the source channel)"
+          onclick="mtsRemoveTrack({{ track.id }})">×</button>
+</div>
