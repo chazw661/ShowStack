@@ -1,0 +1,25 @@
+{# 12-color swatch popover — single instance per page, repositioned by JS #}
+<div id="mts-color-popover" class="mts-color-popover" style="display:none">
+  <div class="mts-swatch-grid">
+    <button type="button" class="mts-color-swatch" data-color="#FF0000" title="Red"      onclick="mtsApplyColor('#FF0000')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#FF8800" title="Orange"   onclick="mtsApplyColor('#FF8800')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#FFDD00" title="Yellow"   onclick="mtsApplyColor('#FFDD00')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#33CC33" title="Green"    onclick="mtsApplyColor('#33CC33')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#00BBDD" title="Sky Blue" onclick="mtsApplyColor('#00BBDD')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#3366FF" title="Blue"     onclick="mtsApplyColor('#3366FF')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#9933FF" title="Purple"   onclick="mtsApplyColor('#9933FF')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#FF33AA" title="Pink"     onclick="mtsApplyColor('#FF33AA')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#FFFFFF" title="White"    onclick="mtsApplyColor('#FFFFFF')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#888888" title="Grey"     onclick="mtsApplyColor('#888888')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#552200" title="Brown"    onclick="mtsApplyColor('#552200')"></button>
+    <button type="button" class="mts-color-swatch" data-color="#000000" title="Black"    onclick="mtsApplyColor('#000000')"></button>
+  </div>
+  <div class="mts-color-popover__custom">
+    <label class="mts-caption" for="mts-color-custom-input">Custom:</label>
+    <input id="mts-color-custom-input" type="text" maxlength="7" placeholder="#000000"
+           pattern="^#[0-9A-Fa-f]{6}$"
+           onchange="mtsApplyColor(this.value)">
+  </div>
+  <button type="button" class="mts-link-btn mts-color-clear-btn"
+          onclick="mtsApplyColor('')">Clear color</button>
+</div>

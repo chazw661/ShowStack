@@ -1,0 +1,126 @@
+<div id="mts-picker-overlay" class="mts-picker-overlay" style="display:none">
+  <div class="mts-picker-panel" role="dialog" aria-labelledby="mts-picker-title">
+    <header class="mts-picker-header">
+      <h2 id="mts-picker-title" class="mts-picker-title">Add Tracks</h2>
+      <button type="button" class="mts-picker-close" aria-label="Close picker"
+              onclick="mtsClosePicker()">&#x2715;</button>
+    </header>
+
+    <nav class="mts-tabs" role="tablist">
+      <button type="button" class="mts-tab" data-tab="inputs"
+              onclick="mtsSwitchTab('inputs')" role="tab">Inputs <span data-tab-count></span></button>
+      <button type="button" class="mts-tab" data-tab="aux"
+              onclick="mtsSwitchTab('aux')" role="tab">Aux <span data-tab-count></span></button>
+      <button type="button" class="mts-tab" data-tab="matrix"
+              onclick="mtsSwitchTab('matrix')" role="tab">Matrix <span data-tab-count></span></button>
+      <button type="button" class="mts-tab" data-tab="stereo"
+              onclick="mtsSwitchTab('stereo')" role="tab">Stereo <span data-tab-count></span></button>
+      <button type="button" class="mts-tab" data-tab="manual"
+              onclick="mtsSwitchTab('manual')" role="tab">Manual</button>
+    </nav>
+
+    <div class="mts-picker-filter">
+      <input type="text" class="mts-filter-input"
+             placeholder="Filter by name or number…"
+             oninput="mtsFilterPicker(this.value)"
+             aria-label="Filter channels">
+    </div>
+
+    {# One panel per tab — the active panel is shown by JS #}
+    <div class="mts-tab-panel" data-panel="inputs">
+      <div class="mts-tab-header">
+        <span class="mts-tab-header-count" data-panel-count>Inputs</span>
+        <div class="mts-tab-bulk">
+          <button type="button" class="mts-link-btn" onclick="mtsSelectAllTab('inputs')">Select all</button>
+          <button type="button" class="mts-link-btn" onclick="mtsClearTab('inputs')">Clear</button>
+        </div>
+      </div>
+      <div class="mts-pick-list" data-pick-list="inputs"><!-- rendered by JS from picker_data_json --></div>
+      <p class="mts-pick-empty" data-empty-message data-empty-no-channels="This console has no input channels." data-empty-all-added="All input channels are already in this session.">This console has no input channels.</p>
+    </div>
+
+    <div class="mts-tab-panel" data-panel="aux">
+      <div class="mts-tab-header">
+        <span class="mts-tab-header-count" data-panel-count>Aux</span>
+        <div class="mts-tab-bulk">
+          <button type="button" class="mts-link-btn" onclick="mtsSelectAllTab('aux')">Select all</button>
+          <button type="button" class="mts-link-btn" onclick="mtsClearTab('aux')">Clear</button>
+        </div>
+      </div>
+      <div class="mts-pick-list" data-pick-list="aux"></div>
+      <p class="mts-pick-empty" data-empty-no-channels="This console has no aux channels." data-empty-all-added="All aux channels are already in this session.">This console has no aux channels.</p>
+    </div>
+
+    <div class="mts-tab-panel" data-panel="matrix">
+      <div class="mts-tab-header">
+        <span class="mts-tab-header-count" data-panel-count>Matrix</span>
+        <div class="mts-tab-bulk">
+          <button type="button" class="mts-link-btn" onclick="mtsSelectAllTab('matrix')">Select all</button>
+          <button type="button" class="mts-link-btn" onclick="mtsClearTab('matrix')">Clear</button>
+        </div>
+      </div>
+      <div class="mts-pick-list" data-pick-list="matrix"></div>
+      <p class="mts-pick-empty" data-empty-no-channels="This console has no matrix channels." data-empty-all-added="All matrix channels are already in this session.">This console has no matrix channels.</p>
+    </div>
+
+    <div class="mts-tab-panel" data-panel="stereo">
+      <div class="mts-tab-header">
+        <span class="mts-tab-header-count" data-panel-count>Stereo</span>
+        <div class="mts-tab-bulk">
+          <button type="button" class="mts-link-btn" onclick="mtsSelectAllTab('stereo')">Select all</button>
+          <button type="button" class="mts-link-btn" onclick="mtsClearTab('stereo')">Clear</button>
+        </div>
+      </div>
+      <div class="mts-pick-list" data-pick-list="stereo"></div>
+      <p class="mts-pick-empty" data-empty-no-channels="This console has no stereo channels." data-empty-all-added="All stereo channels are already in this session.">This console has no stereo channels.</p>
+    </div>
+
+    <div class="mts-tab-panel" data-panel="manual">
+      <div class="mts-tab-header">
+        <span class="mts-tab-header-count">Manual Tracks</span>
+      </div>
+
+      <div class="mts-manual-list" data-manual-list>
+        {# JS renders mts-manual-row entries here on demand #}
+      </div>
+
+      <button type="button" class="mts-btn mts-btn-secondary mts-manual-add-btn"
+              onclick="mtsAppendManualRow()">+ Add another</button>
+      <span class="mts-caption" data-manual-queued>0 manual tracks queued</span>
+    </div>
+
+    <footer class="mts-picker-footer">
+      <button type="button" class="mts-btn mts-btn-primary"
+              data-commit-btn
+              onclick="mtsCommitPickerSelection()">Add 0 selected</button>
+      <button type="button" class="mts-btn mts-btn-secondary" onclick="mtsClosePicker()">Cancel</button>
+    </footer>
+  </div>
+</div>
+
+{# Manual-row template — cloned by JS via `<template>` element #}
+<template id="mts-manual-row-template">
+  <div class="mts-manual-row" data-manual-row>
+    <div class="mts-manual-row-header">
+      <span class="mts-caption">Track <span data-manual-index>1</span></span>
+      <button type="button" class="mts-link-btn mts-link-btn--danger"
+              onclick="mtsRemoveManualRow(this)">Remove</button>
+    </div>
+    <div class="mts-form-row">
+      <label>Label <span class="mts-required">*</span></label>
+      <input type="text" data-manual-label maxlength="100"
+             placeholder="e.g. Click track, Talkback return, Room mic L">
+      <p class="mts-field-error" data-manual-error style="display:none">Label is required for manual tracks.</p>
+    </div>
+    <div class="mts-form-row mts-form-row--inline">
+      <div>
+        <label>Color (optional)</label>
+        <input type="text" data-manual-color maxlength="7" placeholder="#RRGGBB or empty">
+      </div>
+      <div>
+        <label>Notes (optional)</label>
+        <input type="text" data-manual-notes maxlength="200" placeholder="Optional">
+      </div>
+    </div>
+  </div>
+</template>
