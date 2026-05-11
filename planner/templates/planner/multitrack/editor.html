@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="mts-container">
+<div class="mts-container" data-mts-session-id="{{ session.id }}">
   <a class="mts-back-btn" href="{% url 'planner:multitrack_dashboard' %}">← Multitrack Sessions</a>
 
   <div class="mts-editor-header">
