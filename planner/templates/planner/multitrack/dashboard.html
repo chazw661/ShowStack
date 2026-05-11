@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Multitrack Sessions | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'planner/css/multitrack.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="mts-container">
+  <div class="mts-header">
+    <div>
+      <h1 class="mts-h1">Multitrack Sessions</h1>
+      <p class="mts-subtitle">Build recording-session track lists from your console channels.</p>
+    </div>
+    <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
+  </div>
+
+  {% if sessions %}
+    <div class="mts-grid">
+      {% for session in sessions %}
+        {% include "planner/multitrack/_session_card.html" with session=session %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="mts-empty-state">
+      <h2 class="mts-empty-heading">No sessions yet</h2>
+      <p class="mts-empty-body">
+        Create your first multitrack session to start building a track list.
+        ShowStack uses your console's channel labels and patch.
+      </p>
+      <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
+    </div>
+  {% endif %}
+</div>
+
+{# Hidden CSRF for any inline JS forms #}
+<form style="display:none">{% csrf_token %}</form>
+
+<script src="{% static 'planner/js/multitrack_editor.js' %}" defer></script>
+{% endblock %}
