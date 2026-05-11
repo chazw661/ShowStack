@@ -6407,3 +6407,115 @@ def multitrack_capacity_check(request, session_id):
     })
 
 
+# ──────────────────────────────────────────────────────────────────
+# Multitrack — Reaper file-download views (Plan 01-04, Wave 3)
+# Delegates RPP / RTrackTemplate body building to planner.utils.reaper_export
+# (Plan 01-02). This view layer only handles HTTP response shape, filename
+# sanitization (T-04-06 / T-04-12), and the no-enabled-tracks guard
+# (T-04-13).
+# ──────────────────────────────────────────────────────────────────
+
+from .utils.reaper_export import build_rpp, build_rtracktemplate
+
+
+def _safe_filename(name):
+    """Slugify a session name for a Content-Disposition filename header.
+
+    Replaces every non-alphanumeric / non-dash / non-underscore character
+    with `_`. Closes the path-traversal / header-injection surface.
+    """
+    return ''.join(c if (c.isalnum() or c in '-_') else '_' for c in (name or '').strip()) or 'session'
+
+
+def _has_enabled_tracks(session):
+    return session.tracks.filter(enabled=True).exists()
+
+
+@staff_member_required
+def multitrack_export_rpp(request, session_id):
+    """GET: download a Reaper .RPP file for this session (RPP-01..04).
+
+    Returns text/plain attachment. Filename: <safe(session.name)>.RPP.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    session = MultitrackSession.objects.filter(
+        id=session_id, project=current_project
+    ).select_related('console').first()
+    if not session:
+        return redirect('planner:multitrack_dashboard')
+
+    if not _has_enabled_tracks(session):
+        # UI-SPEC error string verbatim. Render an HTML page (not a download).
+        # Route through the shared _editor_context helper (defined in Plan 03)
+        # so the editor template receives the full context contract
+        # (session, tracks, picker_data_json, auto_open_picker, total_count,
+        # over_count, plus our export_error extra). Filtering tracks to the
+        # enabled set keeps the displayed editor consistent with the export
+        # logic — even though enabled is empty here, this preserves the
+        # invariant that the export-fallback view shows what was attempted.
+        enabled_tracks_qs = session.tracks.filter(enabled=True).order_by('track_number')
+        return render(
+            request,
+            'planner/multitrack/editor.html',
+            _editor_context(
+                session,
+                tracks=enabled_tracks_qs,
+                export_error='This session has no enabled tracks. '
+                             'Enable at least one track to export.',
+                auto_open_picker=False,
+            ),
+        )
+
+    body = build_rpp(session)
+    response = HttpResponse(body, content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'attachment; filename="{_safe_filename(session.name)}.RPP"'
+    )
+    return response
+
+
+@staff_member_required
+def multitrack_export_rtracktemplate(request, session_id):
+    """GET: download a Reaper .RTrackTemplate file for this session (RPP-05).
+
+    Same body as .RPP but no <REAPER_PROJECT> wrapper. Filename:
+    <safe(session.name)>.RTrackTemplate.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    session = MultitrackSession.objects.filter(
+        id=session_id, project=current_project
+    ).select_related('console').first()
+    if not session:
+        return redirect('planner:multitrack_dashboard')
+
+    if not _has_enabled_tracks(session):
+        # Route through _editor_context (Plan 03) — see multitrack_export_rpp
+        # above for the rationale.
+        enabled_tracks_qs = session.tracks.filter(enabled=True).order_by('track_number')
+        return render(
+            request,
+            'planner/multitrack/editor.html',
+            _editor_context(
+                session,
+                tracks=enabled_tracks_qs,
+                export_error='This session has no enabled tracks. '
+                             'Enable at least one track to export.',
+                auto_open_picker=False,
+            ),
+        )
+
+    body = build_rtracktemplate(session)
+    response = HttpResponse(body, content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'attachment; filename="{_safe_filename(session.name)}.RTrackTemplate"'
+    )
+    return response
+
+
+
