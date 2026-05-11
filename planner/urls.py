@@ -111,17 +111,18 @@ urlpatterns = [
     path('multitrack/<int:session_id>/rename/', views.multitrack_rename, name='multitrack_rename'),
     path('multitrack/<int:session_id>/delete/', views.multitrack_delete, name='multitrack_delete'),
 
-    # AJAX mutate (Plan 04 will add):
-    #   multitrack/<id>/reorder/        -> multitrack_reorder
-    #   multitrack/<id>/add-tracks/     -> multitrack_add_tracks
-    #   multitrack/<id>/capacity/       -> multitrack_capacity_check
-    #   multitrack/track/set-color/     -> multitrack_set_color
-    #   multitrack/track/set-label/     -> multitrack_set_label
-    #   multitrack/track/set-enabled/   -> multitrack_set_enabled
-    #   multitrack/track/remove/        -> multitrack_remove_track
-    # File downloads (Plan 04 will add):
-    #   multitrack/<id>/export.rpp/             -> multitrack_export_rpp
-    #   multitrack/<id>/export.rtracktemplate/  -> multitrack_export_rtracktemplate
+    # AJAX mutate (Plan 04)
+    path('multitrack/<int:session_id>/reorder/', views.multitrack_reorder, name='multitrack_reorder'),
+    path('multitrack/<int:session_id>/add-tracks/', views.multitrack_add_tracks, name='multitrack_add_tracks'),
+    path('multitrack/<int:session_id>/capacity/', views.multitrack_capacity_check, name='multitrack_capacity_check'),
+    path('multitrack/track/set-color/', views.multitrack_set_color, name='multitrack_set_color'),
+    path('multitrack/track/set-label/', views.multitrack_set_label, name='multitrack_set_label'),
+    path('multitrack/track/set-enabled/', views.multitrack_set_enabled, name='multitrack_set_enabled'),
+    path('multitrack/track/remove/', views.multitrack_remove_track, name='multitrack_remove_track'),
+
+    # File downloads (Plan 04)
+    path('multitrack/<int:session_id>/export.rpp/', views.multitrack_export_rpp, name='multitrack_export_rpp'),
+    path('multitrack/<int:session_id>/export.rtracktemplate/', views.multitrack_export_rtracktemplate, name='multitrack_export_rtracktemplate'),
 
     # Dashboard
     path('admin/', admin.site.urls),
