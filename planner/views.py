@@ -6078,3 +6078,332 @@ def multitrack_delete(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+# ──────────────────────────────────────────────────────────────────
+# Multitrack — AJAX mutate endpoints (Plan 01-04, Wave 3)
+# Track-level endpoints route through `_get_track_for_request` for IDOR-safe
+# project-scoped lookup (T-04-01). Session-level endpoints inline the
+# combined filter (T-04-02). Hex-color writes go through `_HEX_COLOR_RE`
+# (T-04-04). All POST endpoints rely on Django CSRF middleware — no
+# `@csrf_exempt` decorators.
+# ──────────────────────────────────────────────────────────────────
+
+import re
+
+# Hex color validator — REJECTS everything except '' or '#RRGGBB'.
+# Closes the XSS-via-color-override surface (T-04-04 in this plan's threat model).
+_HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+
+
+def _get_track_for_request(request, track_id):
+    """Return the MultitrackTrack iff its session.project == request.current_project.
+
+    IDOR-safe lookup. Returns None when the track doesn't exist or belongs to
+    a different project.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return None
+    return (
+        MultitrackTrack.objects
+        .filter(id=track_id, session__project=current_project)
+        .select_related('session')
+        .first()
+    )
+
+
+@require_POST
+def multitrack_reorder(request, session_id):
+    """POST: reassign dense track_number 1..N from a posted ordered list (TRK-05).
+
+    Body: JSON {ordered_ids: [int, int, ...]}
+    Returns: {ok: True} or {error, status: 4xx}
+    """
+    try:
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        session = MultitrackSession.objects.filter(
+            id=session_id, project=current_project
+        ).first()
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+
+        data = json.loads(request.body or '{}')
+        ordered_ids = data.get('ordered_ids') or []
+        if not isinstance(ordered_ids, list) or not all(isinstance(i, int) for i in ordered_ids):
+            return JsonResponse({'error': 'ordered_ids must be a list of integers'}, status=400)
+
+        # Verify ALL ids belong to this session (prevents cross-session injection)
+        existing_ids = set(session.tracks.values_list('id', flat=True))
+        if not set(ordered_ids).issubset(existing_ids):
+            return JsonResponse({'error': 'One or more track IDs do not belong to this session'}, status=400)
+
+        # Reassign track_number 1..N. bulk_update is one SQL statement.
+        tracks_by_id = {t.id: t for t in session.tracks.all()}
+        to_update = []
+        for idx, tid in enumerate(ordered_ids, start=1):
+            t = tracks_by_id.get(tid)
+            if t is not None:
+                t.track_number = idx
+                to_update.append(t)
+        MultitrackTrack.objects.bulk_update(to_update, ['track_number'])
+
+        return JsonResponse({'ok': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_add_tracks(request, session_id):
+    """POST: create new MultitrackTrack rows for selected channels + manual queue (TRK-06, TRK-07, D-10).
+
+    Body: JSON {
+      selections: {
+        inputs: [int, ...],   # ConsoleInput IDs
+        aux: [int, ...],
+        matrix: [int, ...],
+        stereo: [int, ...],
+      },
+      manuals: [
+        {label: str (required, max 100), color: str (optional, '' or '#RRGGBB'), notes: str (optional)},
+        ...
+      ]
+    }
+
+    Append rule (D-10): inserts in order Inputs -> Aux -> Matrix -> Stereo -> Manual,
+    each in the order received in the request. New track_numbers continue from
+    MAX(existing) + 1.
+
+    Returns: {ok: True, created_count: N, redirect_url: '...'} or
+             {error, status: 4xx}
+    """
+    try:
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        session = MultitrackSession.objects.filter(
+            id=session_id, project=current_project
+        ).first()
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+
+        data = json.loads(request.body or '{}')
+        selections = data.get('selections') or {}
+        manuals = data.get('manuals') or []
+
+        # Validate manuals first — UI-SPEC error strings verbatim
+        validated_manuals = []
+        for m in manuals:
+            label = (m.get('label') or '').strip()
+            color = (m.get('color') or '').strip()
+            notes = (m.get('notes') or '').strip()
+            if not label:
+                return JsonResponse({'error': 'Label is required for manual tracks.'}, status=400)
+            if len(label) > 100:
+                return JsonResponse({'error': 'Label must be 100 characters or fewer.'}, status=400)
+            if color and not _HEX_COLOR_RE.match(color):
+                return JsonResponse({'error': f'Color must be empty or #RRGGBB hex, got: {color!r}'}, status=400)
+            if len(notes) > 200:
+                return JsonResponse({'error': 'Notes must be 200 characters or fewer.'}, status=400)
+            validated_manuals.append({'label': label, 'color': color, 'notes': notes})
+
+        # Validate selections — IDs must belong to this session's console
+        console = session.console
+        valid_input_ids = set(
+            ConsoleInput.objects.filter(console=console)
+            .values_list('id', flat=True)
+        ) & set(selections.get('inputs', []) or [])
+        valid_aux_ids = set(
+            ConsoleAuxOutput.objects.filter(console=console)
+            .values_list('id', flat=True)
+        ) & set(selections.get('aux', []) or [])
+        valid_matrix_ids = set(
+            ConsoleMatrixOutput.objects.filter(console=console)
+            .values_list('id', flat=True)
+        ) & set(selections.get('matrix', []) or [])
+        valid_stereo_ids = set(
+            ConsoleStereoOutput.objects.filter(console=console)
+            .values_list('id', flat=True)
+        ) & set(selections.get('stereo', []) or [])
+
+        # Determine starting track_number (D-10 append rule)
+        # Note: `Max` is already imported top-of-file (line 9: from django.db.models import Max).
+        max_n = (
+            session.tracks.aggregate(m=Max('track_number'))['m'] or 0
+        )
+
+        # Build new rows in D-10 order: inputs -> aux -> matrix -> stereo -> manual
+        new_rows = []
+
+        # Preserve the order the IDs were submitted (sets lose order; re-derive)
+        for src_type, valid_ids, raw_list in [
+            ('input', valid_input_ids, selections.get('inputs', []) or []),
+            ('aux', valid_aux_ids, selections.get('aux', []) or []),
+            ('matrix', valid_matrix_ids, selections.get('matrix', []) or []),
+            ('stereo', valid_stereo_ids, selections.get('stereo', []) or []),
+        ]:
+            for raw_id in raw_list:
+                if raw_id in valid_ids:
+                    max_n += 1
+                    new_rows.append(MultitrackTrack(
+                        session=session,
+                        track_number=max_n,
+                        source_type=src_type,
+                        source_id=raw_id,
+                    ))
+
+        for m in validated_manuals:
+            max_n += 1
+            new_rows.append(MultitrackTrack(
+                session=session,
+                track_number=max_n,
+                source_type='manual',
+                source_id=None,
+                label_override=m['label'],
+                color_override=m['color'],
+                notes=m['notes'],
+            ))
+
+        MultitrackTrack.objects.bulk_create(new_rows)
+        # Touch session.updated_at
+        session.save(update_fields=['updated_at'])
+
+        return JsonResponse({
+            'ok': True,
+            'created_count': len(new_rows),
+            'redirect_url': reverse('planner:multitrack_editor', args=[session.id]),
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_set_color(request):
+    """POST: update a single track's color_override (TRK-04).
+
+    Body: JSON {track_id: int, color: str ('' or '#RRGGBB')}
+    Returns: {ok: True, color: str} or {error, status: 4xx}
+    """
+    try:
+        data = json.loads(request.body or '{}')
+        track_id = data.get('track_id')
+        color = (data.get('color') or '').strip()
+
+        if color and not _HEX_COLOR_RE.match(color):
+            return JsonResponse({'error': f'Color must be empty or #RRGGBB hex, got: {color!r}'}, status=400)
+
+        track = _get_track_for_request(request, track_id)
+        if not track:
+            return JsonResponse({'error': 'Track not found'}, status=404)
+
+        track.color_override = color
+        track.save(update_fields=['color_override'])
+        return JsonResponse({'ok': True, 'color': color})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_set_label(request):
+    """POST: update a single track's label_override (TRK-03).
+
+    Body: JSON {track_id: int, label: str (max 100)}
+    Returns: {ok: True, resolved_label: str} or {error, status: 4xx}
+    """
+    try:
+        data = json.loads(request.body or '{}')
+        track_id = data.get('track_id')
+        label = (data.get('label') or '').strip()
+
+        if len(label) > 100:
+            return JsonResponse({'error': 'Label must be 100 characters or fewer.'}, status=400)
+
+        track = _get_track_for_request(request, track_id)
+        if not track:
+            return JsonResponse({'error': 'Track not found'}, status=404)
+
+        # Manual tracks must always have a label (D-11)
+        if track.source_type == 'manual' and not label:
+            return JsonResponse({'error': 'Label is required for manual tracks.'}, status=400)
+
+        track.label_override = label
+        track.save(update_fields=['label_override'])
+        return JsonResponse({'ok': True, 'resolved_label': track.resolved_label})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_set_enabled(request):
+    """POST: toggle a track's enabled flag (TRK-02).
+
+    Body: JSON {track_id: int, enabled: bool}
+    Returns: {ok: True, enabled: bool} or {error, status: 4xx}
+    """
+    try:
+        data = json.loads(request.body or '{}')
+        track_id = data.get('track_id')
+        enabled = bool(data.get('enabled'))
+
+        track = _get_track_for_request(request, track_id)
+        if not track:
+            return JsonResponse({'error': 'Track not found'}, status=404)
+
+        track.enabled = enabled
+        track.save(update_fields=['enabled'])
+        return JsonResponse({'ok': True, 'enabled': enabled})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def multitrack_remove_track(request):
+    """POST: delete a single MultitrackTrack (TRK-08).
+
+    Body: JSON {track_id: int}
+    Returns: {ok: True} or {error, status: 4xx}
+
+    Does NOT cascade to ConsoleChannel — MultitrackTrack has no FK there (D-01).
+    """
+    try:
+        data = json.loads(request.body or '{}')
+        track_id = data.get('track_id')
+
+        track = _get_track_for_request(request, track_id)
+        if not track:
+            return JsonResponse({'error': 'Track not found'}, status=404)
+
+        track.delete()
+        return JsonResponse({'ok': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@staff_member_required
+def multitrack_capacity_check(request, session_id):
+    """GET: return live capacity-bar state for the editor (TRK-10).
+
+    Returns: {count: int, capacity: int|null, over: bool}
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return JsonResponse({'error': 'No active project'}, status=400)
+
+    session = MultitrackSession.objects.filter(
+        id=session_id, project=current_project
+    ).first()
+    if not session:
+        return JsonResponse({'error': 'Session not found'}, status=404)
+
+    count = session.tracks.count()
+    capacity = session.recorder_capacity
+    over = (capacity is not None) and (count > capacity)
+    return JsonResponse({
+        'count': count,
+        'capacity': capacity,
+        'over': over,
+    })
+
+
