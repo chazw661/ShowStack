@@ -1,0 +1,108 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{% if mode == 'edit' %}Edit Session{% else %}New Multitrack Session{% endif %} | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'planner/css/multitrack.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="mts-container">
+  <a class="mts-back-btn" href="{% url 'planner:multitrack_dashboard' %}">← Multitrack Sessions</a>
+
+  <h1 class="mts-h1">
+    {% if mode == 'edit' %}Edit session metadata{% else %}New Multitrack Session{% endif %}
+  </h1>
+
+  <form method="post" class="mts-form" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="mts-form-errors">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="mts-form-row">
+      <label for="{{ form.name.id_for_label }}">Name <span class="mts-required">*</span></label>
+      {{ form.name }}
+      {% if form.name.errors %}<div class="mts-field-error">{{ form.name.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label for="{{ form.console.id_for_label }}">Console <span class="mts-required">*</span></label>
+      {{ form.console }}
+      {% if form.console.errors %}<div class="mts-field-error">{{ form.console.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label>Target DAW <span class="mts-required">*</span></label>
+      <div class="mts-radio-group">
+        {% for radio in form.target_daw %}
+          <label class="mts-radio-option">
+            {% if radio.choice_value == 'nuendo_live' %}
+              {# Disabled until Phase 4 ships #}
+              <input type="radio" name="{{ form.target_daw.name }}"
+                     value="{{ radio.choice_value }}" disabled>
+              <span class="mts-radio-label mts-radio-label--disabled">
+                Nuendo Live <span class="mts-caption">(coming v2.0)</span>
+              </span>
+            {% else %}
+              {{ radio.tag }}
+              <span class="mts-radio-label">{{ radio.choice_label }}</span>
+            {% endif %}
+          </label>
+        {% endfor %}
+      </div>
+      {% if form.target_daw.errors %}<div class="mts-field-error">{{ form.target_daw.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label>Feed source</label>
+      <div class="mts-radio-group">
+        {% for radio in form.feed_source %}
+          <label class="mts-radio-option">
+            {{ radio.tag }}
+            <span class="mts-radio-label">{{ radio.choice_label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      {% if form.feed_source.errors %}<div class="mts-field-error">{{ form.feed_source.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label>Track order</label>
+      <div class="mts-radio-group">
+        {% for radio in form.track_order_mode %}
+          <label class="mts-radio-option">
+            {{ radio.tag }}
+            <span class="mts-radio-label">{{ radio.choice_label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      {% if form.track_order_mode.errors %}<div class="mts-field-error">{{ form.track_order_mode.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label for="{{ form.recorder_capacity.id_for_label }}">Recorder capacity (optional)</label>
+      {{ form.recorder_capacity }}
+      <p class="mts-help-text">Drives the over-capacity warning bar in the editor.</p>
+      {% if form.recorder_capacity.errors %}<div class="mts-field-error">{{ form.recorder_capacity.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label for="{{ form.notes.id_for_label }}">Notes (optional)</label>
+      {{ form.notes }}
+      {% if form.notes.errors %}<div class="mts-field-error">{{ form.notes.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-actions">
+      <button type="submit" class="mts-btn mts-btn-primary">
+        {% if mode == 'edit' %}Save changes{% else %}Create session{% endif %}
+      </button>
+      <a class="mts-btn mts-btn-secondary"
+         href="{% if mode == 'edit' %}{% url 'planner:multitrack_editor' session.id %}{% else %}{% url 'planner:multitrack_dashboard' %}{% endif %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

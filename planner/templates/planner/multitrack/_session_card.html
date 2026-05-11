@@ -1,0 +1,24 @@
+{% load humanize %}
+<div class="mts-card" data-session-id="{{ session.id }}">
+  <a class="mts-card-link" href="{% url 'planner:multitrack_editor' session.id %}">
+    <div class="mts-card-title">{{ session.name }}</div>
+    <div class="mts-card-meta">
+      {{ session.tracks.count }} track{{ session.tracks.count|pluralize }} ·
+      {{ session.get_target_daw_display }} ·
+      updated {{ session.updated_at|timesince }} ago
+    </div>
+  </a>
+  <div class="mts-card-actions">
+    <button type="button" class="mts-card-menu-trigger"
+            aria-label="Session actions"
+            onclick="mtsToggleCardMenu(this, {{ session.id }})">⋯</button>
+    <div class="mts-dropdown-menu" id="mts-card-menu-{{ session.id }}">
+      <button type="button" class="mts-dropdown-item"
+              onclick="mtsDuplicateSession({{ session.id }}, '{{ session.name|escapejs }}')">Duplicate</button>
+      <button type="button" class="mts-dropdown-item"
+              onclick="mtsRenameSession({{ session.id }}, '{{ session.name|escapejs }}')">Rename</button>
+      <button type="button" class="mts-dropdown-item mts-dropdown-item--danger"
+              onclick="mtsDeleteSession({{ session.id }}, '{{ session.name|escapejs }}', {{ session.tracks.count }})">Delete</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,115 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ session.name }} — Multitrack Session | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'planner/css/multitrack.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="mts-container">
+  <a class="mts-back-btn" href="{% url 'planner:multitrack_dashboard' %}">← Multitrack Sessions</a>
+
+  <div class="mts-editor-header">
+    <div>
+      <h1 class="mts-h1">{{ session.name }} — Multitrack Session</h1>
+      <p class="mts-caption">
+        Console: {{ session.console.name }} ·
+        {{ session.get_target_daw_display }} ·
+        {{ session.get_feed_source_display }}
+      </p>
+    </div>
+    <div class="mts-editor-actions">
+      <a class="mts-btn-tertiary" href="{% url 'planner:multitrack_edit' session.id %}">Edit session metadata</a>
+    </div>
+  </div>
+
+  {% if export_error %}
+    <div class="mts-alert mts-alert--error">{{ export_error }}</div>
+  {% endif %}
+
+  <div class="mts-toolbar">
+    {# Capacity bar reads `total_count` and `over_count` from the view context
+       (Plan 03's `_editor_context` helper computes both). NO inline arithmetic
+       in templates — Django's template language can't subtract cleanly, and
+       the no-enabled-tracks export fallback (Plan 04) shares the same
+       template, so the helper is the single source of truth. #}
+    {% if session.recorder_capacity %}
+      {% if over_count > 0 %}
+        <div class="mts-capacity mts-capacity--over"
+             data-count="{{ total_count }}" data-capacity="{{ session.recorder_capacity }}">
+          <div class="mts-capacity__bar"><span class="mts-capacity__fill" style="width:100%"></span></div>
+          <span class="mts-capacity__text">{{ total_count }} / {{ session.recorder_capacity }} — {{ over_count }} over capacity</span>
+        </div>
+      {% elif total_count == session.recorder_capacity %}
+        <div class="mts-capacity mts-capacity--at"
+             data-count="{{ total_count }}" data-capacity="{{ session.recorder_capacity }}">
+          <div class="mts-capacity__bar"><span class="mts-capacity__fill" style="width:100%"></span></div>
+          <span class="mts-capacity__text">{{ total_count }} / {{ session.recorder_capacity }}</span>
+        </div>
+      {% else %}
+        <div class="mts-capacity mts-capacity--under"
+             data-count="{{ total_count }}" data-capacity="{{ session.recorder_capacity }}">
+          <div class="mts-capacity__bar">
+            <span class="mts-capacity__fill" data-fill-percent="{% widthratio total_count session.recorder_capacity 100 %}"></span>
+          </div>
+          <span class="mts-capacity__text">{{ total_count }} / {{ session.recorder_capacity }}</span>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="mts-capacity mts-capacity--no-cap" data-count="{{ total_count }}">
+        <span class="mts-capacity__text">{{ total_count }} track{{ total_count|pluralize }}</span>
+      </div>
+    {% endif %}
+
+    <div class="mts-toolbar-actions">
+      <button type="button" class="mts-btn mts-btn-secondary" onclick="mtsOpenPicker('inputs')">+ Add tracks</button>
+      <a class="mts-btn mts-btn-success"
+         href="{% url 'planner:multitrack_export_rpp' session.id %}">Export to Reaper</a>
+      <a class="mts-btn mts-btn-secondary"
+         href="{% url 'planner:multitrack_export_rtracktemplate' session.id %}">Export Track Template (.RTrackTemplate)</a>
+    </div>
+  </div>
+
+  {% if tracks %}
+    <div class="mts-track-list" data-session-id="{{ session.id }}">
+      {% for track in tracks %}
+        {% include "planner/multitrack/_track_row.html" with track=track %}
+      {% endfor %}
+    </div>
+    <p class="mts-caption mts-reorder-hint">Drag rows to reorder. Order is saved automatically.</p>
+  {% else %}
+    <div class="mts-empty-state">
+      <h2 class="mts-empty-heading">No tracks yet</h2>
+      <p class="mts-empty-body">Pick channels from this console to build your session.</p>
+      <button type="button" class="mts-btn mts-btn-primary" onclick="mtsOpenPicker('inputs')">+ Add tracks</button>
+    </div>
+  {% endif %}
+
+  {# Picker modal partial — handles its own visibility via JS #}
+  {% include "planner/multitrack/_picker_modal.html" %}
+
+  {# Color picker popover partial — single instance, repositioned by JS #}
+  {% include "planner/multitrack/_color_picker.html" %}
+</div>
+
+{# Picker channel data — pre-computed server-side per UI-SPEC § "Tab counts snapshot on open" #}
+<script id="mts-picker-data" type="application/json">{{ picker_data_json|safe }}</script>
+
+{# CSRF source for AJAX #}
+<form style="display:none">{% csrf_token %}</form>
+
+<script src="{% static 'planner/js/vendor/Sortable.min.js' %}"></script>
+<script src="{% static 'planner/js/multitrack_editor.js' %}" defer></script>
+
+{% if auto_open_picker %}
+  {# D-12 — auto-open picker on Inputs tab when session has zero tracks #}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (typeof mtsOpenPicker === 'function') mtsOpenPicker('inputs');
+    });
+  </script>
+{% endif %}
+{% endblock %}
