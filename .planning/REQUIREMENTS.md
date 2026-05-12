@@ -48,10 +48,14 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 
 ### Console CSV Import — CSV
 
-- [ ] **CSV-01**: User can upload a Yamaha CL/QL channel-name CSV (Studio Manager / CL Editor / Console File Converter export) and have it populate or update the console's channels in ShowStack.
-- [ ] **CSV-02**: User can upload a Yamaha Rivage PM channel-labels CSV and have it populate or update the console's channels.
-- [ ] **CSV-03**: Imported channel labels and colors map onto existing `ConsoleChannel` records when present, otherwise create new ones; user is shown a per-row diff summary before commit.
-- [ ] **CSV-04**: Import errors surface clearly per row (missing required field, unsupported color code) without aborting the whole import.
+- [x] **CSV-01
+**: User can upload a Yamaha CL/QL channel-name CSV (Studio Manager / CL Editor / Console File Converter export) and have it populate or update the console's channels in ShowStack.
+- [x] **CSV-02
+**: User can upload a Yamaha Rivage PM channel-labels CSV and have it populate or update the console's channels.
+- [x] **CSV-03
+**: Imported channel labels and colors map onto existing `ConsoleChannel` records when present, otherwise create new ones; user is shown a per-row diff summary before commit.
+- [x] **CSV-04
+**: Import errors surface clearly per row (missing required field, unsupported color code) without aborting the whole import.
 - [ ] **CSV-05**: After a successful import, user lands in the session editor with the imported channels available as track sources.
 
 ### Templates — TPL
