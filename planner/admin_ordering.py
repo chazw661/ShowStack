@@ -108,9 +108,6 @@ def ordered_get_app_list(request, app_label=None):
         'commcrewname': 14,
         'commchannel': 15,
 
-        # Multitrack Session Builder (12.7)
-        'multitracksession': 12.7,
-
         # Show Mic Tracker (16-20)
         'showday': 16,
         'micsession': 17,
@@ -151,6 +148,9 @@ def ordered_get_app_list(request, app_label=None):
         'deviceevent': 39,
         'projectsnmpconfig': 40,
         'switchportsnapshot': 41,
+
+        # Multitrack Session Builder (50 — bottom of sidebar)
+        'multitracksession': 50,
     }
     
     for app in app_list:
