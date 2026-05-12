@@ -303,7 +303,7 @@
 .mts-capacity__fill {
   display: block !important;
   height: 100% !important;
-  width: 100% !important;
+  width: 100%;
   transition: width 200ms !important;
 }
 

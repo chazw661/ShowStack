@@ -503,6 +503,20 @@
     });
   }
 
+  // Paint under-capacity bar fill width from server-rendered data-fill-percent
+  // (WR-01). The over/at branches inline style="width:100%"; the under branch
+  // sets data-fill-percent so the bar can reflect the real ratio. The CSS
+  // default for .mts-capacity__fill is no longer width:100% !important, so a
+  // plain inline style would win — but we still use setProperty('important')
+  // for defence in depth against future stylesheet changes.
+  function paintCapacityFill() {
+    $$('.mts-capacity__fill').forEach(function (el) {
+      const pct = el.dataset.fillPercent;
+      if (pct === undefined || pct === '') return;
+      el.style.setProperty('width', pct + '%', 'important');
+    });
+  }
+
   // Notes editing on existing tracks is DEFERRED in Phase 1 (per checker
   // WARNING 3). Plan 05's _track_row.html renders notes as a plain
   // <span class="mts-track-notes-display"> — no input, no pencil affordance.
@@ -640,6 +654,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     initSortable();
     paintInitialSwatches();
+    paintCapacityFill();
     wireExportToasts();
     // Close picker on Escape (matches admin help-modal pattern)
     document.addEventListener('keydown', function (e) {
