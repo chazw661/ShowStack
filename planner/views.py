@@ -1,6 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.forms import modelformset_factory
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
@@ -68,7 +68,14 @@ from .models import (
     MultitrackSession, MultitrackTrack,
     ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
 )
-from .forms import MultitrackSessionForm
+from .forms import MultitrackSessionForm, ConsoleCsvUploadForm
+from .models import ConsoleImport
+from planner.utils.console_csv_import import (
+    parse_upload,
+    is_default_row,
+    SECTION_TARGET_MAP,
+    OUT_OF_SCOPE_SECTIONS,
+)
 
 def console_detail(request, console_id):
     console = get_object_or_404(Console, pk=console_id)
@@ -6680,4 +6687,264 @@ def multitrack_export_rtracktemplate(request, session_id):
     return response
 
 
+# -------------------------------------------------------------------------
+# Phase 2 — Console CSV Import (CSV-01..CSV-05)
+# Helpers: viewer gate, stereo-type dispatch, diff computation, apply.
+# View functions live directly below these helpers.
+# -------------------------------------------------------------------------
 
+def _console_import_viewer_block(request):
+    """HTML-response variant of `_multitrack_viewer_block`. Returns HttpResponseForbidden for viewers.
+
+    Per D-09 (LOCKED): viewers get NO upload UI and a 403 on direct POST.
+    Called from all three endpoints — upload GET/POST, preview GET, commit POST —
+    so viewers never see the import surface at all.
+    """
+    if request.user.groups.filter(name='Viewer').exists():
+        return HttpResponseForbidden('Read-only access.')
+    return None
+
+
+def _stereo_type_for_row(section, family, row):
+    """Map an in-scope stereo row to its ConsoleStereoOutput.stereo_type value.
+
+    Returns 'L' / 'R' / 'M' for importable rows; returns None for rows that should
+    be skipped (already filtered upstream, but defensive).
+    """
+    if section == 'StMonoName':
+        return {1: 'L', 2: 'R', 3: 'M'}.get(row.get('channel_number'))
+    if section == 'StName' and family == 'rivage_pm':
+        return {'_AL': 'L', '_AR': 'R'}.get(row.get('key'))
+    return None
+
+
+def _compute_diff_rows(snap):
+    """Compute per-row diff between `snap.parsed_sections` and current console state.
+
+    Returns:
+      {
+        'stats': {'created': N, 'updated': N, 'conflicts': N, 'unchanged': N, 'errors': N},
+        'rows': [{'section': ..., 'channel': ..., 'old_name': ..., 'new_name': ...,
+                  'old_color': ..., 'new_color': ..., 'status': 'created'|'updated'|'unchanged'|'conflict'|'error',
+                  'target_ref': 'InName:5', 'error_code': str|None, 'error_detail': str|None}, ...],
+        'errors': [...]   # informational + structured per-row errors
+      }
+    """
+    stats = {'created': 0, 'updated': 0, 'conflicts': 0, 'unchanged': 0, 'errors': 0}
+    rows = []
+    errors = list(snap.summary.get('errors', []))  # carry-forward parser errors if any
+
+    console = snap.console
+    sections_payload = snap.parsed_sections.get('sections', [])
+
+    for section_data in sections_payload:
+        section = section_data.get('section')
+        family = section_data.get('family')
+        if not section or section in OUT_OF_SCOPE_SECTIONS:
+            for err in section_data.get('errors', []):
+                errors.append(err)
+            continue
+
+        # Determine target model + lookup key + name field
+        if section == 'InName':
+            model_cls = ConsoleInput
+            lookup_field = 'input_ch'
+            name_field = 'source'
+        elif section == 'MixName':
+            model_cls = ConsoleAuxOutput
+            lookup_field = 'aux_number'
+            name_field = 'name'
+        elif section == 'MtxName':
+            model_cls = ConsoleMatrixOutput
+            lookup_field = 'matrix_number'
+            name_field = 'name'
+        elif section == 'StMonoName' or (section == 'StName' and family == 'rivage_pm'):
+            model_cls = ConsoleStereoOutput
+            lookup_field = 'stereo_type'
+            name_field = 'name'
+        else:
+            # CL/QL [StName] returns or unknown — W_NO_MODEL_TARGET'd by parser; carry forward
+            for err in section_data.get('errors', []):
+                errors.append(err)
+            continue
+
+        for row in section_data.get('rows', []):
+            # Smart-skip default (D-01): row matches factory default -> "unchanged"
+            if is_default_row(section, family, row):
+                stats['unchanged'] += 1
+                continue
+
+            # Locate existing row
+            if model_cls is ConsoleStereoOutput:
+                stereo_type = _stereo_type_for_row(section, family, row)
+                if not stereo_type:
+                    continue
+                existing = model_cls.objects.filter(console=console, stereo_type=stereo_type).first()
+                channel_label = stereo_type
+                target_ref = f'{section}:{stereo_type}'
+            else:
+                lookup_value = str(row.get('channel_number') or '')
+                existing = model_cls.objects.filter(console=console, **{lookup_field: lookup_value}).first()
+                channel_label = lookup_value
+                target_ref = f'{section}:{lookup_value}'
+
+            new_name = row.get('name', '')
+            new_color = row.get('color', 'Blue')
+
+            if existing is None:
+                rows.append({
+                    'section': section, 'channel': channel_label,
+                    'old_name': '', 'new_name': new_name,
+                    'old_color': '', 'new_color': new_color,
+                    'status': 'created', 'target_ref': target_ref,
+                    'error_code': None, 'error_detail': None,
+                })
+                stats['created'] += 1
+                continue
+
+            old_name = getattr(existing, name_field, '') or ''
+            old_color = getattr(existing, 'color', '') or ''
+
+            if old_name == new_name and old_color == new_color:
+                stats['unchanged'] += 1
+                continue
+
+            # Conflict iff BOTH old and new are non-default AND values differ.
+            # Default ShowStack state = blank/empty. Customized = anything else.
+            old_customized = bool(old_name) and old_name != new_name
+            new_customized = bool(new_name)
+            is_conflict = old_customized and new_customized and old_name != new_name
+            status = 'conflict' if is_conflict else 'updated'
+
+            rows.append({
+                'section': section, 'channel': channel_label,
+                'old_name': old_name, 'new_name': new_name,
+                'old_color': old_color, 'new_color': new_color,
+                'status': status, 'target_ref': target_ref,
+                'error_code': None, 'error_detail': None,
+            })
+            if is_conflict:
+                stats['conflicts'] += 1
+            else:
+                stats['updated'] += 1
+
+        # Per-row errors from parser
+        for err in section_data.get('errors', []):
+            stats['errors'] += 1
+            rows.append({
+                'section': section, 'channel': err.get('line', ''),
+                'old_name': '', 'new_name': '',
+                'old_color': '', 'new_color': '',
+                'status': 'error', 'target_ref': '',
+                'error_code': err.get('code'),
+                'error_detail': err.get('detail', ''),
+            })
+            errors.append(err)
+
+    return {'stats': stats, 'rows': rows, 'errors': errors}
+
+
+def _apply_console_import(snap, keep_showstack_refs):
+    """Apply the parsed_sections payload to the four channel models.
+
+    Used by console_import_commit inside transaction.atomic().
+
+    `keep_showstack_refs` — set of `target_ref` strings (e.g. {'InName:5'}) the
+    engineer un-ticked in the preview, meaning "keep ShowStack value, drop CSV
+    value for this row".
+
+    Returns the summary dict written back to snap.summary.
+    Critical: ConsoleInput rows are updated via `.source` (NOT `.name`).
+    """
+    summary = {'created': 0, 'updated': 0, 'conflicts_resolved': 0, 'unchanged': 0, 'errors': []}
+    console = snap.console
+    sections_payload = snap.parsed_sections.get('sections', [])
+
+    for section_data in sections_payload:
+        section = section_data.get('section')
+        family = section_data.get('family')
+
+        # Skip out-of-scope sections; carry forward informational errors
+        if not section or section in OUT_OF_SCOPE_SECTIONS:
+            for err in section_data.get('errors', []):
+                summary['errors'].append(err)
+            continue
+
+        # Pick model + lookup + name field
+        if section == 'InName':
+            model_cls, lookup_field, name_field = ConsoleInput, 'input_ch', 'source'
+        elif section == 'MixName':
+            model_cls, lookup_field, name_field = ConsoleAuxOutput, 'aux_number', 'name'
+        elif section == 'MtxName':
+            model_cls, lookup_field, name_field = ConsoleMatrixOutput, 'matrix_number', 'name'
+        elif section == 'StMonoName' or (section == 'StName' and family == 'rivage_pm'):
+            model_cls, lookup_field, name_field = ConsoleStereoOutput, 'stereo_type', 'name'
+        else:
+            # CL/QL StName returns — skip (parser already returned zero rows; defensive)
+            for err in section_data.get('errors', []):
+                summary['errors'].append(err)
+            continue
+
+        for row in section_data.get('rows', []):
+            # Smart-skip default rows (D-01)
+            if is_default_row(section, family, row):
+                summary['unchanged'] += 1
+                continue
+
+            # Determine target_ref for conflict-override check
+            if model_cls is ConsoleStereoOutput:
+                stereo_type = _stereo_type_for_row(section, family, row)
+                if not stereo_type:
+                    continue
+                lookup_value = stereo_type
+                target_ref = f'{section}:{stereo_type}'
+                filter_kwargs = {'console': console, 'stereo_type': stereo_type}
+            else:
+                lookup_value = str(row.get('channel_number') or '')
+                target_ref = f'{section}:{lookup_value}'
+                filter_kwargs = {'console': console, lookup_field: lookup_value}
+
+            new_name = row.get('name', '')
+            new_color = row.get('color', 'Blue')
+
+            existing = model_cls.objects.filter(**filter_kwargs).first()
+
+            # Conflict-override: skip CSV value if engineer un-ticked
+            if existing is not None and target_ref in keep_showstack_refs:
+                summary['conflicts_resolved'] += 1
+                continue
+
+            if existing is None:
+                create_kwargs = dict(filter_kwargs)
+                create_kwargs[name_field] = new_name
+                create_kwargs['color'] = new_color
+                try:
+                    model_cls.objects.create(**create_kwargs)
+                    summary['created'] += 1
+                except Exception as exc:
+                    summary['errors'].append({
+                        'code': 'E_CREATE_FAILED',
+                        'detail': f'{section}:{lookup_value} — {exc}',
+                    })
+            else:
+                old_name = getattr(existing, name_field, '') or ''
+                old_color = getattr(existing, 'color', '') or ''
+                if old_name == new_name and old_color == new_color:
+                    summary['unchanged'] += 1
+                    continue
+                setattr(existing, name_field, new_name)
+                setattr(existing, 'color', new_color)
+                try:
+                    existing.save(update_fields=[name_field, 'color'])
+                    summary['updated'] += 1
+                except Exception as exc:
+                    summary['errors'].append({
+                        'code': 'E_UPDATE_FAILED',
+                        'detail': f'{section}:{lookup_value} — {exc}',
+                    })
+
+        # Carry forward parser per-row errors
+        for err in section_data.get('errors', []):
+            summary['errors'].append(err)
+
+    return summary
