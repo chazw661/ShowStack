@@ -3,6 +3,11 @@
 from django.db import migrations, models
 
 
+# Django cannot alter an M2M field to add a through= model via normal AlterField.
+# In production PostgreSQL the SharedPresenterAssignment table already exists
+# (created by an earlier migration).  We use SeparateDatabaseAndState so Django
+# records the through= in its migration state without issuing any DDL.
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,9 +15,20 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='micassignment',
-            name='shared_presenters',
-            field=models.ManyToManyField(blank=True, help_text='Additional presenters sharing this mic', related_name='shared_mic_assignments', through='planner.SharedPresenterAssignment', to='planner.presenter'),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],   # no DDL — table already exists in prod
+            state_operations=[
+                migrations.AlterField(
+                    model_name='micassignment',
+                    name='shared_presenters',
+                    field=models.ManyToManyField(
+                        blank=True,
+                        help_text='Additional presenters sharing this mic',
+                        related_name='shared_mic_assignments',
+                        through='planner.SharedPresenterAssignment',
+                        to='planner.presenter',
+                    ),
+                ),
+            ],
         ),
     ]

@@ -5,13 +5,73 @@ import django.utils.timezone
 from django.db import migrations, models
 
 
+# Migration 0113 background
+# --------------------------
+# AudioChecklist was created in 0063 as managed=False with db_table='audio_checklist_dummy'.
+# Because managed=False, Django never created that table in SQLite test databases.
+# This migration adds fields + renames the table, which requires the table to exist.
+# In production PostgreSQL the table existed and these operations ran successfully.
+#
+# Strategy: wrap every operation that touches the audiochecklist table in a
+# PostgreSQL-only callable; the remaining operations (commbeltpack, showday)
+# are pure Django ORM changes that work on any backend.
+
+
+def _audiochecklist_postgres_ops(apps, schema_editor):
+    """Apply the audiochecklist DDL changes only on PostgreSQL.
+
+    Equivalent to: AddField created_at/name/project/updated_at,
+    AlterUniqueTogether, AlterModelTable — all skipped on SQLite.
+    """
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+
+    db = schema_editor.connection
+    with db.cursor() as cursor:
+        # AddField created_at (auto_now_add, so default is NOT NULL)
+        cursor.execute(
+            "ALTER TABLE audio_checklist_dummy "
+            "ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"
+        )
+        # AddField name
+        cursor.execute(
+            "ALTER TABLE audio_checklist_dummy "
+            "ADD COLUMN IF NOT EXISTS name VARCHAR(100) NOT NULL DEFAULT '';"
+        )
+        # AddField project FK
+        cursor.execute(
+            "ALTER TABLE audio_checklist_dummy "
+            "ADD COLUMN IF NOT EXISTS project_id BIGINT REFERENCES planner_project(id) "
+            "ON DELETE CASCADE;"
+        )
+        cursor.execute(
+            "UPDATE audio_checklist_dummy SET project_id = 1 WHERE project_id IS NULL;"
+        )
+        # AddField updated_at
+        cursor.execute(
+            "ALTER TABLE audio_checklist_dummy "
+            "ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"
+        )
+        # AlterUniqueTogether (project, name)
+        cursor.execute(
+            "ALTER TABLE audio_checklist_dummy "
+            "ADD CONSTRAINT IF NOT EXISTS audiochecklist_project_name_uniq UNIQUE (project_id, name);"
+        )
+        # AlterModelTable — rename from dummy to standard Django name
+        cursor.execute(
+            "ALTER TABLE audio_checklist_dummy RENAME TO planner_audiochecklist;"
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('planner', '0112_fix_showday_date_constraint'),
     ]
 
-    operations = [
+    state_operations = [
+        # These state operations update Django's migration graph without touching the DB.
+        # They must be listed so downstream migrations that reference these fields work.
         migrations.AddField(
             model_name='audiochecklist',
             name='created_at',
@@ -56,5 +116,66 @@ class Migration(migrations.Migration):
         migrations.AlterModelTable(
             name='audiochecklist',
             table=None,
+        ),
+    ]
+
+    operations = [
+        # audiochecklist DDL — PostgreSQL only (table was managed=False in SQLite)
+        migrations.RunPython(
+            _audiochecklist_postgres_ops,
+            migrations.RunPython.noop,
+        ),
+        # commbeltpack and showday field changes work on any backend
+        migrations.AlterField(
+            model_name='commbeltpack',
+            name='unit_location',
+            field=models.ForeignKey(blank=True, help_text='Equipment location for this belt pack', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='comm_beltpacks', to='planner.location', verbose_name='Location'),
+        ),
+        migrations.AlterField(
+            model_name='showday',
+            name='date',
+            field=models.DateField(),
+        ),
+        migrations.AlterUniqueTogether(
+            name='showday',
+            unique_together={('project', 'date')},
+        ),
+        # State-only operations for audiochecklist: update Django's in-memory
+        # schema without issuing any SQL (SeparateDatabaseAndState pattern).
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.AddField(
+                    model_name='audiochecklist',
+                    name='created_at',
+                    field=models.DateTimeField(auto_now_add=True, default=django.utils.timezone.now),
+                    preserve_default=False,
+                ),
+                migrations.AddField(
+                    model_name='audiochecklist',
+                    name='name',
+                    field=models.CharField(default=1, max_length=100),
+                    preserve_default=False,
+                ),
+                migrations.AddField(
+                    model_name='audiochecklist',
+                    name='project',
+                    field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, related_name='audio_checklists', to='planner.project'),
+                    preserve_default=False,
+                ),
+                migrations.AddField(
+                    model_name='audiochecklist',
+                    name='updated_at',
+                    field=models.DateTimeField(auto_now=True),
+                ),
+                migrations.AlterUniqueTogether(
+                    name='audiochecklist',
+                    unique_together={('project', 'name')},
+                ),
+                migrations.AlterModelTable(
+                    name='audiochecklist',
+                    table=None,
+                ),
+            ],
         ),
     ]
