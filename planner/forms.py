@@ -1164,11 +1164,14 @@ class MultitrackSessionForm(forms.ModelForm):
         else:
             self.fields['console'].queryset = Console.objects.none()
 
-        # Disable Nuendo Live choice in Phase 1 (UI-SPEC: "(coming v2.0)")
-        # We render this in the template; here we just ensure the form
-        # validates if Reaper is picked. The template marks the radio
-        # disabled — server-side, we additionally refuse `nuendo_live`.
-        # (Belt + suspenders against a tampered POST.)
+        # Disable Nuendo Live in Phase 1 (UI-SPEC: "(coming v2.0)").
+        # Restrict the field's choices so any submitted nuendo_live fails the
+        # built-in "Select a valid choice" validation. The template still
+        # renders a visible-but-disabled radio so users see it's coming.
+        # `clean_target_daw` remains as belt + suspenders.
+        self.fields['target_daw'].choices = [
+            c for c in self.fields['target_daw'].choices if c[0] != 'nuendo_live'
+        ]
 
         # Required-asterisk styling (UI-SPEC: required fields show *)
         for fname in ('name', 'console', 'target_daw', 'feed_source', 'track_order_mode'):

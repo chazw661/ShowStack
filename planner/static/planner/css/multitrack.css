@@ -908,7 +908,7 @@
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 6px !important;
   cursor: pointer !important;
   font-size: 14px !important;
   color: #e0e0e0 !important;
@@ -917,13 +917,56 @@
   font-weight: 400 !important;
 }
 
+.mts-radio-option input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  border: 1.5px solid #6a6a8a !important;
+  border-radius: 50% !important;
+  background-color: #1e1e3a !important;
+  position: relative !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+}
+
+.mts-radio-option input[type="radio"]:checked {
+  border-color: #4a9eff !important;
+  background-color: #1e1e3a !important;
+}
+
+.mts-radio-option input[type="radio"]:checked::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background-color: #e0e0e0 !important;
+}
+
+.mts-radio-option input[type="radio"]:focus-visible {
+  outline: 2px solid #4a9eff !important;
+  outline-offset: 1px !important;
+}
+
+.mts-radio-option input[type="radio"]:disabled {
+  border-color: #3a3a5a !important;
+  background-color: #14142a !important;
+  cursor: not-allowed !important;
+  opacity: 0.5 !important;
+}
+
 .mts-radio-label {
   font-size: 14px !important;
   color: #e0e0e0 !important;
 }
 
 .mts-radio-label--disabled {
-  color: #8888aa !important;
+  color: #6a6a8a !important;
   cursor: not-allowed !important;
 }
 
@@ -937,21 +980,50 @@
 }
 
 .mts-field-error {
-  font-size: 12px !important;
-  color: #dc3545 !important;
-  margin-top: 4px !important;
-  font-weight: 400 !important;
+  font-size: 13px !important;
+  color: #ff6b6b !important;
+  margin-top: 6px !important;
+  font-weight: 500 !important;
   text-transform: none !important;
   letter-spacing: normal !important;
 }
 
+.mts-field-error ul,
+.mts-field-error .errorlist {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+.mts-field-error li {
+  color: #ff6b6b !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
 .mts-form-errors {
   font-size: 14px !important;
-  color: #dc3545 !important;
-  padding: 8px 12px !important;
-  background-color: #12122a !important;
+  color: #ff6b6b !important;
+  padding: 12px 16px !important;
+  background-color: rgba(220, 53, 69, 0.12) !important;
   border: 1px solid #dc3545 !important;
   border-radius: 4px !important;
+  margin-bottom: 16px !important;
+}
+
+.mts-form-errors ul,
+.mts-form-errors .errorlist {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+.mts-form-errors li {
+  color: #ff6b6b !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 .mts-form-actions {
@@ -972,6 +1044,13 @@
   color: #e0e0e0 !important;
   font-size: 14px !important;
   font-family: inherit !important;
+  line-height: 1.4 !important;
+}
+
+.mts-form select {
+  padding: 10px 12px !important;
+  height: auto !important;
+  min-height: 40px !important;
 }
 
 .mts-form input[type="text"]:focus,

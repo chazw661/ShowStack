@@ -19,8 +19,11 @@
   <form method="post" class="mts-form" novalidate>
     {% csrf_token %}
 
-    {% if form.non_field_errors %}
-      <div class="mts-form-errors">{{ form.non_field_errors }}</div>
+    {% if form.errors %}
+      <div class="mts-form-errors">
+        Could not save — please fix the highlighted fields.
+        {% if form.non_field_errors %}{{ form.non_field_errors }}{% endif %}
+      </div>
     {% endif %}
 
     <div class="mts-form-row">
@@ -40,19 +43,17 @@
       <div class="mts-radio-group">
         {% for radio in form.target_daw %}
           <label class="mts-radio-option">
-            {% if radio.choice_value == 'nuendo_live' %}
-              {# Disabled until Phase 4 ships #}
-              <input type="radio" name="{{ form.target_daw.name }}"
-                     value="{{ radio.choice_value }}" disabled>
-              <span class="mts-radio-label mts-radio-label--disabled">
-                Nuendo Live <span class="mts-caption">(coming v2.0)</span>
-              </span>
-            {% else %}
-              {{ radio.tag }}
-              <span class="mts-radio-label">{{ radio.choice_label }}</span>
-            {% endif %}
+            {{ radio.tag }}
+            <span class="mts-radio-label">{{ radio.choice_label }}</span>
           </label>
         {% endfor %}
+        {# Nuendo Live disabled until Phase 4 ships — rendered statically (not in form choices) #}
+        <label class="mts-radio-option" title="Nuendo Live export ships in Phase 4">
+          <input type="radio" disabled>
+          <span class="mts-radio-label mts-radio-label--disabled">
+            Nuendo Live <span class="mts-caption">(coming v2.0)</span>
+          </span>
+        </label>
       </div>
       {% if form.target_daw.errors %}<div class="mts-field-error">{{ form.target_daw.errors }}</div>{% endif %}
     </div>
