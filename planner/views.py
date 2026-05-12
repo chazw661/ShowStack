@@ -5795,22 +5795,35 @@ def _build_picker_data(session, existing_tracks, current_project=None):
         except (ValueError, TypeError):
             return float('inf')
 
-    inputs_qs = (
-        ConsoleInput.objects.filter(console=console)
-        .exclude(id__in=used_ids['input'])
+    # Sort picker channels by the session's track_order_mode so the order
+    # in the picker matches the order the editor will render tracks in
+    # after they're added. 'console'/'custom' → by channel number;
+    # 'dante' → by dante stream number. Channels without the relevant
+    # field sort to the end.
+    mode = session.track_order_mode
+    inputs_qs = list(
+        ConsoleInput.objects.filter(console=console).exclude(id__in=used_ids['input'])
     )
-    aux_qs = (
-        ConsoleAuxOutput.objects.filter(console=console)
-        .exclude(id__in=used_ids['aux']).order_by('aux_number')
+    aux_qs = list(
+        ConsoleAuxOutput.objects.filter(console=console).exclude(id__in=used_ids['aux'])
     )
-    matrix_qs = (
-        ConsoleMatrixOutput.objects.filter(console=console)
-        .exclude(id__in=used_ids['matrix']).order_by('matrix_number')
+    matrix_qs = list(
+        ConsoleMatrixOutput.objects.filter(console=console).exclude(id__in=used_ids['matrix'])
     )
-    stereo_qs = (
-        ConsoleStereoOutput.objects.filter(console=console)
-        .exclude(id__in=used_ids['stereo']).order_by('stereo_type')
+    stereo_qs = list(
+        ConsoleStereoOutput.objects.filter(console=console).exclude(id__in=used_ids['stereo'])
     )
+
+    if mode == 'dante':
+        inputs_qs.sort(key=lambda c: (_int_or_inf(c.dante_number), c.id))
+        aux_qs.sort(key=lambda c: (_int_or_inf(c.dante_number), c.id))
+        matrix_qs.sort(key=lambda c: (_int_or_inf(c.dante_number), c.id))
+        stereo_qs.sort(key=lambda c: (_int_or_inf(c.dante_number), c.id))
+    else:  # 'console', 'custom', or anything else — sort by channel number
+        inputs_qs.sort(key=lambda c: (_int_or_inf(c.input_ch), c.id))
+        aux_qs.sort(key=lambda c: (_int_or_inf(c.aux_number), c.id))
+        matrix_qs.sort(key=lambda c: (_int_or_inf(c.matrix_number), c.id))
+        stereo_qs.sort(key=lambda c: (c.stereo_type or '', c.id))
 
     return {
         'inputs': [
@@ -5820,7 +5833,7 @@ def _build_picker_data(session, existing_tracks, current_project=None):
                 'channel_number': c.input_ch or '',
                 'dante_number': c.dante_number or '',
             }
-            for c in sorted(inputs_qs, key=lambda c: (_int_or_inf(c.input_ch), c.id))
+            for c in inputs_qs
         ],
         'aux': [
             {
