@@ -56,7 +56,8 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 **: Imported channel labels and colors map onto existing `ConsoleChannel` records when present, otherwise create new ones; user is shown a per-row diff summary before commit.
 - [x] **CSV-04
 **: Import errors surface clearly per row (missing required field, unsupported color code) without aborting the whole import.
-- [ ] **CSV-05**: After a successful import, user lands in the session editor with the imported channels available as track sources.
+- [x] **CSV-05
+**: After a successful import, user lands in the session editor with the imported channels available as track sources.
 
 ### Templates — TPL
 
