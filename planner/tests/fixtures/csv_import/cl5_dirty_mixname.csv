@@ -1,0 +1,12 @@
+[Information]
+CL5
+V4.1
+[MixName]
+MIX,NAME,COLOR,ICON,
+_01,MX 1,Orange,Blank,
+_02,Kick Send,Red,Effector,
+_03,Drum Sub,Green,Blank,
+_04,Snare,Magenta,Blank,
+_999,BadRange,Blue,Blank,
+_AB,BadKey,Blue,Blank,
+_05,A name that is over one hundred characters long absolutely no doubt about it just look at this never ending text,Yellow,Blank,
