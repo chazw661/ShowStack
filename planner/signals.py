@@ -71,17 +71,36 @@ def consoleinput_to_manual(sender, instance, **kwargs):
 
 @receiver(post_delete, sender=ConsoleAuxOutput)
 def consoleauxoutput_to_manual(sender, instance, **kwargs):
-    label = instance.name or f'Aux {instance.aux_number}' or '(deleted aux)'
+    # Explicit branches — `name or f'Aux {n}' or sentinel` always picked the
+    # f-string (always non-empty, even when aux_number is None or 0), so the
+    # sentinel fallback was unreachable (WR-05).
+    if instance.name:
+        label = instance.name
+    elif instance.aux_number:
+        label = f'Aux {instance.aux_number}'
+    else:
+        label = '(deleted aux)'
     _convert_orphans_to_manual('aux', instance.pk, label)
 
 
 @receiver(post_delete, sender=ConsoleMatrixOutput)
 def consolematrixoutput_to_manual(sender, instance, **kwargs):
-    label = instance.name or f'Matrix {instance.matrix_number}' or '(deleted matrix)'
+    if instance.name:
+        label = instance.name
+    elif instance.matrix_number:
+        label = f'Matrix {instance.matrix_number}'
+    else:
+        label = '(deleted matrix)'
     _convert_orphans_to_manual('matrix', instance.pk, label)
 
 
 @receiver(post_delete, sender=ConsoleStereoOutput)
 def consolestereooutput_to_manual(sender, instance, **kwargs):
-    label = instance.name or instance.get_stereo_type_display() or '(deleted stereo)'
+    if instance.name:
+        label = instance.name
+    else:
+        # get_stereo_type_display() always returns a string for valid choices
+        # but may be empty/None for unset stereo_type — fall back to sentinel.
+        display = instance.get_stereo_type_display() if instance.stereo_type else ''
+        label = display or '(deleted stereo)'
     _convert_orphans_to_manual('stereo', instance.pk, label)
