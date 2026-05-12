@@ -10,12 +10,25 @@
 
 {% block content %}
 <div class="mts-container">
+  {% if messages %}
+    <div class="mts-banners">
+      {% for message in messages %}
+        <div class="mts-banner mts-banner-{{ message.level_tag }}" data-tags="{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <div class="mts-header">
     <div>
       <h1 class="mts-h1">Multitrack Sessions</h1>
       <p class="mts-subtitle">Build recording-session track lists from your console channels.</p>
     </div>
-    <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
+    <div class="mts-header-actions" style="display: flex; gap: 8px;">
+      {% if not request.user.groups.filter(name="Viewer").exists %}
+        <a class="mts-btn mts-btn-secondary" href="{% url 'planner:console_import_upload' %}">Import Console CSV</a>
+      {% endif %}
+      <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
+    </div>
   </div>
 
   {% if sessions %}
