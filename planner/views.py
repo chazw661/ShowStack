@@ -6012,8 +6012,9 @@ def multitrack_duplicate(request, session_id):
             'session_id': new_session.id,
             'redirect_url': reverse('planner:multitrack_editor', args=[new_session.id]),
         })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_duplicate failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6056,8 +6057,9 @@ def multitrack_rename(request, session_id):
         session.name = new_name
         session.save(update_fields=['name', 'updated_at'])
         return JsonResponse({'ok': True, 'name': new_name})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_rename failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6086,8 +6088,9 @@ def multitrack_delete(request, session_id):
             'ok': True,
             'redirect_url': reverse('planner:multitrack_dashboard'),
         })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_delete failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -6100,6 +6103,12 @@ def multitrack_delete(request, session_id):
 # ──────────────────────────────────────────────────────────────────
 
 import re
+import logging
+
+# Module-level logger for multitrack AJAX endpoints. Anything that bubbles
+# out of the per-endpoint try blocks is logged here (with stack trace) so
+# the client only ever sees a generic 500 message (WR-02).
+_multitrack_logger = logging.getLogger(__name__)
 
 # Hex color validator — REJECTS everything except '' or '#RRGGBB'.
 # Closes the XSS-via-color-override surface (T-04-04 in this plan's threat model).
@@ -6179,8 +6188,9 @@ def multitrack_reorder(request, session_id):
         MultitrackTrack.objects.bulk_update(to_update, ['track_number'])
 
         return JsonResponse({'ok': True})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_reorder failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6308,8 +6318,9 @@ def multitrack_add_tracks(request, session_id):
             'created_count': len(new_rows),
             'redirect_url': reverse('planner:multitrack_editor', args=[session.id]),
         })
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_add_tracks failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6338,8 +6349,9 @@ def multitrack_set_color(request):
         track.color_override = color
         track.save(update_fields=['color_override'])
         return JsonResponse({'ok': True, 'color': color})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_set_color failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6372,8 +6384,9 @@ def multitrack_set_label(request):
         track.label_override = label
         track.save(update_fields=['label_override'])
         return JsonResponse({'ok': True, 'resolved_label': track.resolved_label})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_set_label failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6399,8 +6412,9 @@ def multitrack_set_enabled(request):
         track.enabled = enabled
         track.save(update_fields=['enabled'])
         return JsonResponse({'ok': True, 'enabled': enabled})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_set_enabled failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @login_required
@@ -6426,8 +6440,9 @@ def multitrack_remove_track(request):
 
         track.delete()
         return JsonResponse({'ok': True})
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        _multitrack_logger.exception('multitrack_remove_track failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @staff_member_required
