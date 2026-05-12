@@ -6492,10 +6492,16 @@ from .utils.reaper_export import build_rpp, build_rtracktemplate
 def _safe_filename(name):
     """Slugify a session name for a Content-Disposition filename header.
 
-    Replaces every non-alphanumeric / non-dash / non-underscore character
-    with `_`. Closes the path-traversal / header-injection surface.
+    Restricts output to ASCII letters, digits, hyphen, and underscore — every
+    other character is replaced with `_`. RFC 6266 requires bare `filename=`
+    values to be ASCII; non-ASCII letters (which `str.isalnum()` accepts via
+    Unicode) confuse some browsers into rejecting the download or producing
+    mojibake (WR-06). Closes path-traversal / header-injection too.
     """
-    return ''.join(c if (c.isalnum() or c in '-_') else '_' for c in (name or '').strip()) or 'session'
+    return ''.join(
+        c if ((c.isascii() and c.isalnum()) or c in '-_') else '_'
+        for c in (name or '').strip()
+    ) or 'session'
 
 
 def _has_enabled_tracks(session):
