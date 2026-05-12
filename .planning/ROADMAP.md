@@ -65,12 +65,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Engineer clicks "Export to Reaper" and downloads a `.RPP` (and optionally `.RTrackTemplate`) where track names match the resolved labels, track colors match the resolved colors mapped to Reaper packed RGB, and the track order matches the session's `track_order_mode`
   5. Opening the exported `.RPP` in Reaper produces a project with one track per enabled MultitrackTrack, no errors, names and colors as configured
 **Plans**: 6 plans
-- [ ] 01-01-PLAN.md — Foundation: models, migration, signals, admin, admin_ordering (Wave 1)
-- [ ] 01-02-PLAN.md — Reaper exporter utility (Wave 2, parallel-safe)
-- [ ] 01-03-PLAN.md — Forms + page-render views + URL stubs (Wave 2)
-- [ ] 01-04-PLAN.md — AJAX endpoints + Reaper export views (Wave 3)
-- [ ] 01-05-PLAN.md — Templates: dashboard, editor, new_session + four partials (Wave 4)
-- [ ] 01-06-PLAN.md — JS controller + Sortable.js vendor + multitrack.css (Wave 4, parallel with 05)
+- [x] 01-01-PLAN.md — Foundation: models, migration, signals, admin, admin_ordering (Wave 1)
+- [x] 01-02-PLAN.md — Reaper exporter utility (Wave 2, parallel-safe)
+- [x] 01-03-PLAN.md — Forms + page-render views + URL stubs (Wave 2)
+- [x] 01-04-PLAN.md — AJAX endpoints + Reaper export views (Wave 3)
+- [x] 01-05-PLAN.md — Templates: dashboard, editor, new_session + four partials (Wave 4)
+- [x] 01-06-PLAN.md — JS controller + Sortable.js vendor + multitrack.css (Wave 4, parallel with 05)
 **UI hint**: yes
 
 ### Phase 2: Console CSV Import
