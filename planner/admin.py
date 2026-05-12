@@ -35,6 +35,7 @@ from django.db import models
 # Model imports (add the mic tracking models to your existing model imports)
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
+from .models import ConsoleImport
 from .models import MultitrackSession, MultitrackTrack
 from .models import Location, Amp, AmpChannel, AmpDivider
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
@@ -5939,12 +5940,48 @@ class MultitrackSessionAdmin(BaseEquipmentAdmin):
         return super().has_delete_permission(request, obj)
 
 
+class ConsoleImportAdmin(BaseEquipmentAdmin):
+    """Read-mostly audit-history admin for ConsoleImport rows (Phase 2 Console CSV Import).
+
+    Per CONTEXT D-08 / D-09: imports are immutable audit history; every field is
+    readonly. Viewer-group users are blocked at all three permission methods,
+    mirroring MultitrackSessionAdmin (planner/admin.py:5904-5939).
+    """
+    list_display = ['console', 'original_filename', 'uploaded_by', 'uploaded_at', 'committed']
+    list_filter = ['committed', 'console']
+    search_fields = ['original_filename', 'console__name']
+    readonly_fields = ['console', 'uploaded_by', 'uploaded_at', 'original_filename',
+                       'raw_file', 'parsed_sections', 'summary', 'committed']
+
+    def has_add_permission(self, request):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
     # ==================== REGISTER ALL MODELS ====================
 from planner.admin_site import showstack_admin_site
 
 # Register all equipment admin classes
 showstack_admin_site.register(Console, ConsoleAdmin)
 showstack_admin_site.register(MultitrackSession, MultitrackSessionAdmin)
+showstack_admin_site.register(ConsoleImport, ConsoleImportAdmin)
 showstack_admin_site.register(Device, DeviceAdmin)
 showstack_admin_site.register(AmpModel, AmpModelAdmin)
 showstack_admin_site.register(Amp, AmpAdmin)

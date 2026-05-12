@@ -5,6 +5,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from decimal import Decimal
 import math
+import os
 from django import forms
 from django.db import models, transaction
 
@@ -751,6 +752,22 @@ class ProjectAccessRequest(models.Model):
 
 #-----Console Model----
 
+# Yamaha CL/QL/Rivage PM color palette — matches YAMAHA_TO_HEX in
+# planner/utils/reaper_export.py (Phase 2 CSV import stores color names;
+# Phase 1 export resolves them to hex via that table).
+YAMAHA_COLOR_CHOICES = [
+    ('Off',      'Off'),
+    ('Red',      'Red'),
+    ('Orange',   'Orange'),
+    ('Yellow',   'Yellow'),
+    ('Green',    'Green'),
+    ('Sky Blue', 'Sky Blue'),
+    ('Blue',     'Blue'),
+    ('Purple',   'Purple'),
+    ('Pink',     'Pink'),
+    ('White',    'White'),
+]
+
 class Console(models.Model):
     project = models.ForeignKey('Project', on_delete=models.CASCADE, null=True, blank=True)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
@@ -825,6 +842,7 @@ class ConsoleInput(models.Model):
         verbose_name="Source Hardware"
     )
 
+    color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
 
     group = models.CharField(max_length=100, blank=True, null=True)
     dca = models.CharField(max_length=100, blank=True, null=True)
@@ -845,7 +863,7 @@ class ConsoleInput(models.Model):
 
 class ConsoleAuxOutput(models.Model):
     console = models.ForeignKey(Console, on_delete=models.CASCADE)
-    dante_number = models.IntegerField(null=True, blank=True) 
+    dante_number = models.IntegerField(null=True, blank=True)
     aux_number = models.CharField(max_length=10)
     name = models.CharField(max_length=100, blank=True, null=True)
     mono_stereo = models.CharField(
@@ -862,14 +880,15 @@ class ConsoleAuxOutput(models.Model):
     )
     omni_in = models.CharField(max_length=100, blank=True)
     omni_out = models.CharField(max_length=100, blank=True)
-    
+    color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
+
     def __str__(self):
         return f"Aux {self.aux_number} - {self.name}"
 
 
 class ConsoleMatrixOutput(models.Model):
     console = models.ForeignKey(Console, on_delete=models.CASCADE)
-    dante_number = models.IntegerField(null=True, blank=True) 
+    dante_number = models.IntegerField(null=True, blank=True)
     matrix_number = models.CharField(max_length=10)
     name = models.CharField(max_length=100, blank=True, null=True)
     mono_stereo = models.CharField(
@@ -880,7 +899,7 @@ class ConsoleMatrixOutput(models.Model):
 )
     destination = models.CharField(max_length=100, blank=True, null=True)
     omni_out = models.CharField(max_length=100, blank=True, null=True)
-    
+    color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
 
     def __str__(self):
         return f"Matrix {self.matrix_number} - {self.name}"
@@ -896,6 +915,7 @@ class ConsoleStereoOutput(models.Model):
     name = models.CharField(max_length=100, blank=True, null=True)
     dante_number = models.IntegerField(null=True, blank=True)
     omni_out = models.CharField(max_length=100, blank=True, null=True)
+    color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
 
     def __str__(self):
         return f"{self.get_stereo_type_display()} - {self.name}"
@@ -903,6 +923,42 @@ class ConsoleStereoOutput(models.Model):
     class Meta:
         ordering = ['stereo_type']
 
+
+def _import_upload_to(instance, filename):
+    """Per-console, timestamped path. os.path.basename strips any client-supplied path components (path-traversal mitigation)."""
+    from django.utils import timezone
+    safe_name = os.path.basename(filename)
+    return f'console_imports/{instance.console.project_id}/{instance.console_id}/{timezone.now():%Y%m%dT%H%M%S}-{safe_name}'
+
+
+class ConsoleImport(models.Model):
+    """Immutable audit-history snapshot of one Yamaha Editor CSV/zip upload applied to a Console.
+
+    The CSV file is the truth of what was on the physical console at upload time;
+    the ShowStack Console can drift from any single import (engineer edits in admin).
+    The ConsoleImport row stays as audit history and re-apply source.
+    """
+    console = models.ForeignKey(
+        'Console', on_delete=models.CASCADE, related_name='imports',
+    )
+    uploaded_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='console_imports',
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    original_filename = models.CharField(max_length=255)
+    raw_file = models.FileField(upload_to=_import_upload_to, blank=True, null=True)
+    parsed_sections = models.JSONField(default=dict, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    committed = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Console Import"
+        verbose_name_plural = "Console Imports"
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.console.name} — {self.original_filename} ({self.uploaded_at:%Y-%m-%d %H:%M})"
 
 
 # ──────────────────────────────────────────────────────────────────
