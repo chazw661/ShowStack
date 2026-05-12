@@ -5763,9 +5763,14 @@ def multitrack_dashboard(request):
         .order_by('-updated_at')
         if current_project else MultitrackSession.objects.none()
     )
+    can_import_console_csv = (
+        request.user.is_authenticated
+        and not request.user.groups.filter(name='Viewer').exists()
+    )
     return render(request, 'planner/multitrack/dashboard.html', {
         'sessions': sessions,
         'current_project': current_project,
+        'can_import_console_csv': can_import_console_csv,
     })
 
 

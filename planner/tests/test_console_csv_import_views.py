@@ -274,8 +274,10 @@ class CommitTest(CsvImportTestBase):
         self.assertRedirects(
             response,
             reverse('planner:multitrack_dashboard'),
-            fetch_redirect_response=False,
         )
+        followed = self.client.get(reverse('planner:multitrack_dashboard'))
+        self.assertEqual(followed.status_code, 200)
+        self.assertContains(followed, 'Import Console CSV')
 
         snap.refresh_from_db()
         self.assertTrue(snap.committed)

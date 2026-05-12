@@ -24,7 +24,7 @@
       <p class="mts-subtitle">Build recording-session track lists from your console channels.</p>
     </div>
     <div class="mts-header-actions" style="display: flex; gap: 8px;">
-      {% if not request.user.groups.filter(name="Viewer").exists %}
+      {% if can_import_console_csv %}
         <a class="mts-btn mts-btn-secondary" href="{% url 'planner:console_import_upload' %}">Import Console CSV</a>
       {% endif %}
       <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
