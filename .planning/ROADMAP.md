@@ -83,10 +83,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Before commit, the engineer sees a per-row diff summary (created vs updated vs unchanged) and any per-row errors (missing fields, unsupported color codes) without the entire import aborting
   4. After a successful import, the engineer lands directly in the session editor with the imported channels available as track sources
 **Plans**: 4 plans
-- [ ] 02-01-PLAN.md — Schema foundation: YAMAHA_COLOR_CHOICES + color field on 4 channel models, ConsoleImport model, migration 0153, admin + ordering (Wave 1)
-- [ ] 02-02-PLAN.md — Pure-function parser utility + parser unit tests + test fixtures (Wave 1, parallel with 01)
-- [ ] 02-03-PLAN.md — Upload form, three views (upload/preview/commit), URL routes (Wave 2)
-- [ ] 02-04-PLAN.md — Templates (upload, preview, dashboard CTA) + end-to-end view integration tests (Wave 3)
+- [x] 02-01-PLAN.md — Schema foundation: YAMAHA_COLOR_CHOICES + color field on 4 channel models, ConsoleImport model, migration 0153, admin + ordering (Wave 1)
+- [x] 02-02-PLAN.md — Pure-function parser utility + parser unit tests + test fixtures (Wave 1, parallel with 01)
+- [x] 02-03-PLAN.md — Upload form, three views (upload/preview/commit), URL routes (Wave 2)
+- [x] 02-04-PLAN.md — Templates (upload, preview, dashboard CTA) + end-to-end view integration tests (Wave 3)
 
 ### Phase 3: Multitrack Templates
 **Goal**: Engineer can save a working session's structure as a reusable template scoped to the project and apply it to seed new sessions on any console
