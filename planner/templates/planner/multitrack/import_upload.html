@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Import Console CSV | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'planner/css/multitrack.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="mts-container">
+  <a class="mts-back-btn" href="{% url 'planner:multitrack_dashboard' %}">← Multitrack Sessions</a>
+
+  <h1 class="mts-h1">Import Console CSV</h1>
+  <p class="mts-subtitle">
+    Upload a Yamaha CL/QL Editor or Rivage PM Editor channel-label CSV — single section file or a .zip of the full export folder.
+  </p>
+
+  {% if messages %}
+    {% for message in messages %}
+      {% if 'multitrack_import' in message.tags %}
+        <div class="mts-banner mts-banner-{{ message.level_tag }}">{{ message }}</div>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" class="mts-form" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    {% if form.errors %}
+      <div class="mts-form-errors">
+        Could not upload — please fix the highlighted fields.
+        {% if form.non_field_errors %}{{ form.non_field_errors }}{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="mts-form-row">
+      <label for="{{ form.console.id_for_label }}">Target console <span class="mts-required">*</span></label>
+      {{ form.console }}
+      {% if form.console.errors %}<div class="mts-field-error">{{ form.console.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-row">
+      <label for="{{ form.csv_file.id_for_label }}">CSV or zip <span class="mts-required">*</span></label>
+      {{ form.csv_file }}
+      {% if form.csv_file.help_text %}<div class="mts-help-text">{{ form.csv_file.help_text }}</div>{% endif %}
+      {% if form.csv_file.errors %}<div class="mts-field-error">{{ form.csv_file.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mts-form-actions">
+      <button type="submit" class="mts-btn mts-btn-primary">Upload</button>
+      <a class="mts-btn mts-btn-secondary" href="{% url 'planner:multitrack_dashboard' %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
