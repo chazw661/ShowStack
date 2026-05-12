@@ -31,11 +31,13 @@
   {% endif %}
 
   <div class="mts-toolbar">
-    {# Capacity bar reads `total_count` and `over_count` from the view context
-       (Plan 03's `_editor_context` helper computes both). NO inline arithmetic
-       in templates — Django's template language can't subtract cleanly, and
-       the no-enabled-tracks export fallback (Plan 04) shares the same
-       template, so the helper is the single source of truth. #}
+    {% comment %}
+      Capacity bar reads total_count and over_count from the view context
+      (Plan 03's _editor_context helper computes both). NO inline arithmetic
+      in templates — Django's template language can't subtract cleanly, and
+      the no-enabled-tracks export fallback (Plan 04) shares the same
+      template, so the helper is the single source of truth.
+    {% endcomment %}
     {% if session.recorder_capacity %}
       {% if over_count > 0 %}
         <div class="mts-capacity mts-capacity--over"

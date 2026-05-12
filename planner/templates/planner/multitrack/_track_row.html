@@ -40,12 +40,14 @@
     {% if track.color_override %}<span data-swatch-fill></span>{% else %}<span class="mts-swatch__empty-mark">⊘</span>{% endif %}
   </button>
 
-  {# Notes column — DISPLAY ONLY in Phase 1.
-     Per checker decision (BLOCKER WARNING 3), notes are writable only at
-     creation time via the picker's manual-tab inline form (D-11). Editing
-     notes on existing tracks is deferred (no `multitrack_set_notes`
-     endpoint exists in Plan 04). Rendering an editable affordance here
-     would misleadingly imply edit-ability. Plain `<span>` is correct. #}
+  {% comment %}
+    Notes column — DISPLAY ONLY in Phase 1.
+    Per checker decision (BLOCKER WARNING 3), notes are writable only at
+    creation time via the picker's manual-tab inline form (D-11). Editing
+    notes on existing tracks is deferred (no multitrack_set_notes
+    endpoint exists in Plan 04). Rendering an editable affordance here
+    would misleadingly imply edit-ability. Plain <span> is correct.
+  {% endcomment %}
   <span class="mts-track-notes-display" data-track-id="{{ track.id }}">{{ track.notes }}</span>
 
   <button type="button" class="mts-remove-btn"
