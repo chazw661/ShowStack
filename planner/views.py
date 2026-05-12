@@ -6948,3 +6948,187 @@ def _apply_console_import(snap, keep_showstack_refs):
             summary['errors'].append(err)
 
     return summary
+
+
+# -------------------------------------------------------------------------
+# Phase 2 — Console CSV Import — View functions
+# -------------------------------------------------------------------------
+
+# Family-token heuristic for the Blocker 2 mismatch warning (R-02).
+# Soft signal only; the gate is the warning + second confirmation checkbox,
+# NOT a hard block (R-02 — no hard block; D-03's original "block with error"
+# is superseded by the CONTEXT.md amendment).
+_CONSOLE_NAME_FAMILY_TOKENS = {
+    'cl_ql': ('CL5', 'CL3', 'CL1', 'QL5', 'QL1', 'CL ', 'QL '),
+    'rivage_pm': ('RIVAGE', 'CS-R', 'CSR', 'DSP-RX', 'PM10', 'PM7', 'PM5'),
+}
+
+
+def _family_matches_console_name(detected_family: str, console_name: str) -> bool:
+    """Heuristic: does the target console's name plausibly belong to the detected family?
+
+    Returns True when the console name carries at least one token from the detected
+    family's token list. Returns True for `detected_family='unknown'` to avoid
+    false-positive warnings (unknown family already triggers a fatal upload error
+    upstream, so this branch is mostly defensive).
+    """
+    if not detected_family or detected_family == 'unknown':
+        return True
+    name_upper = (console_name or '').upper()
+    tokens = _CONSOLE_NAME_FAMILY_TOKENS.get(detected_family, ())
+    return any(tok.upper() in name_upper for tok in tokens)
+
+
+@staff_member_required
+def console_import_upload(request):
+    """GET: render upload form. POST: decode + parse + create draft ConsoleImport, redirect to preview.
+
+    Per D-09 (LOCKED): viewers are blocked on BOTH GET and POST — they get zero
+    upload UI. Phase 2 / CSV-01, CSV-02. See analog: multitrack_create_view.
+    """
+    # D-09: viewer gate covers BOTH GET and POST. Viewers see no upload UI at all.
+    block = _console_import_viewer_block(request)
+    if block is not None:
+        return block
+
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    if request.method == 'POST':
+        form = ConsoleCsvUploadForm(request.POST, request.FILES, request=request)
+        if form.is_valid():
+            target_console = form.cleaned_data['console']
+            uploaded = form.cleaned_data['csv_file']
+            parsed = parse_upload(uploaded, filename=uploaded.name)
+
+            if parsed.get('fatal_error'):
+                messages.error(
+                    request,
+                    f"Could not parse — {parsed['fatal_error']}. Verify the file is a Yamaha Editor export.",
+                    extra_tags='multitrack_import',
+                )
+                return render(request, 'planner/multitrack/import_upload.html', {'form': form})
+
+            # Rewind FileField so storage backend can read the bytes
+            try:
+                uploaded.seek(0)
+            except Exception:
+                pass
+
+            snap = ConsoleImport.objects.create(
+                console=target_console,
+                uploaded_by=request.user,
+                original_filename=os.path.basename(uploaded.name),
+                raw_file=uploaded,
+                parsed_sections={
+                    'sections': parsed['sections'],
+                    'family': parsed['family'],
+                    'is_zip': parsed['is_zip'],
+                },
+                committed=False,
+            )
+            return redirect('planner:console_import_preview', import_id=snap.id)
+    else:
+        form = ConsoleCsvUploadForm(request=request)
+
+    return render(request, 'planner/multitrack/import_upload.html', {'form': form})
+
+
+@staff_member_required
+def console_import_preview(request, import_id):
+    """GET: render diff preview against CURRENT console state (recomputed every request).
+
+    Per D-09 (LOCKED): viewers are blocked. Preview is part of the import UI surface.
+    Phase 2 / CSV-03. Race-condition stance: no drift detection in v2.0; recompute
+    fresh on every GET (see RESEARCH § Diff Preview Architecture).
+    """
+    # D-09: viewer gate covers preview GET (preview is part of the import UI).
+    block = _console_import_viewer_block(request)
+    if block is not None:
+        return block
+
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    snap = get_object_or_404(
+        ConsoleImport.objects.select_related('console', 'console__project'),
+        pk=import_id,
+        console__project=current_project,
+    )
+
+    diff = _compute_diff_rows(snap)
+
+    # R-02 family-confirmation context
+    detected_family = snap.parsed_sections.get('family', 'unknown')
+    # current_count = existing channels on the target console across all 4 in-scope models
+    current_count = (
+        ConsoleInput.objects.filter(console=snap.console).count()
+        + ConsoleAuxOutput.objects.filter(console=snap.console).count()
+        + ConsoleMatrixOutput.objects.filter(console=snap.console).count()
+        + ConsoleStereoOutput.objects.filter(console=snap.console).count()
+    )
+    new_count = diff['stats']['created']
+
+    # Blocker 2: family-mismatch warning. Surfaces a warning banner + a second
+    # required confirmation checkbox in the preview template (Plan 04).
+    # Two heuristics OR'd together — either one trips the warning:
+    #   1. Massive channel-count gap: importing >= 17 more rows than the console has
+    #      (catches Rivage 288 -> QL5 64 = 224 new channels).
+    #   2. Family token mismatch: detected family tokens don't appear in the
+    #      target console's name (soft signal — engineers do free-name consoles).
+    count_mismatch = new_count > (current_count + 16)
+    name_mismatch = not _family_matches_console_name(detected_family, snap.console.name)
+    family_mismatch_warning = bool(count_mismatch or name_mismatch)
+
+    return render(request, 'planner/multitrack/import_preview.html', {
+        'import': snap,
+        'console': snap.console,
+        'stats': diff['stats'],
+        'diff_rows': diff['rows'],
+        'errors': diff['errors'],
+        'detected_family': detected_family,
+        'current_count': current_count,
+        'new_count': new_count,
+        'family_mismatch_warning': family_mismatch_warning,
+    })
+
+
+@login_required
+@require_POST
+def console_import_commit(request, import_id):
+    """Apply the diff atomically; flip committed=True; redirect to multitrack dashboard with banner.
+
+    Per D-09 (LOCKED): viewers are blocked. Phase 2 / CSV-03, CSV-05, D-06.
+    Double-commit guard: select_for_update() + committed check (T-02-18).
+    """
+    # D-09: viewer gate covers commit POST.
+    block = _console_import_viewer_block(request)
+    if block is not None:
+        return block
+
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return HttpResponseBadRequest('No project selected.')
+
+    keep_showstack_refs = set(request.POST.getlist('keep_showstack'))
+
+    with transaction.atomic():
+        snap = ConsoleImport.objects.select_for_update().select_related('console').get(
+            pk=import_id,
+            console__project=current_project,
+        )
+        if snap.committed:
+            return HttpResponseBadRequest('Already committed.')
+        summary = _apply_console_import(snap, keep_showstack_refs)
+        snap.summary = summary
+        snap.committed = True
+        snap.save(update_fields=['summary', 'committed'])
+
+    messages.success(
+        request,
+        f"Import complete — {summary['created'] + summary['updated']} channels imported.",
+        extra_tags='multitrack_import',
+    )
+    return redirect('planner:multitrack_dashboard')
