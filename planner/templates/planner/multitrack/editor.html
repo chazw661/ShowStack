@@ -69,9 +69,10 @@
     <div class="mts-toolbar-actions">
       <button type="button" class="mts-btn mts-btn-secondary" onclick="mtsOpenPicker('inputs')">+ Add tracks</button>
       <a class="mts-btn mts-btn-success"
-         href="{% url 'planner:multitrack_export_rpp' session.id %}">Export to Reaper</a>
+         href="{% url 'planner:multitrack_export_rpp' session.id %}">Export to Reaper (.RPP)</a>
       <a class="mts-btn mts-btn-secondary"
-         href="{% url 'planner:multitrack_export_rtracktemplate' session.id %}">Export Track Template (.RTrackTemplate)</a>
+         href="{% url 'planner:multitrack_export_rtracktemplate' session.id %}"
+         title="Reaper track template — import via Track menu › Insert track from template">Export to Reaper (Track Template)</a>
     </div>
   </div>
 
