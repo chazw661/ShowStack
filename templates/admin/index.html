@@ -40,10 +40,9 @@
   .ss-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; margin-bottom: 32px; position: relative; overflow: hidden; }
   .ss-diagram::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% -20%, rgba(74,158,255,0.04) 0%, transparent 60%); pointer-events: none; }
   .ss-diagram-title { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: #b0b0dd; font-family: 'DM Mono', monospace; margin-bottom: 28px; }
-  .ss-flow { display: flex; flex-wrap: wrap; row-gap: 16px; align-items: stretch; gap: 0; position: relative; }
-  .ss-node { min-width: 180px; }
+  .ss-flow { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 16px; row-gap: 16px; align-items: stretch; position: relative; }
 
-  .ss-node { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px; position: relative; transition: border-color 0.2s, transform 0.2s; text-decoration: none; cursor: pointer; display: block; }
+  .ss-node { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px; position: relative; transition: border-color 0.2s, transform 0.2s; text-decoration: none; cursor: pointer; display: block; min-width: 0; }
   .ss-node:hover { border-color: var(--accent); transform: translateY(-2px); }
   .ss-node-icon { font-size: 1.4rem; margin-bottom: 10px; display: block; }
   .ss-node-label { display: none; }
@@ -54,9 +53,9 @@
   .ss-node-stat-val { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--accent); }
   .ss-node-stat-val.dim { color: var(--text-muted); }
 
-  .ss-arrow { display: flex; align-items: center; justify-content: center; padding: 0 8px; flex-shrink: 0; }
-  .ss-arrow-line { width: 32px; height: 1px; background: linear-gradient(to right, var(--border-bright), rgba(74,158,255,0.1)); position: relative; }
-  .ss-arrow-line::after { content: '›'; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 0.9rem; opacity: 0.5; }
+  /* Arrows hidden in grid layout — visual flow is established by left-to-right reading order */
+  .ss-arrow { display: none; }
+  .ss-arrow-line { display: none; }
 
   .ss-status-dot { position: absolute; top: 14px; right: 14px; width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
   .ss-status-dot.empty { background: var(--text-muted); box-shadow: none; }
@@ -87,10 +86,12 @@
   .ss-node-icon { width: 28px; height: 28px; margin-bottom: 10px; display: block; color: var(--accent); stroke-width: 1.5; }
   .ss-card-icon { width: 20px; height: 20px; color: var(--text-dim); stroke-width: 1.5; }
   @media (max-width: 900px) {
-    .ss-flow { flex-direction: column; }
-    .ss-arrow { transform: rotate(90deg); padding: 8px 0; }
+    .ss-flow { grid-template-columns: 1fr 1fr; }
     .ss-grid { grid-template-columns: 1fr 1fr; }
     .ss-dash { padding: 20px; }
+  }
+  @media (max-width: 500px) {
+    .ss-flow { grid-template-columns: 1fr; }
   }
 </style>
 {% endblock %}
