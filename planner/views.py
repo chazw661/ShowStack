@@ -5760,12 +5760,22 @@ def multitrack_dashboard(request):
     })
 
 
-def _build_picker_data(session, existing_tracks):
+def _build_picker_data(session, existing_tracks, current_project=None):
     """Build the four channel lists for the picker, with already-added rows hidden (D-09).
 
     Returns a dict {inputs: [...], aux: [...], matrix: [...], stereo: [...]}
     where each list is [{id, label, channel_number, dante_number}, ...].
+
+    Defence-in-depth (WR-07): if `current_project` is supplied, asserts that
+    `session.project_id == current_project.id` so a future caller that forgets
+    the IDOR check can never silently leak channel data from another project's
+    console. Callers SHOULD pass `current_project=request.current_project`.
     """
+    if current_project is not None:
+        assert session.project_id == current_project.id, (
+            'IDOR guard: session.project_id (%r) != current_project.id (%r)'
+            % (session.project_id, current_project.id)
+        )
     used_ids = {
         'input': {t.source_id for t in existing_tracks if t.source_type == 'input' and t.source_id},
         'aux': {t.source_id for t in existing_tracks if t.source_type == 'aux' and t.source_id},
@@ -5817,7 +5827,7 @@ def _build_picker_data(session, existing_tracks):
     }
 
 
-def _editor_context(session, tracks=None, **extras):
+def _editor_context(session, tracks=None, current_project=None, **extras):
     """Build the canonical context dict for the multitrack editor template.
 
     SHARED HELPER — every render of `planner/multitrack/editor.html` MUST go
@@ -5832,6 +5842,10 @@ def _editor_context(session, tracks=None, **extras):
               normal page render path stays a one-liner. Callers that need a
               filtered set (e.g. the no-enabled-tracks export fallback) pass
               their own queryset.
+      current_project: optional Project. When supplied, threaded through to
+                       _build_picker_data so the IDOR-defence assertion can
+                       fire (WR-07). Callers SHOULD pass
+                       `current_project=request.current_project`.
       **extras: any additional context keys the caller wants to merge in
                 (e.g. `export_error='...'`, `auto_open_picker=False`).
                 Extras take precedence over computed defaults.
@@ -5862,7 +5876,9 @@ def _editor_context(session, tracks=None, **extras):
     ctx = {
         'session': session,
         'tracks': tracks,
-        'picker_data_json': json.dumps(_build_picker_data(session, tracks)),
+        'picker_data_json': json.dumps(
+            _build_picker_data(session, tracks, current_project=current_project)
+        ),
         'auto_open_picker': total_count == 0,   # D-12
         'total_count': total_count,
         'over_count': over_count,
@@ -5890,7 +5906,11 @@ def multitrack_editor(request, session_id):
     if not session:
         return redirect('planner:multitrack_dashboard')
 
-    return render(request, 'planner/multitrack/editor.html', _editor_context(session))
+    return render(
+        request,
+        'planner/multitrack/editor.html',
+        _editor_context(session, current_project=current_project),
+    )
 
 
 @staff_member_required
@@ -6540,6 +6560,7 @@ def multitrack_export_rpp(request, session_id):
             _editor_context(
                 session,
                 tracks=enabled_tracks_qs,
+                current_project=current_project,
                 export_error='This session has no enabled tracks. '
                              'Enable at least one track to export.',
                 auto_open_picker=False,
@@ -6581,6 +6602,7 @@ def multitrack_export_rtracktemplate(request, session_id):
             _editor_context(
                 session,
                 tracks=enabled_tracks_qs,
+                current_project=current_project,
                 export_error='This session has no enabled tracks. '
                              'Enable at least one track to export.',
                 auto_open_picker=False,
