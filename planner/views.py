@@ -5945,6 +5945,7 @@ def multitrack_edit_view(request, session_id):
     })
 
 
+@login_required
 @require_POST
 def multitrack_duplicate(request, session_id):
     """POST: duplicate the session + all tracks under a new name (MTS-06).
@@ -5953,6 +5954,9 @@ def multitrack_duplicate(request, session_id):
     name is required; defaults to '{original} (copy)' if blank.
     Returns JSON {ok, redirect_url} or {error, status: 4xx}.
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         current_project = getattr(request, 'current_project', None)
         if not current_project:
@@ -6012,6 +6016,7 @@ def multitrack_duplicate(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_rename(request, session_id):
     """POST: rename a session (MTS-02).
@@ -6019,6 +6024,9 @@ def multitrack_rename(request, session_id):
     Body: JSON {name: '...'}. Returns {ok, name} or {error, status: 409} on
     unique-together conflict.
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         current_project = getattr(request, 'current_project', None)
         if not current_project:
@@ -6052,12 +6060,16 @@ def multitrack_rename(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_delete(request, session_id):
     """POST: delete a session and (via CASCADE) all its tracks (MTS-05).
 
     Returns JSON {ok, redirect_url} so the JS can navigate after success.
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         current_project = getattr(request, 'current_project', None)
         if not current_project:
@@ -6094,6 +6106,19 @@ import re
 _HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
 
 
+def _multitrack_viewer_block(request):
+    """Return a JsonResponse 403 iff the user is in the 'Viewer' group; else None.
+
+    Mirrors the read-only role contract enforced by BaseEquipmentAdmin and the
+    `request.user.groups.filter(name='Viewer').exists()` pattern used throughout
+    `planner/admin.py`. Centralised so every mutate endpoint applies the same
+    check (CR-01 / CR-02).
+    """
+    if request.user.groups.filter(name='Viewer').exists():
+        return JsonResponse({'error': 'Read-only access.'}, status=403)
+    return None
+
+
 def _get_track_for_request(request, track_id):
     """Return the MultitrackTrack iff its session.project == request.current_project.
 
@@ -6111,6 +6136,7 @@ def _get_track_for_request(request, track_id):
     )
 
 
+@login_required
 @require_POST
 def multitrack_reorder(request, session_id):
     """POST: reassign dense track_number 1..N from a posted ordered list (TRK-05).
@@ -6118,6 +6144,9 @@ def multitrack_reorder(request, session_id):
     Body: JSON {ordered_ids: [int, int, ...]}
     Returns: {ok: True} or {error, status: 4xx}
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         current_project = getattr(request, 'current_project', None)
         if not current_project:
@@ -6154,6 +6183,7 @@ def multitrack_reorder(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_add_tracks(request, session_id):
     """POST: create new MultitrackTrack rows for selected channels + manual queue (TRK-06, TRK-07, D-10).
@@ -6178,6 +6208,9 @@ def multitrack_add_tracks(request, session_id):
     Returns: {ok: True, created_count: N, redirect_url: '...'} or
              {error, status: 4xx}
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         current_project = getattr(request, 'current_project', None)
         if not current_project:
@@ -6279,6 +6312,7 @@ def multitrack_add_tracks(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_set_color(request):
     """POST: update a single track's color_override (TRK-04).
@@ -6286,6 +6320,9 @@ def multitrack_set_color(request):
     Body: JSON {track_id: int, color: str ('' or '#RRGGBB')}
     Returns: {ok: True, color: str} or {error, status: 4xx}
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         data = json.loads(request.body or '{}')
         track_id = data.get('track_id')
@@ -6305,6 +6342,7 @@ def multitrack_set_color(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_set_label(request):
     """POST: update a single track's label_override (TRK-03).
@@ -6312,6 +6350,9 @@ def multitrack_set_label(request):
     Body: JSON {track_id: int, label: str (max 100)}
     Returns: {ok: True, resolved_label: str} or {error, status: 4xx}
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         data = json.loads(request.body or '{}')
         track_id = data.get('track_id')
@@ -6335,6 +6376,7 @@ def multitrack_set_label(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_set_enabled(request):
     """POST: toggle a track's enabled flag (TRK-02).
@@ -6342,6 +6384,9 @@ def multitrack_set_enabled(request):
     Body: JSON {track_id: int, enabled: bool}
     Returns: {ok: True, enabled: bool} or {error, status: 4xx}
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         data = json.loads(request.body or '{}')
         track_id = data.get('track_id')
@@ -6358,6 +6403,7 @@ def multitrack_set_enabled(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def multitrack_remove_track(request):
     """POST: delete a single MultitrackTrack (TRK-08).
@@ -6367,6 +6413,9 @@ def multitrack_remove_track(request):
 
     Does NOT cascade to ConsoleChannel — MultitrackTrack has no FK there (D-01).
     """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
     try:
         data = json.loads(request.body or '{}')
         track_id = data.get('track_id')
