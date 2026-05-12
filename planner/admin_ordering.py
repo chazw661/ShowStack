@@ -73,6 +73,16 @@ def ordered_get_app_list(request, app_label=None):
     always_hidden = {
         'ampmodel',
         'micgroup',
+        # Network Health Monitor — module scrapped (see PROJECT.md "v1.0 Network
+        # Health Monitor (scrapped)"). Models remain registered so historical
+        # /admin/planner/<model>/ URLs still work, but they are hidden from the
+        # sidebar.
+        'monitorsession',
+        'discovereddevice',
+        'pollresult',
+        'deviceevent',
+        'projectsnmpconfig',
+        'switchportsnapshot',
     }
     
     # Define the correct order with proper groupings

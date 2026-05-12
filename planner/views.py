@@ -5291,6 +5291,7 @@ def dashboard_stats(request):
                     'mic_count': mic_count,
                 })
 
+        from .models import MultitrackSession
         data = {
             'project_name': cp.name if cp else 'No Project Selected',
             'console_total': Console.objects.filter(**p).count(),
@@ -5303,6 +5304,7 @@ def dashboard_stats(request):
             'pa_zones': PAZone.objects.filter(**p).count(),
             'sv_total': SoundvisionPrediction.objects.filter(**p).count(),
             'sv_arrays': 0,
+            'multitrack_total': MultitrackSession.objects.filter(**p).count(),
             'comm_packs': CommBeltPack.objects.filter(**p).count(),
             'comm_checked': CommBeltPack.objects.filter(**{**p, 'checked_out': True}).count(),
             'mic_total': sum(d['mic_count'] for d in show_days),
