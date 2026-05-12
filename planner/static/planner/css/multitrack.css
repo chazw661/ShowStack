@@ -81,37 +81,50 @@
   line-height: 1.2 !important;
 }
 
-.mts-btn-primary {
+/* Doubled-class selectors bump specificity above django-admin-interface's
+   `a { color: ... !important }` rule, which otherwise wins for anchor-tag
+   buttons rendered inside admin-themed pages. */
+.mts-btn.mts-btn-primary,
+a.mts-btn.mts-btn-primary {
   background-color: #4a9eff !important;
   color: #fff !important;
   border-color: #4a9eff !important;
 }
 
-.mts-btn-primary:hover {
+.mts-btn.mts-btn-primary:hover,
+a.mts-btn.mts-btn-primary:hover {
   background-color: #3b8de8 !important;
+  color: #fff !important;
 }
 
-.mts-btn-secondary {
+.mts-btn.mts-btn-secondary,
+a.mts-btn.mts-btn-secondary {
   background-color: #2a2a4a !important;
-  color: #c0c0c0 !important;
+  color: #e0e0e0 !important;
   border-color: #3a3a5a !important;
 }
 
-.mts-btn-secondary:hover {
+.mts-btn.mts-btn-secondary:hover,
+a.mts-btn.mts-btn-secondary:hover {
   background-color: #3a3a5a !important;
+  color: #e0e0e0 !important;
 }
 
-.mts-btn-success {
+.mts-btn.mts-btn-success,
+a.mts-btn.mts-btn-success {
   background-color: #00ff88 !important;
   color: #000 !important;
   border-color: #00ff88 !important;
 }
 
-.mts-btn-success:hover {
+.mts-btn.mts-btn-success:hover,
+a.mts-btn.mts-btn-success:hover {
   background-color: #00e07a !important;
+  color: #000 !important;
 }
 
-.mts-btn-danger {
+.mts-btn.mts-btn-danger,
+a.mts-btn.mts-btn-danger {
   background-color: #dc3545 !important;
   color: #fff !important;
   border-color: #dc3545 !important;

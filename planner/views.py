@@ -5785,6 +5785,33 @@ def _build_picker_data(session, existing_tracks, current_project=None):
         'stereo': {t.source_id for t in existing_tracks if t.source_type == 'stereo' and t.source_id},
     }
     console = session.console
+
+    # ConsoleInput stores input_ch and dante_number as CharFields, so DB-level
+    # order_by gives lexicographic order ("1", "10", "100", ..., "2", "20").
+    # Sort in Python with an int cast so the picker shows 1, 2, 3, ..., 144.
+    def _int_or_inf(value):
+        try:
+            return int(value) if value not in (None, '') else float('inf')
+        except (ValueError, TypeError):
+            return float('inf')
+
+    inputs_qs = (
+        ConsoleInput.objects.filter(console=console)
+        .exclude(id__in=used_ids['input'])
+    )
+    aux_qs = (
+        ConsoleAuxOutput.objects.filter(console=console)
+        .exclude(id__in=used_ids['aux']).order_by('aux_number')
+    )
+    matrix_qs = (
+        ConsoleMatrixOutput.objects.filter(console=console)
+        .exclude(id__in=used_ids['matrix']).order_by('matrix_number')
+    )
+    stereo_qs = (
+        ConsoleStereoOutput.objects.filter(console=console)
+        .exclude(id__in=used_ids['stereo']).order_by('stereo_type')
+    )
+
     return {
         'inputs': [
             {
@@ -5793,8 +5820,7 @@ def _build_picker_data(session, existing_tracks, current_project=None):
                 'channel_number': c.input_ch or '',
                 'dante_number': c.dante_number or '',
             }
-            for c in ConsoleInput.objects.filter(console=console)
-            .exclude(id__in=used_ids['input']).order_by('id')
+            for c in sorted(inputs_qs, key=lambda c: (_int_or_inf(c.input_ch), c.id))
         ],
         'aux': [
             {
@@ -5803,8 +5829,7 @@ def _build_picker_data(session, existing_tracks, current_project=None):
                 'channel_number': c.aux_number or '',
                 'dante_number': c.dante_number,
             }
-            for c in ConsoleAuxOutput.objects.filter(console=console)
-            .exclude(id__in=used_ids['aux']).order_by('id')
+            for c in aux_qs
         ],
         'matrix': [
             {
@@ -5813,8 +5838,7 @@ def _build_picker_data(session, existing_tracks, current_project=None):
                 'channel_number': c.matrix_number or '',
                 'dante_number': c.dante_number,
             }
-            for c in ConsoleMatrixOutput.objects.filter(console=console)
-            .exclude(id__in=used_ids['matrix']).order_by('id')
+            for c in matrix_qs
         ],
         'stereo': [
             {
@@ -5823,8 +5847,7 @@ def _build_picker_data(session, existing_tracks, current_project=None):
                 'channel_number': c.stereo_type or '',
                 'dante_number': c.dante_number,
             }
-            for c in ConsoleStereoOutput.objects.filter(console=console)
-            .exclude(id__in=used_ids['stereo']).order_by('id')
+            for c in stereo_qs
         ],
     }
 
@@ -5867,9 +5890,34 @@ def _editor_context(session, tracks=None, current_project=None, **extras):
                     suffix without inline {% widthratio %} arithmetic.
     """
     if tracks is None:
-        tracks = list(session.tracks.all().order_by('track_number'))
+        tracks = list(session.tracks.all())
     else:
         tracks = list(tracks)
+
+    # Sort visible tracks according to session.track_order_mode so the editor
+    # display matches what the .RPP export will produce. Reuse the exporter's
+    # ordering helpers so there is one source of truth.
+    from .utils.reaper_export import _source_channel_number, _SOURCE_TYPE_PRIORITY
+    mode = session.track_order_mode
+    if mode == 'dante':
+        def _dante_key(t):
+            d = t.resolved_dante_number
+            if t.source_type == 'manual':
+                return (2, t.track_number)
+            if d is None:
+                return (1, t.track_number)
+            return (0, d, t.track_number)
+        tracks.sort(key=_dante_key)
+    elif mode == 'console':
+        def _console_key(t):
+            return (
+                _SOURCE_TYPE_PRIORITY.get(t.source_type, 99),
+                _source_channel_number(t),
+                t.track_number,
+            )
+        tracks.sort(key=_console_key)
+    else:  # 'custom' — engineer's drag order
+        tracks.sort(key=lambda t: t.track_number)
 
     total_count = len(tracks)
     capacity = session.recorder_capacity
