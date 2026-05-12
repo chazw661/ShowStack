@@ -106,6 +106,11 @@ urlpatterns = [
     path('multitrack/<int:session_id>/', views.multitrack_editor, name='multitrack_editor'),
     path('multitrack/<int:session_id>/edit/', views.multitrack_edit_view, name='multitrack_edit'),
 
+    # Phase 2 — Console CSV Import (CSV-01..CSV-05)
+    path('multitrack/import/', views.console_import_upload, name='console_import_upload'),
+    path('multitrack/import/<int:import_id>/preview/', views.console_import_preview, name='console_import_preview'),
+    path('multitrack/import/<int:import_id>/commit/', views.console_import_commit, name='console_import_commit'),
+
     # AJAX mutate (this plan)
     path('multitrack/<int:session_id>/duplicate/', views.multitrack_duplicate, name='multitrack_duplicate'),
     path('multitrack/<int:session_id>/rename/', views.multitrack_rename, name='multitrack_rename'),
