@@ -6172,10 +6172,17 @@ def multitrack_reorder(request, session_id):
         if not isinstance(ordered_ids, list) or not all(isinstance(i, int) for i in ordered_ids):
             return JsonResponse({'error': 'ordered_ids must be a list of integers'}, status=400)
 
-        # Verify ALL ids belong to this session (prevents cross-session injection)
+        # Verify the posted set EQUALS the full set of session track IDs (WR-04).
+        # A subset would let a client renumber only some tracks, collapsing
+        # multiple rows to the same track_number and breaking the
+        # `ordering = ['track_number']` invariant.
         existing_ids = set(session.tracks.values_list('id', flat=True))
-        if not set(ordered_ids).issubset(existing_ids):
-            return JsonResponse({'error': 'One or more track IDs do not belong to this session'}, status=400)
+        if len(ordered_ids) != len(set(ordered_ids)):
+            return JsonResponse({'error': 'Duplicate track IDs in ordered_ids.'}, status=400)
+        if set(ordered_ids) != existing_ids:
+            return JsonResponse({
+                'error': 'ordered_ids must include every track in the session exactly once.'
+            }, status=400)
 
         # Reassign track_number 1..N. bulk_update is one SQL statement.
         tracks_by_id = {t.id: t for t in session.tracks.all()}
