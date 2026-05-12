@@ -2,6 +2,7 @@
 
 **Gathered:** 2026-05-12
 **Status:** Ready for planning
+**Amended:** 2026-05-12 (post-research, resolves 4 open questions — see `<resolved_open_questions>`)
 
 <domain>
 ## Phase Boundary
@@ -158,7 +159,53 @@ Engineer can populate or update a console's channel-name and color data from a Y
 
 </deferred>
 
+<resolved_open_questions>
+## Resolved Open Questions (2026-05-12, post-research)
+
+Research against the codebase surfaced four CONTEXT.md assumptions that didn't hold. These supersede the originals where they conflict — treat as LOCKED.
+
+### R-01 — DCA scope: CUT from Phase 2
+- No `ConsoleDCA` model exists in `planner/models.py`. Adding one is out of scope.
+- **Amends L-01:** `[DCAName]` (CL/QL) and the `DCA 1..DCA 24` rows of `[MuteDCAName]` (Rivage) are NOT imported. Parser still recognizes these section headers — rows are skipped silently and recorded in `summary.errors` as informational (`{section: 'DCAName', skipped: N, reason: 'no_target_model_v2.0'}`). No error UI; engineer sees "N DCA rows skipped" in the stats summary footer.
+- Move "DCA name import" to the Deferred section.
+
+### R-02 — Family-match: confirmation gate (no schema change)
+- No `Console.console_model` field exists. **Amends D-03.**
+- New behavior on upload: parser reads `[Information]` block, derives family (`cl_ql` | `rivage_pm` | `unknown`). The preview page banner shows: *"This CSV is from a `{detected_family}` console. The selected target is `{target.name}`. Importing will create **{new_count}** new channels (console has **{current_count}** today). Continue?"* — single Commit button to proceed.
+- No hard block. The `new_count` vs `current_count` line is the safety net D-03 was reaching for.
+- If detection returns `unknown` (no `[Information]` block or unrecognized model), the upload itself fails with a parse error before reaching preview.
+
+### R-03 — Stereo edge cases: skip both, log informational
+- CL/QL `[StName]` (stereo *returns*, not the master stereo bus): **skipped**. No `ConsoleStereoReturn` model exists; not adding one. Parser recognizes the section, skips rows, records `{section: 'StName', skipped: N, reason: 'no_target_model_v2.0'}` in `summary.errors`.
+- Rivage `[StName]` `_BL`/`_BR` rows: **skipped**. Only `_AL` (→ `stereo_type='L'`) and `_AR` (→ `stereo_type='R'`) are imported into `ConsoleStereoOutput`. `_BL`/`_BR` recorded in `summary.errors` as `{section: 'StName', skipped: 2, reason: 'stereo_group_b_not_supported_v2.0'}`.
+- CL/QL `[StMonoName]` is unchanged from D-07 — `_01→L, _02→R, _03→M`, mapped exactly to existing `STEREO_CHOICES`.
+
+### R-04 — Upload accepts both `.csv` and `.zip`
+- Yamaha CL/QL/Rivage Editor exports one CSV file *per section*, not a single multi-section file. Each file has its own `[Information]` block.
+- Upload form accepts: a single `.csv` (one section) OR a `.zip` containing multiple section CSVs (the full export folder).
+- Parser detects via `zipfile.is_zipfile(uploaded_file)`. For zip uploads, iterate every `.csv` member, parse each, merge into a single `ConsoleImport.parsed_sections` list. All files inside the zip must report the SAME `[Information]` family — mismatched families across zipped files = parse error.
+- `ConsoleImport.raw_file` stores the original upload as-uploaded (the `.zip` or the single `.csv`), under `media/console_imports/<project_id>/<console_id>/<timestamp>-<filename>`.
+
+### Effective in-scope sections after R-01, R-03 (supersedes L-01 list)
+| Section | Family | Target model | Status |
+|---------|--------|--------------|--------|
+| `[InName]` | CL5, QL5, Rivage | `ConsoleInput` (name field is `source`) | Import |
+| `[MixName]` | CL5, QL5, Rivage | `ConsoleAuxOutput` | Import |
+| `[MtxName]` | CL5, QL5, Rivage | `ConsoleMatrixOutput` | Import |
+| `[StMonoName]` | CL5, QL5 | `ConsoleStereoOutput` (L/R/M) | Import |
+| `[StName]` `_AL`/`_AR` | Rivage | `ConsoleStereoOutput` (L/R) | Import |
+| `[StName]` (CL/QL returns) | CL5, QL5 | none | Skip, log informational |
+| `[StName]` `_BL`/`_BR` | Rivage | none | Skip, log informational |
+| `[DCAName]` | CL5, QL5 | none | Skip, log informational |
+| `[MuteDCAName]` DCA rows | Rivage | none | Skip, log informational |
+| `[MuteDCAName]` Mute rows | Rivage | none | Skip, log informational |
+
+### Field-name watchout (from research)
+- `ConsoleInput` name field is **`source`** (NOT `name`). All other channel models use `name`. Easy miswire — the planner must spell this out in each affected task's `<action>`.
+
+</resolved_open_questions>
+
 ---
 
 *Phase: 02-console-csv-import*
-*Context gathered: 2026-05-12*
+*Context gathered: 2026-05-12; amended 2026-05-12 with R-01..R-04*
