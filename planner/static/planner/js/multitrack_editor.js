@@ -663,6 +663,54 @@
   };
 
   // ──────────────────────────────────────────────────────────────
+  // New-session form: auto-populate fields from picked template (D-11)
+  // ──────────────────────────────────────────────────────────────
+
+  window.mtsApplyTemplateToForm = function (selectEl) {
+    // Called from new_session.html on the template <select>'s onchange.
+    // Reads data-* attributes from the chosen <option> and sets the matching
+    // form fields. Engineer can still edit any field after auto-population.
+    if (!selectEl) return;
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt || !opt.value) {
+      // "— None —" — do not touch the form (engineer might have already
+      // typed in the other fields).
+      return;
+    }
+    // Radio button groups
+    function setRadio(name, value) {
+      if (!value) return;
+      const radio = document.querySelector(
+        'input[type="radio"][name="' + name + '"][value="' + value + '"]'
+      );
+      if (radio) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+    setRadio('target_daw', opt.dataset.targetDaw);
+    setRadio('feed_source', opt.dataset.feedSource);
+    setRadio('track_order_mode', opt.dataset.trackOrderMode);
+
+    // Number input — recorder_capacity (D-11 + "Claude's Discretion":
+    // auto-populate everything; empty data attr clears the input).
+    const capacityInput = document.querySelector(
+      'input[name="recorder_capacity"], input[id$="-recorder_capacity"]'
+    );
+    if (capacityInput) {
+      capacityInput.value = opt.dataset.recorderCapacity || '';
+    }
+
+    // Textarea — notes
+    const notesField = document.querySelector(
+      'textarea[name="notes"], textarea[id$="-notes"]'
+    );
+    if (notesField) {
+      notesField.value = opt.dataset.notes || '';
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────
   // Capacity bar live update (uses GET /capacity/ endpoint).
   //
   // The mtsCommitPickerSelection() and mtsRemoveTrack() flows above already

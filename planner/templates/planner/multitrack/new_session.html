@@ -26,6 +26,28 @@
       </div>
     {% endif %}
 
+    {# Phase 3 — TPL-02 / D-08. Template dropdown carries metadata on each   #}
+    {# option as data-* attrs so vanilla JS can auto-populate without AJAX.  #}
+    {% if form.template.field.queryset.exists %}
+    <div class="mts-form-row">
+      <label for="{{ form.template.id_for_label }}">{{ form.template.label }}</label>
+      <select name="{{ form.template.html_name }}" id="{{ form.template.id_for_label }}"
+              onchange="if (typeof mtsApplyTemplateToForm === 'function') mtsApplyTemplateToForm(this);">
+        <option value="">{{ form.template.field.empty_label }}</option>
+        {% for tpl in form.template.field.queryset %}
+          <option value="{{ tpl.id }}"
+                  data-target-daw="{{ tpl.target_daw }}"
+                  data-feed-source="{{ tpl.feed_source }}"
+                  data-track-order-mode="{{ tpl.track_order_mode }}"
+                  data-recorder-capacity="{{ tpl.recorder_capacity|default_if_none:'' }}"
+                  data-notes="{{ tpl.notes|escape }}">{{ tpl.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="mts-help-text">{{ form.template.help_text }}</p>
+      {% if form.template.errors %}<div class="mts-field-error">{{ form.template.errors }}</div>{% endif %}
+    </div>
+    {% endif %}
+
     <div class="mts-form-row">
       <label for="{{ form.name.id_for_label }}">Name <span class="mts-required">*</span></label>
       {{ form.name }}
@@ -106,4 +128,6 @@
     </div>
   </form>
 </div>
+
+<script src="{% static 'planner/js/multitrack_editor.js' %}" defer></script>
 {% endblock %}
