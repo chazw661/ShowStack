@@ -61,8 +61,10 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 
 ### Templates — TPL
 
-- [ ] **TPL-01**: User can save the current session's structure (target DAW, feed source, track-order mode, include-aux/matrix/groups flags, color scheme, naming pattern) as a named `MultitrackTemplate` scoped to the project.
-- [ ] **TPL-02**: User can apply a template to a new session, seeding the track list and metadata; user can still override per-track values after.
+- [x] **TPL-01
+**: User can save the current session's structure (target DAW, feed source, track-order mode, include-aux/matrix/groups flags, color scheme, naming pattern) as a named `MultitrackTemplate` scoped to the project.
+- [x] **TPL-02
+**: User can apply a template to a new session, seeding the track list and metadata; user can still override per-track values after.
 - [ ] **TPL-03**: User can list, rename, and delete templates from the module landing page.
 - [ ] **TPL-04**: Template save / load buttons, placement, and modal behavior visually and behaviorally match existing ShowStack template patterns (e.g. Comm Config, Mic Tracker).
 

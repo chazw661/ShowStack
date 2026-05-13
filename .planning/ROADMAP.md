@@ -89,15 +89,20 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 02-04-PLAN.md — Templates (upload, preview, dashboard CTA) + end-to-end view integration tests (Wave 3)
 
 ### Phase 3: Multitrack Templates
-**Goal**: Engineer can save a working session's structure as a reusable template scoped to the project and apply it to seed new sessions on any console
+**Goal**: Engineer can save a working session's structure as a reusable template scoped to the engineer's account (owner-scoped per D-05) and apply it to seed new sessions on any console
 **Depends on**: Phase 1
 **Requirements**: TPL-01, TPL-02, TPL-03, TPL-04
 **Success Criteria** (what must be TRUE):
-  1. Engineer saves the current session's structure (target DAW, feed source, track-order mode, include-aux/matrix/groups flags, color scheme, naming pattern) as a named `MultitrackTemplate` for the current project
+  1. Engineer saves the current session's structure (target DAW, feed source, track-order mode, plus a slot list keyed by cross-console portable `(source_type, source_number)` pairs) as a named `MultitrackTemplate` owned by the engineer
   2. Engineer applies a template to a new session and the track list and metadata are seeded; per-track values can still be overridden afterward
   3. Engineer can list, rename, and delete templates from the module landing page
   4. The save/load buttons, placement, and modal behavior visually and behaviorally match the existing ShowStack template patterns (Comm Config, Mic Tracker)
-**Plans**: TBD
+**Plans**: 5 plans
+- [x] 03-01-PLAN.md — Models + migration: `MultitrackTemplate` + `MultitrackTemplateSlot` + `apply_to_session` + `_summarise_skipped_slots` + migration 0154 (Wave 1)
+- [ ] 03-02-PLAN.md — Admin registration + admin_ordering (Wave 2)
+- [ ] 03-03-PLAN.md — JSON endpoints: save / rename / delete + URL routes (Wave 2)
+- [ ] 03-04-PLAN.md — Form integration: `MultitrackSessionForm.template` ModelChoiceField (Wave 2)
+- [ ] 03-05-PLAN.md — UI: dashboard Templates section, editor "Save as Template" button, new_session dropdown, JS (Wave 3)
 
 ### Phase 4: Nuendo Live Export
 **Goal**: Engineer can export the current session as a Nuendo Live 3 `.nlpr` file that opens cleanly with correct names and palette colors
