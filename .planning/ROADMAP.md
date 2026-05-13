@@ -114,7 +114,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Each track's outer `Name` and inner `DeviceAttributes → Name → String` render the resolved track label correctly inside Nuendo Live
   4. Tracks with an assigned color render using the correct Farb palette index per the Yamaha→Nuendo mapping table; tracks with no assigned color render in Nuendo Live's default appearance (Farb omitted)
   5. Every `ID` and `RuntimeID` in the exported document is unique within that document
-**Plans**: TBD
+**Plans**: 7 plans
+- [ ] 04-01-PLAN.md — Deps + `MultitrackTrack.resolved_yamaha_name` @property (Wave 1)
+- [ ] 04-02-PLAN.md — `planner/utils/nuendo_live_export.py` pure exporter: YAMAHA_TO_FARB, build_nlpr, all helpers (Wave 1, parallel-safe)
+- [ ] 04-03-PLAN.md — CHARLIE-OWNED: hand-generate `planner/data/multitrack/nuendo_live_3_template.nlpr` on Windows + Nuendo Live 3 (Wave 1 checkpoint, autonomous=false)
+- [ ] 04-04-PLAN.md — Test: NuendoLiveExportIdUniquenessTests + minimal fake fixture (Wave 2, depends on 02)
+- [ ] 04-05-PLAN.md — View + URL: `multitrack_export_nlpr` + `path('multitrack/<id>/export.nlpr/')` (Wave 2, depends on 02 + 03)
+- [ ] 04-06-PLAN.md — Atomic three-place form-gate removal: forms.py:1192-1199 + 1209-1217 + new_session.html:72-78 (Wave 2, parallel)
+- [ ] 04-07-PLAN.md — Third toolbar button in editor.html (Wave 3, depends on 05)
 
 ### Phase 5: Channel Record Defaults
 **Goal**: Engineers stop re-ticking the same obvious tracks every gig — channels carry per-channel `default_record` and `default_record_color` seed flags that pre-populate new sessions
@@ -139,5 +146,5 @@ in parallel, but solo dev means sequential execution per the spec's order.)
 | 1. Core Sessions, Track Editor & Reaper Export | 0/6 | Planned (6 plans, 4 waves) | - |
 | 2. Console CSV Import | 0/4 | Planned (4 plans, 3 waves) | - |
 | 3. Multitrack Templates | 0/0 | Not started | - |
-| 4. Nuendo Live Export | 0/0 | Not started | - |
+| 4. Nuendo Live Export | 0/7 | Planned (7 plans, 3 waves) | - |
 | 5. Channel Record Defaults | 0/0 | Not started | - |
