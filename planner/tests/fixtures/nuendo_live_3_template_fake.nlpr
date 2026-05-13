@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='utf-8'?>
+<NuendoProject ID="100">
+  <obj class="MApplicationVersion" ID="101">
+    <string name="Platform" value="WIN64"/>
+    <string name="Application" value="Nuendo Live"/>
+    <string name="Version" value="3.0.0"/>
+  </obj>
+  <obj class="MFolderTrack" ID="200">
+    <obj class="MListNode" ID="201">
+      <string name="Name" value="Audio" wide="true"/>
+    </obj>
+    <list name="Tracks">
+      <obj class="MAudioTrackEvent" ID="300">
+        <obj class="MListNode" ID="301">
+          <string name="Name" value="Audio 01" wide="true"/>
+        </obj>
+        <obj class="MAudioTrack" ID="302">
+          <int name="Channel ID" value="1"/>
+          <member name="DeviceAttributes">
+            <member name="Name">
+              <string name="String" value="Audio 01" wide="true"/>
+            </member>
+          </member>
+        </obj>
+        <member name="Additional Attributes">
+          <int name="Farb" value="0"/>
+        </member>
+        <int name="RuntimeID" value="500"/>
+      </obj>
+    </list>
+  </obj>
+  <obj class="MFolderTrack" ID="400">
+    <obj class="MListNode" ID="401">
+      <string name="Name" value="Input/Output Channels" wide="true"/>
+    </obj>
+    <list name="Tracks"/>
+  </obj>
+</NuendoProject>
