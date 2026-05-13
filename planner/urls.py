@@ -103,6 +103,14 @@ urlpatterns = [
     # Page-render
     path('multitrack/', views.multitrack_dashboard, name='multitrack_dashboard'),
     path('multitrack/new/', views.multitrack_create_view, name='multitrack_create'),
+
+    # Phase 3 — Multitrack Templates (TPL-01..TPL-04)
+    # All endpoints OWNER-scoped (request.user), NOT project-scoped (D-05).
+    # MUST come BEFORE any multitrack/<int:session_id>/... routes below — the
+    # int converter only matches \\d+, so 'templates' would not be captured as
+    # a session_id, but ordering-before is the plan's explicit acceptance gate.
+    path('multitrack/templates/save/', views.multitrack_template_save, name='multitrack_template_save'),
+
     path('multitrack/<int:session_id>/', views.multitrack_editor, name='multitrack_editor'),
     path('multitrack/<int:session_id>/edit/', views.multitrack_edit_view, name='multitrack_edit'),
 
