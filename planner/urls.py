@@ -110,6 +110,8 @@ urlpatterns = [
     # int converter only matches \\d+, so 'templates' would not be captured as
     # a session_id, but ordering-before is the plan's explicit acceptance gate.
     path('multitrack/templates/save/', views.multitrack_template_save, name='multitrack_template_save'),
+    path('multitrack/templates/<int:template_id>/rename/', views.multitrack_template_rename, name='multitrack_template_rename'),
+    path('multitrack/templates/<int:template_id>/delete/', views.multitrack_template_delete, name='multitrack_template_delete'),
 
     path('multitrack/<int:session_id>/', views.multitrack_editor, name='multitrack_editor'),
     path('multitrack/<int:session_id>/edit/', views.multitrack_edit_view, name='multitrack_edit'),
