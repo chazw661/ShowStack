@@ -100,8 +100,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 5 plans
 - [x] 03-01-PLAN.md — Models + migration: `MultitrackTemplate` + `MultitrackTemplateSlot` + `apply_to_session` + `_summarise_skipped_slots` + migration 0154 (Wave 1)
 - [x] 03-02-PLAN.md — Admin registration + admin_ordering (Wave 2)
-- [ ] 03-03-PLAN.md — JSON endpoints: save / rename / delete + URL routes (Wave 2)
-- [ ] 03-04-PLAN.md — Form integration: `MultitrackSessionForm.template` ModelChoiceField (Wave 2)
+- [x] 03-03-PLAN.md — JSON endpoints: save / rename / delete + URL routes (Wave 2)
+- [x] 03-04-PLAN.md — Form integration: `MultitrackSessionForm.template` ModelChoiceField (Wave 2)
 - [ ] 03-05-PLAN.md — UI: dashboard Templates section, editor "Save as Template" button, new_session dropdown, JS (Wave 3)
 
 ### Phase 4: Nuendo Live Export
