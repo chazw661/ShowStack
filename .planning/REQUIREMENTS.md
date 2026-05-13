@@ -67,7 +67,8 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 **: User can apply a template to a new session, seeding the track list and metadata; user can still override per-track values after.
 - [x] **TPL-03
 **: User can list, rename, and delete templates from the module landing page.
-- [ ] **TPL-04**: Template save / load buttons, placement, and modal behavior visually and behaviorally match existing ShowStack template patterns (e.g. Comm Config, Mic Tracker).
+- [x] **TPL-04
+**: Template save / load buttons, placement, and modal behavior visually and behaviorally match existing ShowStack template patterns (e.g. Comm Config, Mic Tracker).
 
 ### Polish — POL
 
