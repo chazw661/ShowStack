@@ -161,7 +161,8 @@ def ordered_get_app_list(request, app_label=None):
 
         # Multitrack Session Builder (50 — bottom of sidebar)
         'multitracksession': 50,
-        'consoleimport': 51,
+        'multitracktemplate': 51,        # NEW — Phase 3
+        'consoleimport': 52,             # bumped from 51 to keep grouping order
     }
     
     for app in app_list:
