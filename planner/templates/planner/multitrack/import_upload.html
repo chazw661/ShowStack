@@ -14,7 +14,9 @@
 
   <h1 class="mts-h1">Import Console CSV</h1>
   <p class="mts-subtitle">
-    Upload a Yamaha CL/QL Editor or Rivage PM Editor channel-label CSV — single section file or a .zip of the full export folder.
+    Upload a Yamaha CL/QL Editor or Rivage PM Editor channel-label CSV. ShowStack
+    creates a new console in this project from the file — pick a name below.
+    Single section CSV or a .zip of the full export folder both work.
   </p>
 
   {% if messages %}
@@ -36,9 +38,10 @@
     {% endif %}
 
     <div class="mts-form-row">
-      <label for="{{ form.console.id_for_label }}">Target console <span class="mts-required">*</span></label>
-      {{ form.console }}
-      {% if form.console.errors %}<div class="mts-field-error">{{ form.console.errors }}</div>{% endif %}
+      <label for="{{ form.console_name.id_for_label }}">New console name <span class="mts-required">*</span></label>
+      {{ form.console_name }}
+      {% if form.console_name.help_text %}<div class="mts-help-text">{{ form.console_name.help_text }}</div>{% endif %}
+      {% if form.console_name.errors %}<div class="mts-field-error">{{ form.console_name.errors }}</div>{% endif %}
     </div>
 
     <div class="mts-form-row">
@@ -49,9 +52,26 @@
     </div>
 
     <div class="mts-form-actions">
-      <button type="submit" class="mts-btn mts-btn-primary">Upload</button>
+      <button type="submit" class="mts-btn mts-btn-primary">Create console from CSV</button>
       <a class="mts-btn mts-btn-secondary" href="{% url 'planner:multitrack_dashboard' %}">Cancel</a>
     </div>
   </form>
 </div>
+
+<script>
+  // Pre-fill the console-name field from the uploaded filename (without extension)
+  // when the engineer hasn't typed anything yet. Convenience only — they can edit.
+  (function () {
+    var nameInput = document.getElementById('{{ form.console_name.id_for_label }}');
+    var fileInput = document.getElementById('{{ form.csv_file.id_for_label }}');
+    if (!nameInput || !fileInput) return;
+    fileInput.addEventListener('change', function () {
+      if (nameInput.value.trim() !== '') return;
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      var stem = f.name.replace(/\.(csv|zip)$/i, '').trim();
+      if (stem) nameInput.value = stem;
+    });
+  })();
+</script>
 {% endblock %}

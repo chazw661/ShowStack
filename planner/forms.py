@@ -1230,17 +1230,21 @@ class MultitrackSessionForm(forms.ModelForm):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ConsoleCsvUploadForm(forms.Form):
-    """Upload form for Yamaha Editor channel-label CSVs (Phase 2 Console CSV Import).
+    """Upload form for Yamaha Editor channel-label CSVs.
 
-    Accepts a single section CSV or a `.zip` of multiple section files (R-04).
-    Target console dropdown is scoped to the current project; the file goes to a
-    draft `ConsoleImport` row created by `console_import_upload` (planner/views.py).
+    Creates a NEW Console in the current project from the uploaded CSV — the
+    engineer names the console on this form. Accepts a single section CSV or a
+    `.zip` of multiple section files.
     """
-    console = forms.ModelChoiceField(
-        queryset=Console.objects.none(),
-        label='Target console',
+    console_name = forms.CharField(
+        label='New console name',
         required=True,
-        empty_label='-- select a console --',
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'e.g. Show A FOH (QL5)',
+            'autocomplete': 'off',
+        }),
+        help_text='A new console with this name will be created in the current project.',
     )
     csv_file = forms.FileField(
         label='CSV or zip',
@@ -1255,12 +1259,20 @@ class ConsoleCsvUploadForm(forms.Form):
     def __init__(self, *args, request=None, **kwargs):
         self.request = request
         super().__init__(*args, **kwargs)
-        if request is not None and getattr(request, 'current_project', None):
-            self.fields['console'].queryset = Console.objects.filter(
-                project=request.current_project
-            )
-        else:
-            self.fields['console'].queryset = Console.objects.none()
+
+    def clean_console_name(self):
+        name = (self.cleaned_data.get('console_name') or '').strip()
+        if not name:
+            raise forms.ValidationError('Console name is required.')
+        if self.request is not None and getattr(self.request, 'current_project', None):
+            if Console.objects.filter(
+                project=self.request.current_project, name__iexact=name
+            ).exists():
+                raise forms.ValidationError(
+                    f'A console named "{name}" already exists in this project. '
+                    'Pick a different name.'
+                )
+        return name
 
     def clean_csv_file(self):
         f = self.cleaned_data.get('csv_file')
@@ -1268,8 +1280,7 @@ class ConsoleCsvUploadForm(forms.Form):
             name_lower = (f.name or '').lower()
             if not (name_lower.endswith('.csv') or name_lower.endswith('.zip')):
                 raise forms.ValidationError('Upload must be a .csv or .zip file.')
-            # 5 MB cap — RESEARCH § Security Domain (zip-bomb mitigation).
-            # Legitimate Yamaha exports are well under 300 KB.
+            # 5 MB cap — zip-bomb mitigation. Legitimate Yamaha exports are < 300 KB.
             if f.size > 5 * 1024 * 1024:
                 raise forms.ValidationError('File too large. Maximum size is 5 MB.')
         return f

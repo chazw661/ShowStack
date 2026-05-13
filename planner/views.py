@@ -6694,17 +6694,12 @@ def multitrack_export_rtracktemplate(request, session_id):
 
 # -------------------------------------------------------------------------
 # Phase 2 — Console CSV Import (CSV-01..CSV-05)
-# Helpers: viewer gate, stereo-type dispatch, diff computation, apply.
-# View functions live directly below these helpers.
+# A CSV upload creates a NEW console in the current project. One-shot flow:
+# upload → parse → create Console + channel rows → redirect to dashboard.
 # -------------------------------------------------------------------------
 
 def _console_import_viewer_block(request):
-    """HTML-response variant of `_multitrack_viewer_block`. Returns HttpResponseForbidden for viewers.
-
-    Per D-09 (LOCKED): viewers get NO upload UI and a 403 on direct POST.
-    Called from all three endpoints — upload GET/POST, preview GET, commit POST —
-    so viewers never see the import surface at all.
-    """
+    """Viewers are blocked from the upload surface (D-09)."""
     if request.user.groups.filter(name='Viewer').exists():
         return HttpResponseForbidden('Read-only access.')
     return None
@@ -6723,275 +6718,98 @@ def _stereo_type_for_row(section, family, row):
     return None
 
 
-def _compute_diff_rows(snap):
-    """Compute per-row diff between `snap.parsed_sections` and current console state.
+def _apply_csv_to_new_console(parsed_sections, console):
+    """Populate a freshly-created (empty) console from a parsed CSV payload.
 
-    Returns:
-      {
-        'stats': {'created': N, 'updated': N, 'conflicts': N, 'unchanged': N, 'errors': N},
-        'rows': [{'section': ..., 'channel': ..., 'old_name': ..., 'new_name': ...,
-                  'old_color': ..., 'new_color': ..., 'status': 'created'|'updated'|'unchanged'|'conflict'|'error',
-                  'target_ref': 'InName:5', 'error_code': str|None, 'error_detail': str|None}, ...],
-        'errors': [...]   # informational + structured per-row errors
-      }
+    Creates one row per CSV row across the four in-scope channel models. Default
+    rows ARE imported (with their CSV values, e.g. `source='ch 1'`) so the
+    multitrack picker exposes the console's full inventory.
+
+    `ConsoleInput.source` is the name field — NOT `.name` — for inputs.
+    All other channel models use `.name`.
+
+    Returns a summary dict written to ConsoleImport.summary.
     """
-    stats = {'created': 0, 'updated': 0, 'conflicts': 0, 'unchanged': 0, 'errors': 0}
-    rows = []
-    errors = list(snap.summary.get('errors', []))  # carry-forward parser errors if any
+    summary = {
+        'created_inputs': 0,
+        'created_aux': 0,
+        'created_matrix': 0,
+        'created_stereo': 0,
+        'skipped': 0,
+        'errors': [],
+    }
 
-    console = snap.console
-    sections_payload = snap.parsed_sections.get('sections', [])
-
-    for section_data in sections_payload:
-        section = section_data.get('section')
-        family = section_data.get('family')
-        if not section or section in OUT_OF_SCOPE_SECTIONS:
-            for err in section_data.get('errors', []):
-                errors.append(err)
-            continue
-
-        # Determine target model + lookup key + name field
-        if section == 'InName':
-            model_cls = ConsoleInput
-            lookup_field = 'input_ch'
-            name_field = 'source'
-        elif section == 'MixName':
-            model_cls = ConsoleAuxOutput
-            lookup_field = 'aux_number'
-            name_field = 'name'
-        elif section == 'MtxName':
-            model_cls = ConsoleMatrixOutput
-            lookup_field = 'matrix_number'
-            name_field = 'name'
-        elif section == 'StMonoName' or (section == 'StName' and family == 'rivage_pm'):
-            model_cls = ConsoleStereoOutput
-            lookup_field = 'stereo_type'
-            name_field = 'name'
-        else:
-            # CL/QL [StName] returns or unknown — W_NO_MODEL_TARGET'd by parser; carry forward
-            for err in section_data.get('errors', []):
-                errors.append(err)
-            continue
-
-        for row in section_data.get('rows', []):
-            # Smart-skip default (D-01): row matches factory default -> "unchanged"
-            if is_default_row(section, family, row):
-                stats['unchanged'] += 1
-                continue
-
-            # Locate existing row
-            if model_cls is ConsoleStereoOutput:
-                stereo_type = _stereo_type_for_row(section, family, row)
-                if not stereo_type:
-                    continue
-                existing = model_cls.objects.filter(console=console, stereo_type=stereo_type).first()
-                channel_label = stereo_type
-                target_ref = f'{section}:{stereo_type}'
-            else:
-                lookup_value = str(row.get('channel_number') or '')
-                existing = model_cls.objects.filter(console=console, **{lookup_field: lookup_value}).first()
-                channel_label = lookup_value
-                target_ref = f'{section}:{lookup_value}'
-
-            new_name = row.get('name', '')
-            new_color = row.get('color', 'Blue')
-
-            if existing is None:
-                rows.append({
-                    'section': section, 'channel': channel_label,
-                    'old_name': '', 'new_name': new_name,
-                    'old_color': '', 'new_color': new_color,
-                    'status': 'created', 'target_ref': target_ref,
-                    'error_code': None, 'error_detail': None,
-                })
-                stats['created'] += 1
-                continue
-
-            old_name = getattr(existing, name_field, '') or ''
-            old_color = getattr(existing, 'color', '') or ''
-
-            if old_name == new_name and old_color == new_color:
-                stats['unchanged'] += 1
-                continue
-
-            # Conflict iff BOTH old and new are non-default AND values differ.
-            # Default ShowStack state = blank/empty. Customized = anything else.
-            old_customized = bool(old_name) and old_name != new_name
-            new_customized = bool(new_name)
-            is_conflict = old_customized and new_customized and old_name != new_name
-            status = 'conflict' if is_conflict else 'updated'
-
-            rows.append({
-                'section': section, 'channel': channel_label,
-                'old_name': old_name, 'new_name': new_name,
-                'old_color': old_color, 'new_color': new_color,
-                'status': status, 'target_ref': target_ref,
-                'error_code': None, 'error_detail': None,
-            })
-            if is_conflict:
-                stats['conflicts'] += 1
-            else:
-                stats['updated'] += 1
-
-        # Per-row errors from parser
-        for err in section_data.get('errors', []):
-            stats['errors'] += 1
-            rows.append({
-                'section': section, 'channel': err.get('line', ''),
-                'old_name': '', 'new_name': '',
-                'old_color': '', 'new_color': '',
-                'status': 'error', 'target_ref': '',
-                'error_code': err.get('code'),
-                'error_detail': err.get('detail', ''),
-            })
-            errors.append(err)
-
-    return {'stats': stats, 'rows': rows, 'errors': errors}
-
-
-def _apply_console_import(snap, keep_showstack_refs):
-    """Apply the parsed_sections payload to the four channel models.
-
-    Used by console_import_commit inside transaction.atomic().
-
-    `keep_showstack_refs` — set of `target_ref` strings (e.g. {'InName:5'}) the
-    engineer un-ticked in the preview, meaning "keep ShowStack value, drop CSV
-    value for this row".
-
-    Returns the summary dict written back to snap.summary.
-    Critical: ConsoleInput rows are updated via `.source` (NOT `.name`).
-    """
-    summary = {'created': 0, 'updated': 0, 'conflicts_resolved': 0, 'unchanged': 0, 'errors': []}
-    console = snap.console
-    sections_payload = snap.parsed_sections.get('sections', [])
-
-    for section_data in sections_payload:
+    for section_data in parsed_sections.get('sections', []):
         section = section_data.get('section')
         family = section_data.get('family')
 
-        # Skip out-of-scope sections; carry forward informational errors
+        # Out-of-scope sections (DCAs, CL/QL StName returns, etc.) — log informational
         if not section or section in OUT_OF_SCOPE_SECTIONS:
             for err in section_data.get('errors', []):
                 summary['errors'].append(err)
+                summary['skipped'] += 1
             continue
 
-        # Pick model + lookup + name field
         if section == 'InName':
             model_cls, lookup_field, name_field = ConsoleInput, 'input_ch', 'source'
+            tally_key = 'created_inputs'
         elif section == 'MixName':
             model_cls, lookup_field, name_field = ConsoleAuxOutput, 'aux_number', 'name'
+            tally_key = 'created_aux'
         elif section == 'MtxName':
             model_cls, lookup_field, name_field = ConsoleMatrixOutput, 'matrix_number', 'name'
+            tally_key = 'created_matrix'
         elif section == 'StMonoName' or (section == 'StName' and family == 'rivage_pm'):
             model_cls, lookup_field, name_field = ConsoleStereoOutput, 'stereo_type', 'name'
+            tally_key = 'created_stereo'
         else:
-            # CL/QL StName returns — skip (parser already returned zero rows; defensive)
             for err in section_data.get('errors', []):
                 summary['errors'].append(err)
             continue
 
         for row in section_data.get('rows', []):
-            # Smart-skip default rows (D-01)
-            if is_default_row(section, family, row):
-                summary['unchanged'] += 1
-                continue
-
-            # Determine target_ref for conflict-override check
             if model_cls is ConsoleStereoOutput:
                 stereo_type = _stereo_type_for_row(section, family, row)
                 if not stereo_type:
                     continue
                 lookup_value = stereo_type
-                target_ref = f'{section}:{stereo_type}'
-                filter_kwargs = {'console': console, 'stereo_type': stereo_type}
             else:
                 lookup_value = str(row.get('channel_number') or '')
-                target_ref = f'{section}:{lookup_value}'
-                filter_kwargs = {'console': console, lookup_field: lookup_value}
-
-            new_name = row.get('name', '')
-            new_color = row.get('color', 'Blue')
-
-            existing = model_cls.objects.filter(**filter_kwargs).first()
-
-            # Conflict-override: skip CSV value if engineer un-ticked
-            if existing is not None and target_ref in keep_showstack_refs:
-                summary['conflicts_resolved'] += 1
-                continue
-
-            if existing is None:
-                create_kwargs = dict(filter_kwargs)
-                create_kwargs[name_field] = new_name
-                create_kwargs['color'] = new_color
-                try:
-                    model_cls.objects.create(**create_kwargs)
-                    summary['created'] += 1
-                except Exception as exc:
-                    summary['errors'].append({
-                        'code': 'E_CREATE_FAILED',
-                        'detail': f'{section}:{lookup_value} — {exc}',
-                    })
-            else:
-                old_name = getattr(existing, name_field, '') or ''
-                old_color = getattr(existing, 'color', '') or ''
-                if old_name == new_name and old_color == new_color:
-                    summary['unchanged'] += 1
+                if not lookup_value:
                     continue
-                setattr(existing, name_field, new_name)
-                setattr(existing, 'color', new_color)
-                try:
-                    existing.save(update_fields=[name_field, 'color'])
-                    summary['updated'] += 1
-                except Exception as exc:
-                    summary['errors'].append({
-                        'code': 'E_UPDATE_FAILED',
-                        'detail': f'{section}:{lookup_value} — {exc}',
-                    })
 
-        # Carry forward parser per-row errors
+            try:
+                model_cls.objects.create(**{
+                    'console': console,
+                    lookup_field: lookup_value,
+                    name_field: row.get('name', ''),
+                    'color': row.get('color', 'Blue'),
+                })
+                summary[tally_key] += 1
+            except Exception as exc:
+                summary['errors'].append({
+                    'code': 'E_CREATE_FAILED',
+                    'detail': f'{section}:{lookup_value} — {exc}',
+                })
+
         for err in section_data.get('errors', []):
             summary['errors'].append(err)
 
     return summary
 
 
-# -------------------------------------------------------------------------
-# Phase 2 — Console CSV Import — View functions
-# -------------------------------------------------------------------------
-
-# Family-token heuristic for the Blocker 2 mismatch warning (R-02).
-# Soft signal only; the gate is the warning + second confirmation checkbox,
-# NOT a hard block (R-02 — no hard block; D-03's original "block with error"
-# is superseded by the CONTEXT.md amendment).
-_CONSOLE_NAME_FAMILY_TOKENS = {
-    'cl_ql': ('CL5', 'CL3', 'CL1', 'QL5', 'QL1', 'CL ', 'QL '),
-    'rivage_pm': ('RIVAGE', 'CS-R', 'CSR', 'DSP-RX', 'PM10', 'PM7', 'PM5'),
-}
-
-
-def _family_matches_console_name(detected_family: str, console_name: str) -> bool:
-    """Heuristic: does the target console's name plausibly belong to the detected family?
-
-    Returns True when the console name carries at least one token from the detected
-    family's token list. Returns True for `detected_family='unknown'` to avoid
-    false-positive warnings (unknown family already triggers a fatal upload error
-    upstream, so this branch is mostly defensive).
-    """
-    if not detected_family or detected_family == 'unknown':
-        return True
-    name_upper = (console_name or '').upper()
-    tokens = _CONSOLE_NAME_FAMILY_TOKENS.get(detected_family, ())
-    return any(tok.upper() in name_upper for tok in tokens)
-
-
 @staff_member_required
 def console_import_upload(request):
-    """GET: render upload form. POST: decode + parse + create draft ConsoleImport, redirect to preview.
+    """GET: render upload form. POST: create a new Console from the CSV.
 
-    Per D-09 (LOCKED): viewers are blocked on BOTH GET and POST — they get zero
-    upload UI. Phase 2 / CSV-01, CSV-02. See analog: multitrack_create_view.
+    One-shot flow — no preview, no commit step:
+      1. Validate form (console_name + csv_file)
+      2. Parse upload (single .csv or .zip)
+      3. Atomically: create Console, populate channel rows, create ConsoleImport snapshot
+      4. Redirect to multitrack dashboard with success banner (D-06)
+
+    Viewers are blocked on both GET and POST (D-09).
     """
-    # D-09: viewer gate covers BOTH GET and POST. Viewers see no upload UI at all.
     block = _console_import_viewer_block(request)
     if block is not None:
         return block
@@ -7003,7 +6821,7 @@ def console_import_upload(request):
     if request.method == 'POST':
         form = ConsoleCsvUploadForm(request.POST, request.FILES, request=request)
         if form.is_valid():
-            target_console = form.cleaned_data['console']
+            console_name = form.cleaned_data['console_name']
             uploaded = form.cleaned_data['csv_file']
             parsed = parse_upload(uploaded, filename=uploaded.name)
 
@@ -7015,125 +6833,46 @@ def console_import_upload(request):
                 )
                 return render(request, 'planner/multitrack/import_upload.html', {'form': form})
 
-            # Rewind FileField so storage backend can read the bytes
             try:
                 uploaded.seek(0)
             except Exception:
                 pass
 
-            snap = ConsoleImport.objects.create(
-                console=target_console,
-                uploaded_by=request.user,
-                original_filename=os.path.basename(uploaded.name),
-                raw_file=uploaded,
-                parsed_sections={
-                    'sections': parsed['sections'],
-                    'family': parsed['family'],
-                    'is_zip': parsed['is_zip'],
-                },
-                committed=False,
+            parsed_sections = {
+                'sections': parsed['sections'],
+                'family': parsed['family'],
+                'is_zip': parsed['is_zip'],
+            }
+
+            with transaction.atomic():
+                console = Console.objects.create(
+                    project=current_project,
+                    name=console_name,
+                )
+                summary = _apply_csv_to_new_console(parsed_sections, console)
+                ConsoleImport.objects.create(
+                    console=console,
+                    uploaded_by=request.user,
+                    original_filename=os.path.basename(uploaded.name),
+                    raw_file=uploaded,
+                    parsed_sections=parsed_sections,
+                    summary=summary,
+                    committed=True,
+                )
+
+            total = (
+                summary['created_inputs']
+                + summary['created_aux']
+                + summary['created_matrix']
+                + summary['created_stereo']
             )
-            return redirect('planner:console_import_preview', import_id=snap.id)
+            messages.success(
+                request,
+                f'Imported {total} channels into "{console_name}".',
+                extra_tags='multitrack_import',
+            )
+            return redirect('planner:multitrack_dashboard')
     else:
         form = ConsoleCsvUploadForm(request=request)
 
     return render(request, 'planner/multitrack/import_upload.html', {'form': form})
-
-
-@staff_member_required
-def console_import_preview(request, import_id):
-    """GET: render diff preview against CURRENT console state (recomputed every request).
-
-    Per D-09 (LOCKED): viewers are blocked. Preview is part of the import UI surface.
-    Phase 2 / CSV-03. Race-condition stance: no drift detection in v2.0; recompute
-    fresh on every GET (see RESEARCH § Diff Preview Architecture).
-    """
-    # D-09: viewer gate covers preview GET (preview is part of the import UI).
-    block = _console_import_viewer_block(request)
-    if block is not None:
-        return block
-
-    current_project = getattr(request, 'current_project', None)
-    if not current_project:
-        return redirect('/')
-
-    snap = get_object_or_404(
-        ConsoleImport.objects.select_related('console', 'console__project'),
-        pk=import_id,
-        console__project=current_project,
-    )
-
-    diff = _compute_diff_rows(snap)
-
-    # R-02 family-confirmation context
-    detected_family = snap.parsed_sections.get('family', 'unknown')
-    # current_count = existing channels on the target console across all 4 in-scope models
-    current_count = (
-        ConsoleInput.objects.filter(console=snap.console).count()
-        + ConsoleAuxOutput.objects.filter(console=snap.console).count()
-        + ConsoleMatrixOutput.objects.filter(console=snap.console).count()
-        + ConsoleStereoOutput.objects.filter(console=snap.console).count()
-    )
-    new_count = diff['stats']['created']
-
-    # Blocker 2: family-mismatch warning. Surfaces a warning banner + a second
-    # required confirmation checkbox in the preview template (Plan 04).
-    # Two heuristics OR'd together — either one trips the warning:
-    #   1. Massive channel-count gap: importing >= 17 more rows than the console has
-    #      (catches Rivage 288 -> QL5 64 = 224 new channels).
-    #   2. Family token mismatch: detected family tokens don't appear in the
-    #      target console's name (soft signal — engineers do free-name consoles).
-    count_mismatch = new_count > (current_count + 16)
-    name_mismatch = not _family_matches_console_name(detected_family, snap.console.name)
-    family_mismatch_warning = bool(count_mismatch or name_mismatch)
-
-    return render(request, 'planner/multitrack/import_preview.html', {
-        'import': snap,
-        'console': snap.console,
-        'stats': diff['stats'],
-        'diff_rows': diff['rows'],
-        'errors': diff['errors'],
-        'detected_family': detected_family,
-        'current_count': current_count,
-        'new_count': new_count,
-        'family_mismatch_warning': family_mismatch_warning,
-    })
-
-
-@login_required
-@require_POST
-def console_import_commit(request, import_id):
-    """Apply the diff atomically; flip committed=True; redirect to multitrack dashboard with banner.
-
-    Per D-09 (LOCKED): viewers are blocked. Phase 2 / CSV-03, CSV-05, D-06.
-    Double-commit guard: select_for_update() + committed check (T-02-18).
-    """
-    # D-09: viewer gate covers commit POST.
-    block = _console_import_viewer_block(request)
-    if block is not None:
-        return block
-
-    current_project = getattr(request, 'current_project', None)
-    if not current_project:
-        return HttpResponseBadRequest('No project selected.')
-
-    keep_showstack_refs = set(request.POST.getlist('keep_showstack'))
-
-    with transaction.atomic():
-        snap = ConsoleImport.objects.select_for_update().select_related('console').get(
-            pk=import_id,
-            console__project=current_project,
-        )
-        if snap.committed:
-            return HttpResponseBadRequest('Already committed.')
-        summary = _apply_console_import(snap, keep_showstack_refs)
-        snap.summary = summary
-        snap.committed = True
-        snap.save(update_fields=['summary', 'committed'])
-
-    messages.success(
-        request,
-        f"Import complete — {summary['created'] + summary['updated']} channels imported.",
-        extra_tags='multitrack_import',
-    )
-    return redirect('planner:multitrack_dashboard')

@@ -107,9 +107,8 @@ urlpatterns = [
     path('multitrack/<int:session_id>/edit/', views.multitrack_edit_view, name='multitrack_edit'),
 
     # Phase 2 — Console CSV Import (CSV-01..CSV-05)
+    # One-shot: upload form posts directly into a new Console (no preview/commit step).
     path('multitrack/import/', views.console_import_upload, name='console_import_upload'),
-    path('multitrack/import/<int:import_id>/preview/', views.console_import_preview, name='console_import_preview'),
-    path('multitrack/import/<int:import_id>/commit/', views.console_import_commit, name='console_import_commit'),
 
     # AJAX mutate (this plan)
     path('multitrack/<int:session_id>/duplicate/', views.multitrack_duplicate, name='multitrack_duplicate'),
