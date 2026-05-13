@@ -24,6 +24,9 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - [x] Role-based permissions (superuser / premium owner / editor / viewer)
 - [x] Custom admin site (`showstack_admin_site`)
 - [x] Per-row delete on amplifier change list (issue #1, fixed 2026-05-09)
+- [x] Multitrack Session Builder — core sessions, track editor, Reaper export (Phase 1, 2026-05-13)
+- [x] Console CSV import (Yamaha CL/QL/Rivage PM channel labels) — Phase 2, 2026-05-13
+- [x] Multitrack Templates — owner-scoped, cross-console portable (Phase 3, 2026-05-13)
 
 ### Active
 
