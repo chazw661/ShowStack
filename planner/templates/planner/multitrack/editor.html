@@ -22,6 +22,12 @@
       </p>
     </div>
     <div class="mts-editor-actions">
+      <button type="button"
+              class="mts-btn-tertiary"
+              onclick="mtsSaveAsTemplate({{ session.id }}, '{{ session.name|escapejs }}')"
+              title="Save this session's structure as a reusable template (TPL-01)">
+        Save as Template
+      </button>
       <a class="mts-btn-tertiary" href="{% url 'planner:multitrack_edit' session.id %}">Edit session metadata</a>
     </div>
   </div>
