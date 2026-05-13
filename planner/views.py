@@ -5,7 +5,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Max
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -66,6 +66,7 @@ from .models import (
     ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile,
     AmplifierAssignment,
     MultitrackSession, MultitrackTrack,
+    MultitrackTemplate, MultitrackTemplateSlot,
     ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
 )
 from .forms import MultitrackSessionForm, ConsoleCsvUploadForm
@@ -6292,6 +6293,143 @@ def multitrack_reorder(request, session_id):
         return JsonResponse({'ok': True})
     except Exception:
         _multitrack_logger.exception('multitrack_reorder failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+# ──────────────────────────────────────────────────────────────
+# Phase 3 — Multitrack Templates (TPL-01..TPL-04)
+# All endpoints are OWNER-scoped (created_by=request.user) per D-05,
+# NOT project-scoped. Templates intentionally cross all of a user's projects.
+# ──────────────────────────────────────────────────────────────
+
+
+def _resolve_track_source_number(track):
+    """Return the engineer-meaningful channel-number string for a MultitrackTrack
+    so it can be stored as MultitrackTemplateSlot.source_number (D-02).
+
+    Looks up the linked channel row via _source_model_for(source_type) and reads
+    the corresponding CharField:
+      input  -> ConsoleInput.input_ch
+      aux    -> ConsoleAuxOutput.aux_number
+      matrix -> ConsoleMatrixOutput.matrix_number
+      stereo -> ConsoleStereoOutput.stereo_type
+      manual -> '' (no channel; downstream apply materialises manual tracks unconditionally)
+
+    Returns '' if the source row was deleted (D-04 post_delete converted track
+    to manual) or unresolvable.
+    """
+    from planner.models import _source_model_for
+    if track.source_type == 'manual' or track.source_id is None:
+        return ''
+    number_field = {
+        'input': 'input_ch',
+        'aux': 'aux_number',
+        'matrix': 'matrix_number',
+        'stereo': 'stereo_type',
+    }
+    field = number_field.get(track.source_type)
+    model = _source_model_for(track.source_type)
+    if not field or model is None:
+        return ''
+    row = model.objects.filter(id=track.source_id).only(field).first()
+    if row is None:
+        return ''
+    return getattr(row, field, '') or ''
+
+
+@login_required
+@require_POST
+def multitrack_template_save(request):
+    """Save current session structure as an owner-scoped template (TPL-01).
+
+    Body: JSON {name: str, session_id: int}
+    Returns: JsonResponse {ok: True, template_id, name, slot_count}
+             or {error: str} with status 400/403/404/409/500.
+
+    D-05: OWNER-scoped via request.user, NOT project-scoped. The source SESSION
+    is still IDOR-guarded against request.current_project (sessions are
+    project-scoped per Phase 1).
+
+    Pitfall 1 mitigation: name conflict returns HTTP 409 with a friendly error
+    message (NOT silent overwrite). The unique_together = [('created_by', 'name')]
+    constraint on MultitrackTemplate enforces this at the DB level too.
+
+    Open Question 1 resolution: only ENABLED tracks become slots — disabled
+    tracks were the engineer saying "not this time", so they don't belong in
+    a reusable template (RESEARCH Pitfall 7 / Assumption A8).
+    """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+    name = ''
+    try:
+        data = json.loads(request.body or '{}')
+        name = (data.get('name') or '').strip()
+        session_id = data.get('session_id')
+        if not name:
+            return JsonResponse({'error': 'Name is required.'}, status=400)
+        if len(name) > 200:
+            return JsonResponse({'error': 'Name must be 200 characters or fewer.'}, status=400)
+        if session_id is None:
+            return JsonResponse({'error': 'session_id is required.'}, status=400)
+
+        # IDOR guard: the source session must belong to the user's current project.
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+        session = MultitrackSession.objects.filter(
+            id=session_id, project=current_project,
+        ).select_related('console').first()
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+
+        # D-05: owner-scoped name-conflict check. Templates intentionally cross
+        # all of this user's projects.
+        if MultitrackTemplate.objects.filter(
+            created_by=request.user, name=name,
+        ).exists():
+            return JsonResponse({
+                'error': f'A template named "{name}" already exists. Pick a different name.',
+            }, status=409)
+
+        template = MultitrackTemplate.objects.create(
+            created_by=request.user,
+            name=name,
+            target_daw=session.target_daw,
+            feed_source=session.feed_source,
+            track_order_mode=session.track_order_mode,
+            recorder_capacity=session.recorder_capacity,
+            notes=session.notes,
+        )
+
+        # Snapshot ENABLED tracks only (Open Question 1 resolution).
+        slots = []
+        enabled_tracks = session.tracks.filter(enabled=True).order_by('track_number')
+        for position, track in enumerate(enabled_tracks, start=1):
+            slots.append(MultitrackTemplateSlot(
+                template=template,
+                position=position,
+                source_type=track.source_type,
+                source_number=_resolve_track_source_number(track),
+                label_override=track.label_override,
+                color_override=track.color_override,
+            ))
+        if slots:
+            MultitrackTemplateSlot.objects.bulk_create(slots)
+
+        return JsonResponse({
+            'ok': True,
+            'template_id': template.id,
+            'name': template.name,
+            'slot_count': len(slots),
+        })
+    except IntegrityError:
+        # Defensive — race condition between .exists() check and .create()
+        return JsonResponse({
+            'error': f'A template named "{name}" already exists. Pick a different name.',
+        }, status=409)
+    except Exception:
+        _multitrack_logger.exception('multitrack_template_save failed')
         return JsonResponse({'error': 'Server error.'}, status=500)
 
 
