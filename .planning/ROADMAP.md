@@ -48,7 +48,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Core Sessions, Track Editor & Reaper Export** - Models, full track editor, and `.RPP` / `.RTrackTemplate` export
 - [ ] **Phase 2: Console CSV Import** - Yamaha CL/QL and Rivage PM channel-label CSV ingestion into `ConsoleChannel`
-- [ ] **Phase 3: Multitrack Templates** - Save/apply reusable session structures, matching existing ShowStack template UX
+- [x] **Phase 3: Multitrack Templates** - Save/apply reusable session structures, matching existing ShowStack template UX
 - [ ] **Phase 4: Nuendo Live Export** - `.nlpr` template-injection exporter with Yamaha→Farb color mapping
 - [ ] **Phase 5: Channel Record Defaults** - `default_record` and `default_record_color` seed flags on `ConsoleChannel`
 
@@ -102,7 +102,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 03-02-PLAN.md — Admin registration + admin_ordering (Wave 2)
 - [x] 03-03-PLAN.md — JSON endpoints: save / rename / delete + URL routes (Wave 2)
 - [x] 03-04-PLAN.md — Form integration: `MultitrackSessionForm.template` ModelChoiceField (Wave 2)
-- [ ] 03-05-PLAN.md — UI: dashboard Templates section, editor "Save as Template" button, new_session dropdown, JS (Wave 3)
+- [x] 03-05-PLAN.md — UI: dashboard Templates section, editor "Save as Template" button, new_session dropdown, JS (Wave 3)
 
 ### Phase 4: Nuendo Live Export
 **Goal**: Engineer can export the current session as a Nuendo Live 3 `.nlpr` file that opens cleanly with correct names and palette colors
