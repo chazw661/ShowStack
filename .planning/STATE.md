@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-13T23:49:01.294Z"
-last_activity: 2026-05-13 -- Plan 04-02 complete: build_nlpr exporter shipped (commits 9c6491b, 2e516f9)
+last_updated: "2026-05-13T23:57:02.263Z"
+last_activity: 2026-05-13 -- Plan 04-04 complete: D-09 ID-uniqueness test shipped (commits a285bb6, c52e25a)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 17
-  percent: 77
+  completed_plans: 18
+  percent: 82
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 04 (Nuendo Live Export) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
-Last activity: 2026-05-13 -- Plan 04-02 complete: build_nlpr exporter shipped (commits 9c6491b, 2e516f9)
+Last activity: 2026-05-13 -- Plan 04-04 complete: D-09 ID-uniqueness test shipped (commits a285bb6, c52e25a)
 
-Progress: [████████░░] 77%
+Progress: [████████░░] 82%
 
 ## Roadmap Summary
 
@@ -92,3 +92,13 @@ relevant plans land:
 - Phase 1's `planner/tests/test_reaper_export`: 42/42 passing — byte-stable Reaper contract intact.
 - Zero migrations. `python manage.py makemigrations planner --dry-run` reports `No changes detected`. CLAUDE.md "additive migrations only" naturally satisfied.
 - `build_nlpr` is invokable but raises `ExportTemplateError` until Plan 04-03 commits the bundled fixture at `planner/data/multitrack/nuendo_live_3_template.nlpr` — by design (graceful degradation per D-03).
+
+### From Phase 04 Plan 04 (D-09 ID-uniqueness test)
+
+- `planner/tests/test_nuendo_live_export.py` shipped — 248 lines, 3 tests in `NuendoLiveExportIdUniquenessTests`. Runs in 0.153 s; all 3 pass.
+- D-09 floor assertion (`test_ids_unique`): collects every `@ID` attribute and every `<int name='RuntimeID'|'ID'/>` value from the export bytes, asserts `len(set(ids)) == len(ids)`. Directly verifies NLP-06.
+- Two bonus structural checks (within CONTEXT.md §"Test budget — one assertion is the floor, not the ceiling"): `test_track_count_matches_enabled` confirms the seed track was removed and exactly `enabled_count` `MAudioTrackEvent` elements ship (D-10); `test_both_name_writes` confirms outer `MListNode/Name` and inner `DeviceAttributes/Name/String` agree per track (NLP-03 / Pitfall 9).
+- `planner/tests/fixtures/nuendo_live_3_template_fake.nlpr` shipped — 38-line Python-generated minimal fake template carrying every element shape `build_nlpr`'s helpers traverse. Lets Plan 04-04 run independently of Plan 04-03's Charlie-hand-generated real fixture (Wave 2 parallel-safe).
+- Module-global swap-and-restore pattern in `setUp` / `tearDown` (`nle._TEMPLATE_PATH = FAKE_TEMPLATE`, `nle._TEMPLATE_TREE = None`) — preserves test isolation, restores originals so other tests are unaffected. Verified by `test_reaper_export` still passing 42/42 after the new test module lands.
+- Field-type adjustments to the plan's draft `<action>` test code (invited explicitly by the plan's Notes): `ConsoleAuxOutput.aux_number` and `ConsoleMatrixOutput.matrix_number` are `CharField` (passed as `'1'` not `1`); `ConsoleStereoOutput.stereo_type` choices are `'L'`/`'R'`/`'M'` only (not `'MAIN'`). No deviations — the plan documented these as expected adjustments.
+- Zero migrations, zero schema drift. `python manage.py makemigrations planner --dry-run` → `No changes detected in app 'planner'`.
