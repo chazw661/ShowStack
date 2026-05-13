@@ -42,8 +42,10 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 - [ ] **NLP-01**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
 - [ ] **NLP-02**: The exported `.nlpr` loads in Nuendo Live 3 without errors.
 - [ ] **NLP-03**: Each track's name renders correctly inside Nuendo Live (outer `Name` and inner `DeviceAttributes → Name → String` match).
-- [ ] **NLP-04**: Each track's color renders correctly using a `Farb` palette index (Yamaha CL/QL → Farb mapping table from the spec).
-- [ ] **NLP-05**: Tracks with no assigned color export with `Farb` omitted, so they use the Nuendo Live default appearance.
+- [x] **NLP-04
+**: Each track's color renders correctly using a `Farb` palette index (Yamaha CL/QL → Farb mapping table from the spec).
+- [x] **NLP-05
+**: Tracks with no assigned color export with `Farb` omitted, so they use the Nuendo Live default appearance.
 - [ ] **NLP-06**: All `ID` and `RuntimeID` values in the exported file are unique within the document.
 
 ### Console CSV Import — CSV

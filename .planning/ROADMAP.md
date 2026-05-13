@@ -115,7 +115,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Tracks with an assigned color render using the correct Farb palette index per the Yamaha→Nuendo mapping table; tracks with no assigned color render in Nuendo Live's default appearance (Farb omitted)
   5. Every `ID` and `RuntimeID` in the exported document is unique within that document
 **Plans**: 7 plans
-- [ ] 04-01-PLAN.md — Deps + `MultitrackTrack.resolved_yamaha_name` @property (Wave 1)
+- [x] 04-01-PLAN.md — Deps + `MultitrackTrack.resolved_yamaha_name` @property (Wave 1)
 - [ ] 04-02-PLAN.md — `planner/utils/nuendo_live_export.py` pure exporter: YAMAHA_TO_FARB, build_nlpr, all helpers (Wave 1, parallel-safe)
 - [ ] 04-03-PLAN.md — CHARLIE-OWNED: hand-generate `planner/data/multitrack/nuendo_live_3_template.nlpr` on Windows + Nuendo Live 3 (Wave 1 checkpoint, autonomous=false)
 - [ ] 04-04-PLAN.md — Test: NuendoLiveExportIdUniquenessTests + minimal fake fixture (Wave 2, depends on 02)
