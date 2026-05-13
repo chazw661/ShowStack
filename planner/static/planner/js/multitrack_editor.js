@@ -632,6 +632,36 @@
     });
   };
 
+  window.mtsRenameTemplate = function (templateId, oldName) {
+    const newName = window.prompt('Rename template:', oldName);
+    if (newName === null || newName.trim() === '') return;
+    postJSON('/audiopatch/multitrack/templates/' + templateId + '/rename/', { new_name: newName.trim() })
+      .then(function (resp) {
+        if (resp.status === 200 && resp.data.ok) {
+          window.location.reload();
+        } else {
+          showToast(resp.data.error || 'Rename failed.', 'error');
+        }
+      });
+  };
+
+  window.mtsDeleteTemplate = function (templateId, name) {
+    const ok = window.confirm(
+      'Delete template "' + name + '"?\n\n' +
+      'This will permanently delete the template and all its slots. ' +
+      'Sessions previously created from this template are not affected.'
+    );
+    if (!ok) return;
+    postJSON('/audiopatch/multitrack/templates/' + templateId + '/delete/', {})
+      .then(function (resp) {
+        if (resp.status === 200 && resp.data.ok) {
+          window.location.reload();
+        } else {
+          showToast(resp.data.error || 'Delete failed.', 'error');
+        }
+      });
+  };
+
   // ──────────────────────────────────────────────────────────────
   // Capacity bar live update (uses GET /capacity/ endpoint).
   //
