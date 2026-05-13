@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-13T23:40:35.599Z"
-last_activity: 2026-05-13 -- Plan 04-01 complete: lxml pinned, resolved_yamaha_name @property landed
+last_updated: "2026-05-13T23:49:01.294Z"
+last_activity: 2026-05-13 -- Plan 04-02 complete: build_nlpr exporter shipped (commits 9c6491b, 2e516f9)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 16
-  percent: 73
+  completed_plans: 17
+  percent: 77
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 04 (Nuendo Live Export) — EXECUTING
-Plan: 2 of 7
-Status: Ready to execute (Wave 1 prerequisites landed)
-Last activity: 2026-05-13 -- Plan 04-01 complete (commits be3f151, 8630fda)
+Plan: 3 of 7
+Status: Ready to execute
+Last activity: 2026-05-13 -- Plan 04-02 complete: build_nlpr exporter shipped (commits 9c6491b, 2e516f9)
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 77%
 
 ## Roadmap Summary
 
@@ -80,3 +80,15 @@ relevant plans land:
 - Zero migrations created. `python manage.py makemigrations planner --dry-run` reports `No changes detected`. CLAUDE.md "additive migrations only" rule naturally satisfied.
 - `planner.tests.test_reaper_export`: 42/42 passing — Phase 1 Reaper byte-stable output verified intact.
 - Stale `# disabled in UI until Phase 4 ships` comment at `planner/models.py:980` updated (RESEARCH Pitfall 6 cleanup).
+
+### From Phase 04 Plan 02 (pure-function Nuendo Live exporter)
+
+- `planner/utils/nuendo_live_export.py` shipped — 331 lines, pure `build_nlpr(session) -> bytes` using lxml template-injection. Trust-boundary docstring mirrors `reaper_export.py`; caller (Plan 04-05's view) owns project scoping.
+- `YAMAHA_TO_FARB` constant locked per D-07: 8 entries; `'Off'` and `'White'` intentionally absent so `dict.get()` returns `None` and the exporter strips the `<int name='Farb'/>` element per D-05.
+- `ExportTemplateError` exception class — caught by the (future Plan 04-05) view layer per D-03 contract; renders editor.html with banner instead of returning 500 when the bundled fixture is missing or malformed.
+- Six private helpers implemented per RESEARCH §"Code Examples" verbatim: `_find_audio_folder` (XPath disambiguates 'Audio' from 'Input/Output Channels' MFolderTrack), `_scan_max_id` (D-08 — scans `@ID` attrs + `<int name='RuntimeID'|'ID'/>` value-attrs), `_replace_all_ids` (D-10 — burns IDs sequentially through new_track), `_set_names` (Pitfall 9 two-write protocol), `_set_channel_id`, `_apply_farb` (handles palette-match → mutate, None → remove, non-palette → remove; SubElement re-add path for A5 fallback).
+- `_ordered_enabled_tracks` reused verbatim via `from .reaper_export import _ordered_enabled_tracks` — track order is universal across DAW formats.
+- Helper-level in-memory exercise harness passes end-to-end against a Python-generated fake template covering all 6 helpers (no real Plan 04-03 fixture required for this plan).
+- Phase 1's `planner/tests/test_reaper_export`: 42/42 passing — byte-stable Reaper contract intact.
+- Zero migrations. `python manage.py makemigrations planner --dry-run` reports `No changes detected`. CLAUDE.md "additive migrations only" naturally satisfied.
+- `build_nlpr` is invokable but raises `ExportTemplateError` until Plan 04-03 commits the bundled fixture at `planner/data/multitrack/nuendo_live_3_template.nlpr` — by design (graceful degradation per D-03).
