@@ -37,6 +37,7 @@ from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import ConsoleImport
 from .models import MultitrackSession, MultitrackTrack
+from .models import MultitrackTemplate, MultitrackTemplateSlot
 from .models import Location, Amp, AmpChannel, AmpDivider
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
@@ -5975,12 +5976,79 @@ class ConsoleImportAdmin(BaseEquipmentAdmin):
         return super().has_delete_permission(request, obj)
 
 
+# ──────────────────────────────────────────────────────────────────
+# MultitrackTemplate — Phase 3 (v3.0) admin registration
+# ──────────────────────────────────────────────────────────────────
+# CONTEXT D-05: owner-scoped via created_by FK (NOT project-scoped).
+# CONTEXT specifics line 195: engineers must NOT edit slot lists from
+# Django admin — the multitrack module is the source of truth. Slot
+# inline is fully read-only (every field readonly, can_delete=False,
+# has_add_permission=False). Mirrors ConsoleImportAdmin's readonly
+# audit-history pattern (admin.py:5943-5976).
+# ──────────────────────────────────────────────────────────────────
+
+class MultitrackTemplateSlotInline(admin.TabularInline):
+    """Read-only inline for slots on the MultitrackTemplate admin.
+
+    CONTEXT specifics line 195: engineers must NOT edit slot lists from Django
+    admin. The multitrack module is the source of truth for slot data.
+    Mirrors ConsoleImportAdmin's readonly approach (admin.py:5943-5975).
+    """
+    model = MultitrackTemplateSlot
+    extra = 0
+    can_delete = False
+    fields = ('position', 'source_type', 'source_number', 'label_override', 'color_override')
+    readonly_fields = ('position', 'source_type', 'source_number', 'label_override', 'color_override')
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class MultitrackTemplateAdmin(BaseEquipmentAdmin):
+    """Read-mostly admin for MultitrackTemplate (Phase 3, v3.0).
+
+    D-05: owner-scoped via created_by FK. NOT project-scoped — the admin sees
+    all templates across all users (back-office only).
+    """
+    list_display = ['name', 'created_by', 'target_daw', 'feed_source', 'slot_count', 'updated_at']
+    list_filter = ['target_daw', 'feed_source', 'track_order_mode']
+    search_fields = ['name', 'created_by__username']
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [MultitrackTemplateSlotInline]
+
+    def slot_count(self, obj):
+        return obj.slots.count()
+    slot_count.short_description = 'Slots'
+
+    def has_add_permission(self, request):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+
     # ==================== REGISTER ALL MODELS ====================
 from planner.admin_site import showstack_admin_site
 
 # Register all equipment admin classes
 showstack_admin_site.register(Console, ConsoleAdmin)
 showstack_admin_site.register(MultitrackSession, MultitrackSessionAdmin)
+showstack_admin_site.register(MultitrackTemplate, MultitrackTemplateAdmin)
 showstack_admin_site.register(ConsoleImport, ConsoleImportAdmin)
 showstack_admin_site.register(Device, DeviceAdmin)
 showstack_admin_site.register(AmpModel, AmpModelAdmin)
