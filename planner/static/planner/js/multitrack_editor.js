@@ -601,6 +601,38 @@
   };
 
   // ──────────────────────────────────────────────────────────────
+  // Template save / rename / delete (Phase 3 / v3.0)
+  // All endpoints are OWNER-scoped (created_by=request.user) per D-05.
+  // ──────────────────────────────────────────────────────────────
+
+  window.mtsSaveAsTemplate = function (sessionId, sessionName) {
+    // Called from editor.html's "Save as Template" button.
+    // Prompts for a template name, POSTs to /audiopatch/multitrack/templates/save/,
+    // shows a toast on success or 409 conflict.
+    const name = window.prompt('Save session as template — name?', sessionName || '');
+    if (name === null) return;            // user cancelled
+    const trimmed = name.trim();
+    if (trimmed === '') {
+      showToast('Template name is required.', 'error');
+      return;
+    }
+    postJSON('/audiopatch/multitrack/templates/save/', {
+      name: trimmed,
+      session_id: sessionId,
+    }).then(function (resp) {
+      if (resp.status === 200 && resp.data.ok) {
+        showToast('Saved template "' + trimmed + '" (' + resp.data.slot_count + ' tracks).', 'success');
+      } else if (resp.status === 409) {
+        // Pitfall 1 — name conflict is surfaced as an actionable toast, NOT a silent
+        // overwrite. The server already includes a friendly message in resp.data.error.
+        showToast(resp.data.error || ('A template named "' + trimmed + '" already exists.'), 'error');
+      } else {
+        showToast(resp.data.error || 'Save failed.', 'error');
+      }
+    });
+  };
+
+  // ──────────────────────────────────────────────────────────────
   // Capacity bar live update (uses GET /capacity/ endpoint).
   //
   // The mtsCommitPickerSelection() and mtsRemoveTrack() flows above already
