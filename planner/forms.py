@@ -8,7 +8,7 @@ from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
 from .models import  ConsoleStereoOutput
 from .models import PACableSchedule, PAZone, CommPosition, CommCrewName, CommBeltPack
-from .models import Console, MultitrackSession
+from .models import Console, MultitrackSession, MultitrackTemplate
 
 
 
@@ -1152,6 +1152,19 @@ class MultitrackSessionForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
+    # Phase 3 — TPL-02 / D-08: owner-scoped template picker.
+    # NOT in Meta.fields — MultitrackSession has no `template` FK.
+    # The view (multitrack_create_view) consumes this via form.cleaned_data
+    # after form.save() returns the new session, then calls
+    # template.apply_to_session(session).
+    template = forms.ModelChoiceField(
+        queryset=MultitrackTemplate.objects.none(),   # set per-request in __init__
+        required=False,
+        empty_label='— None —',
+        label='Start from template (optional)',
+        help_text='Picking a template pre-fills the fields below.',
+    )
+
     def __init__(self, *args, request=None, **kwargs):
         self.request = request
         super().__init__(*args, **kwargs)
@@ -1163,6 +1176,18 @@ class MultitrackSessionForm(forms.ModelForm):
             )
         else:
             self.fields['console'].queryset = Console.objects.none()
+
+        # D-05: owner-scoped template queryset. Templates intentionally cross
+        # all of this user's projects (NOT request.current_project). Setting
+        # the queryset in __init__ (per-instance), NOT as a class-level attr,
+        # is REQUIRED to close the IDOR vector — a class-level queryset would
+        # expose every user's templates in the dropdown (RESEARCH Pitfall 6).
+        if request is not None and request.user.is_authenticated:
+            self.fields['template'].queryset = MultitrackTemplate.objects.filter(
+                created_by=request.user
+            ).order_by('name')
+        else:
+            self.fields['template'].queryset = MultitrackTemplate.objects.none()
 
         # Disable Nuendo Live in Phase 1 (UI-SPEC: "(coming v2.0)").
         # Restrict the field's choices so any submitted nuendo_live fails the
