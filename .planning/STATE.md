@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: planning
-last_updated: "2026-05-13T16:25:39.546Z"
+last_updated: "2026-05-13T18:45:13.078Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 10
+  total_plans: 15
   completed_plans: 10
-  percent: 100
+  percent: 67
 ---
 
 # Project State
@@ -70,4 +70,4 @@ relevant plans land:
 4. **Phase 4 — Nuendo Live template fixture**: Charlie must generate and commit `fixtures/nuendo_live_3_template.nlpr` (a fresh empty Nuendo Live 3 session with one default audio track) before the exporter can be implemented. The spec confirms `lxml` (not stdlib ElementTree) is required to preserve formatting.
 5. **Phase 4 — Rivage→Farb color mapping table** is not yet defined in the spec (only Yamaha CL/QL→Farb is). Either build the Rivage table during Phase 4 or accept that Rivage tracks export with `Farb` omitted in v2.0.
 
-**Planned Phase:** 02 (Console CSV Import) — 4 plans — 2026-05-12T21:58:41.544Z
+**Planned Phase:** 03 (Multitrack Templates) — 5 plans — 2026-05-13T18:45:13.069Z
