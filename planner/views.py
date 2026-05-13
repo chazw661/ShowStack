@@ -6002,7 +6002,14 @@ def multitrack_editor(request, session_id):
 
 @staff_member_required
 def multitrack_create_view(request):
-    """GET: render new-session form. POST: create + redirect to editor (MTS-01, D-12)."""
+    """GET: render new-session form. POST: create + (optionally) apply a template
+    + redirect to editor (MTS-01, MTS-04, TPL-02, D-08, D-10, D-12, D-13).
+
+    Phase 3 extension: if the form's `template` field is set, call
+    template.apply_to_session(new_session) AFTER form.save() returns, and
+    surface the (mapped, skipped, summary) return via messages.info so the
+    editor page shows a banner explaining what happened.
+    """
     current_project = getattr(request, 'current_project', None)
     if not current_project:
         return redirect('/')
@@ -6011,6 +6018,36 @@ def multitrack_create_view(request):
         form = MultitrackSessionForm(request.POST, request=request)
         if form.is_valid():
             session = form.save()
+            # TPL-02 — apply selected template if any. Owner-scoped queryset
+            # in MultitrackSessionForm.__init__ guarantees the chosen template
+            # belongs to request.user (IDOR closed).
+            template = form.cleaned_data.get('template')
+            if template is not None:
+                mapped, skipped, skipped_summary = template.apply_to_session(session)
+                total = mapped + skipped
+                if total == 0:
+                    # D-13 — empty-track-list template. Metadata seeded;
+                    # picker auto-opens on Inputs per Phase 1 D-12.
+                    messages.info(
+                        request,
+                        f"Applied template '{template.name}' — "
+                        f"metadata seeded; no tracks in template.",
+                    )
+                elif skipped == 0:
+                    # All slots mapped cleanly — short banner.
+                    messages.info(
+                        request,
+                        f"Applied template '{template.name}' — "
+                        f"{mapped} of {total} slots mapped.",
+                    )
+                else:
+                    # D-10 — at least one slot unmappable on this console.
+                    messages.info(
+                        request,
+                        f"Applied template '{template.name}' — "
+                        f"{mapped} of {total} slots mapped; "
+                        f"{skipped} skipped ({skipped_summary}).",
+                    )
             return redirect('planner:multitrack_editor', session_id=session.id)
     else:
         form = MultitrackSessionForm(request=request)
