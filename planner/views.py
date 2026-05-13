@@ -5754,8 +5754,11 @@ def comm_config_export_freespeak(request, config_id):
 def multitrack_dashboard(request):
     """List view of MultitrackSessions for the current project (MTS-03).
 
-    Renders the dashboard with the session-card grid. Empty state shown
-    when no sessions exist for the current project.
+    Also lists OWNER-SCOPED MultitrackTemplates (TPL-03, D-05) — templates
+    intentionally cross all of this user's projects.
+
+    Renders the dashboard with the session-card grid + Templates section.
+    Empty state shown when no sessions / no templates exist.
     """
     current_project = getattr(request, 'current_project', None)
     sessions = (
@@ -5764,12 +5767,20 @@ def multitrack_dashboard(request):
         .order_by('-updated_at')
         if current_project else MultitrackSession.objects.none()
     )
+    # D-05: templates are OWNER-scoped, NOT project-scoped. They follow the
+    # engineer across all their projects.
+    templates = (
+        MultitrackTemplate.objects.filter(created_by=request.user)
+        .order_by('name')
+        if request.user.is_authenticated else MultitrackTemplate.objects.none()
+    )
     can_import_console_csv = (
         request.user.is_authenticated
         and not request.user.groups.filter(name='Viewer').exists()
     )
     return render(request, 'planner/multitrack/dashboard.html', {
         'sessions': sessions,
+        'templates': templates,
         'current_project': current_project,
         'can_import_console_csv': can_import_console_csv,
     })
@@ -6430,6 +6441,89 @@ def multitrack_template_save(request):
         }, status=409)
     except Exception:
         _multitrack_logger.exception('multitrack_template_save failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+@login_required
+@require_POST
+def multitrack_template_rename(request, template_id):
+    """POST: rename an owner-scoped template (TPL-03).
+
+    Body: JSON {new_name: '...'}. Returns {ok, name} or {error, status: 409}
+    on unique_together(created_by, name) conflict.
+
+    D-05: owner-scoped via request.user. Templates intentionally cross all
+    of this user's projects.
+    """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+    new_name = ''
+    try:
+        # D-05: owner-scoped via request.user. IDOR guard — non-owner gets 404.
+        template = MultitrackTemplate.objects.filter(
+            id=template_id, created_by=request.user,
+        ).first()
+        if not template:
+            return JsonResponse({'error': 'Template not found'}, status=404)
+
+        data = json.loads(request.body or '{}')
+        new_name = (data.get('new_name') or '').strip()
+        if not new_name:
+            return JsonResponse({'error': 'Name is required.'}, status=400)
+        if len(new_name) > 200:
+            return JsonResponse({'error': 'Name must be 200 characters or fewer.'}, status=400)
+
+        # D-05: owner-scoped uniqueness check.
+        if MultitrackTemplate.objects.filter(
+            created_by=request.user, name=new_name,
+        ).exclude(pk=template.pk).exists():
+            return JsonResponse({
+                'error': f'A template named "{new_name}" already exists. '
+                         f'Pick a different name.',
+            }, status=409)
+
+        template.name = new_name
+        template.save(update_fields=['name', 'updated_at'])
+        return JsonResponse({'ok': True, 'name': new_name})
+    except IntegrityError:
+        # Defensive — race between .exists() check and .save()
+        return JsonResponse({
+            'error': f'A template named "{new_name}" already exists. Pick a different name.',
+        }, status=409)
+    except Exception:
+        _multitrack_logger.exception('multitrack_template_rename failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+@login_required
+@require_POST
+def multitrack_template_delete(request, template_id):
+    """POST: delete an owner-scoped template and (via CASCADE) all its slots (TPL-03).
+
+    Returns JSON {ok: True}. JS reloads the dashboard — no redirect_url needed
+    because the dashboard is already the right destination.
+
+    D-05: owner-scoped via request.user. CASCADE on MultitrackTemplateSlot.template
+    FK handles the child rows. Sessions previously created from this template
+    are NOT affected (they were materialised at apply time — no FK back to the
+    template).
+    """
+    viewer_block = _multitrack_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+    try:
+        # D-05: owner-scoped via request.user. IDOR guard — non-owner gets 404.
+        template = MultitrackTemplate.objects.filter(
+            id=template_id, created_by=request.user,
+        ).first()
+        if not template:
+            return JsonResponse({'error': 'Template not found'}, status=404)
+
+        template.delete()   # CASCADE handles MultitrackTemplateSlot rows
+        return JsonResponse({'ok': True})
+    except Exception:
+        _multitrack_logger.exception('multitrack_template_delete failed')
         return JsonResponse({'error': 'Server error.'}, status=500)
 
 
