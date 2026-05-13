@@ -106,54 +106,144 @@ def _find_audio_folder(root):
     """RESEARCH Pattern 2 — locate <obj class='MFolderTrack'> whose
     inner Name is 'Audio' (NOT 'Input/Output Channels').
     """
-    # Implemented in Task 2.
-    raise NotImplementedError
+    folders = root.xpath(
+        ".//obj[@class='MFolderTrack']"
+        "[.//string[@name='Name' and @value='Audio']]"
+    )
+    if not folders:
+        raise ExportTemplateError(
+            "No MFolderTrack named 'Audio' found in template"
+        )
+    if len(folders) > 1:
+        raise ExportTemplateError(
+            f"Multiple Audio folders found ({len(folders)})"
+        )
+    return folders[0]
 
 
 def _scan_max_id(root):
-    """D-08: find the largest integer ID anywhere in the document
-    (across @ID attributes on any element AND <int name='RuntimeID'/>
-    and <int name='ID'/> children).
+    """D-08: find the largest integer ID anywhere in the document.
+
+    Scans:
+      - every element with an @ID attribute (covers <obj ID='N'/>)
+      - every <int name='RuntimeID' value='N'/>
+      - every <int name='ID' value='N'/>
+    Returns 0 if no IDs found (defensive — should never happen on a
+    real Nuendo template).
     """
-    # Implemented in Task 2.
-    raise NotImplementedError
+    ids: list[int] = []
+    for elem in root.xpath("//*[@ID]"):
+        try:
+            ids.append(int(elem.get('ID')))
+        except (TypeError, ValueError):
+            pass
+    for elem in root.xpath("//int[@name='RuntimeID' or @name='ID']"):
+        try:
+            ids.append(int(elem.get('value')))
+        except (TypeError, ValueError):
+            pass
+    return max(ids) if ids else 0
 
 
 def _replace_all_ids(new_track, next_id):
-    """D-10: replace every @ID attribute and every <int name='RuntimeID'
-    or 'ID'/> value inside `new_track` with sequentially-allocated
-    fresh IDs starting at `next_id`. Returns the next available ID
-    after consuming for this track.
+    """D-10: replace every @ID attribute and every RuntimeID / ID
+    int-value inside `new_track` with sequentially-allocated fresh IDs.
+
+    Order of replacement (matters only for determinism — the IDs all
+    end up unique either way):
+      1. The new_track root's own @ID (if present).
+      2. Every descendant element with an @ID attribute.
+      3. Every <int name='RuntimeID' value='...'/> descendant.
+      4. Every <int name='ID' value='...'/> descendant.
+
+    Returns the next available ID after consuming for this track.
     """
-    # Implemented in Task 2.
-    raise NotImplementedError
+    if new_track.get('ID') is not None:
+        new_track.set('ID', str(next_id))
+        next_id += 1
+    for elem in new_track.xpath(".//*[@ID]"):
+        elem.set('ID', str(next_id))
+        next_id += 1
+    for elem in new_track.xpath(
+        ".//int[@name='RuntimeID' or @name='ID']"
+    ):
+        elem.set('value', str(next_id))
+        next_id += 1
+    return next_id
 
 
 def _set_names(new_track, label):
-    """RESEARCH Pitfall 9 — write the resolved label into BOTH name
-    elements:
+    """RESEARCH Pitfall 9 — write `label` into BOTH name elements:
       - outer  <obj class='MListNode'>/<string name='Name' wide='true'/>
       - inner  ...MAudioTrack//DeviceAttributes/Name/<string
                name='String' wide='true'/>
+
+    Raises ExportTemplateError if either element is missing.
     """
-    # Implemented in Task 2.
-    raise NotImplementedError
+    outer = new_track.find(
+        "./obj[@class='MListNode']/string[@name='Name']"
+    )
+    if outer is None:
+        raise ExportTemplateError(
+            "Seed track missing outer MListNode/Name string"
+        )
+    outer.set('value', label)
+
+    inner = new_track.find(
+        ".//obj[@class='MAudioTrack']"
+        "//member[@name='DeviceAttributes']"
+        "/member[@name='Name']"
+        "/string[@name='String']"
+    )
+    if inner is None:
+        raise ExportTemplateError(
+            "Seed track missing inner DeviceAttributes/Name/String"
+        )
+    inner.set('value', label)
 
 
 def _set_channel_id(new_track, index_1_based):
-    """Spec lines 224, 292 — set <int name='Channel ID' value='N'/>
-    inside the inner MAudioTrack to the 1-based track index.
-    """
-    # Implemented in Task 2.
-    raise NotImplementedError
+    """Spec lines 224, 292 — Channel ID is the 1-based track index."""
+    ch = new_track.find(
+        ".//obj[@class='MAudioTrack']/int[@name='Channel ID']"
+    )
+    if ch is None:
+        raise ExportTemplateError(
+            "Seed MAudioTrack missing <int name='Channel ID'/>"
+        )
+    ch.set('value', str(index_1_based))
 
 
 def _apply_farb(new_track, yamaha_name):
     """D-05/D-07 — set Farb to YAMAHA_TO_FARB[name] or remove the
-    element entirely if name is None / not a palette match.
+    element entirely.
+
+    Rules:
+      - yamaha_name is None or absent from YAMAHA_TO_FARB → remove
+        <int name='Farb'/> entirely. Nuendo Live falls back to default
+        appearance (D-05).
+      - yamaha_name is in YAMAHA_TO_FARB → mutate the existing
+        <int name='Farb'/> value. If the seed template doesn't have a
+        Farb element (RESEARCH A5 — depends on Charlie's fixture),
+        create one as a child of <member name='Additional Attributes'>.
     """
-    # Implemented in Task 2.
-    raise NotImplementedError
+    farb = new_track.find(
+        ".//member[@name='Additional Attributes']/int[@name='Farb']"
+    )
+    if yamaha_name is None or yamaha_name not in YAMAHA_TO_FARB:
+        if farb is not None:
+            farb.getparent().remove(farb)
+        return
+    if farb is None:
+        attrs = new_track.find(
+            ".//member[@name='Additional Attributes']"
+        )
+        if attrs is None:
+            raise ExportTemplateError(
+                "Seed track missing <member name='Additional Attributes'>"
+            )
+        farb = etree.SubElement(attrs, 'int', {'name': 'Farb'})
+    farb.set('value', str(YAMAHA_TO_FARB[yamaha_name]))
 
 
 def _sanitize_label(label):
