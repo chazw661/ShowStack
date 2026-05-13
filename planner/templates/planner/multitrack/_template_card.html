@@ -1,0 +1,22 @@
+{% load humanize %}
+<div class="mts-card" data-template-id="{{ template.id }}">
+  <div class="mts-card-link">
+    <div class="mts-card-title">{{ template.name }}</div>
+    <div class="mts-card-meta">
+      {{ template.slots.count }} slot{{ template.slots.count|pluralize }} ·
+      {{ template.get_target_daw_display }} ·
+      updated {{ template.updated_at|timesince }} ago
+    </div>
+  </div>
+  <div class="mts-card-actions">
+    <button type="button" class="mts-card-menu-trigger"
+            aria-label="Template actions"
+            onclick="mtsToggleCardMenu(this, 'tmpl-{{ template.id }}')">⋯</button>
+    <div class="mts-dropdown-menu" id="mts-card-menu-tmpl-{{ template.id }}">
+      <button type="button" class="mts-dropdown-item"
+              onclick="mtsRenameTemplate({{ template.id }}, '{{ template.name|escapejs }}')">Rename</button>
+      <button type="button" class="mts-dropdown-item mts-dropdown-item--danger"
+              onclick="mtsDeleteTemplate({{ template.id }}, '{{ template.name|escapejs }}')">Delete</button>
+    </div>
+  </div>
+</div>

@@ -47,6 +47,27 @@
       <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
     </div>
   {% endif %}
+
+  {# Phase 3 — Templates section (TPL-03). Owner-scoped (D-05): templates #}
+  {# cross all of this user's projects.                                    #}
+  <hr class="mts-section-divider">
+  <div class="mts-section-header">
+    <h2 class="mts-h2">Templates</h2>
+    <p class="mts-subtitle">Reusable session structures saved from any of your projects.</p>
+  </div>
+
+  {% if templates %}
+    <div class="mts-grid">
+      {% for template in templates %}
+        {% include "planner/multitrack/_template_card.html" with template=template %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="mts-empty-state">
+      <h2 class="mts-empty-heading">No templates yet</h2>
+      <p class="mts-empty-body">No templates yet — save one from the session editor.</p>
+    </div>
+  {% endif %}
 </div>
 
 {# Hidden CSRF for any inline JS forms #}
