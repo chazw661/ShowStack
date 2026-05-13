@@ -1119,6 +1119,175 @@ class MultitrackTrack(models.Model):
         ]
 
 
+class MultitrackTemplate(models.Model):
+    """Owner-scoped (NOT project-scoped) reusable session structure (Phase 3, v3.0).
+
+    D-05 divergence: this model has NO `project` FK. Templates belong to the
+    creating engineer and are visible across all of that engineer's projects
+    via created_by=request.user filters in the views.
+    """
+    created_by = models.ForeignKey(
+        'auth.User', on_delete=models.CASCADE,
+        related_name='multitrack_templates',
+    )
+    name = models.CharField(max_length=200)
+    target_daw = models.CharField(
+        max_length=20, choices=MultitrackSession.TARGET_DAW_CHOICES,
+    )
+    feed_source = models.CharField(
+        max_length=20, choices=MultitrackSession.FEED_SOURCE_CHOICES,
+    )
+    track_order_mode = models.CharField(
+        max_length=10, choices=MultitrackSession.TRACK_ORDER_MODE_CHOICES,
+    )
+    recorder_capacity = models.PositiveIntegerField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Multitrack Template"
+        verbose_name_plural = "Multitrack Templates"
+        ordering = ['name']
+        unique_together = [('created_by', 'name')]
+        indexes = [
+            models.Index(fields=['created_by'], name='mtt_owner_idx'),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def apply_to_session(self, session):
+        """Resolve template slots -> MultitrackTracks on a target session (TPL-02).
+
+        D-02 cross-console portable: slots are keyed by (source_type, source_number).
+        For each slot:
+          - 'manual' slots always materialise (no channel resolution needed)
+          - non-manual slots resolve via _source_model_for(source_type).objects
+            .filter(console=session.console, <number_field>=slot.source_number)
+          - unresolvable slots are skipped and collected for the banner
+
+        Returns (mapped, skipped, skipped_summary) where:
+          - mapped: int count of slots that became tracks
+          - skipped: int count of slots that could not resolve
+          - skipped_summary: human string for the banner, e.g.
+            "matrix 9-12 not present on this console" (empty when skipped == 0)
+        """
+        number_field = {
+            'input': 'input_ch',
+            'aux': 'aux_number',
+            'matrix': 'matrix_number',
+            'stereo': 'stereo_type',
+        }
+        new_tracks = []
+        mapped = 0
+        skipped = []  # list of (source_type, source_number) tuples
+        for slot in self.slots.all().order_by('position'):
+            track_number = len(new_tracks) + 1
+            if slot.source_type == 'manual':
+                new_tracks.append(MultitrackTrack(
+                    session=session,
+                    track_number=track_number,
+                    source_type='manual',
+                    source_id=None,
+                    label_override=slot.label_override,
+                    color_override=slot.color_override,
+                ))
+                mapped += 1
+                continue
+            model = _source_model_for(slot.source_type)
+            if model is None:
+                skipped.append((slot.source_type, slot.source_number))
+                continue
+            field = number_field.get(slot.source_type)
+            if field is None:
+                skipped.append((slot.source_type, slot.source_number))
+                continue
+            channel = model.objects.filter(
+                console=session.console,
+                **{field: slot.source_number},
+            ).first()
+            if channel is None:
+                skipped.append((slot.source_type, slot.source_number))
+                continue
+            new_tracks.append(MultitrackTrack(
+                session=session,
+                track_number=track_number,
+                source_type=slot.source_type,
+                source_id=channel.id,
+                label_override=slot.label_override,
+                color_override=slot.color_override,
+            ))
+            mapped += 1
+
+        if new_tracks:
+            MultitrackTrack.objects.bulk_create(new_tracks)
+        return mapped, len(skipped), _summarise_skipped_slots(skipped)
+
+
+class MultitrackTemplateSlot(models.Model):
+    """One row in a template's slot list (Phase 3, v3.0).
+
+    Cross-console portable: keyed by (source_type, source_number) per D-02.
+    Apply resolves these against the target console's channel-number CharFields:
+      input -> ConsoleInput.input_ch
+      aux -> ConsoleAuxOutput.aux_number
+      matrix -> ConsoleMatrixOutput.matrix_number
+      stereo -> ConsoleStereoOutput.stereo_type ('L'/'R'/'M')
+      manual -> no channel resolution; new track materialises with label/color only
+
+    NOTE (D-03): no `enabled` field — every slot is an opt-in-by-design row.
+    NOTE (Assumption A5): no `notes` field — slot-level notes deemed redundant
+    given engineers re-key tracks in a fresh session.
+    """
+    template = models.ForeignKey(
+        MultitrackTemplate, on_delete=models.CASCADE, related_name='slots',
+    )
+    position = models.PositiveIntegerField(default=1)
+    source_type = models.CharField(
+        max_length=10, choices=MultitrackTrack.SOURCE_TYPE_CHOICES,
+    )
+    source_number = models.CharField(max_length=10, blank=True, default='')
+    label_override = models.CharField(max_length=100, blank=True, default='')
+    color_override = models.CharField(max_length=7, blank=True, default='')
+
+    class Meta:
+        verbose_name = "Multitrack Template Slot"
+        verbose_name_plural = "Multitrack Template Slots"
+        ordering = ['position']
+        unique_together = [('template', 'position')]
+        indexes = [
+            models.Index(fields=['template', 'position'], name='mtt_slot_pos_idx'),
+        ]
+
+    def __str__(self):
+        return f'#{self.position} {self.source_type} {self.source_number}'
+
+
+def _summarise_skipped_slots(skipped):
+    """Build a human-readable summary string from a list of (source_type, source_number) tuples.
+
+    Used by MultitrackTemplate.apply_to_session for D-10's banner text.
+    Groups by source_type and lists the missing source_numbers.
+
+    Examples:
+      [('matrix', '9'), ('matrix', '10'), ('matrix', '11')]
+        -> "matrix 9, 10, 11 not present on this console"
+      [('input', '33'), ('aux', '5')]
+        -> "input 33; aux 5 not present on this console"
+      [] -> ""
+    """
+    if not skipped:
+        return ''
+    grouped = {}
+    for source_type, source_number in skipped:
+        grouped.setdefault(source_type, []).append(source_number)
+    parts = []
+    for source_type, numbers in grouped.items():
+        parts.append(f"{source_type} {', '.join(numbers)}")
+    return '; '.join(parts) + ' not present on this console'
+
+
     # planner/models.py
 
 from django.db import models
