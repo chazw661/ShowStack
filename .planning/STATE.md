@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-05-14T19:46:35Z"
-last_activity: 2026-05-14 — Phase 05 Plan 01 complete (commits 8003594 + f4c0a99). Added default_record (bool, default=True) and default_record_color (CharField max_length=7, blank=True, default='') to all 4 ConsoleChannel models; migration 0155_channel_record_defaults shipped with 8 AddField ops, single dep on 0154_multitrack_template. `manage.py check planner` clean; `makemigrations --dry-run` clean. Wave 2 (Plans 05-02 + 05-03) unblocked.
+last_updated: "2026-05-14T19:53:22Z"
+last_activity: 2026-05-14 — Phase 05 Plan 02 complete (commit 7121792). Exposed default_record (BooleanField) and default_record_color (#RRGGBB CharField) on all 4 ConsoleChannel ModelForms (ConsoleInputForm/ConsoleAuxOutputForm/ConsoleMatrixOutputForm/ConsoleStereoOutputForm) with consistent 80px-monospace widget styling and a clean_default_record_color server-side hex validator (verbatim duplicate of planner/views.py:6259 _HEX_COLOR_RE). admin.py + admin_ordering.py NOT touched (CLAUDE.md compliance — no new admin-registered models). `manage.py check planner` clean. Plan 05-03 (seed logic in multitrack_add_tracks) next.
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 25
-  completed_plans: 23
-  percent: 92
+  completed_plans: 24
+  percent: 96
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 05 — Channel Record Defaults (in progress; Plan 01 complete 2026-05-14)
+**Current focus:** Phase 05 — Channel Record Defaults (in progress; Plans 01 + 02 complete 2026-05-14)
 
 ## Current Position
 
-Phase: 5 (in progress — 1 of 3 plans complete)
-Plan: 05-01 complete (commits 8003594 + f4c0a99); 05-02 + 05-03 next (Wave 2)
-Status: Plan 05-01 done
-Last activity: 2026-05-14 — Phase 05 Plan 01 complete (channel model fields + migration 0155)
+Phase: 5 (in progress — 2 of 3 plans complete)
+Plan: 05-02 complete (commit 7121792); 05-03 next (Wave 2, seed logic in multitrack_add_tracks)
+Status: Plan 05-02 done
+Last activity: 2026-05-14 — Phase 05 Plan 02 complete (admin form surface for default_record + default_record_color on 4 channel ModelForms)
 
-Progress: [█████████░] 92% (23 of 25 plans complete)
+Progress: [█████████▌] 96% (24 of 25 plans complete)
 
 ## Roadmap Summary
 
@@ -148,3 +148,16 @@ relevant plans land:
 - `ConsoleImport` (audit-snapshot model) intentionally left untouched per plan instruction — only the 4 channel models received the new fields.
 - The existing `color` field (Yamaha palette NAME, used by Rivage/Nuendo exporters and CSV import) preserved unchanged on all 4 models — `default_record_color` is a separate hex CharField, distinct from the palette-name field. Two different fields, two different consumers.
 - **Wave 2 unblocked:** Plans 05-02 (admin form surface) and 05-03 (seed logic in `multitrack_add_tracks` + regression tests) can run in parallel against the new schema. Both will read `channel.default_record` and `channel.default_record_color` directly on the 4 channel model classes — no type-dispatch needed.
+
+### From Phase 05 Plan 02 (admin form surface — 4 ChannelForm Meta.fields + hex validator)
+
+- `planner/forms.py` gains `'default_record'` and `'default_record_color'` as the trailing two entries of `Meta.fields` on all 4 ConsoleChannel ModelForms (`ConsoleInputForm`, `ConsoleAuxOutputForm`, `ConsoleMatrixOutputForm`, `ConsoleStereoOutputForm`). The 4 corresponding `TabularInline` subclasses in `planner/admin.py:583-761` (`ConsoleInputInline` et al.) pull `form = ConsoleXxxForm` so the new fields render automatically on the Console admin change-form — no admin-class edit needed. +108 lines / −8 lines. Single atomic commit `7121792` (`feat(05-02)`).
+- Each of the 4 forms gains an identical `clean_default_record_color` method whose body is a verbatim duplicate of `planner/views.py:6259` `_HEX_COLOR_RE` (local `import re`, `(value or '').strip()`, `re.match(r'^#[0-9A-Fa-f]{6}$', value)`, raise `forms.ValidationError(f"Color must be empty or #RRGGBB hex, got: {value!r}")` on mismatch). Empty strings pass through unchanged. Verbatim copy chosen over `from .views import _HEX_COLOR_RE` because views.py imports `MultitrackSessionForm` from forms.py — reverse import would be circular.
+- Widget styling on `default_record_color` consistent across all 4 forms: 80px width, centered text, `font-mono`, placeholder `#RRGGBB`, HTML `pattern="#[0-9A-Fa-f]{6}"` (UI hint only — `clean_default_record_color` is the actual security control per threat T-05-02-03), `title="Hex color like #FF0000, or leave blank for no seed"`. `default_record` BooleanField renders as Django default checkbox; admin TabularInline already vertically centers the checkbox column.
+- `ConsoleStereoOutputForm` previously had no `__init__` (only `Meta.widgets = {'dante_number': forms.NumberInput(...)}`); a new `__init__` was added matching the other 3 forms' shape so `default_record_color` widget styling can land. The existing `Meta.widgets` dict was preserved unchanged.
+- `planner/admin.py` NOT touched — the 4 inlines bind `form = ConsoleXxxForm` and Django attaches the new fields automatically via `Meta.fields`. `planner/admin_ordering.py` NOT touched per CLAUDE.md rule (only updated when a new admin-REGISTERED model is added; this plan added fields to existing inlines, not new registrations).
+- `python manage.py check planner` → 0 issues. Plan's `<verify>` automated script prints `OK -- all 4 forms expose new fields and the hex regex contract is correct` (7 regex assertions across positive uppercase/lowercase/mixed-case and negative non-hex/non-hex-char/short/no-leading-#).
+- Acceptance-criteria grep counts: `'default_record'` literal → 4, `'default_record_color'` literal → 12 (one Meta.fields + one widget.attrs.update + one cleaned_data.get per form × 4 forms), `def clean_default_record_color` → 4, `must be empty or #RRGGBB hex` → 4, regex literal `^#[0-9A-Fa-f]{6}$` → 4. All ≥-floor or exact-match criteria satisfied.
+- Canonical `Meta.fields` tail order (`default_record, default_record_color`) established for any future record-default fields — append-only, no reordering of pre-existing fields, visual column order in inline rows stable for engineers used to today's layout.
+- Phase-level Success Criterion 1 (engineer can set `default_record` and `default_record_color` from the channel admin/edit UI) — DELIVERED end-to-end on next Railway deploy. POL-01 admin surface (boolean toggle visible) and POL-02 admin surface (hex input visible + validated) both in place; requirements ledger will check off POL-01 + POL-02 after Plan 05-03 ships the seed logic that actually consumes them.
+- **Plan 05-03 contract for AJAX defence-in-depth:** the form-layer regex in this plan is a verbatim duplicate of `_HEX_COLOR_RE` at views.py:6259. Plan 03's `add_tracks` AJAX endpoint MUST re-validate at the boundary — do NOT trust admin-form validation has run for API-driven channel edits or legacy DB rows. Suggested pattern: `if channel.default_record_color and _HEX_COLOR_RE.match(channel.default_record_color): track.color_override = channel.default_record_color`.
