@@ -94,20 +94,28 @@ state) passes through untouched.
 
 ### Color → Farb Resolution
 
-- **D-04:** Add a new property `MultitrackTrack.resolved_yamaha_name` (Phase 4
-  helper, separate from `resolved_color`). Resolution order:
+- **D-04 (amended 2026-05-14 per HUMAN-UAT feedback):** Add a new property
+  `MultitrackTrack.resolved_yamaha_name` (Phase 4 helper, separate from
+  `resolved_color`). Resolution order:
   1. If `color_override` is set AND its hex value exists as a value in
      `YAMAHA_TO_HEX` (`planner/utils/reaper_export.py:26-37`), return the
      matching palette name. (Reverse-lookup; only 8 of the 10 Yamaha names
      have hex values — `Off` and `White` map to `None` in `YAMAHA_TO_HEX` and
      are not reachable via the override path.)
-  2. Else, if the track has a `resolved_source` AND that source has a `color`
-     field with a non-default Yamaha palette name (`ConsoleInput.color`,
-     `ConsoleAuxOutput.color`, `ConsoleMatrixOutput.color`,
-     `ConsoleStereoOutput.color` — all added in Phase 2 D-07), return that
-     palette name.
-  3. Else, return `None`.
-  Leaves `resolved_color` (hex) untouched. The Reaper exporter is unaffected
+  2. Else, return `None`.
+
+  Original D-04 had a step 2 that fell back to `resolved_source.color`
+  (the channel-level Yamaha palette name from Phase 2 D-07). HUMAN-UAT
+  on 2026-05-14 surfaced a bad UX consequence: the editor's color
+  swatch consults `color_override` only, but the Nuendo exporter
+  pulled Rivage-CSV-imported channel colors through to Farb. Engineers
+  saw tracks render in Nuendo with colors the editor never previewed
+  (e.g. Pod 1 / Pod 2 rendering Green, Vid 1L rendering Pink). The
+  editor must be the single source of truth for "what color
+  exports". Resolution is now symmetric with `resolved_color`:
+  override-only. Engineers who want a channel-level color in Nuendo
+  must explicitly set it via the editor's color picker. Leaves
+  `resolved_color` (hex) untouched. The Reaper exporter is unaffected
   by Phase 4 — its byte-stable Phase 1 contract holds.
 - **D-05:** When `color_override` is a hex that does NOT match any value in
   `YAMAHA_TO_HEX`, the exporter emits **no `Farb` element** for that track,

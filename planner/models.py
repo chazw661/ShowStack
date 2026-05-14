@@ -1119,33 +1119,33 @@ class MultitrackTrack(models.Model):
 
     @property
     def resolved_yamaha_name(self):
-        """D-04: Yamaha palette name for Nuendo Farb mapping, or None.
+        """D-04 (amended 2026-05-14): Yamaha palette name for Nuendo Farb
+        mapping, or None.
 
-        Resolution order (per Phase 4 CONTEXT D-04 / D-05):
+        Resolution:
           1. color_override hex → reverse-lookup against YAMAHA_TO_HEX.
              If override is a non-palette hex (e.g. '#A1B2C3'), return
              None → exporter omits <int name='Farb'/> per D-05.
-          2. resolved_source.color (channel-level YAMAHA_COLOR_CHOICES
-             name on ConsoleInput / ConsoleAuxOutput / ConsoleMatrixOutput
-             / ConsoleStereoOutput — all added in Phase 2 D-07).
-          3. None.
+          2. None.
 
-        Returning None signals 'omit Farb' to the Nuendo exporter. Phase 1's
-        resolved_color (hex) is intentionally NOT touched here — that
-        contract underpins the byte-stable Reaper exporter.
+        The editor's color swatch is the single source of truth for
+        "what color exports". The original D-04 step 2 fell back to
+        resolved_source.color (Phase 2 channel-level color field), but
+        that pulled Rivage-imported channel colors into Nuendo even
+        when the editor showed no override — surprising the engineer.
+        HUMAN-UAT on 2026-05-14 surfaced this; resolution is now
+        symmetric with resolved_color: override-only.
+
+        Returning None signals 'omit Farb' to the Nuendo exporter.
+        Phase 1's resolved_color (hex) is intentionally NOT touched
+        here — that contract underpins the byte-stable Reaper exporter.
         """
         if self.color_override:
             name = _HEX_TO_YAMAHA_NAME.get(self.color_override.lower())
             if name:
                 return name
             return None  # D-05: hex override but not a palette match
-        src = self.resolved_source
-        if src is None:
-            return None
-        color = getattr(src, 'color', None)
-        if not color or color == 'Off':
-            return None
-        return color
+        return None
 
     def __str__(self):
         return f"#{self.track_number} {self.resolved_label}"
