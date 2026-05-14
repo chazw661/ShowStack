@@ -53,7 +53,7 @@ class ConsoleInputForm(forms.ModelForm):
         model = ConsoleInput
         fields = [
             'dante_number',
-            'input_ch', 
+            'input_ch',
             'source',
             'source_hardware',
             'group',
@@ -61,6 +61,8 @@ class ConsoleInputForm(forms.ModelForm):
             'mute',
             'direct_out',
             'omni_in',
+            'default_record',
+            'default_record_color',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -104,7 +106,31 @@ class ConsoleInputForm(forms.ModelForm):
             'style': 'width: 50px; text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
-       
+        self.fields['default_record_color'].widget.attrs.update({
+            'style': 'width: 80px; text-align: center;',
+            'class': 'bg-white text-black rounded-sm font-mono',
+            'placeholder': '#RRGGBB',
+            'pattern': '#[0-9A-Fa-f]{6}',
+            'title': 'Hex color like #FF0000, or leave blank for no seed',
+        })
+        # default_record renders as default checkbox — no style override; the
+        # admin TabularInline checkbox column is already vertically centered.
+
+    def clean_default_record_color(self):
+        """POL-02: validate hex format at the form boundary. Empty string allowed.
+
+        Defence-in-depth: matches _HEX_COLOR_RE at planner/views.py:6259 and
+        the Plan-03 picker-add validator. Mirrors the threat-T-05-02-01
+        mitigation in this plan's threat_model.
+        """
+        import re
+        value = (self.cleaned_data.get('default_record_color') or '').strip()
+        if value and not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise forms.ValidationError(
+                f"Color must be empty or #RRGGBB hex, got: {value!r}"
+            )
+        return value
+
 
 InputFormSet = modelformset_factory(
     ConsoleInput,
@@ -119,12 +145,14 @@ class ConsoleAuxOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleAuxOutput
         fields = [
-            'dante_number', 
+            'dante_number',
             'aux_number',
             'name',
             'mono_stereo',
             'bus_type',
             'omni_out',
+            'default_record',
+            'default_record_color',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -146,11 +174,33 @@ class ConsoleAuxOutputForm(forms.ModelForm):
         self.fields['bus_type'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
-        
+
         self.fields['omni_out'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
-        
+        self.fields['default_record_color'].widget.attrs.update({
+            'style': 'width: 80px; text-align: center;',
+            'class': 'bg-white text-black rounded-sm font-mono',
+            'placeholder': '#RRGGBB',
+            'pattern': '#[0-9A-Fa-f]{6}',
+            'title': 'Hex color like #FF0000, or leave blank for no seed',
+        })
+
+    def clean_default_record_color(self):
+        """POL-02: validate hex format at the form boundary. Empty string allowed.
+
+        Defence-in-depth: matches _HEX_COLOR_RE at planner/views.py:6259 and
+        the Plan-03 picker-add validator. Mirrors the threat-T-05-02-01
+        mitigation in this plan's threat_model.
+        """
+        import re
+        value = (self.cleaned_data.get('default_record_color') or '').strip()
+        if value and not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise forms.ValidationError(
+                f"Color must be empty or #RRGGBB hex, got: {value!r}"
+            )
+        return value
+
 
 OutputFormSet = modelformset_factory(
     ConsoleAuxOutput,
@@ -165,11 +215,13 @@ class ConsoleMatrixOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleMatrixOutput
         fields = [
-            'dante_number', 
+            'dante_number',
             'matrix_number',
             'name',
             'mono_stereo',
             'omni_out',
+            'default_record',
+            'default_record_color',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -188,10 +240,33 @@ class ConsoleMatrixOutputForm(forms.ModelForm):
         self.fields['mono_stereo'].widget.attrs.update({
             'class': 'mono-stereo-select'
         })
-        
+
         self.fields['omni_out'].widget.attrs.update({
             'class': 'w-28 text-center align-middle bg-white text-black rounded-sm',
         })
+        self.fields['default_record_color'].widget.attrs.update({
+            'style': 'width: 80px; text-align: center;',
+            'class': 'bg-white text-black rounded-sm font-mono',
+            'placeholder': '#RRGGBB',
+            'pattern': '#[0-9A-Fa-f]{6}',
+            'title': 'Hex color like #FF0000, or leave blank for no seed',
+        })
+
+    def clean_default_record_color(self):
+        """POL-02: validate hex format at the form boundary. Empty string allowed.
+
+        Defence-in-depth: matches _HEX_COLOR_RE at planner/views.py:6259 and
+        the Plan-03 picker-add validator. Mirrors the threat-T-05-02-01
+        mitigation in this plan's threat_model.
+        """
+        import re
+        value = (self.cleaned_data.get('default_record_color') or '').strip()
+        if value and not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise forms.ValidationError(
+                f"Color must be empty or #RRGGBB hex, got: {value!r}"
+            )
+        return value
+
 
 MatrixOutputFormSet = modelformset_factory(
     ConsoleMatrixOutput,
@@ -207,12 +282,37 @@ MatrixOutputFormSet = modelformset_factory(
 class ConsoleStereoOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleStereoOutput
-        fields = ['dante_number', 'stereo_type', 'name', 'omni_out']
+        fields = ['dante_number', 'stereo_type', 'name', 'omni_out', 'default_record', 'default_record_color']
         widgets = {
             'dante_number': forms.NumberInput(attrs={
                 'style': 'width: 20px !important; text-align: center;',
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['default_record_color'].widget.attrs.update({
+            'style': 'width: 80px; text-align: center;',
+            'class': 'bg-white text-black rounded-sm font-mono',
+            'placeholder': '#RRGGBB',
+            'pattern': '#[0-9A-Fa-f]{6}',
+            'title': 'Hex color like #FF0000, or leave blank for no seed',
+        })
+
+    def clean_default_record_color(self):
+        """POL-02: validate hex format at the form boundary. Empty string allowed.
+
+        Defence-in-depth: matches _HEX_COLOR_RE at planner/views.py:6259 and
+        the Plan-03 picker-add validator. Mirrors the threat-T-05-02-01
+        mitigation in this plan's threat_model.
+        """
+        import re
+        value = (self.cleaned_data.get('default_record_color') or '').strip()
+        if value and not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise forms.ValidationError(
+                f"Color must be empty or #RRGGBB hex, got: {value!r}"
+            )
+        return value
 
 
 #----------Device dropdowns--------
