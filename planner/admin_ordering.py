@@ -83,6 +83,11 @@ def ordered_get_app_list(request, app_label=None):
         'deviceevent',
         'projectsnmpconfig',
         'switchportsnapshot',
+        # ConsoleImport audit history — hidden from sidebar (issue #6).
+        # The Phase 2 CSV-import flow still writes rows here for audit; only
+        # the admin sidebar link is suppressed. Re-enable by removing from this
+        # set when the changelist 500 is investigated.
+        'consoleimport',
     }
     
     # Define the correct order with proper groupings
@@ -162,7 +167,6 @@ def ordered_get_app_list(request, app_label=None):
         # Multitrack Session Builder (50 — bottom of sidebar)
         'multitracksession': 50,
         'multitracktemplate': 51,        # NEW — Phase 3
-        'consoleimport': 52,             # bumped from 51 to keep grouping order
     }
     
     for app in app_list:
