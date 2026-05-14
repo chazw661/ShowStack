@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-14T00:02:48.200Z"
-last_activity: 2026-05-14 -- Plan 04-06 complete: nuendo_live form gates removed atomically (commit c53a9ce)
+last_updated: "2026-05-14T12:00:00.000Z"
+last_activity: 2026-05-14 -- Plan 04-03 complete: Mac-saved Nuendo Live 3 template fixture committed; 04-02 exporter refactored to handle Mac+Windows shapes
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 19
-  percent: 86
+  completed_plans: 20
+  percent: 91
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 04 (Nuendo Live Export) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Last activity: 2026-05-14 -- Plan 04-06 complete: nuendo_live form gates removed atomically (commit c53a9ce, 26 lines deleted across forms.py + new_session.html)
+Last activity: 2026-05-14 -- Plan 04-03 complete: Mac-saved Nuendo Live 3 template fixture committed (c79808a); 04-02 exporter refactored (d7075d2) to handle both Mac shape (no Audio MFolderTrack) and Windows shape; loader switched to recover-mode parser for Nuendo's control-byte UTF-16 idiom; test predicate refined to spec-correct uniqueness (obj-with-class bodies + RuntimeID/ID; <root> and class-less <obj> are reference anchors, not duplicates)
 
-Progress: [█████████░] 86%
+Progress: [██████████] 91%
 
 ## Roadmap Summary
 
