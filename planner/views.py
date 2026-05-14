@@ -6328,15 +6328,35 @@ def multitrack_reorder(request, session_id):
                 'error': 'ordered_ids must include every track in the session exactly once.'
             }, status=400)
 
-        # Reassign track_number 1..N. bulk_update is one SQL statement.
+        # Reassign track_number 1..N. Two-phase inside a transaction
+        # because MultitrackTrack has unique_together = [('session',
+        # 'track_number')]: a single-pass bulk_update would hit an
+        # intermediate state where two tracks share the same number
+        # (every reorder swap triggers this) and the IntegrityError
+        # would roll the whole statement back.
+        #
+        # Phase 1 shifts every track to a unique value above the final
+        # 1..N range, so phase 2 can assign 1..N without colliding.
+        # track_number is a PositiveIntegerField (CHECK >= 0), so we
+        # can't negate — we offset by 1_000_000 instead. Real sessions
+        # have well under that many tracks, leaving the temporary
+        # range collision-free.
+        TRACK_NUMBER_TEMP_OFFSET = 1_000_000
         tracks_by_id = {t.id: t for t in session.tracks.all()}
-        to_update = []
-        for idx, tid in enumerate(ordered_ids, start=1):
-            t = tracks_by_id.get(tid)
-            if t is not None:
-                t.track_number = idx
-                to_update.append(t)
-        MultitrackTrack.objects.bulk_update(to_update, ['track_number'])
+        with transaction.atomic():
+            phase1 = []
+            for t in tracks_by_id.values():
+                t.track_number = t.track_number + TRACK_NUMBER_TEMP_OFFSET
+                phase1.append(t)
+            MultitrackTrack.objects.bulk_update(phase1, ['track_number'])
+
+            phase2 = []
+            for idx, tid in enumerate(ordered_ids, start=1):
+                t = tracks_by_id.get(tid)
+                if t is not None:
+                    t.track_number = idx
+                    phase2.append(t)
+            MultitrackTrack.objects.bulk_update(phase2, ['track_number'])
 
         return JsonResponse({'ok': True})
     except Exception:
