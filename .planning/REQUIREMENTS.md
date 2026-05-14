@@ -39,7 +39,8 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 
 ### Nuendo Live Exporter — NLP
 
-- [ ] **NLP-01**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
+- [x] **NLP-01
+**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
 - [x] **NLP-02
 **: The exported `.nlpr` loads in Nuendo Live 3 without errors.
 - [x] **NLP-03

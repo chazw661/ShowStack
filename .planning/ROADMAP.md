@@ -120,7 +120,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] 04-03-PLAN.md — CHARLIE-OWNED: hand-generate `planner/data/multitrack/nuendo_live_3_template.nlpr` on Windows + Nuendo Live 3 (Wave 1 checkpoint, autonomous=false)
 - [x] 04-04-PLAN.md — Test: NuendoLiveExportIdUniquenessTests + minimal fake fixture (Wave 2, depends on 02)
 - [ ] 04-05-PLAN.md — View + URL: `multitrack_export_nlpr` + `path('multitrack/<id>/export.nlpr/')` (Wave 2, depends on 02 + 03)
-- [ ] 04-06-PLAN.md — Atomic three-place form-gate removal: forms.py:1192-1199 + 1209-1217 + new_session.html:72-78 (Wave 2, parallel)
+- [x] 04-06-PLAN.md — Atomic three-place form-gate removal: forms.py:1192-1199 + 1209-1217 + new_session.html:72-78 (Wave 2, parallel)
 - [ ] 04-07-PLAN.md — Third toolbar button in editor.html (Wave 3, depends on 05)
 
 ### Phase 5: Channel Record Defaults

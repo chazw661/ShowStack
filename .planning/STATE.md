@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-13T23:57:02.263Z"
-last_activity: 2026-05-13 -- Plan 04-04 complete: D-09 ID-uniqueness test shipped (commits a285bb6, c52e25a)
+last_updated: "2026-05-14T00:02:48.200Z"
+last_activity: 2026-05-14 -- Plan 04-06 complete: nuendo_live form gates removed atomically (commit c53a9ce)
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 18
-  percent: 82
+  completed_plans: 19
+  percent: 86
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 04 (Nuendo Live Export) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
-Last activity: 2026-05-13 -- Plan 04-04 complete: D-09 ID-uniqueness test shipped (commits a285bb6, c52e25a)
+Last activity: 2026-05-14 -- Plan 04-06 complete: nuendo_live form gates removed atomically (commit c53a9ce, 26 lines deleted across forms.py + new_session.html)
 
-Progress: [████████░░] 82%
+Progress: [█████████░] 86%
 
 ## Roadmap Summary
 
@@ -102,3 +102,13 @@ relevant plans land:
 - Module-global swap-and-restore pattern in `setUp` / `tearDown` (`nle._TEMPLATE_PATH = FAKE_TEMPLATE`, `nle._TEMPLATE_TREE = None`) — preserves test isolation, restores originals so other tests are unaffected. Verified by `test_reaper_export` still passing 42/42 after the new test module lands.
 - Field-type adjustments to the plan's draft `<action>` test code (invited explicitly by the plan's Notes): `ConsoleAuxOutput.aux_number` and `ConsoleMatrixOutput.matrix_number` are `CharField` (passed as `'1'` not `1`); `ConsoleStereoOutput.stereo_type` choices are `'L'`/`'R'`/`'M'` only (not `'MAIN'`). No deviations — the plan documented these as expected adjustments.
 - Zero migrations, zero schema drift. `python manage.py makemigrations planner --dry-run` → `No changes detected in app 'planner'`.
+
+### From Phase 04 Plan 06 (atomic three-place nuendo_live gate removal)
+
+- Single atomic commit (`c53a9ce`) removes all three Phase 1 belt-and-suspenders gates that disabled `nuendo_live` as a `target_daw` choice on the new-session form. Per RESEARCH Pitfall 6: removing one or two gates in isolation leaves the form half-broken; atomicity is the requirement.
+- Gates removed: (1) `planner/forms.py` `MultitrackSessionForm.__init__` choices-restriction list-comp; (2) `planner/forms.py` `clean_target_daw` method (with ValidationError `'Nuendo Live export ships in v2.0 Phase 4...'`); (3) `planner/templates/planner/multitrack/new_session.html` static `<input type="radio" disabled>` placeholder block.
+- 26 lines deleted across 2 files; 0 lines added. The dynamic `{% for radio in form.target_daw %}` loop at `new_session.html:66-71` is now the sole renderer of the two radios. `MultitrackSession.TARGET_DAW_CHOICES` (`planner/models.py:978-981`) drives the form's choices unmodified — both `reaper` and `nuendo_live` enabled.
+- T-04-20 mitigation (Django `ChoiceField` validation against `TARGET_DAW_CHOICES`) verified intact via inline form-instantiation check: `target_daw='protools'` (bogus) still rejected. T-04-21 (previously-rejected `nuendo_live` now accepted) is the intended behavior change.
+- No Phase 1 test asserted the removed `ValidationError` (grep verified across `planner/tests/`), so no test updates needed. `python manage.py test planner -v 1` → 95/95 passing in 4.750s after the change.
+- `python manage.py check` → 0 issues. `python manage.py makemigrations planner --dry-run` → No changes detected. Zero migrations.
+- Plan 04-01 had already removed the stale `# disabled in UI until Phase 4 ships` comment from `planner/models.py:980` (RESEARCH Pitfall 6 bonus cleanup), confirmed pre-execution by reading `planner/models.py:977-982`. No additional model-side edit needed.
