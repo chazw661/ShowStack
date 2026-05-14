@@ -136,7 +136,7 @@ Mapping of REQ-IDs to phases (filled in 2026-05-09 by `/gsd-roadmap` for the v2.
 | TPL-02 | Phase 3 | Pending |
 | TPL-03 | Phase 3 | Pending |
 | TPL-04 | Phase 3 | Pending |
-| NLP-01 | Phase 4 | Pending |
+| NLP-01 | Phase 4 | Complete |
 | NLP-02 | Phase 4 | Pending |
 | NLP-03 | Phase 4 | Pending |
 | NLP-04 | Phase 4 | Pending |

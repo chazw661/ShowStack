@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-05-14T14:37:07.870Z"
-last_activity: 2026-05-14 -- Plan 04-05 complete: multitrack_export_nlpr view + URL route wired (905b87d, 7216f52); @staff_member_required matches Phase 1 download pattern per RESEARCH Pitfall 5; 95/95 planner tests pass; D-03 graceful-degradation path live via ExportTemplateError
+status: verifying
+last_updated: "2026-05-14T15:11:30.906Z"
+last_activity: 2026-05-14 -- Plan 04-07 complete: third toolbar export anchor for Nuendo Live (.nlpr) added to planner/templates/planner/multitrack/editor.html (eb5dfaf, +2 lines); reuses mts-btn mts-btn-success (D-13, zero new CSS); always-visible (D-11, no {% if %} on session.target_daw); 95/95 planner tests pass; Phase 04 code-complete (7/7 plans)
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 22
-  completed_plans: 21
-  percent: 95
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -26,10 +26,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 Phase: 04 (Nuendo Live Export) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-05-14 -- Plan 04-05 complete: multitrack_export_nlpr view + URL route wired (905b87d, 7216f52); auth decorator @staff_member_required matches Phase 1 downloads per RESEARCH Pitfall 5; D-03 ExportTemplateError graceful fallback live; 95/95 planner tests pass
+Status: Phase complete — ready for verification
+Last activity: 2026-05-14 -- Plan 04-07 complete: third toolbar export anchor for Nuendo Live (.nlpr) added to editor.html (eb5dfaf); reuses mts-btn mts-btn-success (D-13); always-visible (D-11, no {% if %} wrapper); 95/95 planner tests pass; Phase 04 code-complete (7/7 plans, HUMAN-UAT pending NLP-01..NLP-05)
 
-Progress: [██████████] 95%
+Progress: [██████████] 100%
 
 ## Roadmap Summary
 
@@ -123,3 +123,15 @@ relevant plans land:
 - No Phase 1 test asserted the removed `ValidationError` (grep verified across `planner/tests/`), so no test updates needed. `python manage.py test planner -v 1` → 95/95 passing in 4.750s after the change.
 - `python manage.py check` → 0 issues. `python manage.py makemigrations planner --dry-run` → No changes detected. Zero migrations.
 - Plan 04-01 had already removed the stale `# disabled in UI until Phase 4 ships` comment from `planner/models.py:980` (RESEARCH Pitfall 6 bonus cleanup), confirmed pre-execution by reading `planner/models.py:977-982`. No additional model-side edit needed.
+
+### From Phase 04 Plan 07 (toolbar button — Phase 04 code-complete)
+
+- `planner/templates/planner/multitrack/editor.html` gains one new `<a class="mts-btn mts-btn-success" href="{% url 'planner:multitrack_export_nlpr' session.id %}">Export to Nuendo Live (.nlpr)</a>` anchor inserted immediately after the existing Reaper Track Template anchor (between the previous line 81 and the closing `</div>` of `mts-toolbar-actions`). +2 lines, zero deletions. Single atomic commit `eb5dfaf` (`feat(04-07)`).
+- D-11 honored: no `{% if %}` wrapper on `session.target_daw`. All three export buttons (`.RPP` success / `.RTrackTemplate` secondary / `.nlpr` success) render for every session regardless of `target_daw`. Matches the Phase 1 posture of the two Reaper anchors; `target_daw`'s semantic meaning is now "default for new sessions / template signaling" (Phase 3) rather than "what buttons appear."
+- D-13 honored: zero new CSS classes. The `.nlpr` anchor reuses the existing `mts-btn mts-btn-success` pair from the `.RPP` sibling. Phase 4 ships no CSS-edit at all.
+- D-14 honored: single `.nlpr` button — no separate "Nuendo Live track template" variant. Nuendo Live has no track-archive format like full Nuendo's `.npr` (spec §"Nuendo Live (.nlpr)").
+- Deliberate divergence from the `.RTrackTemplate` sibling: no `title=` attribute on the new anchor. Rationale: `.nlpr` is self-explanatory as a Nuendo Live filename; `.RTrackTemplate` needed the "import via Track menu" hint because engineers wouldn't recognize that extension. The `.RPP` anchor (also success-styled, also full-export) also has no `title=`.
+- End-to-end render verified: `render_to_string('planner/multitrack/editor.html', ctx)` with a minimal context produces HTML containing both `Export to Nuendo Live (.nlpr)` and the reversed URL `/multitrack/1/export.nlpr/`. No `NoReverseMatch`.
+- `python manage.py check` → 0 issues. `python manage.py makemigrations planner --dry-run` → No changes detected. Zero migrations (template-only edit). `python manage.py test planner -v 0` → **95/95** passing in 4.649s — Phase 1 Reaper byte-stable contract intact; Plan 04-04 D-09 ID-uniqueness intact.
+- **Phase 04 code-complete:** all 7 plans across 3 waves shipped. Wave 1 (parallel) — Plans 01/02/03/04 (model + lxml + comment, exporter, fixture, ID-uniqueness test). Wave 2 — Plan 05 (view + URL). Wave 3 (parallel) — Plans 06/07 (form gate removal, toolbar button).
+- **HUMAN-UAT for NLP-01..NLP-05 is now unblocked.** Charlie's Mac + Nuendo Live 3 round-trip is the only remaining gate before `/gsd-transition` or `/gsd-complete-phase` can mark Phase 04 done. NLP-06 (ID/RuntimeID uniqueness) is already fully verified via Plan 04-04's `test_ids_unique`.
