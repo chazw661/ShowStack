@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-14T12:00:00.000Z"
-last_activity: 2026-05-14 -- Plan 04-03 complete: Mac-saved Nuendo Live 3 template fixture committed; 04-02 exporter refactored to handle Mac+Windows shapes
+last_updated: "2026-05-14T14:37:07.870Z"
+last_activity: 2026-05-14 -- Plan 04-05 complete: multitrack_export_nlpr view + URL route wired (905b87d, 7216f52); @staff_member_required matches Phase 1 download pattern per RESEARCH Pitfall 5; 95/95 planner tests pass; D-03 graceful-degradation path live via ExportTemplateError
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 20
-  percent: 91
+  completed_plans: 21
+  percent: 95
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 ## Current Position
 
 Phase: 04 (Nuendo Live Export) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
-Last activity: 2026-05-14 -- Plan 04-03 complete: Mac-saved Nuendo Live 3 template fixture committed (c79808a); 04-02 exporter refactored (d7075d2) to handle both Mac shape (no Audio MFolderTrack) and Windows shape; loader switched to recover-mode parser for Nuendo's control-byte UTF-16 idiom; test predicate refined to spec-correct uniqueness (obj-with-class bodies + RuntimeID/ID; <root> and class-less <obj> are reference anchors, not duplicates)
+Last activity: 2026-05-14 -- Plan 04-05 complete: multitrack_export_nlpr view + URL route wired (905b87d, 7216f52); auth decorator @staff_member_required matches Phase 1 downloads per RESEARCH Pitfall 5; D-03 ExportTemplateError graceful fallback live; 95/95 planner tests pass
 
-Progress: [██████████] 91%
+Progress: [██████████] 95%
 
 ## Roadmap Summary
 
@@ -102,6 +102,17 @@ relevant plans land:
 - Module-global swap-and-restore pattern in `setUp` / `tearDown` (`nle._TEMPLATE_PATH = FAKE_TEMPLATE`, `nle._TEMPLATE_TREE = None`) — preserves test isolation, restores originals so other tests are unaffected. Verified by `test_reaper_export` still passing 42/42 after the new test module lands.
 - Field-type adjustments to the plan's draft `<action>` test code (invited explicitly by the plan's Notes): `ConsoleAuxOutput.aux_number` and `ConsoleMatrixOutput.matrix_number` are `CharField` (passed as `'1'` not `1`); `ConsoleStereoOutput.stereo_type` choices are `'L'`/`'R'`/`'M'` only (not `'MAIN'`). No deviations — the plan documented these as expected adjustments.
 - Zero migrations, zero schema drift. `python manage.py makemigrations planner --dry-run` → `No changes detected in app 'planner'`.
+
+### From Phase 04 Plan 05 (HTTP entry point — view + URL route)
+
+- `planner/views.py` gains `multitrack_export_nlpr(request, session_id)` (95 net new lines: import + section-header comment + view body) immediately after `multitrack_export_rtracktemplate`. Mirrors the Phase 1 `multitrack_export_rpp` pattern at `:6875-6919` line-for-line with three deltas: calls `build_nlpr(session)`, wraps the call in `try/except ExportTemplateError` (D-03 graceful fallback to `editor.html` with banner copy `'Nuendo Live export is unavailable on this server — bundled template missing or malformed. Contact support.'`), and uses `application/xml; charset=utf-8` + lowercase `.nlpr` filename.
+- Auth decorator: `@staff_member_required` — RESEARCH Pitfall 5 verified current Phase 1 state (downloads kept legacy gate; CR-01/CR-02 retightened only AJAX mutate endpoints `set_color`/`set_label`/`set_enabled`/`remove_track`/reorder). Decision documented in-source via the section-header comment so future readers don't accidentally drift from Phase 1's sibling.
+- `planner/urls.py` gains one route: `path('multitrack/<int:session_id>/export.nlpr/', views.multitrack_export_nlpr, name='multitrack_export_nlpr')` slotted immediately after the two existing Reaper file-download routes. `reverse('planner:multitrack_export_nlpr', args=[42])` returns `/audiopatch/multitrack/42/export.nlpr/`.
+- Both error paths (no-enabled-tracks AND `ExportTemplateError`) use the IDENTICAL `_editor_context(...)` shape Phase 1 used at `:6900-6912`; only the `export_error` string differs. Keeps the editor template's context contract uniform across all export attempts.
+- Atomic commits: `905b87d` (Task 1: view) + `7216f52` (Task 2: URL). No deletions in either commit (`git diff --diff-filter=D HEAD~1 HEAD` empty for both).
+- Zero migrations. `python manage.py makemigrations planner --dry-run` → `No changes detected in app 'planner'`. View + URL only.
+- `python manage.py check` → 0 issues. Full `planner` suite 95/95 passing in 4.745s. `planner.tests.test_reaper_export` 42/42 (Phase 1 byte-stable Reaper contract intact). `planner.tests.test_nuendo_live_export` 3/3 (Plan 04 D-09 ID-uniqueness + bonus structural checks intact).
+- Plan 04-07 (toolbar button) is now unblocked — the `reverse()` URL is stable and reachable today via direct hit. The `.nlpr` button needs only one `<a>` anchor in `editor.html` per D-11 / D-13.
 
 ### From Phase 04 Plan 06 (atomic three-place nuendo_live gate removal)
 
