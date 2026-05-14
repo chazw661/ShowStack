@@ -96,7 +96,7 @@ class MultitrackReorderRegressionTests(TestCase):
             response.status_code, 200,
             f'Expected 200, got {response.status_code}: {response.content!r}',
         )
-        self.assertEqual(response.json(), {'ok': True})
+        self.assertIs(response.json().get('ok'), True)
 
         # Reload from DB and confirm the new numbering.
         t1.refresh_from_db()
@@ -130,3 +130,28 @@ class MultitrackReorderRegressionTests(TestCase):
             self.session.tracks.order_by('track_number').values_list('id', flat=True)
         )
         self.assertEqual(ids_in_order, new_order)
+
+    def test_reorder_flips_track_order_mode_to_custom(self):
+        """A successful reorder must switch the session into 'custom' mode.
+
+        Without this, _editor_context and _ordered_enabled_tracks
+        re-sort by source channel / Dante number on the next render
+        and export, silently discarding the engineer's drag order.
+        Fixture starts in 'console' mode (see setUpTestData).
+        """
+        t1, t2, t3 = self.tracks
+        self.assertEqual(self.session.track_order_mode, 'console')
+
+        response = self.client.post(
+            f'/audiopatch/multitrack/{self.session.id}/reorder/',
+            data=json.dumps({'ordered_ids': [t3.id, t1.id, t2.id]}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {'ok': True, 'track_order_mode': 'custom'},
+        )
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.track_order_mode, 'custom')

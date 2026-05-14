@@ -6372,7 +6372,16 @@ def multitrack_reorder(request, session_id):
                     phase2.append(t)
             MultitrackTrack.objects.bulk_update(phase2, ['track_number'])
 
-        return JsonResponse({'ok': True})
+            # Flip to 'custom' so the editor render and Reaper/Nuendo exports
+            # honor the engineer's drag order. Without this, _editor_context
+            # and _ordered_enabled_tracks re-sort by source channel / Dante
+            # number and the reorder is invisible everywhere except the row
+            # numbers we just rewrote.
+            if session.track_order_mode != 'custom':
+                session.track_order_mode = 'custom'
+                session.save(update_fields=['track_order_mode'])
+
+        return JsonResponse({'ok': True, 'track_order_mode': session.track_order_mode})
     except Exception:
         _multitrack_logger.exception('multitrack_reorder failed')
         return JsonResponse({'error': 'Server error.'}, status=500)
