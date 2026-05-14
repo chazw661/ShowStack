@@ -1189,15 +1189,6 @@ class MultitrackSessionForm(forms.ModelForm):
         else:
             self.fields['template'].queryset = MultitrackTemplate.objects.none()
 
-        # Disable Nuendo Live in Phase 1 (UI-SPEC: "(coming v2.0)").
-        # Restrict the field's choices so any submitted nuendo_live fails the
-        # built-in "Select a valid choice" validation. The template still
-        # renders a visible-but-disabled radio so users see it's coming.
-        # `clean_target_daw` remains as belt + suspenders.
-        self.fields['target_daw'].choices = [
-            c for c in self.fields['target_daw'].choices if c[0] != 'nuendo_live'
-        ]
-
         # Required-asterisk styling (UI-SPEC: required fields show *)
         for fname in ('name', 'console', 'target_daw', 'feed_source', 'track_order_mode'):
             if fname in self.fields:
@@ -1205,16 +1196,6 @@ class MultitrackSessionForm(forms.ModelForm):
 
         self.fields['recorder_capacity'].required = False
         self.fields['notes'].required = False
-
-    def clean_target_daw(self):
-        """Phase 1 ships Reaper only; Nuendo Live arrives in Phase 4."""
-        value = self.cleaned_data.get('target_daw')
-        if value == 'nuendo_live':
-            raise forms.ValidationError(
-                'Nuendo Live export ships in v2.0 Phase 4. '
-                'Pick Reaper for now.'
-            )
-        return value
 
     def clean_name(self):
         """MTS-02 unique-per-project name validation.
