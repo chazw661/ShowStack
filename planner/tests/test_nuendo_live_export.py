@@ -172,17 +172,30 @@ class NuendoLiveExportIdUniquenessTests(_SessionFixtureMixin, TestCase):
         nle._TEMPLATE_TREE = self._orig_tree
 
     def test_ids_unique(self):
-        """D-09 / NLP-06: collect every ID attr and RuntimeID/ID
-        int-value in the output; assert the set is the same size as
-        the list (no duplicates).
+        """D-09 / NLP-06 — spec line 290: every `ID` attribute on
+        actual `<obj class='...'>` bodies AND every `RuntimeID`/`ID`
+        int-value must be unique within the document.
+
+        Steinberg's serialization uses TWO reference-anchor patterns
+        that intentionally mirror an object body's ID:
+          - `<root name="..." ID="N"/>` — declaration-table anchor
+          - `<obj name="..." ID="N"/>` (no @class) — member reference
+        Both point to the actual `<obj class="..." ID="N">...</obj>`
+        body elsewhere in the tree. They are NOT duplicates of the
+        body's ID — they ARE the body's ID, used as a pointer. Our
+        uniqueness assertion scopes to object bodies (`<obj>` with a
+        `@class`) + `<int name='RuntimeID|ID'>` values, then asserts
+        every anchor has a matching body (reference integrity).
         """
         body = build_nlpr(self.session)
         self.assertIsInstance(body, bytes)
         self.assertIn(b'<', body)  # smoke: looks like XML at all
 
         root = etree.fromstring(body)
+
+        # Uniqueness: <obj class='...'> bodies + RuntimeID/ID values
         ids: list[str] = []
-        for elem in root.xpath("//*[@ID]"):
+        for elem in root.xpath("//obj[@ID and @class]"):
             ids.append(elem.get('ID'))
         for elem in root.xpath(
             "//int[@name='RuntimeID' or @name='ID']"
@@ -193,6 +206,20 @@ class NuendoLiveExportIdUniquenessTests(_SessionFixtureMixin, TestCase):
             duplicates, 0,
             f'Found {duplicates} duplicate IDs in export.\n'
             f'Total IDs scanned: {len(ids)}; unique: {len(set(ids))}.',
+        )
+
+        # Reference integrity: every <root @ID> and every class-less
+        # <obj @ID> anchor must point to an <obj @ID @class> body.
+        body_ids = {el.get('ID') for el in root.xpath("//obj[@ID and @class]")}
+        anchor_ids = (
+            {el.get('ID') for el in root.xpath("//root[@ID]")}
+            | {el.get('ID') for el in root.xpath("//obj[@ID and not(@class)]")}
+        )
+        orphan_refs = anchor_ids - body_ids
+        self.assertFalse(
+            orphan_refs,
+            f'Reference anchors without matching <obj class=...> body: '
+            f'{sorted(orphan_refs)}',
         )
 
     def test_track_count_matches_enabled(self):

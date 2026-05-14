@@ -64,9 +64,10 @@ _TEMPLATE_TREE: etree._ElementTree | None = None
 
 class ExportTemplateError(Exception):
     """Raised when the bundled .nlpr template is missing, malformed, or
-    does not contain exactly one Audio MFolderTrack with a single seed
-    MAudioTrackEvent. Caught by the view layer (D-03) which renders
-    editor.html with an export_error banner instead of returning 500.
+    does not contain exactly one seed MAudioTrackEvent inside a
+    <list name='Tracks'> container. Caught by the view layer (D-03)
+    which renders editor.html with an export_error banner instead of
+    returning 500.
     """
 
 
@@ -81,6 +82,15 @@ def _load_template():
     Parses the template once and caches the parsed tree. Each caller
     gets a deepcopy so mutations never leak back into the cache
     (RESEARCH Pitfall 3).
+
+    Uses lxml's recover-mode parser because real Nuendo Live 3 output
+    embeds raw control bytes (e.g. 0x01-0x08) inside `wide="true"`
+    attribute values — Nuendo's UTF-16 storage idiom that XML 1.0
+    strict mode forbids. The recovery parser preserves tree structure;
+    the affected bytes live in metadata strings the exporter never
+    deep-copies into output (the seed track itself is clean ASCII).
+    huge_tree disables libxml2's security caps so 60KB+ Mac-saved
+    fixtures parse without surprises.
     """
     global _TEMPLATE_TREE
     if _TEMPLATE_TREE is None:
@@ -89,7 +99,12 @@ def _load_template():
                 f'Nuendo Live template missing: {_TEMPLATE_PATH}'
             )
         try:
-            _TEMPLATE_TREE = etree.parse(str(_TEMPLATE_PATH))
+            parser = etree.XMLParser(recover=True, huge_tree=True)
+            _TEMPLATE_TREE = etree.parse(str(_TEMPLATE_PATH), parser)
+            if _TEMPLATE_TREE.getroot() is None:
+                raise ExportTemplateError(
+                    'Nuendo Live template parse produced empty tree'
+                )
         except etree.XMLSyntaxError as exc:
             raise ExportTemplateError(
                 f'Nuendo Live template malformed: {exc}'
@@ -102,23 +117,45 @@ def _load_template():
 # ──────────────────────────────────────────────────────────────────
 
 
-def _find_audio_folder(root):
-    """RESEARCH Pattern 2 — locate <obj class='MFolderTrack'> whose
-    inner Name is 'Audio' (NOT 'Input/Output Channels').
+def _find_seed_and_container(root):
+    """Locate the seed MAudioTrackEvent and its <list name='Tracks'>
+    container. Works for both Nuendo Live 3 layouts:
+
+      - Windows-saved templates: seed lives inside
+        MFolderTrack[name='Audio']/<list name='Tracks'>/MAudioTrackEvent
+      - Mac-saved templates: seed lives directly inside the top-level
+        MTrackList/<list name='Tracks'>/MAudioTrackEvent (no Audio
+        folder — Nuendo Live 3 on Mac does not create one by default)
+
+    Strategy: find THE MAudioTrackEvent first (template invariant:
+    exactly one seed), then use its parent as the injection container.
+    The container is always <list name='Tracks'> — just at different
+    nesting depths.
+
+    Returns (seed_element, container_list_element).
     """
-    folders = root.xpath(
-        ".//obj[@class='MFolderTrack']"
-        "[.//string[@name='Name' and @value='Audio']]"
-    )
-    if not folders:
+    seeds = root.xpath(".//obj[@class='MAudioTrackEvent']")
+    if len(seeds) != 1:
         raise ExportTemplateError(
-            "No MFolderTrack named 'Audio' found in template"
+            f"Template must contain exactly 1 MAudioTrackEvent seed "
+            f"(found {len(seeds)})"
         )
-    if len(folders) > 1:
+    seed = seeds[0]
+    container = seed.getparent()
+    if (
+        container is None
+        or container.tag != 'list'
+        or container.get('name') != 'Tracks'
+    ):
+        actual = (
+            f"<{container.tag} name={container.get('name')!r}>"
+            if container is not None else 'None'
+        )
         raise ExportTemplateError(
-            f"Multiple Audio folders found ({len(folders)})"
+            f"Seed MAudioTrackEvent must be a direct child of "
+            f"<list name='Tracks'>; got {actual}"
         )
-    return folders[0]
+    return seed, container
 
 
 def _scan_max_id(root):
@@ -273,8 +310,10 @@ def build_nlpr(session) -> bytes:
 
     Algorithm (RESEARCH Pattern 1 / spec §template-injection):
       1. Load the bundled template (cached, deepcopy per call).
-      2. Locate the Audio MFolderTrack and its single seed
-         <obj class='MAudioTrackEvent'>.
+      2. Locate the seed <obj class='MAudioTrackEvent'> and its
+         <list name='Tracks'> container. Works for both Windows-saved
+         (seed nested in MFolderTrack[name='Audio']) and Mac-saved
+         (seed directly in top-level MTrackList) templates.
       3. Compute the next free ID as max(existing) + 1000 (D-08).
       4. For each enabled track in session order:
             a. deepcopy the seed
@@ -293,25 +332,12 @@ def build_nlpr(session) -> bytes:
 
     Raises:
         ExportTemplateError — bundled fixture missing / malformed /
-            doesn't parse to exactly one Audio MFolderTrack with a
-            single seed MAudioTrackEvent. Caller catches and renders
-            editor.html with export_error (D-03).
+            doesn't parse to exactly one MAudioTrackEvent seed inside
+            a <list name='Tracks'> container. Caller catches and
+            renders editor.html with export_error (D-03).
     """
     root = _load_template()
-    audio_folder = _find_audio_folder(root)
-
-    track_list = audio_folder.find(".//list[@name='Tracks']")
-    if track_list is None:
-        raise ExportTemplateError(
-            "Audio MFolderTrack has no <list name='Tracks'> child"
-        )
-    seed_tracks = track_list.findall("./obj[@class='MAudioTrackEvent']")
-    if len(seed_tracks) != 1:
-        raise ExportTemplateError(
-            f"Template Audio folder must contain exactly 1 "
-            f"MAudioTrackEvent seed (found {len(seed_tracks)})"
-        )
-    seed_track = seed_tracks[0]
+    seed_track, track_list = _find_seed_and_container(root)
 
     next_id = _scan_max_id(root) + 1000
 
