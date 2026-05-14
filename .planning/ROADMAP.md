@@ -132,7 +132,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Creating a new MultitrackSession pre-checks (enables) tracks whose source channel has `default_record=True`
   3. New tracks seeded from a channel with `default_record_color` set use that hex as the seed color, while still allowing per-track override afterward
 **Plans**: 3 plans
-- [ ] 05-01-PLAN.md — Model fields + migration 0155 on all 4 ConsoleChannel models (Wave 1)
+- [x] 05-01-PLAN.md — Model fields + migration 0155 on all 4 ConsoleChannel models (Wave 1)
 - [ ] 05-02-PLAN.md — Admin form surface: expose default_record + default_record_color on 4 channel ModelForms with hex validator (Wave 2, depends on 05-01)
 - [ ] 05-03-PLAN.md — Seed logic in multitrack_add_tracks + regression test suite (Wave 2, depends on 05-01, parallel with 05-02)
 **UI hint**: yes
@@ -150,4 +150,4 @@ in parallel, but solo dev means sequential execution per the spec's order.)
 | 2. Console CSV Import | 0/4 | Planned (4 plans, 3 waves) | - |
 | 3. Multitrack Templates | 0/0 | Not started | - |
 | 4. Nuendo Live Export | 7/7 | Code-complete — HUMAN-UAT pending NLP-01..NLP-05 | 2026-05-14 |
-| 5. Channel Record Defaults | 0/3 | Planned (3 plans, 2 waves) | - |
+| 5. Channel Record Defaults | 1/3 | In progress (Plan 01 complete 2026-05-14; Wave 2 unblocked) | - |

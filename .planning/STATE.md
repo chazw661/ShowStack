@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: "2026-05-14T20:00:00.000Z"
-last_activity: 2026-05-14 -- Phase 04 (Nuendo Live Export) closed: 7 plans shipped, HUMAN-UAT 5/5 required tests passed after fix 9857aec (resolved_yamaha_name → override-only). 95/95 planner tests green; Phase 1 Reaper byte-stability intact; zero migrations
+status: in_progress
+last_updated: "2026-05-14T19:46:35Z"
+last_activity: 2026-05-14 — Phase 05 Plan 01 complete (commits 8003594 + f4c0a99). Added default_record (bool, default=True) and default_record_color (CharField max_length=7, blank=True, default='') to all 4 ConsoleChannel models; migration 0155_channel_record_defaults shipped with 8 AddField ops, single dep on 0154_multitrack_template. `manage.py check planner` clean; `makemigrations --dry-run` clean. Wave 2 (Plans 05-02 + 05-03) unblocked.
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 22
-  completed_plans: 22
-  percent: 80
+  total_plans: 25
+  completed_plans: 23
+  percent: 92
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 05 — Channel Record Defaults (next; Phase 04 complete 2026-05-14)
+**Current focus:** Phase 05 — Channel Record Defaults (in progress; Plan 01 complete 2026-05-14)
 
 ## Current Position
 
-Phase: 5 (next — not started)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-14 — Phase 04 closed after HUMAN-UAT approval
+Phase: 5 (in progress — 1 of 3 plans complete)
+Plan: 05-01 complete (commits 8003594 + f4c0a99); 05-02 + 05-03 next (Wave 2)
+Status: Plan 05-01 done
+Last activity: 2026-05-14 — Phase 05 Plan 01 complete (channel model fields + migration 0155)
 
-Progress: [████████░░] 80% (4 of 5 phases complete)
+Progress: [█████████░] 92% (23 of 25 plans complete)
 
 ## Roadmap Summary
 
@@ -135,3 +135,16 @@ relevant plans land:
 - `python manage.py check` → 0 issues. `python manage.py makemigrations planner --dry-run` → No changes detected. Zero migrations (template-only edit). `python manage.py test planner -v 0` → **95/95** passing in 4.649s — Phase 1 Reaper byte-stable contract intact; Plan 04-04 D-09 ID-uniqueness intact.
 - **Phase 04 code-complete:** all 7 plans across 3 waves shipped. Wave 1 (parallel) — Plans 01/02/03/04 (model + lxml + comment, exporter, fixture, ID-uniqueness test). Wave 2 — Plan 05 (view + URL). Wave 3 (parallel) — Plans 06/07 (form gate removal, toolbar button).
 - **HUMAN-UAT for NLP-01..NLP-05 is now unblocked.** Charlie's Mac + Nuendo Live 3 round-trip is the only remaining gate before `/gsd-transition` or `/gsd-complete-phase` can mark Phase 04 done. NLP-06 (ID/RuntimeID uniqueness) is already fully verified via Plan 04-04's `test_ids_unique`.
+
+### From Phase 05 Plan 01 (channel model fields + migration 0155)
+
+- `planner/models.py` gains two new fields on each of the 4 ConsoleChannel models (`ConsoleInput`, `ConsoleAuxOutput`, `ConsoleMatrixOutput`, `ConsoleStereoOutput`): `default_record = models.BooleanField(default=True, help_text=...POL-01...)` and `default_record_color = models.CharField(max_length=7, blank=True, default='', help_text=...POL-02...)`. Inserted immediately after each class's existing `color = ...` line so seed-recording metadata clusters visually. +40 lines, zero deletions. Single atomic commit `8003594` (`feat(05-01)`).
+- `planner/migrations/0155_channel_record_defaults.py` shipped — auto-generated via `manage.py makemigrations planner --name channel_record_defaults`. Exactly 8 AddField operations (2 per model × 4 models), single dependency on `('planner', '0154_multitrack_template')`, no AUTH_USER_MODEL swap (neither new field references User). +53 lines (new file), zero deletions. Single atomic commit `f4c0a99` (`feat(05-01)`).
+- Backwards-compat backfill: every existing channel row receives `default_record=TRUE` and `default_record_color=''`. Net change in user-observable behaviour at deploy time: zero (today's picker already enables tracks by default; today's color seeding is already empty). The True default was chosen so engineers opt OUT obvious-don't-record channels (talkback, monitor sends) once at the channel level rather than uncheck them on every new session.
+- `default_record_color` exactly mirrors `MultitrackTrack.color_override` (`max_length=7`, `blank=True`, `default=''`) so Plan 05-03's seed-copy step is a one-liner `track.color_override = channel.default_record_color` with no None-handling. No `choices=` on `default_record_color` — engineers can paint with custom hex via the swatch picker's custom-color path.
+- No model-layer hex validator (defence-in-depth pattern from Phase 1's `MultitrackTrack.color_override`): validation lives at the form layer (Plan 05-02 — Django form `clean_default_record_color` will run `_HEX_COLOR_RE`) and the AJAX boundary (Plan 05-03's `add_tracks` view re-checks). The 4 form classes Plan 05-02 needs to touch: `ConsoleInputForm`, `ConsoleAuxOutputForm`, `ConsoleMatrixOutputForm`, `ConsoleStereoOutputForm` in `planner/forms.py`.
+- `python manage.py check planner` → 0 issues. `python manage.py makemigrations planner --dry-run` → "No changes detected in app 'planner'" after Task 2 (proves migration captures the full model delta).
+- No `python manage.py migrate` invocation per CLAUDE.md rule — Charlie runs migrations against prod via Railway's `railway.json` `startCommand` `migrate` step on next deploy. PG 11+ `ALTER TABLE ADD COLUMN` with a constant default is a metadata-only operation, sub-second across all Railway-tenant projects regardless of console table size.
+- `ConsoleImport` (audit-snapshot model) intentionally left untouched per plan instruction — only the 4 channel models received the new fields.
+- The existing `color` field (Yamaha palette NAME, used by Rivage/Nuendo exporters and CSV import) preserved unchanged on all 4 models — `default_record_color` is a separate hex CharField, distinct from the palette-name field. Two different fields, two different consumers.
+- **Wave 2 unblocked:** Plans 05-02 (admin form surface) and 05-03 (seed logic in `multitrack_add_tracks` + regression tests) can run in parallel against the new schema. Both will read `channel.default_record` and `channel.default_record_color` directly on the 4 channel model classes — no type-dispatch needed.
