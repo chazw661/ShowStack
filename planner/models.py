@@ -856,6 +856,16 @@ class ConsoleInput(models.Model):
     )
 
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
+    default_record = models.BooleanField(
+        default=True,
+        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
+    )
+    default_record_color = models.CharField(
+        max_length=7,
+        blank=True,
+        default='',
+        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+    )
 
     group = models.CharField(max_length=100, blank=True, null=True)
     dca = models.CharField(max_length=100, blank=True, null=True)
@@ -894,6 +904,16 @@ class ConsoleAuxOutput(models.Model):
     omni_in = models.CharField(max_length=100, blank=True)
     omni_out = models.CharField(max_length=100, blank=True)
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
+    default_record = models.BooleanField(
+        default=True,
+        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
+    )
+    default_record_color = models.CharField(
+        max_length=7,
+        blank=True,
+        default='',
+        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+    )
 
     def __str__(self):
         return f"Aux {self.aux_number} - {self.name}"
@@ -913,6 +933,16 @@ class ConsoleMatrixOutput(models.Model):
     destination = models.CharField(max_length=100, blank=True, null=True)
     omni_out = models.CharField(max_length=100, blank=True, null=True)
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
+    default_record = models.BooleanField(
+        default=True,
+        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
+    )
+    default_record_color = models.CharField(
+        max_length=7,
+        blank=True,
+        default='',
+        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+    )
 
     def __str__(self):
         return f"Matrix {self.matrix_number} - {self.name}"
@@ -929,6 +959,16 @@ class ConsoleStereoOutput(models.Model):
     dante_number = models.IntegerField(null=True, blank=True)
     omni_out = models.CharField(max_length=100, blank=True, null=True)
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
+    default_record = models.BooleanField(
+        default=True,
+        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
+    )
+    default_record_color = models.CharField(
+        max_length=7,
+        blank=True,
+        default='',
+        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+    )
 
     def __str__(self):
         return f"{self.get_stereo_type_display()} - {self.name}"
