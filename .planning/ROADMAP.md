@@ -52,6 +52,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Nuendo Live Export** - `.nlpr` template-injection exporter with Yamaha→Farb color mapping (completed 2026-05-14)
 - [x] **Phase 5: Channel Record Defaults** - `default_record` and `default_record_color` seed flags on `ConsoleChannel` (code-complete 2026-05-14)
 
+---
+
+## v2.1 — Collaboration & User Management
+
+- [ ] **Phase 6: Trusted Crew Rosters** - Owner-defined named groups of users that get auto-added to projects without email acceptance (closes friction for repeat collaborators)
+
 ## Phase Details
 
 ### Phase 1: Core Sessions, Track Editor & Reaper Export
@@ -135,6 +141,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 05-01-PLAN.md — Model fields + migration 0155 on all 4 ConsoleChannel models (Wave 1)
 - [x] 05-02-PLAN.md — Admin form surface: expose default_record + default_record_color on 4 channel ModelForms with hex validator (Wave 2, depends on 05-01)
 - [x] 05-03-PLAN.md — Seed logic in multitrack_add_tracks + regression test suite (Wave 2, depends on 05-01, parallel with 05-02)
+**UI hint**: yes
+
+---
+
+### Phase 6: Trusted Crew Rosters
+**Milestone**: v2.1 (Collaboration & User Management) — first phase
+**Goal**: Owner can define named crew rosters (e.g. "Concert team", "Corporate team") and bulk-add an entire crew to a project as ProjectMembers without the email-acceptance round-trip
+**Depends on**: Existing `accounts` app invitation flow (planner.Invitation, ProjectMember)
+**Requirements**: Defined in 06-SPEC.md
+**Plans**: TBD (created by /gsd-plan-phase after spec lock)
 **UI hint**: yes
 
 ## Progress
