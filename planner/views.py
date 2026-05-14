@@ -6324,8 +6324,22 @@ def multitrack_reorder(request, session_id):
         if len(ordered_ids) != len(set(ordered_ids)):
             return JsonResponse({'error': 'Duplicate track IDs in ordered_ids.'}, status=400)
         if set(ordered_ids) != existing_ids:
+            posted = set(ordered_ids)
+            missing = sorted(existing_ids - posted)
+            extra = sorted(posted - existing_ids)
+            _multitrack_logger.warning(
+                'multitrack_reorder set mismatch session=%s '
+                'posted_count=%d existing_count=%d missing=%s extra=%s',
+                session_id, len(posted), len(existing_ids), missing, extra,
+            )
             return JsonResponse({
-                'error': 'ordered_ids must include every track in the session exactly once.'
+                'error': 'ordered_ids must include every track in the session exactly once.',
+                'debug': {
+                    'posted_count': len(posted),
+                    'existing_count': len(existing_ids),
+                    'missing_from_post': missing[:10],
+                    'extra_in_post': extra[:10],
+                },
             }, status=400)
 
         # Reassign track_number 1..N. Two-phase inside a transaction
