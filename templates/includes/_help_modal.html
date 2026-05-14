@@ -1,0 +1,458 @@
+<div id="help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:none;align-items:center;justify-content:center;">
+  <div id="help-modal" style="background:#1e1e2e;border:1px solid #2e2e4e;border-radius:10px;width:780px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #2e2e4e;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;color:#888;">You are on:</span>
+        <select id="help-module-select" onchange="helpSwitchModule(this.value)"
+          style="background:#2a2a3e;border:1px solid #3e3e5e;border-radius:6px;color:#ccc;font-size:13px;padding:4px 8px;cursor:pointer;">
+          <option value="mic">Mic Tracker</option>
+          <option value="comm-config">COMM Config</option>
+          <option value="comm-belt">COMM Belt Pack</option>
+          <option value="amp">Amplifier Assignments</option>
+          <option value="cable">PA Cable Schedule</option>
+          <option value="soundvision">Soundvision</option>
+          <option value="checklist">Audio Checklist</option>
+          <option value="ip">IP Management</option>
+          <option value="report">System Report</option>
+        </select>
+      </div>
+      <button onclick="helpClose()" style="background:none;border:none;color:#888;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:4px;">&#x2715;</button>
+    </div>
+
+    <div style="display:flex;flex:1;min-height:0;">
+
+      <div id="help-fn-list" style="width:200px;flex-shrink:0;border-right:1px solid #2e2e4e;padding:10px 0;overflow-y:auto;background:#181828;"></div>
+
+      <div id="help-steps-pane" style="flex:1;padding:20px 24px;overflow-y:auto;"></div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.help-fn-item {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+}
+.help-fn-item:hover { background: #1e1e2e; color: #ccc; }
+.help-fn-item.active { background: #1e1e2e; color: #4a9eff; font-weight: 500; border-left-color: #4a9eff; }
+.help-step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+.help-step-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #1a3a5e; color: #4a9eff;
+  font-size: 11px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px;
+}
+.help-step-text { font-size: 13px; color: #ccc; line-height: 1.55; }
+.help-step-text em { font-style: normal; font-weight: 500; color: #e0e0e0; }
+.help-tip {
+  margin-top: 14px; padding: 10px 12px;
+  background: #1a1a2e; border-radius: 6px;
+  border: 1px solid #2e2e4e;
+  font-size: 11px; color: #888; line-height: 1.5;
+}
+.help-tip strong { color: #aaa; }
+</style>
+
+<script>
+const HELP_DATA = {
+  mic: {
+    fns: [
+      {
+        name: "Add a presenter slot",
+        desc: "Create an ordered queue entry for an upcoming presenter.",
+        steps: [
+          "Open <em>Mic Tracker</em> from your project's module list.",
+          "Click <em>Add Slot</em> at the top of the queue.",
+          "Enter the presenter's full name and assign a wireless mic channel number.",
+          "Click <em>Save</em>. The slot appears at the bottom of the queue.",
+          "Drag the slot to its correct rundown position using the handle on the left."
+        ],
+        tip: "Slot order reflects the live handoff sequence — keep it in rundown order at all times."
+      },
+      {
+        name: "Attach a presenter photo",
+        desc: "Add a headshot to a slot for fast ID at front-of-house.",
+        steps: [
+          "Click the slot you want to update.",
+          "Click the photo placeholder (or the existing photo).",
+          "Select an image file from your device.",
+          "The photo saves automatically — no submit button needed."
+        ]
+      },
+      {
+        name: "Update mic status",
+        desc: "Mark a mic as active, on standby, or returned after use.",
+        steps: [
+          "Locate the presenter slot in the queue.",
+          "Click the status badge on the right side of the slot.",
+          "Select <em>Active</em>, <em>Standby</em>, or <em>Returned</em>.",
+          "The status updates live for all users viewing the project."
+        ],
+        tip: "Status changes push in real-time — no page refresh needed for other crew members."
+      },
+      {
+        name: "Reorder the queue",
+        desc: "Adjust slot order to match a last-minute rundown change.",
+        steps: [
+          "Click and hold the drag handle on the far left of any slot.",
+          "Drag the slot to its new position.",
+          "Release — order saves automatically."
+        ]
+      }
+    ]
+  },
+  "comm-config": {
+    fns: [
+      {
+        name: "Add a device",
+        desc: "Register an Arcadia mainframe, FSII beltpack, or antenna.",
+        steps: [
+          "Open <em>COMM Config</em> and go to the <em>Devices</em> tab.",
+          "Click <em>Add Device</em>.",
+          "Select the device type from the dropdown.",
+          "Enter a device label and hardware sys_id if known.",
+          "Click <em>Save</em>."
+        ],
+        tip: "The Arcadia sys_id must match the value from the factory PouchDB — not the default placeholder."
+      },
+      {
+        name: "Assign ports",
+        desc: "Set port functions and labels for each device.",
+        steps: [
+          "Go to the <em>Ports</em> tab.",
+          "Select a device from the left panel.",
+          "For each port, choose a function: <em>2W, 4W, SA,</em> or <em>PGM</em>.",
+          "Enter a plain-language label for the port.",
+          "Changes save per port automatically."
+        ]
+      },
+      {
+        name: "Configure partylines",
+        desc: "Define channel groups shared across multiple users.",
+        steps: [
+          "Go to the <em>Partylines</em> tab.",
+          "Click <em>Add Partyline</em>.",
+          "Enter a name (e.g., 'Show Call', 'Lighting').",
+          "Select the member ports for this partyline.",
+          "Click <em>Save</em>."
+        ]
+      },
+      {
+        name: "Define roles",
+        desc: "Create named user roles and assign their channel access.",
+        steps: [
+          "Go to the <em>Roles</em> tab.",
+          "Click <em>Add Role</em>.",
+          "Enter the role name (e.g., 'FOH', 'A2', 'Director').",
+          "Assign the channels this role can access.",
+          "Click <em>Save</em>."
+        ]
+      },
+      {
+        name: "Export a .cca file",
+        desc: "Generate a Clear-Com config archive ready to import into Designer.",
+        steps: [
+          "Confirm <em>Ports</em>, <em>Partylines</em>, and <em>Roles</em> are fully configured.",
+          "Click <em>Export .cca</em>.",
+          "The archive downloads to your device.",
+          "In Clear-Com Designer, go to <em>File &gt; Import</em> and select the file.",
+          "Verify the import preview before applying to hardware."
+        ],
+        tip: "Always validate the import in Designer on a test frame before deploying to show hardware."
+      }
+    ]
+  },
+  "comm-belt": {
+    fns: [
+      {
+        name: "Add a belt pack role",
+        desc: "Create a named crew position with its own channel layout.",
+        steps: [
+          "Click <em>Add Belt Pack</em>.",
+          "Enter a role name (e.g., FOH, A2, Playback).",
+          "Select the manufacturer.",
+          "Click <em>Save</em>."
+        ]
+      },
+      {
+        name: "Assign channels",
+        desc: "Configure which channels each role hears and talks on.",
+        steps: [
+          "Select a belt pack role from the list.",
+          "Click <em>Add Channel</em>.",
+          "Enter the channel label, key assignment (A or B), and listen level.",
+          "Repeat for each channel.",
+          "Changes save automatically."
+        ]
+      },
+      {
+        name: "Export a belt pack sheet",
+        desc: "Download a printable assignment reference for your crew.",
+        steps: [
+          "Click <em>Export PDF</em>.",
+          "The sheet downloads formatted by role.",
+          "Print and leave a copy on the intercom rack at load-in."
+        ]
+      }
+    ]
+  },
+  amp: {
+    fns: [
+      {
+        name: "Add an amplifier",
+        desc: "Register an amp to a rack location.",
+        steps: [
+          "Click <em>Add Amplifier</em>.",
+          "Enter the model name and rack location.",
+          "Enter the number of output channels.",
+          "Click <em>Save</em>."
+        ]
+      },
+      {
+        name: "Assign outputs to zones",
+        desc: "Map each amp channel to a speaker zone or enclosure.",
+        steps: [
+          "Select an amplifier from the list.",
+          "For each output, enter the zone name and speaker destination.",
+          "For NL8 outputs, select the correct pin pair.",
+          "Changes save per output."
+        ],
+        tip: "Use the same zone naming convention as in the PA Cable Schedule to keep the two in agreement."
+      },
+      {
+        name: "Export the assignment sheet",
+        desc: "Generate a printable amp-to-zone reference.",
+        steps: [
+          "Click <em>Export</em>.",
+          "The sheet downloads grouped by rack location.",
+          "Use it to label amp racks or include it in your System Report."
+        ]
+      }
+    ]
+  },
+  cable: {
+    fns: [
+      {
+        name: "Add a cable run",
+        desc: "Document a single loudspeaker cable from amp output to speaker.",
+        steps: [
+          "Click <em>Add Run</em>.",
+          "Enter the source (amp and output number) and destination.",
+          "Enter the cable length and connector type.",
+          "Click <em>Save</em>. A unique run ID is assigned automatically."
+        ]
+      },
+      {
+        name: "Add a fan-out leg",
+        desc: "Model a single amp output feeding multiple enclosures.",
+        steps: [
+          "Select an existing run.",
+          "Click <em>Add Leg</em>.",
+          "Enter the leg's destination and cable length.",
+          "Repeat for each enclosure.",
+          "Safety margin indicators update automatically."
+        ],
+        tip: "The safety flag turns amber when cable resistance approaches the threshold for your load impedance."
+      },
+      {
+        name: "Export the schedule",
+        desc: "Download the cable schedule as PDF or CSV.",
+        steps: [
+          "Click <em>Export PDF</em> for a formatted show-file version.",
+          "Click <em>Export CSV</em> for procurement or label-maker workflows.",
+          "Run numbers in the CSV map directly to cable tags."
+        ]
+      }
+    ]
+  },
+  soundvision: {
+    fns: [
+      {
+        name: "Upload a prediction",
+        desc: "Import an L'Acoustics Soundvision PDF export.",
+        steps: [
+          "Click <em>Upload Prediction</em>.",
+          "Select your Soundvision PDF export from your device.",
+          "ShowStack parses the file and displays the array summary.",
+          "Review the parsed arrays and correct any label mismatches."
+        ],
+        tip: "Upload the array summary PDF. SPL map images are attached as-is."
+      },
+      {
+        name: "View array data",
+        desc: "Inspect hang positions, splay angles, and coverage targets.",
+        steps: [
+          "After uploading, array data appears in the Soundvision pane.",
+          "Each array lists its hang position and splay configuration.",
+          "Click an array to expand enclosure-level detail."
+        ]
+      },
+      {
+        name: "Include in System Report",
+        desc: "Add prediction data to the project's consolidated PDF.",
+        steps: [
+          "Navigate to <em>System Report</em> from the project menu.",
+          "Enable the <em>Soundvision</em> section toggle.",
+          "Generate the report — array data and SPL images will be included."
+        ]
+      }
+    ]
+  },
+  checklist: {
+    fns: [
+      {
+        name: "Work through a tab",
+        desc: "Complete role-specific tasks at load-in or showtime.",
+        steps: [
+          "Select the <em>Prep</em>, <em>FOH</em>, or <em>A2</em> tab for your role.",
+          "Check off each item as completed.",
+          "Progress saves automatically — a page reload won't lose your state.",
+          "Work top-to-bottom. The list is in intended sequence."
+        ],
+        tip: "Prep is for load-in day. FOH and A2 tabs are designed to be run at showtime, in order."
+      },
+      {
+        name: "Add a custom item",
+        desc: "Add a show-specific task not in the default list.",
+        steps: [
+          "Go to the tab where the item belongs.",
+          "Click <em>Add Item</em> at the bottom of the list.",
+          "Type the task text.",
+          "Press <em>Enter</em> or click <em>Save</em>."
+        ]
+      },
+      {
+        name: "Reset for next show",
+        desc: "Clear all check states without losing your item list.",
+        steps: [
+          "Click <em>Reset Checklist</em>.",
+          "Confirm the reset in the dialog.",
+          "All check states clear. Your item list stays intact."
+        ]
+      }
+    ]
+  },
+  ip: {
+    fns: [
+      {
+        name: "Add a device",
+        desc: "Register a networked device with its IP and subnet.",
+        steps: [
+          "Click <em>Add Device</em>.",
+          "Enter the device name, IP address, subnet mask, and gateway.",
+          "Set the address type to <em>Static</em> or <em>DHCP</em>.",
+          "Click <em>Save</em>. Duplicate IPs are flagged immediately."
+        ],
+        tip: "Document gateway and VLAN info in the Notes field — critical for on-site troubleshooting."
+      },
+      {
+        name: "Edit an entry",
+        desc: "Update a device's IP or label after a network change.",
+        steps: [
+          "Click any row in the IP table to open it.",
+          "Update the relevant fields.",
+          "Click <em>Save</em>."
+        ]
+      },
+      {
+        name: "Resolve a conflict",
+        desc: "Fix a duplicate IP assignment flagged by the system.",
+        steps: [
+          "Conflicting rows are marked with a red indicator automatically.",
+          "Click the flagged row to open it.",
+          "Correct the IP address.",
+          "Click <em>Save</em>. The flag clears once the conflict is resolved."
+        ]
+      }
+    ]
+  },
+  report: {
+    fns: [
+      {
+        name: "Generate a system report",
+        desc: "Export a consolidated PDF covering all selected module data.",
+        steps: [
+          "Click <em>System Report</em> from the project menu.",
+          "Toggle which sections to include: Amps, Cables, IPs, COMM Config, Soundvision.",
+          "Click <em>Generate PDF</em>.",
+          "The report downloads with a cover page and all selected sections."
+        ],
+        tip: "Export at load-in for a pre-show record and again post-show for an as-built archive."
+      },
+      {
+        name: "Create a trimmed report",
+        desc: "Export only the sections relevant to a specific audience.",
+        steps: [
+          "Open <em>System Report</em>.",
+          "Disable sections you don't need.",
+          "Click <em>Generate PDF</em>.",
+          "Only enabled sections appear in the output."
+        ]
+      }
+    ]
+  }
+};
+
+let helpCurrentModule = '{{ help_module|default:"mic" }}';
+let helpCurrentFn = 0;
+
+function helpRenderFnList() {
+  const fns = HELP_DATA[helpCurrentModule].fns;
+  document.getElementById('help-fn-list').innerHTML =
+    '<div style="font-size:10px;font-weight:500;color:#555;text-transform:uppercase;letter-spacing:0.06em;padding:0 14px 8px;">Functions</div>' +
+    fns.map((f, i) =>
+      `<div class="help-fn-item${i === helpCurrentFn ? ' active' : ''}" onclick="helpSelectFn(${i})">${f.name}</div>`
+    ).join('');
+}
+
+function helpRenderSteps() {
+  const fn = HELP_DATA[helpCurrentModule].fns[helpCurrentFn];
+  document.getElementById('help-steps-pane').innerHTML =
+    `<div style="font-size:14px;font-weight:500;color:#e0e0e0;margin-bottom:4px;">${fn.name}</div>` +
+    `<div style="font-size:12px;color:#888;margin-bottom:16px;line-height:1.5;">${fn.desc}</div>` +
+    fn.steps.map((s, i) =>
+      `<div class="help-step"><div class="help-step-num">${i+1}</div><div class="help-step-text">${s}</div></div>`
+    ).join('') +
+    (fn.tip ? `<div class="help-tip"><strong>Tip: </strong>${fn.tip}</div>` : '');
+}
+
+function helpSelectFn(i) {
+  helpCurrentFn = i;
+  helpRenderFnList();
+  helpRenderSteps();
+}
+
+function helpSwitchModule(mod) {
+  helpCurrentModule = mod;
+  helpCurrentFn = 0;
+  helpRenderFnList();
+  helpRenderSteps();
+}
+
+function helpOpen() {
+  helpCurrentFn = 0;
+  document.getElementById('help-module-select').value = helpCurrentModule;
+  helpRenderFnList();
+  helpRenderSteps();
+  document.getElementById('help-overlay').style.display = 'flex';
+}
+
+function helpClose() {
+  document.getElementById('help-overlay').style.display = 'none';
+}
+
+document.getElementById('help-overlay').addEventListener('click', function(e) {
+  if (e.target === this) helpClose();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') helpClose();
+});
+</script>
