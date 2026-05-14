@@ -6851,6 +6851,7 @@ def multitrack_capacity_check(request, session_id):
 # ──────────────────────────────────────────────────────────────────
 
 from .utils.reaper_export import build_rpp, build_rtracktemplate
+from .utils.nuendo_live_export import build_nlpr, ExportTemplateError
 
 
 def _safe_filename(name):
@@ -6957,6 +6958,100 @@ def multitrack_export_rtracktemplate(request, session_id):
     response = HttpResponse(body, content_type='text/plain; charset=utf-8')
     response['Content-Disposition'] = (
         f'attachment; filename="{_safe_filename(session.name)}.RTrackTemplate"'
+    )
+    return response
+
+
+# ──────────────────────────────────────────────────────────────────
+# Multitrack — Nuendo Live file-download view (Phase 4 / Plan 05)
+# Delegates .nlpr generation to planner.utils.nuendo_live_export.
+# Auth gate matches Phase 1's download views (@staff_member_required)
+# per Phase 1 CR-01/CR-02 fix scope — those retightened only AJAX
+# mutate endpoints, NOT downloads. Confirmed at planner/views.py:6875,
+# :6923 as of 2026-05-13.
+# ──────────────────────────────────────────────────────────────────
+
+
+@staff_member_required
+def multitrack_export_nlpr(request, session_id):
+    """GET: download a Nuendo Live 3 .nlpr file for this session.
+
+    Verifies NLP-01..06:
+      - NLP-01: button-triggered download via the bundled empty-template
+        injection path (delegated to build_nlpr).
+      - NLP-02..05: name + Farb correctness (HUMAN-UAT — engineer opens
+        the file in Nuendo Live 3 to confirm).
+      - NLP-06: ID/RuntimeID uniqueness — covered by
+        planner.tests.test_nuendo_live_export.
+
+    Response shape: HttpResponse, Content-Type
+    application/xml; charset=utf-8, Content-Disposition attachment with
+    filename <_safe_filename(session.name)>.nlpr.
+
+    Failure modes:
+      - No current_project on the request → 302 to /.
+      - session_id not in current_project → 302 to multitrack_dashboard
+        (IDOR-safe combined filter).
+      - Session has no enabled tracks → render editor.html with
+        export_error (D-03 reused from Phase 1 pattern at :6900-6912).
+      - Bundled fixture missing / malformed (build_nlpr raises
+        ExportTemplateError) → render editor.html with the D-03
+        banner copy.
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+
+    session = MultitrackSession.objects.filter(
+        id=session_id, project=current_project
+    ).select_related('console').first()
+    if not session:
+        return redirect('planner:multitrack_dashboard')
+
+    if not _has_enabled_tracks(session):
+        enabled_tracks_qs = session.tracks.filter(
+            enabled=True,
+        ).order_by('track_number')
+        return render(
+            request,
+            'planner/multitrack/editor.html',
+            _editor_context(
+                session,
+                tracks=enabled_tracks_qs,
+                current_project=current_project,
+                export_error='This session has no enabled tracks. '
+                             'Enable at least one track to export.',
+                auto_open_picker=False,
+            ),
+        )
+
+    try:
+        body = build_nlpr(session)
+    except ExportTemplateError:
+        # CONTEXT.md D-03: missing or malformed bundled fixture →
+        # render editor with an export_error banner instead of 500.
+        enabled_tracks_qs = session.tracks.filter(
+            enabled=True,
+        ).order_by('track_number')
+        return render(
+            request,
+            'planner/multitrack/editor.html',
+            _editor_context(
+                session,
+                tracks=enabled_tracks_qs,
+                current_project=current_project,
+                export_error='Nuendo Live export is unavailable on '
+                             'this server — bundled template missing '
+                             'or malformed. Contact support.',
+                auto_open_picker=False,
+            ),
+        )
+
+    response = HttpResponse(
+        body, content_type='application/xml; charset=utf-8',
+    )
+    response['Content-Disposition'] = (
+        f'attachment; filename="{_safe_filename(session.name)}.nlpr"'
     )
     return response
 

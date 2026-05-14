@@ -134,9 +134,10 @@ urlpatterns = [
     path('multitrack/track/set-enabled/', views.multitrack_set_enabled, name='multitrack_set_enabled'),
     path('multitrack/track/remove/', views.multitrack_remove_track, name='multitrack_remove_track'),
 
-    # File downloads (Plan 04)
+    # File downloads (Plan 04 + Phase 4 Plan 05)
     path('multitrack/<int:session_id>/export.rpp/', views.multitrack_export_rpp, name='multitrack_export_rpp'),
     path('multitrack/<int:session_id>/export.rtracktemplate/', views.multitrack_export_rtracktemplate, name='multitrack_export_rtracktemplate'),
+    path('multitrack/<int:session_id>/export.nlpr/', views.multitrack_export_nlpr, name='multitrack_export_nlpr'),
 
     # Dashboard
     path('admin/', admin.site.urls),

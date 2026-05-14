@@ -27,6 +27,7 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - [x] Multitrack Session Builder — core sessions, track editor, Reaper export (Phase 1, 2026-05-13)
 - [x] Console CSV import (Yamaha CL/QL/Rivage PM channel labels) — Phase 2, 2026-05-13
 - [x] Multitrack Templates — owner-scoped, cross-console portable (Phase 3, 2026-05-13)
+- [x] Nuendo Live `.nlpr` export — `lxml` template-injection with Yamaha→Farb color mapping (Phase 4, 2026-05-14)
 
 ### Active
 
@@ -99,4 +100,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-12 — Phase 1 complete: Core Sessions, Track Editor & Reaper Export (6/6 plans, 21/21 requirements, all 5 HUMAN-UAT items passed). End-to-end MultitrackSession → .RPP / .RTrackTemplate working in browser. Two server-side authorization gaps from code review (CR-01/CR-02) deferred to /gsd-code-review-fix before push to Railway.*
+*Last updated: 2026-05-14 — Phase 4 complete: Nuendo Live Export (7/7 plans, 6/6 requirements NLP-01..06, HUMAN-UAT 5/5 required tests passed). `.nlpr` export end-to-end via lxml template-injection; Mac-saved bundled fixture (D-02 amended); exporter handles both Mac and Windows fixture shapes (`_find_seed_and_container` + recover-mode parser, d7075d2); `resolved_yamaha_name` uses color_override only (symmetric with editor swatch + Reaper, 9857aec). 4 of 5 v2.0 phases complete; Phase 5 (Channel Record Defaults) is next.*

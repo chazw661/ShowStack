@@ -39,12 +39,18 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 
 ### Nuendo Live Exporter — NLP
 
-- [ ] **NLP-01**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
-- [ ] **NLP-02**: The exported `.nlpr` loads in Nuendo Live 3 without errors.
-- [ ] **NLP-03**: Each track's name renders correctly inside Nuendo Live (outer `Name` and inner `DeviceAttributes → Name → String` match).
-- [ ] **NLP-04**: Each track's color renders correctly using a `Farb` palette index (Yamaha CL/QL → Farb mapping table from the spec).
-- [ ] **NLP-05**: Tracks with no assigned color export with `Farb` omitted, so they use the Nuendo Live default appearance.
-- [ ] **NLP-06**: All `ID` and `RuntimeID` values in the exported file are unique within the document.
+- [x] **NLP-01
+**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
+- [x] **NLP-02
+**: The exported `.nlpr` loads in Nuendo Live 3 without errors.
+- [x] **NLP-03
+**: Each track's name renders correctly inside Nuendo Live (outer `Name` and inner `DeviceAttributes → Name → String` match).
+- [x] **NLP-04
+**: Each track's color renders correctly using a `Farb` palette index (Yamaha CL/QL → Farb mapping table from the spec).
+- [x] **NLP-05
+**: Tracks with no assigned color export with `Farb` omitted, so they use the Nuendo Live default appearance.
+- [x] **NLP-06
+**: All `ID` and `RuntimeID` values in the exported file are unique within the document.
 
 ### Console CSV Import — CSV
 
@@ -130,12 +136,12 @@ Mapping of REQ-IDs to phases (filled in 2026-05-09 by `/gsd-roadmap` for the v2.
 | TPL-02 | Phase 3 | Pending |
 | TPL-03 | Phase 3 | Pending |
 | TPL-04 | Phase 3 | Pending |
-| NLP-01 | Phase 4 | Pending |
+| NLP-01 | Phase 4 | Complete |
 | NLP-02 | Phase 4 | Pending |
 | NLP-03 | Phase 4 | Pending |
 | NLP-04 | Phase 4 | Pending |
 | NLP-05 | Phase 4 | Pending |
-| NLP-06 | Phase 4 | Pending |
+| NLP-06 | Phase 4 | Complete |
 | POL-01 | Phase 5 | Pending |
 | POL-02 | Phase 5 | Pending |
 

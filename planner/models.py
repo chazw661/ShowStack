@@ -768,6 +768,19 @@ YAMAHA_COLOR_CHOICES = [
     ('White',    'White'),
 ]
 
+# Phase 4 D-04: reverse-lookup from hex → Yamaha palette name. Built
+# once at module load by mining YAMAHA_TO_HEX. 'Off' and 'White' both
+# map to None in YAMAHA_TO_HEX and are excluded — engineers who paint
+# those colors via the swatch picker fall through to D-04 step 2
+# (source.color) or step 3 (None → omit Farb).
+from .utils.reaper_export import YAMAHA_TO_HEX as _YAMAHA_TO_HEX
+_HEX_TO_YAMAHA_NAME = {
+    hex_val.lower(): name
+    for name, hex_val in _YAMAHA_TO_HEX.items()
+    if hex_val is not None  # skip 'Off' (None) and 'White' (None)
+}
+
+
 class Console(models.Model):
     project = models.ForeignKey('Project', on_delete=models.CASCADE, null=True, blank=True)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
@@ -977,7 +990,7 @@ class MultitrackSession(models.Model):
     """
     TARGET_DAW_CHOICES = [
         ('reaper', 'Reaper'),
-        ('nuendo_live', 'Nuendo Live'),  # disabled in UI until Phase 4 ships
+        ('nuendo_live', 'Nuendo Live'),  # both options available; new sessions default to 'reaper'
     ]
     FEED_SOURCE_CHOICES = [
         ('console_dante', 'Console Dante card'),
@@ -1103,6 +1116,36 @@ class MultitrackTrack(models.Model):
             return int(src.dante_number)
         except (ValueError, TypeError):
             return None
+
+    @property
+    def resolved_yamaha_name(self):
+        """D-04 (amended 2026-05-14): Yamaha palette name for Nuendo Farb
+        mapping, or None.
+
+        Resolution:
+          1. color_override hex → reverse-lookup against YAMAHA_TO_HEX.
+             If override is a non-palette hex (e.g. '#A1B2C3'), return
+             None → exporter omits <int name='Farb'/> per D-05.
+          2. None.
+
+        The editor's color swatch is the single source of truth for
+        "what color exports". The original D-04 step 2 fell back to
+        resolved_source.color (Phase 2 channel-level color field), but
+        that pulled Rivage-imported channel colors into Nuendo even
+        when the editor showed no override — surprising the engineer.
+        HUMAN-UAT on 2026-05-14 surfaced this; resolution is now
+        symmetric with resolved_color: override-only.
+
+        Returning None signals 'omit Farb' to the Nuendo exporter.
+        Phase 1's resolved_color (hex) is intentionally NOT touched
+        here — that contract underpins the byte-stable Reaper exporter.
+        """
+        if self.color_override:
+            name = _HEX_TO_YAMAHA_NAME.get(self.color_override.lower())
+            if name:
+                return name
+            return None  # D-05: hex override but not a palette match
+        return None
 
     def __str__(self):
         return f"#{self.track_number} {self.resolved_label}"
