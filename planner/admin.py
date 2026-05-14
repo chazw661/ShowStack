@@ -1013,11 +1013,11 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                     return redirect('admin:console_template_library')
         
         # GET request - show template library
-        accessible_projects = Project.objects.filter(
-            models.Q(owner=request.user) |
-            models.Q(projectmember__user=request.user)
-        ).distinct()
-        all_templates = Console.objects.filter(is_template=True, project__in=accessible_projects).select_related('project').annotate(
+        # Scope to projects the current user OWNS only (issue #4).
+        # Member-only access to someone else's project does not surface their
+        # templates here; only the project owner's own templates are visible.
+        owned_projects = Project.objects.filter(owner=request.user)
+        all_templates = Console.objects.filter(is_template=True, project__in=owned_projects).select_related('project').annotate(
             inputs_count=Count('consoleinput', distinct=True),
             aux_count=Count('consoleauxoutput', distinct=True),
             matrix_count=Count('consolematrixoutput', distinct=True),
