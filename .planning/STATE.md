@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: verifying
-last_updated: "2026-05-14T15:11:30.906Z"
-last_activity: 2026-05-14 -- Plan 04-07 complete: third toolbar export anchor for Nuendo Live (.nlpr) added to planner/templates/planner/multitrack/editor.html (eb5dfaf, +2 lines); reuses mts-btn mts-btn-success (D-13, zero new CSS); always-visible (D-11, no {% if %} on session.target_daw); 95/95 planner tests pass; Phase 04 code-complete (7/7 plans)
+status: ready_to_plan
+last_updated: "2026-05-14T20:00:00.000Z"
+last_activity: 2026-05-14 -- Phase 04 (Nuendo Live Export) closed: 7 plans shipped, HUMAN-UAT 5/5 required tests passed after fix 9857aec (resolved_yamaha_name → override-only). 95/95 planner tests green; Phase 1 Reaper byte-stability intact; zero migrations
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 22
   completed_plans: 22
-  percent: 100
+  percent: 80
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 04 — Nuendo Live Export
+**Current focus:** Phase 05 — Channel Record Defaults (next; Phase 04 complete 2026-05-14)
 
 ## Current Position
 
-Phase: 04 (Nuendo Live Export) — EXECUTING
-Plan: 7 of 7
-Status: Phase complete — ready for verification
-Last activity: 2026-05-14 -- Plan 04-07 complete: third toolbar export anchor for Nuendo Live (.nlpr) added to editor.html (eb5dfaf); reuses mts-btn mts-btn-success (D-13); always-visible (D-11, no {% if %} wrapper); 95/95 planner tests pass; Phase 04 code-complete (7/7 plans, HUMAN-UAT pending NLP-01..NLP-05)
+Phase: 5 (next — not started)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-14 — Phase 04 closed after HUMAN-UAT approval
 
-Progress: [██████████] 100%
+Progress: [████████░░] 80% (4 of 5 phases complete)
 
 ## Roadmap Summary
 

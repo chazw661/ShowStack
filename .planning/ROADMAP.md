@@ -49,7 +49,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Core Sessions, Track Editor & Reaper Export** - Models, full track editor, and `.RPP` / `.RTrackTemplate` export
 - [ ] **Phase 2: Console CSV Import** - Yamaha CL/QL and Rivage PM channel-label CSV ingestion into `ConsoleChannel`
 - [x] **Phase 3: Multitrack Templates** - Save/apply reusable session structures, matching existing ShowStack template UX
-- [ ] **Phase 4: Nuendo Live Export** - `.nlpr` template-injection exporter with Yamaha→Farb color mapping
+- [x] **Phase 4: Nuendo Live Export** - `.nlpr` template-injection exporter with Yamaha→Farb color mapping (completed 2026-05-14)
 - [ ] **Phase 5: Channel Record Defaults** - `default_record` and `default_record_color` seed flags on `ConsoleChannel`
 
 ## Phase Details

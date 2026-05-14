@@ -1,14 +1,14 @@
 ---
-status: partial
+status: resolved
 phase: 04-nuendo-live-export
 source: [04-VERIFICATION.md]
 started: 2026-05-14T15:55:33Z
-updated: 2026-05-14T19:30:00Z
+updated: 2026-05-14T20:00:00Z
 ---
 
 ## Current Test
 
-Test 5 (default appearance for non-palette tracks) — awaiting re-test after fix 9857aec.
+All required tests passed (1-5). Test 6 (optional D-03 missing-fixture banner) deferred.
 
 ## Tests
 
@@ -32,7 +32,7 @@ result: passed (2026-05-14 — ch1 Red, ch2 Orange, ch3 Yellow, ch4 Yellow all r
 expected: Tracks with non-palette hex overrides OR `Off`/`White`/missing source.color render with Nuendo's default gray appearance (no Farb element emitted).
 result: failed initially (2026-05-14) — Pod 1, Pod 2 rendered Green; Vid 1L rendered Pink; ch5-ch8 / Pod 3-4 / VOG / Spare / Vid 1R-Vid 5 rendered Blue. Editor showed all of these as "no color" (slashed-circle swatch). Root cause: `MultitrackTrack.resolved_yamaha_name` D-04 step 2 fell back to `resolved_source.color` (Phase 2 channel-level color field from Rivage CSV import), but the editor's `resolved_color` consults `color_override` only — asymmetry surfaced as editor-vs-export mismatch.
 fix: 9857aec — dropped D-04 step 2; resolution is now override-only (symmetric with `resolved_color`). CONTEXT.md D-04 amended with rationale.
-result: pending re-test (2026-05-14 — Charlie to re-download and re-open in Nuendo Live 3 to confirm Pod 1/2/Vid 1L now render default, and other no-override tracks (ch5-ch8 etc.) also render default)
+result: passed after fix (2026-05-14 — Charlie re-tested and approved; no-override tracks now render default appearance in Nuendo Live 3)
 
 ### 6. (Optional) Exercise the D-03 missing-fixture graceful-degradation path
 expected: Temporarily renaming `planner/data/multitrack/nuendo_live_3_template.nlpr` aside, then clicking the toolbar button, renders `editor.html` with the banner copy "Nuendo Live export is unavailable on this server — bundled template missing or malformed. Contact support." instead of returning 500.
@@ -41,10 +41,10 @@ result: [pending — optional]
 ## Summary
 
 total: 6
-passed: 4
-issues: 1
-pending: 1 (re-test of #5) + 1 (optional #6)
-skipped: 0
+passed: 5
+issues: 0 (1 surfaced + resolved during UAT)
+pending: 0
+skipped: 1 (optional #6 D-03 banner check)
 blocked: 0
 
 ## Gaps
@@ -53,4 +53,4 @@ blocked: 0
 - surfaced: 2026-05-14 during HUMAN-UAT test 5
 - root cause: `resolved_yamaha_name` fell back to `resolved_source.color`, but the editor's `resolved_color` does not — Rivage-imported channel colors flowed to Nuendo without preview
 - fix: commit 9857aec — dropped D-04 step 2; CONTEXT.md D-04 amended
-- status: resolved — awaiting re-test
+- status: resolved (Charlie re-tested and approved 2026-05-14)

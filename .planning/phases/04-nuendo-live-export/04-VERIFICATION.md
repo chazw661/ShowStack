@@ -1,8 +1,16 @@
 ---
 phase: 04-nuendo-live-export
 verified: 2026-05-14T15:55:33Z
-status: human_needed
-score: 6/6 must-haves verified (NLP-06 fully automated; NLP-01..05 require Nuendo Live 3 round-trip)
+status: passed
+status_resolved_at: 2026-05-14T20:00:00Z
+status_history:
+  - status: human_needed
+    at: 2026-05-14T15:55:33Z
+    note: 6/6 must-haves code-verified; NLP-01..05 routed to HUMAN-UAT for Nuendo Live 3 round-trip
+  - status: passed
+    at: 2026-05-14T20:00:00Z
+    note: HUMAN-UAT 5/5 required tests passed (test 6 optional, deferred). One issue surfaced in test 5 (Pod1/Pod2/Vid1L rendered Rivage-import colors) resolved by commit 9857aec — resolved_yamaha_name now uses color_override only, symmetric with editor swatch.
+score: 6/6 must-haves verified (NLP-06 automated; NLP-01..05 human-verified after fix 9857aec)
 overrides_applied: 0
 re_verification:
   previous_status: none
