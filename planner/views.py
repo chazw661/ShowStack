@@ -6671,6 +6671,18 @@ def multitrack_add_tracks(request, session_id):
             .values_list('id', flat=True)
         ) & set(selections.get('stereo', []) or [])
 
+        # POL-01 / POL-02 — bulk-load channel seed fields so each new track can be
+        # seeded with enabled = channel.default_record and color_override =
+        # channel.default_record_color. One query per source_type (4 total),
+        # restricted to the IDs we'll actually use. ConsoleInput/Aux/Matrix/Stereo
+        # all expose the two seed fields after migration 0155.
+        seed_maps = {
+            'input':  {row[0]: (row[1], row[2]) for row in ConsoleInput.objects.filter(id__in=valid_input_ids).values_list('id', 'default_record', 'default_record_color')},
+            'aux':    {row[0]: (row[1], row[2]) for row in ConsoleAuxOutput.objects.filter(id__in=valid_aux_ids).values_list('id', 'default_record', 'default_record_color')},
+            'matrix': {row[0]: (row[1], row[2]) for row in ConsoleMatrixOutput.objects.filter(id__in=valid_matrix_ids).values_list('id', 'default_record', 'default_record_color')},
+            'stereo': {row[0]: (row[1], row[2]) for row in ConsoleStereoOutput.objects.filter(id__in=valid_stereo_ids).values_list('id', 'default_record', 'default_record_color')},
+        }
+
         # Determine starting track_number (D-10 append rule)
         # Note: `Max` is already imported top-of-file (line 9: from django.db.models import Max).
         max_n = (
@@ -6690,11 +6702,19 @@ def multitrack_add_tracks(request, session_id):
             for raw_id in raw_list:
                 if raw_id in valid_ids:
                     max_n += 1
+                    seed_record, seed_hex = seed_maps[src_type].get(raw_id, (True, ''))
+                    # Defence-in-depth (T-05-03-01): drop seed hex if it does
+                    # not match _HEX_COLOR_RE. Bad hex in the DB (legacy data,
+                    # direct SQL edit) must NOT crash the picker-add path.
+                    if seed_hex and not _HEX_COLOR_RE.match(seed_hex):
+                        seed_hex = ''
                     new_rows.append(MultitrackTrack(
                         session=session,
                         track_number=max_n,
                         source_type=src_type,
                         source_id=raw_id,
+                        enabled=bool(seed_record),
+                        color_override=seed_hex,
                     ))
 
         for m in validated_manuals:
