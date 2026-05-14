@@ -1378,16 +1378,6 @@ from django.db import models
 class Device(models.Model):
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
     location = models.ForeignKey('Location', on_delete=models.SET_NULL, null=True, blank=True, related_name='devices')
-    parent_console = models.ForeignKey(          # ← ADD THIS
-        'Console',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='slot_devices',
-        verbose_name="Parent Console",
-        help_text="For slot cards (e.g. Rivage Dante cards) — the console this card belongs to.",
-    )
-    name = models.CharField(max_length=200)
     name = models.CharField(max_length=200)
     input_count = models.PositiveIntegerField(default=0)
     output_count = models.PositiveIntegerField(default=0)
