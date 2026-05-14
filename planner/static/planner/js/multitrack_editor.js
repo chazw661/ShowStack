@@ -72,7 +72,14 @@
       handle: '.mts-drag',
       animation: 150,
       onEnd: function () {
-        const ids = $$('[data-track-id]', list).map(function (el) {
+        // Scope to .mts-track-row containers only. The _track_row.html
+        // partial also stamps data-track-id on inner inputs/swatches/
+        // notes-displays for the AJAX label/color/enabled handlers, so
+        // a bare `[data-track-id]` selector would return 4 nodes per
+        // track and post duplicate IDs (the view's duplicate check
+        // then 400s). Selecting `.mts-track-row[data-track-id]` gives
+        // exactly one element per track in the rendered order.
+        const ids = $$('.mts-track-row[data-track-id]', list).map(function (el) {
           return parseInt(el.dataset.trackId, 10);
         }).filter(function (n) { return !isNaN(n); });
         const sessionId = list.dataset.sessionId;
