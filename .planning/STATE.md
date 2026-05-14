@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-05-14T19:53:22Z"
-last_activity: 2026-05-14 — Phase 05 Plan 02 complete (commit 7121792). Exposed default_record (BooleanField) and default_record_color (#RRGGBB CharField) on all 4 ConsoleChannel ModelForms (ConsoleInputForm/ConsoleAuxOutputForm/ConsoleMatrixOutputForm/ConsoleStereoOutputForm) with consistent 80px-monospace widget styling and a clean_default_record_color server-side hex validator (verbatim duplicate of planner/views.py:6259 _HEX_COLOR_RE). admin.py + admin_ordering.py NOT touched (CLAUDE.md compliance — no new admin-registered models). `manage.py check planner` clean. Plan 05-03 (seed logic in multitrack_add_tracks) next.
+status: completed
+last_updated: "2026-05-14T20:00:26Z"
+last_activity: 2026-05-14 — Phase 05 Plan 03 complete (commits f49ed1e + b23ea10). Wired POL-01 / POL-02 seed logic into multitrack_add_tracks (planner/views.py:6598) via 4-source-type bulk-fetch `seed_maps` keyed by validated channel IDs, with AJAX-boundary _HEX_COLOR_RE defence-in-depth re-validation. Each picker-added MultitrackTrack now seeds enabled=bool(channel.default_record) and color_override=channel.default_record_color (silently dropped to '' on malformed hex). Shipped planner/tests/test_channel_record_defaults.py — 5 tests in ChannelRecordDefaultsSeedTests covering POL-01 both polarities, POL-02 happy path, defence-in-depth silent-drop on direct .update() write of 'not-a-hex', and end-to-end Reaper RPP exporter assertion (seeded #FF8800 → hex_to_peakcol packed value appears in PEAKCOL line). All 48 prior tests (test_reaper_export 42/42, test_nuendo_live_export 3/3, test_multitrack_reorder 3/3) plus Phase 2 console-CSV-import suites still pass. multitrack_duplicate intentionally NOT touched per plan (duplication preserves source state, not re-seed). Phase 5 code-complete; v2.0 milestone reaches 38/38 requirements wired end-to-end pending HUMAN-UAT.
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 25
-  completed_plans: 24
-  percent: 96
+  completed_plans: 25
+  percent: 100
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 05 — Channel Record Defaults (in progress; Plans 01 + 02 complete 2026-05-14)
+**Current focus:** Phase 05 — Channel Record Defaults code-complete; v2.0 milestone code-complete at 38/38 requirements wired (HUMAN-UAT gate remains)
 
 ## Current Position
 
-Phase: 5 (in progress — 2 of 3 plans complete)
-Plan: 05-02 complete (commit 7121792); 05-03 next (Wave 2, seed logic in multitrack_add_tracks)
-Status: Plan 05-02 done
-Last activity: 2026-05-14 — Phase 05 Plan 02 complete (admin form surface for default_record + default_record_color on 4 channel ModelForms)
+Phase: 5 (code-complete — 3 of 3 plans shipped)
+Plan: 05-03 complete (commits f49ed1e + b23ea10). All 3 Phase 05 plans done.
+Status: Phase 05 done; v2.0 milestone code-complete pending HUMAN-UAT
+Last activity: 2026-05-14 — Phase 05 Plan 03 complete (seed logic in multitrack_add_tracks + 5-test regression suite including end-to-end Reaper RPP exporter assertion)
 
-Progress: [█████████▌] 96% (24 of 25 plans complete)
+Progress: [██████████] 100%
 
 ## Roadmap Summary
 
@@ -161,3 +161,23 @@ relevant plans land:
 - Canonical `Meta.fields` tail order (`default_record, default_record_color`) established for any future record-default fields — append-only, no reordering of pre-existing fields, visual column order in inline rows stable for engineers used to today's layout.
 - Phase-level Success Criterion 1 (engineer can set `default_record` and `default_record_color` from the channel admin/edit UI) — DELIVERED end-to-end on next Railway deploy. POL-01 admin surface (boolean toggle visible) and POL-02 admin surface (hex input visible + validated) both in place; requirements ledger will check off POL-01 + POL-02 after Plan 05-03 ships the seed logic that actually consumes them.
 - **Plan 05-03 contract for AJAX defence-in-depth:** the form-layer regex in this plan is a verbatim duplicate of `_HEX_COLOR_RE` at views.py:6259. Plan 03's `add_tracks` AJAX endpoint MUST re-validate at the boundary — do NOT trust admin-form validation has run for API-driven channel edits or legacy DB rows. Suggested pattern: `if channel.default_record_color and _HEX_COLOR_RE.match(channel.default_record_color): track.color_override = channel.default_record_color`.
+
+### From Phase 05 Plan 03 (seed logic in multitrack_add_tracks + 5-test regression suite)
+
+- `planner/views.py` `multitrack_add_tracks` (line 6598) now bulk-loads channel seed fields via 4 `.values_list('id', 'default_record', 'default_record_color')` queries (one per source_type) restricted to the already-validated `valid_input_ids` / `valid_aux_ids` / `valid_matrix_ids` / `valid_stereo_ids` sets. Result is a `seed_maps` dict keyed by source_type string, each value a `{pk: (default_record, default_record_color)}` map of pure tuples (no model-row instantiation cost). +20 lines, single atomic commit `f49ed1e` (`feat(05-03)`).
+- Each new `MultitrackTrack` row in the picker-add inner loop now receives `enabled=bool(seed_record)` and `color_override=seed_hex` via `seed_record, seed_hex = seed_maps[src_type].get(raw_id, (True, ''))`. The defensive `(True, '')` fallback covers the (shouldn't-happen-post-validate) miss case with values that match the pre-Phase-5 default behaviour, so the fallback path is semantically a no-op.
+- Defence-in-depth AJAX-boundary check: `if seed_hex and not _HEX_COLOR_RE.match(seed_hex): seed_hex = ''`. Reuses module-level `_HEX_COLOR_RE` at views.py:6259 (no re-import, no redefinition). Silently drops malformed hex to `''` rather than crashing the picker or leaking unsanitized strings into `MultitrackTrack.color_override`. Closes threat T-05-03-01 (the only meaningful threat in the plan's STRIDE register).
+- Manual-track construction block (lines 6700-6710 pre-edit) untouched — manuals have no source channel to seed from.
+- `multitrack_duplicate` intentionally NOT touched per plan instruction — duplication preserves source-session state as-is, not re-seed from current channel defaults. POL-01 / POL-02 apply only at picker-add time.
+- No re-import of `ConsoleInput / ConsoleAuxOutput / ConsoleMatrixOutput / ConsoleStereoOutput` inside `multitrack_add_tracks` — they're already imported at planner/views.py:61,70 per CLAUDE.md project-rules.
+- `planner/tests/test_channel_record_defaults.py` shipped — 167 lines, 5 tests in `ChannelRecordDefaultsSeedTests(TestCase)`. Single atomic commit `b23ea10` (`test(05-03)`).
+  1. `test_default_record_true_seeds_enabled_true` — POL-01 happy path
+  2. `test_default_record_false_seeds_enabled_false` — POL-01 opt-out
+  3. `test_default_record_color_seeds_color_override` — POL-02 happy path (`#FF8800`)
+  4. `test_malformed_default_record_color_drops_silently` — defence-in-depth: `.update(default_record_color='not-a-hex')` → endpoint 200 + `track.color_override=''` + `track.enabled` unaffected
+  5. `test_seeded_color_appears_in_reaper_export` — end-to-end: `#FF8800` seeded → `multitrack_export_rpp` GET → response body contains `str(hex_to_peakcol('#FF8800'))` (uses the exporter's own helper to derive the expected integer, future-proof against packing-formula refactors)
+- All 5 tests pass in 0.231s. Phase 1 / 2 / 4 prior test suites all green (test_reaper_export 42/42, test_nuendo_live_export 3/3, test_multitrack_reorder 3/3, Phase 2 import suites green) — proves the seed-logic change did NOT break the Phase 1 byte-stable Reaper contract, the Phase 4 NLP-06 ID-uniqueness contract, the Phase 1 reorder-with-unique-constraint fix, or the Phase 2 CSV-import contracts.
+- Two minor planner-side acceptance-criteria miscounts documented as cosmetic-only deviations in 05-03-SUMMARY.md (the `grep -c "seed_maps"` returns 2 not 5 because the 4 dict-comprehension entries don't repeat the variable name on their lines; the `_HEX_COLOR_RE\.(match|fullmatch)` count returns 3 not 4 because the regex *definition* at 6259 is `re.compile`, not a `.match` invocation). Semantic intent (dict literal exists with 4 source-type entries + 1 lookup, defence-in-depth re-validation present in the row loop) fully met and verified by the plan's own inline `<verify>` script.
+- `python manage.py check planner` → 0 issues. Zero migrations (views/tests-only edit). `python manage.py makemigrations planner --dry-run` → No changes detected.
+- **Phase 05 code-complete; v2.0 milestone code-complete at 38/38 requirements wired end-to-end.** All 5 phases of v2.0 shipped: Phase 1 (Core Sessions + Reaper, 21 reqs) → Phase 2 (Console CSV Import, 5 reqs) → Phase 3 (Multitrack Templates, 4 reqs) → Phase 4 (Nuendo Live Export, 6 reqs) → Phase 5 (Channel Record Defaults, 2 reqs).
+- **HUMAN-UAT remains:** Charlie should verify on local dev that (a) toggling `default_record` to False on a ConsoleInput in the Console admin causes the next picker-add to land `enabled=False`, and (b) setting `default_record_color='#3366FF'` paints the next picker-added track blue. Both flows are smoke-covered by the automated suite; UAT is the standard ShowStack gate before `/gsd-complete-milestone`.

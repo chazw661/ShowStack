@@ -50,7 +50,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Console CSV Import** - Yamaha CL/QL and Rivage PM channel-label CSV ingestion into `ConsoleChannel`
 - [x] **Phase 3: Multitrack Templates** - Save/apply reusable session structures, matching existing ShowStack template UX
 - [x] **Phase 4: Nuendo Live Export** - `.nlpr` template-injection exporter with Yamaha→Farb color mapping (completed 2026-05-14)
-- [ ] **Phase 5: Channel Record Defaults** - `default_record` and `default_record_color` seed flags on `ConsoleChannel`
+- [x] **Phase 5: Channel Record Defaults** - `default_record` and `default_record_color` seed flags on `ConsoleChannel` (code-complete 2026-05-14)
 
 ## Phase Details
 
@@ -134,7 +134,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 - [x] 05-01-PLAN.md — Model fields + migration 0155 on all 4 ConsoleChannel models (Wave 1)
 - [x] 05-02-PLAN.md — Admin form surface: expose default_record + default_record_color on 4 channel ModelForms with hex validator (Wave 2, depends on 05-01)
-- [ ] 05-03-PLAN.md — Seed logic in multitrack_add_tracks + regression test suite (Wave 2, depends on 05-01, parallel with 05-02)
+- [x] 05-03-PLAN.md — Seed logic in multitrack_add_tracks + regression test suite (Wave 2, depends on 05-01, parallel with 05-02)
 **UI hint**: yes
 
 ## Progress
@@ -150,4 +150,4 @@ in parallel, but solo dev means sequential execution per the spec's order.)
 | 2. Console CSV Import | 0/4 | Planned (4 plans, 3 waves) | - |
 | 3. Multitrack Templates | 0/0 | Not started | - |
 | 4. Nuendo Live Export | 7/7 | Code-complete — HUMAN-UAT pending NLP-01..NLP-05 | 2026-05-14 |
-| 5. Channel Record Defaults | 2/3 | In progress (Plans 01 + 02 complete 2026-05-14; Plan 03 next) | - |
+| 5. Channel Record Defaults | 3/3 | Code-complete — HUMAN-UAT pending POL-01 + POL-02 picker/admin smoke | 2026-05-14 |

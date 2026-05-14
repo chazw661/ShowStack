@@ -78,8 +78,8 @@ Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; 
 
 ### Polish — POL
 
-- [ ] **POL-01**: Each `ConsoleChannel` carries a `default_record` boolean; new sessions pre-check tracks where `default_record=True` so engineers don't have to re-enable the obvious ones each gig.
-- [ ] **POL-02**: Each `ConsoleChannel` carries a `default_record_color` (hex) used as the seed color for new tracks unless overridden.
+- [x] **POL-01**: Each `ConsoleChannel` carries a `default_record` boolean; new sessions pre-check tracks where `default_record=True` so engineers don't have to re-enable the obvious ones each gig.
+- [x] **POL-02**: Each `ConsoleChannel` carries a `default_record_color` (hex) used as the seed color for new tracks unless overridden.
 
 ## Future Requirements (deferred to v2.1+)
 
@@ -142,7 +142,7 @@ Mapping of REQ-IDs to phases (filled in 2026-05-09 by `/gsd-roadmap` for the v2.
 | NLP-04 | Phase 4 | Pending |
 | NLP-05 | Phase 4 | Pending |
 | NLP-06 | Phase 4 | Complete |
-| POL-01 | Phase 5 | Pending |
-| POL-02 | Phase 5 | Pending |
+| POL-01 | Phase 5 | Complete |
+| POL-02 | Phase 5 | Complete |
 
 **Coverage:** 38 / 38 v2.0 requirements mapped to exactly one phase. No orphans.
