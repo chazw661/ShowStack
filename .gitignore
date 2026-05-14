@@ -25,6 +25,7 @@ db.sqlite3.backup
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 
 # OS
