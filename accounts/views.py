@@ -11,7 +11,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from planner.models import Invitation
 from .invitation_forms import InviteUserForm
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, User
 
 def register(request):
     """
@@ -589,3 +589,148 @@ def send_access_approved_email(access_req, request):
         })
     except Exception as e:
         print(f"❌ Approval email error: {e}")
+
+
+# ==================== PHASE 6: TRUSTED CREW ROSTERS — CRUD ====================
+from planner.models import Crew, CrewMember
+
+
+@login_required
+def crew_index(request):
+    """List the logged-in user's crews (SPEC-06-R01).
+
+    Empty state per D-12: page handles no-crews case with a 'Create your first crew' CTA.
+    """
+    crews = Crew.objects.filter(owner=request.user).order_by('name')
+    return render(request, 'accounts/crew_index.html', {'crews': crews})
+
+
+@login_required
+def crew_create(request):
+    """POST-only: create a new crew owned by the logged-in user (SPEC-06-R01)."""
+    if request.method != 'POST':
+        return redirect('crew_index')
+    name = (request.POST.get('name') or '').strip()
+    if not name:
+        messages.error(request, 'Crew name is required.')
+        return redirect('crew_index')
+    if Crew.objects.filter(owner=request.user, name=name).exists():
+        messages.error(request, f'You already have a crew named "{name}".')
+        return redirect('crew_index')
+    crew = Crew.objects.create(owner=request.user, name=name)
+    messages.success(request, f'Crew "{crew.name}" created.')
+    return redirect('crew_detail', crew_id=crew.id)
+
+
+@login_required
+def crew_detail(request, crew_id):
+    """Roster page for a single crew (SPEC-06-R01, R02, R06)."""
+    crew = get_object_or_404(Crew, id=crew_id)
+    if crew.owner != request.user:
+        messages.error(request, 'Only the crew owner can view this roster.')
+        return redirect('crew_index')
+    members = crew.crewmember_set.select_related('user').all()
+    return render(request, 'accounts/crew_detail.html', {
+        'crew': crew,
+        'members': members,
+        'role_choices': CrewMember.ROLES,
+    })
+
+
+@login_required
+def crew_delete(request, crew_id):
+    """POST-only: delete a crew and cascade to CrewMember + CrewProjectAdd.
+
+    Per SPEC R7, this does NOT cascade to ProjectMember rows — Django ORM
+    cascade only follows the declared FK paths (Crew -> CrewMember,
+    Crew -> CrewProjectAdd). ProjectMember rows have no FK to Crew.
+    """
+    crew = get_object_or_404(Crew, id=crew_id)
+    if crew.owner != request.user:
+        messages.error(request, 'Only the crew owner can delete this crew.')
+        return redirect('crew_index')
+    if request.method != 'POST':
+        return redirect('crew_detail', crew_id=crew.id)
+    crew_name = crew.name
+    crew.delete()
+    messages.success(request, f'Crew "{crew_name}" deleted. Existing project memberships were not affected.')
+    return redirect('crew_index')
+
+
+@login_required
+def crew_member_add(request, crew_id):
+    """POST-only: add a user (by username/email) OR a pending email to a crew (SPEC-06-R01, R02, R06).
+
+    Form fields:
+      - user_or_email (text): looked up case-insensitively against User.email then User.username.
+        If neither match AND value contains '@', stored as a pending-email row (D-01).
+        Otherwise renders an error.
+      - default_role (choice): 'editor' or 'viewer' (D-02).
+
+    D-08: email match is case-insensitive (__iexact) with whitespace strip.
+    """
+    crew = get_object_or_404(Crew, id=crew_id)
+    if crew.owner != request.user:
+        messages.error(request, 'Only the crew owner can manage this roster.')
+        return redirect('crew_index')
+    if request.method != 'POST':
+        return redirect('crew_detail', crew_id=crew.id)
+
+    raw = (request.POST.get('user_or_email') or '').strip()
+    default_role = request.POST.get('default_role') or 'editor'
+    if default_role not in dict(CrewMember.ROLES):
+        default_role = 'editor'
+    if not raw:
+        messages.error(request, 'Username or email is required.')
+        return redirect('crew_detail', crew_id=crew.id)
+
+    user_obj = (
+        User.objects.filter(email__iexact=raw).first()
+        or User.objects.filter(username__iexact=raw).first()
+    )
+
+    try:
+        if user_obj is not None:
+            if CrewMember.objects.filter(crew=crew, user=user_obj).exists():
+                messages.error(request, f'{user_obj.username} is already in "{crew.name}".')
+                return redirect('crew_detail', crew_id=crew.id)
+            CrewMember.objects.create(crew=crew, user=user_obj, default_role=default_role)
+            messages.success(request, f'Added {user_obj.username} to "{crew.name}".')
+        elif '@' in raw:
+            if CrewMember.objects.filter(crew=crew, email__iexact=raw).exists():
+                messages.error(request, f'{raw} is already pending in "{crew.name}".')
+                return redirect('crew_detail', crew_id=crew.id)
+            CrewMember.objects.create(crew=crew, email=raw, default_role=default_role)
+            messages.success(request, f'Added pending member {raw} to "{crew.name}" — will claim on signup.')
+        else:
+            messages.error(request, f'No user found matching "{raw}". To pre-invite, enter a full email address.')
+    except Exception as e:
+        # D-15 DB constraints (XOR check, partial uniques) surface as IntegrityError here.
+        messages.error(request, f'Could not add member: {e}')
+    return redirect('crew_detail', crew_id=crew.id)
+
+
+@login_required
+def crew_member_remove(request, crew_id, member_id):
+    """POST-only: delete a single CrewMember row (SPEC-06-R07 no-cascade).
+
+    SPEC R7 is enforced by the data model: CrewMember has no FK from
+    ProjectMember, so deleting a CrewMember row never touches a
+    ProjectMember row, regardless of whether the underlying user has
+    previously been bulk-added to any of the crew's projects.
+    """
+    crew = get_object_or_404(Crew, id=crew_id)
+    if crew.owner != request.user:
+        messages.error(request, 'Only the crew owner can manage this roster.')
+        return redirect('crew_index')
+    member = get_object_or_404(CrewMember, id=member_id, crew=crew)
+    if request.method != 'POST':
+        return redirect('crew_detail', crew_id=crew.id)
+    label = member.user.username if member.user_id else f'{member.email} (pending)'
+    member.delete()
+    messages.success(
+        request,
+        f'Removed {label} from "{crew.name}". Their existing project memberships are unaffected — '
+        'manage each project separately to remove project access.'
+    )
+    return redirect('crew_detail', crew_id=crew.id)
