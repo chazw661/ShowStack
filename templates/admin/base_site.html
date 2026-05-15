@@ -127,7 +127,15 @@ html[data-theme="auto"] {
     {% endif %}
         <button onclick="helpOpen()" style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;" onmouseover="this.style.color='#00ff88';this.style.borderColor='#00ff88'" onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">? Help</button>
 
-    
+    {# Phase 6 (D-04, D-12): My Crew link — always visible for authenticated users. #}
+    {% if user.is_authenticated %}
+    <a href="{% url 'crew_index' %}"
+       style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;text-decoration:none;"
+       onmouseover="this.style.color='#00ff88';this.style.borderColor='#00ff88'"
+       onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">My Crew</a>
+    {% endif %}
+
+
     {{ block.super }}
 {% endblock %}
 
