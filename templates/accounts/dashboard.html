@@ -290,6 +290,8 @@
             {% if user.is_superuser or account_type == 'paid' or account_type == 'beta' %}
             <a href="/admin/" class="btn-admin">Planner</a>
             {% endif %}
+            {# Phase 6 (D-04, D-12): My Crew — always visible for logged-in dashboard users. #}
+            <a href="{% url 'crew_index' %}" class="btn-admin">My Crew</a>
             <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
         </div>
     </div>
