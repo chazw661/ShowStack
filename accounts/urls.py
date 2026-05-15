@@ -18,4 +18,12 @@ urlpatterns = [
 
     path('projects/request/<uuid:invite_token>/', views.project_request_access, name='request_access'),
     path('projects/<int:project_id>/requests/', views.project_access_requests, name='access_requests'),
+
+    # Phase 6: Trusted Crew Rosters (D-03 amended — canonical URL prefix is /crew/)
+    path('crew/', views.crew_index, name='crew_index'),
+    path('crew/new/', views.crew_create, name='crew_create'),
+    path('crew/<int:crew_id>/', views.crew_detail, name='crew_detail'),
+    path('crew/<int:crew_id>/delete/', views.crew_delete, name='crew_delete'),
+    path('crew/<int:crew_id>/members/add/', views.crew_member_add, name='crew_member_add'),
+    path('crew/<int:crew_id>/members/<int:member_id>/remove/', views.crew_member_remove, name='crew_member_remove'),
 ]
