@@ -26,4 +26,7 @@ urlpatterns = [
     path('crew/<int:crew_id>/delete/', views.crew_delete, name='crew_delete'),
     path('crew/<int:crew_id>/members/add/', views.crew_member_add, name='crew_member_add'),
     path('crew/<int:crew_id>/members/<int:member_id>/remove/', views.crew_member_remove, name='crew_member_remove'),
+
+    # Phase 6 (Plan 04): bulk-add an entire crew to a project
+    path('projects/<int:project_id>/invite/add-crew/<int:crew_id>/', views.bulk_add_crew, name='bulk_add_crew'),
 ]
