@@ -207,3 +207,33 @@ showstack_admin_site.register(Group, GroupAdmin)
 showstack_admin_site.register(ProjectMember, ProjectMemberAdmin)
 showstack_admin_site.register(Invitation, InvitationAdmin)
 showstack_admin_site.register(UserProfile, UserProfileAdmin)
+
+
+# ==================== PHASE 6: TRUSTED CREW ROSTERS ====================
+from planner.models import Crew, CrewMember, CrewProjectAdd
+
+
+class CrewAdmin(BaseEquipmentAdmin):
+    list_display = ['name', 'owner', 'created_at', 'updated_at']
+    list_filter = ['created_at']
+    search_fields = ['name', 'owner__username', 'owner__email']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+class CrewMemberAdmin(BaseEquipmentAdmin):
+    list_display = ['crew', 'user', 'email', 'default_role', 'added_at']
+    list_filter = ['default_role', 'added_at']
+    search_fields = ['crew__name', 'user__username', 'user__email', 'email']
+    readonly_fields = ['added_at']
+
+
+class CrewProjectAddAdmin(BaseEquipmentAdmin):
+    list_display = ['crew', 'project', 'added_at']
+    list_filter = ['added_at']
+    search_fields = ['crew__name', 'project__name']
+    readonly_fields = ['added_at']
+
+
+showstack_admin_site.register(Crew, CrewAdmin)
+showstack_admin_site.register(CrewMember, CrewMemberAdmin)
+showstack_admin_site.register(CrewProjectAdd, CrewProjectAddAdmin)
