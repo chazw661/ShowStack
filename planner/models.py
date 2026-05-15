@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import CheckConstraint, UniqueConstraint, Q
 from django.core.validators import MinValueValidator
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -747,8 +748,94 @@ class ProjectAccessRequest(models.Model):
     def __str__(self):
         return f"{self.requester.username} → {self.project.name} ({self.status})"
 
-    
-        
+
+class Crew(models.Model):
+    """Owner-scoped named roster of trusted collaborators (Phase 6 — SPEC-06-R01, R02, D-02)."""
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='owned_crews',
+    )
+    name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (('owner', 'name'),)
+        ordering = ['name']
+        verbose_name = "Crew"
+        verbose_name_plural = "Crews"
+
+    def __str__(self):
+        return f"{self.name} (owned by {self.owner.username})"
+
+
+class CrewMember(models.Model):
+    """Single-table polymorphic roster row: existing user XOR pending email (Phase 6 — SPEC-06-R01, R02, R06, D-01, D-15)."""
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='crew_memberships',
+    )
+    email = models.EmailField(null=True, blank=True)
+
+    ROLES = [
+        ('editor', 'Editor'),
+        ('viewer', 'Viewer'),
+    ]
+    default_role = models.CharField(max_length=20, choices=ROLES, default='editor')
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            CheckConstraint(
+                condition=(
+                    Q(user__isnull=False, email__isnull=True) |
+                    Q(user__isnull=True, email__isnull=False)
+                ),
+                name='crewmember_user_xor_email',
+            ),
+            UniqueConstraint(
+                fields=['crew', 'user'],
+                condition=Q(user__isnull=False),
+                name='uniq_crewmember_crew_user',
+            ),
+            UniqueConstraint(
+                fields=['crew', 'email'],
+                condition=Q(email__isnull=False),
+                name='uniq_crewmember_crew_email',
+            ),
+        ]
+        ordering = ['added_at']
+        verbose_name = "Crew Member"
+        verbose_name_plural = "Crew Members"
+
+    def __str__(self):
+        label = self.user.username if self.user_id else f"{self.email} (pending)"
+        return f"{label} → {self.crew.name}"
+
+
+class CrewProjectAdd(models.Model):
+    """Tracks which projects a crew has been bulk-added to (Phase 6 — D-09, supports SPEC-06-R06 auto-claim).
+
+    Read by the auto-claim helper (planner/crew.py) to materialize ProjectMember rows
+    for newly-registered users whose email matched a pending CrewMember.
+    """
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name='project_adds')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='crew_adds')
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = (('crew', 'project'),)
+        ordering = ['-added_at']
+        verbose_name = "Crew Project Add"
+        verbose_name_plural = "Crew Project Adds"
+
+    def __str__(self):
+        return f"{self.crew.name} → {self.project.name}"
+
 
 #-----Console Model----
 
