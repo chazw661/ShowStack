@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -12,6 +14,8 @@ from django.conf import settings
 from planner.models import Invitation
 from .invitation_forms import InviteUserForm
 from django.contrib.auth.models import Group, User
+
+logger = logging.getLogger(__name__)
 
 def register(request):
     """
@@ -150,9 +154,49 @@ def invite_user(request, project_id):
     else:
         form = InviteUserForm(project=project, invited_by=request.user)
     
+    # Phase 6: build owner_crews annotated for the additive 'Add your crew' panel.
+    owner_crews_qs = (
+        Crew.objects.filter(owner=request.user)
+        .prefetch_related('crewmember_set__user')
+        .order_by('name')
+    )
+    existing_member_ids = set(
+        ProjectMember.objects.filter(project=project)
+        .values_list('user_id', flat=True)
+    )
+    owner_crews = []
+    for crew_obj in owner_crews_qs:
+        members_payload = []
+        eligible_count = 0
+        for cm in crew_obj.crewmember_set.all():
+            if cm.user_id is None:
+                members_payload.append({
+                    'label': cm.email,
+                    'is_already_member': False,
+                    'is_pending': True,
+                })
+                # Pending-email rows do not count toward eligible_count —
+                # they materialize via the auto-claim hook (Plan 05) on register.
+            else:
+                is_member = cm.user_id in existing_member_ids
+                members_payload.append({
+                    'label': cm.user.get_full_name() or cm.user.username,
+                    'is_already_member': is_member,
+                    'is_pending': False,
+                })
+                if not is_member:
+                    eligible_count += 1
+        owner_crews.append({
+            'id': crew_obj.id,
+            'name': crew_obj.name,
+            'eligible_count': eligible_count,
+            'member_display': members_payload,
+        })
+
     context = {
         'form': form,
         'project': project,
+        'owner_crews': owner_crews,
     }
     return render(request, 'accounts/invite_user.html', context)
 
@@ -592,7 +636,7 @@ def send_access_approved_email(access_req, request):
 
 
 # ==================== PHASE 6: TRUSTED CREW ROSTERS — CRUD ====================
-from planner.models import Crew, CrewMember
+from planner.models import Crew, CrewMember, CrewProjectAdd
 
 
 @login_required
@@ -734,3 +778,134 @@ def crew_member_remove(request, crew_id, member_id):
         'manage each project separately to remove project access.'
     )
     return redirect('crew_detail', crew_id=crew.id)
+
+
+# ==================== PHASE 6: BULK-ADD CREW TO PROJECT ====================
+
+def send_crew_added_email(project_member, request):
+    """Inform a user they have been added to a project via crew bulk-add (SPEC-06-R04).
+
+    NO accept_url token per SPEC R4 — access is already active. The 'Open project'
+    button reverses to set_project (the canonical land-inside-project URL used
+    elsewhere in the codebase).
+
+    D-10: log + swallow exceptions. The bulk-add contract is 'ProjectMember rows
+    exist' — one bad email must not undo a successful crew-add. Resend dashboard
+    surfaces per-recipient delivery failures. Mirrors send_access_approved_email
+    (NOT send_invitation_email which re-raises).
+    """
+    import resend
+    import os
+    from django.urls import reverse
+
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    project_url = request.build_absolute_uri(
+        reverse('set_project', args=[project_member.project.id])
+    )
+    owner = project_member.project.owner
+    owner_label = owner.get_full_name() or owner.username
+
+    subject = (
+        f"{owner_label} added you to "
+        f"{project_member.project.name} on ShowStack"
+    )
+    html = f"""
+<h2>You've been added to a ShowStack project</h2>
+<p><strong>{owner_label}</strong> added you to their crew on:</p>
+<ul>
+    <li><strong>Project:</strong> {project_member.project.name}</li>
+    <li><strong>Your role:</strong> {project_member.get_role_display()}</li>
+</ul>
+<p><a href="{project_url}" style="display:inline-block;padding:12px 24px;background:#4a9eff;color:white;text-decoration:none;border-radius:6px;margin:20px 0;">
+Open project</a></p>
+<p><small>No action required — your access is already active.</small></p>
+<hr>
+<p><small>ShowStack — Professional Audio Production Management</small></p>
+"""
+    try:
+        resend.Emails.send({
+            "from": "ShowStack <noreply@showstack.io>",
+            "to": [project_member.user.email],
+            "subject": subject,
+            "html": html,
+        })
+        print(f"Crew-added email sent to {project_member.user.email}")
+    except Exception as e:
+        # D-10: log + swallow — do NOT re-raise.
+        print(f"Crew-added email error: {e}")
+
+
+@login_required
+def bulk_add_crew(request, project_id, crew_id):
+    """Bulk-add an entire crew to a project (SPEC-06-R03, R04, R05, R08; D-06, D-09, D-10).
+
+    POST-only. Creates ProjectMember rows for every CrewMember with a User FK
+    that is not already a member of the project. Sends one confirmation email
+    per new row. Records a CrewProjectAdd row so the Plan 05 auto-claim hook
+    can materialize ProjectMember rows for future registrations matching
+    pending-email CrewMember rows.
+
+    Per Pitfall 2: uses .save() (via ProjectMember.objects.create) rather than
+    bulk_create so auto_now_add fires for invited_at.
+    """
+    project = get_object_or_404(Project, id=project_id)
+    # Mirror accounts/views.py:128-131 — project owner gate.
+    if project.owner != request.user:
+        messages.error(request, 'Only the project owner can add a crew.')
+        return redirect('dashboard')
+
+    crew = get_object_or_404(Crew, id=crew_id, owner=request.user)
+
+    if request.method != 'POST':
+        return redirect('invite_user', project_id=project.id)
+
+    # Resolve crew members with a User FK. Pending-email rows (user=NULL) are
+    # skipped here; they materialize via the auto-claim hook in register()
+    # (Plan 05) once the email-holder signs up.
+    resolved = list(
+        crew.crewmember_set.filter(user__isnull=False).select_related('user')
+    )
+
+    # SPEC R8: single upfront dedupe query.
+    existing_user_ids = set(
+        ProjectMember.objects.filter(
+            project=project,
+            user_id__in=[m.user_id for m in resolved],
+        ).values_list('user_id', flat=True)
+    )
+
+    to_add = [m for m in resolved if m.user_id not in existing_user_ids]
+    already = len(resolved) - len(to_add)
+
+    # Pitfall 2: .save() loop (via .create) so auto_now_add fires for invited_at.
+    # Crews are 1-10 members per SPEC Constraint — sync is fine.
+    new_rows = []
+    for m in to_add:
+        pm = ProjectMember.objects.create(
+            project=project,
+            user=m.user,
+            role=m.default_role,
+            invited_by=request.user,
+        )
+        new_rows.append(pm)
+
+    # D-09: record bulk-add so the auto-claim hook (Plan 05) knows which
+    # projects to materialize for newly-registered crew members.
+    CrewProjectAdd.objects.get_or_create(crew=crew, project=project)
+
+    # D-10: log + swallow email failures (per-recipient, defensive).
+    for pm in new_rows:
+        try:
+            send_crew_added_email(pm, request)
+        except Exception:
+            logger.exception(
+                "Crew-added email failed for %s",
+                getattr(pm.user, 'email', '<unknown>'),
+            )
+
+    messages.success(
+        request,
+        f"Added {len(to_add)} members from {crew.name}; "
+        f"{already} were already on this project."
+    )
+    return redirect('invite_user', project_id=project.id)
