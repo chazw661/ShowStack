@@ -149,8 +149,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Milestone**: v2.1 (Collaboration & User Management) — first phase
 **Goal**: Owner can define named crew rosters (e.g. "Concert team", "Corporate team") and bulk-add an entire crew to a project as ProjectMembers without the email-acceptance round-trip
 **Depends on**: Existing `accounts` app invitation flow (planner.Invitation, ProjectMember)
-**Requirements**: Defined in 06-SPEC.md
-**Plans**: TBD (created by /gsd-plan-phase after spec lock)
+**Requirements**: SPEC-06-R01, SPEC-06-R02, SPEC-06-R03, SPEC-06-R04, SPEC-06-R05, SPEC-06-R06, SPEC-06-R07, SPEC-06-R08
+**Plans**: 7 plans
+- [ ] 06-01-models-migration-PLAN.md — Crew + CrewMember + CrewProjectAdd models + migration 0157 (Wave 1)
+- [ ] 06-02-admin-registration-PLAN.md — Register Crew/CrewMember/CrewProjectAdd on showstack_admin_site + admin_ordering update (Wave 2, depends on 06-01)
+- [ ] 06-03-crud-views-urls-templates-PLAN.md — Crew CRUD views + URLs + crew_index/crew_detail templates (Wave 2, depends on 06-01)
+- [ ] 06-04-bulk-add-email-invite-panel-PLAN.md — bulk_add_crew view + send_crew_added_email + additive invite_user.html panel (Wave 3, depends on 06-01 + 06-03)
+- [ ] 06-05-auto-claim-register-hook-PLAN.md — planner/crew.py claim helper + atomic wrap in register() (Wave 3, depends on 06-01)
+- [ ] 06-06-nav-link-PLAN.md — Additive "My Crew" link in admin base_site.html + dashboard.html (Wave 3, depends on 06-03)
+- [ ] 06-07-tests-PLAN.md — planner/tests/test_crew_rosters.py covering all 8 SPEC requirements + D-15 constraints (Wave 4, depends on 06-01..06-06)
 **UI hint**: yes
 
 ## Progress
@@ -167,3 +174,4 @@ in parallel, but solo dev means sequential execution per the spec's order.)
 | 3. Multitrack Templates | 0/0 | Not started | - |
 | 4. Nuendo Live Export | 7/7 | Code-complete — HUMAN-UAT pending NLP-01..NLP-05 | 2026-05-14 |
 | 5. Channel Record Defaults | 3/3 | Code-complete — HUMAN-UAT pending POL-01 + POL-02 picker/admin smoke | 2026-05-14 |
+| 6. Trusted Crew Rosters | 0/7 | Planned (7 plans, 4 waves) | - |

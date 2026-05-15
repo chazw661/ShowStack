@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: milestone
+milestone: v2.1
+milestone_name: — Collaboration & User Management
 status: completed
-last_updated: "2026-05-14T20:00:26Z"
-last_activity: 2026-05-14 — Phase 05 Plan 03 complete (commits f49ed1e + b23ea10). Wired POL-01 / POL-02 seed logic into multitrack_add_tracks (planner/views.py:6598) via 4-source-type bulk-fetch `seed_maps` keyed by validated channel IDs, with AJAX-boundary _HEX_COLOR_RE defence-in-depth re-validation. Each picker-added MultitrackTrack now seeds enabled=bool(channel.default_record) and color_override=channel.default_record_color (silently dropped to '' on malformed hex). Shipped planner/tests/test_channel_record_defaults.py — 5 tests in ChannelRecordDefaultsSeedTests covering POL-01 both polarities, POL-02 happy path, defence-in-depth silent-drop on direct .update() write of 'not-a-hex', and end-to-end Reaper RPP exporter assertion (seeded #FF8800 → hex_to_peakcol packed value appears in PEAKCOL line). All 48 prior tests (test_reaper_export 42/42, test_nuendo_live_export 3/3, test_multitrack_reorder 3/3) plus Phase 2 console-CSV-import suites still pass. multitrack_duplicate intentionally NOT touched per plan (duplication preserves source state, not re-seed). Phase 5 code-complete; v2.0 milestone reaches 38/38 requirements wired end-to-end pending HUMAN-UAT.
+last_updated: "2026-05-15T01:37:46.612Z"
+last_activity: 2026-05-14 — Phase 05 Plan 03 complete (seed logic in multitrack_add_tracks + 5-test regression suite including end-to-end Reaper RPP exporter assertion)
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
-  total_plans: 25
+  total_plans: 32
   completed_plans: 25
-  percent: 100
+  percent: 78
 ---
 
 # Project State
@@ -70,7 +70,7 @@ relevant plans land:
 4. **Phase 4 — Nuendo Live template fixture**: Charlie must generate and commit `fixtures/nuendo_live_3_template.nlpr` (a fresh empty Nuendo Live 3 session with one default audio track) before the exporter can be implemented. The spec confirms `lxml` (not stdlib ElementTree) is required to preserve formatting.
 5. **Phase 4 — Rivage→Farb color mapping table** is not yet defined in the spec (only Yamaha CL/QL→Farb is). Either build the Rivage table during Phase 4 or accept that Rivage tracks export with `Farb` omitted in v2.0.
 
-**Planned Phase:** 4 (Nuendo Live Export) — 7 plans — 2026-05-13T22:49:39.525Z
+**Planned Phase:** 06 (Trusted Crew Rosters) — 7 plans — 2026-05-15T01:37:46.601Z
 
 ### From Phase 04 Plan 01 (Wave 1 prerequisites)
 
