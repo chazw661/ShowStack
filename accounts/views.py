@@ -14,6 +14,8 @@ from django.conf import settings
 from planner.models import Invitation
 from .invitation_forms import InviteUserForm
 from django.contrib.auth.models import Group, User
+from django.db import transaction
+from planner.crew import claim_pending_crew_memberships
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +30,28 @@ def register(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
-            user = form.save()
+            # D-11: form.save() + auto-claim are atomic. If claim raises, the
+            # User row rolls back so the user can re-register cleanly.
+            with transaction.atomic():
+                user = form.save()
+                # D-07: inline call (no Django signals). Rebinds pending CrewMember
+                # rows and materializes ProjectMember rows for every project the
+                # crew has been bulk-added to (D-09 via CrewProjectAdd).
+                new_pms = claim_pending_crew_memberships(user)
+
+            # D-10/D-11: email sends happen OUTSIDE the atomic block — a Resend
+            # hiccup must not roll back the user account. Log + swallow per row.
+            for pm in new_pms:
+                try:
+                    send_crew_added_email(pm, request)
+                except Exception:
+                    logger.exception(
+                        "Crew-added email failed on register for %s",
+                        getattr(pm.user, 'email', '<unknown>'),
+                    )
+
             messages.success(
-                request, 
+                request,
                 f'Welcome to ShowStack, {user.first_name}! Your free account has been created. '
                 'You can now accept project invitations from other users.'
             )
