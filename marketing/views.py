@@ -1,11 +1,17 @@
-from django.shortcuts import render, redirect
+import logging
+
+from django.contrib import messages
 from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.forms import AuthenticationForm
-from django.contrib import messages
+from django.db import transaction
 from django.http import JsonResponse
+from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
+
 from .forms import WaitlistForm, ContactForm, RegistrationForm
 from .models import WaitlistSignup
+
+logger = logging.getLogger(__name__)
 
 
 def home(request):
@@ -66,7 +72,7 @@ def register(request):
     """
     if request.user.is_authenticated:
         return redirect('admin:index')
-    
+
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         terms_accepted = request.POST.get('terms')
@@ -74,7 +80,28 @@ def register(request):
             messages.error(request, 'You must accept the Terms of Service and Privacy Policy to create an account.')
             return render(request, 'marketing/register.html', {'form': form})
         if form.is_valid():
-            user = form.save()
+            # D-11 (Phase 6): form.save() + auto-claim are atomic so a claim failure
+            # rolls back the User row cleanly and lets the user re-register.
+            from planner.crew import claim_pending_crew_memberships
+            from accounts.views import send_crew_added_email
+            with transaction.atomic():
+                user = form.save()
+                # D-07: inline call (no Django signals). Rebinds pending CrewMember
+                # rows and materializes ProjectMember rows for every project the crew
+                # has been bulk-added to (D-09 via CrewProjectAdd).
+                new_pms = claim_pending_crew_memberships(user)
+
+            # D-10/D-11: email sends happen OUTSIDE the atomic block — a Resend
+            # hiccup must not roll back the user account. Log + swallow per row.
+            for pm in new_pms:
+                try:
+                    send_crew_added_email(pm, request)
+                except Exception:
+                    logger.exception(
+                        "Crew-added email failed on register for %s",
+                        getattr(pm.user, 'email', '<unknown>'),
+                    )
+
             # Auto-assign to Viewer group
             from django.contrib.auth.models import Group
             try:
@@ -87,7 +114,7 @@ def register(request):
         return render(request, 'marketing/register.html', {'form': form})
     else:
         form = RegistrationForm()
-    
+
     return render(request, 'marketing/register.html', {'form': form})
     
     
