@@ -103,9 +103,56 @@ Downstream agents MUST read `06-SPEC.md` before planning or implementing. Requir
   - Pending-email rows have their `email` field stored as the owner typed it; the helper trims at compare-time.
   - No gmail dot-stripping, no `+alias` collapsing — too surprising for users who legitimately use plus addressing.
 
+### Post-Research Locks (added 2026-05-14 after RESEARCH.md surfaced open questions)
+
+- **D-09: Add a `CrewProjectAdd` link table to track which projects each crew has been bulk-added to.**
+  - 3 fields: `crew` FK, `project` FK, `added_at` (auto_now_add).
+  - `unique_together = ('crew', 'project')` — re-clicking "Add this crew" updates nothing in this table (idempotent).
+  - Populated by the bulk-add view as part of the same atomic write that creates `ProjectMember` rows.
+  - Auto-claim helper reads this table to find every project to materialize `ProjectMember` rows for.
+  - Lives in `planner/models.py` alongside `Crew` and `CrewMember`.
+
+- **D-10: Email-send failure during bulk-add is logged and swallowed.**
+  - Contract is "ProjectMember rows exist." Resend dashboard surfaces per-recipient failures.
+  - Wrap each `send_crew_added_email(...)` call in try/except Exception with a `logger.exception(...)` and continue.
+  - Bulk-add returns success even if 0 of N emails actually sent.
+  - Diverges from `send_invitation_email`'s re-raise behavior — but that path is interactive (user clicks "Send invite", expects feedback); bulk-add is bulk and durable.
+
+- **D-11: `register()` wraps `form.save()` + `claim_pending_crew_memberships(user)` in a single `transaction.atomic()`.**
+  - All-or-nothing — if the claim helper raises, the new User row is rolled back too.
+  - Avoids the confusing "account exists but no crew claim happened" half-state.
+  - Confirmation email sends from the helper happen INSIDE the atomic block but per D-10 are wrapped in try/except so an email hiccup never rolls back the user account.
+
+- **D-12: "My Crew" link in the top-right user menu is always visible for logged-in users.**
+  - The `/accounts/crew/` index page handles the empty state with a "Create your first crew" CTA.
+  - Mirrors the existing dashboard "free-account" gating pattern.
+  - Two insertion surfaces per RESEARCH.md: `templates/admin/base_site.html` (admin chrome `userlinks` block) AND `templates/accounts/dashboard.html` (`.header-right` div). Both edits are additive.
+
+- **D-13: Models live in `planner/models.py`, not `accounts/models.py`.**
+  - Matches the existing pattern: `ProjectMember`, `Invitation`, `ProjectAccessRequest` all live in `planner/models.py` despite views in `accounts/`.
+  - `accounts/models.py` is a 3-line empty stub — leave it alone.
+  - Auto-claim helper lives at `planner/crew.py` (alongside the models).
+
+- **D-14: Templates live in project-level `templates/accounts/`, NOT `accounts/templates/accounts/`.**
+  - RESEARCH.md confirms the latter does not exist on disk.
+  - Phase 6's new templates land in `templates/accounts/crew_index.html` and `templates/accounts/crew_detail.html`.
+  - The invite-page additive panel edits `templates/accounts/invite_user.html` (insertion point ~line 220 per RESEARCH.md).
+
+- **D-15: Use Django 5.2 `condition=` (not deprecated `check=`) on CheckConstraint, and partial `UniqueConstraint(condition=Q(...))` (not `unique_together`) where any column is nullable.**
+  - `CrewMember` Meta.constraints contains:
+    - `CheckConstraint(condition=Q(user__isnull=False, email__isnull=True) | Q(user__isnull=True, email__isnull=False), name="crewmember_user_xor_email")`
+    - `UniqueConstraint(fields=["crew", "user"], condition=Q(user__isnull=False), name="uniq_crewmember_crew_user")`
+    - `UniqueConstraint(fields=["crew", "email"], condition=Q(email__isnull=False), name="uniq_crewmember_crew_email")`
+  - `Crew` keeps `unique_together = (("owner", "name"),)` — fine because both fields are non-nullable.
+
+### Stale Reference Corrections (from RESEARCH.md — supersedes earlier line numbers in this file)
+
+- `accounts/views.py` line numbers in this CONTEXT.md predate the current file. Use the corrected positions: `register()` at line **16**, `invite_user` owner-check at line **129**, `accept_invitation` at line **181**, `send_invitation_email` at line **241** (NOT 252), `set_project` at line **359**.
+- Template directory: project-level `templates/accounts/` is canonical; `accounts/templates/accounts/` does NOT exist. Pattern-mapper and planner must use the project-level path.
+
 ### Claude's Discretion
 
-- **Confirmation email HTML/template:** Model after the existing inline-HTML pattern in `accounts/views.py:send_invitation_email` (~line 252). One short template, no `accept_url` token, brand-consistent. Researcher/planner picks final wording. Subject line: "{owner.first_name} added you to {project.name} on ShowStack" or similar — owner-friendly.
+- **Confirmation email HTML/template:** Model after the existing inline-HTML pattern in `accounts/views.py:send_invitation_email` (line 241). One short template, no `accept_url` token, brand-consistent. Researcher/planner picks final wording. Subject line: "{owner.first_name} added you to {project.name} on ShowStack" or similar — owner-friendly.
 - **Admin registration:** Register `Crew` + `CrewMember` on `showstack_admin_site` per CLAUDE.md convention so superuser can audit. Update `admin_ordering.py` for the new models (per CLAUDE.md). User-facing UI is the custom `/accounts/crew/` pages — admin is for power use only.
 - **Exact button labels, microcopy, CSS:** Match existing project visual language (dark theme, `ss-card` styling pattern seen in `templates/admin/index.html`). Planner picks.
 - **Bulk-add URL shape:** `POST /projects/<id>/invite/add-crew/<crew_id>/` is the suggested shape but planner finalizes per existing accounts URL conventions.
