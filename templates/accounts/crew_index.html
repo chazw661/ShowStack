@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Crews — ShowStack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .header {
+            background: #2a2a2a;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3a3a3a;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            color: #4a9eff;
+            font-weight: 700;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .user-info {
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+
+        .user-info strong {
+            color: #e0e0e0;
+        }
+
+        .btn-admin {
+            padding: 8px 16px;
+            background: #4a9eff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn-admin:hover {
+            background: #3a8eef;
+        }
+
+        .btn-logout {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn-logout:hover {
+            background: #c82333;
+        }
+
+        .btn-back {
+            padding: 8px 16px;
+            background: #555;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn-back:hover {
+            background: #666;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 30px;
+        }
+
+        .page-header {
+            margin-bottom: 30px;
+        }
+
+        .page-header h2 {
+            font-size: 28px;
+            color: #e0e0e0;
+            margin-bottom: 10px;
+        }
+
+        .page-header p {
+            color: #999;
+            font-size: 14px;
+        }
+
+        .messages {
+            margin-bottom: 20px;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #1f3d2f;
+            color: #4caf87;
+            border: 1px solid #2d5c45;
+        }
+
+        .alert-error {
+            background: #3d1f22;
+            color: #e07070;
+            border: 1px solid #5c2d30;
+        }
+
+        .card {
+            background: #2a2a2a;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid #3a3a3a;
+            margin-bottom: 20px;
+        }
+
+        .card h3 {
+            font-size: 18px;
+            color: #e0e0e0;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+
+        .crew-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .crew-card {
+            background: #333;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .crew-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .crew-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .crew-meta {
+            font-size: 13px;
+            color: #999;
+        }
+
+        .crew-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn-view {
+            padding: 7px 14px;
+            background: #4a9eff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn-view:hover {
+            background: #3a8eef;
+        }
+
+        .btn-delete {
+            padding: 7px 14px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .btn-delete:hover {
+            background: #c82333;
+        }
+
+        .create-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        .form-control {
+            padding: 10px 14px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+
+        .btn-create {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-create:hover {
+            background: #218838;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #777;
+        }
+
+        .empty-state p {
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .empty-state .cta {
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <h1>ShowStack</h1>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <strong>{{ user.get_full_name|default:user.username }}</strong>
+            </div>
+            <a href="{% url 'dashboard' %}" class="btn-back">← Back to Dashboard</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="page-header">
+            <h2>My Crews</h2>
+            <p>Manage your trusted crew rosters. Add members once — assign them to multiple projects in bulk.</p>
+        </div>
+
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Create new crew form -->
+        <div class="card">
+            <h3>Create a New Crew</h3>
+            <form method="post" action="{% url 'crew_create' %}" class="create-form">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="crew-name">Crew Name</label>
+                    <input type="text" id="crew-name" name="name" class="form-control"
+                           placeholder="e.g. Festival A-Team" maxlength="100" required>
+                </div>
+                <button type="submit" class="btn-create">+ Create Crew</button>
+            </form>
+        </div>
+
+        <!-- Crew list -->
+        {% if crews %}
+        <div class="card">
+            <h3>Your Crews ({{ crews|length }})</h3>
+            <div class="crew-grid">
+                {% for crew in crews %}
+                <div class="crew-card">
+                    <div class="crew-card-header">
+                        <span class="crew-name">{{ crew.name }}</span>
+                    </div>
+                    <div class="crew-meta">
+                        {{ crew.crewmember_set.count }} member{{ crew.crewmember_set.count|pluralize }}
+                    </div>
+                    <div class="crew-actions">
+                        <a href="{% url 'crew_detail' crew.id %}" class="btn-view">View / Edit Roster</a>
+                        <form method="post" action="{% url 'crew_delete' crew.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-delete"
+                                    onclick="return confirm('Delete crew \'{{ crew.name }}\'? Existing project memberships will not be affected.')">
+                                Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="empty-state">
+                <p>You don't have any crews yet.</p>
+                <p class="cta">Create your first crew using the form above to get started.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

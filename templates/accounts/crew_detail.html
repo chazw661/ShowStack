@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ crew.name }} — ShowStack</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a1a;
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .header {
+            background: #2a2a2a;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3a3a3a;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            color: #4a9eff;
+            font-weight: 700;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .user-info {
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+
+        .user-info strong {
+            color: #e0e0e0;
+        }
+
+        .btn-admin {
+            padding: 8px 16px;
+            background: #4a9eff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn-admin:hover {
+            background: #3a8eef;
+        }
+
+        .btn-logout {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn-logout:hover {
+            background: #c82333;
+        }
+
+        .btn-back {
+            padding: 8px 16px;
+            background: #555;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .btn-back:hover {
+            background: #666;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 30px;
+        }
+
+        .page-header {
+            margin-bottom: 30px;
+        }
+
+        .page-header h2 {
+            font-size: 28px;
+            color: #e0e0e0;
+            margin-bottom: 6px;
+        }
+
+        .page-header .meta {
+            font-size: 14px;
+            color: #999;
+        }
+
+        .messages {
+            margin-bottom: 20px;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #1f3d2f;
+            color: #4caf87;
+            border: 1px solid #2d5c45;
+        }
+
+        .alert-error {
+            background: #3d1f22;
+            color: #e07070;
+            border: 1px solid #5c2d30;
+        }
+
+        .card {
+            background: #2a2a2a;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid #3a3a3a;
+            margin-bottom: 20px;
+        }
+
+        .card h3 {
+            font-size: 18px;
+            color: #e0e0e0;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+
+        .add-member-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        .form-control {
+            padding: 10px 14px;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #4a9eff;
+        }
+
+        select.form-control option {
+            background: #333;
+        }
+
+        .btn-add {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-add:hover {
+            background: #218838;
+        }
+
+        .members-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .members-table th {
+            text-align: left;
+            padding: 12px;
+            background: #333;
+            font-weight: 600;
+            color: #bbb;
+            font-size: 13px;
+            border-bottom: 1px solid #444;
+        }
+
+        .members-table td {
+            padding: 14px 12px;
+            border-bottom: 1px solid #3a3a3a;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .members-table tr:hover td {
+            background: #2f2f2f;
+        }
+
+        .members-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .role-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .role-editor {
+            background: #1f3d2f;
+            color: #4caf87;
+        }
+
+        .role-viewer {
+            background: #1e3a5f;
+            color: #4a9eff;
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: #1f3d2f;
+            color: #4caf87;
+        }
+
+        .status-pending {
+            background: #3d2d00;
+            color: #ffc107;
+        }
+
+        .btn-remove {
+            padding: 6px 12px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .btn-remove:hover {
+            background: #c82333;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #777;
+        }
+
+        .empty-state p {
+            font-size: 15px;
+        }
+
+        .btn-delete-crew {
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .btn-delete-crew:hover {
+            background: #c82333;
+        }
+
+        .danger-zone-text {
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <h1>ShowStack</h1>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <strong>{{ user.get_full_name|default:user.username }}</strong>
+            </div>
+            <a href="{% url 'crew_index' %}" class="btn-back">← Back to My Crews</a>
+            <a href="{% url 'dashboard' %}" class="btn-back">Dashboard</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="page-header">
+            <h2>{{ crew.name }}</h2>
+            <p class="meta">{{ members|length }} member{{ members|length|pluralize }} in this crew</p>
+        </div>
+
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Add member form -->
+        <div class="card">
+            <h3>Add Member</h3>
+            <form method="post" action="{% url 'crew_member_add' crew.id %}" class="add-member-form">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="user-or-email">Username or Email</label>
+                    <input type="text" id="user-or-email" name="user_or_email" class="form-control"
+                           placeholder="username or email" autocomplete="off">
+                </div>
+                <div class="form-group" style="flex: 0; min-width: 150px;">
+                    <label for="default-role">Default Role</label>
+                    <select id="default-role" name="default_role" class="form-control">
+                        {% for value, label in role_choices %}
+                        <option value="{{ value }}"{% if value == 'editor' %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn-add">+ Add to Crew</button>
+            </form>
+        </div>
+
+        <!-- Members roster table -->
+        <div class="card">
+            <h3>Roster</h3>
+            {% if members %}
+            <table class="members-table">
+                <thead>
+                    <tr>
+                        <th>Identity</th>
+                        <th>Default Role</th>
+                        <th>Status</th>
+                        <th>Remove</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for member in members %}
+                    <tr>
+                        <td>
+                            {% if member.user_id %}
+                                {{ member.user.username }}
+                                {% if member.user.email %}
+                                <span style="color:#777; font-size:12px;">&lt;{{ member.user.email }}&gt;</span>
+                                {% endif %}
+                            {% else %}
+                                {{ member.email }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="role-badge role-{{ member.default_role }}">{{ member.get_default_role_display }}</span>
+                        </td>
+                        <td>
+                            {% if member.user_id %}
+                                <span class="status-badge status-active">Active</span>
+                            {% else %}
+                                <span class="status-badge status-pending">pending signup</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="post" action="{% url 'crew_member_remove' crew.id member.id %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-remove"
+                                        onclick="return confirm('Remove this member from the crew? This removes them from the crew only — their existing project memberships are NOT affected. To remove them from active projects, manage each project separately.')">
+                                    Remove
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <p>No members in this crew yet. Use the form above to add one.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Delete crew danger zone -->
+        <div class="card">
+            <h3>Delete Crew</h3>
+            <p class="danger-zone-text">
+                Deleting this crew will remove all roster entries permanently.
+                Existing project memberships for crew members will <strong>not</strong> be affected.
+                To remove someone from a project, manage that project's membership separately.
+            </p>
+            <form method="post" action="{% url 'crew_delete' crew.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn-delete-crew"
+                        onclick="return confirm('Delete this crew? Existing project memberships will not be affected.')">
+                    Delete Crew "{{ crew.name }}"
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
