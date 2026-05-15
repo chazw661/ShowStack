@@ -61,11 +61,12 @@ Downstream agents MUST read `06-SPEC.md` before planning or implementing. Requir
 
 ### UI Placement & Navigation
 
-- **D-03: `/accounts/crew/` is the index URL — new top-level route under the accounts app.**
+- **D-03: `/crew/` is the index URL — new top-level route inside the accounts app.**
+  - **Amended 2026-05-14 after checker review.** `accounts.urls` is mounted at the root prefix `''` in `audiopatch/urls.py:36`, so existing routes are `/register/`, `/login/`, `/dashboard/`. Crew routes follow the same pattern: `/crew/`, not `/accounts/crew/`. No edits to `audiopatch/urls.py`.
   - Auth-gated via `@login_required`. Owner-only views check `request.user == project.owner` for any project-touching action.
-  - Templates live in the existing pattern: `accounts/templates/accounts/crew_index.html`, `crew_detail.html` (matches `register.html`, `invite_user.html` neighbors).
-  - NOT under Django admin — this is a first-class user-facing feature, not a power-user backstage tool.
-  - Routes: `/accounts/crew/` (index), `/accounts/crew/new/` (create), `/accounts/crew/<crew_id>/` (detail/edit/delete), `/accounts/crew/<crew_id>/members/add/` (add member), `/accounts/crew/<crew_id>/members/<member_id>/remove/` (remove). Final URL names finalized in planning.
+  - Templates live in project-level `templates/accounts/crew_index.html`, `crew_detail.html` per D-14.
+  - NOT under Django admin — this is a first-class user-facing feature.
+  - Routes: `/crew/` (index), `/crew/new/` (create), `/crew/<crew_id>/` (detail/edit/delete), `/crew/<crew_id>/members/add/` (add member), `/crew/<crew_id>/members/<member_id>/remove/` (remove). URL names: `crew_index`, `crew_create`, `crew_detail`, `crew_member_add`, `crew_member_remove`.
 
 - **D-04: Nav surface is the top-right user menu, next to logout.**
   - Add a "My Crew" link to whatever template renders the top-right user dropdown (researcher: locate that template — likely a header partial in `templates/` or `accounts/templates/accounts/`).
