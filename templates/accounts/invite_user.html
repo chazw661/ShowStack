@@ -217,6 +217,33 @@
                 <button type="submit" class="btn-primary">Send Invitation</button>
             </form>
         </div>
+
+    {# Phase 6 (SPEC-06-R03, R05): additive Add your crew panel. No edits to the existing form above. #}
+    {% if owner_crews %}
+    {% for crew in owner_crews %}
+    <div class="card" style="margin-top: 20px;">
+        <h3>{{ crew.name }} ({{ crew.eligible_count }} eligible to add)</h3>
+        <p>
+            {% for cm in crew.member_display %}
+                {% if cm.is_already_member %}
+                    <span style="color:#888;text-decoration:line-through">{{ cm.label }}</span>
+                {% elif cm.is_pending %}
+                    <span>{{ cm.label }} <span style="background:#f39c12;color:white;font-size:11px;padding:2px 6px;border-radius:3px;">pending signup</span></span>
+                {% else %}
+                    <span>{{ cm.label }}</span>
+                {% endif %}{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+        <form method="post" action="{% url 'bulk_add_crew' project.id crew.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-primary"
+                    {% if crew.eligible_count == 0 %}disabled{% endif %}>
+                Add this crew
+            </button>
+        </form>
+    </div>
+    {% endfor %}
+    {% endif %}
     </div>
 </body>
 </html>
