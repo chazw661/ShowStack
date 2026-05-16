@@ -856,6 +856,57 @@ Open project</a></p>
         print(f"Crew-added email error: {e}")
 
 
+def send_crew_invite_to_signup_email(crew_member, project, request):
+    """Email a pending (unregistered) crew member at bulk-add time.
+
+    Pending CrewMembers (user=NULL) have an email but no ShowStack account.
+    When the project owner bulk-adds the crew to a project, fire this email
+    so the recipient knows they were added and can sign up. After they
+    register, the auto-claim hook in marketing/views.register materializes
+    the ProjectMember row automatically.
+
+    D-10: log + swallow — mirrors send_crew_added_email.
+    """
+    import resend
+    import os
+    from django.urls import reverse
+
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    signup_url = request.build_absolute_uri(reverse('register'))
+    owner = project.owner
+    owner_label = owner.get_full_name() or owner.username
+
+    subject = (
+        f"{owner_label} added you to "
+        f"{project.name} on ShowStack"
+    )
+    html = f"""
+<h2>You've been added to a ShowStack project</h2>
+<p><strong>{owner_label}</strong> added you to their crew on:</p>
+<ul>
+    <li><strong>Project:</strong> {project.name}</li>
+    <li><strong>Your role:</strong> {crew_member.get_default_role_display()}</li>
+</ul>
+<p>You don't have a ShowStack account yet. Sign up with <strong>{crew_member.email}</strong> and your project access will activate automatically:</p>
+<p><a href="{signup_url}" style="display:inline-block;padding:12px 24px;background:#4a9eff;color:white;text-decoration:none;border-radius:6px;margin:20px 0;">
+Sign up for ShowStack</a></p>
+<p><small>Use the email address above when registering so your access connects automatically.</small></p>
+<hr>
+<p><small>ShowStack — Professional Audio Production Management</small></p>
+"""
+    try:
+        resend.Emails.send({
+            "from": "ShowStack <noreply@showstack.io>",
+            "to": [crew_member.email],
+            "subject": subject,
+            "html": html,
+        })
+        print(f"Crew-invite-to-signup email sent to {crew_member.email}")
+    except Exception as e:
+        # D-10: log + swallow — do NOT re-raise.
+        print(f"Crew-invite-to-signup email error: {e}")
+
+
 @login_required
 def bulk_add_crew(request, project_id, crew_id):
     """Bulk-add an entire crew to a project (SPEC-06-R03, R04, R05, R08; D-06, D-09, D-10).
@@ -924,9 +975,29 @@ def bulk_add_crew(request, project_id, crew_id):
                 getattr(pm.user, 'email', '<unknown>'),
             )
 
+    # Pending crew members (user=NULL) — fire signup invite so they know
+    # they were added and can sign up to materialize their access. After
+    # registration, the auto-claim hook in marketing/views.register creates
+    # their ProjectMember row automatically.
+    pending = list(crew.crewmember_set.filter(user__isnull=True))
+    for cm in pending:
+        try:
+            send_crew_invite_to_signup_email(cm, project, request)
+        except Exception:
+            logger.exception(
+                "Crew-invite-to-signup email failed for %s",
+                cm.email,
+            )
+
+    pending_count = len(pending)
+    pending_clause = (
+        f" {pending_count} pending member(s) emailed a signup invite."
+        if pending_count else ""
+    )
     messages.success(
         request,
         f"Added {len(to_add)} members from {crew.name}; "
         f"{already} were already on this project."
+        f"{pending_clause}"
     )
     return redirect('invite_user', project_id=project.id)
