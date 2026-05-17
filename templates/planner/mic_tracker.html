@@ -251,9 +251,10 @@
     .a2-select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; border-radius: 3px; padding: 3px 6px; font-family: inherit; cursor: pointer; }
     .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
     .a2-select option { background: #1e1e32; }
-    .a2-notes-input { color: var(--text-primary); }
-    .a2-notes-input:focus { border-color: var(--accent-blue); height: 52px; }
-    .a2-notes-input::placeholder { color: #6060a0; }
+    .a2-setting-notes { flex: 1; min-width: 200px; }
+    .a2-setting-notes .a2-notes-input { width: 100%; min-height: 26px; height: 26px; max-height: 80px; resize: vertical; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); font-size: 11px; font-family: inherit; padding: 3px 6px; outline: none; transition: border-color 0.15s, height 0.15s; box-sizing: border-box; }
+    .a2-setting-notes .a2-notes-input:focus { border-color: var(--accent-blue); height: 60px; }
+    .a2-setting-notes .a2-notes-input::placeholder { color: #6060a0; }
 
     .a2-slot-queue { border-top: 1px solid var(--border); padding: 8px 14px 4px; background: #13131f; }
     .a2-slot-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -486,7 +487,7 @@
                                     <th style="width:110px;">Type</th>
                                     <th>Presenter</th>
                                     <th class="th-center a1-micd-cell">MIC'D</th>
-                                    <th class="a1-notes-cell">Notes</th>
+                                    <th class="a1-notes-cell">A1 Notes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -725,13 +726,16 @@
                                                 {% for val, label in assignment.OUTPUT_LEVEL_CHOICES %}{% if val %}<option value="{{ val }}" {% if active_slot.output_level == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
                                             </select>
                                         </div>
+                                        <div class="a2-setting a2-setting-notes">
+                                            <span class="a2-setting-label">A2 Notes</span>
+                                            <textarea class="a2-notes-input"
+                                                      id="a2-notes-{{ assignment.id }}"
+                                                      data-active-slot-id="{% if active_slot %}{{ active_slot.id }}{% endif %}"
+                                                      placeholder="allergies, preferences, setup tips..."
+                                                      onblur="if(this.dataset.activeSlotId) updateSlotField(this.dataset.activeSlotId, 'notes', this.value)"
+                                                      {% if is_viewer %}readonly{% endif %}>{% if active_slot %}{{ active_slot.notes|default:'' }}{% endif %}</textarea>
+                                        </div>
                                     </div>
-                                    <textarea class="a2-notes-input"
-                                              id="a2-notes-{{ assignment.id }}"
-                                              data-active-slot-id="{% if active_slot %}{{ active_slot.id }}{% endif %}"
-                                              placeholder="Notes (allergies, preferences, setup tips...)"
-                                              onblur="if(this.dataset.activeSlotId) updateSlotField(this.dataset.activeSlotId, 'notes', this.value)"
-                                              {% if is_viewer %}readonly{% endif %}>{% if active_slot %}{{ active_slot.notes|default:'' }}{% endif %}</textarea>
                                     {% endwith %}
                                 </div>
                             </div>
