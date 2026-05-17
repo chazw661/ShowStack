@@ -1234,7 +1234,7 @@ class DeviceOutputInline(BaseEquipmentInline):
 
 
 class DeviceAdmin(BaseEquipmentAdmin):
-    inlines = [DeviceInputInline, DeviceOutputInline, DanteDeviceConfigInline]
+    inlines = [DeviceInputInline, DeviceOutputInline]
     list_display = ['name','primary_ip_address', 'secondary_ip_address', 'device_actions',]
     #list_filter = ['location',]  
     search_fields = ['name'] 
