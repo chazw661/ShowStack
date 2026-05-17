@@ -333,18 +333,8 @@
             <h2 class="panel-title">Service Configuration</h2>
             <div class="grid-3">
                 <div class="form-group">
-                    <label>Service Type</label>
-                    <select id="service-type" onchange="updatePlanSettings()">
-                        {% for value, label in service_types %}
-                        <option value="{{ value }}" {% if plan.service_type == value %}selected{% endif %}>
-                            {{ label }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
                     <label>Available Amps/Leg</label>
-                    <input type="number" id="available-amps" value="{{ plan.available_amperage_per_leg }}" 
+                    <input type="number" id="available-amps" value="{{ plan.available_amperage_per_leg }}"
                            onchange="updatePlanSettings()">
                 </div>
                 <div class="form-group">
@@ -546,7 +536,6 @@
         // Update plan settings via AJAX
         function updatePlanSettings() {
             const data = {
-                service_type: document.getElementById('service-type').value,
                 available_amperage_per_leg: document.getElementById('available-amps').value,
                 transient_headroom: document.getElementById('transient-headroom').value,
                 safety_margin: document.getElementById('safety-margin').value,
