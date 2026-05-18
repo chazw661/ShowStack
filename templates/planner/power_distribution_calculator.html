@@ -549,12 +549,24 @@
                 },
                 body: JSON.stringify(data)
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Plan settings update failed: HTTP ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     updatePhaseDisplay(data.phase_loads);
-                    location.reload(); // Refresh to show recalculated values
+                    location.reload();
+                } else {
+                    console.error('Plan settings update returned success=false:', data.error);
+                    alert('Could not save settings: ' + (data.error || 'unknown error'));
                 }
+            })
+            .catch(err => {
+                console.error('Plan settings update error:', err);
+                alert('Could not save settings: ' + err.message);
             });
         }
         

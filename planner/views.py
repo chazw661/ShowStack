@@ -2163,15 +2163,34 @@ def update_plan_settings(request, plan_id):
         for assignment in plan.amplifier_assignments.all():
             assignment.save()  # This triggers recalculation in the model's save method
         
-        # Get updated phase distribution
+        # Get updated phase distribution. The full phase_loads dict carries
+        # AmplifierAssignment model instances inside phases[L].assignments,
+        # which the default Django JSON encoder cannot serialize. Strip to
+        # scalar fields the JS optimistic update actually reads — the page
+        # reload that follows the AJAX call rehydrates the rest from the
+        # server-rendered template (#9 fix).
         phase_loads = calculate_phase_distribution(plan)
-        
+        slim_phase_loads = {
+            'phases': {
+                name: {
+                    'total_current': pdata.get('total_current', 0),
+                    'current_rounded': pdata.get('current_rounded', 0),
+                    'percentage': pdata.get('percentage', 0),
+                }
+                for name, pdata in phase_loads['phases'].items()
+            },
+            'imbalance': phase_loads.get('imbalance', 0),
+            'total_current': phase_loads.get('total_current', 0),
+            'usable_amperage': phase_loads.get('usable_amperage', 0),
+            'available_amperage': phase_loads.get('available_amperage', 0),
+        }
+
         return JsonResponse({
             'success': True,
-            'phase_loads': phase_loads,
+            'phase_loads': slim_phase_loads,
             'usable_amperage': plan.get_usable_amperage()
         })
-        
+
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
