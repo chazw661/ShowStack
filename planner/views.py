@@ -1149,6 +1149,28 @@ def toggle_day_collapse(request):
         return JsonResponse({'success': False, 'error': str(e)})      
 
 
+def _presenter_photo_data_url(presenter):
+    """Return a data: URL string for a Presenter's headshot, or '' if none.
+
+    Used to auto-populate PresenterSlot.photo_data (an inline base64 data URL
+    that the A2 photo zone renders as <img src=...>) when a presenter is
+    assigned to a slot — Issue #10. Any read failure returns '' so the
+    assignment itself still succeeds; the photo just won't auto-populate.
+    """
+    if not presenter or not presenter.photo:
+        return ''
+    try:
+        import base64
+        import mimetypes
+        with presenter.photo.open('rb') as f:
+            content = f.read()
+        mime_type = mimetypes.guess_type(presenter.photo.name)[0] or 'image/jpeg'
+        b64 = base64.b64encode(content).decode('utf-8')
+        return f'data:{mime_type};base64,{b64}'
+    except Exception:
+        return ''
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def update_mic_assignment(request):
@@ -1158,12 +1180,12 @@ def update_mic_assignment(request):
         assignment_id = data.get('assignment_id')
         field = data.get('field')
         value = data.get('value')
-        
+
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
         current_project_id = request.session.get('current_project')
         if not current_project_id and hasattr(request, 'current_project') and request.current_project:
             current_project_id = request.current_project.id
-        
+
         if field in ('is_micd', 'is_d_mic'):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
             assignment.save()
@@ -1176,6 +1198,7 @@ def update_mic_assignment(request):
                 slot = PresenterSlot.objects.create(
                     assignment=assignment, order=0, is_active=True
                 )
+            presenter_changed = False
             if field in ('presenter', 'presenter_name'):
                 if value:
                     presenter, _ = Presenter.objects.get_or_create(
@@ -1184,6 +1207,7 @@ def update_mic_assignment(request):
                     slot.presenter = presenter
                 else:
                     slot.presenter = None
+                presenter_changed = True
             elif field == 'presenter_id':
                 if value:
                     try:
@@ -1197,12 +1221,20 @@ def update_mic_assignment(request):
                         slot.presenter = presenter
                 else:
                     slot.presenter = None
+                presenter_changed = True
             else:
                 setattr(slot, field, value)
+
+            # Issue #10: when the presenter changes, sync the slot's headshot
+            # to the Presenter's photo. Clearing the presenter also clears
+            # photo_data so a stale face doesn't hang on after re-assignment.
+            if presenter_changed:
+                slot.photo_data = _presenter_photo_data_url(slot.presenter)
+
             slot.save()
         else:
             return JsonResponse({'success': False, 'error': f'Unknown field: {field}'}, status=400)
-        
+
         session = assignment.session
         session_stats = {
             'micd': session.mic_assignments.filter(is_micd=True).count(),
@@ -1210,13 +1242,15 @@ def update_mic_assignment(request):
         }
         active_slot = assignment.presenter_slots.filter(is_active=True).first()
         presenter_display = active_slot.presenter.name if active_slot and active_slot.presenter else ''
-        
+
         slot_count = assignment.presenter_slots.count()
         return JsonResponse({
             'success': True,
             'session_stats': session_stats,
             'presenter_display': presenter_display,
             'presenter_count': slot_count,
+            'slot_photo_data': active_slot.photo_data if active_slot else '',
+            'active_slot_id': active_slot.id if active_slot else None,
         })
         
     except Exception as e:

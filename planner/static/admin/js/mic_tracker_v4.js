@@ -45,13 +45,17 @@ async function updateField(assignmentId, field, value) {
             // Update UI with new stats
             updateSessionStats(assignmentId, data.session_stats);
             updateDayStats(data.day_stats);
-            
+
             // Update presenter display if needed
             if (field === 'presenter_name' || field === 'presenter_id' || field === 'shared_presenters') {
                 updatePresenterDisplay(assignmentId, data.presenter_display, data.presenter_count);
                 // Update active slot chip
                 const activeChip = document.querySelector(`#slot-queue-${assignmentId} .a2-slot-chip.active`);
                 if (activeChip) activeChip.textContent = data.presenter_display || 'Unassigned';
+                // Issue #10: sync photo zone with the newly-assigned presenter's headshot
+                if (typeof syncAssignmentPhoto === 'function') {
+                    syncAssignmentPhoto(assignmentId, data.slot_photo_data || '', data.active_slot_id || null);
+                }
             }
             
             // Visual feedback

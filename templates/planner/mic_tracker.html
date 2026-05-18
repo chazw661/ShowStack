@@ -1154,6 +1154,57 @@ async function uploadPhotoForSlot(slotId, assignmentId, input) {
     } else { alert('Photo upload failed: ' + (data.error || 'Unknown error')); }
 }
 
+// Issue #10: paint the A2 photo zone with the just-assigned presenter's
+// headshot (data URL) or revert to the placeholder if the presenter has
+// no photo or was unassigned. Mirrors uploadPhotoForSlot's DOM mutations.
+function syncAssignmentPhoto(assignmentId, photoDataUrl, slotId) {
+    const zone = document.getElementById('photo-zone-' + assignmentId);
+    if (!zone) return;
+    let img = document.getElementById('photo-img-' + assignmentId);
+    let expandDiv = document.getElementById('photo-expand-' + assignmentId);
+    const placeholder = document.getElementById('photo-placeholder-' + assignmentId);
+
+    if (photoDataUrl) {
+        if (placeholder) placeholder.style.display = 'none';
+        if (!img) {
+            img = document.createElement('img');
+            img.id = 'photo-img-' + assignmentId;
+            img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
+            zone.insertBefore(img, zone.firstChild);
+        }
+        img.src = photoDataUrl;
+        if (!expandDiv) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'a2-photo-expand';
+            const expandImg = document.createElement('img');
+            expandImg.id = 'photo-expand-' + assignmentId;
+            wrapper.appendChild(expandImg);
+            zone.appendChild(wrapper);
+            expandDiv = expandImg;
+        }
+        expandDiv.src = photoDataUrl;
+    } else {
+        // Presenter cleared (or has no photo) — drop the img elements and
+        // restore the placeholder so the zone reads as empty again.
+        if (img) img.remove();
+        const expandWrapper = zone.querySelector('.a2-photo-expand');
+        if (expandWrapper) expandWrapper.remove();
+        if (placeholder) {
+            placeholder.style.display = '';
+        }
+    }
+
+    // Rewire the file input's slot id so a manual upload still targets the
+    // correct slot after the presenter swap.
+    if (slotId) {
+        const fileInput = zone.querySelector('.a2-photo-input');
+        if (fileInput) {
+            fileInput.id = 'photo-input-slot-' + slotId;
+            fileInput.setAttribute('onchange', 'uploadPhotoForSlot(' + slotId + ', ' + assignmentId + ', this)');
+        }
+    }
+}
+
 function updateSharedPlacement(assignmentId, presenterId, value) {
     fetch('/audiopatch/api/mic/update-shared-placement/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId, presenter_id: presenterId, placement: value}) });
 }
