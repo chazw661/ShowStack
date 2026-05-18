@@ -596,28 +596,6 @@
             }
         }
         
-        // Modal functions
-       
-            
-            fetch(`/audiopatch/api/power/plan/${planId}/add-amp/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    closeModal();
-                    location.reload(); // Refresh to show new assignment
-                } else {
-                    alert('Error: ' + data.error);
-                }
-            });
-        }
-        
         // Delete assignment
         function deleteAssignment(assignmentId) {
             if (!confirm('Are you sure you want to delete this amplifier assignment?')) {
