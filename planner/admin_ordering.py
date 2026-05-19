@@ -99,9 +99,7 @@ def ordered_get_app_list(request, app_label=None):
         # User/Project Management (1-4)
         'userprofile': 1,
         'projectmember': 2,
-        'crew': 2.3,           # Phase 6
-        'crewmember': 2.5,     # Phase 6
-        'crewprojectadd': 2.7, # Phase 6
+        'crew': 2.3,           # Phase 6 (crewmember/crewprojectadd hidden — #12; members managed via Crew inline)
         'invitation': 3,
         'project': 4,
         

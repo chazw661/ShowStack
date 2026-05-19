@@ -213,27 +213,46 @@ showstack_admin_site.register(UserProfile, UserProfileAdmin)
 from planner.models import Crew, CrewMember, CrewProjectAdd
 
 
-class CrewAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'owner', 'created_at', 'updated_at']
+class CrewMemberInline(admin.TabularInline):
+    """Manage a crew's roster directly from the Crew detail page (#12).
+
+    Either `user` (existing ShowStack account) or `email` (pending signup)
+    is required per CrewMember.crewmember_user_xor_email DB constraint.
+    """
+    model = CrewMember
+    extra = 0
+    fields = ('user', 'email', 'default_role', 'added_at')
+    readonly_fields = ('added_at',)
+    autocomplete_fields = ('user',)
+
+
+class CrewAdmin(admin.ModelAdmin):
+    """Admin for Crews. Owner-scoped — BaseEquipmentAdmin's project filter
+    can't apply because Crew has no project FK (#12)."""
+    list_display = ['name', 'owner', 'member_count', 'created_at', 'updated_at']
     list_filter = ['created_at']
     search_fields = ['name', 'owner__username', 'owner__email']
     readonly_fields = ['created_at', 'updated_at']
+    inlines = [CrewMemberInline]
+
+    def member_count(self, obj):
+        return obj.crewmember_set.count()
+    member_count.short_description = 'Members'
+
+    def get_queryset(self, request):
+        """Superusers see every crew; everyone else sees only crews they own."""
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(owner=request.user)
+
+    def save_model(self, request, obj, form, change):
+        if not change and not obj.owner_id:
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
 
 
-class CrewMemberAdmin(BaseEquipmentAdmin):
-    list_display = ['crew', 'user', 'email', 'default_role', 'added_at']
-    list_filter = ['default_role', 'added_at']
-    search_fields = ['crew__name', 'user__username', 'user__email', 'email']
-    readonly_fields = ['added_at']
-
-
-class CrewProjectAddAdmin(BaseEquipmentAdmin):
-    list_display = ['crew', 'project', 'added_at']
-    list_filter = ['added_at']
-    search_fields = ['crew__name', 'project__name']
-    readonly_fields = ['added_at']
-
-
+# Phase 6 originally registered CrewMember and CrewProjectAdd as standalone
+# admin entries; #12 hides them — crews are managed from the Crew detail page
+# (inline) and CrewProjectAdd is an audit artifact users don't need to browse.
 showstack_admin_site.register(Crew, CrewAdmin)
-showstack_admin_site.register(CrewMember, CrewMemberAdmin)
-showstack_admin_site.register(CrewProjectAdd, CrewProjectAddAdmin)
