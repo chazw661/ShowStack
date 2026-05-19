@@ -28,6 +28,8 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - [x] Console CSV import (Yamaha CL/QL/Rivage PM channel labels) — Phase 2, 2026-05-13
 - [x] Multitrack Templates — owner-scoped, cross-console portable (Phase 3, 2026-05-13)
 - [x] Nuendo Live `.nlpr` export — `lxml` template-injection with Yamaha→Farb color mapping (Phase 4, 2026-05-14)
+- [x] Channel record defaults — `default_record` + `default_record_color` seed flags on `ConsoleChannel` (Phase 5, 2026-05-14)
+- [x] Trusted Crew Rosters — owner-defined named groups, bulk-add with pre-onboarding email invites, auto-claim on register (Phase 6 / v2.1, 2026-05-15)
 
 ### Active
 
@@ -41,20 +43,33 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - Network monitoring inside ShowStack — moved to a standalone-app architecture (v1.0 scrapped)
 - Replacing vendor tools that already work well (Dante Controller, LA Network Manager, Studio Manager) — ShowStack feeds them, doesn't replace them
 
-## Current Milestone: v2.0 Multitrack Session Builder
+## Current Milestone: v2.2 Signal Flow Diagrammer
 
-**Goal:** Convert ShowStack console channel data into ready-to-use multitrack recording sessions for Reaper and Nuendo Live, with reusable templates and a per-session track editor.
+**Goal:** ShowStack engineers can draw, save, and share project-scoped signal-flow diagrams using smart shapes that link to live ShowStack equipment records, with connector styles matched to signal type and circuit labels pulled from existing `signal_name` fields.
 
-**Target features:**
-- Core data model: `MultitrackSession` + `MultitrackTrack` per project, referencing existing `Device` (console) and console channels
-- Reaper `.RPP` exporter — plain text, simpler, ships first
-- Nuendo Live `.nlpr` exporter via `lxml` template injection (XML structure + 16-color `Farb` palette already decoded in spec)
-- CSV import for Yamaha CL/QL and Rivage PM channel labels (M7CL deferred until CSV path confirmed)
-- `MultitrackTemplate` for reusable session structures across consoles, mirroring existing ShowStack template UX
-- Track editor: drag-reorder, per-track override (label/color), bulk Aux/Matrix/Group toggles, capacity warning vs configurable recorder limit
-- Pro Tools support deferred to v2.1 pending tester access
+**Target features (module-MVP scope):**
+- Drag-and-drop canvas powered by **JointJS core** (vanilla JS, MIT) — matches ShowStack's no-framework frontend
+- `SignalFlowDiagram` model, project-scoped via `CurrentProjectMiddleware`
+- Many diagrams per project (list page + name + delete)
+- Smart shapes for `Console` / `Device` / `SpeakerArray` / `CommBeltPack` + a generic shape for gear not in ShowStack
+- Nodes carry `(content_type, object_id)` → live link to ShowStack record; label propagates on rename, soft-fail render if the linked record is deleted
+- Orthogonal cable connectors with line-style variants: analog / AES / Dante / MADI / intercom
+- Circuit-label autocomplete sourced from existing signal-name fields (`ConsoleInput`, `DeviceInput/Output`, etc.)
+- JSON autosave (blob on the model row)
+- PNG export
 
-**Source-of-truth spec:** `multitrack_session_builder_spec.md` (in repo root)
+**Source-of-truth spec:** issue #13 + `.planning/research/SUMMARY.md` (generated this milestone).
+
+**Out of scope for v2.2 (carry to v2.3+):**
+- Obstacle-aware orthogonal auto-routing (v2.2 hand-rolls basic routing)
+- Custom rack-unit SVG equipment faceplates
+- PDF / SVG export, version snapshots
+- Mobile `/m/` viewer
+- Real-time multi-user editing
+
+**Previous milestones (closed):**
+- v2.0 Multitrack Session Builder (Phases 1–5) — shipped 2026-05-14
+- v2.1 Collaboration & User Management (Phase 6, Trusted Crew Rosters) — shipped 2026-05-15
 
 ## Context
 
@@ -80,7 +95,9 @@ ShowStack is in beta with live-audio engineer testers. The Multitrack Session Bu
 |----------|-----------|---------|
 | Each ShowStack module is its own GSD milestone (v2.0, v2.1, ...) under a single ShowStack-as-platform project | One-module-per-project cluttered planning; unifying makes cross-module work tractable | In effect from 2026-05-09 |
 | Network Health Monitor scrapped from ShowStack | WiFi/Dante NIC conflicts make cloud-hosted monitoring impossible — moved to standalone-app architecture | v1.0 closed without ship |
-| Multitrack Session Builder selected as v2.0 | Strong differentiation against flaky Yamaha-Steinberg native integration; Reaper has no first-party path | Pending |
+| Multitrack Session Builder selected as v2.0 | Strong differentiation against flaky Yamaha-Steinberg native integration; Reaper has no first-party path | Shipped 2026-05-14 (Phases 1–5) |
+| Signal Flow Diagrammer selected as v2.2 (issue #13) | Engineers manually redraw signal flow in Visio/Lucidchart every gig despite having all the data in ShowStack; closes a high-leverage gap by reusing existing equipment/signal-name records | In progress |
+| JointJS core (MIT) chosen over drawio iframe and maxGraph for v2.2 | Vanilla-JS drop-in matches ShowStack's no-framework frontend; iframe-embed loses native feel and complicates click-through-to-record; maxGraph requires TS build | Locked 2026-05-19 |
 
 ## Evolution
 
@@ -100,4 +117,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-14 — Phase 4 complete: Nuendo Live Export (7/7 plans, 6/6 requirements NLP-01..06, HUMAN-UAT 5/5 required tests passed). `.nlpr` export end-to-end via lxml template-injection; Mac-saved bundled fixture (D-02 amended); exporter handles both Mac and Windows fixture shapes (`_find_seed_and_container` + recover-mode parser, d7075d2); `resolved_yamaha_name` uses color_override only (symmetric with editor swatch + Reaper, 9857aec). 4 of 5 v2.0 phases complete; Phase 5 (Channel Record Defaults) is next.*
+*Last updated: 2026-05-19 — v2.1 closed (Phase 6 Trusted Crew Rosters shipped 2026-05-15: bulk-add + pre-onboarding emails + auto-claim on register, 7/7 plans). v2.2 Signal Flow Diagrammer opened — JointJS core locked as canvas library; module-MVP scope (smart shapes for Console/Device/SpeakerArray/CommBeltPack + generic, orthogonal connectors with type variants, circuit-label autocomplete, JSON autosave, PNG export); mobile viewer + auto-routing deferred to v2.3+.*

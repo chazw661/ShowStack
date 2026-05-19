@@ -1,55 +1,39 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: — Collaboration & User Management
-status: executing
-last_updated: "2026-05-15T01:53:43.360Z"
-last_activity: 2026-05-15 -- Phase 06 execution started
+milestone: v2.2
+milestone_name: Signal Flow Diagrammer
+status: defining_requirements
+last_updated: "2026-05-19T00:00:00.000Z"
+last_activity: 2026-05-19 -- Milestone v2.2 opened, defining requirements
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 32
-  completed_plans: 25
-  percent: 78
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-09)
+See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 06 — trusted-crew-rosters
+**Current focus:** v2.2 — Signal Flow Diagrammer (defining requirements)
 
 ## Current Position
 
-Phase: 06 (trusted-crew-rosters) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 06
-Last activity: 2026-05-15 -- Phase 06 execution started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-19 — Milestone v2.2 started
 
-Progress: [██████████] 100%
+Progress: [          ] 0%
 
 ## Roadmap Summary
 
-5 phases, all derived from REQUIREMENTS.md and the canonical spec
-(`multitrack_session_builder_spec.md`). Phase 1 carries the bulk of the
-work (21 of 38 requirements) because the track editor and Reaper exporter
-must ship as one coherent end-to-end capability before importers, templates,
-or Nuendo Live can be validated against it.
-
-| Phase | Goal | Reqs | UI |
-|-------|------|------|----|
-| 1. Core Sessions, Track Editor & Reaper Export | Build a session and export `.RPP` end-to-end | 21 | yes |
-| 2. Console CSV Import | Populate channels from CL/QL + Rivage PM CSVs | 5 | — |
-| 3. Multitrack Templates | Save/apply reusable session structures | 4 | — |
-| 4. Nuendo Live Export | `.nlpr` template-injection exporter via `lxml` | 6 | — |
-| 5. Channel Record Defaults | `default_record` + `default_record_color` seed flags | 2 | yes |
-
-Phases 2–5 each depend only on Phase 1; sequential execution per the spec's
-ordering rationale (Reaper before Nuendo because plain text is easier to
-validate; CSV after editor exists; Templates after sessions exist; polish last).
+(Pending — `/gsd-roadmapper` will fill this in after REQUIREMENTS.md is locked.)
 
 ## Accumulated Context
 
@@ -59,125 +43,26 @@ validate; CSV after editor exists; Templates after sessions exist; polish last).
 - Reusable lesson: AJAX polling (2–3 s) is more robust than SSE for ShowStack's request lifecycle. Apply to any future near-real-time UI.
 - Phase artifacts archived to `.planning/archive/v1.0-network-monitor/`.
 
-### Open questions flagged for plan-time research
+### From v2.0 Multitrack Session Builder (shipped 2026-05-14)
 
-These don't block roadmap finalization but should be answered before the
-relevant plans land:
+- 5 phases / 38 requirements shipped end-to-end. Reaper `.RPP` byte-stable export, Nuendo Live `.nlpr` template-injection via `lxml`, Yamaha CL/QL + Rivage PM CSV import, owner-scoped Multitrack Templates, channel record defaults.
+- Reusable lessons applicable to v2.2:
+  - **Defence-in-depth at the AJAX boundary** — server-side validation must re-run even when client-side form validation already ran (Phase 5 hex-color re-check pattern). The Signal Flow autosave endpoint should mirror this.
+  - **Additive migrations only.** Phases 1–5 added tables/columns; never altered existing columns destructively. Apply to `SignalFlowDiagram` model.
+  - **CharField(default='') over nullable** for "may not exist" string fields — keeps queries simple and matches MultitrackTrack.color_override pattern.
+  - **Atomic per-task commits** with `feat(NN-MM): ...` subject convention. Apply per plan task in v2.2.
+  - Full per-phase detail archived in `.planning/phases/01-*/SUMMARY.md` through `05-*/SUMMARY.md`.
 
-1. **Phase 2 — M7CL CSV path** (already deferred to v2.1 in REQUIREMENTS.md, but if a Studio Manager CL Editor CSV path *also* covers M7CL, confirm before scoping the parser).
-2. **Phase 2 — exact CL/QL CSV column structure** depends on which export path the user chose (Studio Manager vs CL Editor vs Console File Converter); confirm against real fixture files before finalizing the parser.
-3. **Phase 3 — color-scheme template semantics**: do `MultitrackTemplate.color_scheme` entries apply by name pattern (regex on channel name) or are they manual-only? Spec leaves this open.
-4. **Phase 4 — Nuendo Live template fixture**: Charlie must generate and commit `fixtures/nuendo_live_3_template.nlpr` (a fresh empty Nuendo Live 3 session with one default audio track) before the exporter can be implemented. The spec confirms `lxml` (not stdlib ElementTree) is required to preserve formatting.
-5. **Phase 4 — Rivage→Farb color mapping table** is not yet defined in the spec (only Yamaha CL/QL→Farb is). Either build the Rivage table during Phase 4 or accept that Rivage tracks export with `Farb` omitted in v2.0.
+### From v2.1 Trusted Crew Rosters (shipped 2026-05-15)
 
-**Planned Phase:** 06 (Trusted Crew Rosters) — 7 plans — 2026-05-15T01:37:46.601Z
+- 7 plans / 1 phase. Owner-scoped Crew model, bulk-add with Resend pre-onboarding emails, auto-claim on register.
+- Reusable lesson for v2.2: **`CurrentProjectMiddleware` scoping is the standard** — never URL-route project IDs. v2.2's `SignalFlowDiagram` queryset must filter by `project=request.current_project`.
+- Hidden-from-sidebar pattern (admin_ordering.py whitelist) — apply if v2.2 ships intermediate models that shouldn't clutter the admin sidebar.
 
-### From Phase 04 Plan 01 (Wave 1 prerequisites)
+### v2.2 Locked Scope Decisions (this milestone)
 
-- `lxml~=5.3.0` pinned in `requirements.txt`; Railway pip-installs on next deploy via `railway.json` `startCommand`.
-- `MultitrackTrack.resolved_yamaha_name` `@property` lives next to `resolved_color` / `resolved_dante_number`. Returns palette NAME (e.g. `'Red'`), not hex — Phase 1 `resolved_color` contract is byte-stable and unchanged.
-- `_HEX_TO_YAMAHA_NAME` module-level reverse map (8 entries) is the only structural addition; built once at import time via dict comprehension over `YAMAHA_TO_HEX`, filtering `None` hex values (`'Off'` / `'White'` intentionally unreachable through the override path per D-04).
-- Zero migrations created. `python manage.py makemigrations planner --dry-run` reports `No changes detected`. CLAUDE.md "additive migrations only" rule naturally satisfied.
-- `planner.tests.test_reaper_export`: 42/42 passing — Phase 1 Reaper byte-stable output verified intact.
-- Stale `# disabled in UI until Phase 4 ships` comment at `planner/models.py:980` updated (RESEARCH Pitfall 6 cleanup).
-
-### From Phase 04 Plan 02 (pure-function Nuendo Live exporter)
-
-- `planner/utils/nuendo_live_export.py` shipped — 331 lines, pure `build_nlpr(session) -> bytes` using lxml template-injection. Trust-boundary docstring mirrors `reaper_export.py`; caller (Plan 04-05's view) owns project scoping.
-- `YAMAHA_TO_FARB` constant locked per D-07: 8 entries; `'Off'` and `'White'` intentionally absent so `dict.get()` returns `None` and the exporter strips the `<int name='Farb'/>` element per D-05.
-- `ExportTemplateError` exception class — caught by the (future Plan 04-05) view layer per D-03 contract; renders editor.html with banner instead of returning 500 when the bundled fixture is missing or malformed.
-- Six private helpers implemented per RESEARCH §"Code Examples" verbatim: `_find_audio_folder` (XPath disambiguates 'Audio' from 'Input/Output Channels' MFolderTrack), `_scan_max_id` (D-08 — scans `@ID` attrs + `<int name='RuntimeID'|'ID'/>` value-attrs), `_replace_all_ids` (D-10 — burns IDs sequentially through new_track), `_set_names` (Pitfall 9 two-write protocol), `_set_channel_id`, `_apply_farb` (handles palette-match → mutate, None → remove, non-palette → remove; SubElement re-add path for A5 fallback).
-- `_ordered_enabled_tracks` reused verbatim via `from .reaper_export import _ordered_enabled_tracks` — track order is universal across DAW formats.
-- Helper-level in-memory exercise harness passes end-to-end against a Python-generated fake template covering all 6 helpers (no real Plan 04-03 fixture required for this plan).
-- Phase 1's `planner/tests/test_reaper_export`: 42/42 passing — byte-stable Reaper contract intact.
-- Zero migrations. `python manage.py makemigrations planner --dry-run` reports `No changes detected`. CLAUDE.md "additive migrations only" naturally satisfied.
-- `build_nlpr` is invokable but raises `ExportTemplateError` until Plan 04-03 commits the bundled fixture at `planner/data/multitrack/nuendo_live_3_template.nlpr` — by design (graceful degradation per D-03).
-
-### From Phase 04 Plan 04 (D-09 ID-uniqueness test)
-
-- `planner/tests/test_nuendo_live_export.py` shipped — 248 lines, 3 tests in `NuendoLiveExportIdUniquenessTests`. Runs in 0.153 s; all 3 pass.
-- D-09 floor assertion (`test_ids_unique`): collects every `@ID` attribute and every `<int name='RuntimeID'|'ID'/>` value from the export bytes, asserts `len(set(ids)) == len(ids)`. Directly verifies NLP-06.
-- Two bonus structural checks (within CONTEXT.md §"Test budget — one assertion is the floor, not the ceiling"): `test_track_count_matches_enabled` confirms the seed track was removed and exactly `enabled_count` `MAudioTrackEvent` elements ship (D-10); `test_both_name_writes` confirms outer `MListNode/Name` and inner `DeviceAttributes/Name/String` agree per track (NLP-03 / Pitfall 9).
-- `planner/tests/fixtures/nuendo_live_3_template_fake.nlpr` shipped — 38-line Python-generated minimal fake template carrying every element shape `build_nlpr`'s helpers traverse. Lets Plan 04-04 run independently of Plan 04-03's Charlie-hand-generated real fixture (Wave 2 parallel-safe).
-- Module-global swap-and-restore pattern in `setUp` / `tearDown` (`nle._TEMPLATE_PATH = FAKE_TEMPLATE`, `nle._TEMPLATE_TREE = None`) — preserves test isolation, restores originals so other tests are unaffected. Verified by `test_reaper_export` still passing 42/42 after the new test module lands.
-- Field-type adjustments to the plan's draft `<action>` test code (invited explicitly by the plan's Notes): `ConsoleAuxOutput.aux_number` and `ConsoleMatrixOutput.matrix_number` are `CharField` (passed as `'1'` not `1`); `ConsoleStereoOutput.stereo_type` choices are `'L'`/`'R'`/`'M'` only (not `'MAIN'`). No deviations — the plan documented these as expected adjustments.
-- Zero migrations, zero schema drift. `python manage.py makemigrations planner --dry-run` → `No changes detected in app 'planner'`.
-
-### From Phase 04 Plan 05 (HTTP entry point — view + URL route)
-
-- `planner/views.py` gains `multitrack_export_nlpr(request, session_id)` (95 net new lines: import + section-header comment + view body) immediately after `multitrack_export_rtracktemplate`. Mirrors the Phase 1 `multitrack_export_rpp` pattern at `:6875-6919` line-for-line with three deltas: calls `build_nlpr(session)`, wraps the call in `try/except ExportTemplateError` (D-03 graceful fallback to `editor.html` with banner copy `'Nuendo Live export is unavailable on this server — bundled template missing or malformed. Contact support.'`), and uses `application/xml; charset=utf-8` + lowercase `.nlpr` filename.
-- Auth decorator: `@staff_member_required` — RESEARCH Pitfall 5 verified current Phase 1 state (downloads kept legacy gate; CR-01/CR-02 retightened only AJAX mutate endpoints `set_color`/`set_label`/`set_enabled`/`remove_track`/reorder). Decision documented in-source via the section-header comment so future readers don't accidentally drift from Phase 1's sibling.
-- `planner/urls.py` gains one route: `path('multitrack/<int:session_id>/export.nlpr/', views.multitrack_export_nlpr, name='multitrack_export_nlpr')` slotted immediately after the two existing Reaper file-download routes. `reverse('planner:multitrack_export_nlpr', args=[42])` returns `/audiopatch/multitrack/42/export.nlpr/`.
-- Both error paths (no-enabled-tracks AND `ExportTemplateError`) use the IDENTICAL `_editor_context(...)` shape Phase 1 used at `:6900-6912`; only the `export_error` string differs. Keeps the editor template's context contract uniform across all export attempts.
-- Atomic commits: `905b87d` (Task 1: view) + `7216f52` (Task 2: URL). No deletions in either commit (`git diff --diff-filter=D HEAD~1 HEAD` empty for both).
-- Zero migrations. `python manage.py makemigrations planner --dry-run` → `No changes detected in app 'planner'`. View + URL only.
-- `python manage.py check` → 0 issues. Full `planner` suite 95/95 passing in 4.745s. `planner.tests.test_reaper_export` 42/42 (Phase 1 byte-stable Reaper contract intact). `planner.tests.test_nuendo_live_export` 3/3 (Plan 04 D-09 ID-uniqueness + bonus structural checks intact).
-- Plan 04-07 (toolbar button) is now unblocked — the `reverse()` URL is stable and reachable today via direct hit. The `.nlpr` button needs only one `<a>` anchor in `editor.html` per D-11 / D-13.
-
-### From Phase 04 Plan 06 (atomic three-place nuendo_live gate removal)
-
-- Single atomic commit (`c53a9ce`) removes all three Phase 1 belt-and-suspenders gates that disabled `nuendo_live` as a `target_daw` choice on the new-session form. Per RESEARCH Pitfall 6: removing one or two gates in isolation leaves the form half-broken; atomicity is the requirement.
-- Gates removed: (1) `planner/forms.py` `MultitrackSessionForm.__init__` choices-restriction list-comp; (2) `planner/forms.py` `clean_target_daw` method (with ValidationError `'Nuendo Live export ships in v2.0 Phase 4...'`); (3) `planner/templates/planner/multitrack/new_session.html` static `<input type="radio" disabled>` placeholder block.
-- 26 lines deleted across 2 files; 0 lines added. The dynamic `{% for radio in form.target_daw %}` loop at `new_session.html:66-71` is now the sole renderer of the two radios. `MultitrackSession.TARGET_DAW_CHOICES` (`planner/models.py:978-981`) drives the form's choices unmodified — both `reaper` and `nuendo_live` enabled.
-- T-04-20 mitigation (Django `ChoiceField` validation against `TARGET_DAW_CHOICES`) verified intact via inline form-instantiation check: `target_daw='protools'` (bogus) still rejected. T-04-21 (previously-rejected `nuendo_live` now accepted) is the intended behavior change.
-- No Phase 1 test asserted the removed `ValidationError` (grep verified across `planner/tests/`), so no test updates needed. `python manage.py test planner -v 1` → 95/95 passing in 4.750s after the change.
-- `python manage.py check` → 0 issues. `python manage.py makemigrations planner --dry-run` → No changes detected. Zero migrations.
-- Plan 04-01 had already removed the stale `# disabled in UI until Phase 4 ships` comment from `planner/models.py:980` (RESEARCH Pitfall 6 bonus cleanup), confirmed pre-execution by reading `planner/models.py:977-982`. No additional model-side edit needed.
-
-### From Phase 04 Plan 07 (toolbar button — Phase 04 code-complete)
-
-- `planner/templates/planner/multitrack/editor.html` gains one new `<a class="mts-btn mts-btn-success" href="{% url 'planner:multitrack_export_nlpr' session.id %}">Export to Nuendo Live (.nlpr)</a>` anchor inserted immediately after the existing Reaper Track Template anchor (between the previous line 81 and the closing `</div>` of `mts-toolbar-actions`). +2 lines, zero deletions. Single atomic commit `eb5dfaf` (`feat(04-07)`).
-- D-11 honored: no `{% if %}` wrapper on `session.target_daw`. All three export buttons (`.RPP` success / `.RTrackTemplate` secondary / `.nlpr` success) render for every session regardless of `target_daw`. Matches the Phase 1 posture of the two Reaper anchors; `target_daw`'s semantic meaning is now "default for new sessions / template signaling" (Phase 3) rather than "what buttons appear."
-- D-13 honored: zero new CSS classes. The `.nlpr` anchor reuses the existing `mts-btn mts-btn-success` pair from the `.RPP` sibling. Phase 4 ships no CSS-edit at all.
-- D-14 honored: single `.nlpr` button — no separate "Nuendo Live track template" variant. Nuendo Live has no track-archive format like full Nuendo's `.npr` (spec §"Nuendo Live (.nlpr)").
-- Deliberate divergence from the `.RTrackTemplate` sibling: no `title=` attribute on the new anchor. Rationale: `.nlpr` is self-explanatory as a Nuendo Live filename; `.RTrackTemplate` needed the "import via Track menu" hint because engineers wouldn't recognize that extension. The `.RPP` anchor (also success-styled, also full-export) also has no `title=`.
-- End-to-end render verified: `render_to_string('planner/multitrack/editor.html', ctx)` with a minimal context produces HTML containing both `Export to Nuendo Live (.nlpr)` and the reversed URL `/multitrack/1/export.nlpr/`. No `NoReverseMatch`.
-- `python manage.py check` → 0 issues. `python manage.py makemigrations planner --dry-run` → No changes detected. Zero migrations (template-only edit). `python manage.py test planner -v 0` → **95/95** passing in 4.649s — Phase 1 Reaper byte-stable contract intact; Plan 04-04 D-09 ID-uniqueness intact.
-- **Phase 04 code-complete:** all 7 plans across 3 waves shipped. Wave 1 (parallel) — Plans 01/02/03/04 (model + lxml + comment, exporter, fixture, ID-uniqueness test). Wave 2 — Plan 05 (view + URL). Wave 3 (parallel) — Plans 06/07 (form gate removal, toolbar button).
-- **HUMAN-UAT for NLP-01..NLP-05 is now unblocked.** Charlie's Mac + Nuendo Live 3 round-trip is the only remaining gate before `/gsd-transition` or `/gsd-complete-phase` can mark Phase 04 done. NLP-06 (ID/RuntimeID uniqueness) is already fully verified via Plan 04-04's `test_ids_unique`.
-
-### From Phase 05 Plan 01 (channel model fields + migration 0155)
-
-- `planner/models.py` gains two new fields on each of the 4 ConsoleChannel models (`ConsoleInput`, `ConsoleAuxOutput`, `ConsoleMatrixOutput`, `ConsoleStereoOutput`): `default_record = models.BooleanField(default=True, help_text=...POL-01...)` and `default_record_color = models.CharField(max_length=7, blank=True, default='', help_text=...POL-02...)`. Inserted immediately after each class's existing `color = ...` line so seed-recording metadata clusters visually. +40 lines, zero deletions. Single atomic commit `8003594` (`feat(05-01)`).
-- `planner/migrations/0155_channel_record_defaults.py` shipped — auto-generated via `manage.py makemigrations planner --name channel_record_defaults`. Exactly 8 AddField operations (2 per model × 4 models), single dependency on `('planner', '0154_multitrack_template')`, no AUTH_USER_MODEL swap (neither new field references User). +53 lines (new file), zero deletions. Single atomic commit `f4c0a99` (`feat(05-01)`).
-- Backwards-compat backfill: every existing channel row receives `default_record=TRUE` and `default_record_color=''`. Net change in user-observable behaviour at deploy time: zero (today's picker already enables tracks by default; today's color seeding is already empty). The True default was chosen so engineers opt OUT obvious-don't-record channels (talkback, monitor sends) once at the channel level rather than uncheck them on every new session.
-- `default_record_color` exactly mirrors `MultitrackTrack.color_override` (`max_length=7`, `blank=True`, `default=''`) so Plan 05-03's seed-copy step is a one-liner `track.color_override = channel.default_record_color` with no None-handling. No `choices=` on `default_record_color` — engineers can paint with custom hex via the swatch picker's custom-color path.
-- No model-layer hex validator (defence-in-depth pattern from Phase 1's `MultitrackTrack.color_override`): validation lives at the form layer (Plan 05-02 — Django form `clean_default_record_color` will run `_HEX_COLOR_RE`) and the AJAX boundary (Plan 05-03's `add_tracks` view re-checks). The 4 form classes Plan 05-02 needs to touch: `ConsoleInputForm`, `ConsoleAuxOutputForm`, `ConsoleMatrixOutputForm`, `ConsoleStereoOutputForm` in `planner/forms.py`.
-- `python manage.py check planner` → 0 issues. `python manage.py makemigrations planner --dry-run` → "No changes detected in app 'planner'" after Task 2 (proves migration captures the full model delta).
-- No `python manage.py migrate` invocation per CLAUDE.md rule — Charlie runs migrations against prod via Railway's `railway.json` `startCommand` `migrate` step on next deploy. PG 11+ `ALTER TABLE ADD COLUMN` with a constant default is a metadata-only operation, sub-second across all Railway-tenant projects regardless of console table size.
-- `ConsoleImport` (audit-snapshot model) intentionally left untouched per plan instruction — only the 4 channel models received the new fields.
-- The existing `color` field (Yamaha palette NAME, used by Rivage/Nuendo exporters and CSV import) preserved unchanged on all 4 models — `default_record_color` is a separate hex CharField, distinct from the palette-name field. Two different fields, two different consumers.
-- **Wave 2 unblocked:** Plans 05-02 (admin form surface) and 05-03 (seed logic in `multitrack_add_tracks` + regression tests) can run in parallel against the new schema. Both will read `channel.default_record` and `channel.default_record_color` directly on the 4 channel model classes — no type-dispatch needed.
-
-### From Phase 05 Plan 02 (admin form surface — 4 ChannelForm Meta.fields + hex validator)
-
-- `planner/forms.py` gains `'default_record'` and `'default_record_color'` as the trailing two entries of `Meta.fields` on all 4 ConsoleChannel ModelForms (`ConsoleInputForm`, `ConsoleAuxOutputForm`, `ConsoleMatrixOutputForm`, `ConsoleStereoOutputForm`). The 4 corresponding `TabularInline` subclasses in `planner/admin.py:583-761` (`ConsoleInputInline` et al.) pull `form = ConsoleXxxForm` so the new fields render automatically on the Console admin change-form — no admin-class edit needed. +108 lines / −8 lines. Single atomic commit `7121792` (`feat(05-02)`).
-- Each of the 4 forms gains an identical `clean_default_record_color` method whose body is a verbatim duplicate of `planner/views.py:6259` `_HEX_COLOR_RE` (local `import re`, `(value or '').strip()`, `re.match(r'^#[0-9A-Fa-f]{6}$', value)`, raise `forms.ValidationError(f"Color must be empty or #RRGGBB hex, got: {value!r}")` on mismatch). Empty strings pass through unchanged. Verbatim copy chosen over `from .views import _HEX_COLOR_RE` because views.py imports `MultitrackSessionForm` from forms.py — reverse import would be circular.
-- Widget styling on `default_record_color` consistent across all 4 forms: 80px width, centered text, `font-mono`, placeholder `#RRGGBB`, HTML `pattern="#[0-9A-Fa-f]{6}"` (UI hint only — `clean_default_record_color` is the actual security control per threat T-05-02-03), `title="Hex color like #FF0000, or leave blank for no seed"`. `default_record` BooleanField renders as Django default checkbox; admin TabularInline already vertically centers the checkbox column.
-- `ConsoleStereoOutputForm` previously had no `__init__` (only `Meta.widgets = {'dante_number': forms.NumberInput(...)}`); a new `__init__` was added matching the other 3 forms' shape so `default_record_color` widget styling can land. The existing `Meta.widgets` dict was preserved unchanged.
-- `planner/admin.py` NOT touched — the 4 inlines bind `form = ConsoleXxxForm` and Django attaches the new fields automatically via `Meta.fields`. `planner/admin_ordering.py` NOT touched per CLAUDE.md rule (only updated when a new admin-REGISTERED model is added; this plan added fields to existing inlines, not new registrations).
-- `python manage.py check planner` → 0 issues. Plan's `<verify>` automated script prints `OK -- all 4 forms expose new fields and the hex regex contract is correct` (7 regex assertions across positive uppercase/lowercase/mixed-case and negative non-hex/non-hex-char/short/no-leading-#).
-- Acceptance-criteria grep counts: `'default_record'` literal → 4, `'default_record_color'` literal → 12 (one Meta.fields + one widget.attrs.update + one cleaned_data.get per form × 4 forms), `def clean_default_record_color` → 4, `must be empty or #RRGGBB hex` → 4, regex literal `^#[0-9A-Fa-f]{6}$` → 4. All ≥-floor or exact-match criteria satisfied.
-- Canonical `Meta.fields` tail order (`default_record, default_record_color`) established for any future record-default fields — append-only, no reordering of pre-existing fields, visual column order in inline rows stable for engineers used to today's layout.
-- Phase-level Success Criterion 1 (engineer can set `default_record` and `default_record_color` from the channel admin/edit UI) — DELIVERED end-to-end on next Railway deploy. POL-01 admin surface (boolean toggle visible) and POL-02 admin surface (hex input visible + validated) both in place; requirements ledger will check off POL-01 + POL-02 after Plan 05-03 ships the seed logic that actually consumes them.
-- **Plan 05-03 contract for AJAX defence-in-depth:** the form-layer regex in this plan is a verbatim duplicate of `_HEX_COLOR_RE` at views.py:6259. Plan 03's `add_tracks` AJAX endpoint MUST re-validate at the boundary — do NOT trust admin-form validation has run for API-driven channel edits or legacy DB rows. Suggested pattern: `if channel.default_record_color and _HEX_COLOR_RE.match(channel.default_record_color): track.color_override = channel.default_record_color`.
-
-### From Phase 05 Plan 03 (seed logic in multitrack_add_tracks + 5-test regression suite)
-
-- `planner/views.py` `multitrack_add_tracks` (line 6598) now bulk-loads channel seed fields via 4 `.values_list('id', 'default_record', 'default_record_color')` queries (one per source_type) restricted to the already-validated `valid_input_ids` / `valid_aux_ids` / `valid_matrix_ids` / `valid_stereo_ids` sets. Result is a `seed_maps` dict keyed by source_type string, each value a `{pk: (default_record, default_record_color)}` map of pure tuples (no model-row instantiation cost). +20 lines, single atomic commit `f49ed1e` (`feat(05-03)`).
-- Each new `MultitrackTrack` row in the picker-add inner loop now receives `enabled=bool(seed_record)` and `color_override=seed_hex` via `seed_record, seed_hex = seed_maps[src_type].get(raw_id, (True, ''))`. The defensive `(True, '')` fallback covers the (shouldn't-happen-post-validate) miss case with values that match the pre-Phase-5 default behaviour, so the fallback path is semantically a no-op.
-- Defence-in-depth AJAX-boundary check: `if seed_hex and not _HEX_COLOR_RE.match(seed_hex): seed_hex = ''`. Reuses module-level `_HEX_COLOR_RE` at views.py:6259 (no re-import, no redefinition). Silently drops malformed hex to `''` rather than crashing the picker or leaking unsanitized strings into `MultitrackTrack.color_override`. Closes threat T-05-03-01 (the only meaningful threat in the plan's STRIDE register).
-- Manual-track construction block (lines 6700-6710 pre-edit) untouched — manuals have no source channel to seed from.
-- `multitrack_duplicate` intentionally NOT touched per plan instruction — duplication preserves source-session state as-is, not re-seed from current channel defaults. POL-01 / POL-02 apply only at picker-add time.
-- No re-import of `ConsoleInput / ConsoleAuxOutput / ConsoleMatrixOutput / ConsoleStereoOutput` inside `multitrack_add_tracks` — they're already imported at planner/views.py:61,70 per CLAUDE.md project-rules.
-- `planner/tests/test_channel_record_defaults.py` shipped — 167 lines, 5 tests in `ChannelRecordDefaultsSeedTests(TestCase)`. Single atomic commit `b23ea10` (`test(05-03)`).
-  1. `test_default_record_true_seeds_enabled_true` — POL-01 happy path
-  2. `test_default_record_false_seeds_enabled_false` — POL-01 opt-out
-  3. `test_default_record_color_seeds_color_override` — POL-02 happy path (`#FF8800`)
-  4. `test_malformed_default_record_color_drops_silently` — defence-in-depth: `.update(default_record_color='not-a-hex')` → endpoint 200 + `track.color_override=''` + `track.enabled` unaffected
-  5. `test_seeded_color_appears_in_reaper_export` — end-to-end: `#FF8800` seeded → `multitrack_export_rpp` GET → response body contains `str(hex_to_peakcol('#FF8800'))` (uses the exporter's own helper to derive the expected integer, future-proof against packing-formula refactors)
-- All 5 tests pass in 0.231s. Phase 1 / 2 / 4 prior test suites all green (test_reaper_export 42/42, test_nuendo_live_export 3/3, test_multitrack_reorder 3/3, Phase 2 import suites green) — proves the seed-logic change did NOT break the Phase 1 byte-stable Reaper contract, the Phase 4 NLP-06 ID-uniqueness contract, the Phase 1 reorder-with-unique-constraint fix, or the Phase 2 CSV-import contracts.
-- Two minor planner-side acceptance-criteria miscounts documented as cosmetic-only deviations in 05-03-SUMMARY.md (the `grep -c "seed_maps"` returns 2 not 5 because the 4 dict-comprehension entries don't repeat the variable name on their lines; the `_HEX_COLOR_RE\.(match|fullmatch)` count returns 3 not 4 because the regex *definition* at 6259 is `re.compile`, not a `.match` invocation). Semantic intent (dict literal exists with 4 source-type entries + 1 lookup, defence-in-depth re-validation present in the row loop) fully met and verified by the plan's own inline `<verify>` script.
-- `python manage.py check planner` → 0 issues. Zero migrations (views/tests-only edit). `python manage.py makemigrations planner --dry-run` → No changes detected.
-- **Phase 05 code-complete; v2.0 milestone code-complete at 38/38 requirements wired end-to-end.** All 5 phases of v2.0 shipped: Phase 1 (Core Sessions + Reaper, 21 reqs) → Phase 2 (Console CSV Import, 5 reqs) → Phase 3 (Multitrack Templates, 4 reqs) → Phase 4 (Nuendo Live Export, 6 reqs) → Phase 5 (Channel Record Defaults, 2 reqs).
-- **HUMAN-UAT remains:** Charlie should verify on local dev that (a) toggling `default_record` to False on a ConsoleInput in the Console admin causes the next picker-add to land `enabled=False`, and (b) setting `default_record_color='#3366FF'` paints the next picker-added track blue. Both flows are smoke-covered by the automated suite; UAT is the standard ShowStack gate before `/gsd-complete-milestone`.
+1. **JointJS core (MIT) is the canvas library** — chosen over drawio iframe and maxGraph. Vanilla-JS drop-in matches the no-framework frontend.
+2. **Module-MVP scope** — desktop only, smart shapes for Console/Device/SpeakerArray/CommBeltPack/Generic, orthogonal connectors with line-style variants (analog/AES/Dante/MADI/intercom), circuit-label autocomplete from existing `signal_name` fields, JSON autosave, PNG export.
+3. **Many diagrams per project** — list page + name + delete, not single-diagram-per-project.
+4. **Out of scope for v2.2:** obstacle-aware auto-routing, custom rack-unit SVG faceplates, PDF / SVG export, version snapshots, mobile `/m/` viewer, real-time multi-user editing. All carried to v2.3+.
+5. **Research path:** 4-agent domain research before requirements are finalized (JointJS docs, diagramming patterns in Django apps, signal-flow industry conventions, common pitfalls).
