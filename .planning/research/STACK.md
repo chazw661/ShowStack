@@ -1,212 +1,303 @@
-# Technology Stack: Network Health Monitor
+# Stack Research: v2.2 Signal Flow Diagrammer
 
-**Project:** ShowStack Network Health Monitor  
-**Researched:** 2026-04-21  
-**Scope:** Libraries needed to add real-time network monitoring (Dante, LA Network/Milan AVB, SNMP switches) to an existing Django 5.x app on Railway.
+**Domain:** Vanilla-JS diagramming module added to existing Django 5.x SaaS
+**Researched:** 2026-05-19
+**Confidence:** HIGH (JointJS core), HIGH (Python layer), MEDIUM (PNG export path)
 
 ---
 
-## Critical Architectural Constraint
+## Scope Boundary
 
-The Django process running on Railway cannot reach show networks. Show networks are local, air-gapped VLANs. The engineer's laptop bridges the gap by running `python manage.py runserver` locally while connected to the show network. All SNMP, ICMP, and mDNS operations happen on the local Django process — the Railway deployment is not involved in monitoring. This is already documented in PROJECT.md and CLAUDE.md §7b. Every library recommendation below assumes local execution on the engineer's laptop.
+This document covers ONLY the net-new dependencies for the v2.2 Signal Flow Diagrammer.
+The existing stack (Django 5.x, PostgreSQL, Whitenoise 6.x, gunicorn, Resend,
+ReportLab, lxml, Sortable.min.js) is locked and not re-evaluated here.
 
 ---
 
 ## Recommended Stack
 
-### 1. Dante Device Discovery — mDNS/Bonjour
+### Core Technologies
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|-----------|
-| `zeroconf` | `>=0.148.0` | mDNS listener for Dante service types | HIGH |
-| `netaudio` | `0.2.4` | High-level Dante device discovery and status; wraps zeroconf | MEDIUM |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `@joint/core` | 4.2.4 | Diagram canvas — nodes, edges, drag-drop, serialisation | MIT was the assumption; actual license is MPL-2.0 (see License section). Dependency-free since v4.0; no Backbone/jQuery/lodash. Drop-in `<script>` tag via CDN. Single UMD bundle + no required CSS. |
+| `html-to-image` | 1.11.11 | Client-side PNG export (SVG → canvas → PNG data URL) | dom-to-image is unmaintained; html-to-image is the maintained fork with identical API. Available as a single UMD min file on cdnjs — no build step. |
 
-**Why `zeroconf`:** The canonical pure-Python mDNS library, actively maintained by the `python-zeroconf` organization (v0.148.0, October 2025). Home Assistant uses it for all mDNS discovery. `netaudio` itself declares `zeroconf>=0.38.3` as a dependency. It supports asyncio via `AsyncServiceBrowser` and `AsyncZeroconf`, which integrates cleanly with Django's async views.
+### Supporting Libraries
 
-**Why `netaudio` (0.2.4, March 2026):** The `network-audio-controller` project (`netaudio` on PyPI) is the only Python library that has already reverse-engineered and validated Dante's mDNS service types (`_netaudio-dbc._udp`, `_netaudio-arc._udp`, `_netaudio-cmc._udp`, `_netaudio-chan._udp`) and the binary control protocol on UDP port 4440/4455. It provides device discovery, subscription listing, channel enumeration, device name/latency/sample rate readout, and clock status queries — exactly what the health monitor needs. It is maintained by Christopher Ritsen and was updated March 31, 2026.
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| Django `models.JSONField` | built-in (Django 3.1+, used here on Django 5.2) | Store diagram canvas state (nodes, edges, positions) as a JSON blob on the `SignalFlowDiagram` model | Always — no third-party dep needed. PostgreSQL stores it as native `jsonb`. |
+| `django.contrib.contenttypes` | built-in | `GenericForeignKey` (`content_type` + `object_id`) on diagram nodes linking to live ShowStack equipment records | Already in `INSTALLED_APPS` for the existing admin; just use it. |
 
-**Caution:** `netaudio` is a CLI tool, not a library designed for embedding. Its internals can be imported but the API is not stable. Use it for the discovery/query logic; wrap it in a service layer to isolate ShowStack from API churn.
+### Development Tools
 
-**What `netaudio` uses for mDNS service types:**
-- `_netaudio-dbc._udp` — device browser/controller (main device presence)
-- `_netaudio-arc._udp` — ARC routing control (used for subscription commands)
-- `_netaudio-cmc._udp` — clock master control
-- `_netaudio-chan._udp` — individual channel advertisements
-
-**Dante-specific:** Discovery is not part of AES67 scope. Dante uses Audinate's proprietary mDNS types above. Standard AES67 endpoints (non-Dante) use SAP/SDP for stream announcement — out of scope for this module.
-
----
-
-### 2. Switch Monitoring — SNMP
-
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|-----------|
-| `pysnmp` | `7.1.24` | SNMP v1/v2c/v3 GET/WALK for switch port status, counters, PoE | HIGH |
-
-**Why `pysnmp` (maintained fork by LeXtudio):** The original `etingof/pysnmp` was abandoned in 2020. LeXtudio Inc. took over maintainership in 2022 and released v7.1.24 on April 18, 2026. It is now published as `pysnmp` on PyPI (the `pysnmp-lextudio` name is deprecated — use `pysnmp`). Supports SNMPv1, v2c, v3 with full MIB handling and asyncio operations.
-
-**Why not `easysnmp`:** Requires native `net-snmp` C library installed on the host (`brew install net-snmp`). For a tool engineers install on their laptops, a pure-Python dependency is much friendlier. EasySNMP is also effectively abandoned (last release 2021). The fork `ezsnmp` exists but has minimal adoption.
-
-**MIBs needed for entertainment switches:**
-- `IF-MIB` — interface status, speed, octets, errors (universal)
-- `BRIDGE-MIB` — VLAN membership
-- `RFC1213-MIB` — standard system info
-- `ENTITY-MIB` — physical inventory (optional)
-- Luminex-specific MIBs if deeper telemetry is needed (vendor-provided)
-
-**SNMP versions:** Target v2c for Luminex/Netgear; v3 for Cisco in secured environments. `pysnmp` handles both.
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| jsDelivr CDN (dev) | Serve `@joint/core` and `html-to-image` during local development | Pin the exact version in the URL (`/npm/@joint/core@4.2.4/dist/joint.min.js`) so local and production behaviour match |
+| Vendored copy (production) | `planner/static/planner/js/vendor/` — same pattern as `Sortable.min.js` | Download once, commit, serve via Whitenoise — eliminates CDN availability as a production dependency |
 
 ---
 
-### 3. LA Network / Milan AVB Device Reachability
+## License: MPL-2.0 (Not MIT) — What This Means
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|-----------|
-| `icmplib` | `3.0.4` | ICMP ping for LA-amplifier reachability checks | HIGH |
+`@joint/core` is licensed under **Mozilla Public License 2.0**, not MIT.
 
-**Why `icmplib`:** Pure Python, no external dependencies, supports `multiping` and `async_multiping` for concurrent checks across many amp IPs. Can operate without root privileges (`privileged=False` uses unprivileged SOCK_DGRAM sockets). The `async_multiping` function integrates with asyncio polling loops.
+MPL-2.0 is a **file-level weak copyleft** licence:
 
-**Why not deeper LA Network / Milan AVB protocol integration:** L-Acoustics' open-source AVDECC library (`L-Acoustics/avdecc`) is C++17 — no Python bindings exist. There is no Python library for IEEE 1722.1 AVDECC as of April 2026. L-Acoustics Network Manager owns that protocol space. ShowStack's scope is connectivity-only (per PROJECT.md), which `icmplib` covers completely.
+- Commercial use and SaaS deployment: **permitted** (confirmed via Mozilla MPL FAQ)
+- Running on Railway and charging subscription fees: **permitted**
+- Obligation: if you **modify the `@joint/core` source files themselves**, those modified files must be re-released under MPL-2.0. ShowStack's own code (views, templates, diagram JS) is in separate files and is **not** subject to the copyleft requirement.
+- Attribution: include the MPL-2.0 licence notice alongside the vendored `joint.min.js` file (a `LICENSE` file or a comment in a `THIRD_PARTY_LICENSES.txt` at project root satisfies this).
 
-**Also use `icmplib` for Dante device reachability verification:** mDNS discovery confirms presence; a ping round-trip confirms the device is actually responding on the network. Both checks together give a more reliable health signal.
+**Practical implication:** vendor the file, add a `THIRD_PARTY_LICENSES.txt`, do not modify `joint.min.js` directly — all constraints are trivially satisfied.
 
 ---
 
-### 4. Real-Time Dashboard Push
+## Static File Layout
 
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|-----------|
-| Django async `StreamingHttpResponse` + SSE | built-in (Django 5.x) | Push device status updates to browser | HIGH |
-| `daphne` (ASGI) | `>=4.0` | ASGI server that enables async views and streaming | HIGH |
+Follow the `Sortable.min.js` precedent:
 
-**Recommendation: SSE over Django Channels or WebSockets.**
-
-The monitoring dashboard is read-only push: the server sends status updates to the browser; the browser never sends monitoring commands back. That is exactly the use case SSE was designed for. SSE requires no Redis, no Channels, no additional processes, and no extra infrastructure.
-
-**Implementation pattern:**
-
-```python
-# views.py
-import asyncio
-from django.http import StreamingHttpResponse
-
-async def status_stream(request):
-    async def event_stream():
-        while True:
-            data = await get_current_network_status(request)  # async DB read
-            yield f"data: {json.dumps(data)}\n\n"
-            await asyncio.sleep(5)
-    return StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+```
+planner/static/planner/js/vendor/
+    Sortable.min.js                ← existing
+    joint.min.js                   ← new (@joint/core 4.2.4 UMD bundle)
+    html-to-image.min.js           ← new (html-to-image 1.11.11 UMD bundle)
 ```
 
-Requires Django running under Daphne (ASGI), which ShowStack already uses or can trivially add since it deploys on Railway with a `Procfile`. The ASGI switch does not break existing WSGI-style views.
+Companion CSS: `@joint/core` 4.x does **not** require a `joint.css` stylesheet.
+The UMD examples in the official docs show the stylesheet commented out. No CSS file
+is needed unless you adopt JointJS+ in a future milestone.
 
-**Why not Django Channels:** Channels adds Redis as a required dependency, a separate worker process, and significant operational complexity. For a local-running tool that pushes to one or two browser tabs, that overhead is not justified. Channels also has a history of breaking API changes between major versions.
+Template `<script>` tag load order:
 
-**Why not polling from the browser:** A polling interval of 5 seconds means every engineer on the show has their browser making HTTP requests every 5 seconds. SSE keeps one persistent connection per browser tab and the server pushes only on state changes — lower overhead and lower latency.
+```html
+{# Diagram canvas — no CSS needed #}
+<script src="{% static 'planner/js/vendor/joint.min.js' %}"></script>
 
-**Frontend:** Plain `EventSource` API (built into every browser, no npm dependency). HTMX can also handle SSE natively with `hx-ext="sse"` if ShowStack is using HTMX elsewhere.
+{# PNG export helper — loaded lazily in the export handler is fine #}
+<script src="{% static 'planner/js/vendor/html-to-image.min.js' %}"></script>
 
----
-
-### 5. Background Network Polling
-
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|-----------|
-| `apscheduler` | `>=3.10` | In-process periodic polling of devices (SNMP, ping, mDNS) | MEDIUM |
-
-**Why `apscheduler` over Celery:** Celery requires a Redis broker and a separate worker process. For a local development tool running `python manage.py runserver`, standing up Redis and a Celery worker adds friction that is inappropriate for a laptop-deployed tool. APScheduler runs inside the Django process with no external dependencies, scheduling polling tasks every N seconds without a broker.
-
-**Polling architecture:** A single background `AsyncIOScheduler` job collects status from all configured devices and writes results to the database. SSE views read from the database (or an in-memory cache) and push changes to connected browsers. This separates the polling concern from the push concern cleanly.
-
-**Caveat:** In a multi-worker production deployment (Railway, gunicorn multi-process), in-process schedulers run in every worker, causing duplicate polls. Since this module is designed for local use (`runserver`), single-process execution is the norm. If production deployment ever needs background polling, migrating to Celery Beat is straightforward — the polling logic does not need to change, only the scheduler wrapper.
-
----
-
-### 6. Session History / Event Storage
-
-| Technology | Version | Purpose | Confidence |
-|------------|---------|---------|-----------|
-| Native Django ORM + PostgreSQL | Django 5.x built-in | Event log table for show-day history | HIGH |
-
-**Recommendation: plain Django model with `timestamp` index, not TimescaleDB.**
-
-**Rationale:** TimescaleDB is a separate PostgreSQL extension that requires a different Railway service (the Railway-managed Postgres does not have the TimescaleDB extension enabled by default). Adding a second database service for a feature that stores at most a few thousand events per show day is not justified. A standard Django model with a `db_index=True` on `timestamp` and a `show_session` FK scoping queries to the current session will handle years of data without performance issues.
-
-```python
-class NetworkEvent(models.Model):
-    show_session = models.ForeignKey('planner.Project', on_delete=models.CASCADE)
-    timestamp    = models.DateTimeField(auto_now_add=True, db_index=True)
-    device_name  = models.CharField(max_length=255)
-    event_type   = models.CharField(max_length=50)  # UP, DOWN, CLOCK_LOST, etc.
-    details      = models.JSONField(default=dict)
-
-    class Meta:
-        ordering = ['-timestamp']
-        indexes = [models.Index(fields=['show_session', '-timestamp'])]
+{# Diagram module #}
+<script src="{% static 'planner/js/signal_flow_diagram.js' %}"></script>
 ```
 
-**Retention:** Add a management command or APScheduler job to prune records older than 30 days. No TimescaleDB automatic compression needed at this event volume.
+Whitenoise serves everything under `STATIC_ROOT` after `collectstatic`. No special
+configuration needed — `.js` files are served with `application/javascript` (Whitenoise
+ships its own MIME table, independent of the OS `/etc/mime.types`).
 
-**When to reconsider:** If the project ever stores per-second metrics from dozens of SNMP interfaces (bandwidth graphs, error rate over time), TimescaleDB becomes worth the operational overhead. That is not in scope for this milestone.
+---
+
+## JointJS Core: Package Details
+
+| Attribute | Value | Source |
+|-----------|-------|--------|
+| Package name | `@joint/core` (renamed from `jointjs` in v4.0.0, Feb 2024) | npm |
+| Current stable version | 4.2.4 (published ~Feb 2026) | npmjs.com/@joint/core |
+| Previous stable | 4.1.4 (Mar 2025) | npm |
+| License | MPL-2.0 | npmjs.com/@joint/core |
+| Peer dependencies | **None** — v4.0 removed Backbone, jQuery, lodash | jointjs.com/blog/introducing-version-4 |
+| UMD bundle (CDN) | `https://cdn.jsdelivr.net/npm/@joint/core@4.2.4/dist/joint.min.js` | jsDelivr |
+| CSS required | No | Official docs JS integration guide |
+| Bundle size (total, no deps) | ~1.1 MB unminified (44% reduction vs v3 + deps) | jointjs.com v4.0 announcement |
+| Global variable exposed | `joint` (UMD build exposes `joint` on `window`) | Official docs |
+| Browser support | Latest Chrome/Firefox/Safari/Edge/Opera (including mobile) | docs.jointjs.com FAQ |
+
+**v4.x removed Backbone internals** but replaced them with an internal `mvc` namespace
+(`mvc.Model`, `mvc.View`, `mvc.Collection`, `mvc.Events`). These are bundled inside
+`joint.min.js` — there is nothing to install separately.
+
+---
+
+## PNG Export: Strategy
+
+### Built-in JointJS raster export
+
+`format.toPNG()` / `format.toJPEG()` / `format.toDataURL()` exist in the official docs
+but are documented exclusively under **JointJS+** (the paid tier). They are NOT part of
+`@joint/core`. Do not use them.
+
+### Recommended: manual SVG → canvas → PNG (two options)
+
+**Option A — `html-to-image` (recommended)**
+
+`html-to-image` 1.11.11 is available as a UMD min file on cdnjs
+(`https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js`).
+Drop it in `vendor/`, call `htmlToImage.toPng(paperElement)` — it serialises the SVG
+DOM to a `<canvas>`, then calls `canvas.toBlob()`. Returns a Promise resolving to a PNG
+data URL. Works in Chrome, Firefox, Edge. Safari has `foreignObject` restrictions but
+JointJS renders pure SVG (no HTML inside foreignObject), so the restriction does not
+apply here.
+
+```js
+// signal_flow_diagram.js — export handler
+document.getElementById('btn-export-png').addEventListener('click', async () => {
+    const paperEl = document.getElementById('paper');
+    const dataUrl = await htmlToImage.toPng(paperEl);
+    const a = document.createElement('a');
+    a.download = diagramName + '.png';
+    a.href = dataUrl;
+    a.click();
+});
+```
+
+**Option B — native SVG serialise → canvas (no extra library)**
+
+JointJS renders to SVG. You can serialise the SVG element to a string, create a Blob
+URL, draw it into a `<canvas>` via `drawImage`, then call `canvas.toDataURL('image/png')`.
+This requires ~20 lines of vanilla JS with no extra file to vendor. The tradeoff is
+more manual handling of embedded fonts, `<image>` elements, and canvas tainting.
+
+For v2.2 (smart shapes, cable connectors, text labels — no embedded images), Option B
+is feasible. Option A is more robust and only costs one extra vendored file.
+
+**Recommendation: use Option A (`html-to-image`) for v2.2.** The extra vendored file
+is cheap insurance against SVG serialisation edge cases as the shape library grows.
+
+---
+
+## Python-Side: No New Dependencies Required
+
+| Need | How Served | New dep? |
+|------|-----------|---------|
+| Store canvas JSON | `models.JSONField` — built into Django 3.1+, works on PostgreSQL as `jsonb` | No |
+| Generic FK to equipment records | `django.contrib.contenttypes.fields.GenericForeignKey` — already in `INSTALLED_APPS` | No |
+| Autosave endpoint | Plain Django `JsonResponse` view returning `{"ok": true}` — no DRF needed | No |
+| PNG export trigger | Client-side only (Option A above) — server never touches image data in v2.2 | No |
+
+**No additions to `requirements.txt`.**
+
+---
+
+## Autosave Endpoint: CSRF Integration
+
+The autosave view is a vanilla `fetch` POST. Django's CSRF middleware is already active.
+No special config needed — read the token from the `csrftoken` cookie (set automatically
+by Django when any page with `{% csrf_token %}` is rendered) and send it as the
+`X-CSRFToken` header:
+
+```js
+// Minimal CSRF-safe fetch helper — add to signal_flow_diagram.js
+function getCsrfToken() {
+    return document.cookie.split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+}
+
+async function autosave(diagramId, graphJson) {
+    await fetch(`/audiopatch/signal-flow/${diagramId}/save/`, {
+        method: 'POST',
+        mode: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ graph: graphJson }),
+    });
+}
+```
+
+If the diagrammer page doesn't contain a `<form>` with `{% csrf_token %}`, decorate the
+view with `@ensure_csrf_cookie` so Django sets the cookie on the GET request.
+
+---
+
+## Existing Stack Conflict Check
+
+| Potential Conflict | Status | Detail |
+|--------------------|--------|--------|
+| CSP headers | No conflict | ShowStack does not configure CSP headers (not in `requirements.txt`, not in `MIDDLEWARE` in codebase). No `django-csp` or `Content-Security-Policy` response header in place. JointJS inline SVG and the PNG canvas path do not require `unsafe-inline` script allowances. |
+| X-Frame-Options | No conflict | `X-Frame-Options: SAMEORIGIN` (Django default) only affects embedding ShowStack pages in iframes from other origins. The diagrammer runs inside the ShowStack page, not in an iframe. |
+| CSRF on autosave | Handled | See pattern above — standard Django cookie + `X-CSRFToken` header pattern used by all other AJAX POST calls in the existing codebase. |
+| Whitenoise static serving | No conflict | Whitenoise serves all files under `STATIC_ROOT` with correct MIME types from its own bundled MIME table. `.js` files get `application/javascript`. No SVG MIME-type quirk applies since the JointJS bundle is a `.js` file, not a `.svg` static asset. |
+| Admin dark theme | Minor care needed | Templates for the diagrammer should extend `admin/base_site.html` (same as all other planner views) to inherit the dark theme. JointJS renders into a user-supplied `<div>` — set a white or light background on the paper container div explicitly, since the dark theme CSS does not know about JointJS internal SVG. |
+| `django.contrib.contenttypes` | Already installed | Used by existing admin; no migration needed to add `GenericForeignKey` to the new model. |
+| Sortable.js coexistence | No conflict | Sortable is used in other views (Crew Rosters). The diagrammer page loads its own JS files and does not share a page with Sortable. No global namespace collision; Sortable exposes `Sortable`, JointJS exposes `joint`. |
+| Mobile `/m/` interface | Not in scope for v2.2; plan for v2.3 | JointJS "supports latest mobile Chrome and Safari" (from the docs FAQ) but touch-drag on mobile requires `dia.PaperScroller` or custom pointer event handling — that is a v2.3 concern. The `/m/` routes do not load the diagrammer in v2.2. |
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Dante discovery | `zeroconf` + `netaudio` | `aiozeroconf` | Abandoned; `zeroconf` absorbed async support natively |
-| SNMP | `pysnmp` (LeXtudio) | `easysnmp` / `ezsnmp` | Requires native net-snmp C lib; easysnmp abandoned 2021 |
-| SNMP | `pysnmp` (LeXtudio) | `puresnmp` | No SNMPv3 support; smaller ecosystem |
-| Reachability | `icmplib` | `pythonping` | Less maintained, no async multiping |
-| Reachability | `icmplib` | subprocess `ping` | Fragile OS-specific output parsing, slow |
-| Real-time push | SSE via `StreamingHttpResponse` | Django Channels | Requires Redis broker + worker process; bidirectional not needed |
-| Real-time push | SSE | Long-polling | Higher request overhead, more complex client logic |
-| Background polling | `apscheduler` | Celery + Redis | Celery requires external broker; overkill for local tool |
-| History storage | Native PostgreSQL | TimescaleDB | Requires separate Railway service; unnecessary for event volumes |
-| Milan AVB | `icmplib` (ping only) | `L-Acoustics/avdecc` C++ lib | C++17 only, no Python bindings; out of scope per PROJECT.md |
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| `@joint/core` 4.2.4 (locked decision) | draw.io iframe embed | Loses native ShowStack UX; click-through-to-equipment-record not feasible across iframe boundary; already rejected in PROJECT.md key decisions |
+| `@joint/core` 4.2.4 (locked decision) | maxGraph (mxGraph fork) | Requires TypeScript build step; no-build constraint from PROJECT.md |
+| `@joint/core` 4.2.4 (locked decision) | Konva.js | Canvas-based (not SVG); hit-testing and label rendering are harder; no built-in graph model |
+| `html-to-image` (Option A) | Option B: native SVG serialise | Works but more fragile for embedded images in future shapes; requires ~20 lines of careful canvas-tainting handling |
+| `html-to-image` | `dom-to-image` | Unmaintained (last release 2019); html-to-image is the active maintained fork with same API |
+| `html-to-image` | JointJS+ `format.toPNG` | Requires paid JointJS+ licence; not available in `@joint/core` |
+| `models.JSONField` (built-in) | `django-jsonfield` (third-party) | Unnecessary — Django 3.1+ includes JSONField natively for all backends including PostgreSQL |
 
 ---
 
-## Installation
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| JointJS+ (`@joint/plus`) | Commercial licence (separate paid SKU); `@joint/core` covers all v2.2 features | `@joint/core` 4.2.4 |
+| `dom-to-image` | Unmaintained since 2019; unresolved bugs | `html-to-image` 1.11.11 |
+| `canvg` | Heavy dependency for SVG→canvas; overkill since html-to-image handles it | `html-to-image` |
+| React / Vue / Svelte | PROJECT.md constraint: vanilla JS only, no framework, no build step | vanilla JS + `@joint/core` |
+| Any npm build toolchain (webpack, vite, rollup) | No-build constraint from PROJECT.md | vendor the pre-built UMD bundles |
+| `django-csp` | ShowStack has no CSP today; adding it mid-milestone would require auditing every inline script and style across all existing views — massive scope expansion | Defer CSP hardening to a dedicated security milestone |
+| `django-jsonfield` (PyPI) | Redundant — Django 5.x ships `models.JSONField` natively | `models.JSONField` |
+| Celery / Redis | Not needed; autosave is a synchronous POST, not a background task | Django view + `JsonResponse` |
+
+---
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `@joint/core` 4.2.4 | Django 5.x (irrelevant — client-side only) | No server-side interaction beyond JSON blob read/write |
+| `@joint/core` 4.2.4 | Whitenoise 6.11 | Whitenoise serves the `.js` file; no interaction with library internals |
+| `@joint/core` 4.2.4 | Sortable.min.js (any version) | Both are UMD globals (`joint` vs `Sortable`); no namespace collision |
+| `html-to-image` 1.11.11 | `@joint/core` 4.2.4 | html-to-image operates on a DOM element; JointJS renders its paper to a `<div>` containing an `<svg>` — fully compatible |
+| `models.JSONField` | Django 5.2 / PostgreSQL (Railway) | Native support; stored as `jsonb` on PostgreSQL. Local SQLite dev also works (stored as text, Django deserialises transparently) |
+
+---
+
+## Acquisition
 
 ```bash
-# Core monitoring libraries
-pip install "zeroconf>=0.148.0"
-pip install "netaudio==0.2.4"
-pip install "pysnmp>=7.0,<8.0"
-pip install "icmplib>=3.0"
-pip install "apscheduler>=3.10,<4.0"
+# Download vendored JS files (do this once, commit the files)
+# @joint/core 4.2.4 UMD minified
+curl -L "https://cdn.jsdelivr.net/npm/@joint/core@4.2.4/dist/joint.min.js" \
+     -o planner/static/planner/js/vendor/joint.min.js
 
-# No additional infrastructure required for local dev
-# (no Redis, no Celery worker, no TimescaleDB)
+# html-to-image 1.11.11 UMD minified
+curl -L "https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js" \
+     -o planner/static/planner/js/vendor/html-to-image.min.js
 ```
 
-For production Railway deployment, no changes to existing `requirements.txt` pattern are needed beyond the above additions.
+No `npm install`, no `package.json`, no build step. Consistent with the Sortable.min.js
+precedent.
 
----
-
-## Open Questions
-
-1. **SNMP community strings / v3 credentials:** These are per-project configuration. The data model needs fields on a `NetworkSwitch` model to store SNMP version, community string (v2c), or auth/priv credentials (v3). These must be stored encrypted or at minimum flagged as sensitive in the admin.
-
-2. **mDNS multicast on multi-VLAN networks:** mDNS is link-local (224.0.0.251). If Dante lives on a separate VLAN, the laptop's interface must be on that VLAN for discovery to work. The engineer's network access level determines what `zeroconf` can see — a documentation/UX concern, not a library limitation.
-
-3. **`netaudio` clock status query:** Dante clock master/slave state is readable via the `_netaudio-cmc._udp` service and binary protocol. `netaudio` exposes device-level info but clock domain detail may require direct UDP queries. Validate in Phase 1 implementation against real hardware before committing to clock-status UI.
-
-4. **`apscheduler` v3 vs v4:** APScheduler v4 (beta as of 2025) is a significant rewrite with a different API. Pin to `>=3.10,<4.0` until v4 is stable and has Django integration guidance.
+Add a `THIRD_PARTY_LICENSES.txt` at project root (or in `planner/static/`) citing:
+- `@joint/core` 4.2.4 — Mozilla Public License 2.0 — https://github.com/clientIO/joint
+- `html-to-image` 1.11.11 — MIT — https://github.com/bubkoo/html-to-image
 
 ---
 
 ## Sources
 
-- python-zeroconf: https://github.com/python-zeroconf/python-zeroconf (v0.148.0, Oct 2025)
-- netaudio: https://pypi.org/project/netaudio/ (v0.2.4, March 2026); https://github.com/chris-ritsen/network-audio-controller
-- Dante mDNS service types: https://github.com/chris-ritsen/network-audio-controller/wiki/Technical-details
-- pysnmp (LeXtudio): https://pypi.org/project/pysnmp/ (v7.1.24, April 2026); https://github.com/lextudio/pysnmp
-- icmplib: https://github.com/ValentinBELYN/icmplib (v3.0.4)
-- L-Acoustics AVDECC (C++, for reference): https://github.com/L-Acoustics/avdecc
-- Django SSE with async StreamingHttpResponse: https://valberg.dk/django-sse-postgresql-listen-notify.html
-- Railway Django + Celery: https://dev.to/techbychoiceorg/django-celery-and-redis-on-railway-214h
-- TimescaleDB on Railway: https://railway.com/deploy/timescaledb
+- [@joint/core on npm](https://www.npmjs.com/package/@joint/core) — version 4.2.4, license MPL-2.0 confirmed
+- [JointJS v4.0 "Dependency-Free" announcement](https://www.jointjs.com/blog/introducing-version-4) — Backbone/jQuery/lodash removal confirmed
+- [JointJS v4.2 docs: JavaScript integration](https://docs.jointjs.com/learn/integration/javascript/) — UMD script-tag installation, no CSS required
+- [JointJS v4.2 release notes](https://docs.jointjs.com/learn/release-notes/) — current stable is 4.2.x
+- [JointJS Raster export docs](https://docs.jointjs.com/api/format/Raster/) — documents `format.toPNG`; confirmed available under JointJS+ namespace only
+- [JointJS SVG export docs](https://docs.jointjs.com/api/format/SVG/) — `format.toSVG` path
+- [@joint/core on jsDelivr CDN](https://www.jsdelivr.com/package/npm/@joint/core) — CDN availability confirmed
+- [Mozilla MPL 2.0 FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/) — commercial SaaS use permitted; file-level copyleft only
+- [html-to-image on npm](https://www.npmjs.com/package/html-to-image) — v1.11.11, MIT, active maintenance
+- [html-to-image on cdnjs](https://cdnjs.com/libraries/html-to-image) — CDN distribution confirmed
+- [dom-to-image vs html-to-image comparison](https://npm-compare.com/dom-to-image,html-to-image,html2canvas) — html-to-image recommended as maintained fork (2025)
+- [Django 3.1 JSONField release notes](https://docs.djangoproject.com/en/5.2/releases/3.1/) — built-in JSONField, no third-party dep needed
+- [Django CSRF with fetch API](https://docs.djangoproject.com/en/5.2/howto/csrf/) — `X-CSRFToken` header pattern
+- [Whitenoise documentation](https://whitenoise.readthedocs.io/en/stable/django.html) — ships own MIME table, no SVG/JS serving quirks
+
+---
+
+*Stack research for: ShowStack v2.2 Signal Flow Diagrammer*
+*Researched: 2026-05-19*

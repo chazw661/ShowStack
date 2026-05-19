@@ -1,17 +1,19 @@
 # Project Research Summary
 
-**Project:** ShowStack Network Health Monitor
-**Domain:** Live audio network monitoring (Dante/mDNS, SNMP switches, LA Network/ICMP)
-**Researched:** 2026-04-21
-**Confidence:** MEDIUM-HIGH
+**Project:** ShowStack v2.2 Signal Flow Diagrammer
+**Domain:** Vanilla-JS diagramming module added to existing Django 5.x SaaS (additive planner module)
+**Researched:** 2026-05-19
+**Confidence:** HIGH
+
+---
 
 ## Executive Summary
 
-The Network Health Monitor is a locally-executed Django module that monitors three parallel show networks — Dante audio networking (mDNS discovery), L'Acoustics amplification (ICMP reachability), and entertainment switches (SNMP) — and presents a unified status dashboard to the A1 engineer. No competing product aggregates all three domains. The recommended approach is a two-process local model: `python manage.py runserver` for the web layer plus `python manage.py run_monitor` as a long-running background poller, communicating through PostgreSQL and pushing updates to the browser via Server-Sent Events. The entire system runs on the engineer's laptop on the show network; the Railway deployment is not involved in monitoring.
+The Signal Flow Diagrammer is a specialized diagramming tool built inside the existing `planner` Django app. The implementation approach is well-defined: `@joint/core` 4.2.4 (MPL-2.0) is the canvas engine — dependency-free since v4.0, vendored as a pre-built UMD bundle alongside the existing `Sortable.min.js` precedent. PNG export uses `html-to-image` 1.11.11 (MIT) rather than JointJS+ `format.toPNG()` which is restricted to the paid tier and unavailable in `@joint/core`. Diagram state is stored as a single `JSONField` blob on a new `SignalFlowDiagram` model using `graph.toJSON()` as the serialization format. No new Python dependencies are required.
 
-The core stack is conservative and dependency-light by design: `zeroconf` and `netaudio` for Dante mDNS discovery, `pysnmp` (LeXtudio maintained fork) for SNMP, `icmplib` for ping reachability, plain Django `StreamingHttpResponse` for SSE, and native PostgreSQL for event storage. No Redis, no Celery, no TimescaleDB, no Django Channels. This keeps the tool installable in minutes on a show laptop — a non-negotiable UX constraint given the deployment context.
+The core competitive differentiation over Visio and Lucidchart is ShowStack's existing data: smart shapes link to live `Console`, `Device`, `SpeakerArray`, and `CommBeltPack` records via `GenericForeignKey` inside the JSON blob, connector labels autocomplete from `DeviceInput.signal_name` and `DeviceOutput.signal_name` scoped to the current project, and signal-type connector variants (Analog / AES / Dante / MADI / Intercom) are first-class properties rather than manual style workarounds. Auto-layout of nodes is intentionally excluded — live-audio signal-flow diagrams encode physical topology (stage left, FOH center, monitor world stage right) that algorithmic reordering destroys.
 
-The highest-risk area is the Dante integration: `netaudio` is reverse-engineered, explicitly described by its author as "guesswork," and can cause devices to behave unexpectedly. Clock monitoring via mDNS/protocol is LOW confidence. The safe strategy is to use mDNS discovery for presence detection only and ICMP ping as the authoritative reachability signal, treating all other Dante protocol data as advisory. A second critical risk is the "local network required" precondition, which is invisible to engineers opening the dashboard from a cloud URL — onboarding UX must surface this immediately.
+The highest-risk implementation areas are `cellNamespace` registration before `graph.fromJSON()` (silent blank canvas on load if missed), the autosave race-condition and IDOR surface (cross-project diagram writes are possible unless every view chains `.filter(project=request.current_project)`), and PNG export correctness (cross-origin font resources taint the canvas and produce a SecurityError). All three are preventable with patterns that are either already established in the codebase or documented precisely in the pitfalls research.
 
 ---
 
@@ -19,79 +21,132 @@ The highest-risk area is the Dante integration: `netaudio` is reverse-engineered
 
 ### Recommended Stack
 
-The stack prioritizes zero-infrastructure-overhead for local laptop deployment. Every library is pure Python where possible to avoid native C build issues on macOS arm64 at show site.
+No additions to `requirements.txt`. The only new files are two vendored JS bundles (`joint.min.js`, `html-to-image.min.js`) placed in `planner/static/planner/js/vendor/` alongside `Sortable.min.js`, and a `THIRD_PARTY_LICENSES.txt` at project root. All server-side needs are met by built-in Django primitives: `models.JSONField` for the canvas blob, `django.contrib.contenttypes` for GFK linking (already in `INSTALLED_APPS`), and `JsonResponse` views for autosave.
+
+**CORRECTION TO CARRY INTO ALL DOWNSTREAM DOCS:** `@joint/core` is licensed **MPL-2.0**, not MIT. PROJECT.md and STATE.md currently state "MIT" — this must be corrected before any phase plan or requirements doc is written. Vendoring the unmodified `joint.min.js` is fully compliant with MPL-2.0 (file-level copyleft applies only to modifications of the library source itself). A `THIRD_PARTY_LICENSES.txt` at project root is required. Do not patch `joint.min.js` directly; use the public JointJS API for any workarounds.
 
 **Core technologies:**
-- `zeroconf >=0.148.0`: mDNS listener for Dante service type enumeration — actively maintained, asyncio-native
-- `netaudio 0.2.4`: Dante-specific mDNS service type constants and device query wrappers — use for read-only discovery only
-- `pysnmp >=7.0,<8.0` (LeXtudio fork): SNMP v1/v2c/v3 for switch port status and counters — pure Python, v7.1.24 released April 2026
-- `icmplib >=3.0`: ICMP ping for amp and Dante device reachability — pure Python, unprivileged on macOS, async multiping support
-- Django `StreamingHttpResponse` (built-in): SSE push to browser — no additional infrastructure
-- Native Django ORM + PostgreSQL: event and poll result storage — plain indexed model, no TimescaleDB needed at show-day event volumes
+- `@joint/core` 4.2.4: diagram canvas (nodes, edges, drag-drop, serialization) — dependency-free UMD bundle, no CSS required, `joint` global on window; **MPL-2.0** (not MIT)
+- `html-to-image` 1.11.11: PNG export (SVG to canvas to data URL) — maintained fork of dom-to-image; MIT; `format.toPNG()` is JointJS+ (paid) only and must not be used
+- `models.JSONField`: canvas state persistence as PostgreSQL `jsonb` — built into Django 3.1+, no third-party dep
+- `django.contrib.contenttypes` GenericForeignKey: equipment record linking — already installed, zero migration cost to use
 
-**Architecture:** Two-process model — `run_monitor` management command (daemon threads per protocol) + `runserver` (web layer reads from DB only). SSE via StreamingHttpResponse + HTMX SSE extension for live dashboard updates.
+**What NOT to add:** React/Vue/Svelte, any build toolchain (webpack/vite), `dom-to-image` (unmaintained), `django-jsonfield` (redundant), JointJS+ (`@joint/plus`), Celery/Redis, `django-csp`.
 
 ### Expected Features
 
-No competing tool unifies Dante, LA Network, and switch monitoring. Engineers currently maintain three separate app windows with no persistent history.
+Feature research was grounded in direct codebase inspection and live-audio production documentation practice. Engineers currently rebuild five recurring diagram types (full system block, Dante network, intercom architecture, amp/PA zone, broadcast output map) from scratch in Visio or Lucidchart on every show because no tool knows their gear list. ShowStack holds the underlying data for all five types.
 
-**Must have (table stakes):**
-- Dante device auto-discovery and per-device up/down status
-- Dante clock master identification and lock/unlocked status per device
-- Switch SNMP port status (up/down) per configured switch
-- LA Network amp reachability via ICMP ping
-- At-a-glance dashboard with green/yellow/red rollup per domain
-- Critical alerts on device offline or clock loss with confirm-before-firing (N=3 consecutive failures)
-- Session history: append-only state-change timeline with timestamps
-- Integration with existing ShowStack device records as FK sources for IP addresses
+**Must have for v2.2 (table stakes — missing any makes the tool feel broken):**
+- Drag-and-drop canvas with smart shapes: Console / Device / SpeakerArray / CommBeltPack / Generic
+- ShowStack record linking with label propagation on rename + soft-fail render with `saved_label` on delete
+- Orthogonal connectors with five line-style variants: Analog / AES / Dante / MADI / Intercom
+- Connector direction property (source-to-target / bidirectional) for intercom partyline notation
+- Circuit-label autocomplete from `DeviceInput.signal_name`, `DeviceOutput.signal_name`, `ConsoleInput.source` scoped to current project
+- Undo / redo (JointJS CommandManager — must be wired before first graph mutation)
+- Multi-select and rubber-band selection
+- Keyboard delete (Delete / Backspace)
+- Snap-to-grid
+- Port-to-port connector snapping (connectors originate from and terminate at defined ports, not arbitrary shape boundaries)
+- Midpoint waypoints (vertex drag on connectors)
+- Zoom in / out / zoom-to-fit
+- JSON autosave (debounced 2-3 s, `keepalive: true` on page unload)
+- PNG export with white background via `html-to-image`
+- Many diagrams per project (list page, name, delete)
 
-**Should have (differentiators):**
-- Pre-show network health check comparing discovered vs project-defined device list
-- Cross-domain event correlation (multiple devices on same switch port = one grouped alert)
-- Switch bandwidth utilization warnings (70%/90% thresholds)
-- Show mode toggle (Setup / Show / Wrap) suppressing alerts during load-in/load-out
-- Export session history as PDF/CSV
+**Should have — competitive differentiators in v2.2:**
+- Circuit-label autocomplete is the primary differentiator (no other diagrammer knows this engineer's patch)
+- Signal-type connector vocabulary as first-class property (not manual style overrides)
+- Smart shapes that update labels from live equipment records (rename propagation)
 
-**Defer (v2+):**
-- Dante multicast bandwidth monitoring
-- Mobile status view at `/m/`
-- EEE detection on switch ports carrying Dante traffic
+**Defer to v2.3:**
+- PDF export (ReportLab pattern proven; trigger: engineers report PNG insufficient for printed show documentation)
+- IP address annotation as secondary node label (data already in `Console.primary_ip_address`, `Device.primary_ip_address`)
+- COMM Config auto-generate intercom diagram (trigger: FSII port swap fix ships and COMM Config is stable)
+- PA Cable Schedule visualization overlay (trigger: beta testers report manual duplication)
+- Group / ungroup nodes by location
+- Alignment guides (smart snap lines)
+- Mobile `/m/` viewer (JointJS supports mobile Chrome/Safari but requires PaperScroller or custom pointer event handling)
+- Copy / paste nodes (only if JointJS Clipboard is in core; defer if JointJS+ only)
+
+**Anti-features — do not build:**
+- Auto-layout that reorders nodes by hierarchy: destroys physical topology; most-cited Lucidchart complaint from AV engineers
+- Real-time multi-user collaborative editing: last-write-wins autosave is correct for solo A1
+- SVG export: creates a secondary copy outside ShowStack, defeating source-of-truth model
+- Pictographic rack-unit SVG faceplates per model: maintenance burden; label carries semantic weight, not icon
+
+### Architecture Approach
+
+The diagrammer is a fully additive module inside `planner` — no new app, no new Python dependencies, no deviation from established conventions. The canvas state is a single `JSONField` blob (no normalized `DiagramNode`/`DiagramEdge` tables). GFK references (`content_type_id`, `object_id`) live inside the JSON nodes; equipment is resolved server-side on the `state/` endpoint via `_enrich_nodes()`. The editor page uses an HTML shell + separate `GET .../state/` JSON endpoint (not inline JSON), enabling the v2.3 mobile viewer to consume the same endpoint.
+
+**Major components:**
+1. `SignalFlowDiagram` model — `project FK`, `name`, `canvas_state JSONField`, `viewport JSONField`, `version IntegerField`, `created_at`, `updated_at`
+2. 9 view functions in `planner/views.py` — list, create, editor shell, state (GET JSON), autosave (POST), rename, delete, autocomplete, export PNG
+3. `signal_flow_editor.js` — JointJS graph+paper init, custom shape definitions with `cellNamespace`, autosave debounce + dirty flag + in-flight guard, PNG export via `html-to-image`, `readOnly` flag guard for future mobile viewer
+4. `list.html` / `editor.html` extending `admin/base_site.html`
+5. `SignalFlowDiagramAdmin` on `showstack_admin_site` with `always_hidden` + `order_map: 52` in `admin_ordering.py`
+
+**Build order:** Layer 1 (model + migration + admin) → Layer 2 (CRUD views + URLs + list template) → Layer 3 (editor HTML shell + vendor JS) → Layer 4 (JointJS canvas init) → Layers 5+6 in parallel (smart shapes / connector types) → Layer 7 (autocomplete) → Layer 8 (autosave + orphan rendering) → Layer 9 (PNG export)
 
 ### Critical Pitfalls
 
-1. **netaudio is reverse-engineered and unreliable for protocol commands** — use mDNS enumeration only; ICMP ping is the authoritative reachability signal
-2. **mDNS silently returns empty across VLAN boundaries** — show diagnostic state rather than empty discovery; offer manual IP entry fallback
-3. **Dante clock loss and device offline are distinct failure modes** — model clock status separately from reachability
-4. **Luminex GigaCore SNMP disabled by default** — detect SNMP non-response vs auth failure vs timeout distinctly; provide in-app setup guide
-5. **Alert fatigue during load-in destroys engineer trust** — implement show mode toggle; N=3 consecutive failures before critical alert
-6. **Browser tab throttling kills WebSocket/SSE heartbeats** — Web Worker-based heartbeat or Page Visibility API refresh on tab foreground
+1. **`cellNamespace` not passed to `Graph` constructor before `fromJSON()`** — JointJS v4 removed the implicit `joint.shapes` global lookup. Symptom: silent blank canvas on reload. Prevention: smoke-test save + reload with each shape type before closing the canvas phase.
+
+2. **Autosave race condition and page-unload data loss** — Three concurrent-write hazards: simultaneous debounced + manual save, two tabs on the same diagram, `fetch` cancelled on tab close. Prevention: `version IntegerField` on model; `select_for_update()` + `atomic()` with `WHERE version=expected_version` (HTTP 409 on mismatch); `saveInProgress` + `pendingSave` JS flags; `fetch(..., { keepalive: true })` on `visibilitychange`/`pagehide` — NOT `navigator.sendBeacon` (64 KB limit silently drops large diagram JSON).
+
+3. **IDOR on autosave endpoint + equipment reference validation** — Prevention: `.filter(project=request.current_project)` in every diagram lookup (replicate `_get_track_for_request` pattern); walk canvas JSON on every save and reject with HTTP 422 if any `object_id`'s project != current project.
+
+4. **PNG export: cross-origin fonts taint the canvas** — Prevention: system fonts only on shape labels; native JointJS SVG `<text>` elements for all node labels (no `<foreignObject>`); `useComputedStyles: true` in the export call.
+
+5. **SVG-coordinate vs. page-coordinate confusion after scroll or zoom** — Prevention: always use `paper.clientToLocalPoint({ x: event.clientX, y: event.clientY })` for all pointer event conversions.
+
+6. **MPL-2.0 license compliance** — `joint.min.js` must be vendored unmodified; `THIRD_PARTY_LICENSES.txt` required; use public JointJS API for any workarounds rather than patching the source.
 
 ---
 
 ## Implications for Roadmap
 
-### Phase 1: Foundation — Data Models, ICMP Pipeline, and SSE Dashboard
+### Phase 1: Foundation — Model, Migration, Admin Wiring
+**Rationale:** Model exists before anything else can be built. `version`, `viewport`, and `saved_label` decisions are cheapest here. License correction happens before any code ships.
+**Delivers:** `SignalFlowDiagram` model with `canvas_state JSONField`, `viewport JSONField`, `version IntegerField`; migration; `SignalFlowDiagramAdmin` on `showstack_admin_site`; `admin_ordering.py` update; `THIRD_PARTY_LICENSES.txt`; correction of "MIT" to "MPL-2.0" in PROJECT.md and STATE.md.
 
-Proves the full poll→DB→SSE pipeline with the simplest protocol. Delivers LA Network amp reachability, at-a-glance dashboard, session history, and `run_monitor` management command. Locks architecture decisions: GenericFK to existing device models, two-table data model, management command lifecycle, SSE approach, N=3 confirm-before-firing.
+### Phase 2: CRUD Views, URL Patterns, and List Page
+**Rationale:** List/create/rename/delete and all 9 URL patterns must exist before the editor shell can link to a diagram.
+**Delivers:** All 9 view stubs + URL patterns; `list.html`; dashboard link; autocomplete stub for Phase 7 testing.
 
-### Phase 2: Switch SNMP Integration and Alert Design
+### Phase 3: Editor HTML Shell and Vendor JS
+**Rationale:** Vendor files must be committed and `collectstatic` verified before any JointJS code runs.
+**Delivers:** `signal_flow_editor` view; `editor.html`; `joint.min.js` + `html-to-image.min.js` in `vendor/`; stub JS; white background on paper container div.
+**Gate:** `collectstatic --noinput` passes locally.
 
-Adds switch port monitoring with SNMP, per-project credential config (v2c and v3), show mode toggle (Setup/Show/Wrap), and in-app Luminex SNMP setup guide. SNMP against real show networks is when alert fatigue first surfaces — show mode belongs here.
+### Phase 4: JointJS Canvas Initialization
+**Rationale:** `cellNamespace`, coordinate system, and state-separation discipline must be structural foundations before shapes are defined.
+**Delivers:** `graph` + `paper` init; `graph.fromJSON()` on `STATE_URL`; blank canvas + pan/zoom; `viewport` restore; `readOnly` guard structure.
+**Gate:** Scroll 300px down, drag-drop a shape — it must land under the cursor.
 
-### Phase 3: Dante mDNS Discovery and Clock Monitoring
+### Phase 5: Smart Shapes and Connector Types (parallel workstreams)
+**Rationale:** Shapes and connectors have no mutual dependency. Both gate autosave (Phase 6) and autocomplete (Phase 7).
+**Delivers (shapes):** Five shape classes registered in `cellNamespace`; shape picker sidebar; equipment picker modal; node payload with `content_type_id`, `object_id`, `equipment_type`, `label_override`, `port_overrides`.
+**Delivers (connectors):** Link draw tool; five `signal_type` variants; direction property; port-to-port snapping; midpoint waypoints.
+**Research flag:** Verify JointJS `Clipboard` and `CommandManager` availability in `@joint/core` 4.2.4 vs JointJS+ before finalizing copy/paste and undo/redo plans.
 
-Highest protocol uncertainty — built last so ICMP and SNMP dashboards already deliver value. Adds Dante auto-discovery via zeroconf, per-device mDNS presence + ICMP reachability, clock master/lock status (advisory), NIC/VLAN selection UI, and manual IP entry fallback. Clock status requires hardware validation — treat as stretch goal.
+### Phase 6: Autosave and Orphan Rendering
+**Rationale:** Race condition, IDOR, and CSRF tests require real canvas content to be meaningful.
+**Delivers:** 2.5 s debounced POST with guards; `version` token; `keepalive: true` on unload; `_enrich_nodes()` for orphan rendering; save status indicator; error banner.
 
-### Phase 4: Correlation, Pre-Show Check, and Export
+### Phase 7: Circuit-Label Autocomplete
+**Rationale:** Requires connectors (Phase 5).
+**Delivers:** Autocomplete endpoint querying all signal-name fields filtered to `request.current_project`; JS autocomplete widget on connector label field.
 
-Differentiating features requiring all three pollers running: cross-domain correlation, pre-show health check report, session history export as PDF/CSV, switch bandwidth utilization warnings, mobile status view at `/m/`.
+### Phase 8: PNG Export
+**Rationale:** Requires a fully populated canvas.
+**Delivers:** "Export PNG" button; `htmlToImage.toPng(paperEl)` with white background; correct rendering after scroll.
 
 ### Research Flags
+**Phases needing deeper research during planning:**
+- **Phase 5:** Verify JointJS `Clipboard` and `CommandManager` availability in `@joint/core` 4.2.4 vs JointJS+.
 
-- **Phase 3 (Dante):** Clock status via netaudio needs hardware validation. LOW confidence. Flag clock monitoring as stretch with explicit fallback.
-- **Phase 2 (SNMP):** pysnmp on macOS arm64 needs benchmarking against real switch hardware.
-- **Phase 1 (ICMP + SSE):** HIGH confidence, standard patterns. No additional research needed.
-- **Phase 4 (Export):** Solved problem in ShowStack context. No additional research needed.
+**Phases with standard patterns (no research-phase needed):** 1, 2, 3, 4, 6, 7, 8.
 
 ---
 
@@ -99,18 +154,45 @@ Differentiating features requiring all three pollers running: cross-domain corre
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | MEDIUM-HIGH | pysnmp and icmplib HIGH; netaudio LOW (author disclaims reliability) |
-| Features | HIGH | Table stakes verified against official Audinate, L-Acoustics, and Luminex docs |
-| Architecture | HIGH | Component boundaries, data model, SSE approach well-sourced |
-| Pitfalls | HIGH | Critical pitfalls sourced from official Audinate documentation and RFC standards |
+| Stack | HIGH | `@joint/core` 4.2.4 npm + MPL-2.0 verified; `html-to-image` CDN confirmed; no new Python deps |
+| Features | HIGH (practice), MEDIUM (formal standards) | Engineer workflow verified; connector line-style conventions de facto |
+| Architecture | HIGH | Direct codebase inspection; multitrack module is a proven precedent |
+| Pitfalls | HIGH (JointJS, Django/permission), MEDIUM (PNG internals, Railway limits) | JointJS docs + ShowStack codebase verified |
+
+**Overall confidence:** HIGH
 
 ### Gaps to Address
-
-- Dante clock status via netaudio: LOW confidence, hardware validation required
-- icmplib unprivileged mode on macOS arm64: MEDIUM, needs Phase 1 smoke test
-- SNMP library build on macOS arm64: MEDIUM, needs Phase 1 benchmark
-- Local-only deployment model UX: prerequisite-check UI must ship with Phase 1
+- JointJS `Clipboard` and `CommandManager` in `@joint/core` 4.2.4 — resolve during Phase 5 planning.
+- `navigator.sendBeacon` 64 KB limit at Railway — verify Railway does not also block large `keepalive` requests.
+- Connector line-style conventions — validate with beta tester feedback before v2.3 PDF export locks the visual language.
 
 ---
-*Research completed: 2026-04-21*
+
+## Sources
+
+### Primary (HIGH confidence)
+- `@joint/core` on npm — version 4.2.4, MPL-2.0 license
+- JointJS v4.0 announcement (dependency-free)
+- JointJS v4.2 JavaScript integration docs (UMD)
+- JointJS Raster export docs (confirms `format.toPNG` is JointJS+ only)
+- JointJS license page (MPL-2.0)
+- Mozilla MPL-2.0 FAQ
+- `html-to-image` on npm (v1.11.11, MIT)
+- Direct codebase inspection: `planner/models.py`, `planner/views.py`, `planner/urls.py`, `planner/admin_ordering.py`, `planner/middleware.py` (2026-05-19)
+- JointJS GitHub issues #964, #1502; discussions #2235, #2566
+- MDN Navigator.sendBeacon (64 KB limit)
+- ShowStack `planner/views.py:6328` — `_get_track_for_request` IDOR-safe pattern
+- ShowStack `templates/planner/mic_tracker.html:1212` — `getCsrfToken()` pattern
+
+### Secondary (MEDIUM confidence)
+- ProSoundWeb community threads — engineer diagramming workflow
+- AVIXA AV drawing symbols (architectural floor-plan, not block-diagram connectors)
+- pganalyze — JSONB TOAST performance
+
+### Tertiary (LOW confidence)
+- Connector line-style conventions — de facto, not formally standardized
+
+---
+
+*Research completed: 2026-05-19*
 *Ready for roadmap: yes*
