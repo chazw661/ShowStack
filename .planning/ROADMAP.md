@@ -56,7 +56,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ## v2.1 — Collaboration & User Management
 
-- [ ] **Phase 6: Trusted Crew Rosters** - Owner-defined named groups of users that get auto-added to projects without email acceptance (closes friction for repeat collaborators)
+- [x] **Phase 6: Trusted Crew Rosters** - Owner-defined named groups of users that get auto-added to projects without email acceptance (closes friction for repeat collaborators)
+
+---
+
+## v2.2 — Signal Flow Diagrammer
+
+- [ ] **Phase 7: Foundation, CRUD & Editor Shell** - `SignalFlowDiagram` model, migration, admin, list/create/rename/delete views, all URL patterns, and the HTML editor shell with vendored JointJS
+- [ ] **Phase 8: Canvas, Smart Shapes & Connectors** - JointJS canvas init, five smart shape classes with equipment picker modal, five connector signal-type variants with port snapping, all canvas UX (pan/zoom/snap/undo/multi-select/delete/viewport restore)
+- [ ] **Phase 9: Autosave & Orphan Rendering** - Debounced JSON autosave with race-condition guards, save-status indicator, HTTP 409 conflict banner, keepalive on unload, and server-side `_enrich_nodes()` for ghosted orphan rendering
+- [ ] **Phase 10: Autocomplete & PNG Export** - Circuit-label autocomplete endpoint (all signal-name fields, project-scoped), JS autocomplete widget on connector labels, and one-click PNG export via `html-to-image`
 
 ## Phase Details
 
@@ -151,27 +160,91 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Existing `accounts` app invitation flow (planner.Invitation, ProjectMember)
 **Requirements**: SPEC-06-R01, SPEC-06-R02, SPEC-06-R03, SPEC-06-R04, SPEC-06-R05, SPEC-06-R06, SPEC-06-R07, SPEC-06-R08
 **Plans**: 7 plans
-- [ ] 06-01-models-migration-PLAN.md — Crew + CrewMember + CrewProjectAdd models + migration 0157 (Wave 1)
-- [ ] 06-02-admin-registration-PLAN.md — Register Crew/CrewMember/CrewProjectAdd on showstack_admin_site + admin_ordering update (Wave 2, depends on 06-01)
-- [ ] 06-03-crud-views-urls-templates-PLAN.md — Crew CRUD views + URLs + crew_index/crew_detail templates (Wave 2, depends on 06-01)
-- [ ] 06-04-bulk-add-email-invite-panel-PLAN.md — bulk_add_crew view + send_crew_added_email + additive invite_user.html panel (Wave 3, depends on 06-01 + 06-03)
-- [ ] 06-05-auto-claim-register-hook-PLAN.md — planner/crew.py claim helper + atomic wrap in register() (Wave 3, depends on 06-01)
-- [ ] 06-06-nav-link-PLAN.md — Additive "My Crew" link in admin base_site.html + dashboard.html (Wave 3, depends on 06-03)
-- [ ] 06-07-tests-PLAN.md — planner/tests/test_crew_rosters.py covering all 8 SPEC requirements + D-15 constraints (Wave 4, depends on 06-01..06-06)
+- [x] 06-01-models-migration-PLAN.md — Crew + CrewMember + CrewProjectAdd models + migration 0157 (Wave 1)
+- [x] 06-02-admin-registration-PLAN.md — Register Crew/CrewMember/CrewProjectAdd on showstack_admin_site + admin_ordering update (Wave 2, depends on 06-01)
+- [x] 06-03-crud-views-urls-templates-PLAN.md — Crew CRUD views + URLs + crew_index/crew_detail templates (Wave 2, depends on 06-01)
+- [x] 06-04-bulk-add-email-invite-panel-PLAN.md — bulk_add_crew view + send_crew_added_email + additive invite_user.html panel (Wave 3, depends on 06-01 + 06-03)
+- [x] 06-05-auto-claim-register-hook-PLAN.md — planner/crew.py claim helper + atomic wrap in register() (Wave 3, depends on 06-01)
+- [x] 06-06-nav-link-PLAN.md — Additive "My Crew" link in admin base_site.html + dashboard.html (Wave 3, depends on 06-03)
+- [x] 06-07-tests-PLAN.md — planner/tests/test_crew_rosters.py covering all 8 SPEC requirements + D-15 constraints (Wave 4, depends on 06-01..06-06)
 **UI hint**: yes
+
+---
+
+### Phase 7: Foundation, CRUD & Editor Shell
+**Milestone**: v2.2 (Signal Flow Diagrammer)
+**Goal**: Engineer can navigate to a project's signal-flow diagram list, create a named diagram, rename and delete it, and open the diagram editor page — with the JointJS vendor bundle loaded and the blank canvas div present in the DOM, ready for canvas initialization in Phase 8
+**Depends on**: Phase 6 (v2.1 closed; model pattern established)
+**Requirements**: DGM-01, DGM-02, DGM-03, DGM-04, DGM-05, DGM-08
+**Success Criteria** (what must be TRUE):
+  1. Engineer navigates to `/audiopatch/signal-flow/` and sees all diagrams for the current project (name, last-modified); page shows empty state with a "New Diagram" prompt when no diagrams exist
+  2. Engineer creates a diagram by entering a name; the diagram is scoped to the current project and any attempt to access it from a different project returns 404
+  3. Engineer can rename a diagram inline on the list page; the name is unique per project and a duplicate name returns a clear error
+  4. Engineer can delete a diagram from the list page; the row is removed immediately with no orphaned data
+  5. Opening a diagram navigates to the editor page; the browser console shows no 404 errors on JS/CSS assets and `joint` is available on `window`
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 8: Canvas, Smart Shapes & Connectors
+**Milestone**: v2.2 (Signal Flow Diagrammer)
+**Goal**: Engineer can draw a complete signal-flow diagram on a live JointJS canvas — dropping smart shapes linked to ShowStack Console, Device, SpeakerArray, and CommBeltPack records (plus a free-label Generic shape), connecting them with typed orthogonal connectors, and using the full canvas UX: pan, zoom, snap-to-grid, undo/redo, multi-select, keyboard delete, and viewport persistence
+**Depends on**: Phase 7
+**Requirements**: CNV-01, CNV-02, CNV-03, CNV-04, CNV-05, CNV-06, CNV-07, CNV-08, SHP-01, SHP-02, SHP-03, SHP-04, SHP-05, SHP-08, SHP-09, CON-01, CON-02, CON-03, CON-04, CON-05, CON-06
+**Success Criteria** (what must be TRUE):
+  1. Engineer drags a shape from the sidebar picker (Console, Device, SpeakerArray, CommBeltPack, Generic) onto the canvas and the shape lands at the cursor position accounting for scroll and zoom; equipment picker modal lists only records belonging to the current project
+  2. Engineer pans via space+drag or middle-click, zooms via toolbar buttons (zoom-to-fit included), and toggles snap-to-grid — all without disrupting the canvas state; reopening the diagram restores the previous viewport position and zoom level
+  3. Engineer performs Ctrl+Z / Ctrl+Shift+Z and changes undo and redo correctly; engineer shift-clicks or rubber-band-selects multiple nodes; pressing Delete or Backspace removes the selection
+  4. Engineer drags from an output port to an input port and a connector appears; connector rejects mid-shape drops; engineer sets signal type from the 5-option dropdown (analog / AES / Dante / MADI / intercom) and each type renders with a distinct line style and dash pattern
+  5. Engineer drags a midpoint waypoint to route a connector manually; engineer sets connector direction to bidirectional; each connector carries a circuit-label string that renders along the line
+**Plans**: TBD
+**UI hint**: yes
+
+**Research flag (Phase 8):** Verify JointJS `Clipboard` and `CommandManager` availability in `@joint/core` 4.2.4 vs JointJS+ before finalizing undo/redo and any future copy/paste plans. Confirm during plan-phase research step.
+
+### Phase 9: Autosave & Orphan Rendering
+**Milestone**: v2.2 (Signal Flow Diagrammer)
+**Goal**: Canvas changes persist automatically without the engineer thinking about saving — the editor shows live save status, handles tab-conflict and page-unload edge cases correctly, and shows ghosted shapes for equipment records deleted since the diagram was last edited
+**Depends on**: Phase 8
+**Requirements**: DGM-06, DGM-07, DGM-08, SHP-06, SHP-07
+**Success Criteria** (what must be TRUE):
+  1. Engineer edits the canvas and within 2.5 seconds a POST to the save endpoint fires; the editor shows "Saving..." then "Saved"; a failed save shows "Failed — retry" persistently
+  2. Engineer opens the same diagram in a second tab and makes an edit; the losing tab's next save returns HTTP 409 and a non-dismissable banner reads "Diagram was modified elsewhere — reload to see latest"
+  3. Engineer navigates away with unsaved changes; a keepalive fetch fires on `visibilitychange`/`pagehide` and the latest state is persisted on the server
+  4. Engineer renames a piece of linked equipment, then reloads the diagram; the shape label reflects the new name without any manual update
+  5. Engineer deletes a piece of linked equipment, then reloads the diagram; the affected shape renders ghosted (dashed border, muted style) with its last-known label preserved — the canvas does not crash
+
+**Note on DGM-08 overlap:** DGM-08 (keepalive on tab close) was seeded in Phase 7 as a URL/view stub but its behavioral requirement (the actual keepalive fetch) is delivered here in Phase 9 alongside the full autosave system.
+**Plans**: TBD
+
+### Phase 10: Autocomplete & PNG Export
+**Milestone**: v2.2 (Signal Flow Diagrammer)
+**Goal**: Engineer can label connectors using autocomplete suggestions drawn from the project's existing signal-name fields (no manual lookup), and can export the finished diagram as a PNG file in one click
+**Depends on**: Phase 9 (canvas must be populated and autosaving for export to be meaningful)
+**Requirements**: LBL-01, LBL-02, LBL-03, EXP-01
+**Success Criteria** (what must be TRUE):
+  1. Typing in a connector's circuit-label field surfaces autocomplete suggestions from `DeviceInput.signal_name`, `DeviceOutput.signal_name`, `ConsoleInput.source`, and `ConsoleAuxOutput.name` — all scoped to the current project; cross-project signals never appear
+  2. Engineer can override autocomplete and type any free-text string; the connector accepts it without validation error
+  3. Engineer clicks "Export PNG" and downloads a PNG with a white background that captures the full canvas (not just the visible viewport), with correct system-font label rendering and no cross-origin taint errors
+**Plans**: TBD
+
+---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
-(Phases 2, 3, 4, and 5 each depend only on Phase 1 and could in principle run
-in parallel, but solo dev means sequential execution per the spec's order.)
+v2.0 phases: 1 → 2 → 3 → 4 → 5
+v2.1 phase: 6
+v2.2 phases: 7 → 8 → 9 → 10
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Core Sessions, Track Editor & Reaper Export | 0/6 | Planned (6 plans, 4 waves) | - |
-| 2. Console CSV Import | 0/4 | Planned (4 plans, 3 waves) | - |
-| 3. Multitrack Templates | 0/0 | Not started | - |
-| 4. Nuendo Live Export | 7/7 | Code-complete — HUMAN-UAT pending NLP-01..NLP-05 | 2026-05-14 |
-| 5. Channel Record Defaults | 3/3 | Code-complete — HUMAN-UAT pending POL-01 + POL-02 picker/admin smoke | 2026-05-14 |
-| 6. Trusted Crew Rosters | 0/7 | Planned (7 plans, 4 waves) | - |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Core Sessions, Track Editor & Reaper Export | v2.0 | 6/6 | Complete | 2026-05-13 |
+| 2. Console CSV Import | v2.0 | 4/4 | Complete | 2026-05-13 |
+| 3. Multitrack Templates | v2.0 | 5/5 | Complete | 2026-05-13 |
+| 4. Nuendo Live Export | v2.0 | 7/7 | Complete | 2026-05-14 |
+| 5. Channel Record Defaults | v2.0 | 3/3 | Complete | 2026-05-14 |
+| 6. Trusted Crew Rosters | v2.1 | 7/7 | Complete | 2026-05-15 |
+| 7. Foundation, CRUD & Editor Shell | v2.2 | 0/TBD | Not started | - |
+| 8. Canvas, Smart Shapes & Connectors | v2.2 | 0/TBD | Not started | - |
+| 9. Autosave & Orphan Rendering | v2.2 | 0/TBD | Not started | - |
+| 10. Autocomplete & PNG Export | v2.2 | 0/TBD | Not started | - |

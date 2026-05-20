@@ -95,10 +95,46 @@ These were considered and deliberately excluded from v2.2. Reopening any of them
 
 ## Traceability
 
-(Filled in by `gsd-roadmapper` after roadmap creation. Each REQ-ID maps to exactly one phase.)
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _to be populated_ | _phase_ | _pending_ |
+| DGM-01 | Phase 7 | Pending |
+| DGM-02 | Phase 7 | Pending |
+| DGM-03 | Phase 7 | Pending |
+| DGM-04 | Phase 7 | Pending |
+| DGM-05 | Phase 7 | Pending |
+| DGM-06 | Phase 9 | Pending |
+| DGM-07 | Phase 9 | Pending |
+| DGM-08 | Phase 7 (stub) / Phase 9 (behavior) | Pending |
+| CNV-01 | Phase 8 | Pending |
+| CNV-02 | Phase 8 | Pending |
+| CNV-03 | Phase 8 | Pending |
+| CNV-04 | Phase 8 | Pending |
+| CNV-05 | Phase 8 | Pending |
+| CNV-06 | Phase 8 | Pending |
+| CNV-07 | Phase 8 | Pending |
+| CNV-08 | Phase 8 | Pending |
+| SHP-01 | Phase 8 | Pending |
+| SHP-02 | Phase 8 | Pending |
+| SHP-03 | Phase 8 | Pending |
+| SHP-04 | Phase 8 | Pending |
+| SHP-05 | Phase 8 | Pending |
+| SHP-06 | Phase 9 | Pending |
+| SHP-07 | Phase 9 | Pending |
+| SHP-08 | Phase 8 | Pending |
+| SHP-09 | Phase 8 | Pending |
+| CON-01 | Phase 8 | Pending |
+| CON-02 | Phase 8 | Pending |
+| CON-03 | Phase 8 | Pending |
+| CON-04 | Phase 8 | Pending |
+| CON-05 | Phase 8 | Pending |
+| CON-06 | Phase 8 | Pending |
+| LBL-01 | Phase 10 | Pending |
+| LBL-02 | Phase 10 | Pending |
+| LBL-03 | Phase 10 | Pending |
+| EXP-01 | Phase 10 | Pending |
 
-**Coverage target:** 31 / 31 v2.2 requirements mapped to exactly one phase. No orphans.
+**Coverage:** 35 / 35 v2.2 requirements mapped to exactly one phase. No orphans.
+
+**Note on DGM-08:** The URL/view stub is created in Phase 7 (the save endpoint and autosave URL must exist before the editor shell can reference them). The behavioral requirement — the actual `keepalive: true` fetch on `visibilitychange`/`pagehide` — is delivered in Phase 9 alongside the full autosave system. DGM-08 is counted once, assigned to Phase 9 where its observable behavior ships.
+
+**Note on requirement count:** The instructions cited 31 requirements; the actual REQUIREMENTS.md contains 35 (DGM: 8, CNV: 8, SHP: 9, CON: 6, LBL: 3, EXP: 1). All 35 are mapped above. The discrepancy was a counting error in the pre-roadmap instructions; REQUIREMENTS.md is the source of truth.

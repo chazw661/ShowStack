@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Signal Flow Diagrammer
-status: defining_requirements
+status: ready_to_plan
 last_updated: "2026-05-19T00:00:00.000Z"
-last_activity: 2026-05-19 -- Milestone v2.2 opened, defining requirements
+last_activity: 2026-05-19 -- Roadmap created for v2.2 (4 phases, Phases 7-10, 35 requirements)
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,49 +20,62 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** v2.2 — Signal Flow Diagrammer (defining requirements)
+**Current focus:** v2.2 Signal Flow Diagrammer — Phase 7 ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-19 — Milestone v2.2 started
+Phase: 7 of 10 (Foundation, CRUD & Editor Shell)
+Plan: — (not started)
+Status: Ready to plan
+Last activity: 2026-05-19 — v2.2 roadmap created (4 phases: 7-10, 35 requirements mapped)
 
-Progress: [          ] 0%
+Progress: [          ] 0% (v2.2 scope only)
 
 ## Roadmap Summary
 
-(Pending — `/gsd-roadmapper` will fill this in after REQUIREMENTS.md is locked.)
+| Phase | Goal | Requirements |
+|-------|------|--------------|
+| 7. Foundation, CRUD & Editor Shell | List/create/rename/delete diagrams + editor HTML shell with JointJS vendor | DGM-01–05, DGM-08 (6 reqs) |
+| 8. Canvas, Smart Shapes & Connectors | Live canvas, 5 smart shapes with equipment picker, 5 connector types, full canvas UX | CNV-01–08, SHP-01–05, SHP-08–09, CON-01–06 (21 reqs) |
+| 9. Autosave & Orphan Rendering | Debounced autosave, 409 conflict, keepalive on unload, label propagation, ghost rendering | DGM-06–07, SHP-06–07 (4 reqs) |
+| 10. Autocomplete & PNG Export | Signal-name autocomplete on connector labels + one-click PNG export | LBL-01–03, EXP-01 (4 reqs) |
+
+Next: `/gsd-plan-phase 7`
 
 ## Accumulated Context
 
 ### From v1.0 Network Health Monitor (scrapped)
 
-- Cloud-hosted ShowStack cannot reliably monitor on-site Dante networks (WiFi/Dante NIC conflicts, mDNS interface binding, link-local discovery). Standalone-app architecture is the correct path; the standalone app lives in a separate codebase.
-- Reusable lesson: AJAX polling (2–3 s) is more robust than SSE for ShowStack's request lifecycle. Apply to any future near-real-time UI.
-- Phase artifacts archived to `.planning/archive/v1.0-network-monitor/`.
+- Cloud-hosted ShowStack cannot reliably monitor on-site Dante networks. Standalone-app architecture is the correct path.
+- AJAX polling (2-3 s) is more robust than SSE for ShowStack's request lifecycle.
 
 ### From v2.0 Multitrack Session Builder (shipped 2026-05-14)
 
-- 5 phases / 38 requirements shipped end-to-end. Reaper `.RPP` byte-stable export, Nuendo Live `.nlpr` template-injection via `lxml`, Yamaha CL/QL + Rivage PM CSV import, owner-scoped Multitrack Templates, channel record defaults.
-- Reusable lessons applicable to v2.2:
-  - **Defence-in-depth at the AJAX boundary** — server-side validation must re-run even when client-side form validation already ran (Phase 5 hex-color re-check pattern). The Signal Flow autosave endpoint should mirror this.
-  - **Additive migrations only.** Phases 1–5 added tables/columns; never altered existing columns destructively. Apply to `SignalFlowDiagram` model.
-  - **CharField(default='') over nullable** for "may not exist" string fields — keeps queries simple and matches MultitrackTrack.color_override pattern.
-  - **Atomic per-task commits** with `feat(NN-MM): ...` subject convention. Apply per plan task in v2.2.
-  - Full per-phase detail archived in `.planning/phases/01-*/SUMMARY.md` through `05-*/SUMMARY.md`.
+- Defence-in-depth at AJAX boundary: server-side validation must re-run even when client already validated.
+- Additive migrations only. `CharField(default='')` over nullable for optional string fields.
+- Atomic per-task commits with `feat(NN-MM): ...` subject convention.
 
 ### From v2.1 Trusted Crew Rosters (shipped 2026-05-15)
 
-- 7 plans / 1 phase. Owner-scoped Crew model, bulk-add with Resend pre-onboarding emails, auto-claim on register.
-- Reusable lesson for v2.2: **`CurrentProjectMiddleware` scoping is the standard** — never URL-route project IDs. v2.2's `SignalFlowDiagram` queryset must filter by `project=request.current_project`.
-- Hidden-from-sidebar pattern (admin_ordering.py whitelist) — apply if v2.2 ships intermediate models that shouldn't clutter the admin sidebar.
+- `CurrentProjectMiddleware` scoping is the standard — never URL-route project IDs.
+- Hidden-from-sidebar pattern: `admin_ordering.py` `always_hidden` set + `order_map` entry both required.
 
-### v2.2 Locked Scope Decisions (this milestone)
+### v2.2 Locked Scope Decisions
 
-1. **JointJS core (MIT) is the canvas library** — chosen over drawio iframe and maxGraph. Vanilla-JS drop-in matches the no-framework frontend.
-2. **Module-MVP scope** — desktop only, smart shapes for Console/Device/SpeakerArray/CommBeltPack/Generic, orthogonal connectors with line-style variants (analog/AES/Dante/MADI/intercom), circuit-label autocomplete from existing `signal_name` fields, JSON autosave, PNG export.
-3. **Many diagrams per project** — list page + name + delete, not single-diagram-per-project.
-4. **Out of scope for v2.2:** obstacle-aware auto-routing, custom rack-unit SVG faceplates, PDF / SVG export, version snapshots, mobile `/m/` viewer, real-time multi-user editing. All carried to v2.3+.
-5. **Research path:** 4-agent domain research before requirements are finalized (JointJS docs, diagramming patterns in Django apps, signal-flow industry conventions, common pitfalls).
+1. **`@joint/core` 4.2.4 (MPL-2.0)** is the canvas library — vendored as unmodified UMD bundle; `THIRD_PARTY_LICENSES.txt` required at project root.
+2. **`html-to-image` 1.11.11 (MIT)** for PNG export — `format.toPNG()` is JointJS+ (paid) only, must not be used.
+3. **Single `JSONField` blob** on `SignalFlowDiagram` — no `DiagramNode`/`DiagramEdge` tables.
+4. **GFK-in-JSON** for equipment linking (`content_type_id`, `object_id` inside `canvas_state.cells[]`).
+5. **HTML shell + `GET .../state/` JSON endpoint** — no inline JSON in editor template; enables future v2.3 mobile viewer.
+6. **Research flag (Phase 8):** Verify `CommandManager` and `Clipboard` availability in `@joint/core` 4.2.4 vs JointJS+ before finalizing undo/redo plans.
+7. **System fonts only** on shape/connector labels — cross-origin webfonts taint PNG export canvas.
+
+### Blockers/Concerns
+
+None at roadmap creation.
+
+## Session Continuity
+
+Last session: 2026-05-19
+Stopped at: Roadmap created — ready to plan Phase 7
+Resume file: None
