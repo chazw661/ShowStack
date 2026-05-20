@@ -200,10 +200,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Engineer performs Ctrl+Z / Ctrl+Shift+Z and changes undo and redo correctly; engineer shift-clicks or rubber-band-selects multiple nodes; pressing Delete or Backspace removes the selection
   4. Engineer drags from an output port to an input port and a connector appears; connector rejects mid-shape drops; engineer sets signal type from the 5-option dropdown (analog / AES / Dante / MADI / intercom) and each type renders with a distinct line style and dash pattern
   5. Engineer drags a midpoint waypoint to route a connector manually; engineer sets connector direction to bidirectional; each connector carries a circuit-label string that renders along the line
-**Plans**: TBD
+**Plans**: 6 plans
+- [ ] 08-01-PLAN.md — Backend: signal_flow_autocomplete (project-scoped per-type equipment dispatch w/ SpeakerArray prediction__project special-case) + signal_flow_autosave (canvas_state + viewport persist, simplified version bump, IDOR validation) (Wave 1)
+- [ ] 08-02-PLAN.md — New signal_flow.css: toolbar groups, sidebar tiles, inspector panel, equipment picker modal, toast, port hover-reveal, selection visual (Wave 1, parallel with 01)
+- [ ] 08-03-PLAN.md — Template chrome: editor.html toolbar buttons + sidebar + inspector + modal include + CSS link; new _equipment_picker_modal.html partial (Wave 1, parallel with 01 + 02)
+- [ ] 08-04-PLAN.md — JS init + shape system: helpers, joint.shapes.showstack namespace + 5 shape classes (Console/Device/SpeakerArray/CommBeltPack/Generic) with 4 ports each, Graph + Paper init w/ cellNamespace, initial state load with undoable:false, sidebar drag-drop, equipment picker modal flow (Wave 2, depends on 01+02+03)
+- [ ] 08-05-PLAN.md — JS canvas UX: pan (space + middle-click), zoom (in/out/fit + level), snap toggle, viewport debounced POST, custom event-sourced undo stack (~120 lines, no CommandManager in @joint/core), keyboard shortcuts, multi-select (shift-click + rubber-band), keyboard delete (Wave 3, depends on 04)
+- [ ] 08-06-PLAN.md — JS connectors + inspector + manual save: SignalLink class, defaultLink + validateConnection + linkPinning + snapLinks, linkTools.Vertices for waypoints, inspector show/hide on connector select, 3 fields (signal-type / direction / circuit-label) with live SVG updates, Save button + status text cycle (Wave 4, depends on 05)
 **UI hint**: yes
 
-**Research flag (Phase 8):** Verify JointJS `Clipboard` and `CommandManager` availability in `@joint/core` 4.2.4 vs JointJS+ before finalizing undo/redo and any future copy/paste plans. Confirm during plan-phase research step.
+**Research flag (Phase 8):** RESOLVED in 08-RESEARCH.md — `CommandManager` is NOT in `@joint/core` 4.2.4 (JointJS+ only). Plan 05 implements a custom event-sourced undo stack (~120 lines). `Clipboard` similarly unavailable; COPY-01 deferred to v2.3.
 
 ### Phase 9: Autosave & Orphan Rendering
 **Milestone**: v2.2 (Signal Flow Diagrammer)
@@ -249,6 +255,6 @@ v2.2 phases: 7 → 8 → 9 → 10
 | 5. Channel Record Defaults | v2.0 | 3/3 | Complete | 2026-05-14 |
 | 6. Trusted Crew Rosters | v2.1 | 7/7 | Complete | 2026-05-15 |
 | 7. Foundation, CRUD & Editor Shell | v2.2 | 0/TBD | Not started | - |
-| 8. Canvas, Smart Shapes & Connectors | v2.2 | 0/TBD | Not started | - |
+| 8. Canvas, Smart Shapes & Connectors | v2.2 | 0/6 | Planned | - |
 | 9. Autosave & Orphan Rendering | v2.2 | 0/TBD | Not started | - |
 | 10. Autocomplete & PNG Export | v2.2 | 0/TBD | Not started | - |
