@@ -67,6 +67,7 @@ from .models import (
     AmplifierAssignment,
     MultitrackSession, MultitrackTrack,
     MultitrackTemplate, MultitrackTemplateSlot,
+    SignalFlowDiagram,
     ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
 )
 from .forms import MultitrackSessionForm, ConsoleCsvUploadForm
@@ -7342,3 +7343,231 @@ def console_import_upload(request):
         form = ConsoleCsvUploadForm(request=request)
 
     return render(request, 'planner/multitrack/import_upload.html', {'form': form})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Signal Flow Diagrammer (v2.2) — DGM-01..DGM-05 + DGM-08 stub
+#
+# All views follow the multitrack module pattern. See
+# .planning/phases/07-foundation-crud-editor-shell/07-PATTERNS.md for analogs.
+#
+# Helpers:
+#   _signal_flow_viewer_block — 403 for Viewer group (mirrors _multitrack_viewer_block at views.py:6315)
+#   _get_diagram_for_request  — IDOR-safe lookup (mirrors _get_track_for_request at views.py:6328)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_signal_flow_logger = logging.getLogger(__name__)
+
+
+def _signal_flow_viewer_block(request):
+    """Return JsonResponse 403 iff user is in Viewer group; else None.
+
+    Mirrors _multitrack_viewer_block (views.py:6315). Centralised so every
+    signal-flow mutate endpoint applies the same check.
+    """
+    if request.user.groups.filter(name='Viewer').exists():
+        return JsonResponse({'error': 'Read-only access.'}, status=403)
+    return None
+
+
+def _get_diagram_for_request(request, diagram_id):
+    """Return SignalFlowDiagram iff it belongs to request.current_project.
+
+    IDOR-safe lookup. Returns None when the diagram doesn't exist or belongs
+    to a different project. Mirrors _get_track_for_request (views.py:6328).
+
+    Enforces DGM-05: cross-project access yields None -> caller returns 404.
+    """
+    project = getattr(request, 'current_project', None)
+    if not project:
+        return None
+    return SignalFlowDiagram.objects.filter(
+        id=diagram_id, project=project
+    ).first()
+
+
+@staff_member_required
+def signal_flow_list(request):
+    """List view of SignalFlowDiagrams for the current project (DGM-01)."""
+    current_project = getattr(request, 'current_project', None)
+    diagrams = (
+        SignalFlowDiagram.objects.filter(project=current_project)
+        .order_by('-updated_at')
+        if current_project else SignalFlowDiagram.objects.none()
+    )
+    return render(request, 'planner/signal_flow/list.html', {
+        'diagrams': diagrams,
+        'current_project': current_project,
+    })
+
+
+@login_required
+@require_POST
+def signal_flow_create(request):
+    """Create a new SignalFlowDiagram in the current project (DGM-02).
+
+    POST body: {"name": "<diagram name>"}
+    Returns: {"ok": true, "redirect_url": "/audiopatch/signal-flow/<id>/"}
+    """
+    viewer_block = _signal_flow_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+    try:
+        project = getattr(request, 'current_project', None)
+        if not project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+        data = json.loads(request.body or '{}')
+        name = (data.get('name') or '').strip()
+        if not name:
+            return JsonResponse({'error': 'Name is required.'}, status=400)
+        if len(name) > 200:
+            return JsonResponse({'error': 'Name must be 200 characters or fewer.'}, status=400)
+        if SignalFlowDiagram.objects.filter(project=project, name=name).exists():
+            return JsonResponse({
+                'error': f'A diagram named "{name}" already exists in this project.',
+            }, status=409)
+        diagram = SignalFlowDiagram.objects.create(project=project, name=name)
+        return JsonResponse({
+            'ok': True,
+            'redirect_url': reverse('planner:signal_flow_editor', args=[diagram.id]),
+        })
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_create failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+@staff_member_required
+def signal_flow_editor(request, diagram_id):
+    """Render the HTML editor shell (DGM-05).
+
+    Canvas state is fetched separately via signal_flow_state — the shell
+    does not embed inline JSON. Cross-project diagram_id returns the user
+    to the list page (404-equivalent for a page render — no leak).
+    """
+    current_project = getattr(request, 'current_project', None)
+    if not current_project:
+        return redirect('/')
+    diagram = SignalFlowDiagram.objects.filter(
+        id=diagram_id, project=current_project
+    ).first()
+    if not diagram:
+        return redirect('planner:signal_flow_list')
+    return render(request, 'planner/signal_flow/editor.html', {
+        'diagram': diagram,
+    })
+
+
+@login_required
+@require_POST
+def signal_flow_rename(request, diagram_id):
+    """Rename a diagram (DGM-03). Enforces unique-per-project name.
+
+    POST body: {"name": "<new name>"}
+    Returns: {"ok": true, "name": "<new name>"} or {"error": ...} with
+    400/404/409/500 as appropriate.
+    """
+    viewer_block = _signal_flow_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+    try:
+        project = getattr(request, 'current_project', None)
+        if not project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+        diagram = _get_diagram_for_request(request, diagram_id)
+        if not diagram:
+            return JsonResponse({'error': 'Not found'}, status=404)
+        data = json.loads(request.body or '{}')
+        new_name = (data.get('name') or '').strip()
+        if not new_name:
+            return JsonResponse({'error': 'Name is required.'}, status=400)
+        if len(new_name) > 200:
+            return JsonResponse({'error': 'Name must be 200 characters or fewer.'}, status=400)
+        if SignalFlowDiagram.objects.filter(
+            project=project, name=new_name
+        ).exclude(pk=diagram.pk).exists():
+            return JsonResponse({
+                'error': f'A diagram named "{new_name}" already exists in this project.',
+            }, status=409)
+        diagram.name = new_name
+        diagram.save(update_fields=['name', 'updated_at'])
+        return JsonResponse({'ok': True, 'name': new_name})
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_rename failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+@login_required
+@require_POST
+def signal_flow_delete(request, diagram_id):
+    """Delete a diagram (DGM-04). CASCADE handles single-table cleanup.
+
+    Returns: {"ok": true, "redirect_url": "/audiopatch/signal-flow/"}
+    """
+    viewer_block = _signal_flow_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+    try:
+        project = getattr(request, 'current_project', None)
+        if not project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+        diagram = _get_diagram_for_request(request, diagram_id)
+        if not diagram:
+            return JsonResponse({'error': 'Not found'}, status=404)
+        diagram.delete()
+        return JsonResponse({
+            'ok': True,
+            'redirect_url': reverse('planner:signal_flow_list'),
+        })
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_delete failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+# ── Stub endpoints (filled in Phase 8-10) ──────────────────────────────────
+
+@staff_member_required
+def signal_flow_state(request, diagram_id):
+    """GET — return canvas_state JSON (Phase 7 stub; no _enrich_nodes yet).
+
+    Phase 9 will enrich nodes for orphan rendering. Today this returns the
+    raw blob plus the optimistic-locking version token.
+    """
+    diagram = _get_diagram_for_request(request, diagram_id)
+    if not diagram:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    return JsonResponse({
+        'canvas_state': diagram.canvas_state,
+        'viewport': diagram.viewport,
+        'version': diagram.version,
+    })
+
+
+@login_required
+@require_POST
+def signal_flow_autosave(request, diagram_id):
+    """POST stub for DGM-08 (URL must exist for editor.html data-autosave-url).
+
+    Phase 9 implements: optimistic locking via version field, equipment GFK
+    validation, _enrich_nodes-aware save, HTTP 409 on conflict. For now the
+    endpoint exists so {% url 'planner:signal_flow_autosave' diagram.id %}
+    resolves in editor.html — the actual fetch behavior ships in Phase 9.
+    """
+    return JsonResponse({'ok': True, 'stub': True})
+
+
+@staff_member_required
+def signal_flow_autocomplete(request):
+    """GET stub for circuit-label autocomplete (Phase 10 fills).
+
+    URL must exist now so editor.html data-autocomplete-url resolves.
+    """
+    return JsonResponse({'results': []})
+
+
+@staff_member_required
+def signal_flow_export_png(request, diagram_id):
+    """GET stub for PNG export (Phase 10 fills via html-to-image).
+
+    URL must exist now so editor.html data-export-png-url resolves.
+    """
+    return JsonResponse({'error': 'Not yet implemented'}, status=501)
