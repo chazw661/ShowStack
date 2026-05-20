@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ diagram.name }} — Signal Flow | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+{# No CSS required for @joint/core 4.x — paper background set inline on #sfd-paper below. #}
+<style>
+  #sfd-container { display: flex; flex-direction: column; height: calc(100vh - 64px); }
+  #sfd-toolbar { padding: 8px 16px; background: #2a2a3e; border-bottom: 1px solid #444;
+                 display: flex; gap: 12px; align-items: center; }
+  #sfd-toolbar h1 { margin: 0; font-size: 16px; color: #eee; }
+  #sfd-canvas-container { flex: 1 1 auto; position: relative; overflow: hidden; }
+  #sfd-paper { width: 100%; height: 100%; background: #ffffff; }
+  .sfd-back-link { color: #aaa; text-decoration: none; font-size: 13px; }
+  .sfd-back-link:hover { color: #fff; text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="sfd-container"
+     data-diagram-id="{{ diagram.id }}"
+     data-diagram-name="{{ diagram.name|escapejs }}"
+     data-state-url="{% url 'planner:signal_flow_state' diagram.id %}"
+     data-autosave-url="{% url 'planner:signal_flow_autosave' diagram.id %}"
+     data-autocomplete-url="{% url 'planner:signal_flow_autocomplete' %}"
+     data-export-png-url="{% url 'planner:signal_flow_export_png' diagram.id %}">
+
+  <div id="sfd-toolbar">
+    <a class="sfd-back-link" href="{% url 'planner:signal_flow_list' %}">&larr; Diagrams</a>
+    <h1>{{ diagram.name }}</h1>
+    <span style="color:#888;font-size:12px;">(Phase 8 will wire the canvas; this is the shell.)</span>
+  </div>
+
+  <div id="sfd-canvas-container">
+    {# JointJS paper mounts here in Phase 8. Phase 7 shows a blank white div. #}
+    <div id="sfd-paper"></div>
+  </div>
+</div>
+
+{# CSRF cookie available for all AJAX POST calls (Phase 9 autosave will use it). #}
+<form style="display:none">{% csrf_token %}</form>
+
+{# Vendor bundles — load order matters: joint first, then html-to-image, then app JS. #}
+{# joint is NOT deferred — it must be on `window.joint` when signal_flow_editor.js evaluates. #}
+<script src="{% static 'planner/js/vendor/joint.min.js' %}"></script>
+<script src="{% static 'planner/js/vendor/html-to-image.min.js' %}"></script>
+<script src="{% static 'planner/js/signal_flow_editor.js' %}" defer></script>
+{% endblock %}

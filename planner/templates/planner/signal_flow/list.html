@@ -1,0 +1,147 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Signal Flow Diagrams | ShowStack{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+{# Phase 7: no module-level CSS yet — Phase 8 may add planner/css/signal_flow.css #}
+<style>
+  .sfd-container { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .sfd-header { display: flex; justify-content: space-between; align-items: flex-end;
+                border-bottom: 1px solid #444; padding-bottom: 12px; margin-bottom: 24px; }
+  .sfd-h1 { margin: 0 0 4px 0; font-size: 24px; }
+  .sfd-subtitle { margin: 0; color: #aaa; font-size: 13px; }
+  .sfd-btn { display: inline-block; padding: 8px 14px; border-radius: 4px; border: 1px solid #555;
+             background: #2a2a3e; color: #eee; text-decoration: none; cursor: pointer; font-size: 13px; }
+  .sfd-btn-primary { background: #0a84ff; border-color: #0a84ff; color: #fff; }
+  .sfd-grid { display: grid; gap: 12px; }
+  .sfd-card { background: #1a1a2e; border: 1px solid #333; border-radius: 6px; padding: 16px;
+              display: flex; justify-content: space-between; align-items: center; }
+  .sfd-card-name { font-size: 15px; font-weight: 600; }
+  .sfd-card-meta { color: #888; font-size: 12px; margin-top: 4px; }
+  .sfd-card-actions { display: flex; gap: 8px; }
+  .sfd-empty { text-align: center; padding: 64px 16px; border: 1px dashed #444; border-radius: 8px; }
+  .sfd-empty-h { font-size: 18px; margin: 0 0 8px 0; }
+  .sfd-empty-p { color: #888; margin: 0 0 16px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sfd-container">
+  <div class="sfd-header">
+    <div>
+      <h1 class="sfd-h1">Signal Flow Diagrams</h1>
+      <p class="sfd-subtitle">Draw block diagrams of your audio system; nodes link to your ShowStack consoles, devices, speaker arrays, and intercom belt-packs.</p>
+    </div>
+    <div>
+      <button type="button" class="sfd-btn sfd-btn-primary" id="sfd-new-diagram-btn">+ New Diagram</button>
+    </div>
+  </div>
+
+  {% if diagrams %}
+    <div class="sfd-grid">
+      {% for d in diagrams %}
+        <div class="sfd-card" data-diagram-id="{{ d.id }}">
+          <div>
+            <div class="sfd-card-name">{{ d.name }}</div>
+            <div class="sfd-card-meta">Updated {{ d.updated_at|date:"M j, Y H:i" }}</div>
+          </div>
+          <div class="sfd-card-actions">
+            <a class="sfd-btn" href="{% url 'planner:signal_flow_editor' d.id %}">Open</a>
+            <button type="button" class="sfd-btn" data-action="rename" data-id="{{ d.id }}" data-name="{{ d.name|escapejs }}">Rename</button>
+            <button type="button" class="sfd-btn" data-action="delete" data-id="{{ d.id }}" data-name="{{ d.name|escapejs }}">Delete</button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="sfd-empty">
+      <h2 class="sfd-empty-h">No diagrams yet</h2>
+      <p class="sfd-empty-p">Create your first signal-flow diagram for this project to start mapping your system.</p>
+      <button type="button" class="sfd-btn sfd-btn-primary" id="sfd-empty-new-btn">+ New Diagram</button>
+    </div>
+  {% endif %}
+</div>
+
+{# CSRF cookie for AJAX create/rename/delete — Phase 7 wires basic create flow; full rename/delete UX lands here as inline JS #}
+<form style="display:none">{% csrf_token %}</form>
+
+<script>
+(function () {
+  'use strict';
+
+  function getCsrfToken() {
+    return document.cookie.split('; ')
+      .find(function (row) { return row.startsWith('csrftoken='); })
+      .split('=')[1];
+  }
+
+  function promptName(defaultName) {
+    var name = window.prompt('Diagram name:', defaultName || '');
+    if (name === null) return null;
+    name = name.trim();
+    if (!name) { alert('Name is required.'); return null; }
+    if (name.length > 200) { alert('Name must be 200 characters or fewer.'); return null; }
+    return name;
+  }
+
+  function ajaxJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(body || {}),
+    }).then(function (r) {
+      return r.json().then(function (j) { return { ok: r.ok, status: r.status, body: j }; });
+    });
+  }
+
+  function newDiagram() {
+    var name = promptName('');
+    if (name === null) return;
+    ajaxJson('{% url "planner:signal_flow_create" %}', { name: name }).then(function (res) {
+      if (res.ok && res.body.redirect_url) {
+        window.location.href = res.body.redirect_url;
+      } else {
+        alert(res.body.error || 'Create failed (status ' + res.status + ').');
+      }
+    });
+  }
+
+  function bindAll(sel, fn) {
+    var els = document.querySelectorAll(sel);
+    for (var i = 0; i < els.length; i++) { els[i].addEventListener('click', fn); }
+  }
+
+  var newBtn = document.getElementById('sfd-new-diagram-btn');
+  if (newBtn) newBtn.addEventListener('click', newDiagram);
+  var emptyBtn = document.getElementById('sfd-empty-new-btn');
+  if (emptyBtn) emptyBtn.addEventListener('click', newDiagram);
+
+  bindAll('button[data-action="rename"]', function (ev) {
+    var id = ev.currentTarget.dataset.id;
+    var current = ev.currentTarget.dataset.name;
+    var name = promptName(current);
+    if (name === null) return;
+    ajaxJson('/audiopatch/signal-flow/' + id + '/rename/', { name: name }).then(function (res) {
+      if (res.ok) { window.location.reload(); }
+      else { alert(res.body.error || 'Rename failed (status ' + res.status + ').'); }
+    });
+  });
+
+  bindAll('button[data-action="delete"]', function (ev) {
+    var id = ev.currentTarget.dataset.id;
+    var name = ev.currentTarget.dataset.name;
+    if (!window.confirm('Delete diagram "' + name + '"? This cannot be undone.')) return;
+    ajaxJson('/audiopatch/signal-flow/' + id + '/delete/', {}).then(function (res) {
+      if (res.ok) { window.location.reload(); }
+      else { alert(res.body.error || 'Delete failed (status ' + res.status + ').'); }
+    });
+  });
+})();
+</script>
+{% endblock %}
