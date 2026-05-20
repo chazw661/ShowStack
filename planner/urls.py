@@ -323,6 +323,24 @@ urlpatterns = [
 
     # Network Health Monitor — Phase 3: Dante (agent)
     path('network-monitor/api/dante-results/', views_monitor.agent_dante_results, name='agent_dante_results'),
+
+    # ── Signal Flow Diagrammer (v2.2) ─────────────────────────────────────────
+    # DGM-01..DGM-05 + DGM-08 (autosave URL stub).
+    #
+    # IMPORTANT: signal-flow/create/ and signal-flow/autocomplete/ MUST come
+    # BEFORE signal-flow/<int:diagram_id>/ — the int converter matches only \d+,
+    # so "create" / "autocomplete" would not be captured as diagram_id, but
+    # static-paths-before-param-paths is the explicit convention in this
+    # codebase (see urls.py multitrack block at lines 109-115).
+    path('signal-flow/', views.signal_flow_list, name='signal_flow_list'),
+    path('signal-flow/create/', views.signal_flow_create, name='signal_flow_create'),
+    path('signal-flow/autocomplete/', views.signal_flow_autocomplete, name='signal_flow_autocomplete'),
+    path('signal-flow/<int:diagram_id>/', views.signal_flow_editor, name='signal_flow_editor'),
+    path('signal-flow/<int:diagram_id>/state/', views.signal_flow_state, name='signal_flow_state'),
+    path('signal-flow/<int:diagram_id>/save/', views.signal_flow_autosave, name='signal_flow_autosave'),
+    path('signal-flow/<int:diagram_id>/rename/', views.signal_flow_rename, name='signal_flow_rename'),
+    path('signal-flow/<int:diagram_id>/delete/', views.signal_flow_delete, name='signal_flow_delete'),
+    path('signal-flow/<int:diagram_id>/export.png/', views.signal_flow_export_png, name='signal_flow_export_png'),
 ]
 
 from django.conf import settings
