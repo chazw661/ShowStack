@@ -1,148 +1,104 @@
-# Milestone v2.0 Requirements — Multitrack Session Builder
+# Milestone v2.2 Requirements — Signal Flow Diagrammer
 
-**Defined:** 2026-05-09
+**Defined:** 2026-05-19
+**Driver:** GitHub issue #13
 **Core Value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
 
-Source: `multitrack_session_builder_spec.md` (repo root) is the canonical spec; this file is the falsifiable, user-centric ledger that the roadmap maps phases against.
+Source: `.planning/research/SUMMARY.md` (2026-05-19) is the research-grounded basis for this scope. The locked technology stack is `@joint/core` 4.2.4 (MPL-2.0) for the canvas, `html-to-image` 1.11.11 (MIT) for PNG export, zero new Python dependencies. The single source of truth for canvas state is a `JSONField` blob on a new `SignalFlowDiagram` model; smart-shape equipment references live inside the JSON via `GenericForeignKey` keys (`content_type_id`, `object_id`), enriched server-side on load.
 
-## v2.0 Requirements
+## v2.2 Requirements
 
-### Session Management — MTS
+### Diagram Management — DGM
 
-- [ ] **MTS-01**: User can create a new MultitrackSession by picking a project console, target DAW (Reaper or Nuendo Live), feed-source mode (`console_dante` / `rio_direct` / `custom`), and track-order mode (`console` / `dante`).
-- [ ] **MTS-02**: User can name a session and rename it later; name is unique per project.
-- [ ] **MTS-03**: User can list all sessions for the current project on a module landing page, with create/duplicate/delete actions.
-- [ ] **MTS-04**: User can edit session metadata (name, target DAW, feed source, track-order mode, recorder capacity, notes) without losing track customizations.
-- [ ] **MTS-05**: User can delete a session and its tracks.
-- [ ] **MTS-06**: User can duplicate an existing session into a new one as a starting point.
+- [ ] **DGM-01**: User can see all signal-flow diagrams for the current project on a list page, with create / rename / delete actions.
+- [ ] **DGM-02**: User can create a new diagram by entering a name; diagram is scoped to the current project via `CurrentProjectMiddleware`.
+- [ ] **DGM-03**: User can rename a diagram from the list page; name is unique per project.
+- [ ] **DGM-04**: User can delete a diagram from the list page; deletion removes the canvas state and all node/connector references.
+- [ ] **DGM-05**: All diagram views enforce `.filter(project=request.current_project)` on every lookup; cross-project access returns 404.
+- [ ] **DGM-06**: Canvas changes autosave on idle within 2.5 s; the editor shows a "Saved" / "Saving…" / "Failed — retry" status indicator.
+- [ ] **DGM-07**: Concurrent edits from a second tab return HTTP 409 on save; the losing tab shows a non-dismissable banner: "Diagram was modified elsewhere — reload to see latest."
+- [ ] **DGM-08**: Closing the tab or navigating away triggers a `keepalive: true` final save if there are unsaved changes.
 
-### Track Editor — TRK
+### Canvas & Editor UX — CNV
 
-- [ ] **TRK-01**: User can see all tracks for a session in an ordered list, with track number, source channel ref (and channel type — input / aux / matrix / group / FX return / cue), resolved label, resolved color, enabled state, and notes.
-- [ ] **TRK-02**: User can enable / disable individual tracks; only enabled tracks appear in exports.
-- [ ] **TRK-03**: User can override a track's label (overrides the source channel's name).
-- [ ] **TRK-04**: User can override a track's color via a swatch picker (overrides the source channel's color).
-- [ ] **TRK-05**: User can reorder tracks via drag-and-drop; the new order persists.
-- [ ] **TRK-06**: User can add a track to a session at any time by picking from any available console channel — **input channels, Aux outputs, Matrix outputs, Group outputs, FX returns, and Cue outputs are all first-class selectable sources**, not just the initial seed list. Channels are presented grouped by type with type filters.
-- [ ] **TRK-07**: User can add a manual track that has no source channel (e.g. click track, room mic, talkback return) with a hand-entered label and color.
-- [ ] **TRK-08**: User can remove a track from the session — works for both manual tracks and tracks tied to a console source channel (removal does not delete the underlying ConsoleChannel).
-- [ ] **TRK-09**: User can bulk include or exclude all Aux, Matrix, and Group source channels via collapsible section toggles; bulk toggles seed the selection, and individual tracks can still be added or removed afterwards via TRK-06 / TRK-08.
-- [ ] **TRK-10**: When `recorder_capacity` is set, the editor shows a count vs capacity ("47 / 64"); over-capacity is highlighted red ("72 / 64 — 8 over") but does not block export.
+- [ ] **CNV-01**: User can drag a shape from the sidebar shape picker onto the canvas; the shape lands at the cursor position (after scroll/zoom).
+- [ ] **CNV-02**: User can pan the canvas via space-bar + drag or middle-click drag.
+- [ ] **CNV-03**: User can zoom in, zoom out, and zoom-to-fit via toolbar buttons; current zoom level is persisted with the diagram.
+- [ ] **CNV-04**: User can toggle snap-to-grid on/off via a toolbar button; when on, dragged shapes snap to the grid.
+- [ ] **CNV-05**: User can undo and redo via Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z; the command stack is wired before the first graph mutation.
+- [ ] **CNV-06**: User can select multiple nodes via shift-click and via rubber-band (drag empty canvas to draw selection rectangle).
+- [ ] **CNV-07**: User can delete the current selection (single or multi) via the `Delete` or `Backspace` key.
+- [ ] **CNV-08**: When the user reopens a diagram, the viewport (pan position + zoom level) restores to where they left off.
 
-### Reaper Exporter — RPP
+### Smart Shapes — SHP
 
-- [ ] **RPP-01**: User can export the current session as a Reaper `.RPP` project file with one track per enabled track.
-- [ ] **RPP-02**: Track names in the exported `.RPP` match each track's resolved label.
-- [ ] **RPP-03**: Track colors in the exported `.RPP` match each track's resolved color, mapped from Yamaha palette to Reaper packed RGB.
-- [ ] **RPP-04**: Track order in the exported `.RPP` matches the session's `track_order_mode`.
-- [ ] **RPP-05**: User can also export a Reaper track template (`.RTrackTemplate`) to merge into an existing project.
+- [ ] **SHP-01**: User can drop a **Console** shape and pick a project Console record via a modal; the node label seeds from the Console's name.
+- [ ] **SHP-02**: User can drop a **Device** shape and pick a project Device record (Rio, Tio, RIO3224-D, AVB rack, etc.) via the same modal pattern.
+- [ ] **SHP-03**: User can drop a **SpeakerArray** shape and pick a project SpeakerArray record.
+- [ ] **SHP-04**: User can drop a **CommBeltPack** shape and pick a project CommBeltPack record.
+- [ ] **SHP-05**: User can drop a **Generic** shape (no record link); the engineer types the label by hand. Used for gear not yet modeled in ShowStack.
+- [ ] **SHP-06**: When linked equipment is renamed, the shape's label updates on the next diagram load (label propagation via server-side `_enrich_nodes()`).
+- [ ] **SHP-07**: When linked equipment is deleted, the shape renders **ghosted** (muted style, dashed border) with its last-known label preserved from a snapshot stored on the node. Engineer chooses whether to delete or relink the node.
+- [ ] **SHP-08**: Each shape exposes one generic "in" port per side and one generic "out" port per side, used as connector snap targets. (Per-channel ports deferred to v2.3.)
+- [ ] **SHP-09**: The equipment picker modal lists only records belonging to `request.current_project`.
 
-### Nuendo Live Exporter — NLP
+### Connectors — CON
 
-- [x] **NLP-01
-**: User can export the current session as a Nuendo Live 3 `.nlpr` file via the bundled empty-template injection path.
-- [x] **NLP-02
-**: The exported `.nlpr` loads in Nuendo Live 3 without errors.
-- [x] **NLP-03
-**: Each track's name renders correctly inside Nuendo Live (outer `Name` and inner `DeviceAttributes → Name → String` match).
-- [x] **NLP-04
-**: Each track's color renders correctly using a `Farb` palette index (Yamaha CL/QL → Farb mapping table from the spec).
-- [x] **NLP-05
-**: Tracks with no assigned color export with `Farb` omitted, so they use the Nuendo Live default appearance.
-- [x] **NLP-06
-**: All `ID` and `RuntimeID` values in the exported file are unique within the document.
+- [ ] **CON-01**: User can draw a connector between two nodes by dragging from an output port to an input port; routing is orthogonal (right-angle).
+- [ ] **CON-02**: User can set the connector's **signal type** from a 5-option dropdown: **analog**, **AES**, **Dante**, **MADI**, **intercom**. Each type renders with a distinct line style + color (color is not the only differentiator — line dash pattern carries the meaning too, for grayscale print).
+- [ ] **CON-03**: Connectors snap to defined ports; mid-shape drops are rejected.
+- [ ] **CON-04**: User can drag midpoint waypoints to route the connector around obstacles manually.
+- [ ] **CON-05**: User can set the connector **direction** to *source-to-target* (default, arrow on target end) or *bidirectional* (no arrows; used for intercom partylines).
+- [ ] **CON-06**: Each connector carries a **circuit-label** string field that renders along the line.
 
-### Console CSV Import — CSV
+### Circuit-Label Autocomplete — LBL
 
-- [x] **CSV-01
-**: User can upload a Yamaha CL/QL channel-name CSV (Studio Manager / CL Editor / Console File Converter export) and have it populate or update the console's channels in ShowStack.
-- [x] **CSV-02
-**: User can upload a Yamaha Rivage PM channel-labels CSV and have it populate or update the console's channels.
-- [x] **CSV-03
-**: Imported channel labels and colors map onto existing `ConsoleChannel` records when present, otherwise create new ones; user is shown a per-row diff summary before commit.
-- [x] **CSV-04
-**: Import errors surface clearly per row (missing required field, unsupported color code) without aborting the whole import.
-- [x] **CSV-05
-**: After a successful import, user lands in the session editor with the imported channels available as track sources.
+- [ ] **LBL-01**: Typing in a connector's circuit-label field surfaces autocomplete suggestions sourced from existing project signal-name fields: `DeviceInput.signal_name`, `DeviceOutput.signal_name`, `ConsoleInput.source`, and `ConsoleAuxOutput.name`.
+- [ ] **LBL-02**: Autocomplete results are scoped to `request.current_project`; cross-project signals never appear in results.
+- [ ] **LBL-03**: Engineer can override autocomplete and enter free-text; the connector accepts any string.
 
-### Templates — TPL
+### Export — EXP
 
-- [x] **TPL-01
-**: User can save the current session's structure (target DAW, feed source, track-order mode, include-aux/matrix/groups flags, color scheme, naming pattern) as a named `MultitrackTemplate` scoped to the project.
-- [x] **TPL-02
-**: User can apply a template to a new session, seeding the track list and metadata; user can still override per-track values after.
-- [x] **TPL-03
-**: User can list, rename, and delete templates from the module landing page.
-- [x] **TPL-04
-**: Template save / load buttons, placement, and modal behavior visually and behaviorally match existing ShowStack template patterns (e.g. Comm Config, Mic Tracker).
+- [ ] **EXP-01**: User can export the current diagram as a PNG file from a toolbar "Export PNG" button. The PNG renders with a white background, captures the full canvas (not just the visible viewport), and matches on-screen label fonts (system fonts only — no cross-origin font taint).
 
-### Polish — POL
+## Future Requirements (deferred to v2.3+)
 
-- [x] **POL-01**: Each `ConsoleChannel` carries a `default_record` boolean; new sessions pre-check tracks where `default_record=True` so engineers don't have to re-enable the obvious ones each gig.
-- [x] **POL-02**: Each `ConsoleChannel` carries a `default_record_color` (hex) used as the seed color for new tracks unless overridden.
-
-## Future Requirements (deferred to v2.1+)
-
-- **PT-01**: Pro Tools session-data `.txt` or AAF exporter — deferred until tester access secured (Pro Tools Intro free-tier viability or beta-tester recruit).
-- **M7CL-01**: Yamaha M7CL channel import — deferred until a CSV export path is confirmed; if none, a `.M7C` binary parser is separate work.
-- **Other-Console**: DiGiCo, Allen & Heath, Avid console families — separate effort if/when demand surfaces.
+- **PDF-01**: PDF export for printed technical riders. Trigger: beta engineers report PNG insufficient for show documentation.
+- **MOB-01**: Mobile `/m/` read-only viewer using the same `state/` JSON endpoint. Pre-design preserved in v2.2 (HTML shell + JSON load + `readOnly` JS flag).
+- **AUTO-01**: Obstacle-aware orthogonal auto-routing of connectors. v2.2 ships hand-roll routing with engineer-controlled waypoints.
+- **PORT-01**: Per-channel ports on smart shapes (a Console exposes a port per input/output channel from its DB record). v2.2 ships generic-in/generic-out only.
+- **COPY-01**: Copy / paste of selected nodes — gated on JointJS `Clipboard` availability in `@joint/core` 4.2.4 vs JointJS+ (research flag in Phase 5 planning).
+- **IP-01**: Optional IP-address annotation on smart shapes (data already in `Console.primary_ip_address` / `Device.primary_ip_address`).
+- **CMM-01**: COMM Config integration — auto-generate intercom diagram from `CommBeltPack` + `CommChannel` records. Unblocked by v2.2's CommBeltPack smart shape.
+- **PAC-01**: PA Cable Schedule overlay — visualize cable runs from existing `PACableSchedule` records on top of the speaker-system portion of the diagram.
+- **ALIGN-01**: Smart alignment guides (snap lines between nodes).
+- **SVG-01**: SVG faceplate icons for racks. Deliberately deferred — engineers' default expectation is text labels.
 
 ## Out of Scope (explicit exclusions)
 
-These were considered and deliberately excluded from v2.0. Reopening any of them needs a milestone-boundary decision.
+These were considered and deliberately excluded from v2.2. Reopening any of them needs a milestone-boundary decision.
 
-- Setlist / song-marker timeline generation in exported sessions
-- File-naming pattern automation for recorded files (only naming the *tracks*, not the captured files)
-- Recording-rig modeling (recorders, interfaces) inside ShowStack
-- Show notes / per-recording-session log
-- Virtual-soundcheck asset tracking (file-management workflow)
-- Post-show delivery automation (cloud links, manifests)
-- Real-time DAW control (transport, marker drop) — replaces no vendor protocol
-- A replacement for the Yamaha Console Extension protocol — this exporter sits *alongside* it, not against it
+- **Auto-layout** (hierarchical / force-directed): destroys physical topology (FOH center, stage left/right, monitor world stage right). The most-cited Lucidchart complaint from AV engineers.
+- **Real-time multi-user collaborative editing**: last-write-wins autosave with HTTP 409 conflict is correct for solo A1 workflow.
+- **SVG export as an artifact**: PNG covers embedding; PDF (v2.3) covers print. SVG would create a secondary copy outside ShowStack, defeating source-of-truth.
+- **Pictographic rack-unit faceplates per model**: maintenance burden across hundreds of equipment models; labels carry the semantic weight.
+- **Console families outside Yamaha CL/QL/Rivage PM**: already out of scope at the project level.
+- **Network monitoring inside ShowStack**: already out of scope at the project level (v1.0 was scrapped).
+
+## Constraints
+
+- **No new Python dependencies.** `models.JSONField` and `django.contrib.contenttypes` are built into Django 5.x. Confirmed via STACK.md.
+- **`@joint/core` is MPL-2.0** (not MIT as initially noted in PROJECT.md). Vendor the unmodified `joint.min.js`; ship `THIRD_PARTY_LICENSES.txt`; do not patch the JointJS source — use the public API for workarounds.
+- **System fonts only on shape and connector labels.** Cross-origin webfonts taint the PNG export canvas with a `SecurityError`.
+- **Additive migrations only.** Single `SignalFlowDiagram` migration; no edits to existing tables. Inherits project-level rule.
+- **Project scoping enforced on every view.** Replicate the `_get_track_for_request` IDOR pattern from `planner/views.py:6328`; walk canvas JSON on every save to reject cross-project equipment references.
 
 ## Traceability
 
-Mapping of REQ-IDs to phases (filled in 2026-05-09 by `/gsd-roadmap` for the v2.0 Multitrack Session Builder milestone).
+(Filled in by `gsd-roadmapper` after roadmap creation. Each REQ-ID maps to exactly one phase.)
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MTS-01 | Phase 1 | Pending |
-| MTS-02 | Phase 1 | Pending |
-| MTS-03 | Phase 1 | Pending |
-| MTS-04 | Phase 1 | Pending |
-| MTS-05 | Phase 1 | Pending |
-| MTS-06 | Phase 1 | Pending |
-| TRK-01 | Phase 1 | Pending |
-| TRK-02 | Phase 1 | Pending |
-| TRK-03 | Phase 1 | Pending |
-| TRK-04 | Phase 1 | Pending |
-| TRK-05 | Phase 1 | Pending |
-| TRK-06 | Phase 1 | Pending |
-| TRK-07 | Phase 1 | Pending |
-| TRK-08 | Phase 1 | Pending |
-| TRK-09 | Phase 1 | Pending |
-| TRK-10 | Phase 1 | Pending |
-| RPP-01 | Phase 1 | Pending |
-| RPP-02 | Phase 1 | Pending |
-| RPP-03 | Phase 1 | Pending |
-| RPP-04 | Phase 1 | Pending |
-| RPP-05 | Phase 1 | Pending |
-| CSV-01 | Phase 2 | Pending |
-| CSV-02 | Phase 2 | Pending |
-| CSV-03 | Phase 2 | Pending |
-| CSV-04 | Phase 2 | Pending |
-| CSV-05 | Phase 2 | Pending |
-| TPL-01 | Phase 3 | Pending |
-| TPL-02 | Phase 3 | Pending |
-| TPL-03 | Phase 3 | Pending |
-| TPL-04 | Phase 3 | Pending |
-| NLP-01 | Phase 4 | Complete |
-| NLP-02 | Phase 4 | Pending |
-| NLP-03 | Phase 4 | Pending |
-| NLP-04 | Phase 4 | Pending |
-| NLP-05 | Phase 4 | Pending |
-| NLP-06 | Phase 4 | Complete |
-| POL-01 | Phase 5 | Complete |
-| POL-02 | Phase 5 | Complete |
+| _to be populated_ | _phase_ | _pending_ |
 
-**Coverage:** 38 / 38 v2.0 requirements mapped to exactly one phase. No orphans.
+**Coverage target:** 31 / 31 v2.2 requirements mapped to exactly one phase. No orphans.
