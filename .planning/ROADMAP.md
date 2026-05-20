@@ -183,10 +183,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Engineer can delete a diagram from the list page; the row is removed immediately with no orphaned data
   5. Opening a diagram navigates to the editor page; the browser console shows no 404 errors on JS/CSS assets and `joint` is available on `window`
 **Plans**: 4 plans
-- [ ] 07-01-model-migration-admin-PLAN.md — SignalFlowDiagram model + migration 0158 + admin + admin_ordering (Wave 1)
-- [ ] 07-02-vendor-js-licensing-PLAN.md — Vendor joint.min.js + html-to-image.min.js + THIRD_PARTY_LICENSES.txt + PROJECT.md MIT->MPL-2.0 correction (Wave 1, parallel with 07-01)
-- [ ] 07-03-views-urls-PLAN.md — 9 view functions + 9 URL patterns + IDOR/viewer guards (Wave 2, depends on 07-01)
-- [ ] 07-04-templates-editor-shell-PLAN.md — list.html + editor.html + signal_flow_editor.js stub + dashboard quick-action link (Wave 3, depends on 07-01/02/03)
+- [x] 07-01-model-migration-admin-PLAN.md — SignalFlowDiagram model + migration 0158 + admin + admin_ordering (Wave 1)
+- [x] 07-02-vendor-js-licensing-PLAN.md — Vendor joint.min.js + html-to-image.min.js + THIRD_PARTY_LICENSES.txt + PROJECT.md MIT->MPL-2.0 correction (Wave 1, parallel with 07-01)
+- [x] 07-03-views-urls-PLAN.md — 9 view functions + 9 URL patterns + IDOR/viewer guards (Wave 2, depends on 07-01)
+- [x] 07-04-templates-editor-shell-PLAN.md — list.html + editor.html + signal_flow_editor.js stub + dashboard quick-action link (Wave 3, depends on 07-01/02/03)
 **UI hint**: yes
 
 ### Phase 8: Canvas, Smart Shapes & Connectors
