@@ -30,6 +30,7 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - [x] Nuendo Live `.nlpr` export — `lxml` template-injection with Yamaha→Farb color mapping (Phase 4, 2026-05-14)
 - [x] Channel record defaults — `default_record` + `default_record_color` seed flags on `ConsoleChannel` (Phase 5, 2026-05-14)
 - [x] Trusted Crew Rosters — owner-defined named groups, bulk-add with pre-onboarding email invites, auto-claim on register (Phase 6 / v2.1, 2026-05-15)
+- [x] Signal Flow Diagrammer foundation — `SignalFlowDiagram` model, CRUD views, editor HTML shell with vendored JointJS 4.2.4 (Phase 7 / v2.2, 2026-05-20)
 
 ### Active
 
@@ -117,4 +118,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 — v2.1 closed (Phase 6 Trusted Crew Rosters shipped 2026-05-15: bulk-add + pre-onboarding emails + auto-claim on register, 7/7 plans). v2.2 Signal Flow Diagrammer opened — JointJS core locked as canvas library; module-MVP scope (smart shapes for Console/Device/SpeakerArray/CommBeltPack + generic, orthogonal connectors with type variants, circuit-label autocomplete, JSON autosave, PNG export); mobile viewer + auto-routing deferred to v2.3+.*
+*Last updated: 2026-05-20 — v2.2 Phase 7 shipped (Foundation, CRUD & Editor Shell). `SignalFlowDiagram` model + 0158 migration + admin on showstack_admin_site, 9 views + 9 URLs with project-scoped IDOR guards, `joint.min.js` (MPL-2.0) + `html-to-image.min.js` (MIT) vendored, list page + editor HTML shell + dashboard quick-action. Browser smoke test approved 2026-05-20 (console: `[SFD] JointJS ready — version 4.2.4`). 19/19 must-haves verified. DGM-01..05 + DGM-08 closed. Phase 8 (Canvas, Smart Shapes & Connectors) is next.*

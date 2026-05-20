@@ -62,7 +62,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ## v2.2 — Signal Flow Diagrammer
 
-- [ ] **Phase 7: Foundation, CRUD & Editor Shell** - `SignalFlowDiagram` model, migration, admin, list/create/rename/delete views, all URL patterns, and the HTML editor shell with vendored JointJS
+- [x] **Phase 7: Foundation, CRUD & Editor Shell** - `SignalFlowDiagram` model, migration, admin, list/create/rename/delete views, all URL patterns, and the HTML editor shell with vendored JointJS (completed 2026-05-20)
 - [ ] **Phase 8: Canvas, Smart Shapes & Connectors** - JointJS canvas init, five smart shape classes with equipment picker modal, five connector signal-type variants with port snapping, all canvas UX (pan/zoom/snap/undo/multi-select/delete/viewport restore)
 - [ ] **Phase 9: Autosave & Orphan Rendering** - Debounced JSON autosave with race-condition guards, save-status indicator, HTTP 409 conflict banner, keepalive on unload, and server-side `_enrich_nodes()` for ghosted orphan rendering
 - [ ] **Phase 10: Autocomplete & PNG Export** - Circuit-label autocomplete endpoint (all signal-name fields, project-scoped), JS autocomplete widget on connector labels, and one-click PNG export via `html-to-image`
