@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Collaboration & User Management
 status: completed
-stopped_at: Phase 8 context gathered
-last_updated: "2026-05-20T20:41:24.236Z"
+stopped_at: Phase 8 UI-SPEC approved
+last_updated: "2026-05-20T23:09:19.544Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
@@ -78,7 +78,7 @@ None at roadmap creation.
 ## Session Continuity
 
 Last session: --stopped-at
-Stopped at: Phase 8 context gathered
+Stopped at: Phase 8 UI-SPEC approved
 Resume file: --resume-file
 
 **Planned Phase:** 7 (Foundation, CRUD & Editor Shell) — 4 plans — 2026-05-20T13:06:24.303Z
