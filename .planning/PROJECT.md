@@ -48,7 +48,7 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 **Goal:** ShowStack engineers can draw, save, and share project-scoped signal-flow diagrams using smart shapes that link to live ShowStack equipment records, with connector styles matched to signal type and circuit labels pulled from existing `signal_name` fields.
 
 **Target features (module-MVP scope):**
-- Drag-and-drop canvas powered by **JointJS core** (vanilla JS, MIT) — matches ShowStack's no-framework frontend
+- Drag-and-drop canvas powered by **JointJS core** (vanilla JS, MPL-2.0) — matches ShowStack's no-framework frontend
 - `SignalFlowDiagram` model, project-scoped via `CurrentProjectMiddleware`
 - Many diagrams per project (list page + name + delete)
 - Smart shapes for `Console` / `Device` / `SpeakerArray` / `CommBeltPack` + a generic shape for gear not in ShowStack
@@ -97,7 +97,7 @@ ShowStack is in beta with live-audio engineer testers. The Multitrack Session Bu
 | Network Health Monitor scrapped from ShowStack | WiFi/Dante NIC conflicts make cloud-hosted monitoring impossible — moved to standalone-app architecture | v1.0 closed without ship |
 | Multitrack Session Builder selected as v2.0 | Strong differentiation against flaky Yamaha-Steinberg native integration; Reaper has no first-party path | Shipped 2026-05-14 (Phases 1–5) |
 | Signal Flow Diagrammer selected as v2.2 (issue #13) | Engineers manually redraw signal flow in Visio/Lucidchart every gig despite having all the data in ShowStack; closes a high-leverage gap by reusing existing equipment/signal-name records | In progress |
-| JointJS core (MIT) chosen over drawio iframe and maxGraph for v2.2 | Vanilla-JS drop-in matches ShowStack's no-framework frontend; iframe-embed loses native feel and complicates click-through-to-record; maxGraph requires TS build | Locked 2026-05-19 |
+| JointJS core (MPL-2.0) chosen over drawio iframe and maxGraph for v2.2 | Vanilla-JS drop-in matches ShowStack's no-framework frontend; iframe-embed loses native feel and complicates click-through-to-record; maxGraph requires TS build | Locked 2026-05-19 |
 
 ## Evolution
 
