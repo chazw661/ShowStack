@@ -88,6 +88,10 @@ def ordered_get_app_list(request, app_label=None):
         # the admin sidebar link is suppressed. Re-enable by removing from this
         # set when the changelist 500 is investigated.
         'consoleimport',
+        # Signal Flow Diagrammer — editor lives at /audiopatch/signal-flow/;
+        # admin changelist is for superuser inspection only, not end-user navigation.
+        # Same pattern as multitracksession / multitracktemplate.
+        'signalflowdiagram',
     }
     
     # Define the correct order with proper groupings
@@ -168,6 +172,7 @@ def ordered_get_app_list(request, app_label=None):
         # Multitrack Session Builder (50 — bottom of sidebar)
         'multitracksession': 50,
         'multitracktemplate': 51,        # NEW — Phase 3
+        'signalflowdiagram': 52,   # Phase 7 — Signal Flow Diagrammer (v2.2)
     }
     
     for app in app_list:

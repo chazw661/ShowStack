@@ -38,6 +38,7 @@ from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import ConsoleImport
 from .models import MultitrackSession, MultitrackTrack
 from .models import MultitrackTemplate, MultitrackTemplateSlot
+from .models import SignalFlowDiagram
 from .models import Location, Amp, AmpChannel, AmpDivider
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
@@ -6181,6 +6182,65 @@ class SwitchPortSnapshotAdmin(admin.ModelAdmin):
 
 showstack_admin_site.register(ProjectSNMPConfig, ProjectSNMPConfigAdmin)
 showstack_admin_site.register(SwitchPortSnapshot, SwitchPortSnapshotAdmin)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Signal Flow Diagrammer (v2.2) — Phase 7
+# Mirrors MultitrackSessionAdmin pattern (admin.py:5906-5941).
+# Always hidden from sidebar (admin_ordering.py always_hidden set).
+# Changelist redirects to /audiopatch/signal-flow/ (plan 03).
+# ──────────────────────────────────────────────────────────────────────────────
+
+@admin.register(SignalFlowDiagram, site=showstack_admin_site)
+class SignalFlowDiagramAdmin(BaseEquipmentAdmin):
+    """Signal Flow Diagram admin — superuser inspection only.
+
+    Changelist redirects to the user-facing list page at /audiopatch/signal-flow/.
+    canvas_state is shown as a collapsible JSON display (read-only).
+    Always hidden from the sidebar (see admin_ordering.py always_hidden).
+    """
+
+    list_display = ['name', 'project', 'updated_at']
+    list_filter = ['project']
+    readonly_fields = ['canvas_state_display', 'version', 'created_at', 'updated_at']
+    exclude = ['canvas_state', 'viewport']
+
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+        return redirect('planner:signal_flow_list')
+
+    def canvas_state_display(self, obj):
+        import json
+        from django.utils.html import format_html
+        pretty = json.dumps(obj.canvas_state, indent=2)
+        cell_count = len(obj.canvas_state.get('cells', []))
+        return format_html(
+            '<details><summary>{} cells</summary>'
+            '<pre style="max-height:400px;overflow:auto">{}</pre></details>',
+            cell_count, pretty
+        )
+    canvas_state_display.short_description = 'Canvas State'
+
+    def has_add_permission(self, request):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if request.user.groups.filter(name='Viewer').exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 

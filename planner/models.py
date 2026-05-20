@@ -1434,6 +1434,34 @@ class MultitrackTemplateSlot(models.Model):
         return f'#{self.position} {self.source_type} {self.source_number}'
 
 
+class SignalFlowDiagram(models.Model):
+    """Signal Flow Diagrammer canvas (v2.2). Single-blob persistence model.
+
+    canvas_state stores the full JointJS `graph.toJSON()` output as a JSON blob.
+    viewport stores pan/zoom state (Phase 8 wires this).
+    version is the optimistic-locking token (Phase 9 wires this).
+    """
+
+    project = models.ForeignKey(
+        'Project', on_delete=models.CASCADE, related_name='signal_flow_diagrams'
+    )
+    name = models.CharField(max_length=200)
+    canvas_state = models.JSONField(default=dict, blank=True)
+    viewport = models.JSONField(default=dict, blank=True)
+    version = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Signal Flow Diagram"
+        verbose_name_plural = "Signal Flow Diagrams"
+        ordering = ['-updated_at', 'name']
+        unique_together = [('project', 'name')]
+
+    def __str__(self):
+        return self.name
+
+
 def _summarise_skipped_slots(skipped):
     """Build a human-readable summary string from a list of (source_type, source_number) tuples.
 
