@@ -1,0 +1,29 @@
+# Third-Party Licenses
+# ShowStack — Lawson Design & Engineering
+
+## @joint/core 4.2.4
+
+License: Mozilla Public License 2.0 (MPL-2.0)
+Source: https://github.com/clientIO/joint
+Vendored as: planner/static/planner/js/vendor/joint.min.js
+Modifications: None. File vendored unmodified.
+
+Notes: MPL-2.0 is a file-level weak copyleft license. ShowStack does NOT
+modify joint.min.js — it is served verbatim from the @joint/core 4.2.4 npm
+distribution. Any future need to patch JointJS behavior MUST be implemented
+via the public JointJS API in separate ShowStack files; do not edit
+joint.min.js directly.
+
+## html-to-image 1.11.11
+
+License: MIT
+Source: https://github.com/bubkoo/html-to-image
+Vendored as: planner/static/planner/js/vendor/html-to-image.min.js
+Modifications: None. File vendored unmodified.
+
+## Sortable.js (existing)
+
+License: MIT
+Source: https://github.com/SortableJS/Sortable
+Vendored as: planner/static/planner/js/vendor/Sortable.min.js
+Modifications: None. File vendored unmodified.
