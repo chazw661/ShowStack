@@ -1,14 +1,14 @@
 ---
-status: partial
+status: resolved
 phase: 08-canvas-smart-shapes-connectors
 source: [08-VERIFICATION.md]
 started: 2026-05-21T18:20:00Z
-updated: 2026-05-21T18:20:00Z
+updated: 2026-05-21T22:55:00Z
 ---
 
 ## Current Test
 
-[awaiting human testing]
+[complete — all 5 tests passed in browser]
 
 ## Tests
 
@@ -23,7 +23,7 @@ expected:
   - For typed shapes (Console / Device / SpeakerArray / CommBeltPack), the equipment picker modal opens with the current project's records only (and an "Add equipment in Admin" empty-state link if none exist).
   - The Generic tile drops the shape directly without opening the picker.
 
-result: [pending]
+result: passed
 
 ### 2. Pan + zoom + snap + viewport restore
 
@@ -41,7 +41,7 @@ expected:
   - Zoom clamped between 25% and 200%.
   - During pan: paperEl cursor = `grabbing`; Space-hold without drag = `grab`; on release = default.
 
-result: [pending]
+result: passed
 
 ### 3. Undo/redo + multi-select + keyboard delete
 
@@ -58,7 +58,7 @@ action:
   - Click into the circuit-label input; press Backspace — character deletes from input, NOT the selected connector.
   - Open the equipment picker; press Backspace in the search box — character deletes, NOT a canvas shape.
 
-result: [pending]
+result: passed
 
 ### 4. Port-snapped orthogonal connectors + signal-type styles
 
@@ -78,7 +78,7 @@ action:
     - MADI → orange (`#ef6c00`) dashed 10-3-3-3 (heavier 2.5px), orange arrow
     - intercom → purple (`#7b1fa2`) dashed 2-4, purple arrow
 
-result: [pending]
+result: passed
 
 ### 5. Inspector + bidirectional + circuit-label + manual Save round-trip
 
@@ -97,15 +97,23 @@ action:
   - Open the editor as a Viewer-group user — Save returns 403 → toast shows "Save failed."
   - (Optional adversarial) POST a crafted canvas_state with a foreign-project contentTypeId — server returns HTTP 422 with "Equipment reference out of project."
 
-result: [pending]
+result: passed
 
 ## Summary
 
 total: 5
-passed: 0
+passed: 5
 issues: 0
-pending: 5
+pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
+
+None blocking. Three small UAT-time spec additions landed before sign-off
+(commit 55a0169): manhattan router with padding for parallel-link
+separation, `linkTools.Segments()` for per-segment knuckle editing, and
+two extra signal types (AVB / Network). User-addable input/output ports
+were considered and deferred per SHP-08 ("Per-channel ports deferred
+to v2.3"); revisit as a Phase 8.1 if real-world use demands it before
+v2.3.
