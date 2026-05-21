@@ -7545,23 +7545,203 @@ def signal_flow_state(request, diagram_id):
 @login_required
 @require_POST
 def signal_flow_autosave(request, diagram_id):
-    """POST stub for DGM-08 (URL must exist for editor.html data-autosave-url).
+    """POST: persist canvas_state + viewport, bump version. Phase 8 (simplified).
 
-    Phase 9 implements: optimistic locking via version field, equipment GFK
-    validation, _enrich_nodes-aware save, HTTP 409 on conflict. For now the
-    endpoint exists so {% url 'planner:signal_flow_autosave' diagram.id %}
-    resolves in editor.html — the actual fetch behavior ships in Phase 9.
+    Body shapes:
+      - Full save:        {"canvas_state": {...}, "viewport": {...}}
+      - Viewport-only:    {"viewport": {...}}  with ?viewport_only=1 query param
+
+    Phase 8 walks canvas_state.cells and rejects any (contentTypeId, objectId)
+    that doesn't belong to request.current_project (PITFALLS.md §4 baseline).
+    SpeakerArray scopes via prediction__project (no direct project FK).
+
+    Phase 9 will add optimistic locking via If-Match version header + HTTP 409.
+    For now version bumps on every save unconditionally.
     """
-    return JsonResponse({'ok': True, 'stub': True})
+    viewer_block = _signal_flow_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+
+    try:
+        diagram = _get_diagram_for_request(request, diagram_id)
+        if not diagram:
+            return JsonResponse({'error': 'Not found'}, status=404)
+
+        payload = json.loads(request.body or '{}')
+
+        # Branch: viewport-only writes (RESEARCH §10 + §19 — folded into the same URL
+        # via ?viewport_only=1 to keep URL count stable).
+        if request.GET.get('viewport_only') == '1':
+            viewport = payload.get('viewport') or {}
+            if not isinstance(viewport, dict):
+                return JsonResponse({'error': 'Bad viewport payload'}, status=400)
+            diagram.viewport = viewport
+            diagram.save(update_fields=['viewport', 'updated_at'])
+            return JsonResponse({'ok': True, 'viewport_only': True})
+
+        # Full canvas_state save
+        canvas_state = payload.get('canvas_state') or {}
+        if not isinstance(canvas_state, dict):
+            return JsonResponse({'error': 'Bad canvas_state payload'}, status=400)
+
+        # Walk canvas JSON, validate every linked equipment ref (PITFALLS.md §4).
+        # Local import keeps the global views.py import surface unchanged.
+        from django.contrib.contenttypes.models import ContentType
+        current_project = request.current_project
+        cells = canvas_state.get('cells') or []
+        for cell in cells:
+            prop = cell.get('showstack') if isinstance(cell, dict) else None
+            if not isinstance(prop, dict):
+                continue
+            ct_id = prop.get('contentTypeId')
+            obj_id = prop.get('objectId')
+            if not ct_id or not obj_id:
+                continue
+            ct = ContentType.objects.filter(id=ct_id).first()
+            if not ct:
+                return JsonResponse({'error': f'Unknown content type {ct_id}'}, status=422)
+            Model = ct.model_class()
+            if Model is None:
+                return JsonResponse({'error': f'Content type {ct_id} not resolvable'}, status=422)
+            # IDOR — SpeakerArray uses prediction__project; others use project
+            # (PATTERNS.md risk #3). hasattr() catches future-added project FKs too.
+            model_name = Model.__name__
+            if model_name == 'SpeakerArray':
+                exists = Model.objects.filter(
+                    id=obj_id, prediction__project=current_project,
+                ).exists()
+            elif hasattr(Model, 'project') or model_name in ('Console', 'Device', 'CommBeltPack'):
+                exists = Model.objects.filter(
+                    id=obj_id, project=current_project,
+                ).exists()
+            else:
+                return JsonResponse(
+                    {'error': f'Type {ct.model} has no project scope'}, status=422,
+                )
+            if not exists:
+                return JsonResponse(
+                    {'error': 'Equipment reference out of project'}, status=422,
+                )
+
+        diagram.canvas_state = canvas_state
+        if 'viewport' in payload and isinstance(payload['viewport'], dict):
+            diagram.viewport = payload['viewport']
+        diagram.version = (diagram.version or 1) + 1
+        diagram.save(update_fields=['canvas_state', 'viewport', 'version', 'updated_at'])
+        return JsonResponse({'ok': True, 'version': diagram.version})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Bad JSON'}, status=400)
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_autosave failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @staff_member_required
 def signal_flow_autocomplete(request):
-    """GET stub for circuit-label autocomplete (Phase 10 fills).
+    """GET: equipment picker autocomplete for the canvas sidebar shape drops.
 
-    URL must exist now so editor.html data-autocomplete-url resolves.
+    Returns a project-scoped list of equipment records matching ?type=X (&q=...).
+    type ∈ {console, device, speakerarray, commbeltpack}.
+
+    IDOR-safe: SpeakerArray scopes via prediction__project (no direct FK);
+    all others via project FK. Pattern: _get_track_for_request (views.py:6328).
+
+    Phase 10 will add a SEPARATE signal_flow_label_autocomplete URL for
+    circuit-label string completion; this view stays equipment-only.
     """
-    return JsonResponse({'results': []})
+    try:
+        from django.contrib.contenttypes.models import ContentType
+
+        shape_type = (request.GET.get('type') or '').lower().strip()
+        q = (request.GET.get('q') or '').strip()
+
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        # Per-type config: (Model, project_filter_kwargs, search_fields, label_fn, detail_fn).
+        # project_filter is a kwarg dict so SpeakerArray can use prediction__project
+        # without polluting the others. label_fn returns primary text; detail_fn returns secondary.
+        MODEL_MAP = {
+            'console': (
+                Console,
+                {'project': current_project},
+                ['name'],
+                lambda c: c.name,
+                lambda c: ('Template' if c.is_template else (c.primary_ip_address or '—')),
+            ),
+            'device': (
+                Device,
+                {'project': current_project},
+                ['name'],
+                lambda d: d.name,
+                lambda d: f"{d.input_count} in × {d.output_count} out",
+            ),
+            'speakerarray': (
+                SpeakerArray,
+                {'prediction__project': current_project},  # PATTERNS.md risk #3 — NO direct project FK
+                ['source_name', 'array_base_name'],
+                lambda s: s.source_name,  # SpeakerArray has no `name` field
+                lambda s: f"{s.array_base_name} · {s.get_configuration_display()}",
+            ),
+            'commbeltpack': (
+                CommBeltPack,
+                {'project': current_project},
+                ['bp_number', 'manufacturer'],
+                lambda b: f"BP #{b.bp_number}",
+                lambda b: b.get_manufacturer_display(),
+            ),
+        }
+
+        if shape_type not in MODEL_MAP:
+            return JsonResponse({'error': 'Invalid type'}, status=400)
+
+        Model, project_kw, search_fields, label_fn, detail_fn = MODEL_MAP[shape_type]
+
+        qs = Model.objects.filter(**project_kw)
+        if q:
+            cond = Q()
+            for f in search_fields:
+                # bp_number is IntegerField — only match when q is purely digits
+                if f == 'bp_number':
+                    if q.isdigit():
+                        cond |= Q(bp_number=int(q))
+                else:
+                    cond |= Q(**{f'{f}__icontains': q})
+            # Q() is truthy/falsy by children — only apply if at least one clause was added
+            if cond.children:
+                qs = qs.filter(cond)
+
+        # Order: SpeakerArray by source_name (no `name` field); CommBeltPack by bp_number; others by name.
+        order_key = (
+            'source_name' if shape_type == 'speakerarray'
+            else ('bp_number' if shape_type == 'commbeltpack' else 'name')
+        )
+        qs = qs.order_by(order_key)[:50]  # hard cap (CONTEXT D-11 instant-search)
+
+        # ContentType lookup once per request
+        ct = ContentType.objects.get_for_model(Model)
+
+        results = []
+        for obj in qs:
+            try:
+                results.append({
+                    'id': obj.pk,
+                    'contentTypeId': ct.pk,
+                    'name': label_fn(obj),
+                    'detail': detail_fn(obj),
+                })
+            except Exception:
+                _signal_flow_logger.exception(
+                    'autocomplete row build failed for %s id=%s', shape_type, obj.pk,
+                )
+                continue
+
+        return JsonResponse({'results': results})
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_autocomplete failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @staff_member_required
