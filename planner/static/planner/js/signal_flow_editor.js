@@ -1287,6 +1287,98 @@
   hideInspector();
 
   // ──────────────────────────────────────────────────────────────
+  // Plan 06 — Manual Save flow.
+  // Phase 8 ships the manual button only; Phase 9 will add debounced
+  // autosave on graph events + keepalive on pagehide + 409 conflict.
+  // CONTEXT "Save trigger", RESEARCH §19, UI-SPEC "Save status" copy.
+  // ──────────────────────────────────────────────────────────────
+
+  var saveBtn       = document.getElementById('sfd-save');
+  var saveStatusEl  = document.getElementById('sfd-save-status');
+  var savingNow     = false;   // re-entrancy + double-submit guard (T-08-44)
+
+  function setSaveStatus(state) {
+    // state: 'saved' | 'saving' | 'error'
+    if (!saveStatusEl) return;
+    saveStatusEl.classList.remove('is-saving', 'is-error');
+    if (state === 'saved') {
+      saveStatusEl.textContent = 'All changes saved.';
+    } else if (state === 'saving') {
+      saveStatusEl.textContent = 'Saving…';
+      saveStatusEl.classList.add('is-saving');
+    } else if (state === 'error') {
+      saveStatusEl.textContent = 'Save failed — retry';
+      saveStatusEl.classList.add('is-error');
+    }
+  }
+
+  function doSave() {
+    if (savingNow) return;
+    savingNow = true;
+    setSaveStatus('saving');
+    if (saveBtn) saveBtn.setAttribute('disabled', '');
+
+    // graph.toJSON() returns { cells: [...] }; each cell carries its full attributes
+    // object, including showstack/* GFK props (set via link.prop('showstack/X', ...)).
+    // Plan 01 server walks each cell.showstack sub-object for IDOR validation.
+    var canvasState = graph.toJSON();
+
+    var payload = {
+      canvas_state: canvasState,
+      viewport: {
+        x: currentViewport.x,
+        y: currentViewport.y,
+        scale: currentViewport.scale,
+        snapEnabled: currentViewport.snapEnabled,
+      },
+      // Phase 9 will add: version: currentVersion (for If-Match optimistic lock).
+      // Phase 8 ships without the conflict check — currentVersion is still tracked
+      // server-side so we can wire that header without code surgery later.
+    };
+
+    postJSON(autosaveUrl, payload)
+      .then(function (resp) {
+        savingNow = false;
+        if (saveBtn) saveBtn.removeAttribute('disabled');
+        if (resp.status === 200 && resp.data && resp.data.ok) {
+          // Track server-bumped version so Phase 9 can send it as If-Match.
+          currentVersion = resp.data.version || (currentVersion + 1);
+          setSaveStatus('saved');
+          return;
+        }
+        // Specific 422 — equipment ref out of project (IDOR rejection, T-08-42).
+        if (resp.status === 422) {
+          setSaveStatus('error');
+          showToast(resp.data && resp.data.error
+            ? resp.data.error
+            : "Couldn't save — equipment reference is out of project.", 'error');
+          return;
+        }
+        // Generic failure (403 Viewer block, 400 malformed, 500 etc.)
+        setSaveStatus('error');
+        showToast((resp.data && resp.data.error) || 'Save failed. Please try again.', 'error');
+      })
+      .catch(function () {
+        savingNow = false;
+        if (saveBtn) saveBtn.removeAttribute('disabled');
+        setSaveStatus('error');
+        showToast('Network error. Try again.', 'error');
+      });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', doSave);
+  }
+
+  // Normalize initial state — after page render, before user interaction.
+  // The template renders "All changes saved." but a previous render path could
+  // leave a stale 'is-saving' or 'is-error' class on the span.
+  setSaveStatus('saved');
+
+  // Expose save as an external trigger (e.g., future Cmd+S shortcut — not Phase 8 scope).
+  // The window.__sfd.save assignment is added to the handoff block below.
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
@@ -1317,6 +1409,9 @@
     clear: function () { selectedSet.clear(); redrawSelection(); },
     // onSelectionChanged hook — plan 06 sets this to drive inspector show/hide.
   };
+  // Plan 06 manual save handoff — external trigger for future Cmd+S shortcut
+  // and for Phase 9 autosave to call when forcing an immediate flush.
+  window.__sfd.save = doSave;
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
