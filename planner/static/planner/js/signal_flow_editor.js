@@ -1003,6 +1003,169 @@
   });
 
   // ──────────────────────────────────────────────────────────────
+  // Plan 06 — Connectors (SignalLink class + signal-type recipe).
+  // CON-01, CON-02, CON-03, CON-04, CON-05.
+  // RESEARCH §§11-15, CONTEXT D-16 (locked signal-type table).
+  // ──────────────────────────────────────────────────────────────
+
+  // SignalLink — custom orthogonal-routed link with signal-type props (CON-01, CON-02, CON-05, CON-06).
+  // joint.shapes.standard.Link.extend gives us the `line` SVG sub-element that all attrs target.
+  joint.shapes.showstack.SignalLink = joint.shapes.standard.Link.extend({
+    defaults: joint.util.deepSupplement({
+      type: 'showstack.SignalLink',
+      router: { name: 'orthogonal' },
+      connector: { name: 'rounded', args: { radius: 4 } },
+      attrs: {
+        line: {
+          stroke: '#1a1a1a',
+          strokeWidth: 2,
+          strokeDasharray: 'none',
+          sourceMarker: { type: 'none' },
+          targetMarker: {
+            type: 'path',
+            d: 'M 10 -5 0 0 10 5 z',
+            fill: '#1a1a1a',
+            stroke: 'none',
+          },
+        },
+      },
+      // Custom property bag — JointJS toJSON serializes everything under cell.attributes,
+      // so these survive the save/reload round-trip.
+      signalType:   'analog',
+      direction:    'forward',
+      circuitLabel: '',
+    }, joint.shapes.standard.Link.prototype.defaults),
+  });
+
+  // Signal-type style table — CONTEXT D-16 LOCKED. DO NOT EDIT without UI sign-off.
+  // Five types: analog, AES, Dante, MADI, intercom. Each has hex stroke + width + dash pattern.
+  var SIGNAL_TYPE_STYLES = {
+    analog:   { stroke: '#1a1a1a', strokeWidth: 2,   strokeDasharray: 'none'      },
+    AES:      { stroke: '#1565c0', strokeWidth: 2,   strokeDasharray: 'none'      },
+    Dante:    { stroke: '#00bcd4', strokeWidth: 2,   strokeDasharray: '6 4'       },
+    MADI:     { stroke: '#ef6c00', strokeWidth: 2.5, strokeDasharray: '10 3 3 3'  },
+    intercom: { stroke: '#7b1fa2', strokeWidth: 2,   strokeDasharray: '2 4'       },
+  };
+
+  function applySignalType(link, type) {
+    var s = SIGNAL_TYPE_STYLES[type];
+    if (!s) return;   // unknown types silently ignored (T-08-41)
+    link.attr('line/stroke', s.stroke);
+    link.attr('line/strokeWidth', s.strokeWidth);
+    link.attr('line/strokeDasharray', s.strokeDasharray);
+    link.prop('signalType', type);
+    // Recolor the target marker to match the new stroke (only when forward direction).
+    if (link.prop('direction') !== 'bidirectional') {
+      link.attr('line/targetMarker', {
+        type: 'path', d: 'M 10 -5 0 0 10 5 z', fill: s.stroke, stroke: 'none',
+      });
+    }
+  }
+
+  function applyDirection(link, direction) {
+    link.prop('direction', direction);
+    if (direction === 'bidirectional') {
+      // Both markers stripped — pure line, both ends.
+      link.attr('line/sourceMarker', { type: 'none' });
+      link.attr('line/targetMarker', { type: 'none' });
+    } else {
+      // Forward direction (default): target arrow only, colored to match stroke.
+      link.attr('line/sourceMarker', { type: 'none' });
+      var sType = link.prop('signalType') || 'analog';
+      var stroke = (SIGNAL_TYPE_STYLES[sType] || SIGNAL_TYPE_STYLES.analog).stroke;
+      link.attr('line/targetMarker', {
+        type: 'path', d: 'M 10 -5 0 0 10 5 z', fill: stroke, stroke: 'none',
+      });
+    }
+  }
+
+  function applyCircuitLabel(link, label) {
+    link.prop('circuitLabel', label || '');
+    if (!label) {
+      link.labels([]);   // empty array clears all labels
+      return;
+    }
+    link.labels([{
+      position: { distance: 0.5, offset: -10 },
+      attrs: {
+        labelText: {
+          text: label,
+          fill: '#111',
+          fontSize: 11,
+          fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+          fontWeight: 500,
+          textAnchor: 'middle',
+          textVerticalAnchor: 'middle',
+        },
+        labelRect: {
+          fill: 'rgba(255,255,255,0.85)',   // 85% white pill background per UI-SPEC
+          stroke: '#aaa',
+          strokeWidth: 0.5,
+          ref: 'labelText',
+          refWidth: '110%', refHeight: '110%',
+          refX: '-5%', refY: '-5%',
+        },
+      },
+      markup: [
+        { tagName: 'rect', selector: 'labelRect' },
+        { tagName: 'text', selector: 'labelText' },
+      ],
+    }]);
+  }
+
+  // Paper config — port-snapped link creation, orthogonal routing, mid-shape rejection.
+  // Plan 04 already created `paper`; we patch its options post-construction.
+  paper.options.defaultLink = function () { return new joint.shapes.showstack.SignalLink(); };
+  paper.options.linkPinning = false;          // CON-03 — no mid-air drops
+  paper.options.snapLinks = { radius: 24 };   // port snap radius (RESEARCH §12)
+  paper.options.validateConnection = function (sourceView, sourceMagnet, targetView, targetMagnet, end, linkView) {
+    // CON-03 — both ends MUST be magnets (ports). Mid-shape drops have null magnets.
+    if (!sourceMagnet || !targetMagnet) return false;
+    // Reject self-connections (same shape both ends).
+    if (sourceView === targetView) return false;
+    return true;
+  };
+  paper.options.validateMagnet = function (cellView, magnet) {
+    // Allow any non-passive magnet to be the SOURCE of a drag.
+    // Out-ports have magnet="true" (drag source), in-ports have magnet="passive" (target only).
+    // PATTERNS risk #4 mitigation: never let a user drag from an in-port.
+    return magnet && magnet.getAttribute('magnet') !== 'passive';
+  };
+
+  // Link tools — vertices for midpoint waypoints (CON-04), source/target anchors,
+  // and a Remove handle for the connector. Attached on link click; cleared on blank click.
+  paper.on('link:pointerclick', function (linkView) {
+    if (linkView.hasTools()) return;   // avoid stacking duplicate tool sets
+    var tools = new joint.dia.ToolsView({
+      tools: [
+        new joint.linkTools.Vertices(),
+        new joint.linkTools.SourceAnchor(),
+        new joint.linkTools.TargetAnchor(),
+        new joint.linkTools.Remove({ distance: -30 }),
+      ],
+    });
+    linkView.addTools(tools);
+  });
+
+  // NOTE: plan 05 already registers a `blank:pointerdown` listener for rubber-band selection.
+  // JointJS event emitter supports multiple listeners on the same event; the rubber-band
+  // listener runs first (registered earlier), then this `removeTools()` runs. Both coexist.
+  paper.on('blank:pointerdown', function () { paper.removeTools(); });
+
+  // Defensive re-apply on cell add — covers both new links from the user AND links coming
+  // back from `fromJSON` on diagram reload (the `add` event fires per cell during load).
+  // Re-applying ensures stroke/dasharray/markers/label match the saved signalType/direction/label.
+  graph.on('add', function (cell, _coll, _opts) {
+    if (cell.isLink && cell.isLink()) {
+      var type = cell.prop('signalType') || 'analog';
+      applySignalType(cell, type);
+      applyDirection(cell, cell.prop('direction') || 'forward');
+      var label = cell.prop('circuitLabel') || '';
+      if (label) applyCircuitLabel(cell, label);
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
