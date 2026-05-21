@@ -839,6 +839,170 @@
   });
 
   // ──────────────────────────────────────────────────────────────
+  // Selection (CNV-06) and keyboard delete (CNV-07).
+  //
+  //  - Plain click on an element/link: replace selection with that cell.
+  //  - Shift+click: toggle the cell in/out of the selection set.
+  //  - Blank click: clear selection.
+  //  - Blank pointerdown + drag: rubber-band — selects all views inside
+  //    the rectangle via paper.findViewsInArea(). Gated on
+  //    !panState.spaceDown && evt.button === 0 so it never starts during
+  //    a pan (CONTEXT D-08 + RESEARCH §8).
+  //  - Delete / Backspace: remove the current selection in one undo batch.
+  //
+  // Selection visual is via CSS class `.is-selected` (plan 02 styles).
+  // Multi-select bbox overlay uses `.sfd-multi-bbox` (plan 02 styles).
+  // ──────────────────────────────────────────────────────────────
+
+  var selectedSet = new Set();
+  var multiBboxRect = null;   // SVG <rect> overlay for multi-select bbox
+
+  function applySelectionVisuals() {
+    graph.getCells().forEach(function (cell) {
+      var view = paper.findViewByModel(cell);
+      if (!view || !view.el) return;
+      if (selectedSet.has(cell.id)) view.el.classList.add('is-selected');
+      else view.el.classList.remove('is-selected');
+    });
+    // Plan 06's inspector hooks into this — see window.__sfd.selection below.
+    if (typeof window.__sfd.onSelectionChanged === 'function') {
+      window.__sfd.onSelectionChanged(Array.from(selectedSet));
+    }
+  }
+
+  function redrawSelection() {
+    applySelectionVisuals();
+    // Multi-select bbox overlay
+    if (multiBboxRect && multiBboxRect.parentNode) {
+      multiBboxRect.parentNode.removeChild(multiBboxRect);
+    }
+    multiBboxRect = null;
+    if (selectedSet.size > 1) {
+      var cells = Array.from(selectedSet)
+        .map(function (id) { return graph.getCell(id); })
+        .filter(Boolean);
+      if (cells.length > 1) {
+        var bbox = graph.getCellsBBox(cells);
+        if (bbox) {
+          multiBboxRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          multiBboxRect.setAttribute('class', 'sfd-multi-bbox');
+          multiBboxRect.setAttribute('x', String(bbox.x - 4));
+          multiBboxRect.setAttribute('y', String(bbox.y - 4));
+          multiBboxRect.setAttribute('width',  String(bbox.width + 8));
+          multiBboxRect.setAttribute('height', String(bbox.height + 8));
+          var vp = paper.viewport || paper.svg;
+          if (vp && vp.appendChild) vp.appendChild(multiBboxRect);
+        }
+      }
+    }
+  }
+
+  // Plain / shift click on an element or link.
+  paper.on('element:pointerclick', function (elementView, evt) {
+    var id = elementView.model.id;
+    if (evt.shiftKey) {
+      if (selectedSet.has(id)) selectedSet.delete(id); else selectedSet.add(id);
+    } else {
+      selectedSet.clear();
+      selectedSet.add(id);
+    }
+    redrawSelection();
+  });
+  paper.on('link:pointerclick', function (linkView, evt) {
+    var id = linkView.model.id;
+    if (evt.shiftKey) {
+      if (selectedSet.has(id)) selectedSet.delete(id); else selectedSet.add(id);
+    } else {
+      selectedSet.clear();
+      selectedSet.add(id);
+    }
+    redrawSelection();
+  });
+  paper.on('blank:pointerclick', function () {
+    selectedSet.clear();
+    redrawSelection();
+  });
+
+  // Rubber-band drag on blank canvas — RESEARCH §8.
+  // Gated against panState.spaceDown so space+drag is always a pan.
+  paper.on('blank:pointerdown', function (evt, x, y) {
+    if (panState.spaceDown || evt.button !== 0) return;
+    var startLocal = { x: x, y: y };
+    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('fill', 'rgba(13, 148, 136, 0.08)');   // accent at 8% opacity
+    rect.setAttribute('stroke', '#0d9488');
+    rect.setAttribute('stroke-width', '1');
+    rect.setAttribute('stroke-dasharray', '4 3');
+    rect.setAttribute('pointer-events', 'none');
+    rect.setAttribute('x', String(x));
+    rect.setAttribute('y', String(y));
+    rect.setAttribute('width', '0');
+    rect.setAttribute('height', '0');
+    var vp = paper.viewport || paper.svg;
+    if (vp && vp.appendChild) vp.appendChild(rect);
+
+    function onMove(evt2) {
+      var p = paper.clientToLocalPoint({ x: evt2.clientX, y: evt2.clientY });
+      var x0 = Math.min(startLocal.x, p.x);
+      var y0 = Math.min(startLocal.y, p.y);
+      var w = Math.abs(p.x - startLocal.x);
+      var h = Math.abs(p.y - startLocal.y);
+      rect.setAttribute('x', String(x0));
+      rect.setAttribute('y', String(y0));
+      rect.setAttribute('width',  String(w));
+      rect.setAttribute('height', String(h));
+    }
+    function onUp(evt2) {
+      var p = paper.clientToLocalPoint({ x: evt2.clientX, y: evt2.clientY });
+      var x0 = Math.min(startLocal.x, p.x);
+      var y0 = Math.min(startLocal.y, p.y);
+      var w = Math.abs(p.x - startLocal.x);
+      var h = Math.abs(p.y - startLocal.y);
+      if (rect.parentNode) rect.parentNode.removeChild(rect);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (w < 4 && h < 4) return;   // ignore tiny accidental drags
+      var hits = paper.findViewsInArea({ x: x0, y: y0, width: w, height: h });
+      if (!evt2.shiftKey) selectedSet.clear();
+      hits.forEach(function (v) { if (v && v.model) selectedSet.add(v.model.id); });
+      redrawSelection();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Keyboard delete — Delete or Backspace removes the current selection
+  // in a single undo batch. Guarded against input-field focus and the
+  // picker modal.
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (pickerState && pickerState.open) return;
+    if (evt.key === 'Delete' || evt.key === 'Backspace') {
+      var ids = Array.from(selectedSet);
+      if (!ids.length) return;
+      evt.preventDefault();
+      undoBeginBatch();
+      ids.forEach(function (id) {
+        var cell = graph.getCell(id);
+        if (cell) cell.remove();
+      });
+      undoEndBatch();
+      selectedSet.clear();
+      redrawSelection();
+    }
+  });
+
+  // Re-apply selection visuals after JointJS re-renders (RESEARCH Open
+  // Risk #4). `add` covers cell creation; `change:attrs` covers
+  // attribute-driven re-paints (label edits, signal-type style swaps).
+  // We DO NOT bind to `change:position` — that would re-paint constantly
+  // during drags. Position changes don't re-create the DOM node, so the
+  // .is-selected class survives them anyway.
+  graph.on('add change:attrs', function () {
+    applySelectionVisuals();
+  });
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
@@ -861,6 +1025,13 @@
     undo: doUndo, redo: doRedo,
     beginBatch: undoBeginBatch, endBatch: undoEndBatch,
     record: undoRecord,
+  };
+  // Plan 05 selection handoff — plan 06's inspector reads getSelected()
+  // and sets onSelectionChanged to be notified when the selection changes.
+  window.__sfd.selection = {
+    getSelected: function () { return Array.from(selectedSet); },
+    clear: function () { selectedSet.clear(); redrawSelection(); },
+    // onSelectionChanged hook — plan 06 sets this to drive inspector show/hide.
   };
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
