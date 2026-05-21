@@ -654,15 +654,11 @@
   var snapToggleBtn = document.getElementById('sfd-snap-toggle');
 
   function setSnap(on) {
+    // `@joint/core` 4.x: setGrid() takes a drawGrid config (or null to hide);
+    // setGridSize() sets the snap grid spacing. There is no public drawGrid() method.
     currentViewport.snapEnabled = !!on;
-    paper.setGrid(on ? 20 : 1);
-    if (on) {
-      paper.drawGrid({ name: 'dot', args: { color: '#dde', thickness: 1 } });
-    } else if (typeof paper.clearGrid === 'function') {
-      paper.clearGrid();
-    } else {
-      paper.drawGrid({ name: 'dot', args: { color: 'transparent', thickness: 1 } });
-    }
+    paper.setGridSize(on ? 20 : 1);
+    paper.setGrid(on ? { name: 'dot', args: { color: '#dde', thickness: 1 } } : null);
     if (snapToggleBtn) {
       if (on) {
         snapToggleBtn.classList.add('is-active');
