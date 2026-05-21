@@ -7557,11 +7557,109 @@ def signal_flow_autosave(request, diagram_id):
 
 @staff_member_required
 def signal_flow_autocomplete(request):
-    """GET stub for circuit-label autocomplete (Phase 10 fills).
+    """GET: equipment picker autocomplete for the canvas sidebar shape drops.
 
-    URL must exist now so editor.html data-autocomplete-url resolves.
+    Returns a project-scoped list of equipment records matching ?type=X (&q=...).
+    type ∈ {console, device, speakerarray, commbeltpack}.
+
+    IDOR-safe: SpeakerArray scopes via prediction__project (no direct FK);
+    all others via project FK. Pattern: _get_track_for_request (views.py:6328).
+
+    Phase 10 will add a SEPARATE signal_flow_label_autocomplete URL for
+    circuit-label string completion; this view stays equipment-only.
     """
-    return JsonResponse({'results': []})
+    try:
+        from django.contrib.contenttypes.models import ContentType
+
+        shape_type = (request.GET.get('type') or '').lower().strip()
+        q = (request.GET.get('q') or '').strip()
+
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        # Per-type config: (Model, project_filter_kwargs, search_fields, label_fn, detail_fn).
+        # project_filter is a kwarg dict so SpeakerArray can use prediction__project
+        # without polluting the others. label_fn returns primary text; detail_fn returns secondary.
+        MODEL_MAP = {
+            'console': (
+                Console,
+                {'project': current_project},
+                ['name'],
+                lambda c: c.name,
+                lambda c: ('Template' if c.is_template else (c.primary_ip_address or '—')),
+            ),
+            'device': (
+                Device,
+                {'project': current_project},
+                ['name'],
+                lambda d: d.name,
+                lambda d: f"{d.input_count} in × {d.output_count} out",
+            ),
+            'speakerarray': (
+                SpeakerArray,
+                {'prediction__project': current_project},  # PATTERNS.md risk #3 — NO direct project FK
+                ['source_name', 'array_base_name'],
+                lambda s: s.source_name,  # SpeakerArray has no `name` field
+                lambda s: f"{s.array_base_name} · {s.get_configuration_display()}",
+            ),
+            'commbeltpack': (
+                CommBeltPack,
+                {'project': current_project},
+                ['bp_number', 'manufacturer'],
+                lambda b: f"BP #{b.bp_number}",
+                lambda b: b.get_manufacturer_display(),
+            ),
+        }
+
+        if shape_type not in MODEL_MAP:
+            return JsonResponse({'error': 'Invalid type'}, status=400)
+
+        Model, project_kw, search_fields, label_fn, detail_fn = MODEL_MAP[shape_type]
+
+        qs = Model.objects.filter(**project_kw)
+        if q:
+            cond = Q()
+            for f in search_fields:
+                # bp_number is IntegerField — only match when q is purely digits
+                if f == 'bp_number':
+                    if q.isdigit():
+                        cond |= Q(bp_number=int(q))
+                else:
+                    cond |= Q(**{f'{f}__icontains': q})
+            # Q() is truthy/falsy by children — only apply if at least one clause was added
+            if cond.children:
+                qs = qs.filter(cond)
+
+        # Order: SpeakerArray by source_name (no `name` field); CommBeltPack by bp_number; others by name.
+        order_key = (
+            'source_name' if shape_type == 'speakerarray'
+            else ('bp_number' if shape_type == 'commbeltpack' else 'name')
+        )
+        qs = qs.order_by(order_key)[:50]  # hard cap (CONTEXT D-11 instant-search)
+
+        # ContentType lookup once per request
+        ct = ContentType.objects.get_for_model(Model)
+
+        results = []
+        for obj in qs:
+            try:
+                results.append({
+                    'id': obj.pk,
+                    'contentTypeId': ct.pk,
+                    'name': label_fn(obj),
+                    'detail': detail_fn(obj),
+                })
+            except Exception:
+                _signal_flow_logger.exception(
+                    'autocomplete row build failed for %s id=%s', shape_type, obj.pk,
+                )
+                continue
+
+        return JsonResponse({'results': results})
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_autocomplete failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @staff_member_required
