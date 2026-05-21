@@ -681,6 +681,164 @@
   setSnap(currentViewport.snapEnabled);   // apply initial state from plan-04 viewport load
 
   // ──────────────────────────────────────────────────────────────
+  // Custom event-sourced undo / redo stack (CNV-05).
+  //
+  // @joint/core 4.2.4 ships NO CommandManager — it's JointJS+ (paid)
+  // only. We roll our own per RESEARCH.md "Custom Undo-Stack Pattern".
+  //
+  // Bounded to UNDO_HISTORY_CAP=50 batches (T-08-30 mitigation).
+  // EVERY applyInverse / applyForward call MUST pass { undoable: false }
+  // so the graph listeners below don't re-record their own actions.
+  //
+  // Plan 04 already runs the initial fromJSON with { undoable: false },
+  // so initial-load adds never reach this stack.
+  // ──────────────────────────────────────────────────────────────
+
+  var undoStack = [];
+  var redoStack = [];
+  var undoCapturing = true;
+  var undoBatchDepth = 0;
+  var undoBatchCurrent = null;
+  var UNDO_HISTORY_CAP = 50;
+
+  function undoRecord(cmd) {
+    if (!undoCapturing) return;
+    if (undoBatchDepth > 0) {
+      undoBatchCurrent.push(cmd);
+    } else {
+      undoStack.push([cmd]);
+      if (undoStack.length > UNDO_HISTORY_CAP) undoStack.shift();
+      redoStack.length = 0;
+    }
+    refreshUndoButtons();
+  }
+
+  function undoBeginBatch() {
+    undoBatchDepth++;
+    if (undoBatchDepth === 1) undoBatchCurrent = [];
+  }
+  function undoEndBatch() {
+    undoBatchDepth = Math.max(0, undoBatchDepth - 1);
+    if (undoBatchDepth === 0 && undoBatchCurrent && undoBatchCurrent.length) {
+      undoStack.push(undoBatchCurrent);
+      if (undoStack.length > UNDO_HISTORY_CAP) undoStack.shift();
+      redoStack.length = 0;
+      undoBatchCurrent = null;
+      refreshUndoButtons();
+    } else if (undoBatchDepth === 0) {
+      undoBatchCurrent = null;
+    }
+  }
+
+  graph.on('add', function (cell, _coll, opts) {
+    if (opts && opts.undoable === false) return;
+    undoRecord({ type: 'add', cellId: cell.id, json: cell.toJSON() });
+  });
+  graph.on('remove', function (cell, _coll, opts) {
+    if (opts && opts.undoable === false) return;
+    undoRecord({ type: 'remove', cellId: cell.id, json: cell.toJSON() });
+  });
+  graph.on('change', function (cell, opts) {
+    if (opts && opts.undoable === false) return;
+    var before = cell.previousAttributes();
+    if (!before) return;
+    undoRecord({
+      type: 'change',
+      cellId: cell.id,
+      before: JSON.parse(JSON.stringify(before)),
+      after: JSON.parse(JSON.stringify(cell.toJSON())),
+    });
+  });
+
+  function applyInverse(cmd) {
+    undoCapturing = false;
+    try {
+      if (cmd.type === 'add') {
+        var c = graph.getCell(cmd.cellId);
+        if (c) c.remove({ undoable: false });
+      } else if (cmd.type === 'remove') {
+        graph.addCell(cmd.json, { undoable: false });
+      } else if (cmd.type === 'change') {
+        var c2 = graph.getCell(cmd.cellId);
+        if (c2) c2.set(cmd.before, { undoable: false });
+      }
+    } finally {
+      undoCapturing = true;
+    }
+  }
+  function applyForward(cmd) {
+    undoCapturing = false;
+    try {
+      if (cmd.type === 'add') {
+        graph.addCell(cmd.json, { undoable: false });
+      } else if (cmd.type === 'remove') {
+        var c = graph.getCell(cmd.cellId);
+        if (c) c.remove({ undoable: false });
+      } else if (cmd.type === 'change') {
+        var c2 = graph.getCell(cmd.cellId);
+        if (c2) c2.set(cmd.after, { undoable: false });
+      }
+    } finally {
+      undoCapturing = true;
+    }
+  }
+
+  function doUndo() {
+    var batch = undoStack.pop();
+    if (!batch) return;
+    for (var i = batch.length - 1; i >= 0; i--) applyInverse(batch[i]);
+    redoStack.push(batch);
+    refreshUndoButtons();
+  }
+  function doRedo() {
+    var batch = redoStack.pop();
+    if (!batch) return;
+    for (var i = 0; i < batch.length; i++) applyForward(batch[i]);
+    undoStack.push(batch);
+    refreshUndoButtons();
+  }
+
+  // Toolbar Undo / Redo buttons — disabled when their stack is empty.
+  var undoBtn = document.getElementById('sfd-undo');
+  var redoBtn = document.getElementById('sfd-redo');
+  function refreshUndoButtons() {
+    if (undoBtn) {
+      if (undoStack.length > 0) undoBtn.removeAttribute('disabled');
+      else undoBtn.setAttribute('disabled', '');
+    }
+    if (redoBtn) {
+      if (redoStack.length > 0) redoBtn.removeAttribute('disabled');
+      else redoBtn.setAttribute('disabled', '');
+    }
+  }
+  undoBtn.addEventListener('click', doUndo);
+  redoBtn.addEventListener('click', doRedo);
+  refreshUndoButtons();   // initial — both disabled
+
+  // Multi-cell drag batching (RESEARCH Open Risk #1). JointJS emits
+  // a flurry of `change:position` events during a drag — wrap them in
+  // a single undo batch so one Ctrl+Z reverts the whole gesture.
+  paper.on('element:pointerdown', function () { undoBeginBatch(); });
+  paper.on('element:pointerup',   function () { undoEndBatch(); });
+
+  // Keyboard shortcuts — Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y.
+  // Guard against input-field focus and modal-open per RESEARCH §7.
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (pickerState && pickerState.open) return;
+    var meta = evt.ctrlKey || evt.metaKey;
+    if (!meta) return;
+    var key = evt.key.toLowerCase();
+    if (key === 'z' && !evt.shiftKey) {
+      evt.preventDefault();
+      doUndo();
+    } else if ((key === 'z' && evt.shiftKey) || key === 'y') {
+      evt.preventDefault();
+      doRedo();
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
@@ -697,6 +855,13 @@
   window.__sfd.cellNamespace = cellNamespace;
   // Useful seam for plan 06's "re-link equipment" if the inspector wants it (not a Phase 8 requirement).
   window.__sfd.openEquipmentPicker = openEquipmentPicker;
+  // Plan 05 undo handoff — plan 06's manual Save can wrap multi-step writes
+  // in beginBatch/endBatch so one Ctrl+Z reverts the whole gesture.
+  window.__sfd.undo = {
+    undo: doUndo, redo: doRedo,
+    beginBatch: undoBeginBatch, endBatch: undoEndBatch,
+    record: undoRecord,
+  };
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
