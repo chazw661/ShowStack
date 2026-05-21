@@ -1003,6 +1003,382 @@
   });
 
   // ──────────────────────────────────────────────────────────────
+  // Plan 06 — Connectors (SignalLink class + signal-type recipe).
+  // CON-01, CON-02, CON-03, CON-04, CON-05.
+  // RESEARCH §§11-15, CONTEXT D-16 (locked signal-type table).
+  // ──────────────────────────────────────────────────────────────
+
+  // SignalLink — custom orthogonal-routed link with signal-type props (CON-01, CON-02, CON-05, CON-06).
+  // joint.shapes.standard.Link.extend gives us the `line` SVG sub-element that all attrs target.
+  joint.shapes.showstack.SignalLink = joint.shapes.standard.Link.extend({
+    defaults: joint.util.deepSupplement({
+      type: 'showstack.SignalLink',
+      router: { name: 'orthogonal' },
+      connector: { name: 'rounded', args: { radius: 4 } },
+      attrs: {
+        line: {
+          stroke: '#1a1a1a',
+          strokeWidth: 2,
+          strokeDasharray: 'none',
+          sourceMarker: { type: 'none' },
+          targetMarker: {
+            type: 'path',
+            d: 'M 10 -5 0 0 10 5 z',
+            fill: '#1a1a1a',
+            stroke: 'none',
+          },
+        },
+      },
+      // Custom property bag — JointJS toJSON serializes everything under cell.attributes,
+      // so these survive the save/reload round-trip.
+      signalType:   'analog',
+      direction:    'forward',
+      circuitLabel: '',
+    }, joint.shapes.standard.Link.prototype.defaults),
+  });
+
+  // Signal-type style table — CONTEXT D-16 LOCKED. DO NOT EDIT without UI sign-off.
+  // Five types: analog, AES, Dante, MADI, intercom. Each has hex stroke + width + dash pattern.
+  var SIGNAL_TYPE_STYLES = {
+    analog:   { stroke: '#1a1a1a', strokeWidth: 2,   strokeDasharray: 'none'      },
+    AES:      { stroke: '#1565c0', strokeWidth: 2,   strokeDasharray: 'none'      },
+    Dante:    { stroke: '#00bcd4', strokeWidth: 2,   strokeDasharray: '6 4'       },
+    MADI:     { stroke: '#ef6c00', strokeWidth: 2.5, strokeDasharray: '10 3 3 3'  },
+    intercom: { stroke: '#7b1fa2', strokeWidth: 2,   strokeDasharray: '2 4'       },
+  };
+
+  function applySignalType(link, type) {
+    var s = SIGNAL_TYPE_STYLES[type];
+    if (!s) return;   // unknown types silently ignored (T-08-41)
+    link.attr('line/stroke', s.stroke);
+    link.attr('line/strokeWidth', s.strokeWidth);
+    link.attr('line/strokeDasharray', s.strokeDasharray);
+    link.prop('signalType', type);
+    // Recolor the target marker to match the new stroke (only when forward direction).
+    if (link.prop('direction') !== 'bidirectional') {
+      link.attr('line/targetMarker', {
+        type: 'path', d: 'M 10 -5 0 0 10 5 z', fill: s.stroke, stroke: 'none',
+      });
+    }
+  }
+
+  function applyDirection(link, direction) {
+    link.prop('direction', direction);
+    if (direction === 'bidirectional') {
+      // Both markers stripped — pure line, both ends.
+      link.attr('line/sourceMarker', { type: 'none' });
+      link.attr('line/targetMarker', { type: 'none' });
+    } else {
+      // Forward direction (default): target arrow only, colored to match stroke.
+      link.attr('line/sourceMarker', { type: 'none' });
+      var sType = link.prop('signalType') || 'analog';
+      var stroke = (SIGNAL_TYPE_STYLES[sType] || SIGNAL_TYPE_STYLES.analog).stroke;
+      link.attr('line/targetMarker', {
+        type: 'path', d: 'M 10 -5 0 0 10 5 z', fill: stroke, stroke: 'none',
+      });
+    }
+  }
+
+  function applyCircuitLabel(link, label) {
+    link.prop('circuitLabel', label || '');
+    if (!label) {
+      link.labels([]);   // empty array clears all labels
+      return;
+    }
+    link.labels([{
+      position: { distance: 0.5, offset: -10 },
+      attrs: {
+        labelText: {
+          text: label,
+          fill: '#111',
+          fontSize: 11,
+          fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+          fontWeight: 500,
+          textAnchor: 'middle',
+          textVerticalAnchor: 'middle',
+        },
+        labelRect: {
+          fill: 'rgba(255,255,255,0.85)',   // 85% white pill background per UI-SPEC
+          stroke: '#aaa',
+          strokeWidth: 0.5,
+          ref: 'labelText',
+          refWidth: '110%', refHeight: '110%',
+          refX: '-5%', refY: '-5%',
+        },
+      },
+      markup: [
+        { tagName: 'rect', selector: 'labelRect' },
+        { tagName: 'text', selector: 'labelText' },
+      ],
+    }]);
+  }
+
+  // Paper config — port-snapped link creation, orthogonal routing, mid-shape rejection.
+  // Plan 04 already created `paper`; we patch its options post-construction.
+  paper.options.defaultLink = function () { return new joint.shapes.showstack.SignalLink(); };
+  paper.options.linkPinning = false;          // CON-03 — no mid-air drops
+  paper.options.snapLinks = { radius: 24 };   // port snap radius (RESEARCH §12)
+  paper.options.validateConnection = function (sourceView, sourceMagnet, targetView, targetMagnet, end, linkView) {
+    // CON-03 — both ends MUST be magnets (ports). Mid-shape drops have null magnets.
+    if (!sourceMagnet || !targetMagnet) return false;
+    // Reject self-connections (same shape both ends).
+    if (sourceView === targetView) return false;
+    return true;
+  };
+  paper.options.validateMagnet = function (cellView, magnet) {
+    // Allow any non-passive magnet to be the SOURCE of a drag.
+    // Out-ports have magnet="true" (drag source), in-ports have magnet="passive" (target only).
+    // PATTERNS risk #4 mitigation: never let a user drag from an in-port.
+    return magnet && magnet.getAttribute('magnet') !== 'passive';
+  };
+
+  // Link tools — vertices for midpoint waypoints (CON-04), source/target anchors,
+  // and a Remove handle for the connector. Attached on link click; cleared on blank click.
+  paper.on('link:pointerclick', function (linkView) {
+    if (linkView.hasTools()) return;   // avoid stacking duplicate tool sets
+    var tools = new joint.dia.ToolsView({
+      tools: [
+        new joint.linkTools.Vertices(),
+        new joint.linkTools.SourceAnchor(),
+        new joint.linkTools.TargetAnchor(),
+        new joint.linkTools.Remove({ distance: -30 }),
+      ],
+    });
+    linkView.addTools(tools);
+  });
+
+  // NOTE: plan 05 already registers a `blank:pointerdown` listener for rubber-band selection.
+  // JointJS event emitter supports multiple listeners on the same event; the rubber-band
+  // listener runs first (registered earlier), then this `removeTools()` runs. Both coexist.
+  paper.on('blank:pointerdown', function () { paper.removeTools(); });
+
+  // Defensive re-apply on cell add — covers both new links from the user AND links coming
+  // back from `fromJSON` on diagram reload (the `add` event fires per cell during load).
+  // Re-applying ensures stroke/dasharray/markers/label match the saved signalType/direction/label.
+  graph.on('add', function (cell, _coll, _opts) {
+    if (cell.isLink && cell.isLink()) {
+      var type = cell.prop('signalType') || 'analog';
+      applySignalType(cell, type);
+      applyDirection(cell, cell.prop('direction') || 'forward');
+      var label = cell.prop('circuitLabel') || '';
+      if (label) applyCircuitLabel(cell, label);
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Plan 06 — Right-side inspector (auto-show on connector select).
+  // CON-02 / CON-05 / CON-06 user-facing field wiring.
+  // CONTEXT D-07 (auto-show/hide rule), UI-SPEC "Inspector Panel".
+  // ──────────────────────────────────────────────────────────────
+
+  var inspectorEl       = document.getElementById('sfd-inspector');
+  var inspectorCloseBtn = document.getElementById('sfd-inspector-close');
+  var signalTypeSelect  = document.getElementById('sfd-signal-type');
+  var dirForwardBtn     = document.getElementById('sfd-dir-forward');
+  var dirBidirBtn       = document.getElementById('sfd-dir-bidir');
+  var circuitLabelInput = document.getElementById('sfd-circuit-label');
+
+  // The link model currently bound to the inspector (null when hidden).
+  var inspectorCurrentLink = null;
+
+  function showInspector() {
+    if (!inspectorEl) return;
+    inspectorEl.removeAttribute('hidden');
+    // CLAUDE.md override rule — admin-template DOM nodes need !important.
+    inspectorEl.style.setProperty('display', 'block', 'important');
+  }
+  function hideInspector() {
+    if (!inspectorEl) return;
+    inspectorEl.setAttribute('hidden', '');
+    inspectorEl.style.setProperty('display', 'none', 'important');
+    inspectorCurrentLink = null;
+  }
+
+  function syncInspectorFromLink(link) {
+    // Populate field values from the link model (no events fired — pure DOM write).
+    signalTypeSelect.value = link.prop('signalType') || 'analog';
+    var dir = link.prop('direction') || 'forward';
+    if (dir === 'bidirectional') {
+      dirForwardBtn.setAttribute('data-active', 'false');
+      dirBidirBtn.setAttribute('data-active', 'true');
+    } else {
+      dirForwardBtn.setAttribute('data-active', 'true');
+      dirBidirBtn.setAttribute('data-active', 'false');
+    }
+    circuitLabelInput.value = link.prop('circuitLabel') || '';
+  }
+
+  // Selection-change hook — plan 05's applySelectionVisuals() calls this if defined.
+  // RESEARCH Open Risk #6: selection updates first, then inspector reacts. Single-source.
+  window.__sfd.onSelectionChanged = function (selectedIds) {
+    if (selectedIds.length === 1) {
+      var cell = graph.getCell(selectedIds[0]);
+      if (cell && cell.isLink && cell.isLink()) {
+        inspectorCurrentLink = cell;
+        syncInspectorFromLink(cell);
+        showInspector();
+        return;
+      }
+    }
+    // Any other case (zero, multi, or single non-link) — hide inspector.
+    hideInspector();
+  };
+
+  // Field handlers — every change writes to the link model AND updates the live SVG
+  // via the helpers defined in Task 1 (applySignalType / applyDirection / applyCircuitLabel).
+  if (signalTypeSelect) {
+    signalTypeSelect.addEventListener('change', function () {
+      if (!inspectorCurrentLink) return;
+      applySignalType(inspectorCurrentLink, signalTypeSelect.value);
+    });
+  }
+
+  if (dirForwardBtn) {
+    dirForwardBtn.addEventListener('click', function () {
+      if (!inspectorCurrentLink) return;
+      applyDirection(inspectorCurrentLink, 'forward');
+      dirForwardBtn.setAttribute('data-active', 'true');
+      dirBidirBtn.setAttribute('data-active', 'false');
+    });
+  }
+  if (dirBidirBtn) {
+    dirBidirBtn.addEventListener('click', function () {
+      if (!inspectorCurrentLink) return;
+      applyDirection(inspectorCurrentLink, 'bidirectional');
+      dirForwardBtn.setAttribute('data-active', 'false');
+      dirBidirBtn.setAttribute('data-active', 'true');
+    });
+  }
+
+  // Circuit-label input — debounced 200ms during typing AND committed on blur.
+  // Prevents one undo-stack record per keystroke (T-08-30 memory hygiene).
+  // Plan 05's keyboard handler already excludes /INPUT|TEXTAREA|SELECT/ so Backspace
+  // here doesn't delete the connector being edited.
+  var circuitLabelTimer = null;
+  if (circuitLabelInput) {
+    circuitLabelInput.addEventListener('input', function () {
+      if (!inspectorCurrentLink) return;
+      if (circuitLabelTimer) clearTimeout(circuitLabelTimer);
+      var snapshot = inspectorCurrentLink;
+      circuitLabelTimer = setTimeout(function () {
+        circuitLabelTimer = null;
+        if (snapshot) applyCircuitLabel(snapshot, circuitLabelInput.value);
+      }, 200);
+    });
+    circuitLabelInput.addEventListener('blur', function () {
+      if (circuitLabelTimer) { clearTimeout(circuitLabelTimer); circuitLabelTimer = null; }
+      if (inspectorCurrentLink) applyCircuitLabel(inspectorCurrentLink, circuitLabelInput.value);
+    });
+  }
+
+  if (inspectorCloseBtn) {
+    inspectorCloseBtn.addEventListener('click', function () {
+      // Clear selection — plan 05's onSelectionChanged then fires with [] and hides.
+      if (window.__sfd.selection && typeof window.__sfd.selection.clear === 'function') {
+        window.__sfd.selection.clear();
+      }
+      hideInspector();
+    });
+  }
+
+  // Defensive — ensure inspector is hidden on initial page load.
+  // The template renders with the `hidden` attribute set, but a previous render
+  // could leave inline styles; this normalizes both.
+  hideInspector();
+
+  // ──────────────────────────────────────────────────────────────
+  // Plan 06 — Manual Save flow.
+  // Phase 8 ships the manual button only; Phase 9 will add debounced
+  // autosave on graph events + keepalive on pagehide + 409 conflict.
+  // CONTEXT "Save trigger", RESEARCH §19, UI-SPEC "Save status" copy.
+  // ──────────────────────────────────────────────────────────────
+
+  var saveBtn       = document.getElementById('sfd-save');
+  var saveStatusEl  = document.getElementById('sfd-save-status');
+  var savingNow     = false;   // re-entrancy + double-submit guard (T-08-44)
+
+  function setSaveStatus(state) {
+    // state: 'saved' | 'saving' | 'error'
+    if (!saveStatusEl) return;
+    saveStatusEl.classList.remove('is-saving', 'is-error');
+    if (state === 'saved') {
+      saveStatusEl.textContent = 'All changes saved.';
+    } else if (state === 'saving') {
+      saveStatusEl.textContent = 'Saving…';
+      saveStatusEl.classList.add('is-saving');
+    } else if (state === 'error') {
+      saveStatusEl.textContent = 'Save failed — retry';
+      saveStatusEl.classList.add('is-error');
+    }
+  }
+
+  function doSave() {
+    if (savingNow) return;
+    savingNow = true;
+    setSaveStatus('saving');
+    if (saveBtn) saveBtn.setAttribute('disabled', '');
+
+    // graph.toJSON() returns { cells: [...] }; each cell carries its full attributes
+    // object, including showstack/* GFK props (set via link.prop('showstack/X', ...)).
+    // Plan 01 server walks each cell.showstack sub-object for IDOR validation.
+    var canvasState = graph.toJSON();
+
+    var payload = {
+      canvas_state: canvasState,
+      viewport: {
+        x: currentViewport.x,
+        y: currentViewport.y,
+        scale: currentViewport.scale,
+        snapEnabled: currentViewport.snapEnabled,
+      },
+      // Phase 9 will add: version: currentVersion (for If-Match optimistic lock).
+      // Phase 8 ships without the conflict check — currentVersion is still tracked
+      // server-side so we can wire that header without code surgery later.
+    };
+
+    postJSON(autosaveUrl, payload)
+      .then(function (resp) {
+        savingNow = false;
+        if (saveBtn) saveBtn.removeAttribute('disabled');
+        if (resp.status === 200 && resp.data && resp.data.ok) {
+          // Track server-bumped version so Phase 9 can send it as If-Match.
+          currentVersion = resp.data.version || (currentVersion + 1);
+          setSaveStatus('saved');
+          return;
+        }
+        // Specific 422 — equipment ref out of project (IDOR rejection, T-08-42).
+        if (resp.status === 422) {
+          setSaveStatus('error');
+          showToast(resp.data && resp.data.error
+            ? resp.data.error
+            : "Couldn't save — equipment reference is out of project.", 'error');
+          return;
+        }
+        // Generic failure (403 Viewer block, 400 malformed, 500 etc.)
+        setSaveStatus('error');
+        showToast((resp.data && resp.data.error) || 'Save failed. Please try again.', 'error');
+      })
+      .catch(function () {
+        savingNow = false;
+        if (saveBtn) saveBtn.removeAttribute('disabled');
+        setSaveStatus('error');
+        showToast('Network error. Try again.', 'error');
+      });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', doSave);
+  }
+
+  // Normalize initial state — after page render, before user interaction.
+  // The template renders "All changes saved." but a previous render path could
+  // leave a stale 'is-saving' or 'is-error' class on the span.
+  setSaveStatus('saved');
+
+  // Expose save as an external trigger (e.g., future Cmd+S shortcut — not Phase 8 scope).
+  // The window.__sfd.save assignment is added to the handoff block below.
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
@@ -1033,6 +1409,9 @@
     clear: function () { selectedSet.clear(); redrawSelection(); },
     // onSelectionChanged hook — plan 06 sets this to drive inspector show/hide.
   };
+  // Plan 06 manual save handoff — external trigger for future Cmd+S shortcut
+  // and for Phase 9 autosave to call when forcing an immediate flush.
+  window.__sfd.save = doSave;
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
