@@ -1036,7 +1036,9 @@
   joint.shapes.showstack.SignalLink = joint.shapes.standard.Link.extend({
     defaults: joint.util.deepSupplement({
       type: 'showstack.SignalLink',
-      router: { name: 'orthogonal' },
+      // `manhattan` with padding produces a longer initial segment off the source
+      // edge — separates visually when several connectors share the same port edge.
+      router: { name: 'manhattan', args: { padding: 24, step: 20 } },
       connector: { name: 'rounded', args: { radius: 4 } },
       attrs: {
         line: {
@@ -1060,14 +1062,16 @@
     }, joint.shapes.standard.Link.prototype.defaults),
   });
 
-  // Signal-type style table — CONTEXT D-16 LOCKED. DO NOT EDIT without UI sign-off.
-  // Five types: analog, AES, Dante, MADI, intercom. Each has hex stroke + width + dash pattern.
+  // Signal-type style table — CONTEXT D-16. Each entry: hex stroke + width + dash pattern.
+  // AVB + Network added during Phase 8 UAT (solid, distinct hues).
   var SIGNAL_TYPE_STYLES = {
     analog:   { stroke: '#1a1a1a', strokeWidth: 2,   strokeDasharray: 'none'      },
     AES:      { stroke: '#1565c0', strokeWidth: 2,   strokeDasharray: 'none'      },
     Dante:    { stroke: '#00bcd4', strokeWidth: 2,   strokeDasharray: '6 4'       },
     MADI:     { stroke: '#ef6c00', strokeWidth: 2.5, strokeDasharray: '10 3 3 3'  },
     intercom: { stroke: '#7b1fa2', strokeWidth: 2,   strokeDasharray: '2 4'       },
+    AVB:      { stroke: '#dc2626', strokeWidth: 2,   strokeDasharray: 'none'      },
+    Network:  { stroke: '#16a34a', strokeWidth: 2,   strokeDasharray: 'none'      },
   };
 
   function applySignalType(link, type) {
@@ -1147,7 +1151,11 @@
     if (linkView.hasTools()) return;   // avoid stacking duplicate tool sets
     var tools = new joint.dia.ToolsView({
       tools: [
+        // Vertices: drag the midpoint dot of each existing vertex.
         new joint.linkTools.Vertices(),
+        // Segments: drag the midpoint of each STRAIGHT SEGMENT to slide it
+        // perpendicular — adjusts knuckle length / direction of each leg.
+        new joint.linkTools.Segments(),
         new joint.linkTools.SourceAnchor(),
         new joint.linkTools.TargetAnchor(),
         new joint.linkTools.Remove({ distance: -30 }),
