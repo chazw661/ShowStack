@@ -1,0 +1,38 @@
+{# Equipment picker modal for Signal Flow Diagrammer.
+   Shown by JS (plan 04) when a typed shape is dropped on the canvas.
+   Hidden by default. Cancel removes the placeholder shape (CONTEXT.md D-10).
+   Single-select (one row click = assignment) per CONTEXT.md D-09.
+#}
+<div id="sfd-picker-overlay" class="sfd-picker-overlay" hidden style="display:none">
+  <div class="sfd-picker-panel" role="dialog" aria-modal="true" aria-labelledby="sfd-picker-title">
+    <div class="sfd-picker-header">
+      <h2 id="sfd-picker-title" class="sfd-picker-title">
+        Pick a <span id="sfd-picker-type">Console</span>
+      </h2>
+      <button type="button" id="sfd-picker-close-x" class="sfd-picker-close" aria-label="Cancel">&times;</button>
+    </div>
+
+    <div class="sfd-picker-filter">
+      <input type="text"
+             id="sfd-picker-search"
+             class="sfd-filter-input"
+             placeholder="Search by name, model, serial&hellip;"
+             aria-label="Search equipment"
+             autocomplete="off">
+    </div>
+
+    <div class="sfd-tab-panel">
+      <ul id="sfd-picker-results" class="sfd-pick-list" role="listbox" aria-labelledby="sfd-picker-title">
+        {# Populated by JS via fetch from data-autocomplete-url. #}
+      </ul>
+      <div id="sfd-picker-empty" class="sfd-pick-empty" hidden>
+        <p>No <span id="sfd-picker-empty-type">Console</span> records in this project.</p>
+        <p><a id="sfd-picker-admin-link" href="#">Add equipment in Admin</a> first, then drop the shape again.</p>
+      </div>
+    </div>
+
+    <div class="sfd-picker-footer">
+      <button type="button" id="sfd-picker-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
