@@ -275,6 +275,231 @@
     });
 
   // ──────────────────────────────────────────────────────────────
+  // Picker type config — drives modal title, autocomplete ?type=, and admin-link href.
+  // SHP-05: Generic skips the picker entirely.
+  // ──────────────────────────────────────────────────────────────
+
+  var PICKER_TYPE_CONFIG = {
+    Console:      { backend: 'console',      label: 'Console',       admin: '/admin/planner/console/' },
+    Device:       { backend: 'device',       label: 'Device',        admin: '/admin/planner/device/' },
+    SpeakerArray: { backend: 'speakerarray', label: 'Speaker Array', admin: '/admin/planner/speakerarray/' },
+    CommBeltPack: { backend: 'commbeltpack', label: 'Beltpack',      admin: '/admin/planner/commbeltpack/' },
+  };
+
+  // ──────────────────────────────────────────────────────────────
+  // Sidebar tile dragstart wiring (CNV-01).
+  // ──────────────────────────────────────────────────────────────
+
+  $$('.sfd-tile').forEach(function (tile) {
+    tile.addEventListener('dragstart', function (evt) {
+      var shapeType = tile.dataset.shapeType;
+      if (!shapeType) return;
+      evt.dataTransfer.setData('application/x-shape-type', shapeType);
+      evt.dataTransfer.effectAllowed = 'copy';
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Paper drop target (CNV-01).
+  // PITFALLS §2: use paper.clientToLocalPoint() to translate
+  // pointer coords through scroll + zoom.
+  // ──────────────────────────────────────────────────────────────
+
+  paperEl.addEventListener('dragover', function (evt) {
+    evt.preventDefault();
+    evt.dataTransfer.dropEffect = 'copy';
+  });
+
+  paperEl.addEventListener('drop', function (evt) {
+    evt.preventDefault();
+    var shapeType = evt.dataTransfer.getData('application/x-shape-type');
+    // T-08-20: defence against crafted dataTransfer carrying an unknown type.
+    if (!shapeType || !joint.shapes.showstack[shapeType]) return;
+
+    var local = paper.clientToLocalPoint({ x: evt.clientX, y: evt.clientY });
+
+    // Snap-to-grid — plan 05 turns currentViewport.snapEnabled into a live toggle.
+    // For now we honor the default (snap ON, grid 20) per CONTEXT D-13.
+    if (currentViewport.snapEnabled) {
+      local.x = Math.round(local.x / 20) * 20;
+      local.y = Math.round(local.y / 20) * 20;
+    }
+
+    var ShapeClass = joint.shapes.showstack[shapeType];
+    var node = new ShapeClass({ position: { x: local.x, y: local.y } });
+    graph.addCell(node);
+
+    if (shapeType === 'Generic') {
+      // SHP-05 — no picker; user types the label later via inspector (plan 06).
+      return;
+    }
+
+    // Typed shape — open picker; on cancel, remove the placeholder node (CONTEXT D-10).
+    openEquipmentPicker(shapeType, node);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Equipment picker modal (SHP-01..04 / SHP-09).
+  // CONTEXT D-09 (drop-first), D-10 (cancel removes placeholder),
+  // D-11 (instant search w/ 200ms debounce), D-12 (reuse admin modal pattern).
+  // ──────────────────────────────────────────────────────────────
+
+  var pickerOverlay      = document.getElementById('sfd-picker-overlay');
+  var pickerTypeSpan     = document.getElementById('sfd-picker-type');
+  var pickerEmptyTypeSpan = document.getElementById('sfd-picker-empty-type');
+  var pickerSearchInput  = document.getElementById('sfd-picker-search');
+  var pickerResultsUL    = document.getElementById('sfd-picker-results');
+  var pickerEmptyDiv     = document.getElementById('sfd-picker-empty');
+  var pickerAdminLink    = document.getElementById('sfd-picker-admin-link');
+  var pickerCancelBtn    = document.getElementById('sfd-picker-cancel');
+  var pickerCloseXBtn    = document.getElementById('sfd-picker-close-x');
+
+  var pickerState = {
+    open: false,
+    shapeType: null,   // 'Console' | 'Device' | 'SpeakerArray' | 'CommBeltPack'
+    node: null,        // the placeholder cell to assign-or-remove
+    searchTimer: null,
+  };
+
+  function openEquipmentPicker(shapeType, node) {
+    var cfg = PICKER_TYPE_CONFIG[shapeType];
+    if (!cfg) return;
+
+    pickerState.open = true;
+    pickerState.shapeType = shapeType;
+    pickerState.node = node;
+
+    // textContent only — XSS-safe (T-08-21).
+    pickerTypeSpan.textContent = cfg.label;
+    pickerEmptyTypeSpan.textContent = cfg.label;
+    // T-08-23: admin URL is a hardcoded constant — no user input touches the href.
+    pickerAdminLink.setAttribute('href', cfg.admin);
+
+    // Reset UI state.
+    pickerSearchInput.value = '';
+    pickerResultsUL.innerHTML = '';   // empty-string clear — no content-bearing innerHTML write.
+    pickerEmptyDiv.setAttribute('hidden', '');
+
+    // CLAUDE.md admin-DOM override — display:flex must use setProperty + important
+    // because the modal partial carries `style="display:none"` inline.
+    pickerOverlay.removeAttribute('hidden');
+    pickerOverlay.style.setProperty('display', 'flex', 'important');
+
+    // Initial fetch (empty query → first 50 records per project) + focus.
+    fetchPickerResults('');
+    setTimeout(function () { pickerSearchInput.focus(); }, 50);
+  }
+
+  function closeEquipmentPicker(opts) {
+    // opts.assigned === true means a row was clicked; leave the node in place.
+    // opts.assigned === false (any cancel path) removes the placeholder.
+    if (!pickerState.open) return;
+    if (!opts || !opts.assigned) {
+      if (pickerState.node) {
+        // CONTEXT D-10 — no half-built nodes in canvas_state.
+        // undoable:false because the placeholder was never user-visible work.
+        pickerState.node.remove({ undoable: false });
+      }
+    }
+    pickerOverlay.style.setProperty('display', 'none', 'important');
+    pickerOverlay.setAttribute('hidden', '');
+    pickerState.open = false;
+    pickerState.shapeType = null;
+    pickerState.node = null;
+    if (pickerState.searchTimer) {
+      clearTimeout(pickerState.searchTimer);
+      pickerState.searchTimer = null;
+    }
+  }
+
+  function fetchPickerResults(query) {
+    var cfg = PICKER_TYPE_CONFIG[pickerState.shapeType];
+    if (!cfg) return;
+    var url = autocompleteUrl + '?type=' + encodeURIComponent(cfg.backend);
+    if (query) url += '&q=' + encodeURIComponent(query);
+
+    getJSON(url)
+      .then(function (data) {
+        if (!pickerState.open) return;   // user cancelled while in-flight
+        renderPickerResults(data.results || []);
+      })
+      .catch(function () {
+        if (!pickerState.open) return;
+        showToast("Couldn't load equipment.", 'error');
+        renderPickerResults([]);
+      });
+  }
+
+  function renderPickerResults(results) {
+    // PATTERNS.md XSS rule — createElement + textContent only, no content-bearing innerHTML.
+    pickerResultsUL.innerHTML = '';
+    if (!results.length) {
+      pickerEmptyDiv.removeAttribute('hidden');
+      return;
+    }
+    pickerEmptyDiv.setAttribute('hidden', '');
+
+    results.forEach(function (rec) {
+      var row = document.createElement('li');
+      row.className = 'sfd-pick-row';
+      row.setAttribute('role', 'option');
+      row.dataset.id = String(rec.id || '');
+      row.dataset.contentTypeId = String(rec.contentTypeId || '');
+
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'sfd-pick-name';
+      nameSpan.textContent = rec.name || '(unnamed)';
+
+      var detailSpan = document.createElement('span');
+      detailSpan.className = 'sfd-pick-detail';
+      detailSpan.textContent = rec.detail || '';
+
+      row.appendChild(nameSpan);
+      row.appendChild(detailSpan);
+      row.addEventListener('click', function () { assignPickerResult(rec); });
+
+      pickerResultsUL.appendChild(row);
+    });
+  }
+
+  function assignPickerResult(rec) {
+    var node = pickerState.node;
+    if (!node) return closeEquipmentPicker({ assigned: false });
+
+    // GFK payload + label snapshot.
+    // Phase 9 will use savedLabel for orphan ghosting (SHP-07).
+    node.prop('showstack/contentTypeId', rec.contentTypeId);
+    node.prop('showstack/objectId', rec.id);
+    node.prop('showstack/savedLabel', rec.name || '');
+    node.attr('label/text', rec.name || '');
+
+    closeEquipmentPicker({ assigned: true });
+  }
+
+  // Search debounce — CONTEXT D-11 instant-search at 200ms.
+  pickerSearchInput.addEventListener('input', function () {
+    if (pickerState.searchTimer) clearTimeout(pickerState.searchTimer);
+    pickerState.searchTimer = setTimeout(function () {
+      fetchPickerResults(pickerSearchInput.value.trim());
+    }, 200);
+  });
+
+  // Close affordances — Cancel button, top-right X, backdrop click, Escape key.
+  pickerCancelBtn.addEventListener('click', function () { closeEquipmentPicker({ assigned: false }); });
+  pickerCloseXBtn.addEventListener('click', function () { closeEquipmentPicker({ assigned: false }); });
+  pickerOverlay.addEventListener('click', function (evt) {
+    // Backdrop click only — clicks inside the panel must not close.
+    if (evt.target === pickerOverlay) closeEquipmentPicker({ assigned: false });
+  });
+  document.addEventListener('keydown', function (evt) {
+    if (!pickerState.open) return;
+    if (evt.key === 'Escape') {
+      evt.preventDefault();
+      closeEquipmentPicker({ assigned: false });
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
@@ -289,6 +514,8 @@
   window.__sfd.urls = { state: stateUrl, autosave: autosaveUrl, autocomplete: autocompleteUrl };
   window.__sfd.shapeNamespace = joint.shapes.showstack;
   window.__sfd.cellNamespace = cellNamespace;
+  // Useful seam for plan 06's "re-link equipment" if the inspector wants it (not a Phase 8 requirement).
+  window.__sfd.openEquipmentPicker = openEquipmentPicker;
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
