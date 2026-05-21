@@ -16,6 +16,7 @@
   .sfd-back-link { color: #aaa; text-decoration: none; font-size: 13px; }
   .sfd-back-link:hover { color: #fff; text-decoration: underline; }
 </style>
+<link rel="stylesheet" href="{% static 'planner/css/signal_flow.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -30,17 +31,95 @@
   <div id="sfd-toolbar">
     <a class="sfd-back-link" href="{% url 'planner:signal_flow_list' %}">&larr; Diagrams</a>
     <h1>{{ diagram.name }}</h1>
-    <span style="color:#888;font-size:12px;">(Phase 8 will wire the canvas; this is the shell.)</span>
+    {# Phase 8: canvas-control toolbar groups #}
+    <span class="sfd-toolbar-spacer"></span>
+    <div class="sfd-btn-group" data-group="zoom">
+      <button type="button" id="sfd-zoom-out" aria-label="Zoom out">&minus;</button>
+      <span id="sfd-zoom-level" aria-live="polite">100%</span>
+      <button type="button" id="sfd-zoom-in" aria-label="Zoom in">&plus;</button>
+      <button type="button" id="sfd-zoom-fit" aria-label="Zoom to fit">&#x2750;</button>
+    </div>
+    <span class="sfd-toolbar-divider"></span>
+    <div class="sfd-btn-group" data-group="mode">
+      <button type="button" id="sfd-snap-toggle" class="is-active" aria-label="Snap to grid: on" aria-pressed="true">&#x229E;</button>
+    </div>
+    <span class="sfd-toolbar-divider"></span>
+    <div class="sfd-btn-group" data-group="history">
+      <button type="button" id="sfd-undo" aria-label="Undo (Ctrl/Cmd+Z)" disabled>&#x21B6;</button>
+      <button type="button" id="sfd-redo" aria-label="Redo (Ctrl/Cmd+Shift+Z)" disabled>&#x21B7;</button>
+    </div>
+    <span class="sfd-toolbar-spacer"></span>
+    <div class="sfd-btn-group" data-group="persist">
+      <button type="button" id="sfd-save" aria-label="Save diagram">Save</button>
+      <span id="sfd-save-status">All changes saved.</span>
+    </div>
   </div>
 
   <div id="sfd-canvas-container">
-    {# JointJS paper mounts here in Phase 8. Phase 7 shows a blank white div. #}
+    {# Phase 8: left sidebar shape picker — 5 draggable tiles. #}
+    <aside id="sfd-sidebar" aria-label="Shape picker">
+      <button class="sfd-tile" type="button" draggable="true" data-shape-type="Console" aria-label="Drag to add Console">
+        <svg class="sfd-tile-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="6" width="16" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="9" x2="5" y2="13" stroke="currentColor" stroke-width="1.5"/><line x1="9" y1="9" x2="9" y2="13" stroke="currentColor" stroke-width="1.5"/><line x1="13" y1="9" x2="13" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span class="sfd-tile-label">Console</span>
+      </button>
+      <button class="sfd-tile" type="button" draggable="true" data-shape-type="Device" aria-label="Drag to add Device">
+        <svg class="sfd-tile-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="8" x2="17" y2="8" stroke="currentColor" stroke-width="1"/><line x1="3" y1="12" x2="17" y2="12" stroke="currentColor" stroke-width="1"/></svg>
+        <span class="sfd-tile-label">Device</span>
+      </button>
+      <button class="sfd-tile" type="button" draggable="true" data-shape-type="SpeakerArray" aria-label="Drag to add Speaker Array">
+        <svg class="sfd-tile-icon" viewBox="0 0 20 20" aria-hidden="true"><polygon points="5,3 15,3 17,17 3,17" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span class="sfd-tile-label">Speaker Array</span>
+      </button>
+      <button class="sfd-tile" type="button" draggable="true" data-shape-type="CommBeltPack" aria-label="Drag to add Beltpack">
+        <svg class="sfd-tile-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span class="sfd-tile-label">Beltpack</span>
+      </button>
+      <button class="sfd-tile" type="button" draggable="true" data-shape-type="Generic" aria-label="Drag to add Generic">
+        <svg class="sfd-tile-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="5" width="14" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/></svg>
+        <span class="sfd-tile-label">Generic</span>
+      </button>
+    </aside>
+
+    {# JointJS paper mounts here in Phase 8. #}
     <div id="sfd-paper"></div>
+
+    {# Phase 8: right-side inspector — auto-shown on connector select by JS. #}
+    <aside id="sfd-inspector" hidden aria-label="Connector inspector">
+      <div class="sfd-inspector-header">
+        <h3>Connector</h3>
+        <button type="button" id="sfd-inspector-close" aria-label="Close inspector">&times;</button>
+      </div>
+      <div class="sfd-field">
+        <label for="sfd-signal-type">Signal type</label>
+        <select id="sfd-signal-type">
+          <option value="analog">Analog</option>
+          <option value="AES">AES</option>
+          <option value="Dante">Dante</option>
+          <option value="MADI">MADI</option>
+          <option value="intercom">Intercom</option>
+        </select>
+      </div>
+      <div class="sfd-field">
+        <label>Direction</label>
+        <div class="sfd-segmented" role="group" aria-label="Connector direction">
+          <button type="button" id="sfd-dir-forward" data-active="true">Source &rarr; Target</button>
+          <button type="button" id="sfd-dir-bidir">Bidirectional</button>
+        </div>
+      </div>
+      <div class="sfd-field">
+        <label for="sfd-circuit-label">Circuit label</label>
+        <input type="text" id="sfd-circuit-label" placeholder="e.g. CKT-01" maxlength="100">
+        <p class="sfd-field-help">Renders along the connector line.</p>
+      </div>
+    </aside>
   </div>
 </div>
 
 {# CSRF cookie available for all AJAX POST calls (Phase 9 autosave will use it). #}
 <form style="display:none">{% csrf_token %}</form>
+
+{# Phase 8: equipment picker modal (hidden by default; opened by JS in plan 04). #}
+{% include "planner/signal_flow/_equipment_picker_modal.html" %}
 
 {# Vendor bundles — load order matters: joint first, then html-to-image, then app JS. #}
 {# joint is NOT deferred — it must be on `window.joint` when signal_flow_editor.js evaluates. #}
