@@ -35,6 +35,11 @@
     return;
   }
 
+  // Plans 04-06 progressively assign to window.__sfd (handoff seam between
+  // sub-plans). Initialise here so anything that writes to it before the
+  // full handoff block (around the bottom of this IIFE) doesn't throw.
+  window.__sfd = window.__sfd || {};
+
   // ──────────────────────────────────────────────────────────────
   // Helpers (analog of multitrack_editor.js — sfd- namespace).
   // ──────────────────────────────────────────────────────────────
@@ -236,7 +241,29 @@
     gridSize: 20,
     drawGrid: { name: 'dot', args: { color: '#dde', thickness: 1 } },
     background: { color: '#ffffff' },
-    // CON-related options (linkPinning, validateConnection, defaultLink) ship in plan 06.
+    // CON-related options — must be set at construction; post-hoc
+    // `paper.options.X = Y` is not reliably picked up by @joint/core 4.x.
+    linkPinning: false,                       // CON-03 — reject drops on empty paper
+    snapLinks: { radius: 24 },                // RESEARCH §12 — port snap radius
+    defaultLink: function () {
+      // joint.shapes.showstack.SignalLink is registered later in this IIFE,
+      // but this factory is called lazily on first port-drag, so the lookup
+      // resolves correctly at user-interaction time.
+      return new joint.shapes.showstack.SignalLink();
+    },
+    validateMagnet: function (cellView, magnet) {
+      // Allow link drag to START only from non-passive magnets (out-ports).
+      // In-ports have magnet="passive" and act as drag TARGETS only.
+      // PATTERNS risk #4 mitigation.
+      return magnet && magnet.getAttribute('magnet') !== 'passive';
+    },
+    validateConnection: function (sourceView, sourceMagnet, targetView, targetMagnet) {
+      // CON-03 — both ends MUST be magnets (ports). Mid-shape drops have null magnet.
+      if (!sourceMagnet || !targetMagnet) return false;
+      // Reject self-connections (same shape on both ends).
+      if (sourceView === targetView) return false;
+      return true;
+    },
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -1109,24 +1136,10 @@
     }]);
   }
 
-  // Paper config — port-snapped link creation, orthogonal routing, mid-shape rejection.
-  // Plan 04 already created `paper`; we patch its options post-construction.
-  paper.options.defaultLink = function () { return new joint.shapes.showstack.SignalLink(); };
-  paper.options.linkPinning = false;          // CON-03 — no mid-air drops
-  paper.options.snapLinks = { radius: 24 };   // port snap radius (RESEARCH §12)
-  paper.options.validateConnection = function (sourceView, sourceMagnet, targetView, targetMagnet, end, linkView) {
-    // CON-03 — both ends MUST be magnets (ports). Mid-shape drops have null magnets.
-    if (!sourceMagnet || !targetMagnet) return false;
-    // Reject self-connections (same shape both ends).
-    if (sourceView === targetView) return false;
-    return true;
-  };
-  paper.options.validateMagnet = function (cellView, magnet) {
-    // Allow any non-passive magnet to be the SOURCE of a drag.
-    // Out-ports have magnet="true" (drag source), in-ports have magnet="passive" (target only).
-    // PATTERNS risk #4 mitigation: never let a user drag from an in-port.
-    return magnet && magnet.getAttribute('magnet') !== 'passive';
-  };
+  // (Paper-level connector options — linkPinning, snapLinks, defaultLink,
+  // validateMagnet, validateConnection — are now set at Paper construction
+  // above. Post-construction `paper.options.X = Y` was unreliable in
+  // @joint/core 4.x, producing pinned links + accepted self-loops.)
 
   // Link tools — vertices for midpoint waypoints (CON-04), source/target anchors,
   // and a Remove handle for the connector. Attached on link click; cleared on blank click.
