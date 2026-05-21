@@ -7545,14 +7545,96 @@ def signal_flow_state(request, diagram_id):
 @login_required
 @require_POST
 def signal_flow_autosave(request, diagram_id):
-    """POST stub for DGM-08 (URL must exist for editor.html data-autosave-url).
+    """POST: persist canvas_state + viewport, bump version. Phase 8 (simplified).
 
-    Phase 9 implements: optimistic locking via version field, equipment GFK
-    validation, _enrich_nodes-aware save, HTTP 409 on conflict. For now the
-    endpoint exists so {% url 'planner:signal_flow_autosave' diagram.id %}
-    resolves in editor.html — the actual fetch behavior ships in Phase 9.
+    Body shapes:
+      - Full save:        {"canvas_state": {...}, "viewport": {...}}
+      - Viewport-only:    {"viewport": {...}}  with ?viewport_only=1 query param
+
+    Phase 8 walks canvas_state.cells and rejects any (contentTypeId, objectId)
+    that doesn't belong to request.current_project (PITFALLS.md §4 baseline).
+    SpeakerArray scopes via prediction__project (no direct project FK).
+
+    Phase 9 will add optimistic locking via If-Match version header + HTTP 409.
+    For now version bumps on every save unconditionally.
     """
-    return JsonResponse({'ok': True, 'stub': True})
+    viewer_block = _signal_flow_viewer_block(request)
+    if viewer_block is not None:
+        return viewer_block
+
+    try:
+        diagram = _get_diagram_for_request(request, diagram_id)
+        if not diagram:
+            return JsonResponse({'error': 'Not found'}, status=404)
+
+        payload = json.loads(request.body or '{}')
+
+        # Branch: viewport-only writes (RESEARCH §10 + §19 — folded into the same URL
+        # via ?viewport_only=1 to keep URL count stable).
+        if request.GET.get('viewport_only') == '1':
+            viewport = payload.get('viewport') or {}
+            if not isinstance(viewport, dict):
+                return JsonResponse({'error': 'Bad viewport payload'}, status=400)
+            diagram.viewport = viewport
+            diagram.save(update_fields=['viewport', 'updated_at'])
+            return JsonResponse({'ok': True, 'viewport_only': True})
+
+        # Full canvas_state save
+        canvas_state = payload.get('canvas_state') or {}
+        if not isinstance(canvas_state, dict):
+            return JsonResponse({'error': 'Bad canvas_state payload'}, status=400)
+
+        # Walk canvas JSON, validate every linked equipment ref (PITFALLS.md §4).
+        # Local import keeps the global views.py import surface unchanged.
+        from django.contrib.contenttypes.models import ContentType
+        current_project = request.current_project
+        cells = canvas_state.get('cells') or []
+        for cell in cells:
+            prop = cell.get('showstack') if isinstance(cell, dict) else None
+            if not isinstance(prop, dict):
+                continue
+            ct_id = prop.get('contentTypeId')
+            obj_id = prop.get('objectId')
+            if not ct_id or not obj_id:
+                continue
+            ct = ContentType.objects.filter(id=ct_id).first()
+            if not ct:
+                return JsonResponse({'error': f'Unknown content type {ct_id}'}, status=422)
+            Model = ct.model_class()
+            if Model is None:
+                return JsonResponse({'error': f'Content type {ct_id} not resolvable'}, status=422)
+            # IDOR — SpeakerArray uses prediction__project; others use project
+            # (PATTERNS.md risk #3). hasattr() catches future-added project FKs too.
+            model_name = Model.__name__
+            if model_name == 'SpeakerArray':
+                exists = Model.objects.filter(
+                    id=obj_id, prediction__project=current_project,
+                ).exists()
+            elif hasattr(Model, 'project') or model_name in ('Console', 'Device', 'CommBeltPack'):
+                exists = Model.objects.filter(
+                    id=obj_id, project=current_project,
+                ).exists()
+            else:
+                return JsonResponse(
+                    {'error': f'Type {ct.model} has no project scope'}, status=422,
+                )
+            if not exists:
+                return JsonResponse(
+                    {'error': 'Equipment reference out of project'}, status=422,
+                )
+
+        diagram.canvas_state = canvas_state
+        if 'viewport' in payload and isinstance(payload['viewport'], dict):
+            diagram.viewport = payload['viewport']
+        diagram.version = (diagram.version or 1) + 1
+        diagram.save(update_fields=['canvas_state', 'viewport', 'version', 'updated_at'])
+        return JsonResponse({'ok': True, 'version': diagram.version})
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Bad JSON'}, status=400)
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_autosave failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
 
 
 @staff_member_required
