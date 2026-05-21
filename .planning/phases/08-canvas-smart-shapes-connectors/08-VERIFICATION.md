@@ -1,8 +1,8 @@
 ---
 phase: 08-canvas-smart-shapes-connectors
-verified: 2026-05-20T00:00:00Z
-status: human_needed
-score: 21/21 must-haves verified (static checks); 5 success-criteria require browser verification
+verified: 2026-05-21T22:55:00Z
+status: passed
+score: 21/21 must-haves verified (static) + 5/5 success-criteria confirmed in-browser by Charlie 2026-05-21
 overrides_applied: 0
 re_verification:
   previous_status: none

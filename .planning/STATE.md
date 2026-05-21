@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Collaboration & User Management
-status: executing
+status: milestone_complete
 stopped_at: Phase 8 UI-SPEC approved
 last_updated: "2026-05-21T01:42:15.507Z"
 last_activity: 2026-05-21 -- Phase 8 execution started
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 42
   completed_plans: 36
-  percent: 86
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-19)
 
 ## Current Position
 
-Phase: 8 (Canvas, Smart Shapes & Connectors) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 8
-Last activity: 2026-05-21 -- Phase 8 execution started
+Phase: 8
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-05-21
 
 Progress: [          ] 0% (v2.2 scope only)
 
