@@ -499,6 +499,509 @@
     }
   });
 
+  // ══════════════════════════════════════════════════════════════
+  // Plan 08-05 — Canvas UX layer
+  //   Pan (space + middle-click), zoom (in/out/fit + level display),
+  //   snap toggle, viewport debounced persistence,
+  //   custom event-sourced undo/redo stack, multi-selection, delete.
+  //
+  //   All code below extends the same closure scope as plan 04 above —
+  //   `graph`, `paper`, `paperEl`, `currentViewport`, `pickerState`,
+  //   `csrfToken`, `autosaveUrl` are already in scope.
+  // ══════════════════════════════════════════════════════════════
+
+  // ──────────────────────────────────────────────────────────────
+  // Viewport debounced POST (CNV-08).
+  // 800ms coalesces rapid pan/zoom/snap events into one fetch.
+  // Hits the plan-01 viewport-only fast path (`?viewport_only=1`):
+  // does NOT bump version, does NOT validate equipment refs.
+  // CSRF token via X-CSRFToken — matches multitrack postJSON pattern.
+  // Defined BEFORE callers below.
+  // ──────────────────────────────────────────────────────────────
+
+  var viewportTimer = null;
+  function schedulePersistViewport() {
+    if (viewportTimer) clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(function () {
+      viewportTimer = null;
+      var payload = {
+        viewport: {
+          x: currentViewport.x,
+          y: currentViewport.y,
+          scale: currentViewport.scale,
+          snapEnabled: currentViewport.snapEnabled,
+        },
+      };
+      fetch(autosaveUrl + '?viewport_only=1', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+        body: JSON.stringify(payload),
+      }).catch(function () {
+        // Silent — viewport persistence is best-effort. Don't pester the user.
+      });
+    }, 800);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Pan (CNV-02) — Space+left-drag OR middle-click drag.
+  // CLAUDE.md: cursor writes MUST use setProperty(... 'important').
+  // Guard against typing into inputs and against the picker modal.
+  // ──────────────────────────────────────────────────────────────
+
+  var panState = { spaceDown: false, dragging: false, startX: 0, startY: 0, baseTx: 0, baseTy: 0 };
+
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (pickerState && pickerState.open) return;
+    if (evt.code === 'Space' && !panState.spaceDown) {
+      panState.spaceDown = true;
+      paperEl.style.setProperty('cursor', 'grab', 'important');
+      evt.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', function (evt) {
+    if (evt.code === 'Space') {
+      panState.spaceDown = false;
+      if (!panState.dragging) paperEl.style.setProperty('cursor', '', 'important');
+    }
+  });
+
+  paperEl.addEventListener('mousedown', function (evt) {
+    var isMiddle = evt.button === 1;
+    var isSpaceLeft = evt.button === 0 && panState.spaceDown;
+    if (!isMiddle && !isSpaceLeft) return;
+    panState.dragging = true;
+    panState.startX = evt.clientX;
+    panState.startY = evt.clientY;
+    var t = paper.translate();
+    panState.baseTx = t.tx;
+    panState.baseTy = t.ty;
+    paperEl.style.setProperty('cursor', 'grabbing', 'important');
+    evt.preventDefault();
+  });
+  document.addEventListener('mousemove', function (evt) {
+    if (!panState.dragging) return;
+    var dx = evt.clientX - panState.startX;
+    var dy = evt.clientY - panState.startY;
+    paper.translate(panState.baseTx + dx, panState.baseTy + dy);
+    currentViewport.x = panState.baseTx + dx;
+    currentViewport.y = panState.baseTy + dy;
+  });
+  document.addEventListener('mouseup', function (evt) {
+    if (!panState.dragging) return;
+    panState.dragging = false;
+    paperEl.style.setProperty('cursor', panState.spaceDown ? 'grab' : '', 'important');
+    schedulePersistViewport();
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Zoom (CNV-03) — in / out / fit + persistent level display.
+  // Clamp to [0.25, 2.0]. Each step is 1.2x / ÷1.2.
+  // Zoom-to-fit pads bbox by 40px on each side, never exceeds 2.0.
+  // ──────────────────────────────────────────────────────────────
+
+  var zoomLevelEl = document.getElementById('sfd-zoom-level');
+
+  function setZoom(newScale) {
+    newScale = Math.max(0.25, Math.min(2.0, newScale));
+    paper.scale(newScale, newScale);
+    currentViewport.scale = newScale;
+    if (zoomLevelEl) zoomLevelEl.textContent = Math.round(newScale * 100) + '%';
+    schedulePersistViewport();
+  }
+  function zoomIn()  { setZoom(currentViewport.scale * 1.2); }
+  function zoomOut() { setZoom(currentViewport.scale / 1.2); }
+  function zoomToFit() {
+    var cells = graph.getCells();
+    if (!cells.length) {
+      setZoom(1.0);
+      paper.translate(0, 0);
+      currentViewport.x = 0; currentViewport.y = 0;
+      return;
+    }
+    var bbox = graph.getBBox(cells);
+    if (!bbox || bbox.width === 0 || bbox.height === 0) { setZoom(1.0); return; }
+    var paperW = paperEl.clientWidth;
+    var paperH = paperEl.clientHeight;
+    var fitScale = Math.min(paperW / (bbox.width + 80), paperH / (bbox.height + 80), 2.0);
+    fitScale = Math.max(0.25, fitScale);
+    paper.scale(fitScale, fitScale);
+    var tx = -bbox.x * fitScale + 40;
+    var ty = -bbox.y * fitScale + 40;
+    paper.translate(tx, ty);
+    currentViewport.scale = fitScale;
+    currentViewport.x = tx;
+    currentViewport.y = ty;
+    if (zoomLevelEl) zoomLevelEl.textContent = Math.round(fitScale * 100) + '%';
+    schedulePersistViewport();
+  }
+
+  document.getElementById('sfd-zoom-in').addEventListener('click', zoomIn);
+  document.getElementById('sfd-zoom-out').addEventListener('click', zoomOut);
+  document.getElementById('sfd-zoom-fit').addEventListener('click', zoomToFit);
+
+  // Initial display — currentViewport.scale was set by the state-load promise
+  // (or defaults to 1.0 from the initial currentViewport literal).
+  if (zoomLevelEl) zoomLevelEl.textContent = Math.round(currentViewport.scale * 100) + '%';
+
+  // ──────────────────────────────────────────────────────────────
+  // Snap to grid (CNV-04) — default ON per CONTEXT D-13.
+  // On: 20px grid + dotted overlay; off: 1px grid + no overlay.
+  // Updates aria-pressed + is-active class on toolbar button.
+  // ──────────────────────────────────────────────────────────────
+
+  var snapToggleBtn = document.getElementById('sfd-snap-toggle');
+
+  function setSnap(on) {
+    currentViewport.snapEnabled = !!on;
+    paper.setGrid(on ? 20 : 1);
+    if (on) {
+      paper.drawGrid({ name: 'dot', args: { color: '#dde', thickness: 1 } });
+    } else if (typeof paper.clearGrid === 'function') {
+      paper.clearGrid();
+    } else {
+      paper.drawGrid({ name: 'dot', args: { color: 'transparent', thickness: 1 } });
+    }
+    if (snapToggleBtn) {
+      if (on) {
+        snapToggleBtn.classList.add('is-active');
+        snapToggleBtn.setAttribute('aria-pressed', 'true');
+        snapToggleBtn.setAttribute('aria-label', 'Snap to grid: on');
+      } else {
+        snapToggleBtn.classList.remove('is-active');
+        snapToggleBtn.setAttribute('aria-pressed', 'false');
+        snapToggleBtn.setAttribute('aria-label', 'Snap to grid: off');
+      }
+    }
+    schedulePersistViewport();
+  }
+
+  snapToggleBtn.addEventListener('click', function () { setSnap(!currentViewport.snapEnabled); });
+  setSnap(currentViewport.snapEnabled);   // apply initial state from plan-04 viewport load
+
+  // ──────────────────────────────────────────────────────────────
+  // Custom event-sourced undo / redo stack (CNV-05).
+  //
+  // @joint/core 4.2.4 ships NO CommandManager — it's JointJS+ (paid)
+  // only. We roll our own per RESEARCH.md "Custom Undo-Stack Pattern".
+  //
+  // Bounded to UNDO_HISTORY_CAP=50 batches (T-08-30 mitigation).
+  // EVERY applyInverse / applyForward call MUST pass { undoable: false }
+  // so the graph listeners below don't re-record their own actions.
+  //
+  // Plan 04 already runs the initial fromJSON with { undoable: false },
+  // so initial-load adds never reach this stack.
+  // ──────────────────────────────────────────────────────────────
+
+  var undoStack = [];
+  var redoStack = [];
+  var undoCapturing = true;
+  var undoBatchDepth = 0;
+  var undoBatchCurrent = null;
+  var UNDO_HISTORY_CAP = 50;
+
+  function undoRecord(cmd) {
+    if (!undoCapturing) return;
+    if (undoBatchDepth > 0) {
+      undoBatchCurrent.push(cmd);
+    } else {
+      undoStack.push([cmd]);
+      if (undoStack.length > UNDO_HISTORY_CAP) undoStack.shift();
+      redoStack.length = 0;
+    }
+    refreshUndoButtons();
+  }
+
+  function undoBeginBatch() {
+    undoBatchDepth++;
+    if (undoBatchDepth === 1) undoBatchCurrent = [];
+  }
+  function undoEndBatch() {
+    undoBatchDepth = Math.max(0, undoBatchDepth - 1);
+    if (undoBatchDepth === 0 && undoBatchCurrent && undoBatchCurrent.length) {
+      undoStack.push(undoBatchCurrent);
+      if (undoStack.length > UNDO_HISTORY_CAP) undoStack.shift();
+      redoStack.length = 0;
+      undoBatchCurrent = null;
+      refreshUndoButtons();
+    } else if (undoBatchDepth === 0) {
+      undoBatchCurrent = null;
+    }
+  }
+
+  graph.on('add', function (cell, _coll, opts) {
+    if (opts && opts.undoable === false) return;
+    undoRecord({ type: 'add', cellId: cell.id, json: cell.toJSON() });
+  });
+  graph.on('remove', function (cell, _coll, opts) {
+    if (opts && opts.undoable === false) return;
+    undoRecord({ type: 'remove', cellId: cell.id, json: cell.toJSON() });
+  });
+  graph.on('change', function (cell, opts) {
+    if (opts && opts.undoable === false) return;
+    var before = cell.previousAttributes();
+    if (!before) return;
+    undoRecord({
+      type: 'change',
+      cellId: cell.id,
+      before: JSON.parse(JSON.stringify(before)),
+      after: JSON.parse(JSON.stringify(cell.toJSON())),
+    });
+  });
+
+  function applyInverse(cmd) {
+    undoCapturing = false;
+    try {
+      if (cmd.type === 'add') {
+        var c = graph.getCell(cmd.cellId);
+        if (c) c.remove({ undoable: false });
+      } else if (cmd.type === 'remove') {
+        graph.addCell(cmd.json, { undoable: false });
+      } else if (cmd.type === 'change') {
+        var c2 = graph.getCell(cmd.cellId);
+        if (c2) c2.set(cmd.before, { undoable: false });
+      }
+    } finally {
+      undoCapturing = true;
+    }
+  }
+  function applyForward(cmd) {
+    undoCapturing = false;
+    try {
+      if (cmd.type === 'add') {
+        graph.addCell(cmd.json, { undoable: false });
+      } else if (cmd.type === 'remove') {
+        var c = graph.getCell(cmd.cellId);
+        if (c) c.remove({ undoable: false });
+      } else if (cmd.type === 'change') {
+        var c2 = graph.getCell(cmd.cellId);
+        if (c2) c2.set(cmd.after, { undoable: false });
+      }
+    } finally {
+      undoCapturing = true;
+    }
+  }
+
+  function doUndo() {
+    var batch = undoStack.pop();
+    if (!batch) return;
+    for (var i = batch.length - 1; i >= 0; i--) applyInverse(batch[i]);
+    redoStack.push(batch);
+    refreshUndoButtons();
+  }
+  function doRedo() {
+    var batch = redoStack.pop();
+    if (!batch) return;
+    for (var i = 0; i < batch.length; i++) applyForward(batch[i]);
+    undoStack.push(batch);
+    refreshUndoButtons();
+  }
+
+  // Toolbar Undo / Redo buttons — disabled when their stack is empty.
+  var undoBtn = document.getElementById('sfd-undo');
+  var redoBtn = document.getElementById('sfd-redo');
+  function refreshUndoButtons() {
+    if (undoBtn) {
+      if (undoStack.length > 0) undoBtn.removeAttribute('disabled');
+      else undoBtn.setAttribute('disabled', '');
+    }
+    if (redoBtn) {
+      if (redoStack.length > 0) redoBtn.removeAttribute('disabled');
+      else redoBtn.setAttribute('disabled', '');
+    }
+  }
+  undoBtn.addEventListener('click', doUndo);
+  redoBtn.addEventListener('click', doRedo);
+  refreshUndoButtons();   // initial — both disabled
+
+  // Multi-cell drag batching (RESEARCH Open Risk #1). JointJS emits
+  // a flurry of `change:position` events during a drag — wrap them in
+  // a single undo batch so one Ctrl+Z reverts the whole gesture.
+  paper.on('element:pointerdown', function () { undoBeginBatch(); });
+  paper.on('element:pointerup',   function () { undoEndBatch(); });
+
+  // Keyboard shortcuts — Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y.
+  // Guard against input-field focus and modal-open per RESEARCH §7.
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (pickerState && pickerState.open) return;
+    var meta = evt.ctrlKey || evt.metaKey;
+    if (!meta) return;
+    var key = evt.key.toLowerCase();
+    if (key === 'z' && !evt.shiftKey) {
+      evt.preventDefault();
+      doUndo();
+    } else if ((key === 'z' && evt.shiftKey) || key === 'y') {
+      evt.preventDefault();
+      doRedo();
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Selection (CNV-06) and keyboard delete (CNV-07).
+  //
+  //  - Plain click on an element/link: replace selection with that cell.
+  //  - Shift+click: toggle the cell in/out of the selection set.
+  //  - Blank click: clear selection.
+  //  - Blank pointerdown + drag: rubber-band — selects all views inside
+  //    the rectangle via paper.findViewsInArea(). Gated on
+  //    !panState.spaceDown && evt.button === 0 so it never starts during
+  //    a pan (CONTEXT D-08 + RESEARCH §8).
+  //  - Delete / Backspace: remove the current selection in one undo batch.
+  //
+  // Selection visual is via CSS class `.is-selected` (plan 02 styles).
+  // Multi-select bbox overlay uses `.sfd-multi-bbox` (plan 02 styles).
+  // ──────────────────────────────────────────────────────────────
+
+  var selectedSet = new Set();
+  var multiBboxRect = null;   // SVG <rect> overlay for multi-select bbox
+
+  function applySelectionVisuals() {
+    graph.getCells().forEach(function (cell) {
+      var view = paper.findViewByModel(cell);
+      if (!view || !view.el) return;
+      if (selectedSet.has(cell.id)) view.el.classList.add('is-selected');
+      else view.el.classList.remove('is-selected');
+    });
+    // Plan 06's inspector hooks into this — see window.__sfd.selection below.
+    if (typeof window.__sfd.onSelectionChanged === 'function') {
+      window.__sfd.onSelectionChanged(Array.from(selectedSet));
+    }
+  }
+
+  function redrawSelection() {
+    applySelectionVisuals();
+    // Multi-select bbox overlay
+    if (multiBboxRect && multiBboxRect.parentNode) {
+      multiBboxRect.parentNode.removeChild(multiBboxRect);
+    }
+    multiBboxRect = null;
+    if (selectedSet.size > 1) {
+      var cells = Array.from(selectedSet)
+        .map(function (id) { return graph.getCell(id); })
+        .filter(Boolean);
+      if (cells.length > 1) {
+        var bbox = graph.getCellsBBox(cells);
+        if (bbox) {
+          multiBboxRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          multiBboxRect.setAttribute('class', 'sfd-multi-bbox');
+          multiBboxRect.setAttribute('x', String(bbox.x - 4));
+          multiBboxRect.setAttribute('y', String(bbox.y - 4));
+          multiBboxRect.setAttribute('width',  String(bbox.width + 8));
+          multiBboxRect.setAttribute('height', String(bbox.height + 8));
+          var vp = paper.viewport || paper.svg;
+          if (vp && vp.appendChild) vp.appendChild(multiBboxRect);
+        }
+      }
+    }
+  }
+
+  // Plain / shift click on an element or link.
+  paper.on('element:pointerclick', function (elementView, evt) {
+    var id = elementView.model.id;
+    if (evt.shiftKey) {
+      if (selectedSet.has(id)) selectedSet.delete(id); else selectedSet.add(id);
+    } else {
+      selectedSet.clear();
+      selectedSet.add(id);
+    }
+    redrawSelection();
+  });
+  paper.on('link:pointerclick', function (linkView, evt) {
+    var id = linkView.model.id;
+    if (evt.shiftKey) {
+      if (selectedSet.has(id)) selectedSet.delete(id); else selectedSet.add(id);
+    } else {
+      selectedSet.clear();
+      selectedSet.add(id);
+    }
+    redrawSelection();
+  });
+  paper.on('blank:pointerclick', function () {
+    selectedSet.clear();
+    redrawSelection();
+  });
+
+  // Rubber-band drag on blank canvas — RESEARCH §8.
+  // Gated against panState.spaceDown so space+drag is always a pan.
+  paper.on('blank:pointerdown', function (evt, x, y) {
+    if (panState.spaceDown || evt.button !== 0) return;
+    var startLocal = { x: x, y: y };
+    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('fill', 'rgba(13, 148, 136, 0.08)');   // accent at 8% opacity
+    rect.setAttribute('stroke', '#0d9488');
+    rect.setAttribute('stroke-width', '1');
+    rect.setAttribute('stroke-dasharray', '4 3');
+    rect.setAttribute('pointer-events', 'none');
+    rect.setAttribute('x', String(x));
+    rect.setAttribute('y', String(y));
+    rect.setAttribute('width', '0');
+    rect.setAttribute('height', '0');
+    var vp = paper.viewport || paper.svg;
+    if (vp && vp.appendChild) vp.appendChild(rect);
+
+    function onMove(evt2) {
+      var p = paper.clientToLocalPoint({ x: evt2.clientX, y: evt2.clientY });
+      var x0 = Math.min(startLocal.x, p.x);
+      var y0 = Math.min(startLocal.y, p.y);
+      var w = Math.abs(p.x - startLocal.x);
+      var h = Math.abs(p.y - startLocal.y);
+      rect.setAttribute('x', String(x0));
+      rect.setAttribute('y', String(y0));
+      rect.setAttribute('width',  String(w));
+      rect.setAttribute('height', String(h));
+    }
+    function onUp(evt2) {
+      var p = paper.clientToLocalPoint({ x: evt2.clientX, y: evt2.clientY });
+      var x0 = Math.min(startLocal.x, p.x);
+      var y0 = Math.min(startLocal.y, p.y);
+      var w = Math.abs(p.x - startLocal.x);
+      var h = Math.abs(p.y - startLocal.y);
+      if (rect.parentNode) rect.parentNode.removeChild(rect);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (w < 4 && h < 4) return;   // ignore tiny accidental drags
+      var hits = paper.findViewsInArea({ x: x0, y: y0, width: w, height: h });
+      if (!evt2.shiftKey) selectedSet.clear();
+      hits.forEach(function (v) { if (v && v.model) selectedSet.add(v.model.id); });
+      redrawSelection();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Keyboard delete — Delete or Backspace removes the current selection
+  // in a single undo batch. Guarded against input-field focus and the
+  // picker modal.
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (pickerState && pickerState.open) return;
+    if (evt.key === 'Delete' || evt.key === 'Backspace') {
+      var ids = Array.from(selectedSet);
+      if (!ids.length) return;
+      evt.preventDefault();
+      undoBeginBatch();
+      ids.forEach(function (id) {
+        var cell = graph.getCell(id);
+        if (cell) cell.remove();
+      });
+      undoEndBatch();
+      selectedSet.clear();
+      redrawSelection();
+    }
+  });
+
+  // Re-apply selection visuals after JointJS re-renders (RESEARCH Open
+  // Risk #4). `add` covers cell creation; `change:attrs` covers
+  // attribute-driven re-paints (label edits, signal-type style swaps).
+  // We DO NOT bind to `change:position` — that would re-paint constantly
+  // during drags. Position changes don't re-create the DOM node, so the
+  // .is-selected class survives them anyway.
+  graph.on('add change:attrs', function () {
+    applySelectionVisuals();
+  });
+
   // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
@@ -516,6 +1019,20 @@
   window.__sfd.cellNamespace = cellNamespace;
   // Useful seam for plan 06's "re-link equipment" if the inspector wants it (not a Phase 8 requirement).
   window.__sfd.openEquipmentPicker = openEquipmentPicker;
+  // Plan 05 undo handoff — plan 06's manual Save can wrap multi-step writes
+  // in beginBatch/endBatch so one Ctrl+Z reverts the whole gesture.
+  window.__sfd.undo = {
+    undo: doUndo, redo: doRedo,
+    beginBatch: undoBeginBatch, endBatch: undoEndBatch,
+    record: undoRecord,
+  };
+  // Plan 05 selection handoff — plan 06's inspector reads getSelected()
+  // and sets onSelectionChanged to be notified when the selection changes.
+  window.__sfd.selection = {
+    getSelected: function () { return Array.from(selectedSet); },
+    clear: function () { selectedSet.clear(); redrawSelection(); },
+    // onSelectionChanged hook — plan 06 sets this to drive inspector show/hide.
+  };
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
