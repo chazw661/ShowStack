@@ -499,6 +499,187 @@
     }
   });
 
+  // ══════════════════════════════════════════════════════════════
+  // Plan 08-05 — Canvas UX layer
+  //   Pan (space + middle-click), zoom (in/out/fit + level display),
+  //   snap toggle, viewport debounced persistence,
+  //   custom event-sourced undo/redo stack, multi-selection, delete.
+  //
+  //   All code below extends the same closure scope as plan 04 above —
+  //   `graph`, `paper`, `paperEl`, `currentViewport`, `pickerState`,
+  //   `csrfToken`, `autosaveUrl` are already in scope.
+  // ══════════════════════════════════════════════════════════════
+
+  // ──────────────────────────────────────────────────────────────
+  // Viewport debounced POST (CNV-08).
+  // 800ms coalesces rapid pan/zoom/snap events into one fetch.
+  // Hits the plan-01 viewport-only fast path (`?viewport_only=1`):
+  // does NOT bump version, does NOT validate equipment refs.
+  // CSRF token via X-CSRFToken — matches multitrack postJSON pattern.
+  // Defined BEFORE callers below.
+  // ──────────────────────────────────────────────────────────────
+
+  var viewportTimer = null;
+  function schedulePersistViewport() {
+    if (viewportTimer) clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(function () {
+      viewportTimer = null;
+      var payload = {
+        viewport: {
+          x: currentViewport.x,
+          y: currentViewport.y,
+          scale: currentViewport.scale,
+          snapEnabled: currentViewport.snapEnabled,
+        },
+      };
+      fetch(autosaveUrl + '?viewport_only=1', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+        body: JSON.stringify(payload),
+      }).catch(function () {
+        // Silent — viewport persistence is best-effort. Don't pester the user.
+      });
+    }, 800);
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Pan (CNV-02) — Space+left-drag OR middle-click drag.
+  // CLAUDE.md: cursor writes MUST use setProperty(... 'important').
+  // Guard against typing into inputs and against the picker modal.
+  // ──────────────────────────────────────────────────────────────
+
+  var panState = { spaceDown: false, dragging: false, startX: 0, startY: 0, baseTx: 0, baseTy: 0 };
+
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (pickerState && pickerState.open) return;
+    if (evt.code === 'Space' && !panState.spaceDown) {
+      panState.spaceDown = true;
+      paperEl.style.setProperty('cursor', 'grab', 'important');
+      evt.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', function (evt) {
+    if (evt.code === 'Space') {
+      panState.spaceDown = false;
+      if (!panState.dragging) paperEl.style.setProperty('cursor', '', 'important');
+    }
+  });
+
+  paperEl.addEventListener('mousedown', function (evt) {
+    var isMiddle = evt.button === 1;
+    var isSpaceLeft = evt.button === 0 && panState.spaceDown;
+    if (!isMiddle && !isSpaceLeft) return;
+    panState.dragging = true;
+    panState.startX = evt.clientX;
+    panState.startY = evt.clientY;
+    var t = paper.translate();
+    panState.baseTx = t.tx;
+    panState.baseTy = t.ty;
+    paperEl.style.setProperty('cursor', 'grabbing', 'important');
+    evt.preventDefault();
+  });
+  document.addEventListener('mousemove', function (evt) {
+    if (!panState.dragging) return;
+    var dx = evt.clientX - panState.startX;
+    var dy = evt.clientY - panState.startY;
+    paper.translate(panState.baseTx + dx, panState.baseTy + dy);
+    currentViewport.x = panState.baseTx + dx;
+    currentViewport.y = panState.baseTy + dy;
+  });
+  document.addEventListener('mouseup', function (evt) {
+    if (!panState.dragging) return;
+    panState.dragging = false;
+    paperEl.style.setProperty('cursor', panState.spaceDown ? 'grab' : '', 'important');
+    schedulePersistViewport();
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Zoom (CNV-03) — in / out / fit + persistent level display.
+  // Clamp to [0.25, 2.0]. Each step is 1.2x / ÷1.2.
+  // Zoom-to-fit pads bbox by 40px on each side, never exceeds 2.0.
+  // ──────────────────────────────────────────────────────────────
+
+  var zoomLevelEl = document.getElementById('sfd-zoom-level');
+
+  function setZoom(newScale) {
+    newScale = Math.max(0.25, Math.min(2.0, newScale));
+    paper.scale(newScale, newScale);
+    currentViewport.scale = newScale;
+    if (zoomLevelEl) zoomLevelEl.textContent = Math.round(newScale * 100) + '%';
+    schedulePersistViewport();
+  }
+  function zoomIn()  { setZoom(currentViewport.scale * 1.2); }
+  function zoomOut() { setZoom(currentViewport.scale / 1.2); }
+  function zoomToFit() {
+    var cells = graph.getCells();
+    if (!cells.length) {
+      setZoom(1.0);
+      paper.translate(0, 0);
+      currentViewport.x = 0; currentViewport.y = 0;
+      return;
+    }
+    var bbox = graph.getBBox(cells);
+    if (!bbox || bbox.width === 0 || bbox.height === 0) { setZoom(1.0); return; }
+    var paperW = paperEl.clientWidth;
+    var paperH = paperEl.clientHeight;
+    var fitScale = Math.min(paperW / (bbox.width + 80), paperH / (bbox.height + 80), 2.0);
+    fitScale = Math.max(0.25, fitScale);
+    paper.scale(fitScale, fitScale);
+    var tx = -bbox.x * fitScale + 40;
+    var ty = -bbox.y * fitScale + 40;
+    paper.translate(tx, ty);
+    currentViewport.scale = fitScale;
+    currentViewport.x = tx;
+    currentViewport.y = ty;
+    if (zoomLevelEl) zoomLevelEl.textContent = Math.round(fitScale * 100) + '%';
+    schedulePersistViewport();
+  }
+
+  document.getElementById('sfd-zoom-in').addEventListener('click', zoomIn);
+  document.getElementById('sfd-zoom-out').addEventListener('click', zoomOut);
+  document.getElementById('sfd-zoom-fit').addEventListener('click', zoomToFit);
+
+  // Initial display — currentViewport.scale was set by the state-load promise
+  // (or defaults to 1.0 from the initial currentViewport literal).
+  if (zoomLevelEl) zoomLevelEl.textContent = Math.round(currentViewport.scale * 100) + '%';
+
+  // ──────────────────────────────────────────────────────────────
+  // Snap to grid (CNV-04) — default ON per CONTEXT D-13.
+  // On: 20px grid + dotted overlay; off: 1px grid + no overlay.
+  // Updates aria-pressed + is-active class on toolbar button.
+  // ──────────────────────────────────────────────────────────────
+
+  var snapToggleBtn = document.getElementById('sfd-snap-toggle');
+
+  function setSnap(on) {
+    currentViewport.snapEnabled = !!on;
+    paper.setGrid(on ? 20 : 1);
+    if (on) {
+      paper.drawGrid({ name: 'dot', args: { color: '#dde', thickness: 1 } });
+    } else if (typeof paper.clearGrid === 'function') {
+      paper.clearGrid();
+    } else {
+      paper.drawGrid({ name: 'dot', args: { color: 'transparent', thickness: 1 } });
+    }
+    if (snapToggleBtn) {
+      if (on) {
+        snapToggleBtn.classList.add('is-active');
+        snapToggleBtn.setAttribute('aria-pressed', 'true');
+        snapToggleBtn.setAttribute('aria-label', 'Snap to grid: on');
+      } else {
+        snapToggleBtn.classList.remove('is-active');
+        snapToggleBtn.setAttribute('aria-pressed', 'false');
+        snapToggleBtn.setAttribute('aria-label', 'Snap to grid: off');
+      }
+    }
+    schedulePersistViewport();
+  }
+
+  snapToggleBtn.addEventListener('click', function () { setSnap(!currentViewport.snapEnabled); });
+  setSnap(currentViewport.snapEnabled);   // apply initial state from plan-04 viewport load
+
   // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
