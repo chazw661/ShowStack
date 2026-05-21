@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Collaboration & User Management
-status: completed
+status: executing
 stopped_at: Phase 8 UI-SPEC approved
-last_updated: "2026-05-20T23:48:09.826Z"
-last_activity: 2026-05-20
+last_updated: "2026-05-21T01:42:15.507Z"
+last_activity: 2026-05-21 -- Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase --phase — 07
+**Current focus:** Phase 8 — Canvas, Smart Shapes & Connectors
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-20
+Phase: 8 (Canvas, Smart Shapes & Connectors) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 8
+Last activity: 2026-05-21 -- Phase 8 execution started
 
 Progress: [          ] 0% (v2.2 scope only)
 
