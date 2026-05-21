@@ -1166,6 +1166,127 @@
   });
 
   // ──────────────────────────────────────────────────────────────
+  // Plan 06 — Right-side inspector (auto-show on connector select).
+  // CON-02 / CON-05 / CON-06 user-facing field wiring.
+  // CONTEXT D-07 (auto-show/hide rule), UI-SPEC "Inspector Panel".
+  // ──────────────────────────────────────────────────────────────
+
+  var inspectorEl       = document.getElementById('sfd-inspector');
+  var inspectorCloseBtn = document.getElementById('sfd-inspector-close');
+  var signalTypeSelect  = document.getElementById('sfd-signal-type');
+  var dirForwardBtn     = document.getElementById('sfd-dir-forward');
+  var dirBidirBtn       = document.getElementById('sfd-dir-bidir');
+  var circuitLabelInput = document.getElementById('sfd-circuit-label');
+
+  // The link model currently bound to the inspector (null when hidden).
+  var inspectorCurrentLink = null;
+
+  function showInspector() {
+    if (!inspectorEl) return;
+    inspectorEl.removeAttribute('hidden');
+    // CLAUDE.md override rule — admin-template DOM nodes need !important.
+    inspectorEl.style.setProperty('display', 'block', 'important');
+  }
+  function hideInspector() {
+    if (!inspectorEl) return;
+    inspectorEl.setAttribute('hidden', '');
+    inspectorEl.style.setProperty('display', 'none', 'important');
+    inspectorCurrentLink = null;
+  }
+
+  function syncInspectorFromLink(link) {
+    // Populate field values from the link model (no events fired — pure DOM write).
+    signalTypeSelect.value = link.prop('signalType') || 'analog';
+    var dir = link.prop('direction') || 'forward';
+    if (dir === 'bidirectional') {
+      dirForwardBtn.setAttribute('data-active', 'false');
+      dirBidirBtn.setAttribute('data-active', 'true');
+    } else {
+      dirForwardBtn.setAttribute('data-active', 'true');
+      dirBidirBtn.setAttribute('data-active', 'false');
+    }
+    circuitLabelInput.value = link.prop('circuitLabel') || '';
+  }
+
+  // Selection-change hook — plan 05's applySelectionVisuals() calls this if defined.
+  // RESEARCH Open Risk #6: selection updates first, then inspector reacts. Single-source.
+  window.__sfd.onSelectionChanged = function (selectedIds) {
+    if (selectedIds.length === 1) {
+      var cell = graph.getCell(selectedIds[0]);
+      if (cell && cell.isLink && cell.isLink()) {
+        inspectorCurrentLink = cell;
+        syncInspectorFromLink(cell);
+        showInspector();
+        return;
+      }
+    }
+    // Any other case (zero, multi, or single non-link) — hide inspector.
+    hideInspector();
+  };
+
+  // Field handlers — every change writes to the link model AND updates the live SVG
+  // via the helpers defined in Task 1 (applySignalType / applyDirection / applyCircuitLabel).
+  if (signalTypeSelect) {
+    signalTypeSelect.addEventListener('change', function () {
+      if (!inspectorCurrentLink) return;
+      applySignalType(inspectorCurrentLink, signalTypeSelect.value);
+    });
+  }
+
+  if (dirForwardBtn) {
+    dirForwardBtn.addEventListener('click', function () {
+      if (!inspectorCurrentLink) return;
+      applyDirection(inspectorCurrentLink, 'forward');
+      dirForwardBtn.setAttribute('data-active', 'true');
+      dirBidirBtn.setAttribute('data-active', 'false');
+    });
+  }
+  if (dirBidirBtn) {
+    dirBidirBtn.addEventListener('click', function () {
+      if (!inspectorCurrentLink) return;
+      applyDirection(inspectorCurrentLink, 'bidirectional');
+      dirForwardBtn.setAttribute('data-active', 'false');
+      dirBidirBtn.setAttribute('data-active', 'true');
+    });
+  }
+
+  // Circuit-label input — debounced 200ms during typing AND committed on blur.
+  // Prevents one undo-stack record per keystroke (T-08-30 memory hygiene).
+  // Plan 05's keyboard handler already excludes /INPUT|TEXTAREA|SELECT/ so Backspace
+  // here doesn't delete the connector being edited.
+  var circuitLabelTimer = null;
+  if (circuitLabelInput) {
+    circuitLabelInput.addEventListener('input', function () {
+      if (!inspectorCurrentLink) return;
+      if (circuitLabelTimer) clearTimeout(circuitLabelTimer);
+      var snapshot = inspectorCurrentLink;
+      circuitLabelTimer = setTimeout(function () {
+        circuitLabelTimer = null;
+        if (snapshot) applyCircuitLabel(snapshot, circuitLabelInput.value);
+      }, 200);
+    });
+    circuitLabelInput.addEventListener('blur', function () {
+      if (circuitLabelTimer) { clearTimeout(circuitLabelTimer); circuitLabelTimer = null; }
+      if (inspectorCurrentLink) applyCircuitLabel(inspectorCurrentLink, circuitLabelInput.value);
+    });
+  }
+
+  if (inspectorCloseBtn) {
+    inspectorCloseBtn.addEventListener('click', function () {
+      // Clear selection — plan 05's onSelectionChanged then fires with [] and hides.
+      if (window.__sfd.selection && typeof window.__sfd.selection.clear === 'function') {
+        window.__sfd.selection.clear();
+      }
+      hideInspector();
+    });
+  }
+
+  // Defensive — ensure inspector is hidden on initial page load.
+  // The template renders with the `hidden` attribute set, but a previous render
+  // could leave inline styles; this normalizes both.
+  hideInspector();
+
+  // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
   // those plans extend the same Graph/Paper instances rather than
   // instantiating new ones.
