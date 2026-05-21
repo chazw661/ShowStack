@@ -1,0 +1,528 @@
+/*
+ * signal_flow.css — Phase 8 chrome for the Signal Flow Diagrammer editor.
+ *
+ * Loaded ONLY by `editor.html` (plan 03 wires the <link>). NEVER loaded by
+ * `list.html`, which ships its own scoped inline `.sfd-*` rules. New rules
+ * here use IDs (#sfd-toolbar, #sfd-sidebar, #sfd-inspector) plus distinct
+ * class names (.sfd-tile, .sfd-btn-group, .sfd-picker-*, .sfd-inspector-*,
+ * .sfd-toast, .sfd-segmented, .sfd-field, .sfd-multi-bbox, .sfd-empty-hint,
+ * .sfd-pick-*) that do not collide with list.html's `.sfd-container`,
+ * `.sfd-card`, `.sfd-btn`, `.sfd-grid`, `.sfd-empty` rules.
+ *
+ * !important is used pervasively because `django-admin-interface` ships
+ * `!important` declarations that win specificity battles otherwise. Rule of
+ * thumb from CLAUDE.md: every property the admin theme might touch gets
+ * `!important`. JointJS-managed SVG inside `#sfd-paper` is in its own
+ * namespace and does not need `!important` — but we apply it on the few
+ * SVG rules below anyway (port hover-reveal, selection visuals) for
+ * defence-in-depth.
+ *
+ * Sections:
+ *   1. Toolbar button groups + dividers (extends Phase 7 #sfd-toolbar)
+ *   2. Canvas container layout (sidebar | paper | inspector)
+ *   3. Left sidebar shape picker (#sfd-sidebar + .sfd-tile)
+ *   4. Right inspector panel (#sfd-inspector + .sfd-field + .sfd-segmented)
+ *   5. Equipment picker modal (.sfd-picker-overlay + .sfd-pick-*)
+ *   6. Toast (.sfd-toast)
+ *   7. JointJS port hover-reveal
+ *   8. Selection visual (.is-selected + .sfd-multi-bbox)
+ *   9. Empty canvas hint (.sfd-empty-hint)
+ */
+
+/* =========================================================================
+   SECTION 1 — Toolbar button groups + dividers
+   Extends Phase 7 locked #sfd-toolbar (background #2a2a3e, border-bottom).
+   ========================================================================= */
+
+.sfd-toolbar-spacer {
+  flex: 1 1 auto !important;
+}
+
+.sfd-toolbar-divider {
+  display: inline-block !important;
+  width: 1px !important;
+  height: 16px !important;
+  background-color: #444 !important;
+  margin: 0 4px !important;
+}
+
+.sfd-btn-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+#sfd-toolbar button {
+  background: transparent !important;
+  color: #eee !important;
+  border: 1px solid transparent !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+#sfd-toolbar button:hover:not(:disabled) {
+  background-color: #3a3a4e !important;
+}
+
+#sfd-toolbar button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+#sfd-toolbar button.is-active {
+  background-color: #0d9488 !important;
+  color: #fff !important;
+}
+
+#sfd-zoom-level {
+  font-family: "SF Mono", Consolas, Menlo, monospace !important;
+  font-size: 12px !important;
+  color: #aaa !important;
+  min-width: 40px !important;
+  text-align: center !important;
+}
+
+#sfd-save {
+  background-color: #3a3a4e !important;
+  border-color: #555 !important;
+  padding: 4px 14px !important;
+}
+
+#sfd-save-status {
+  color: #aaa !important;
+  font-size: 12px !important;
+  margin-left: 8px !important;
+}
+
+#sfd-save-status.is-error {
+  color: #dc2626 !important;
+}
+
+#sfd-save-status.is-saving {
+  color: #eee !important;
+}
+
+/* =========================================================================
+   SECTION 2 — Canvas container layout (sidebar | paper | inspector)
+   Phase 7 already sets #sfd-canvas-container; we declare flex-children rules.
+   ========================================================================= */
+
+#sfd-canvas-container {
+  display: flex !important;
+  flex-direction: row !important;
+}
+
+#sfd-paper {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+/* =========================================================================
+   SECTION 3 — Left sidebar shape picker
+   UI-SPEC § #sfd-sidebar — 64px fixed, 5 stacked tiles, dark surface.
+   ========================================================================= */
+
+#sfd-sidebar {
+  width: 64px !important;
+  flex: 0 0 64px !important;
+  background-color: #1f1f2e !important;
+  border-right: 1px solid #444 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 8px 0 !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+}
+
+.sfd-tile {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: 48px !important;
+  height: 56px !important;
+  margin: 0 auto !important;
+  padding: 4px !important;
+  background: transparent !important;
+  color: #eee !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  cursor: grab !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.sfd-tile:hover {
+  background-color: #3a3a4e !important;
+  color: #fff !important;
+}
+
+.sfd-tile:active {
+  cursor: grabbing !important;
+}
+
+.sfd-tile:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px #0d9488 !important;
+}
+
+.sfd-tile-icon {
+  width: 20px !important;
+  height: 20px !important;
+  display: block !important;
+}
+
+.sfd-tile-label {
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  text-align: center !important;
+}
+
+/* =========================================================================
+   SECTION 4 — Right inspector panel
+   UI-SPEC § #sfd-inspector — 280px fixed, auto-show on connector select.
+   ========================================================================= */
+
+#sfd-inspector {
+  width: 280px !important;
+  flex: 0 0 280px !important;
+  background-color: #252535 !important;
+  border-left: 1px solid #444 !important;
+  padding: 16px !important;
+  color: #eee !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  overflow-y: auto !important;
+}
+
+#sfd-inspector[hidden] {
+  display: none !important;
+}
+
+.sfd-inspector-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 2px solid #0d9488 !important;
+  padding-bottom: 8px !important;
+  margin-bottom: 16px !important;
+}
+
+.sfd-inspector-header h3 {
+  margin: 0 !important;
+  font-size: 16px !important;
+  color: #eee !important;
+}
+
+#sfd-inspector-close {
+  background: transparent !important;
+  border: none !important;
+  color: #aaa !important;
+  font-size: 18px !important;
+  cursor: pointer !important;
+  padding: 0 4px !important;
+}
+
+#sfd-inspector-close:hover {
+  color: #fff !important;
+}
+
+.sfd-field {
+  margin-bottom: 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.sfd-field label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  color: #aaa !important;
+}
+
+.sfd-field select,
+.sfd-field input[type="text"] {
+  background-color: #1a1a2a !important;
+  color: #eee !important;
+  border: 1px solid #444 !important;
+  border-radius: 4px !important;
+  padding: 6px 8px !important;
+  font-size: 12px !important;
+  font-family: "SF Mono", Consolas, Menlo, monospace !important;
+}
+
+.sfd-field select:focus,
+.sfd-field input[type="text"]:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px #0d9488 !important;
+}
+
+.sfd-field-help {
+  font-size: 11px !important;
+  color: #aaa !important;
+  margin: 0 !important;
+}
+
+.sfd-segmented {
+  display: inline-flex !important;
+  border: 1px solid #444 !important;
+  border-radius: 4px !important;
+  overflow: hidden !important;
+}
+
+.sfd-segmented button {
+  background-color: #1a1a2a !important;
+  color: #eee !important;
+  border: none !important;
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+  cursor: pointer !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.sfd-segmented button[data-active="true"] {
+  background-color: #0d9488 !important;
+  color: #fff !important;
+}
+
+/* =========================================================================
+   SECTION 5 — Equipment picker modal
+   Analog: multitrack.css 568–757 (verbatim copy with namespace swap).
+   Single-pick (no checkboxes); light-themed modal card on dark backdrop.
+   ========================================================================= */
+
+.sfd-picker-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  z-index: 99999 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+/* Modal hidden by default; JS sets `display: flex` via setProperty 'important'. */
+
+.sfd-picker-panel {
+  width: 480px !important;
+  max-width: 95vw !important;
+  max-height: 85vh !important;
+  background-color: #ffffff !important;
+  border: 1px solid #ddd !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  color: #111 !important;
+}
+
+.sfd-picker-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid #eee !important;
+}
+
+.sfd-picker-title {
+  margin: 0 !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #111 !important;
+}
+
+.sfd-picker-close {
+  background: transparent !important;
+  border: none !important;
+  font-size: 20px !important;
+  cursor: pointer !important;
+  color: #666 !important;
+  padding: 0 4px !important;
+}
+
+.sfd-picker-close:hover {
+  color: #111 !important;
+}
+
+.sfd-picker-filter {
+  padding: 12px 20px !important;
+}
+
+.sfd-filter-input {
+  width: 100% !important;
+  padding: 8px 12px !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  box-sizing: border-box !important;
+}
+
+.sfd-filter-input:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px #0d9488 !important;
+  border-color: #0d9488 !important;
+}
+
+.sfd-tab-panel {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  padding: 0 20px 12px !important;
+}
+
+.sfd-pick-list {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-height: 320px !important;
+  overflow-y: auto !important;
+}
+
+.sfd-pick-row {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding: 8px 12px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+}
+
+.sfd-pick-row:hover {
+  background-color: #f5f5f5 !important;
+}
+
+.sfd-pick-row.is-highlighted {
+  background-color: #e8f7f5 !important;
+}
+
+.sfd-pick-name {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #111 !important;
+}
+
+.sfd-pick-detail {
+  font-size: 12px !important;
+  color: #666 !important;
+}
+
+.sfd-pick-empty {
+  padding: 24px 12px !important;
+  text-align: center !important;
+  color: #666 !important;
+  font-size: 13px !important;
+}
+
+.sfd-picker-footer {
+  padding: 12px 20px !important;
+  border-top: 1px solid #eee !important;
+  text-align: right !important;
+}
+
+.sfd-picker-footer button {
+  background-color: #f0f0f0 !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+  color: #111 !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.sfd-picker-footer button:hover {
+  background-color: #e0e0e0 !important;
+}
+
+/* =========================================================================
+   SECTION 6 — Toast
+   Analog: multitrack.css 1081–1111 (verbatim copy with namespace swap).
+   ========================================================================= */
+
+.sfd-toast {
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  padding: 12px 16px !important;
+  background-color: #1e1e3a !important;
+  border: 1px solid #2a2a4a !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+  color: #e0e0e0 !important;
+  font-size: 14px !important;
+  z-index: 100000 !important;
+  transition: opacity 300ms !important;
+  max-width: 480px !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.sfd-toast--success {
+  border-left: 3px solid #00ff88 !important;
+}
+
+.sfd-toast--error {
+  border-left: 3px solid #dc2626 !important;
+}
+
+.sfd-toast--info {
+  border-left: 3px solid #4a9eff !important;
+}
+
+.sfd-toast--hide {
+  opacity: 0 !important;
+}
+
+/* =========================================================================
+   SECTION 7 — JointJS port hover-reveal
+   RESEARCH §2 — ports are opacity:0 in shape definitions; reveal on element
+   hover or while a link is being dragged onto a target magnet.
+   ========================================================================= */
+
+.joint-paper .joint-element:hover .joint-port circle {
+  opacity: 1 !important;
+}
+
+.joint-paper .joint-port.is-link-target-magnet circle {
+  opacity: 1 !important;
+}
+
+/* =========================================================================
+   SECTION 8 — Selection visual
+   CONTEXT.md D-08 + RESEARCH §8 Open Risk #4 — JS toggles `is-selected` on
+   .joint-element via cellView.el.classList; multi-select adds a paper-level
+   <rect class="sfd-multi-bbox"> overlay.
+   ========================================================================= */
+
+.joint-element.is-selected [joint-selector="body"] {
+  stroke: #0d9488 !important;
+  stroke-width: 2.5 !important;
+}
+
+.joint-link.is-selected [joint-selector="line"] {
+  filter: drop-shadow(0 0 4px #0d9488);
+}
+
+.sfd-multi-bbox {
+  fill: none !important;
+  stroke: #0d9488 !important;
+  stroke-width: 2 !important;
+  stroke-dasharray: 6 4 !important;
+  pointer-events: none !important;
+}
+
+/* =========================================================================
+   SECTION 9 — Empty canvas hint
+   UI-SPEC § Empty Paper Hint — single SVG <text> centered on blank canvas.
+   ========================================================================= */
+
+.sfd-empty-hint {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 13px !important;
+  fill: #999 !important;
+  pointer-events: none !important;
+}
