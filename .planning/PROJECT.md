@@ -31,6 +31,8 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - [x] Channel record defaults — `default_record` + `default_record_color` seed flags on `ConsoleChannel` (Phase 5, 2026-05-14)
 - [x] Trusted Crew Rosters — owner-defined named groups, bulk-add with pre-onboarding email invites, auto-claim on register (Phase 6 / v2.1, 2026-05-15)
 - [x] Signal Flow Diagrammer foundation — `SignalFlowDiagram` model, CRUD views, editor HTML shell with vendored JointJS 4.2.4 (Phase 7 / v2.2, 2026-05-20)
+- [x] Signal Flow Diagrammer canvas — JointJS paper + shape picker + connector smart-routing + manual save flow + selection/undo (Phase 8 / v2.2, 2026-05-21)
+- [x] Signal Flow Diagrammer autosave & orphan rendering — debounced JSON autosave with optimistic-locked `If-Match` 409 path, three-state status indicator, keepalive flush on unload, server-side `_enrich_nodes()` for label propagation + ghosted orphan rendering, node-mode inspector with Re-link/Delete (Phase 9 / v2.2, 2026-05-22)
 
 ### Active
 
@@ -118,4 +120,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-20 — v2.2 Phase 7 shipped (Foundation, CRUD & Editor Shell). `SignalFlowDiagram` model + 0158 migration + admin on showstack_admin_site, 9 views + 9 URLs with project-scoped IDOR guards, `joint.min.js` (MPL-2.0) + `html-to-image.min.js` (MIT) vendored, list page + editor HTML shell + dashboard quick-action. Browser smoke test approved 2026-05-20 (console: `[SFD] JointJS ready — version 4.2.4`). 19/19 must-haves verified. DGM-01..05 + DGM-08 closed. Phase 8 (Canvas, Smart Shapes & Connectors) is next.*
+*Last updated: 2026-05-22 — v2.2 Phase 9 shipped (Autosave & Orphan Rendering). Server: `_enrich_nodes()` + atomic If-Match optimistic-lock UPDATE + 12-test suite. JS: `flushAutosave`/`scheduleAutosave`/`showConflictBanner`/`maybeKeepaliveFlush` controller (1500ms debounce, three-state status with locked copy, keepalive on visibilitychange + pagehide) + `applyOrphanState`/`setInspectorMode` for ghost rendering and node-mode Re-link/Delete. Browser UAT approved 2026-05-22 — all 5 success criteria pass. 13/13 must-haves verified. DGM-06, DGM-07, DGM-08, SHP-06, SHP-07 closed. Code review surfaced 4 advisory warnings (no critical). Phase 9 = last phase of milestone v2.2; milestone marked complete.*
