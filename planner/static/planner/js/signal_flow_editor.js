@@ -1561,7 +1561,7 @@
     if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
     if (!diagramDirty) return Promise.resolve();
     if (conflicted)    return Promise.resolve();
-    if (savingNow && !opts.force) return Promise.resolve();
+    if (savingNow) return Promise.resolve();
 
     savingNow = true;
     setSaveStatus('saving');
