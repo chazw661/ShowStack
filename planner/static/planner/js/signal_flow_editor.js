@@ -1723,6 +1723,5 @@
   // future caller can force an immediate save.
   window.__sfd.save = function () { return flushAutosave({ force: true }); };
 
-  // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
 })();
