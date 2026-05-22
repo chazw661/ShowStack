@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: — Collaboration & User Management
+milestone: v2.2
+milestone_name: Signal Flow Diagrammer
 status: milestone_complete
 stopped_at: Phase 9 context gathered
 last_updated: "2026-05-22T01:35:41.679Z"
@@ -82,3 +82,21 @@ Stopped at: Phase 9 context gathered
 Resume file: --resume-file
 
 **Planned Phase:** 9 (Autosave & Orphan Rendering) — 4 plans — 2026-05-22T00:44:34.227Z
+
+## Deferred Items
+
+Acknowledged at v2.2 milestone close on 2026-05-22. All from pre-v2.2 phases that were
+already de-facto shipped; deferred rather than reopened because resolution would not
+change shipped behavior. Tracked here so future audits do not re-surface as blockers.
+
+| Category | Phase | Item | Status | Note |
+|----------|-------|------|--------|------|
+| UAT gap | 01 | 01-HUMAN-UAT.md | passed (0 pending) | False positive — UAT closed |
+| UAT gap | 03 | 03-HUMAN-UAT.md | resolved (0 pending) | False positive — UAT closed |
+| UAT gap | 04 | 04-HUMAN-UAT.md | resolved (0 pending) | False positive — UAT closed |
+| UAT gap | 06 | 06-HUMAN-UAT.md | partial (6 pending) | Crew Rosters — shipped in beta, scenarios deferred |
+| UAT gap | 08 | 08-HUMAN-UAT.md | resolved (0 pending) | False positive — UAT closed |
+| Verification gap | 01 | 01-VERIFICATION.md | human_needed | Carried from v2.0 |
+| Verification gap | 03 | 03-VERIFICATION.md | human_needed | Carried from v2.0 |
+| Verification gap | 05 | 05-VERIFICATION.md | human_needed | Carried from v2.0 |
+| Verification gap | 06 | 06-VERIFICATION.md | human_needed | Carried from v2.1 |

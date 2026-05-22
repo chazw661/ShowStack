@@ -46,33 +46,27 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 - Network monitoring inside ShowStack — moved to a standalone-app architecture (v1.0 scrapped)
 - Replacing vendor tools that already work well (Dante Controller, LA Network Manager, Studio Manager) — ShowStack feeds them, doesn't replace them
 
-## Current Milestone: v2.2 Signal Flow Diagrammer
+## Current State
 
-**Goal:** ShowStack engineers can draw, save, and share project-scoped signal-flow diagrams using smart shapes that link to live ShowStack equipment records, with connector styles matched to signal type and circuit labels pulled from existing `signal_name` fields.
+**Latest shipped:** v2.2 Signal Flow Diagrammer — 2026-05-22 (Phases 7, 8, 9)
 
-**Target features (module-MVP scope):**
-- Drag-and-drop canvas powered by **JointJS core** (vanilla JS, MPL-2.0) — matches ShowStack's no-framework frontend
-- `SignalFlowDiagram` model, project-scoped via `CurrentProjectMiddleware`
-- Many diagrams per project (list page + name + delete)
-- Smart shapes for `Console` / `Device` / `SpeakerArray` / `CommBeltPack` + a generic shape for gear not in ShowStack
-- Nodes carry `(content_type, object_id)` → live link to ShowStack record; label propagates on rename, soft-fail render if the linked record is deleted
-- Orthogonal cable connectors with line-style variants: analog / AES / Dante / MADI / intercom
-- Circuit-label autocomplete sourced from existing signal-name fields (`ConsoleInput`, `DeviceInput/Output`, etc.)
-- JSON autosave (blob on the model row)
-- PNG export
+ShowStack engineers can draw project-scoped signal-flow diagrams on a live JointJS canvas with smart shapes linked to Console / Device / SpeakerArray / CommBeltPack records, typed orthogonal connectors (analog / AES / Dante / MADI / intercom with distinct line styles + dash patterns for grayscale print), and the full canvas UX (pan / zoom / snap / undo / multi-select / keyboard delete / viewport restore). Edits persist via debounced 1500 ms autosave with `If-Match` optimistic-lock conflict handling — multi-tab conflicts reveal a locked-copy banner with hard reload; tab-close edits flush via `keepalive`. Equipment renames propagate on next diagram load via server-side `_enrich_nodes()`; deleted equipment renders ghosted with a node-mode inspector offering Re-link or Delete.
 
-**Source-of-truth spec:** issue #13 + `.planning/research/SUMMARY.md` (generated this milestone).
+**Archived milestones (full detail):**
+- [v2.2 Signal Flow Diagrammer](./milestones/v2.2-ROADMAP.md) — Phases 7–9, shipped 2026-05-22
+- v2.1 Collaboration & User Management — Phase 6 Trusted Crew Rosters, shipped 2026-05-15 _(pre-dates milestone-close workflow; no archive file)_
+- v2.0 Multitrack Session Builder — Phases 1–5, shipped 2026-05-14 _(pre-dates milestone-close workflow; no archive file)_
 
-**Out of scope for v2.2 (carry to v2.3+):**
-- Obstacle-aware orthogonal auto-routing (v2.2 hand-rolls basic routing)
-- Custom rack-unit SVG equipment faceplates
-- PDF / SVG export, version snapshots
-- Mobile `/m/` viewer
-- Real-time multi-user editing
+## Next Milestone Goals
 
-**Previous milestones (closed):**
-- v2.0 Multitrack Session Builder (Phases 1–5) — shipped 2026-05-14
-- v2.1 Collaboration & User Management (Phase 6, Trusted Crew Rosters) — shipped 2026-05-15
+**v2.3 — not yet planned.** Run `/gsd-new-milestone` to scope it.
+
+**Top candidate for the v2.3 opening phase (carried forward from v2.2 deferred scope):**
+- **Autocomplete & PNG Export** _(was v2.2 Phase 10, never started)_ — Circuit-label autocomplete from signal-name fields (`DeviceInput.signal_name`, `DeviceOutput.signal_name`, `ConsoleInput.source`, `ConsoleAuxOutput.name`) + JS autocomplete widget + one-click PNG export via the already-vendored `html-to-image` (Phase 7 vendor bundle). Closes LBL-01, LBL-02, LBL-03, EXP-01.
+
+**v2.2 advisory items worth closing in v2.3 polish:**
+- Pre-v2.2 carried UAT/verification gaps from phases 1, 3, 5, 6 (see STATE.md `## Deferred Items`). Phase 6 has 6 pending UAT scenarios; the rest are status-only false positives that should be cleaned up.
+- Multi-line `{# … #}` Django comment audit was project-wide during v2.2 close — `feedback_django_multiline_template_comments.md` memory locked in to prevent recurrence.
 
 ## Context
 
@@ -120,4 +114,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-22 — v2.2 Phase 9 shipped (Autosave & Orphan Rendering). Server: `_enrich_nodes()` + atomic If-Match optimistic-lock UPDATE + 12-test suite. JS: `flushAutosave`/`scheduleAutosave`/`showConflictBanner`/`maybeKeepaliveFlush` controller (1500ms debounce, three-state status with locked copy, keepalive on visibilitychange + pagehide) + `applyOrphanState`/`setInspectorMode` for ghost rendering and node-mode Re-link/Delete. Browser UAT approved 2026-05-22 — all 5 success criteria pass. 13/13 must-haves verified. DGM-06, DGM-07, DGM-08, SHP-06, SHP-07 closed. Code review surfaced 4 advisory warnings (no critical). Phase 9 = last phase of milestone v2.2; milestone marked complete.*
+*Last updated: 2026-05-22 — Milestone v2.2 Signal Flow Diagrammer closed via `/gsd-complete-milestone`. v2.2 archive: `.planning/milestones/v2.2-ROADMAP.md` + `.planning/milestones/v2.2-REQUIREMENTS.md`. 31 / 35 v2.2 requirements shipped (89%); LBL-01..03 + EXP-01 (Phase 10 — Autocomplete & PNG Export) carried forward to v2.3. Git tag `v2.2` created at HEAD. ROADMAP.md collapsed to milestone index; fresh REQUIREMENTS.md to be created via `/gsd-new-milestone`.*
