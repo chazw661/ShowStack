@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Collaboration & User Management
-status: completed
+status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-05-21T21:47:18.969Z"
-last_activity: 2026-05-21
+last_updated: "2026-05-22T01:35:41.679Z"
+last_activity: 2026-05-22 -- Phase 09 execution started
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 42
+  total_plans: 46
   completed_plans: 42
-  percent: 100
+  percent: 91
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 8 — Canvas, Smart Shapes & Connectors
+**Current focus:** Phase 09 — autosave-orphan-rendering
 
 ## Current Position
 
-Phase: 8
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-21
+Phase: 09 (autosave-orphan-rendering) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 09
+Last activity: 2026-05-22 -- Phase 09 execution started
 
 Progress: [          ] 0% (v2.2 scope only)
 
@@ -81,4 +81,4 @@ Last session: --stopped-at
 Stopped at: Phase 9 context gathered
 Resume file: --resume-file
 
-**Planned Phase:** 8 (Canvas, Smart Shapes & Connectors) — 6 plans — 2026-05-20T23:48:09.819Z
+**Planned Phase:** 9 (Autosave & Orphan Rendering) — 4 plans — 2026-05-22T00:44:34.227Z
