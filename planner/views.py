@@ -6,7 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
-from django.db.models import Max
+from django.db.models import Max, F
+from django.utils import timezone
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from datetime import datetime, date
@@ -7525,18 +7526,93 @@ def signal_flow_delete(request, diagram_id):
 
 # ── Stub endpoints (filled in Phase 8-10) ──────────────────────────────────
 
+def _enrich_nodes(canvas_state, project):
+    """Refresh GFK-linked cell labels and flag missing equipment as orphans.
+
+    Phase 9 D-12: GET-only enrichment. Deep-copies the input — never mutates
+    the persisted blob.
+    Phase 9 D-13: One SELECT per content type. SpeakerArray scopes via
+    `prediction__project`; others via `project` (same predicate as the IDOR
+    walk at signal_flow_autosave).
+    Phase 9 D-14: Live ref  -> isOrphan = False, savedLabel + attrs.label.text = live name
+                  Missing   -> isOrphan = True,  savedLabel + label.text untouched
+                  Non-linked cells (Generic, connectors) untouched.
+    Never raises on missing CT -> treated as orphan.
+    """
+    import copy
+    from collections import defaultdict
+    from django.contrib.contenttypes.models import ContentType
+
+    if not isinstance(canvas_state, dict):
+        return canvas_state
+    result = copy.deepcopy(canvas_state)
+    cells = result.get('cells') or []
+
+    # 1) Group (ct_id, obj_id) pairs by content_type.
+    by_ct = defaultdict(set)
+    for cell in cells:
+        prop = cell.get('showstack') if isinstance(cell, dict) else None
+        if not isinstance(prop, dict):
+            continue
+        ct_id, obj_id = prop.get('contentTypeId'), prop.get('objectId')
+        if ct_id and obj_id:
+            by_ct[ct_id].add(obj_id)
+
+    # 2) Bulk SELECT per content type — IDOR-scoped (PITFALLS.md §4 + views.py:7587-7624).
+    resolved = {}  # {(ct_id, obj_id): name}
+    for ct_id, obj_ids in by_ct.items():
+        ct = ContentType.objects.filter(id=ct_id).first()
+        if not ct:
+            continue  # unknown CT — every cell with this ct_id becomes orphan
+        Model = ct.model_class()
+        if Model is None:
+            continue
+        model_name = Model.__name__
+        if model_name == 'SpeakerArray':
+            qs = Model.objects.filter(id__in=obj_ids, prediction__project=project)
+        elif hasattr(Model, 'project') or model_name in ('Console', 'Device', 'CommBeltPack'):
+            qs = Model.objects.filter(id__in=obj_ids, project=project)
+        else:
+            continue  # no project scope -> every cell with this ct_id becomes orphan
+        for row_id, row_name in qs.values_list('id', 'name'):
+            resolved[(ct_id, row_id)] = row_name
+
+    # 3) Second pass — mutate each linked cell (D-14).
+    for cell in cells:
+        prop = cell.get('showstack') if isinstance(cell, dict) else None
+        if not isinstance(prop, dict):
+            continue
+        ct_id, obj_id = prop.get('contentTypeId'), prop.get('objectId')
+        if not ct_id or not obj_id:
+            continue
+        name = resolved.get((ct_id, obj_id))
+        if name is not None:
+            prop['isOrphan'] = False
+            prop['savedLabel'] = name
+            attrs = cell.setdefault('attrs', {})
+            label = attrs.setdefault('label', {})
+            label['text'] = name
+        else:
+            prop['isOrphan'] = True
+            # savedLabel + attrs.label.text intentionally untouched (D-14)
+
+    return result
+
+
 @staff_member_required
 def signal_flow_state(request, diagram_id):
-    """GET — return canvas_state JSON (Phase 7 stub; no _enrich_nodes yet).
+    """GET — return enriched canvas_state JSON (Phase 9: SHP-06 + SHP-07).
 
-    Phase 9 will enrich nodes for orphan rendering. Today this returns the
-    raw blob plus the optimistic-locking version token.
+    Phase 9 D-12: enriches linked cell labels from live equipment records
+    and flags missing refs as orphans. The persisted blob is never mutated;
+    callers receive a deep-copied + mutated view.
     """
     diagram = _get_diagram_for_request(request, diagram_id)
     if not diagram:
         return JsonResponse({'error': 'Not found'}, status=404)
+    enriched = _enrich_nodes(diagram.canvas_state or {}, request.current_project)
     return JsonResponse({
-        'canvas_state': diagram.canvas_state,
+        'canvas_state': enriched,
         'viewport': diagram.viewport,
         'version': diagram.version,
     })
