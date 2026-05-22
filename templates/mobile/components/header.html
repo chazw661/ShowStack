@@ -1,17 +1,17 @@
 {# templates/mobile/components/header.html #}
-{# 
-   Reusable mobile header component
-   
-   Usage:
-   {% include 'mobile/components/header.html' with title="Page Title" show_back=True back_url="/m/" %}
-   
-   Parameters:
-   - title: Header title text
-   - show_back: Boolean to show back button
-   - back_url: URL for back button (default: mobile:dashboard)
-   - show_logo: Boolean to show ShowStack logo instead of back button
-   - right_icon: Optional right side icon (logout, settings, etc.)
-#}
+{% comment %}
+  Reusable mobile header component
+
+  Usage:
+  {% include 'mobile/components/header.html' with title="Page Title" show_back=True back_url="/m/" %}
+
+  Parameters:
+  - title: Header title text
+  - show_back: Boolean to show back button
+  - back_url: URL for back button (default: mobile:dashboard)
+  - show_logo: Boolean to show ShowStack logo instead of back button
+  - right_icon: Optional right side icon (logout, settings, etc.)
+{% endcomment %}
 
 <header class="mobile-header">
     <div class="header-left">
