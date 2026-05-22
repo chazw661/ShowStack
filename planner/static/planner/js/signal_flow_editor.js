@@ -849,6 +849,7 @@
   document.addEventListener('keydown', function (evt) {
     if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
     if (pickerState && pickerState.open) return;
+    if (conflicted) return;   // Phase 9 D-08 — banner is showing
     var meta = evt.ctrlKey || evt.metaKey;
     if (!meta) return;
     var key = evt.key.toLowerCase();
@@ -1000,6 +1001,7 @@
   document.addEventListener('keydown', function (evt) {
     if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
     if (pickerState && pickerState.open) return;
+    if (conflicted) return;   // Phase 9 D-08 — banner is showing
     if (evt.key === 'Delete' || evt.key === 'Backspace') {
       var ids = Array.from(selectedSet);
       if (!ids.length) return;
@@ -1247,6 +1249,7 @@
     signalTypeSelect.addEventListener('change', function () {
       if (!inspectorCurrentLink) return;
       applySignalType(inspectorCurrentLink, signalTypeSelect.value);
+      scheduleAutosave();   // Phase 9 D-01 — inspector mutation triggers autosave
     });
   }
 
@@ -1256,6 +1259,7 @@
       applyDirection(inspectorCurrentLink, 'forward');
       dirForwardBtn.setAttribute('data-active', 'true');
       dirBidirBtn.setAttribute('data-active', 'false');
+      scheduleAutosave();   // Phase 9 D-01
     });
   }
   if (dirBidirBtn) {
@@ -1264,6 +1268,7 @@
       applyDirection(inspectorCurrentLink, 'bidirectional');
       dirForwardBtn.setAttribute('data-active', 'false');
       dirBidirBtn.setAttribute('data-active', 'true');
+      scheduleAutosave();   // Phase 9 D-01
     });
   }
 
@@ -1280,11 +1285,13 @@
       circuitLabelTimer = setTimeout(function () {
         circuitLabelTimer = null;
         if (snapshot) applyCircuitLabel(snapshot, circuitLabelInput.value);
+        scheduleAutosave();   // Phase 9 D-01 — 1500ms autosave debounce coalesces keystrokes
       }, 200);
     });
     circuitLabelInput.addEventListener('blur', function () {
       if (circuitLabelTimer) { clearTimeout(circuitLabelTimer); circuitLabelTimer = null; }
       if (inspectorCurrentLink) applyCircuitLabel(inspectorCurrentLink, circuitLabelInput.value);
+      scheduleAutosave();   // Phase 9 D-01
     });
   }
 
@@ -1304,18 +1311,36 @@
   hideInspector();
 
   // ──────────────────────────────────────────────────────────────
-  // Plan 06 — Manual Save flow.
-  // Phase 8 ships the manual button only; Phase 9 will add debounced
-  // autosave on graph events + keepalive on pagehide + 409 conflict.
-  // CONTEXT "Save trigger", RESEARCH §19, UI-SPEC "Save status" copy.
+  // Phase 9 — Autosave controller.
+  // Replaces the Phase 8 manual-save flow. The #sfd-save button
+  // was removed by template plan 09-02; #sfd-save-status is now the
+  // only persistence affordance (clickable in the 'error' state).
+  //
+  //   D-01: graph events trigger; mid-drag positions do not
+  //   D-02: 1500ms trailing debounce
+  //   D-03: clickable status span retries on error
+  //   D-04: locked three-state copy
+  //   D-05: If-Match: <currentVersion> on every full save
+  //   D-06: server returns 409 on stale version
+  //   D-08: 409 -> reveal banner + lock canvas + cancel debounce
+  //   D-09/D-10/D-11: keepalive flush on visibilitychange + pagehide
   // ──────────────────────────────────────────────────────────────
 
-  var saveBtn       = document.getElementById('sfd-save');
-  var saveStatusEl  = document.getElementById('sfd-save-status');
-  var savingNow     = false;   // re-entrancy + double-submit guard (T-08-44)
+  var saveStatusEl       = document.getElementById('sfd-save-status');
+  var conflictBannerEl   = document.getElementById('sfd-conflict-banner');
+  var conflictReloadBtn  = document.getElementById('sfd-conflict-reload');
 
+  var diagramDirty        = false;
+  var savingNow           = false;   // in-flight POST guard
+  var conflicted          = false;   // 409 lockout — true freezes all save paths
+  var autosaveTimer       = null;
+  var lastFailedPayload   = null;    // for the clickable-retry path (D-03)
+
+  // D-04 — locked three-state copy. Do NOT paraphrase. Punctuation matters:
+  //   'All changes saved.' has a trailing period.
+  //   'Saving…' uses U+2026 (single ellipsis char), NOT three dots.
+  //   'Save failed — retry' uses U+2014 em-dash, NOT a hyphen.
   function setSaveStatus(state) {
-    // state: 'saved' | 'saving' | 'error'
     if (!saveStatusEl) return;
     saveStatusEl.classList.remove('is-saving', 'is-error');
     if (state === 'saved') {
@@ -1329,71 +1354,144 @@
     }
   }
 
-  function doSave() {
-    if (savingNow) return;
+  function scheduleAutosave() {
+    if (conflicted) return;
+    diagramDirty = true;
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(flushAutosave, 1500);   // D-02
+  }
+
+  function flushAutosave(opts) {
+    opts = opts || {};
+    if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    if (!diagramDirty) return Promise.resolve();
+    if (conflicted)    return Promise.resolve();
+    if (savingNow && !opts.force) return Promise.resolve();
+
     savingNow = true;
     setSaveStatus('saving');
-    if (saveBtn) saveBtn.setAttribute('disabled', '');
 
-    // graph.toJSON() returns { cells: [...] }; each cell carries its full attributes
-    // object, including showstack/* GFK props (set via link.prop('showstack/X', ...)).
-    // Plan 01 server walks each cell.showstack sub-object for IDOR validation.
-    var canvasState = graph.toJSON();
-
-    var payload = {
-      canvas_state: canvasState,
+    var payloadObj = {
+      canvas_state: graph.toJSON(),
       viewport: {
         x: currentViewport.x,
         y: currentViewport.y,
         scale: currentViewport.scale,
         snapEnabled: currentViewport.snapEnabled,
       },
-      // Phase 9 will add: version: currentVersion (for If-Match optimistic lock).
-      // Phase 8 ships without the conflict check — currentVersion is still tracked
-      // server-side so we can wire that header without code surgery later.
     };
 
-    postJSON(autosaveUrl, payload)
-      .then(function (resp) {
-        savingNow = false;
-        if (saveBtn) saveBtn.removeAttribute('disabled');
-        if (resp.status === 200 && resp.data && resp.data.ok) {
-          // Track server-bumped version so Phase 9 can send it as If-Match.
-          currentVersion = resp.data.version || (currentVersion + 1);
-          setSaveStatus('saved');
-          return;
-        }
-        // Specific 422 — equipment ref out of project (IDOR rejection, T-08-42).
-        if (resp.status === 422) {
-          setSaveStatus('error');
-          showToast(resp.data && resp.data.error
-            ? resp.data.error
-            : "Couldn't save — equipment reference is out of project.", 'error');
-          return;
-        }
-        // Generic failure (403 Viewer block, 400 malformed, 500 etc.)
-        setSaveStatus('error');
-        showToast((resp.data && resp.data.error) || 'Save failed. Please try again.', 'error');
-      })
-      .catch(function () {
-        savingNow = false;
-        if (saveBtn) saveBtn.removeAttribute('disabled');
-        setSaveStatus('error');
-        showToast('Network error. Try again.', 'error');
+    var fetchOpts = {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken(),
+        'If-Match': String(currentVersion),   // D-05
+      },
+      body: JSON.stringify(payloadObj),
+    };
+    if (opts.keepalive) fetchOpts.keepalive = true;   // D-10
+
+    return fetch(autosaveUrl, fetchOpts).then(function (r) {
+      return r.json().then(function (data) {
+        return { status: r.status, data: data };
+      }).catch(function () {
+        // Body was not JSON — synthesize an empty data object.
+        return { status: r.status, data: {} };
       });
+    }).then(function (resp) {
+      if (resp.status === 200 && resp.data && resp.data.ok) {
+        currentVersion    = resp.data.version || (currentVersion + 1);
+        diagramDirty      = false;
+        savingNow         = false;
+        lastFailedPayload = null;
+        setSaveStatus('saved');
+        return;
+      }
+      if (resp.status === 409) {
+        // D-06 / D-08 — version conflict OR missing/invalid If-Match.
+        savingNow = false;
+        showConflictBanner();
+        return;
+      }
+      if (resp.status === 422) {
+        savingNow = false;
+        lastFailedPayload = payloadObj;
+        setSaveStatus('error');
+        showToast(resp.data && resp.data.error
+          ? resp.data.error
+          : "Couldn't save — equipment reference is out of project.", 'error');
+        return;
+      }
+      // Generic failure (403 Viewer block, 400 malformed, 500, etc.)
+      savingNow = false;
+      lastFailedPayload = payloadObj;
+      setSaveStatus('error');
+      showToast((resp.data && resp.data.error) || 'Save failed. Please try again.', 'error');
+    }).catch(function () {
+      // Network error
+      savingNow = false;
+      lastFailedPayload = payloadObj;
+      setSaveStatus('error');
+      showToast('Network error. Try again.', 'error');
+    });
   }
 
-  if (saveBtn) {
-    saveBtn.addEventListener('click', doSave);
+  // D-03 — clickable status span retries the last failed save.
+  if (saveStatusEl) {
+    saveStatusEl.addEventListener('click', function () {
+      if (!saveStatusEl.classList.contains('is-error')) return;
+      diagramDirty = true;   // re-arm
+      flushAutosave({ force: true });
+    });
   }
 
-  // Normalize initial state — after page render, before user interaction.
-  // The template renders "All changes saved." but a previous render path could
-  // leave a stale 'is-saving' or 'is-error' class on the span.
+  // D-07 / D-08 — 409 banner reveal + canvas lock + debounce cancel.
+  function showConflictBanner() {
+    conflicted = true;
+    if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    if (conflictBannerEl) {
+      conflictBannerEl.removeAttribute('hidden');
+      // CLAUDE.md override rule — admin-template DOM nodes need !important.
+      conflictBannerEl.style.setProperty('display', 'flex', 'important');
+    }
+    // Lock the canvas — pointer events off the JointJS paper. Toolbar
+    // zoom/pan/snap stay live for inspection (D-08).
+    if (paperEl) paperEl.style.setProperty('pointer-events', 'none', 'important');
+    // Persistent error chrome on the status span so the user knows their
+    // edits are not being saved.
+    setSaveStatus('error');
+  }
+  if (conflictReloadBtn) {
+    conflictReloadBtn.addEventListener('click', function () {
+      window.location.reload();
+    });
+  }
+
+  // D-01 — graph events that trigger autosave. Note: change:position is NOT
+  // listed here. Mid-drag position events are intentionally excluded
+  // (PITFALLS.md §6 "autosave flooding"); only the element:pointerup
+  // drag-end below fires the debounce for moves.
+  graph.on('add remove change:source change:target', scheduleAutosave);
+  paper.on('element:pointerup', scheduleAutosave);
+
+  // D-09 / D-10 / D-11 — keepalive flush on tab-hide / page-hide.
+  // We intentionally avoid the pre-unload event (browser cancels the fetch
+  //   — PITFALLS.md §3) and navigator.send_beacon (64 KB cap — PITFALLS.md §6).
+  function maybeKeepaliveFlush() {
+    if (!diagramDirty) return;
+    if (savingNow)     return;   // in-flight will land it
+    if (conflicted)    return;   // banner is showing
+    flushAutosave({ keepalive: true });
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') maybeKeepaliveFlush();
+  });
+  window.addEventListener('pagehide', maybeKeepaliveFlush);
+
+  // Normalize initial state — clean slate on every page render.
   setSaveStatus('saved');
-
-  // Expose save as an external trigger (e.g., future Cmd+S shortcut — not Phase 8 scope).
-  // The window.__sfd.save assignment is added to the handoff block below.
 
   // ──────────────────────────────────────────────────────────────
   // Handoff to plans 05 + 06 — single window-scoped attachment so
@@ -1426,9 +1524,9 @@
     clear: function () { selectedSet.clear(); redrawSelection(); },
     // onSelectionChanged hook — plan 06 sets this to drive inspector show/hide.
   };
-  // Plan 06 manual save handoff — external trigger for future Cmd+S shortcut
-  // and for Phase 9 autosave to call when forcing an immediate flush.
-  window.__sfd.save = doSave;
+  // Phase 9 manual-flush seam — Cmd+S shortcut (deferred to v2.3) or any
+  // future caller can force an immediate save.
+  window.__sfd.save = function () { return flushAutosave({ force: true }); };
 
   // Phase 9 will: autosave debounce on graph events, keepalive fetch on visibilitychange.
   // Phase 10 will: circuit-label autocomplete widget, PNG export button.
