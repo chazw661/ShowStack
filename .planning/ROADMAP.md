@@ -227,7 +227,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 - [x] 09-01-PLAN.md — Server: `_enrich_nodes()` helper, `signal_flow_state` enrichment, `signal_flow_autosave` If-Match + atomic version-pinned UPDATE, server test suite (Wave 1) — DGM-07, SHP-06, SHP-07
 - [x] 09-02-PLAN.md — Template + CSS: remove `#sfd-save`, add `#sfd-conflict-banner`, CSS section 10 (banner) + section 11 (orphan ghost) (Wave 1, parallel with 01) — DGM-06, DGM-07, SHP-07
-- [ ] 09-03-PLAN.md — JS autosave controller: 1500ms debounce + dirty flag + `If-Match` + three-state status + clickable retry + 409 reveal + `keepalive` flush on `visibilitychange`/`pagehide` (Wave 2, depends on 01+02) — DGM-06, DGM-07, DGM-08
+- [x] 09-03-PLAN.md — JS autosave controller: 1500ms debounce + dirty flag + `If-Match` + three-state status + clickable retry + 409 reveal + `keepalive` flush on `visibilitychange`/`pagehide` (Wave 2, depends on 01+02) — DGM-06, DGM-07, DGM-08
 - [ ] 09-04-PLAN.md — JS orphan render hook + node-mode inspector with Re-link/Delete + canvas lockout + human-verify checkpoint for all 5 success criteria (Wave 3, depends on 01+02+03) — SHP-06, SHP-07
 
 ### Phase 10: Autocomplete & PNG Export
