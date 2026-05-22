@@ -224,7 +224,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Engineer deletes a piece of linked equipment, then reloads the diagram; the affected shape renders ghosted (dashed border, muted style) with its last-known label preserved — the canvas does not crash
 
 **Note on DGM-08 overlap:** DGM-08 (keepalive on tab close) was seeded in Phase 7 as a URL/view stub but its behavioral requirement (the actual keepalive fetch) is delivered here in Phase 9 alongside the full autosave system.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 09-01-PLAN.md — Server: `_enrich_nodes()` helper, `signal_flow_state` enrichment, `signal_flow_autosave` If-Match + atomic version-pinned UPDATE, server test suite (Wave 1) — DGM-07, SHP-06, SHP-07
+- [ ] 09-02-PLAN.md — Template + CSS: remove `#sfd-save`, add `#sfd-conflict-banner`, CSS section 10 (banner) + section 11 (orphan ghost) (Wave 1, parallel with 01) — DGM-06, DGM-07, SHP-07
+- [ ] 09-03-PLAN.md — JS autosave controller: 1500ms debounce + dirty flag + `If-Match` + three-state status + clickable retry + 409 reveal + `keepalive` flush on `visibilitychange`/`pagehide` (Wave 2, depends on 01+02) — DGM-06, DGM-07, DGM-08
+- [ ] 09-04-PLAN.md — JS orphan render hook + node-mode inspector with Re-link/Delete + canvas lockout + human-verify checkpoint for all 5 success criteria (Wave 3, depends on 01+02+03) — SHP-06, SHP-07
 
 ### Phase 10: Autocomplete & PNG Export
 **Milestone**: v2.2 (Signal Flow Diagrammer)
@@ -256,5 +260,5 @@ v2.2 phases: 7 → 8 → 9 → 10
 | 6. Trusted Crew Rosters | v2.1 | 7/7 | Complete | 2026-05-15 |
 | 7. Foundation, CRUD & Editor Shell | v2.2 | 0/TBD | Not started | - |
 | 8. Canvas, Smart Shapes & Connectors | v2.2 | 6/6 | Complete    | 2026-05-21 |
-| 9. Autosave & Orphan Rendering | v2.2 | 0/TBD | Not started | - |
+| 9. Autosave & Orphan Rendering | v2.2 | 0/4 | Not started | - |
 | 10. Autocomplete & PNG Export | v2.2 | 0/TBD | Not started | - |
