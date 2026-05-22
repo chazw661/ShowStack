@@ -101,6 +101,8 @@
 
 #sfd-save-status.is-error {
   color: #dc2626 !important;
+  cursor: pointer !important;
+  text-decoration: underline !important;
 }
 
 #sfd-save-status.is-saving {
@@ -525,4 +527,70 @@
   font-size: 13px !important;
   fill: #999 !important;
   pointer-events: none !important;
+}
+
+/* =========================================================================
+   SECTION 10 — 409 Conflict banner (Phase 9 D-07)
+   Full-width red bar pinned below #sfd-toolbar, above #sfd-canvas-container.
+   Non-dismissable. Locked copy from DGM-07.
+   ========================================================================= */
+
+#sfd-conflict-banner {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  padding: 10px 16px !important;
+  border-bottom: 1px solid #991b1b !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+
+#sfd-conflict-banner[hidden] {
+  display: none !important;
+}
+
+.sfd-conflict-msg {
+  flex: 1 1 auto !important;
+}
+
+#sfd-conflict-reload {
+  background-color: #ffffff !important;
+  color: #dc2626 !important;
+  border: 1px solid #ffffff !important;
+  border-radius: 4px !important;
+  padding: 6px 14px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  font-family: inherit !important;
+}
+
+#sfd-conflict-reload:hover {
+  background-color: #fee2e2 !important;
+}
+
+/* =========================================================================
+   SECTION 11 — Orphan ghost render (Phase 9 D-15 + SHP-07)
+   JS (signal_flow_editor.js — wired by 09-04) toggles joint-orphan="true"
+   on each ghosted cell's root SVG <g>; these rules do the visual work.
+   Connectors attached to an orphan get joint-orphan-attached="true" set on
+   their own <g> to fade their stroke.
+   ========================================================================= */
+
+.joint-element[joint-orphan="true"] [joint-selector="body"],
+.joint-element[joint-orphan="true"] [joint-selector="band"] {
+  stroke: #888 !important;
+  stroke-dasharray: 4 3 !important;
+  fill-opacity: 0.4 !important;
+}
+
+.joint-element[joint-orphan="true"] [joint-selector="label"] {
+  fill: #555 !important;
+}
+
+.joint-link[joint-orphan-attached="true"] [joint-selector="line"] {
+  opacity: 0.5 !important;
 }
