@@ -7570,10 +7570,10 @@ def _enrich_nodes(canvas_state, project):
         model_name = Model.__name__
         if model_name == 'SpeakerArray':
             qs = Model.objects.filter(id__in=obj_ids, prediction__project=project)
-        elif hasattr(Model, 'project') or model_name in ('Console', 'Device', 'CommBeltPack'):
+        elif model_name in ('Console', 'Device', 'CommBeltPack'):
             qs = Model.objects.filter(id__in=obj_ids, project=project)
         else:
-            continue  # no project scope -> every cell with this ct_id becomes orphan
+            continue  # unknown model -> orphan (safe default)
         for row_id, row_name in qs.values_list('id', 'name'):
             resolved[(ct_id, row_id)] = row_name
 
@@ -7692,14 +7692,16 @@ def signal_flow_autosave(request, diagram_id):
             Model = ct.model_class()
             if Model is None:
                 return JsonResponse({'error': f'Content type {ct_id} not resolvable'}, status=422)
-            # IDOR — SpeakerArray uses prediction__project; others use project
-            # (PATTERNS.md risk #3). hasattr() catches future-added project FKs too.
+            # IDOR — SpeakerArray uses prediction__project; others use an explicit
+            # allowlist (PATTERNS.md risk #3). hasattr() is intentionally avoided:
+            # a future model with a non-FK 'project' attribute would silently pass
+            # the old guard and scope incorrectly or not at all.
             model_name = Model.__name__
             if model_name == 'SpeakerArray':
                 exists = Model.objects.filter(
                     id=obj_id, prediction__project=current_project,
                 ).exists()
-            elif hasattr(Model, 'project') or model_name in ('Console', 'Device', 'CommBeltPack'):
+            elif model_name in ('Console', 'Device', 'CommBeltPack'):
                 exists = Model.objects.filter(
                     id=obj_id, project=current_project,
                 ).exists()
