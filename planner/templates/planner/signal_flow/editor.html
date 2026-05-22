@@ -50,9 +50,17 @@
     </div>
     <span class="sfd-toolbar-spacer"></span>
     <div class="sfd-btn-group" data-group="persist">
-      <button type="button" id="sfd-save" aria-label="Save diagram">Save</button>
-      <span id="sfd-save-status">All changes saved.</span>
+      <span id="sfd-save-status" role="status" aria-live="polite">All changes saved.</span>
     </div>
+  </div>
+
+  {# Phase 9 DGM-07: full-width non-dismissable 409 conflict banner. Hidden on initial
+     load; revealed by signal_flow_editor.js when an autosave POST returns HTTP 409.
+     Locked copy from REQUIREMENTS.md DGM-07. The Reload button calls
+     window.location.reload(). #}
+  <div id="sfd-conflict-banner" role="alert" hidden>
+    <span class="sfd-conflict-msg">Diagram was modified elsewhere — reload to see latest.</span>
+    <button type="button" id="sfd-conflict-reload">Reload</button>
   </div>
 
   <div id="sfd-canvas-container">
