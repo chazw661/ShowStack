@@ -7621,18 +7621,19 @@ def signal_flow_state(request, diagram_id):
 @login_required
 @require_POST
 def signal_flow_autosave(request, diagram_id):
-    """POST: persist canvas_state + viewport, bump version. Phase 8 (simplified).
+    """Persist canvas_state + viewport with optimistic-lock conflict detection (DGM-07).
 
     Body shapes:
       - Full save:        {"canvas_state": {...}, "viewport": {...}}
       - Viewport-only:    {"viewport": {...}}  with ?viewport_only=1 query param
 
-    Phase 8 walks canvas_state.cells and rejects any (contentTypeId, objectId)
-    that doesn't belong to request.current_project (PITFALLS.md §4 baseline).
-    SpeakerArray scopes via prediction__project (no direct project FK).
+    Phase 9 If-Match: full canvas-state saves require the client to send the
+    version it loaded in the If-Match request header. Missing/stale header
+    returns 409. Viewport-only writes remain last-write-wins (D-05).
 
-    Phase 9 will add optimistic locking via If-Match version header + HTTP 409.
-    For now version bumps on every save unconditionally.
+    Phase 8 IDOR walk (views.py:7663-7700) stays verbatim — still rejects any
+    (contentTypeId, objectId) that doesn't belong to request.current_project.
+    SpeakerArray scopes via prediction__project (no direct project FK).
     """
     viewer_block = _signal_flow_viewer_block(request)
     if viewer_block is not None:
@@ -7654,6 +7655,17 @@ def signal_flow_autosave(request, diagram_id):
             diagram.viewport = viewport
             diagram.save(update_fields=['viewport', 'updated_at'])
             return JsonResponse({'ok': True, 'viewport_only': True})
+
+        # Phase 9 D-05: optimistic-lock header. FULL canvas-state saves require
+        # the client to advertise the version it loaded; missing or stale
+        # versions get 409. (Viewport-only writes above remain last-write-wins.)
+        if_match = request.headers.get('If-Match', '').strip()
+        if not if_match:
+            return JsonResponse({'error': 'version_required'}, status=409)
+        try:
+            loaded_version = int(if_match)
+        except ValueError:
+            return JsonResponse({'error': 'version_required'}, status=409)
 
         # Full canvas_state save
         canvas_state = payload.get('canvas_state') or {}
@@ -7699,12 +7711,33 @@ def signal_flow_autosave(request, diagram_id):
                     {'error': 'Equipment reference out of project'}, status=422,
                 )
 
-        diagram.canvas_state = canvas_state
-        if 'viewport' in payload and isinstance(payload['viewport'], dict):
-            diagram.viewport = payload['viewport']
-        diagram.version = (diagram.version or 1) + 1
-        diagram.save(update_fields=['canvas_state', 'viewport', 'version', 'updated_at'])
-        return JsonResponse({'ok': True, 'version': diagram.version})
+        # Phase 9 D-06: atomic version-pinned UPDATE. Cheaper than
+        # select_for_update() — single round-trip; on stale version the
+        # rowcount is 0 and we return 409 without touching the blob.
+        new_viewport = (
+            payload['viewport']
+            if 'viewport' in payload and isinstance(payload['viewport'], dict)
+            else diagram.viewport
+        )
+        with transaction.atomic():
+            rowcount = SignalFlowDiagram.objects.filter(
+                id=diagram.id, version=loaded_version,
+            ).update(
+                canvas_state=canvas_state,
+                viewport=new_viewport,
+                version=F('version') + 1,
+                updated_at=timezone.now(),
+            )
+        if rowcount == 0:
+            current = (
+                SignalFlowDiagram.objects.filter(id=diagram.id)
+                .values_list('version', flat=True).first()
+            )
+            return JsonResponse(
+                {'error': 'version_conflict', 'current_version': current},
+                status=409,
+            )
+        return JsonResponse({'ok': True, 'version': loaded_version + 1})
 
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Bad JSON'}, status=400)
