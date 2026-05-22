@@ -1678,7 +1678,11 @@
     if (!diagramDirty) return;
     if (savingNow)     return;   // in-flight will land it
     if (conflicted)    return;   // banner is showing
-    flushAutosave({ keepalive: true });
+    flushAutosave({ keepalive: true }).catch(function () {
+      // Keepalive fetch failed (network down on hide). Re-schedule a normal
+      // debounce so the next visible event gets another attempt.
+      scheduleAutosave();
+    });
   }
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') maybeKeepaliveFlush();
