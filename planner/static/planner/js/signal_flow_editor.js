@@ -494,11 +494,18 @@
     if (!node) return closeEquipmentPicker({ assigned: false });
 
     // GFK payload + label snapshot.
-    // Phase 9 will use savedLabel for orphan ghosting (SHP-07).
     node.prop('showstack/contentTypeId', rec.contentTypeId);
     node.prop('showstack/objectId', rec.id);
     node.prop('showstack/savedLabel', rec.name || '');
     node.attr('label/text', rec.name || '');
+
+    // Phase 9 — picker assigns a live record, so this cell is no longer an orphan.
+    node.prop('showstack/isOrphan', false);
+    applyOrphanState(node);              // clear joint-orphan attribute on the view
+    // Re-evaluate any link attached to this node — its attached-orphan attribute
+    // may need to clear (if both endpoints are now live).
+    graph.getConnectedLinks(node).forEach(applyAttachedOrphanState);
+    scheduleAutosave();                  // persist the new GFK + cleared orphan flag
 
     closeEquipmentPicker({ assigned: true });
   }
@@ -1182,6 +1189,84 @@
       var label = cell.prop('circuitLabel') || '';
       if (label) applyCircuitLabel(cell, label);
     }
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase 9 — Orphan ghost render hook (SHP-07, D-15).
+  // CSS work (Section 11 of signal_flow.css) is keyed on:
+  //   joint-orphan="true"          on the orphaned element's root <g>
+  //   joint-orphan-attached="true" on any link attached to an orphan
+  // The server's _enrich_nodes() (Phase 9 09-01) sets the cell.showstack.isOrphan
+  // boolean on every linked cell when state is fetched; this block syncs that
+  // model property to the DOM attribute.
+  // ──────────────────────────────────────────────────────────────
+
+  function applyOrphanState(cell) {
+    if (!cell || !cell.isElement || !cell.isElement()) return;
+    var view = paper.findViewByModel(cell);
+    if (!view || !view.el) return;
+    var sub = cell.prop('showstack') || {};
+    if (sub.isOrphan === true) {
+      view.el.setAttribute('joint-orphan', 'true');
+    } else {
+      view.el.removeAttribute('joint-orphan');
+    }
+  }
+
+  function isCellOrphan(cell) {
+    if (!cell) return false;
+    var sub = cell.prop('showstack') || {};
+    return sub.isOrphan === true;
+  }
+
+  function applyAttachedOrphanState(link) {
+    if (!link || !link.isLink || !link.isLink()) return;
+    var view = paper.findViewByModel(link);
+    if (!view || !view.el) return;
+    var src = link.getSourceElement();
+    var tgt = link.getTargetElement();
+    if (isCellOrphan(src) || isCellOrphan(tgt)) {
+      view.el.setAttribute('joint-orphan-attached', 'true');
+    } else {
+      view.el.removeAttribute('joint-orphan-attached');
+    }
+  }
+
+  // Initial load via fromJSON: views may not be rendered yet when the `add`
+  // event fires for each cell. Defer the attribute write to next tick so
+  // paper.findViewByModel() can find the rendered view.
+  function applyOrphanStateDeferred(cell) {
+    setTimeout(function () { applyOrphanState(cell); }, 0);
+  }
+  function applyAttachedOrphanStateDeferred(link) {
+    setTimeout(function () { applyAttachedOrphanState(link); }, 0);
+  }
+
+  graph.on('add', function (cell) {
+    if (cell.isElement && cell.isElement()) {
+      applyOrphanStateDeferred(cell);
+    } else if (cell.isLink && cell.isLink()) {
+      applyAttachedOrphanStateDeferred(cell);
+    }
+  });
+
+  // Re-link or server-enrich changes -> re-evaluate both the element AND every
+  // link attached to it (the attached-orphan visual must clear when the
+  // underlying element goes live again).
+  graph.on('change:showstack', function (cell) {
+    if (!cell) return;
+    if (cell.isElement && cell.isElement()) {
+      applyOrphanState(cell);
+      // Re-evaluate every link in the graph that has this cell as an endpoint.
+      graph.getConnectedLinks(cell).forEach(function (link) {
+        applyAttachedOrphanState(link);
+      });
+    }
+  });
+
+  // Link endpoint swaps -> re-evaluate the link's attached-orphan attribute.
+  graph.on('change:source change:target', function (cell) {
+    if (cell && cell.isLink && cell.isLink()) applyAttachedOrphanState(cell);
   });
 
   // ──────────────────────────────────────────────────────────────
