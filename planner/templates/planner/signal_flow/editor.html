@@ -54,10 +54,11 @@
     </div>
   </div>
 
-  {# Phase 9 DGM-07: full-width non-dismissable 409 conflict banner. Hidden on initial
-     load; revealed by signal_flow_editor.js when an autosave POST returns HTTP 409.
-     Locked copy from REQUIREMENTS.md DGM-07. The Reload button calls
-     window.location.reload(). #}
+  {% comment %}
+    Phase 9 DGM-07: full-width non-dismissable 409 conflict banner. Hidden on initial
+    load; revealed by signal_flow_editor.js when an autosave POST returns HTTP 409.
+    Locked copy from REQUIREMENTS.md DGM-07. The Reload button calls window.location.reload().
+  {% endcomment %}
   <div id="sfd-conflict-banner" role="alert" hidden>
     <span class="sfd-conflict-msg">Diagram was modified elsewhere — reload to see latest.</span>
     <button type="button" id="sfd-conflict-reload">Reload</button>
