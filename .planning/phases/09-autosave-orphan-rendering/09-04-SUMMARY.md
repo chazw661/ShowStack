@@ -45,7 +45,7 @@ metrics:
   tasks_total: 3
   files_modified: 1
 
-checkpoint_status: "Task 3 (human-verify) pending — code complete, awaiting browser verification"
+checkpoint_status: "Task 3 (human-verify) — APPROVED 2026-05-22 by Charlie; all 5 success criteria pass in browser"
 ---
 
 # Phase 09 Plan 04: Orphan Render Hook + Node-Mode Inspector Summary
@@ -56,7 +56,7 @@ checkpoint_status: "Task 3 (human-verify) pending — code complete, awaiting br
 
 - **Duration:** ~40 min
 - **Completed:** 2026-05-21
-- **Tasks:** 2 of 3 (Task 3 is checkpoint:human-verify — pending)
+- **Tasks:** 3 of 3 (Task 3 human-verify approved by Charlie 2026-05-22)
 - **Files modified:** 1 (planner/static/planner/js/signal_flow_editor.js)
 
 ## Accomplishments
@@ -88,11 +88,17 @@ checkpoint_status: "Task 3 (human-verify) pending — code complete, awaiting br
 |------|------|--------|-------|
 | 1 | applyOrphanState + graph.on change:showstack + assignPickerResult Phase 9 tail | f3f3183 | planner/static/planner/js/signal_flow_editor.js |
 | 2 | setInspectorMode + buildNodeModeBlock + Re-link/Delete UI | e1042c1 | planner/static/planner/js/signal_flow_editor.js |
-| 3 | Human verification (checkpoint) | PENDING | — |
+| 3 | Human verification (checkpoint) | APPROVED 2026-05-22 | — |
 
 ## Deviations from Plan
 
-None — plan executed exactly as written. All verbatim function bodies and literal strings from the plan spec were used without modification. Both `node -e` verification scripts pass. `node --check` confirms valid JS parse.
+None within the Phase 9 JS scope — plan executed exactly as written. All verbatim function bodies and literal strings from the plan spec were used without modification. Both `node -e` verification scripts pass. `node --check` confirms valid JS parse.
+
+**Adjacent template fix (post-UAT, off-plan)**
+
+During the human verification step, Charlie spotted stray Django template comment text leaking onto the rendered editor page. Root cause: multi-line `{# … #}` comments — Django's `{# #}` syntax is single-line only, so the comment body rendered as literal text. The Phase 9 conflict banner comment (introduced by 09-02) and the pre-existing equipment picker file-header comment were both affected.
+
+Fixed in commit `52fbc86` (signal_flow templates) and `6259eec` (mobile components, same class of bug found project-wide). Both rewrites use `{% comment %}…{% endcomment %}` blocks. Pure cosmetic — no behavior change.
 
 ## Threat Surface Scan
 
@@ -100,11 +106,17 @@ No new network endpoints. The Re-link button routes through `window.__sfd.openEq
 
 ## Known Stubs
 
-None. All functionality fully implemented. Ghost rendering, Re-link, and Delete are wired end-to-end. Pending only the human browser verification (Task 3 checkpoint).
+None. All functionality fully implemented. Ghost rendering, Re-link, and Delete are wired end-to-end.
 
-## Checkpoint Pending
+## Checkpoint Resolved
 
-Task 3 is a `checkpoint:human-verify` gate. Code is complete; the checkpoint covers all five Phase 9 success criteria (SC-1 through SC-5). See checkpoint details below.
+Task 3 (`checkpoint:human-verify`) **APPROVED 2026-05-22 by Charlie**. All five Phase 9 success criteria pass in browser:
+
+- ✅ SC-1: Autosave + three-state indicator
+- ✅ SC-2: 409 banner with locked copy + canvas lock
+- ✅ SC-3: Keepalive flush on pagehide + visibilitychange
+- ✅ SC-4: Label propagation on reload
+- ✅ SC-5: Ghost rendering + Re-link + Delete
 
 ## Self-Check: PASSED
 
