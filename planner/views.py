@@ -6,7 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
-from django.db.models import Max
+from django.db.models import Max, F
+from django.utils import timezone
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from datetime import datetime, date
@@ -7525,18 +7526,93 @@ def signal_flow_delete(request, diagram_id):
 
 # ── Stub endpoints (filled in Phase 8-10) ──────────────────────────────────
 
+def _enrich_nodes(canvas_state, project):
+    """Refresh GFK-linked cell labels and flag missing equipment as orphans.
+
+    Phase 9 D-12: GET-only enrichment. Deep-copies the input — never mutates
+    the persisted blob.
+    Phase 9 D-13: One SELECT per content type. SpeakerArray scopes via
+    `prediction__project`; others via `project` (same predicate as the IDOR
+    walk at signal_flow_autosave).
+    Phase 9 D-14: Live ref  -> isOrphan = False, savedLabel + attrs.label.text = live name
+                  Missing   -> isOrphan = True,  savedLabel + label.text untouched
+                  Non-linked cells (Generic, connectors) untouched.
+    Never raises on missing CT -> treated as orphan.
+    """
+    import copy
+    from collections import defaultdict
+    from django.contrib.contenttypes.models import ContentType
+
+    if not isinstance(canvas_state, dict):
+        return canvas_state
+    result = copy.deepcopy(canvas_state)
+    cells = result.get('cells') or []
+
+    # 1) Group (ct_id, obj_id) pairs by content_type.
+    by_ct = defaultdict(set)
+    for cell in cells:
+        prop = cell.get('showstack') if isinstance(cell, dict) else None
+        if not isinstance(prop, dict):
+            continue
+        ct_id, obj_id = prop.get('contentTypeId'), prop.get('objectId')
+        if ct_id and obj_id:
+            by_ct[ct_id].add(obj_id)
+
+    # 2) Bulk SELECT per content type — IDOR-scoped (PITFALLS.md §4 + views.py:7587-7624).
+    resolved = {}  # {(ct_id, obj_id): name}
+    for ct_id, obj_ids in by_ct.items():
+        ct = ContentType.objects.filter(id=ct_id).first()
+        if not ct:
+            continue  # unknown CT — every cell with this ct_id becomes orphan
+        Model = ct.model_class()
+        if Model is None:
+            continue
+        model_name = Model.__name__
+        if model_name == 'SpeakerArray':
+            qs = Model.objects.filter(id__in=obj_ids, prediction__project=project)
+        elif hasattr(Model, 'project') or model_name in ('Console', 'Device', 'CommBeltPack'):
+            qs = Model.objects.filter(id__in=obj_ids, project=project)
+        else:
+            continue  # no project scope -> every cell with this ct_id becomes orphan
+        for row_id, row_name in qs.values_list('id', 'name'):
+            resolved[(ct_id, row_id)] = row_name
+
+    # 3) Second pass — mutate each linked cell (D-14).
+    for cell in cells:
+        prop = cell.get('showstack') if isinstance(cell, dict) else None
+        if not isinstance(prop, dict):
+            continue
+        ct_id, obj_id = prop.get('contentTypeId'), prop.get('objectId')
+        if not ct_id or not obj_id:
+            continue
+        name = resolved.get((ct_id, obj_id))
+        if name is not None:
+            prop['isOrphan'] = False
+            prop['savedLabel'] = name
+            attrs = cell.setdefault('attrs', {})
+            label = attrs.setdefault('label', {})
+            label['text'] = name
+        else:
+            prop['isOrphan'] = True
+            # savedLabel + attrs.label.text intentionally untouched (D-14)
+
+    return result
+
+
 @staff_member_required
 def signal_flow_state(request, diagram_id):
-    """GET — return canvas_state JSON (Phase 7 stub; no _enrich_nodes yet).
+    """GET — return enriched canvas_state JSON (Phase 9: SHP-06 + SHP-07).
 
-    Phase 9 will enrich nodes for orphan rendering. Today this returns the
-    raw blob plus the optimistic-locking version token.
+    Phase 9 D-12: enriches linked cell labels from live equipment records
+    and flags missing refs as orphans. The persisted blob is never mutated;
+    callers receive a deep-copied + mutated view.
     """
     diagram = _get_diagram_for_request(request, diagram_id)
     if not diagram:
         return JsonResponse({'error': 'Not found'}, status=404)
+    enriched = _enrich_nodes(diagram.canvas_state or {}, request.current_project)
     return JsonResponse({
-        'canvas_state': diagram.canvas_state,
+        'canvas_state': enriched,
         'viewport': diagram.viewport,
         'version': diagram.version,
     })
@@ -7545,18 +7621,19 @@ def signal_flow_state(request, diagram_id):
 @login_required
 @require_POST
 def signal_flow_autosave(request, diagram_id):
-    """POST: persist canvas_state + viewport, bump version. Phase 8 (simplified).
+    """Persist canvas_state + viewport with optimistic-lock conflict detection (DGM-07).
 
     Body shapes:
       - Full save:        {"canvas_state": {...}, "viewport": {...}}
       - Viewport-only:    {"viewport": {...}}  with ?viewport_only=1 query param
 
-    Phase 8 walks canvas_state.cells and rejects any (contentTypeId, objectId)
-    that doesn't belong to request.current_project (PITFALLS.md §4 baseline).
-    SpeakerArray scopes via prediction__project (no direct project FK).
+    Phase 9 If-Match: full canvas-state saves require the client to send the
+    version it loaded in the If-Match request header. Missing/stale header
+    returns 409. Viewport-only writes remain last-write-wins (D-05).
 
-    Phase 9 will add optimistic locking via If-Match version header + HTTP 409.
-    For now version bumps on every save unconditionally.
+    Phase 8 IDOR walk (views.py:7663-7700) stays verbatim — still rejects any
+    (contentTypeId, objectId) that doesn't belong to request.current_project.
+    SpeakerArray scopes via prediction__project (no direct project FK).
     """
     viewer_block = _signal_flow_viewer_block(request)
     if viewer_block is not None:
@@ -7578,6 +7655,17 @@ def signal_flow_autosave(request, diagram_id):
             diagram.viewport = viewport
             diagram.save(update_fields=['viewport', 'updated_at'])
             return JsonResponse({'ok': True, 'viewport_only': True})
+
+        # Phase 9 D-05: optimistic-lock header. FULL canvas-state saves require
+        # the client to advertise the version it loaded; missing or stale
+        # versions get 409. (Viewport-only writes above remain last-write-wins.)
+        if_match = request.headers.get('If-Match', '').strip()
+        if not if_match:
+            return JsonResponse({'error': 'version_required'}, status=409)
+        try:
+            loaded_version = int(if_match)
+        except ValueError:
+            return JsonResponse({'error': 'version_required'}, status=409)
 
         # Full canvas_state save
         canvas_state = payload.get('canvas_state') or {}
@@ -7623,12 +7711,33 @@ def signal_flow_autosave(request, diagram_id):
                     {'error': 'Equipment reference out of project'}, status=422,
                 )
 
-        diagram.canvas_state = canvas_state
-        if 'viewport' in payload and isinstance(payload['viewport'], dict):
-            diagram.viewport = payload['viewport']
-        diagram.version = (diagram.version or 1) + 1
-        diagram.save(update_fields=['canvas_state', 'viewport', 'version', 'updated_at'])
-        return JsonResponse({'ok': True, 'version': diagram.version})
+        # Phase 9 D-06: atomic version-pinned UPDATE. Cheaper than
+        # select_for_update() — single round-trip; on stale version the
+        # rowcount is 0 and we return 409 without touching the blob.
+        new_viewport = (
+            payload['viewport']
+            if 'viewport' in payload and isinstance(payload['viewport'], dict)
+            else diagram.viewport
+        )
+        with transaction.atomic():
+            rowcount = SignalFlowDiagram.objects.filter(
+                id=diagram.id, version=loaded_version,
+            ).update(
+                canvas_state=canvas_state,
+                viewport=new_viewport,
+                version=F('version') + 1,
+                updated_at=timezone.now(),
+            )
+        if rowcount == 0:
+            current = (
+                SignalFlowDiagram.objects.filter(id=diagram.id)
+                .values_list('version', flat=True).first()
+            )
+            return JsonResponse(
+                {'error': 'version_conflict', 'current_version': current},
+                status=409,
+            )
+        return JsonResponse({'ok': True, 'version': loaded_version + 1})
 
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Bad JSON'}, status=400)
