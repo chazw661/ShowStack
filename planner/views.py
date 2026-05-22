@@ -7600,6 +7600,7 @@ def _enrich_nodes(canvas_state, project):
 
 
 @staff_member_required
+@require_GET
 def signal_flow_state(request, diagram_id):
     """GET — return enriched canvas_state JSON (Phase 9: SHP-06 + SHP-07).
 
