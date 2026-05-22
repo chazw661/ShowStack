@@ -494,11 +494,18 @@
     if (!node) return closeEquipmentPicker({ assigned: false });
 
     // GFK payload + label snapshot.
-    // Phase 9 will use savedLabel for orphan ghosting (SHP-07).
     node.prop('showstack/contentTypeId', rec.contentTypeId);
     node.prop('showstack/objectId', rec.id);
     node.prop('showstack/savedLabel', rec.name || '');
     node.attr('label/text', rec.name || '');
+
+    // Phase 9 — picker assigns a live record, so this cell is no longer an orphan.
+    node.prop('showstack/isOrphan', false);
+    applyOrphanState(node);              // clear joint-orphan attribute on the view
+    // Re-evaluate any link attached to this node — its attached-orphan attribute
+    // may need to clear (if both endpoints are now live).
+    graph.getConnectedLinks(node).forEach(applyAttachedOrphanState);
+    scheduleAutosave();                  // persist the new GFK + cleared orphan flag
 
     closeEquipmentPicker({ assigned: true });
   }
@@ -1185,6 +1192,84 @@
   });
 
   // ──────────────────────────────────────────────────────────────
+  // Phase 9 — Orphan ghost render hook (SHP-07, D-15).
+  // CSS work (Section 11 of signal_flow.css) is keyed on:
+  //   joint-orphan="true"          on the orphaned element's root <g>
+  //   joint-orphan-attached="true" on any link attached to an orphan
+  // The server's _enrich_nodes() (Phase 9 09-01) sets the cell.showstack.isOrphan
+  // boolean on every linked cell when state is fetched; this block syncs that
+  // model property to the DOM attribute.
+  // ──────────────────────────────────────────────────────────────
+
+  function applyOrphanState(cell) {
+    if (!cell || !cell.isElement || !cell.isElement()) return;
+    var view = paper.findViewByModel(cell);
+    if (!view || !view.el) return;
+    var sub = cell.prop('showstack') || {};
+    if (sub.isOrphan === true) {
+      view.el.setAttribute('joint-orphan', 'true');
+    } else {
+      view.el.removeAttribute('joint-orphan');
+    }
+  }
+
+  function isCellOrphan(cell) {
+    if (!cell) return false;
+    var sub = cell.prop('showstack') || {};
+    return sub.isOrphan === true;
+  }
+
+  function applyAttachedOrphanState(link) {
+    if (!link || !link.isLink || !link.isLink()) return;
+    var view = paper.findViewByModel(link);
+    if (!view || !view.el) return;
+    var src = link.getSourceElement();
+    var tgt = link.getTargetElement();
+    if (isCellOrphan(src) || isCellOrphan(tgt)) {
+      view.el.setAttribute('joint-orphan-attached', 'true');
+    } else {
+      view.el.removeAttribute('joint-orphan-attached');
+    }
+  }
+
+  // Initial load via fromJSON: views may not be rendered yet when the `add`
+  // event fires for each cell. Defer the attribute write to next tick so
+  // paper.findViewByModel() can find the rendered view.
+  function applyOrphanStateDeferred(cell) {
+    setTimeout(function () { applyOrphanState(cell); }, 0);
+  }
+  function applyAttachedOrphanStateDeferred(link) {
+    setTimeout(function () { applyAttachedOrphanState(link); }, 0);
+  }
+
+  graph.on('add', function (cell) {
+    if (cell.isElement && cell.isElement()) {
+      applyOrphanStateDeferred(cell);
+    } else if (cell.isLink && cell.isLink()) {
+      applyAttachedOrphanStateDeferred(cell);
+    }
+  });
+
+  // Re-link or server-enrich changes -> re-evaluate both the element AND every
+  // link attached to it (the attached-orphan visual must clear when the
+  // underlying element goes live again).
+  graph.on('change:showstack', function (cell) {
+    if (!cell) return;
+    if (cell.isElement && cell.isElement()) {
+      applyOrphanState(cell);
+      // Re-evaluate every link in the graph that has this cell as an endpoint.
+      graph.getConnectedLinks(cell).forEach(function (link) {
+        applyAttachedOrphanState(link);
+      });
+    }
+  });
+
+  // Link endpoint swaps -> re-evaluate the link's attached-orphan attribute.
+  graph.on('change:source change:target', function (cell) {
+    if (cell && cell.isLink && cell.isLink()) applyAttachedOrphanState(cell);
+  });
+
+  // ──────────────────────────────────────────────────────────────
   // Plan 06 — Right-side inspector (auto-show on connector select).
   // CON-02 / CON-05 / CON-06 user-facing field wiring.
   // CONTEXT D-07 (auto-show/hide rule), UI-SPEC "Inspector Panel".
@@ -1211,6 +1296,7 @@
     inspectorEl.setAttribute('hidden', '');
     inspectorEl.style.setProperty('display', 'none', 'important');
     inspectorCurrentLink = null;
+    inspectorCurrentNode = null;    // Phase 9 — clear node ref too
   }
 
   function syncInspectorFromLink(link) {
@@ -1227,19 +1313,21 @@
     circuitLabelInput.value = link.prop('circuitLabel') || '';
   }
 
-  // Selection-change hook — plan 05's applySelectionVisuals() calls this if defined.
-  // RESEARCH Open Risk #6: selection updates first, then inspector reacts. Single-source.
+  // Phase 9 D-16 — Selection-change widened to node mode.
   window.__sfd.onSelectionChanged = function (selectedIds) {
     if (selectedIds.length === 1) {
       var cell = graph.getCell(selectedIds[0]);
       if (cell && cell.isLink && cell.isLink()) {
-        inspectorCurrentLink = cell;
-        syncInspectorFromLink(cell);
+        setInspectorMode('connector', cell);
+        showInspector();
+        return;
+      }
+      if (cell && cell.isElement && cell.isElement()) {
+        setInspectorMode('node', cell);
         showInspector();
         return;
       }
     }
-    // Any other case (zero, multi, or single non-link) — hide inspector.
     hideInspector();
   };
 
@@ -1309,6 +1397,113 @@
   // The template renders with the `hidden` attribute set, but a previous render
   // could leave inline styles; this normalizes both.
   hideInspector();
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase 9 D-16 — Node-mode inspector (SHP-07 re-link UX).
+  //
+  // Extends the Phase 8 #sfd-inspector panel to ALSO render a node-mode
+  // sub-block with `Re-link equipment` + `Delete shape` buttons. The Phase 8
+  // connector fields are hidden when a node is selected; the Phase 9 node
+  // sub-block is built lazily the first time setInspectorMode('node', …) runs.
+  // ──────────────────────────────────────────────────────────────
+
+  var inspectorHeader = inspectorEl ? inspectorEl.querySelector('.sfd-inspector-header h3') : null;
+  // Cache references to the Phase 8 connector-mode field rows (the three .sfd-field divs).
+  var connectorFieldRows = inspectorEl ? Array.from(inspectorEl.querySelectorAll('.sfd-field')) : [];
+  var nodeModeBlock = null;           // built on first 'node' call
+  var nodeRelinkBtn = null;
+  var nodeDeleteBtn = null;
+  var inspectorCurrentNode = null;    // the cell currently shown in node mode
+
+  function buildNodeModeBlock() {
+    if (!inspectorEl) return;
+    nodeModeBlock = document.createElement('div');
+    nodeModeBlock.className = 'sfd-field sfd-field--node-actions';
+    nodeModeBlock.setAttribute('data-mode', 'node');
+    nodeModeBlock.style.setProperty('display', 'none', 'important');
+
+    nodeRelinkBtn = document.createElement('button');
+    nodeRelinkBtn.type = 'button';
+    nodeRelinkBtn.id = 'sfd-node-relink';
+    nodeRelinkBtn.textContent = 'Re-link equipment';
+    nodeRelinkBtn.style.setProperty('display', 'block', 'important');
+    nodeRelinkBtn.style.setProperty('width', '100%', 'important');
+    nodeRelinkBtn.style.setProperty('margin-bottom', '8px', 'important');
+    nodeRelinkBtn.style.setProperty('padding', '8px 12px', 'important');
+    nodeRelinkBtn.style.setProperty('cursor', 'pointer', 'important');
+
+    nodeDeleteBtn = document.createElement('button');
+    nodeDeleteBtn.type = 'button';
+    nodeDeleteBtn.id = 'sfd-node-delete';
+    nodeDeleteBtn.textContent = 'Delete shape';
+    nodeDeleteBtn.style.setProperty('display', 'block', 'important');
+    nodeDeleteBtn.style.setProperty('width', '100%', 'important');
+    nodeDeleteBtn.style.setProperty('padding', '8px 12px', 'important');
+    nodeDeleteBtn.style.setProperty('cursor', 'pointer', 'important');
+
+    nodeModeBlock.appendChild(nodeRelinkBtn);
+    nodeModeBlock.appendChild(nodeDeleteBtn);
+    inspectorEl.appendChild(nodeModeBlock);
+
+    nodeRelinkBtn.addEventListener('click', function () {
+      if (!inspectorCurrentNode) return;
+      var type = inspectorCurrentNode.get('type') || '';
+      var shapeType = type.split('.').pop();  // 'showstack.Console' -> 'Console'
+      if (typeof window.__sfd.openEquipmentPicker === 'function') {
+        window.__sfd.openEquipmentPicker(shapeType, inspectorCurrentNode);
+      }
+    });
+
+    nodeDeleteBtn.addEventListener('click', function () {
+      if (!inspectorCurrentNode) return;
+      var cell = inspectorCurrentNode;
+      if (window.__sfd.undo && typeof window.__sfd.undo.beginBatch === 'function') {
+        window.__sfd.undo.beginBatch();
+        cell.remove();
+        window.__sfd.undo.endBatch();
+      } else {
+        cell.remove();
+      }
+      if (window.__sfd.selection && typeof window.__sfd.selection.clear === 'function') {
+        window.__sfd.selection.clear();
+      }
+      inspectorCurrentNode = null;
+      hideInspector();
+    });
+  }
+
+  function setInspectorMode(mode, cell) {
+    if (!inspectorEl) return;
+    if (!nodeModeBlock) buildNodeModeBlock();
+
+    if (mode === 'connector') {
+      if (inspectorHeader) inspectorHeader.textContent = 'Connector';
+      connectorFieldRows.forEach(function (row) {
+        row.style.setProperty('display', 'block', 'important');
+      });
+      if (nodeModeBlock) nodeModeBlock.style.setProperty('display', 'none', 'important');
+      inspectorCurrentLink = cell;
+      inspectorCurrentNode = null;
+      syncInspectorFromLink(cell);
+    } else if (mode === 'node') {
+      if (inspectorHeader) inspectorHeader.textContent = 'Node';
+      connectorFieldRows.forEach(function (row) {
+        row.style.setProperty('display', 'none', 'important');
+      });
+      nodeModeBlock.style.setProperty('display', 'block', 'important');
+      inspectorCurrentNode = cell;
+      inspectorCurrentLink = null;
+      // Hide the Re-link button when the cell has no equipment GFK
+      // (pure Generic shape with no contentTypeId — nothing to relink to).
+      var prop = cell.prop('showstack') || {};
+      var hasLink = !!(prop.contentTypeId);
+      if (nodeRelinkBtn) {
+        nodeRelinkBtn.style.setProperty(
+          'display', hasLink ? 'block' : 'none', 'important'
+        );
+      }
+    }
+  }
 
   // ──────────────────────────────────────────────────────────────
   // Phase 9 — Autosave controller.
