@@ -1296,6 +1296,7 @@
     inspectorEl.setAttribute('hidden', '');
     inspectorEl.style.setProperty('display', 'none', 'important');
     inspectorCurrentLink = null;
+    inspectorCurrentNode = null;    // Phase 9 — clear node ref too
   }
 
   function syncInspectorFromLink(link) {
@@ -1312,19 +1313,21 @@
     circuitLabelInput.value = link.prop('circuitLabel') || '';
   }
 
-  // Selection-change hook — plan 05's applySelectionVisuals() calls this if defined.
-  // RESEARCH Open Risk #6: selection updates first, then inspector reacts. Single-source.
+  // Phase 9 D-16 — Selection-change widened to node mode.
   window.__sfd.onSelectionChanged = function (selectedIds) {
     if (selectedIds.length === 1) {
       var cell = graph.getCell(selectedIds[0]);
       if (cell && cell.isLink && cell.isLink()) {
-        inspectorCurrentLink = cell;
-        syncInspectorFromLink(cell);
+        setInspectorMode('connector', cell);
+        showInspector();
+        return;
+      }
+      if (cell && cell.isElement && cell.isElement()) {
+        setInspectorMode('node', cell);
         showInspector();
         return;
       }
     }
-    // Any other case (zero, multi, or single non-link) — hide inspector.
     hideInspector();
   };
 
@@ -1394,6 +1397,113 @@
   // The template renders with the `hidden` attribute set, but a previous render
   // could leave inline styles; this normalizes both.
   hideInspector();
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase 9 D-16 — Node-mode inspector (SHP-07 re-link UX).
+  //
+  // Extends the Phase 8 #sfd-inspector panel to ALSO render a node-mode
+  // sub-block with `Re-link equipment` + `Delete shape` buttons. The Phase 8
+  // connector fields are hidden when a node is selected; the Phase 9 node
+  // sub-block is built lazily the first time setInspectorMode('node', …) runs.
+  // ──────────────────────────────────────────────────────────────
+
+  var inspectorHeader = inspectorEl ? inspectorEl.querySelector('.sfd-inspector-header h3') : null;
+  // Cache references to the Phase 8 connector-mode field rows (the three .sfd-field divs).
+  var connectorFieldRows = inspectorEl ? Array.from(inspectorEl.querySelectorAll('.sfd-field')) : [];
+  var nodeModeBlock = null;           // built on first 'node' call
+  var nodeRelinkBtn = null;
+  var nodeDeleteBtn = null;
+  var inspectorCurrentNode = null;    // the cell currently shown in node mode
+
+  function buildNodeModeBlock() {
+    if (!inspectorEl) return;
+    nodeModeBlock = document.createElement('div');
+    nodeModeBlock.className = 'sfd-field sfd-field--node-actions';
+    nodeModeBlock.setAttribute('data-mode', 'node');
+    nodeModeBlock.style.setProperty('display', 'none', 'important');
+
+    nodeRelinkBtn = document.createElement('button');
+    nodeRelinkBtn.type = 'button';
+    nodeRelinkBtn.id = 'sfd-node-relink';
+    nodeRelinkBtn.textContent = 'Re-link equipment';
+    nodeRelinkBtn.style.setProperty('display', 'block', 'important');
+    nodeRelinkBtn.style.setProperty('width', '100%', 'important');
+    nodeRelinkBtn.style.setProperty('margin-bottom', '8px', 'important');
+    nodeRelinkBtn.style.setProperty('padding', '8px 12px', 'important');
+    nodeRelinkBtn.style.setProperty('cursor', 'pointer', 'important');
+
+    nodeDeleteBtn = document.createElement('button');
+    nodeDeleteBtn.type = 'button';
+    nodeDeleteBtn.id = 'sfd-node-delete';
+    nodeDeleteBtn.textContent = 'Delete shape';
+    nodeDeleteBtn.style.setProperty('display', 'block', 'important');
+    nodeDeleteBtn.style.setProperty('width', '100%', 'important');
+    nodeDeleteBtn.style.setProperty('padding', '8px 12px', 'important');
+    nodeDeleteBtn.style.setProperty('cursor', 'pointer', 'important');
+
+    nodeModeBlock.appendChild(nodeRelinkBtn);
+    nodeModeBlock.appendChild(nodeDeleteBtn);
+    inspectorEl.appendChild(nodeModeBlock);
+
+    nodeRelinkBtn.addEventListener('click', function () {
+      if (!inspectorCurrentNode) return;
+      var type = inspectorCurrentNode.get('type') || '';
+      var shapeType = type.split('.').pop();  // 'showstack.Console' -> 'Console'
+      if (typeof window.__sfd.openEquipmentPicker === 'function') {
+        window.__sfd.openEquipmentPicker(shapeType, inspectorCurrentNode);
+      }
+    });
+
+    nodeDeleteBtn.addEventListener('click', function () {
+      if (!inspectorCurrentNode) return;
+      var cell = inspectorCurrentNode;
+      if (window.__sfd.undo && typeof window.__sfd.undo.beginBatch === 'function') {
+        window.__sfd.undo.beginBatch();
+        cell.remove();
+        window.__sfd.undo.endBatch();
+      } else {
+        cell.remove();
+      }
+      if (window.__sfd.selection && typeof window.__sfd.selection.clear === 'function') {
+        window.__sfd.selection.clear();
+      }
+      inspectorCurrentNode = null;
+      hideInspector();
+    });
+  }
+
+  function setInspectorMode(mode, cell) {
+    if (!inspectorEl) return;
+    if (!nodeModeBlock) buildNodeModeBlock();
+
+    if (mode === 'connector') {
+      if (inspectorHeader) inspectorHeader.textContent = 'Connector';
+      connectorFieldRows.forEach(function (row) {
+        row.style.setProperty('display', 'block', 'important');
+      });
+      if (nodeModeBlock) nodeModeBlock.style.setProperty('display', 'none', 'important');
+      inspectorCurrentLink = cell;
+      inspectorCurrentNode = null;
+      syncInspectorFromLink(cell);
+    } else if (mode === 'node') {
+      if (inspectorHeader) inspectorHeader.textContent = 'Node';
+      connectorFieldRows.forEach(function (row) {
+        row.style.setProperty('display', 'none', 'important');
+      });
+      nodeModeBlock.style.setProperty('display', 'block', 'important');
+      inspectorCurrentNode = cell;
+      inspectorCurrentLink = null;
+      // Hide the Re-link button when the cell has no equipment GFK
+      // (pure Generic shape with no contentTypeId — nothing to relink to).
+      var prop = cell.prop('showstack') || {};
+      var hasLink = !!(prop.contentTypeId);
+      if (nodeRelinkBtn) {
+        nodeRelinkBtn.style.setProperty(
+          'display', hasLink ? 'block' : 'none', 'important'
+        );
+      }
+    }
+  }
 
   // ──────────────────────────────────────────────────────────────
   // Phase 9 — Autosave controller.
