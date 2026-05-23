@@ -222,6 +222,48 @@
     }, joint.dia.Element.prototype.defaults),
   });
 
+  // ---- Processor (160×60, amber #b45309 left band) — SHP-10 ----
+  // Covers SystemProcessor (GFK target); picker badges P1 vs GALAXY via device_type.
+  joint.shapes.showstack.Processor = joint.dia.Element.extend({
+    markup: [
+      { tagName: 'rect', selector: 'body' },
+      { tagName: 'rect', selector: 'band' },
+      { tagName: 'text', selector: 'label' },
+    ],
+    defaults: joint.util.deepSupplement({
+      type: 'showstack.Processor',
+      size: { width: 160, height: 60 },
+      attrs: {
+        body:  { refWidth: '100%', refHeight: '100%', fill: '#ffffff', stroke: '#333', 'stroke-width': 1.5 },
+        band:  { x: 0, y: 0, width: 6, refHeight: '100%', fill: '#b45309' },
+        label: { refX: 16, refY: '50%', textAnchor: 'start', textVerticalAnchor: 'middle',
+                 fontSize: 13, fontFamily: FONT_STACK, fill: '#111', text: 'Processor' },
+      },
+      ports: portsForRect(160, 60),
+    }, joint.dia.Element.prototype.defaults),
+  });
+
+  // ---- Amp (140×60, green #15803d left band) — SHP-11 ----
+  // Covers Amp model (project FK); picker shows AmpModel as secondary line.
+  joint.shapes.showstack.Amp = joint.dia.Element.extend({
+    markup: [
+      { tagName: 'rect', selector: 'body' },
+      { tagName: 'rect', selector: 'band' },
+      { tagName: 'text', selector: 'label' },
+    ],
+    defaults: joint.util.deepSupplement({
+      type: 'showstack.Amp',
+      size: { width: 140, height: 60 },
+      attrs: {
+        body:  { refWidth: '100%', refHeight: '100%', fill: '#ffffff', stroke: '#333', 'stroke-width': 1.5 },
+        band:  { x: 0, y: 0, width: 6, refHeight: '100%', fill: '#15803d' },
+        label: { refX: 16, refY: '50%', textAnchor: 'start', textVerticalAnchor: 'middle',
+                 fontSize: 13, fontFamily: FONT_STACK, fill: '#111', text: 'Amp' },
+      },
+      ports: portsForRect(140, 60),
+    }, joint.dia.Element.prototype.defaults),
+  });
+
   // ──────────────────────────────────────────────────────────────
   // Graph + Paper init.
   // PITFALLS §1: pass cellNamespace AND cellViewNamespace.
@@ -309,6 +351,8 @@
   var PICKER_TYPE_CONFIG = {
     Console:      { backend: 'console',      label: 'Console',       admin: '/admin/planner/console/' },
     Device:       { backend: 'device',       label: 'Device',        admin: '/admin/planner/device/' },
+    Processor:    { backend: 'processor',    label: 'Processor',     admin: '/admin/planner/systemprocessor/' },
+    Amp:          { backend: 'amp',          label: 'Amp',           admin: '/admin/planner/amp/' },
     SpeakerArray: { backend: 'speakerarray', label: 'Speaker Array', admin: '/admin/planner/speakerarray/' },
     CommBeltPack: { backend: 'commbeltpack', label: 'Beltpack',      admin: '/admin/planner/commbeltpack/' },
   };
