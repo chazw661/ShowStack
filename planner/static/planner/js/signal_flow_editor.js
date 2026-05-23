@@ -27,7 +27,8 @@
   var stateUrl = container.dataset.stateUrl;
   var autosaveUrl = container.dataset.autosaveUrl;
   var autocompleteUrl = container.dataset.autocompleteUrl;
-  // (exportPngUrl is Phase 10 — do not read here)
+  var labelAutocompleteUrl = container.dataset.labelAutocompleteUrl;  // Phase 10 plan 10-03
+  // (exportPngUrl is not needed — PNG export is fully client-side via html-to-image)
 
   // Confirm JointJS UMD bundle loaded and exposes `joint` global.
   if (typeof joint === 'undefined') {
@@ -1771,5 +1772,166 @@
   // future caller can force an immediate save.
   window.__sfd.save = function () { return flushAutosave({ force: true }); };
 
-  // Phase 10 will: circuit-label autocomplete widget, PNG export button.
+  // ══════════════════════════════════════════════════════════════
+  // Plan 10-03 — Circuit-label autocomplete combobox (LBL-01..03)
+  //   Attached to #sfd-circuit-label in the connector inspector.
+  //   D-01: 1-char threshold, 200ms debounce.
+  //   D-02: shows "label — source tag" format.
+  //   D-03: max 8 results, alphabetical (enforced server-side).
+  //   D-14: synthetic input event on selection triggers scheduleAutosave.
+  // ══════════════════════════════════════════════════════════════
+
+  var circuitLabelInput = document.getElementById('sfd-circuit-label');
+
+  // Create the listbox and wrap the input field in a relative-position container.
+  // The CSS Section 12 (plan 10-02) styles .sfd-autocomplete-wrapper and
+  // #sfd-label-suggestions — we only need the DOM structure here.
+  var acListbox = null;
+  var acTimer = null;
+  var acActiveIndex = -1;
+
+  // DOM-readiness note (plan-checker finding, 2026-05-22):
+  // initAutocomplete() is called at the bottom of this IIFE. Safe because
+  // editor.html:160 loads signal_flow_editor.js with the `defer` attribute,
+  // so DOM is fully parsed before this script evaluates. If the `defer`
+  // attribute is ever removed from the <script> tag, wrap the init call in
+  // a DOMContentLoaded listener or this will hit null elements.
+  function initAutocomplete() {
+    if (!circuitLabelInput || !labelAutocompleteUrl) return;
+
+    // Wrap input's parent .sfd-field div — add wrapper class for CSS positioning.
+    var fieldDiv = circuitLabelInput.closest('.sfd-field');
+    if (!fieldDiv) return;
+    fieldDiv.classList.add('sfd-autocomplete-wrapper');
+
+    // Create listbox element.
+    acListbox = document.createElement('ul');
+    acListbox.id = 'sfd-label-suggestions';
+    acListbox.setAttribute('role', 'listbox');
+    acListbox.setAttribute('hidden', '');
+    fieldDiv.appendChild(acListbox);
+
+    // ARIA: wire combobox role onto the input.
+    circuitLabelInput.setAttribute('role', 'combobox');
+    circuitLabelInput.setAttribute('aria-autocomplete', 'list');
+    circuitLabelInput.setAttribute('aria-expanded', 'false');
+    circuitLabelInput.setAttribute('aria-haspopup', 'listbox');
+    circuitLabelInput.setAttribute('aria-controls', 'sfd-label-suggestions');
+
+    // Input event — debounced fetch.
+    circuitLabelInput.addEventListener('input', function () {
+      var q = circuitLabelInput.value.trim();
+      if (acTimer) clearTimeout(acTimer);
+      if (q.length < 1) { closeAcListbox(); return; }
+      acTimer = setTimeout(function () { fetchAcResults(q); }, 200);
+    });
+
+    // Keyboard navigation.
+    circuitLabelInput.addEventListener('keydown', function (evt) {
+      if (!acListbox || acListbox.hasAttribute('hidden')) return;
+      var rows = Array.from(acListbox.querySelectorAll('.sfd-ac-row'));
+      if (!rows.length) return;
+      if (evt.key === 'ArrowDown') {
+        evt.preventDefault();
+        acActiveIndex = Math.min(acActiveIndex + 1, rows.length - 1);
+        updateAcActive(rows);
+      } else if (evt.key === 'ArrowUp') {
+        evt.preventDefault();
+        acActiveIndex = Math.max(acActiveIndex - 1, 0);
+        updateAcActive(rows);
+      } else if (evt.key === 'Enter') {
+        evt.preventDefault();
+        if (acActiveIndex >= 0 && rows[acActiveIndex]) {
+          selectAcRow(rows[acActiveIndex]);
+        }
+      } else if (evt.key === 'Escape') {
+        evt.preventDefault();
+        closeAcListbox();
+      }
+    });
+
+    // Blur close with delay so click on a row registers first.
+    circuitLabelInput.addEventListener('blur', function () {
+      setTimeout(closeAcListbox, 150);
+    });
+  }
+
+  function fetchAcResults(q) {
+    if (!labelAutocompleteUrl) return;
+    var url = labelAutocompleteUrl + '?q=' + encodeURIComponent(q);
+    getJSON(url)
+      .then(function (data) { renderAcResults(data.results || []); })
+      .catch(function () { closeAcListbox(); });
+  }
+
+  function renderAcResults(results) {
+    if (!acListbox) return;
+    acListbox.innerHTML = '';
+    acActiveIndex = -1;
+    if (!results.length) { closeAcListbox(); return; }
+
+    results.forEach(function (rec, i) {
+      var li = document.createElement('li');
+      li.className = 'sfd-ac-row';
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', 'false');
+      li.id = 'sfd-ac-row-' + i;
+
+      // XSS-safe: textContent only (PATTERNS.md rule).
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = rec.label || '';
+      var sourceSpan = document.createElement('span');
+      sourceSpan.className = 'sfd-ac-source';
+      sourceSpan.textContent = rec.source ? ('— ' + rec.source) : '';
+
+      li.appendChild(labelSpan);
+      li.appendChild(sourceSpan);
+
+      li.addEventListener('mousedown', function (evt) {
+        // mousedown fires before blur — prevent blur from firing first.
+        evt.preventDefault();
+      });
+      li.addEventListener('click', function () { selectAcRow(li, rec.label); });
+      li.addEventListener('mouseover', function () {
+        var rows = Array.from(acListbox.querySelectorAll('.sfd-ac-row'));
+        acActiveIndex = rows.indexOf(li);
+        updateAcActive(rows);
+      });
+
+      acListbox.appendChild(li);
+    });
+
+    acListbox.removeAttribute('hidden');
+    circuitLabelInput.setAttribute('aria-expanded', 'true');
+  }
+
+  function selectAcRow(rowEl, label) {
+    // label may come from the rec or from the row's first span text.
+    var chosen = label || (rowEl.querySelector('span') && rowEl.querySelector('span').textContent) || '';
+    circuitLabelInput.value = chosen;
+    closeAcListbox();
+    // D-14: dispatch synthetic input event so existing Phase 9 inspector listener fires.
+    circuitLabelInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function updateAcActive(rows) {
+    rows.forEach(function (r, i) {
+      r.setAttribute('aria-selected', String(i === acActiveIndex));
+    });
+    if (acActiveIndex >= 0) {
+      circuitLabelInput.setAttribute('aria-activedescendant', 'sfd-ac-row-' + acActiveIndex);
+    }
+  }
+
+  function closeAcListbox() {
+    if (!acListbox) return;
+    acListbox.setAttribute('hidden', '');
+    acListbox.innerHTML = '';
+    acActiveIndex = -1;
+    circuitLabelInput.setAttribute('aria-expanded', 'false');
+    circuitLabelInput.removeAttribute('aria-activedescendant');
+  }
+
+  initAutocomplete();
+
 })();
