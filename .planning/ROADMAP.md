@@ -40,6 +40,11 @@
 Phase numbering continues from v2.2 (next integer is 10). Build order is dependency-driven: data-model + autocomplete plumbing first (Phase 10), then the shape/port UX that depends on the autocomplete (Phase 11), then the canvas-decoration primitives that don't depend on shapes (Phase 12), then export which needs everything else rendered (Phase 13).
 
 - [ ] **Phase 10: Autocomplete, PNG Export & New Shape Types** — `signal_flow_autocomplete` extended to surface signal-name fields from all sources (Device, Console, Amp, all 3 Processor types), JS autocomplete widget on connector labels, one-click PNG export via `html-to-image`, plus Processor + Amp smart shape classes with their equipment picker entries. Closes LBL-01..03, EXP-01, SHP-10, SHP-11.
+  **Plans:** 3 plans
+  Plans:
+  - [ ] 10-01-PLAN.md — Server: label-autocomplete view, extend picker/enrich/IDOR for Amp + SystemProcessor, tests
+  - [ ] 10-02-PLAN.md — JS + HTML + CSS: Processor + Amp shape classes, sidebar tiles, export button scaffold, CSS sections 12+13
+  - [ ] 10-03-PLAN.md — JS behavior: autocomplete combobox widget + PNG export handler
 - [ ] **Phase 11: Per-Shape Labeled Ports + Resizable Shapes** — engineer-authored ports on top/left/right edges with auto-equal-spacing, dropdown-or-custom labels (consuming Phase 10's autocomplete plumbing), corner-handle shape resize gated by a per-type min-size, connector snap targeting updated to per-port endpoints. Closes PORT-01..06, SHP-RESIZE-01..03.
 - [ ] **Phase 12: Boundary Lines + Text Annotations** — toolbar boundary-draw mode with color + style picker (solid/dashed/dotted/double), inspector edit for selected boundary lines, freeform text labels with font-size + color, full integration with the autosave + undo + 409 + keepalive paths from v2.2. Closes DRAW-01..04, TXT-01..03.
 
@@ -68,6 +73,6 @@ _(empty)_
 | 7. Foundation, CRUD & Editor Shell | v2.2 | 4/4 | ✅ Complete | 2026-05-20 |
 | 8. Canvas, Smart Shapes & Connectors | v2.2 | 6/6 | ✅ Complete | 2026-05-21 |
 | 9. Autosave & Orphan Rendering | v2.2 | 4/4 | ✅ Complete | 2026-05-22 |
-| 10. Autocomplete, PNG Export & New Shape Types | v2.3 | 0/TBD | Not started | — |
+| 10. Autocomplete, PNG Export & New Shape Types | v2.3 | 0/3 | In planning | — |
 | 11. Per-Shape Labeled Ports + Resizable Shapes | v2.3 | 0/TBD | Not started | — |
 | 12. Boundary Lines + Text Annotations | v2.3 | 0/TBD | Not started | — |
