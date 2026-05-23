@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: Signal Flow Diagrammer
-status: milestone_complete
-stopped_at: Phase 9 context gathered
-last_updated: "2026-05-22T01:35:41.679Z"
-last_activity: 2026-05-22 -- Phase 09 execution started
+milestone: v2.3
+milestone_name: Signal Flow Diagrammer — Export & Enhancements
+status: defining_requirements
+stopped_at: v2.3 milestone defined; awaiting plan-phase to start Phase 10
+last_updated: "2026-05-22T21:00:00.000Z"
+last_activity: 2026-05-22 -- v2.3 milestone opened (issue #14 + v2.2 carried scope)
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 46
-  completed_plans: 42
-  percent: 100
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 09 — autosave-orphan-rendering
+**Current focus:** v2.3 — Signal Flow Diagrammer Export & Enhancements (issue #14)
 
 ## Current Position
 
-Phase: 09
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-22
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements (Phase 10 next via /gsd-plan-phase)
+Last activity: 2026-05-22 -- v2.3 milestone opened
 
-Progress: [          ] 0% (v2.2 scope only)
+Progress: [          ] 0% (v2.3 scope: 22 requirements across 3 phases)
 
 ## Roadmap Summary
 

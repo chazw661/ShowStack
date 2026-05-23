@@ -28,21 +28,30 @@
 
 ---
 
-## Active Milestone
+## Active Milestone: v2.3 Signal Flow Diagrammer Export & Enhancements
 
-**Current:** _none — v2.2 just shipped._
+**Driver:** Issue #14 + carried scope from v2.2 Phase 10
+**Defined:** 2026-05-22
 
-The next milestone (v2.3) has not been planned yet. Run `/gsd-new-milestone` to scope it.
+**Goal:** Close the v2.2 deferred scope (autocomplete + PNG export) and ship the engineer-requested Signal Flow Diagrammer power-user features from issue #14: per-shape labeled ports with project-scoped autofill, resizable shapes, two new smart shape types (Processor + Amp), freeform boundary lines, and freeform text annotations.
 
-### Carried forward from v2.2 (top candidates for v2.3 Phase 1)
+### v2.3 Phases
 
-These were scoped to v2.2 but never started — recommended as the opening phase of v2.3:
+Phase numbering continues from v2.2 (next integer is 10). Build order is dependency-driven: data-model + autocomplete plumbing first (Phase 10), then the shape/port UX that depends on the autocomplete (Phase 11), then the canvas-decoration primitives that don't depend on shapes (Phase 12), then export which needs everything else rendered (Phase 13).
 
-- [ ] **Autocomplete & PNG Export** _(was v2.2 Phase 10)_ — Circuit-label autocomplete endpoint (signal-name fields from all 4 equipment types, project-scoped) + JS autocomplete widget on connector labels + one-click PNG export via the already-vendored `html-to-image` (Phase 7 bundle). Closes LBL-01, LBL-02, LBL-03, EXP-01.
+- [ ] **Phase 10: Autocomplete, PNG Export & New Shape Types** — `signal_flow_autocomplete` extended to surface signal-name fields from all sources (Device, Console, Amp, all 3 Processor types), JS autocomplete widget on connector labels, one-click PNG export via `html-to-image`, plus Processor + Amp smart shape classes with their equipment picker entries. Closes LBL-01..03, EXP-01, SHP-10, SHP-11.
+- [ ] **Phase 11: Per-Shape Labeled Ports + Resizable Shapes** — engineer-authored ports on top/left/right edges with auto-equal-spacing, dropdown-or-custom labels (consuming Phase 10's autocomplete plumbing), corner-handle shape resize gated by a per-type min-size, connector snap targeting updated to per-port endpoints. Closes PORT-01..06, SHP-RESIZE-01..03.
+- [ ] **Phase 12: Boundary Lines + Text Annotations** — toolbar boundary-draw mode with color + style picker (solid/dashed/dotted/double), inspector edit for selected boundary lines, freeform text labels with font-size + color, full integration with the autosave + undo + 409 + keepalive paths from v2.2. Closes DRAW-01..04, TXT-01..03.
 
-### Backlog ideas (not yet scoped)
+### Carried decisions (still in force)
 
-_(empty — capture ideas via `/gsd-add-backlog` or `/gsd-plant-seed`)_
+- State lives in the existing `SignalFlowDiagram.canvas_state` `JSONField` blob — no schema migration on `SignalFlowDiagram` itself.
+- Resizable applies to ALL shape types (including v2.2's existing 5), not just the new Processor + Amp shapes.
+- Autocomplete sources include all v2.2-scoped fields plus the new Amp + Processor I/O label fields.
+
+### Backlog ideas (not yet scoped — capture via `/gsd-add-backlog` or `/gsd-plant-seed`)
+
+_(empty)_
 
 ---
 
@@ -59,3 +68,6 @@ _(empty — capture ideas via `/gsd-add-backlog` or `/gsd-plant-seed`)_
 | 7. Foundation, CRUD & Editor Shell | v2.2 | 4/4 | ✅ Complete | 2026-05-20 |
 | 8. Canvas, Smart Shapes & Connectors | v2.2 | 6/6 | ✅ Complete | 2026-05-21 |
 | 9. Autosave & Orphan Rendering | v2.2 | 4/4 | ✅ Complete | 2026-05-22 |
+| 10. Autocomplete, PNG Export & New Shape Types | v2.3 | 0/TBD | Not started | — |
+| 11. Per-Shape Labeled Ports + Resizable Shapes | v2.3 | 0/TBD | Not started | — |
+| 12. Boundary Lines + Text Annotations | v2.3 | 0/TBD | Not started | — |

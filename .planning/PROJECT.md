@@ -57,16 +57,38 @@ ShowStack engineers can draw project-scoped signal-flow diagrams on a live Joint
 - v2.1 Collaboration & User Management — Phase 6 Trusted Crew Rosters, shipped 2026-05-15 _(pre-dates milestone-close workflow; no archive file)_
 - v2.0 Multitrack Session Builder — Phases 1–5, shipped 2026-05-14 _(pre-dates milestone-close workflow; no archive file)_
 
-## Next Milestone Goals
+## Current Milestone: v2.3 Signal Flow Diagrammer — Export & Enhancements
 
-**v2.3 — not yet planned.** Run `/gsd-new-milestone` to scope it.
+**Driver:** Issue #14 + v2.2 carried scope
+**Defined:** 2026-05-22
 
-**Top candidate for the v2.3 opening phase (carried forward from v2.2 deferred scope):**
-- **Autocomplete & PNG Export** _(was v2.2 Phase 10, never started)_ — Circuit-label autocomplete from signal-name fields (`DeviceInput.signal_name`, `DeviceOutput.signal_name`, `ConsoleInput.source`, `ConsoleAuxOutput.name`) + JS autocomplete widget + one-click PNG export via the already-vendored `html-to-image` (Phase 7 vendor bundle). Closes LBL-01, LBL-02, LBL-03, EXP-01.
+**Goal:** Close v2.2's deferred Phase 10 scope (autocomplete + PNG export) and ship the engineer-requested Signal Flow Diagrammer power-user features from issue #14: per-shape labeled ports with project-scoped autofill, resizable shapes, two new smart shape types (Processor + Amp), freeform boundary lines, and freeform text annotations.
 
-**v2.2 advisory items worth closing in v2.3 polish:**
-- Pre-v2.2 carried UAT/verification gaps from phases 1, 3, 5, 6 (see STATE.md `## Deferred Items`). Phase 6 has 6 pending UAT scenarios; the rest are status-only false positives that should be cleaned up.
-- Multi-line `{# … #}` Django comment audit was project-wide during v2.2 close — `feedback_django_multiline_template_comments.md` memory locked in to prevent recurrence.
+**Target features:**
+- **Per-shape labeled ports** with auto-equal-spacing on top/left/right edges; labels via dropdown (project signal-name fields) or custom text
+- **Resizable shapes** (corner-handle drag, per-type min-size) — all existing v2.2 shape types plus the new v2.3 types
+- **Two new smart shape types** linked via GFK: **Processor** (covering `SystemProcessor` + `P1Processor` + `GalaxyProcessor`) and **Amp** (covering `Amp` model)
+- **Boundary lines** — toolbar draw mode, freeform polyline, color + line-style picker (solid/dashed/dotted/double)
+- **Text annotations** — freeform canvas text, font-size + color
+- **Circuit-label autocomplete** from existing signal-name fields across Device, Console, Amp, and Processor models (project-scoped)
+- **PNG export** — one-click via the already-vendored `html-to-image`
+
+**Phase plan (continues numbering from v2.2):**
+- Phase 10 — Autocomplete, PNG Export & New Shape Types (LBL + EXP + SHP-10/11)
+- Phase 11 — Per-Shape Labeled Ports + Resizable Shapes (PORT + SHP-RESIZE)
+- Phase 12 — Boundary Lines + Text Annotations (DRAW + TXT)
+
+**Out of scope for v2.3 (carry to v2.4+):**
+- Manual port position dragging (auto-equal-spacing only in v2.3)
+- Curved boundary lines (polyline only)
+- Filled translucent zones (line boundaries only)
+- Rich text formatting in TXT (font-size + color only, no bold/italic)
+- PDF / SVG export, mobile viewer, auto-routing, clipboard copy/paste, IP annotations, COMM Config integration, PA Cable Schedule overlay, alignment guides, SVG faceplate icons
+
+**Source-of-truth spec:** issue #14 + `.planning/REQUIREMENTS.md`
+
+**Carried polish items from v2.2 (not v2.3 scope but worth tracking):**
+- Pre-v2.2 UAT/verification gaps from phases 1, 3, 5, 6 (see STATE.md `## Deferred Items`). Phase 6 has 6 real pending UAT scenarios; the rest are status-only false positives.
 
 ## Context
 
@@ -114,4 +136,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-22 — Milestone v2.2 Signal Flow Diagrammer closed via `/gsd-complete-milestone`. v2.2 archive: `.planning/milestones/v2.2-ROADMAP.md` + `.planning/milestones/v2.2-REQUIREMENTS.md`. 31 / 35 v2.2 requirements shipped (89%); LBL-01..03 + EXP-01 (Phase 10 — Autocomplete & PNG Export) carried forward to v2.3. Git tag `v2.2` created at HEAD. ROADMAP.md collapsed to milestone index; fresh REQUIREMENTS.md to be created via `/gsd-new-milestone`.*
+*Last updated: 2026-05-22 — Milestone v2.3 (Signal Flow Diagrammer Export & Enhancements) opened. Driver: GitHub issue #14 + carried scope from v2.2 Phase 10. 22 requirements across 6 categories (PORT, SHP-RESIZE, SHP, DRAW, TXT, LBL, EXP) mapped to 3 phases (10/11/12). State stays in the existing `SignalFlowDiagram.canvas_state` JSONField — no model migrations expected. Awaiting plan-phase to start Phase 10.*
