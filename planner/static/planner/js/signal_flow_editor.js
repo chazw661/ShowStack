@@ -1934,4 +1934,58 @@
 
   initAutocomplete();
 
+  // ══════════════════════════════════════════════════════════════
+  // Plan 10-03 — PNG export handler (EXP-01)
+  //   D-06: filename slug from diagram name + YYYYMMDD date.
+  //   D-07: pixelRatio 2 (retina quality).
+  //   D-08: captures full paperEl including orphan ghosts.
+  //   D-09: white background.
+  //   A3: shows generating toast; error toast on failure.
+  //   A5: guards typeof htmlToImage before calling.
+  // ══════════════════════════════════════════════════════════════
+
+  var exportPngBtn = document.getElementById('sfd-export-png');
+
+  if (exportPngBtn) {
+    exportPngBtn.addEventListener('click', function () {
+      // A5: guard against missing UMD global (mis-loaded vendor bundle).
+      if (typeof htmlToImage === 'undefined') {
+        showToast('Export unavailable: html-to-image library not loaded.', 'error');
+        return;
+      }
+
+      // Disable button during export to prevent double-clicks.
+      exportPngBtn.disabled = true;
+      showToast('Generating PNG…', 'info');
+
+      // D-06: filename slug.
+      var diagramName = (container.dataset.diagramName || '').trim();
+      var slug = diagramName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      var date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      var filename = (slug || 'signal-flow') + '-' + date + '.png';
+
+      // D-07, D-08, D-09: full canvas, 2x, white background.
+      htmlToImage.toPng(paperEl, {
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+        width: paper.options.width,
+        height: paper.options.height,
+      })
+        .then(function (dataUrl) {
+          var a = document.createElement('a');
+          a.download = filename;
+          a.href = dataUrl;
+          a.click();
+          showToast('PNG exported.', 'success');
+        })
+        .catch(function (err) {
+          console.error('[SFD] PNG export failed', err);
+          showToast('Export failed. Try again.', 'error');
+        })
+        .finally(function () {
+          exportPngBtn.disabled = false;
+        });
+    });
+  }
+
 })();
