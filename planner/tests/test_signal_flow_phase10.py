@@ -249,11 +249,25 @@ class SignalFlowLabelAutocompleteTests(_Phase10Base):
         self.assertEqual(by_label.get('Galaxy Out 1'), 'Galaxy Output')
 
     def test_no_active_project_returns_400(self):
-        # Clear the session project — middleware will not attach current_project.
-        session = self.client.session
-        del session['current_project_id']
-        session.save()
-        resp = self._get(q='FOH')
+        """Defensive guard: if request.current_project is None (user owns no
+        projects and has no invitations), the view must return 400.
+
+        We can't simply clear self.client.session['current_project_id'] —
+        CurrentProjectMiddleware will auto-select the first project the user
+        owns. So we log in as a third user with zero projects + zero
+        memberships; the middleware leaves request.current_project = None.
+        """
+        loner = User.objects.create_user(
+            username='phase10_loner',
+            email='loner@example.com',
+            password='pw',
+            is_staff=True,
+        )
+        loner_client = Client()
+        loner_client.force_login(loner)
+        resp = loner_client.get(
+            reverse('planner:signal_flow_label_autocomplete') + '?q=FOH'
+        )
         self.assertEqual(resp.status_code, 400)
 
 

@@ -335,6 +335,10 @@ urlpatterns = [
     path('signal-flow/', views.signal_flow_list, name='signal_flow_list'),
     path('signal-flow/create/', views.signal_flow_create, name='signal_flow_create'),
     path('signal-flow/autocomplete/', views.signal_flow_autocomplete, name='signal_flow_autocomplete'),
+    # Phase 10 LBL-01: label autocomplete endpoint. MUST come before the
+    # <int:diagram_id> param routes (static-paths-before-param-paths is the
+    # convention in this codebase — see urls.py:330-334).
+    path('signal-flow/label-autocomplete/', views.signal_flow_label_autocomplete, name='signal_flow_label_autocomplete'),
     path('signal-flow/<int:diagram_id>/', views.signal_flow_editor, name='signal_flow_editor'),
     path('signal-flow/<int:diagram_id>/state/', views.signal_flow_state, name='signal_flow_state'),
     path('signal-flow/<int:diagram_id>/save/', views.signal_flow_autosave, name='signal_flow_autosave'),
