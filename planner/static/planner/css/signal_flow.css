@@ -594,3 +594,98 @@
 .joint-link[joint-orphan-attached="true"] [joint-selector="line"] {
   opacity: 0.5 !important;
 }
+
+/* =========================================================================
+   SECTION 12 — Autocomplete dropdown (Phase 10 LBL-01..03)
+   Wraps the #sfd-circuit-label input with a positioned <ul> listbox.
+   ARIA combobox pattern: input role="combobox" + listbox role="listbox".
+   DOM injection + behavior wired by Plan 10-03. !important required to
+   override Django admin base CSS (per CLAUDE.md "Coding Conventions").
+   ========================================================================= */
+
+.sfd-autocomplete-wrapper {
+  position: relative !important;
+}
+
+#sfd-label-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1100;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+#sfd-label-suggestions[hidden] {
+  display: none !important;
+}
+
+.sfd-ac-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sfd-ac-row:last-child {
+  border-bottom: none !important;
+}
+
+.sfd-ac-row[aria-selected="true"],
+.sfd-ac-row:hover {
+  background: #e0f2fe !important;
+}
+
+.sfd-ac-source {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+/* =========================================================================
+   SECTION 13 — Export button group (Phase 10 EXP-01)
+   Right-aligned toolbar group containing the PNG export button. Group
+   scaffolded for future PDF / SVG buttons (v2.4+). Click handler wired
+   by Plan 10-03 via html-to-image library (already vendored in Phase 7).
+   ========================================================================= */
+
+#sfd-export-group {
+  margin-left: auto !important;
+}
+
+#sfd-export-png {
+  background: #0f766e;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.03em;
+}
+
+#sfd-export-png:hover {
+  background: #0d6b63 !important;
+}
+
+#sfd-export-png:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
