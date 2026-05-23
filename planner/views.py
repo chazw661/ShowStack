@@ -63,7 +63,8 @@ from .models import (
     GalaxyProcessor, GalaxyInput, GalaxyOutput,
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
-    Device, Device, SystemProcessor, Amp, Location, PACableSchedule, PAZone,
+    Device, Device, DeviceInput, DeviceOutput,
+    SystemProcessor, Amp, AmpChannel, Location, PACableSchedule, PAZone,
     ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile,
     AmplifierAssignment,
     MultitrackSession, MultitrackTrack,
@@ -7570,7 +7571,11 @@ def _enrich_nodes(canvas_state, project):
         model_name = Model.__name__
         if model_name == 'SpeakerArray':
             qs = Model.objects.filter(id__in=obj_ids, prediction__project=project)
-        elif model_name in ('Console', 'Device', 'CommBeltPack'):
+        elif model_name in ('Console', 'Device', 'CommBeltPack', 'Amp', 'SystemProcessor'):
+            # Phase 10 SHP-10 + SHP-11: Amp and SystemProcessor both have a
+            # direct project FK and a `name` field, so the values_list('id', 'name')
+            # call below works unchanged. Without this extension, Processor/Amp
+            # cells would render as permanent orphans even when the record exists.
             qs = Model.objects.filter(id__in=obj_ids, project=project)
         else:
             continue  # unknown model -> orphan (safe default)
@@ -7701,7 +7706,13 @@ def signal_flow_autosave(request, diagram_id):
                 exists = Model.objects.filter(
                     id=obj_id, prediction__project=current_project,
                 ).exists()
-            elif model_name in ('Console', 'Device', 'CommBeltPack'):
+            elif model_name in ('Console', 'Device', 'CommBeltPack', 'Amp', 'SystemProcessor'):
+                # Phase 10 SHP-10 + SHP-11: Amp and SystemProcessor are valid
+                # canvas GFK targets (both have a direct project FK). Without
+                # this extension, every Phase 10 autosave with a new shape
+                # type would return HTTP 422 — research §Pitfall 1 (the most
+                # likely silent-failure bug). P1Processor/GalaxyProcessor are
+                # NOT in the allowlist: the picker targets SystemProcessor.
                 exists = Model.objects.filter(
                     id=obj_id, project=current_project,
                 ).exists()
@@ -7754,7 +7765,12 @@ def signal_flow_autocomplete(request):
     """GET: equipment picker autocomplete for the canvas sidebar shape drops.
 
     Returns a project-scoped list of equipment records matching ?type=X (&q=...).
-    type ∈ {console, device, speakerarray, commbeltpack}.
+    type ∈ {console, device, speakerarray, commbeltpack, processor, amp}.
+
+    Phase 10 (SHP-10 + SHP-11): added 'processor' (-> SystemProcessor, badge from
+    device_type) and 'amp' (-> Amp, badge from amp_model) so the equipment picker
+    modal can serve the new Phase 10 shape types. Processor picker targets
+    SystemProcessor — NOT P1Processor / GalaxyProcessor (research §Pitfall 2).
 
     IDOR-safe: SpeakerArray scopes via prediction__project (no direct FK);
     all others via project FK. Pattern: _get_track_for_request (views.py:6328).
@@ -7804,6 +7820,28 @@ def signal_flow_autocomplete(request):
                 lambda b: f"BP #{b.bp_number}",
                 lambda b: b.get_manufacturer_display(),
             ),
+            # Phase 10 SHP-10: Processor picker -> SystemProcessor. Badge text
+            # comes from device_type ("L'Acoustics P1" / "Meyer GALAXY") so the
+            # picker modal can distinguish brands per D-10. NOT P1Processor /
+            # GalaxyProcessor (research §Pitfall 2 — those are child config
+            # models, never canvas GFK targets).
+            'processor': (
+                SystemProcessor,
+                {'project': current_project},
+                ['name'],
+                lambda sp: sp.name,
+                lambda sp: sp.get_device_type_display(),
+            ),
+            # Phase 10 SHP-11: Amp picker. Badge text is the AmpModel
+            # (manufacturer/model). select_related('amp_model') added below
+            # to prevent N+1 on str(a.amp_model) across the result list.
+            'amp': (
+                Amp,
+                {'project': current_project},
+                ['name'],
+                lambda a: a.name,
+                lambda a: str(a.amp_model) if a.amp_model else '—',
+            ),
         }
 
         if shape_type not in MODEL_MAP:
@@ -7812,6 +7850,10 @@ def signal_flow_autocomplete(request):
         Model, project_kw, search_fields, label_fn, detail_fn = MODEL_MAP[shape_type]
 
         qs = Model.objects.filter(**project_kw)
+        # Phase 10 SHP-11: prevent N+1 on str(a.amp_model) across amp results
+        # (lambda detail_fn dereferences amp_model for every row).
+        if shape_type == 'amp':
+            qs = qs.select_related('amp_model')
         if q:
             cond = Q()
             for f in search_fields:
@@ -7853,6 +7895,88 @@ def signal_flow_autocomplete(request):
         return JsonResponse({'results': results})
     except Exception:
         _signal_flow_logger.exception('signal_flow_autocomplete failed')
+        return JsonResponse({'error': 'Server error.'}, status=500)
+
+
+@staff_member_required
+@require_GET
+def signal_flow_label_autocomplete(request):
+    """GET: signal-name autocomplete for connector circuit-label and port labels.
+
+    Returns project-scoped label suggestions from 9 signal-name fields across
+    Device, Console, Amp, and Processor I/O models. Intended for the Phase 10
+    autocomplete combobox on #sfd-circuit-label and the future Phase 11
+    PORT-03 picker (D-04 — same endpoint, no re-implementation).
+
+    Locked behaviour:
+      - D-01: triggered after 1 char typed, 200ms debounce enforced client-side.
+      - D-02: each result has {label, source} where source is a human tag.
+      - D-03: max 8 results, alphabetical by label (case-insensitive).
+      - D-05: SystemProcessor is EXCLUDED — SystemProcessor.name is a device
+              identifier ("P1 Stage Left"), not a signal name. Signal-name data
+              lives on P1Input.label / P1Output.label (via P1Processor) and
+              GalaxyInput.label / GalaxyOutput.label (via GalaxyProcessor).
+              See planner/models.py:1898 (SystemProcessor), 2028 (P1Input),
+              2067 (P1Output), 2128 (GalaxyInput), 2163 (GalaxyOutput).
+      - LBL-02 / T-10-01: all 9 source queries are filtered by the
+              caller's request.current_project — cross-project labels never
+              appear (IDOR guard active).
+
+    Empty/null label values are excluded — without this, blank AmpChannel
+    rows (default channel_name="") would flood the dropdown (research
+    §Pitfall 5).
+    """
+    try:
+        q = (request.GET.get('q') or '').strip()
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return JsonResponse({'error': 'No active project'}, status=400)
+
+        # (Model, label_field, project-scope kwarg, human source tag).
+        # SystemProcessor is intentionally NOT in this list (D-05).
+        SOURCES = [
+            (DeviceInput,      'signal_name',  'device__project',
+             'Device Input'),
+            (DeviceOutput,     'signal_name',  'device__project',
+             'Device Output'),
+            (ConsoleInput,     'source',       'console__project',
+             'Console Input'),
+            (ConsoleAuxOutput, 'name',         'console__project',
+             'Console Aux Out'),
+            (AmpChannel,       'channel_name', 'amp__project',
+             'Amp Channel'),
+            (P1Input,          'label',        'p1_processor__system_processor__project',
+             'P1 Input'),
+            (P1Output,         'label',        'p1_processor__system_processor__project',
+             'P1 Output'),
+            (GalaxyInput,      'label',        'galaxy_processor__system_processor__project',
+             'Galaxy Input'),
+            (GalaxyOutput,     'label',        'galaxy_processor__system_processor__project',
+             'Galaxy Output'),
+        ]
+
+        seen = set()
+        results = []
+        for Model, field, scope_kwarg, tag in SOURCES:
+            filter_kw = {scope_kwarg: current_project}
+            if q:
+                filter_kw[f'{field}__icontains'] = q
+            qs = (Model.objects
+                  .filter(**filter_kw)
+                  .exclude(**{field: ''})
+                  .exclude(**{f'{field}__isnull': True})
+                  .values_list(field, flat=True)
+                  .distinct()[:50])
+            for val in qs:
+                key = (val, tag)
+                if key not in seen:
+                    seen.add(key)
+                    results.append({'label': val, 'source': tag})
+
+        results.sort(key=lambda r: r['label'].lower())
+        return JsonResponse({'results': results[:8]})
+    except Exception:
+        _signal_flow_logger.exception('signal_flow_label_autocomplete failed')
         return JsonResponse({'error': 'Server error.'}, status=500)
 
 
