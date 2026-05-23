@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.3
-milestone_name: Signal Flow Diagrammer — Export & Enhancements
-status: defining_requirements
-stopped_at: v2.3 milestone defined; awaiting plan-phase to start Phase 10
-last_updated: "2026-05-22T21:00:00.000Z"
-last_activity: 2026-05-22 -- v2.3 milestone opened (issue #14 + v2.2 carried scope)
+milestone: v2.0
+milestone_name: one-liners
+status: milestone_complete
+stopped_at: Phase 9 context gathered
+last_updated: "2026-05-23T13:50:11.207Z"
+last_activity: 2026-05-23 -- Phase --phase execution started
 progress:
-  total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 10
+  completed_phases: 10
+  total_plans: 49
+  completed_plans: 46
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** v2.3 — Signal Flow Diagrammer Export & Enhancements (issue #14)
+**Current focus:** Phase --phase — 10
 
 ## Current Position
 
-Phase: 10 (autocomplete-png-export-new-shapes) — CONTEXT gathered
+Phase: 10
 Plan: Not started
-Status: Phase 10 context captured; ready for /gsd-plan-phase 10
-Last activity: 2026-05-22 -- Phase 10 CONTEXT.md committed
+Status: Milestone complete
+Last activity: 2026-05-23
 
 Progress: [          ] 0% (v2.3 scope: 22 requirements across 3 phases)
 

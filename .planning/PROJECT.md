@@ -48,7 +48,8 @@ ShowStack knows your patch, your labels, and your gear. Once entered, that data 
 
 ## Current State
 
-**Latest shipped:** v2.2 Signal Flow Diagrammer — 2026-05-22 (Phases 7, 8, 9)
+**Latest shipped:** v2.3 Phase 10 — Autocomplete, PNG Export & New Shape Types — 2026-05-23 (closes LBL-01..03, EXP-01, SHP-10, SHP-11)
+**Previous milestone:** v2.2 Signal Flow Diagrammer — 2026-05-22 (Phases 7, 8, 9)
 
 ShowStack engineers can draw project-scoped signal-flow diagrams on a live JointJS canvas with smart shapes linked to Console / Device / SpeakerArray / CommBeltPack records, typed orthogonal connectors (analog / AES / Dante / MADI / intercom with distinct line styles + dash patterns for grayscale print), and the full canvas UX (pan / zoom / snap / undo / multi-select / keyboard delete / viewport restore). Edits persist via debounced 1500 ms autosave with `If-Match` optimistic-lock conflict handling — multi-tab conflicts reveal a locked-copy banner with hard reload; tab-close edits flush via `keepalive`. Equipment renames propagate on next diagram load via server-side `_enrich_nodes()`; deleted equipment renders ghosted with a node-mode inspector offering Re-link or Delete.
 
@@ -74,7 +75,7 @@ ShowStack engineers can draw project-scoped signal-flow diagrams on a live Joint
 - **PNG export** — one-click via the already-vendored `html-to-image`
 
 **Phase plan (continues numbering from v2.2):**
-- Phase 10 — Autocomplete, PNG Export & New Shape Types (LBL + EXP + SHP-10/11)
+- Phase 10 — Autocomplete, PNG Export & New Shape Types (LBL + EXP + SHP-10/11) — **shipped 2026-05-23**
 - Phase 11 — Per-Shape Labeled Ports + Resizable Shapes (PORT + SHP-RESIZE)
 - Phase 12 — Boundary Lines + Text Annotations (DRAW + TXT)
 

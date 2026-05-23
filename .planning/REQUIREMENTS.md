@@ -114,8 +114,8 @@ These were considered and deliberately excluded from v2.3. Reopening any of them
 | SHP-RESIZE-01 | TBD | Pending |
 | SHP-RESIZE-02 | TBD | Pending |
 | SHP-RESIZE-03 | TBD | Pending |
-| SHP-10 | TBD | Pending |
-| SHP-11 | TBD | Pending |
+| SHP-10 | 10 | Done |
+| SHP-11 | 10 | Done |
 | DRAW-01 | TBD | Pending |
 | DRAW-02 | TBD | Pending |
 | DRAW-03 | TBD | Pending |
@@ -123,9 +123,9 @@ These were considered and deliberately excluded from v2.3. Reopening any of them
 | TXT-01 | TBD | Pending |
 | TXT-02 | TBD | Pending |
 | TXT-03 | TBD | Pending |
-| LBL-01 | TBD | Pending |
-| LBL-02 | TBD | Pending |
-| LBL-03 | TBD | Pending |
-| EXP-01 | TBD | Pending |
+| LBL-01 | 10 | Done |
+| LBL-02 | 10 | Done |
+| LBL-03 | 10 | Done |
+| EXP-01 | 10 | Done |
 
 **Coverage target:** 22 / 22 requirements mapped to exactly one phase by end of roadmapping.
