@@ -255,11 +255,35 @@
     }
   }
 
-  // Stub — Plan 11-06 replaces this body with the Q7 auto-expansion logic
-  // (compute min-size from live port set + label widths, grow shape if needed,
-  // fire .sfd-toast "Shape resized to fit ports").
+  // Phase 11 Plan 11-06 — PORT-06 auto-expansion on port-add / label-rename overflow.
+  // Triggered by addAuthoredPort and renameAuthoredPort (Plan 11-02 wired the calls).
+  // Grows shape only when current size is below computeMinSize threshold; preserves
+  // top-left corner; toast notifies engineer; change:size listener (Plan 11-05) fires
+  // scheduleAutosave + live-redistribute automatically — no double-fire here.
   function maybeAutoExpand(cell) {
-    // Phase 11 Plan 11-06 fills in.
+    var current = cell.size();
+    var min = computeMinSize(cell);
+    var grew = false;
+    var newW = current.width, newH = current.height;
+    if (min.width  > current.width)  { newW = min.width;  grew = true; }
+    if (min.height > current.height) { newH = min.height; grew = true; }
+    if (!grew) return;   // silent no-op — engineer sees nothing, which is the right UX
+
+    // Snap-to-grid via Math.ceil — never shrink below min (Pitfall 4 ordering).
+    // Defensive null-check on viewport: in some edge cases (e.g. test harness)
+    // window.__sfd.viewport may not be initialised yet.
+    var snap = window.__sfd && window.__sfd.viewport && window.__sfd.viewport.snapEnabled;
+    if (snap) {
+      newW = Math.ceil(newW / 20) * 20;
+      newH = Math.ceil(newH / 20) * 20;
+    }
+
+    // cell.resize() fires change:size → Plan 11-05's listener fires
+    // scheduleAutosave + live-redistribute. Do NOT call scheduleAutosave
+    // here (would just reset the same debounce timer; harmless but noisy).
+    // Top-left corner preserved automatically (no cell.position() call).
+    cell.resize(newW, newH);
+    showToast('Shape resized to fit ports.', 'info');
   }
 
   // Mutators — every call ends with scheduleAutosave() because `change:ports`
