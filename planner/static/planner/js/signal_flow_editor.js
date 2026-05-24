@@ -379,6 +379,197 @@
     }];
   }
 
+  // =========================================================================
+  // Phase 11 — Min-size math (RESEARCH §Q2). Used by:
+  //   - CornerResize.setPosition (live drag clamp — SHP-RESIZE-02)
+  //   - maybeAutoExpand (Plan 11-06 PORT-06 trigger)
+  //   - renameAuthoredPort (label-widening auto-expand)
+  // Constants are off-grid (24/12/8) because 20px grid is too tight for
+  // 11px font port labels stacked vertically. Shape BBOX still snaps to 20
+  // (CornerResize snaps after compute, before resize() call).
+  // =========================================================================
+
+  var MIN_PORT_SPACING = 24;                            // px — center-to-center
+  var PORT_LABEL_FONT_SIZE = 11;                        // px — matches Plan 11-04 markup
+  var EDGE_PADDING_PARALLEL = 12;                       // px — corner clearance along edge
+  var EDGE_PADDING_PERPENDICULAR_INSIDE = 8;            // px — perpendicular inset
+  var FONT_LINE_HEIGHT = Math.ceil(PORT_LABEL_FONT_SIZE * 1.4);   // ≈ 16px
+
+  // Per-shape absolute floors — values verified against signal_flow_editor.js
+  // lines 127-266 defaults.size at research time. Update here if the per-shape
+  // defaults ever change in a future phase.
+  var ABSOLUTE_FLOORS = {
+    'showstack.Console':      { width: 180, height: 60  },
+    'showstack.Device':       { width: 140, height: 56  },
+    'showstack.SpeakerArray': { width: 120, height: 80  },
+    'showstack.CommBeltPack': { width: 80,  height: 100 },
+    'showstack.Generic':      { width: 140, height: 56  },
+    'showstack.Processor':    { width: 160, height: 60  },
+    'showstack.Amp':          { width: 140, height: 60  },
+  };
+
+  // Memoized Canvas-2D measureText. System-fonts-only — font stack matches
+  // Plan 11-04 portLabelMarkupForEdge() exactly so width measurement and
+  // rendering agree. Cache is keyed (fontSize, text) — fontStack is fixed.
+  var _textMeasureCanvas = null;
+  var _textMeasureCache = {};
+  function measureLabelWidth(text, fontSize) {
+    if (!text) return 0;
+    var key = fontSize + '|' + text;
+    if (_textMeasureCache[key] !== undefined) return _textMeasureCache[key];
+    if (!_textMeasureCanvas) _textMeasureCanvas = document.createElement('canvas');
+    var ctx = _textMeasureCanvas.getContext('2d');
+    ctx.font = fontSize + 'px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    var w = ctx.measureText(text).width;
+    _textMeasureCache[key] = w;
+    return w;
+  }
+
+  function computeMinSize(cell) {
+    var type = cell.get('type');
+    var floor = ABSOLUTE_FLOORS[type] || { width: 80, height: 56 };
+
+    var topPorts    = getAuthoredPortsByEdge(cell, 'top');
+    var bottomPorts = getAuthoredPortsByEdge(cell, 'bottom');
+    var leftPorts   = getAuthoredPortsByEdge(cell, 'left');
+    var rightPorts  = getAuthoredPortsByEdge(cell, 'right');
+
+    function maxLabelWidth(ports) {
+      var max = 0;
+      ports.forEach(function (p) {
+        var label = (p.showstack && p.showstack.label) || '';
+        var w = measureLabelWidth(label, PORT_LABEL_FONT_SIZE);
+        if (w > max) max = w;
+      });
+      return max;
+    }
+
+    // Shape's own body label (e.g. 'Console', 'FOH Lead Vox') — reserved width.
+    var bodyLabelText = (cell.attr('label/text') || '');
+    var bodyLabelReserveW = measureLabelWidth(bodyLabelText, 13) + 20;
+    var bodyLabelReserveH = 16;
+
+    var N_T = topPorts.length, N_B = bottomPorts.length;
+    var N_L = leftPorts.length, N_R = rightPorts.length;
+
+    var W_topbottom = (Math.max(N_T, N_B) > 0)
+      ? (2 * EDGE_PADDING_PARALLEL + Math.max(N_T, N_B) * MIN_PORT_SPACING)
+      : 0;
+
+    var maxLW = maxLabelWidth(leftPorts);
+    var maxRW = maxLabelWidth(rightPorts);
+    var W_leftright =
+        (maxLW > 0 ? maxLW + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + (maxRW > 0 ? maxRW + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + bodyLabelReserveW;
+
+    var minWidth = Math.max(W_topbottom, W_leftright, bodyLabelReserveW, floor.width);
+
+    var H_topbottom =
+        (N_T > 0 ? FONT_LINE_HEIGHT + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + (N_B > 0 ? FONT_LINE_HEIGHT + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + bodyLabelReserveH;
+
+    var H_leftright = (Math.max(N_L, N_R) > 0)
+      ? (2 * EDGE_PADDING_PARALLEL + Math.max(N_L, N_R) * MIN_PORT_SPACING)
+      : 0;
+
+    var minHeight = Math.max(H_topbottom, H_leftright, floor.height);
+
+    return { width: minWidth, height: minHeight };
+  }
+
+  // =========================================================================
+  // Phase 11 — Corner resize tool (SHP-RESIZE-01..03).
+  // Subclasses joint.elementTools.Control (MPL-2.0 core). NOT
+  // joint.elementTools.Resize (JointJS+ paid — confirmed absent from
+  // vendored bundle, RESEARCH §Q1).
+  // =========================================================================
+
+  var CornerResize = joint.elementTools.Control.extend({
+    children: [{
+      tagName: 'rect',
+      selector: 'handle',
+      attributes: {
+        width: 10, height: 10, x: -5, y: -5,
+        fill: '#0d9488', stroke: '#fff', 'stroke-width': 1,
+        cursor: 'nwse-resize',
+      }
+    }],
+
+    getPosition: function (view) {
+      var s = view.model.size();
+      var c = this.options.corner;
+      if (c === 'tl') return { x: 0,        y: 0 };
+      if (c === 'tr') return { x: s.width,  y: 0 };
+      if (c === 'bl') return { x: 0,        y: s.height };
+      return { x: s.width, y: s.height };
+    },
+
+    setPosition: function (view, coordinates) {
+      var model = view.model;
+      var s = model.size();
+      var p = model.position();
+      var c = this.options.corner;
+      var minSize = computeMinSize(model);
+
+      var newW = s.width, newH = s.height, newX = p.x, newY = p.y;
+
+      if (c === 'br') {
+        newW = Math.max(coordinates.x, minSize.width);
+        newH = Math.max(coordinates.y, minSize.height);
+      } else if (c === 'tr') {
+        newW = Math.max(coordinates.x, minSize.width);
+        newH = Math.max(s.height - coordinates.y, minSize.height);
+        newY = p.y + (s.height - newH);
+      } else if (c === 'bl') {
+        newW = Math.max(s.width - coordinates.x, minSize.width);
+        newX = p.x + (s.width - newW);
+        newH = Math.max(coordinates.y, minSize.height);
+      } else if (c === 'tl') {
+        newW = Math.max(s.width - coordinates.x, minSize.width);
+        newH = Math.max(s.height - coordinates.y, minSize.height);
+        newX = p.x + (s.width - newW);
+        newY = p.y + (s.height - newH);
+      }
+
+      // Phase 8 D-13 — snap-to-grid 20px. Pitfall 4: clamp AFTER snap.
+      if (window.__sfd && window.__sfd.viewport && window.__sfd.viewport.snapEnabled) {
+        newW = Math.round(newW / 20) * 20;
+        newH = Math.round(newH / 20) * 20;
+        newX = Math.round(newX / 20) * 20;
+        newY = Math.round(newY / 20) * 20;
+        newW = Math.max(newW, minSize.width);
+        newH = Math.max(newH, minSize.height);
+      }
+
+      model.position(newX, newY);
+      model.resize(newW, newH);
+    }
+  });
+
+  function attachResizeTools(cell) {
+    if (!cell || !cell.isElement || !cell.isElement()) return;
+    var view = cell.findView(paper);
+    if (!view) return;
+    view.removeTools();   // clear any stale tools
+    view.addTools(new joint.dia.ToolsView({
+      name: 'sfd-resize',
+      tools: [
+        new CornerResize({ corner: 'tl', selector: 'body' }),
+        new CornerResize({ corner: 'tr', selector: 'body' }),
+        new CornerResize({ corner: 'bl', selector: 'body' }),
+        new CornerResize({ corner: 'br', selector: 'body' }),
+      ]
+    }));
+  }
+
+  function detachResizeTools(cell) {
+    if (!cell || !cell.findView) return;
+    var view = cell.findView(paper);
+    if (view) view.removeTools();
+  }
+
   // ---- Console (180×60, teal #0d9488 left band) ----
   joint.shapes.showstack.Console = joint.dia.Element.extend({
     markup: [
@@ -1615,6 +1806,10 @@
     circuitLabelInput.value = link.prop('circuitLabel') || '';
   }
 
+  // Phase 11 — tracker for the cell that currently has resize handles attached.
+  // Detached before every selection-change so stale handles never accumulate.
+  var _resizeAttachedCell = null;
+
   // Phase 9 D-16 — Selection-change widened to node mode.
   window.__sfd.onSelectionChanged = function (selectedIds) {
     if (selectedIds.length === 1) {
@@ -1622,15 +1817,32 @@
       if (cell && cell.isLink && cell.isLink()) {
         setInspectorMode('connector', cell);
         showInspector();
+        // Phase 11 — detach resize tools (link selected, not an element).
+        if (_resizeAttachedCell) {
+          detachResizeTools(_resizeAttachedCell);
+          _resizeAttachedCell = null;
+        }
         return;
       }
       if (cell && cell.isElement && cell.isElement()) {
         setInspectorMode('node', cell);
         showInspector();
+        // Phase 11 — attach corner-resize handles to the single selected element.
+        if (_resizeAttachedCell) {
+          detachResizeTools(_resizeAttachedCell);
+          _resizeAttachedCell = null;
+        }
+        attachResizeTools(cell);
+        _resizeAttachedCell = cell;
         return;
       }
     }
     hideInspector();
+    // Phase 11 — multi-select or empty selection: detach resize tools.
+    if (_resizeAttachedCell) {
+      detachResizeTools(_resizeAttachedCell);
+      _resizeAttachedCell = null;
+    }
   };
 
   // Field handlers — every change writes to the link model AND updates the live SVG
@@ -2123,8 +2335,26 @@
   // listed here. Mid-drag position events are intentionally excluded
   // (PITFALLS.md §6 "autosave flooding"); only the element:pointerup
   // drag-end below fires the debounce for moves.
-  graph.on('add remove change:source change:target', scheduleAutosave);
+  // Phase 11 — change:size added so programmatic resizes (Plan 11-06 auto-expand)
+  // also trigger autosave. Manual drag-end is already caught by element:pointerup.
+  graph.on('add remove change:source change:target change:size', scheduleAutosave);
   paper.on('element:pointerup', scheduleAutosave);
+
+  // Phase 11 D-06 — live port re-distribute during resize drag. Skips
+  // shapes with no authored ports (back-compat — Phase 8 generic ports
+  // are statically positioned and would no-op anyway, but the early-exit
+  // saves work). Also calls view.updateTools() so the 4 corner handles
+  // re-render at the new corners in the same frame (Pitfall 3).
+  graph.on('change:size', function (cell) {
+    if (!cell || !cell.isElement || !cell.isElement()) return;
+    if (cellHasAnyAuthoredPort(cell)) {
+      ['top', 'bottom', 'left', 'right'].forEach(function (edge) {
+        redistributeEdgePorts(cell, edge);
+      });
+    }
+    var view = cell.findView(paper);
+    if (view && typeof view.updateTools === 'function') view.updateTools();
+  });
 
   // D-09 / D-10 / D-11 — keepalive flush on tab-hide / page-hide.
   // We intentionally avoid the pre-unload event (browser cancels the fetch
@@ -2195,6 +2425,12 @@
     reanchorFromPort:    reanchorLinksFromPort,
     // Geometry
     edgeMidpoint:        edgeMidpointInPaperCoords,
+  };
+  // Phase 11 Plan 11-05 — resize surface (Plan 11-06 consumes computeMinSize
+  // to implement maybeAutoExpand's auto-expansion check — PORT-06).
+  window.__sfd.resize = {
+    computeMinSize:    computeMinSize,
+    measureLabelWidth: measureLabelWidth,
   };
 
   // ══════════════════════════════════════════════════════════════
