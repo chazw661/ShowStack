@@ -7926,6 +7926,21 @@ def signal_flow_label_autocomplete(request):
     rows (default channel_name="") would flood the dropdown (research
     §Pitfall 5).
     """
+    # Phase 11 GAP-11.1: per-shape autocomplete scoping.
+    # When the engineer authors a port on a Device shape, suggestions should come
+    # from Device I/O fields, NOT Amp Channel (the UAT bug). Allowlist keys are
+    # cell.get('type') values defined in planner/static/planner/js/signal_flow_editor.js.
+    # SpeakerArray / CommBeltPack / Generic deliberately absent → fall through to
+    # the unscoped 9-source list (no catalog of their own; same as connector circuit
+    # label). Unknown shape_class values also fall through (allowlist-only filter).
+    # Backwards compat: callers that omit shape_class (e.g. the connector circuit-label
+    # autocomplete at signal_flow_editor.js:2652) see ZERO behavior change.
+    SHAPE_CLASS_SOURCES = {
+        'showstack.Console':   {'Console Input', 'Console Aux Out'},
+        'showstack.Device':    {'Device Input', 'Device Output'},
+        'showstack.Amp':       {'Amp Channel'},
+        'showstack.Processor': {'P1 Input', 'P1 Output', 'Galaxy Input', 'Galaxy Output'},
+    }
     try:
         q = (request.GET.get('q') or '').strip()
         current_project = getattr(request, 'current_project', None)
@@ -7954,6 +7969,13 @@ def signal_flow_label_autocomplete(request):
             (GalaxyOutput,     'label',        'galaxy_processor__system_processor__project',
              'Galaxy Output'),
         ]
+
+        # Phase 11 GAP-11.1: optionally narrow SOURCES to the requesting shape's catalog.
+        # Allowlist-only: unknown shape_class → fall through (no exception, no 500).
+        shape_class = (request.GET.get('shape_class') or '').strip()
+        if shape_class and shape_class in SHAPE_CLASS_SOURCES:
+            allowed_tags = SHAPE_CLASS_SOURCES[shape_class]
+            SOURCES = [row for row in SOURCES if row[3] in allowed_tags]
 
         seen = set()
         results = []
