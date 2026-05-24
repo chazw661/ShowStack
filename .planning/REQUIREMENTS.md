@@ -14,17 +14,22 @@ Supersedes v2.2's deferred PORT-01 (per-channel ports) with a richer model: engi
 
 - [ ] **PORT-01**: User can add a labeled port to any smart shape via the inspector. Ports anchor to one of four edges per shape: **Top**, **Bottom**, **Left**, **Right**. The bottom edge is structurally free because all 7 shape classes left-anchor their body label inside the colored band (`refX: 16, refY: '50%'` in `signal_flow_editor.js`), so bottom-edge ports do not collide with the shape's own label.
 - [ ] **PORT-02**: When the inspector adds a port to an edge, all ports on that edge auto-distribute to equal spacing (no manual port-position drag in v2.3).
-- [ ] **PORT-03**: Each port can be labeled via one of two paths: (a) a dropdown that surfaces existing project signal-name fields scoped to `request.current_project` (see PORT-LBL-* below for sources), OR (b) a free-text custom label. The two paths are exclusive — picking from the dropdown sets the label; subsequent typing in the custom field overrides it.
-- [ ] **PORT-04**: When a shape has at least one port on a given edge, that edge becomes a connector snap target — engineers drag connectors from/to any specific port, not the generic shape edge. The v2.2 single-port-per-edge behavior is preserved when the engineer hasn't added any custom ports yet (back-compat).
-- [ ] **PORT-05**: User can remove a port via the inspector; remaining ports on that edge re-distribute to equal spacing. Any connector attached to a removed port detaches gracefully — the connector survives with its endpoint pinned to the shape's edge midpoint (not lost; not silently re-routed).
-- [ ] **PORT-06**: Adding ports to a shape with no existing port edge expands the shape's height (vertical-axis edges) or width (top edge) so labels remain readable — width-to-port-count + height-to-port-count are managed automatically alongside SHP-RESIZE-* manual resizing.
+- [x] **PORT-03
+**: Each port can be labeled via one of two paths: (a) a dropdown that surfaces existing project signal-name fields scoped to `request.current_project` (see PORT-LBL-* below for sources), OR (b) a free-text custom label. The two paths are exclusive — picking from the dropdown sets the label; subsequent typing in the custom field overrides it.
+- [x] **PORT-04
+**: When a shape has at least one port on a given edge, that edge becomes a connector snap target — engineers drag connectors from/to any specific port, not the generic shape edge. The v2.2 single-port-per-edge behavior is preserved when the engineer hasn't added any custom ports yet (back-compat).
+- [x] **PORT-05
+**: User can remove a port via the inspector; remaining ports on that edge re-distribute to equal spacing. Any connector attached to a removed port detaches gracefully — the connector survives with its endpoint pinned to the shape's edge midpoint (not lost; not silently re-routed).
+- [x] **PORT-06
+**: Adding ports to a shape with no existing port edge expands the shape's height (vertical-axis edges) or width (top edge) so labels remain readable — width-to-port-count + height-to-port-count are managed automatically alongside SHP-RESIZE-* manual resizing.
 
 ### Shape Sizing — SHP-RESIZE
 
 Companion to PORT — engineers need to grow or shrink shapes to accommodate ports or just to fit their canvas layout.
 
 - [ ] **SHP-RESIZE-01**: User can resize ANY smart shape (Console, Device, SpeakerArray, CommBeltPack, Generic, plus the v2.3 Processor + Amp) by dragging a corner handle. Handle appears on selection.
-- [ ] **SHP-RESIZE-02**: Shape resize is constrained to a per-type minimum size that always fits the longest label on each port edge plus the shape's own label, so the engineer cannot resize a shape into illegibility. (Specific min-size table is a phase-research output.)
+- [x] **SHP-RESIZE-02
+**: Shape resize is constrained to a per-type minimum size that always fits the longest label on each port edge plus the shape's own label, so the engineer cannot resize a shape into illegibility. (Specific min-size table is a phase-research output.)
 - [ ] **SHP-RESIZE-03**: Resize lands in the autosave + undo path — Ctrl+Z reverses a resize gesture, autosave POSTs the new dimensions, 409 conflict applies same as any other edit.
 
 ### New Smart Shape Types — SHP
@@ -60,7 +65,8 @@ Freeform text on the canvas, decoupled from shapes and connectors. Used for "FOH
   - `ConsoleAuxOutput.name`
   - **New for v2.3 (via SHP-10/SHP-11):** `AmpChannel.*` label fields (final field set is research output) plus the input/output models for the three processor types (`P1Input.signal_name`, `P1Output.signal_name`, `GalaxyInput.signal_name`, `GalaxyOutput.signal_name`, and equivalent fields on `SystemProcessor` — research will resolve which `SystemProcessor` field is canonical)
 - [ ] **LBL-02**: Autocomplete results are scoped to `request.current_project`; cross-project signals never appear.
-- [ ] **LBL-03**: Engineer can override autocomplete and enter free-text; the field accepts any string. (Already works in connector labels today; v2.3 extends to PORT-03 custom labels.)
+- [x] **LBL-03**: Engineer can override autocomplete and enter free-text; the field accepts any string. (Already works in connector labels today; v2.3 extends to PORT-03
+ custom labels.)
 
 ### PNG Export — EXP (carried forward from v2.2 Phase 10)
 
