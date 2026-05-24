@@ -2605,7 +2605,12 @@
     });
 
     function fetchAcResults(q) {
-      var fetchUrl = url + '?q=' + encodeURIComponent(q);
+      // GAP-11.1 fix (CR-01): the base `url` may already carry a query string
+      // (e.g. Phase 11 port autocomplete pre-appends `?shape_class=...`). Use a
+      // separator check so we produce `?q=...` for plain URLs (Phase 10
+      // connector-label path) and `&q=...` when params already exist.
+      var sep = (url.indexOf('?') === -1) ? '?' : '&';
+      var fetchUrl = url + sep + 'q=' + encodeURIComponent(q);
       getJSON(fetchUrl)
         .then(function (data) { renderAcResults(data.results || []); })
         .catch(function () { closeAcListbox(); });
