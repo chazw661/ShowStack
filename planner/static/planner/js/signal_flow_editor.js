@@ -305,7 +305,11 @@
             magnet: (directionForEdge(edge) === 'in') ? 'passive' : true,
             r: 4, fill: '#fff', stroke: '#666',
             'stroke-width': 1,
-            opacity: 0                                       // hover-revealed (Phase 8 CSS Section 7)
+            opacity: 1                                       // GAP-11.2: authored ports always visible
+                                                              // — labels next to them (Section 14) make
+                                                              // the click affordance obvious. Phase 8
+                                                              // generic ports in standardPortGroups
+                                                              // still opacity:0 (Section 7 hover-reveal).
           },
           label: { text: label }                             // JointJS reads this for SVG label
         },
@@ -468,6 +472,17 @@
       return max;
     }
 
+    function sumLabelWidths(ports) {
+      // GAP-11.5: Top/Bottom edges hold horizontal labels INSIDE the body, so each
+      // port consumes its own label-width along the edge. RESEARCH §Q2 formula.
+      var sum = 0;
+      ports.forEach(function (p) {
+        var label = (p.showstack && p.showstack.label) || '';
+        sum += measureLabelWidth(label, PORT_LABEL_FONT_SIZE);
+      });
+      return sum;
+    }
+
     // Shape's own body label (e.g. 'Console', 'FOH Lead Vox') — reserved width.
     var bodyLabelText = (cell.attr('label/text') || '');
     var bodyLabelReserveW = measureLabelWidth(bodyLabelText, 13) + 20;
@@ -476,9 +491,17 @@
     var N_T = topPorts.length, N_B = bottomPorts.length;
     var N_L = leftPorts.length, N_R = rightPorts.length;
 
-    var W_topbottom = (Math.max(N_T, N_B) > 0)
-      ? (2 * EDGE_PADDING_PARALLEL + Math.max(N_T, N_B) * MIN_PORT_SPACING)
-      : 0;
+    // GAP-11.5: width contribution per horizontal edge = Σ(label widths)
+    //   + (count - 1) * MIN_PORT_SPACING + 2 * EDGE_PADDING_PARALLEL.
+    // Empty-label ports contribute 0 width but the inter-port spacing still applies
+    // (so unlabeled ports remain separable on the canvas).
+    function edgeWidthRequired(ports) {
+      if (!ports.length) return 0;
+      return sumLabelWidths(ports)
+           + (ports.length - 1) * MIN_PORT_SPACING
+           + 2 * EDGE_PADDING_PARALLEL;
+    }
+    var W_topbottom = Math.max(edgeWidthRequired(topPorts), edgeWidthRequired(bottomPorts));
 
     var maxLW = maxLabelWidth(leftPorts);
     var maxRW = maxLabelWidth(rightPorts);
@@ -2096,6 +2119,21 @@
   function refreshPortAuthorBlock(cell) {
     if (!portAuthorBlock || !cell) return;
 
+    // GAP-11.3 / WR-02 fix: drop stale autocomplete listboxes left in portAuthorBlock
+    // by prior refreshes. attachAutocompleteToInput resolves the input's .sfd-field
+    // ancestor to portAuthorBlock itself and appends a fresh <ul.sfd-ac-listbox>
+    // each time, so without this purge the inspector accumulates orphans (and
+    // duplicate listbox ids).
+    Array.from(portAuthorBlock.querySelectorAll('.sfd-ac-listbox')).forEach(function (lb) {
+      lb.parentNode && lb.parentNode.removeChild(lb);
+    });
+
+    // GAP-11.1: scope autocomplete to the cell's catalog. Backend's SHAPE_CLASS_SOURCES
+    // allowlist filters SOURCES; unknown / missing shape_class → full 9-source fallback.
+    var portAutocompleteUrl = labelAutocompleteUrl
+      + (labelAutocompleteUrl.indexOf('?') === -1 ? '?' : '&')
+      + 'shape_class=' + encodeURIComponent(cell.get('type') || '');
+
     PORT_EDGES.forEach(function (edge) {
       var listEl = portEdgeLists[edge];
       // Clear existing rows (preserves the section header above the <ul>).
@@ -2135,7 +2173,7 @@
           // onSelect fires on row-pick AND on freeform blur-commit.
           attachAutocompleteToInput(
             input,
-            labelAutocompleteUrl,
+            portAutocompleteUrl,
             function (label) {
               window.__sfd.ports.rename(capturedCell, capturedPortId, label);
             }
