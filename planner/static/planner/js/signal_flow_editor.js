@@ -524,6 +524,7 @@
       return magnet && magnet.getAttribute('magnet') !== 'passive';
     },
     validateConnection: function (sourceView, sourceMagnet, targetView, targetMagnet) {
+      // Phase 11 — per-port snap targeting honored automatically; see addAuthoredPort().
       // CON-03 — both ends MUST be magnets (ports). Mid-shape drops have null magnet.
       if (!sourceMagnet || !targetMagnet) return false;
       // Reject self-connections (same shape on both ends).
@@ -1994,6 +1995,21 @@
   // Phase 9 manual-flush seam — Cmd+S shortcut (deferred to v2.3) or any
   // future caller can force an immediate save.
   window.__sfd.save = function () { return flushAutosave({ force: true }); };
+  // Phase 11 — engineer-authored port helpers (Plans 11-03/05/06 consume this).
+  window.__sfd.ports = {
+    // Data accessors
+    getByEdge:           getAuthoredPortsByEdge,
+    hasAuthored:         cellHasAnyAuthoredPort,
+    directionForEdge:    directionForEdge,
+    // Mutators (each ends with scheduleAutosave())
+    add:                 addAuthoredPort,
+    removeWithSurvival:  removeAuthoredPortWithSurvival,
+    rename:              renameAuthoredPort,
+    redistribute:        redistributeEdgePorts,
+    reanchorFromPort:    reanchorLinksFromPort,
+    // Geometry
+    edgeMidpoint:        edgeMidpointInPaperCoords,
+  };
 
   // ══════════════════════════════════════════════════════════════
   // Plan 10-03 — Circuit-label autocomplete combobox (LBL-01..03)
