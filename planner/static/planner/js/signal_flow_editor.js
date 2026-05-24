@@ -379,6 +379,106 @@
     }];
   }
 
+  // =========================================================================
+  // Phase 11 — Min-size math (RESEARCH §Q2). Used by:
+  //   - CornerResize.setPosition (live drag clamp — SHP-RESIZE-02)
+  //   - maybeAutoExpand (Plan 11-06 PORT-06 trigger)
+  //   - renameAuthoredPort (label-widening auto-expand)
+  // Constants are off-grid (24/12/8) because 20px grid is too tight for
+  // 11px font port labels stacked vertically. Shape BBOX still snaps to 20
+  // (CornerResize snaps after compute, before resize() call).
+  // =========================================================================
+
+  var MIN_PORT_SPACING = 24;                            // px — center-to-center
+  var PORT_LABEL_FONT_SIZE = 11;                        // px — matches Plan 11-04 markup
+  var EDGE_PADDING_PARALLEL = 12;                       // px — corner clearance along edge
+  var EDGE_PADDING_PERPENDICULAR_INSIDE = 8;            // px — perpendicular inset
+  var FONT_LINE_HEIGHT = Math.ceil(PORT_LABEL_FONT_SIZE * 1.4);   // ≈ 16px
+
+  // Per-shape absolute floors — values verified against signal_flow_editor.js
+  // lines 127-266 defaults.size at research time. Update here if the per-shape
+  // defaults ever change in a future phase.
+  var ABSOLUTE_FLOORS = {
+    'showstack.Console':      { width: 180, height: 60  },
+    'showstack.Device':       { width: 140, height: 56  },
+    'showstack.SpeakerArray': { width: 120, height: 80  },
+    'showstack.CommBeltPack': { width: 80,  height: 100 },
+    'showstack.Generic':      { width: 140, height: 56  },
+    'showstack.Processor':    { width: 160, height: 60  },
+    'showstack.Amp':          { width: 140, height: 60  },
+  };
+
+  // Memoized Canvas-2D measureText. System-fonts-only — font stack matches
+  // Plan 11-04 portLabelMarkupForEdge() exactly so width measurement and
+  // rendering agree. Cache is keyed (fontSize, text) — fontStack is fixed.
+  var _textMeasureCanvas = null;
+  var _textMeasureCache = {};
+  function measureLabelWidth(text, fontSize) {
+    if (!text) return 0;
+    var key = fontSize + '|' + text;
+    if (_textMeasureCache[key] !== undefined) return _textMeasureCache[key];
+    if (!_textMeasureCanvas) _textMeasureCanvas = document.createElement('canvas');
+    var ctx = _textMeasureCanvas.getContext('2d');
+    ctx.font = fontSize + 'px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    var w = ctx.measureText(text).width;
+    _textMeasureCache[key] = w;
+    return w;
+  }
+
+  function computeMinSize(cell) {
+    var type = cell.get('type');
+    var floor = ABSOLUTE_FLOORS[type] || { width: 80, height: 56 };
+
+    var topPorts    = getAuthoredPortsByEdge(cell, 'top');
+    var bottomPorts = getAuthoredPortsByEdge(cell, 'bottom');
+    var leftPorts   = getAuthoredPortsByEdge(cell, 'left');
+    var rightPorts  = getAuthoredPortsByEdge(cell, 'right');
+
+    function maxLabelWidth(ports) {
+      var max = 0;
+      ports.forEach(function (p) {
+        var label = (p.showstack && p.showstack.label) || '';
+        var w = measureLabelWidth(label, PORT_LABEL_FONT_SIZE);
+        if (w > max) max = w;
+      });
+      return max;
+    }
+
+    // Shape's own body label (e.g. 'Console', 'FOH Lead Vox') — reserved width.
+    var bodyLabelText = (cell.attr('label/text') || '');
+    var bodyLabelReserveW = measureLabelWidth(bodyLabelText, 13) + 20;
+    var bodyLabelReserveH = 16;
+
+    var N_T = topPorts.length, N_B = bottomPorts.length;
+    var N_L = leftPorts.length, N_R = rightPorts.length;
+
+    var W_topbottom = (Math.max(N_T, N_B) > 0)
+      ? (2 * EDGE_PADDING_PARALLEL + Math.max(N_T, N_B) * MIN_PORT_SPACING)
+      : 0;
+
+    var maxLW = maxLabelWidth(leftPorts);
+    var maxRW = maxLabelWidth(rightPorts);
+    var W_leftright =
+        (maxLW > 0 ? maxLW + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + (maxRW > 0 ? maxRW + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + bodyLabelReserveW;
+
+    var minWidth = Math.max(W_topbottom, W_leftright, bodyLabelReserveW, floor.width);
+
+    var H_topbottom =
+        (N_T > 0 ? FONT_LINE_HEIGHT + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + (N_B > 0 ? FONT_LINE_HEIGHT + EDGE_PADDING_PERPENDICULAR_INSIDE : 0)
+      + bodyLabelReserveH;
+
+    var H_leftright = (Math.max(N_L, N_R) > 0)
+      ? (2 * EDGE_PADDING_PARALLEL + Math.max(N_L, N_R) * MIN_PORT_SPACING)
+      : 0;
+
+    var minHeight = Math.max(H_topbottom, H_leftright, floor.height);
+
+    return { width: minWidth, height: minHeight };
+  }
+
   // ---- Console (180×60, teal #0d9488 left band) ----
   joint.shapes.showstack.Console = joint.dia.Element.extend({
     markup: [
