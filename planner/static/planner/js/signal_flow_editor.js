@@ -1741,6 +1741,153 @@
     });
   }
 
+  // =========================================================================
+  // Phase 11 — Inspector port-authoring block (PORT-01, PORT-02, PORT-03, PORT-05).
+  //
+  // DOM structure built once in buildPortAuthorBlock; per-selection refresh
+  // via refreshPortAuthorBlock(cell). Click delegation handles "+ Add port",
+  // trash-icon, and label-input commits through Plan 11-02's window.__sfd.ports API.
+  // =========================================================================
+
+  var portAuthorBlock = null;
+  var portEdgeSections = {};       // { top: <div>, bottom: <div>, left: <div>, right: <div> }
+  var portEdgeLists    = {};       // { top: <ul>,  bottom: <ul>,  left: <ul>,  right: <ul>  }
+  var portEdgeAddBtns  = {};       // { top: <btn>, bottom: <btn>, left: <btn>, right: <btn> }
+
+  var PORT_EDGES = ['top', 'bottom', 'left', 'right'];
+  var PORT_EDGE_LABELS = { top: 'Top', bottom: 'Bottom', left: 'Left', right: 'Right' };
+
+  function buildPortAuthorBlock() {
+    if (!inspectorEl) return;       // null-guard (Phase 8 discipline)
+    if (portAuthorBlock) return;    // idempotent
+
+    portAuthorBlock = document.createElement('div');
+    portAuthorBlock.className = 'sfd-field sfd-field--port-author';
+    portAuthorBlock.setAttribute('data-mode', 'node');
+    portAuthorBlock.style.setProperty('display', 'none', 'important');
+
+    var title = document.createElement('h4');
+    title.className = 'sfd-port-section-title';
+    title.textContent = 'Ports';          // textContent — XSS-safe
+    portAuthorBlock.appendChild(title);
+
+    // Build 4 edge sections.
+    PORT_EDGES.forEach(function (edge) {
+      var section = document.createElement('div');
+      section.className = 'sfd-port-edge-section';
+      section.setAttribute('data-edge', edge);
+
+      var header = document.createElement('div');
+      header.className = 'sfd-port-edge-header';
+
+      var name = document.createElement('span');
+      name.className = 'sfd-port-edge-name';
+      name.textContent = PORT_EDGE_LABELS[edge];          // textContent
+      header.appendChild(name);
+
+      var listEl = document.createElement('ul');
+      listEl.className = 'sfd-port-list';
+      listEl.setAttribute('data-edge', edge);
+
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'sfd-port-add';
+      addBtn.setAttribute('data-edge', edge);
+      addBtn.textContent = '+ Add port';
+      // Use IIFE to capture edge + listEl in the closure (ES5-safe).
+      (function (capturedEdge, capturedListEl) {
+        addBtn.addEventListener('click', function () {
+          if (!inspectorCurrentNode) return;
+          var cell = inspectorCurrentNode;
+          window.__sfd.ports.add(cell, capturedEdge, '');    // empty label — engineer types next
+          refreshPortAuthorBlock(cell);
+          // Focus the new row's input so the engineer can type immediately.
+          var newRow = capturedListEl.lastElementChild;
+          if (newRow) {
+            var newInput = newRow.querySelector('.sfd-port-label-input');
+            if (newInput) newInput.focus();
+          }
+        });
+      })(edge, listEl);
+      header.appendChild(addBtn);
+
+      section.appendChild(header);
+      section.appendChild(listEl);
+
+      portEdgeSections[edge] = section;
+      portEdgeLists[edge] = listEl;
+      portEdgeAddBtns[edge] = addBtn;
+
+      portAuthorBlock.appendChild(section);
+    });
+
+    inspectorEl.appendChild(portAuthorBlock);
+  }
+
+  function refreshPortAuthorBlock(cell) {
+    if (!portAuthorBlock || !cell) return;
+
+    PORT_EDGES.forEach(function (edge) {
+      var listEl = portEdgeLists[edge];
+      // Clear existing rows (preserves the section header above the <ul>).
+      while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+
+      var ports = window.__sfd.ports.getByEdge(cell, edge);
+      ports.forEach(function (port, i) {
+        var row = document.createElement('li');
+        row.className = 'sfd-port-row';
+        row.setAttribute('data-port-id', port.id);
+
+        var ordinal = document.createElement('span');
+        ordinal.className = 'sfd-port-ordinal';
+        ordinal.textContent = String(i + 1);              // 1-based ordinal for engineer reference
+        row.appendChild(ordinal);
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'sfd-port-label-input';
+        input.id = 'sfd-port-label-' + port.id;           // unique id per row for combobox listbox
+        // Read engineer's source-of-truth label from showstack.label (Plan 11-02 contract).
+        input.value = (port.showstack && port.showstack.label) || '';  // .value — XSS-safe DOM property
+        row.appendChild(input);
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'sfd-port-remove';
+        removeBtn.setAttribute('aria-label', 'Remove port');
+        removeBtn.textContent = '🗑';           // U+1F5D1 WASTEBASKET emoji
+        row.appendChild(removeBtn);
+
+        listEl.appendChild(row);
+
+        // Capture cell + portId in a per-row closure (ES5-safe IIFE).
+        (function (capturedCell, capturedPortId) {
+          // Attach Phase 10 combobox to the label input (Plan 11-01 refactor).
+          // onSelect fires on row-pick AND on freeform blur-commit.
+          attachAutocompleteToInput(
+            input,
+            labelAutocompleteUrl,
+            function (label) {
+              window.__sfd.ports.rename(capturedCell, capturedPortId, label);
+            }
+          );
+
+          // Trash-icon click — wraps removeWithSurvival in undo batch (Phase 9 pattern).
+          removeBtn.addEventListener('click', function () {
+            if (window.__sfd.undo && typeof window.__sfd.undo.beginBatch === 'function') {
+              window.__sfd.undo.beginBatch();
+              window.__sfd.ports.removeWithSurvival(capturedCell, capturedPortId);
+              window.__sfd.undo.endBatch();
+            } else {
+              window.__sfd.ports.removeWithSurvival(capturedCell, capturedPortId);
+            }
+            refreshPortAuthorBlock(capturedCell);          // repaint without the removed row
+          });
+        })(cell, port.id);
+      });
+    });
+  }
+
   function setInspectorMode(mode, cell) {
     if (!inspectorEl) return;
     if (!nodeModeBlock) buildNodeModeBlock();
@@ -1751,6 +1898,7 @@
         row.style.setProperty('display', 'block', 'important');
       });
       if (nodeModeBlock) nodeModeBlock.style.setProperty('display', 'none', 'important');
+      if (portAuthorBlock) portAuthorBlock.style.setProperty('display', 'none', 'important');
       inspectorCurrentLink = cell;
       inspectorCurrentNode = null;
       syncInspectorFromLink(cell);
@@ -1771,6 +1919,11 @@
           'display', hasLink ? 'block' : 'none', 'important'
         );
       }
+      // Phase 11 — Port-authoring block: lazy build on first node-mode entry,
+      // then refresh for the currently selected cell on every entry.
+      if (!portAuthorBlock) buildPortAuthorBlock();
+      portAuthorBlock.style.setProperty('display', 'block', 'important');
+      refreshPortAuthorBlock(cell);
     }
   }
 
