@@ -1,9 +1,12 @@
 ---
 phase: 11-ports-and-resize
 verified: 2026-05-24T00:00:00Z
-status: human_needed
-score: 9/9 must-haves verified (automated); 7 items need human browser verification
+updated: 2026-05-24T18:00:00Z
+status: gaps_found
+score: 9/9 must-haves verified structurally; 5 functional gaps reported in browser testing
 overrides_applied: 0
+gaps_reported: 5
+human_uat: 11-HUMAN-UAT.md
 human_verification:
   - test: "Port authoring UI: select any of the 7 shape types → inspector shows 'Ports' section with Top / Bottom / Left / Right sub-sections each having a '+ Add port' button"
     expected: "Four labeled edge sections visible; clicking '+ Add port' on any edge creates a port row with ordinal, label input, and trash icon; port dot appears on canvas at auto-distributed position"
@@ -190,17 +193,33 @@ No BLOCKER anti-patterns found. The three warnings match exactly the findings do
 
 ## Gaps Summary
 
-No automated gaps found. All 9 phase requirements are structurally verified in the codebase:
-- PORT-01..06: data model + inspector UI + canvas rendering + PORT-05 survival + PORT-06 auto-expand are all fully implemented and wired
-- SHP-RESIZE-01..03: `CornerResize` (MPL-2.0 `joint.elementTools.Control` subclass) with min-size, autosave, and undo integration is fully wired
+**Status changed `human_needed` → `gaps_found`** after browser UAT (2026-05-24). All 9 phase requirements pass structural automated checks, but 5 functional gaps surfaced when the user exercised the feature in the browser. Details in `11-HUMAN-UAT.md`. Summary:
 
-Three code-review warnings (WR-01 cursor CSS scope, WR-02 stale autocomplete listboxes, WR-03 snap corner drift) are documented but classified as non-blocking cosmetic issues by the REVIEW agent. They were identified in 11-REVIEW.md and are NOT fixed in Phase 11 — they are polish candidates for v2.3 or v2.4.
+| # | UAT Test | Result | Gap |
+|---|----------|--------|-----|
+| 1 | Circuit-label autocomplete (Phase 10 BC) | failed | GAP-11.1 + GAP-11.3 |
+| 2 | Inspector port-authoring block | **passed** | — |
+| 3 | PORT-03 autocomplete on port rows | partial | GAP-11.1 + GAP-11.4 |
+| 4 | PORT-05 connector survival | failed | GAP-11.2 (BLOCKER) |
+| 5 | SHP-RESIZE-01 handles on 7 shapes | **passed** | — |
+| 6 | SHP-RESIZE-02/03 min-size + autosave + undo | skipped | re-test post-fix |
+| 7 | PORT-06 auto-expansion + toast | failed | GAP-11.5 |
 
-The REQUIREMENTS.md traceability table still shows PORT-01..06 and SHP-RESIZE-01..03 as "TBD / Pending" — this was intentionally deferred to the verification step per PLAN frontmatter (line: "Traceability table UNCHANGED — Phase 11 will mark as Done in a later plan / verification step").
+**Gaps (full detail in 11-HUMAN-UAT.md):**
 
-Status is `human_needed` because behavioral verification of all 9 requirements requires a live browser. The automated checks confirm the structural implementation is complete and correctly wired.
+- **GAP-11.1** (high) — Authored port autocomplete reads from the wrong source (Device shape suggests Amp Channels). Endpoint is not shape-scoped.
+- **GAP-11.2** (critical, BLOCKER) — Cannot draw connector from any authored port; click drags the shape instead. Likely cause: `opacity: 0` hover-reveal selector doesn't match authored ports added via `cell.addPort` (only matches `portsForRect()`-added ports).
+- **GAP-11.3** (high) — Stale autocomplete listboxes accumulate in the inspector (WR-02 from code review now manifests visibly).
+- **GAP-11.4** (medium) — Port-row label input text too faint to see on the dark inspector background.
+- **GAP-11.5** (high) — `computeMinSize` undercounts: port-count × spacing without Σ(label widths) per edge → labels overlap inside shape body.
+
+Three code-review warnings (WR-01 cursor CSS scope, WR-02 stale autocomplete listboxes, WR-03 snap corner drift) — WR-02 has now escalated to GAP-11.3 (functional bug), WR-01 and WR-03 remain advisory.
+
+The REQUIREMENTS.md traceability table still shows PORT-01..06 and SHP-RESIZE-01..03 as "TBD / Pending" — flip to Done only after gap-closure phase passes UAT.
+
+Next action: `/gsd-plan-phase 11 --gaps` to create gap-closure plans, then `/gsd-execute-phase 11 --gaps-only`.
 
 ---
 
-_Verified: 2026-05-24_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-05-24 (structural) / 2026-05-24 (UAT: gaps found)_
+_Verifier: Claude (gsd-verifier); UAT: Charlie Lawson (browser)_
