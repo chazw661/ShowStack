@@ -128,6 +128,224 @@
     };
   }
 
+  // =========================================================================
+  // Phase 11 — Engineer-authored port helpers (PORT-01..06, SHP-RESIZE-*).
+  //
+  // Design pillars (locked):
+  //   - Storage: JointJS-native ports.items[N]; per-port `showstack` namespace
+  //     holds the engineer's source-of-truth label + edge + authored flag.
+  //     Round-trips through graph.toJSON() (canvas_state JSON) per RESEARCH §Q4.
+  //   - Back-compat (D-13): A cell with ZERO authored ports keeps the v2.2
+  //     4-generic-port set (added by portsForRect()). The first authored-port
+  //     add to ANY edge calls convertCellFromGenericToAuthored() which removes
+  //     all generic ports atomically. NEVER a mixed state.
+  //   - Direction (RESEARCH §Q3): inferred from edge. Top+Left → 'in'
+  //     (magnet:'passive'); Bottom+Right → 'out' (magnet:true). No per-port
+  //     direction picker in v2.3.
+  //   - Autosave: every mutator helper explicitly calls scheduleAutosave() at
+  //     the end. `change:ports` is intentionally NOT added to the line 1716
+  //     graph-event listener (RESEARCH Pitfall 7 — infinite redistribute loop).
+  // =========================================================================
+
+  function directionForEdge(edge) {
+    // Top + Left = inbound (magnet:'passive') — sources arrive here.
+    // Bottom + Right = outbound (magnet:true) — signal departs here.
+    if (edge === 'top' || edge === 'left') return 'in';
+    return 'out';
+  }
+
+  function cellHasAnyAuthoredPort(cell) {
+    return cell.getPorts().some(function (p) {
+      return p.showstack && p.showstack.authored === true;
+    });
+  }
+
+  function getAuthoredPortsByEdge(cell, edge) {
+    // Preserves insertion order via cell.getPorts() ordering.
+    return cell.getPorts().filter(function (p) {
+      return p.showstack && p.showstack.authored === true && p.showstack.edge === edge;
+    });
+  }
+
+  function edgeMidpointInPaperCoords(cell, edge) {
+    var pos = cell.position();
+    var size = cell.size();
+    if (edge === 'top')    return { x: pos.x + size.width / 2, y: pos.y };
+    if (edge === 'bottom') return { x: pos.x + size.width / 2, y: pos.y + size.height };
+    if (edge === 'left')   return { x: pos.x,                  y: pos.y + size.height / 2 };
+    // 'right'
+    return { x: pos.x + size.width, y: pos.y + size.height / 2 };
+  }
+
+  function redistributeEdgePorts(cell, edge) {
+    // Instant snap to equal spacing (D-10). Position formula:
+    //   - top/bottom: x = (i+1)/(N+1) * width;  y = 0 (top) or height (bottom)
+    //   - left/right: y = (i+1)/(N+1) * height; x = 0 (left) or width (right)
+    var ports = getAuthoredPortsByEdge(cell, edge);
+    if (!ports.length) return;
+    var size = cell.size();
+    var N = ports.length;
+
+    // Suppress intermediate change:ports during the loop (RESEARCH Pitfall 7).
+    cell.startBatch('phase11-redistribute');
+    try {
+      ports.forEach(function (port, i) {
+        var fraction = (i + 1) / (N + 1);
+        var x, y;
+        if (edge === 'top' || edge === 'bottom') {
+          x = fraction * size.width;
+          y = (edge === 'top') ? 0 : size.height;
+        } else {
+          // left or right
+          x = (edge === 'left') ? 0 : size.width;
+          y = fraction * size.height;
+        }
+        cell.portProp(port.id, 'args/x', x);
+        cell.portProp(port.id, 'args/y', y);
+      });
+    } finally {
+      cell.stopBatch('phase11-redistribute');
+    }
+  }
+
+  function reanchorLinksFromPort(cell, portId) {
+    // MUST be called BEFORE cell.removePort(portId) — JointJS 4.2.4's
+    // _processRemovedPort auto-removes any link whose source.port or
+    // target.port no longer exists (verified by direct bundle inspection,
+    // RESEARCH §Q6). Re-anchor here to the shape's edge midpoint so the
+    // link survives.
+    if (!cell.graph) return;
+    var port = cell.getPort(portId);
+    var edge = (port && port.showstack && port.showstack.edge) || 'left';
+    var midpoint = edgeMidpointInPaperCoords(cell, edge);
+
+    cell.graph.getConnectedLinks(cell).forEach(function (link) {
+      var src = link.get('source');
+      var tgt = link.get('target');
+      if (src && src.port === portId) {
+        link.source({ x: midpoint.x, y: midpoint.y });
+      }
+      if (tgt && tgt.port === portId) {
+        link.target({ x: midpoint.x, y: midpoint.y });
+      }
+    });
+  }
+
+  function convertCellFromGenericToAuthored(cell) {
+    // D-13 whole-shape switch: called from addAuthoredPort the first time an
+    // authored port is added to a shape. Removes the 4 v2.2 generic ports
+    // atomically (so undo treats this + the subsequent addPort as one step
+    // when wrapped in beginBatch/endBatch upstream).
+    var generic = cell.getPorts().filter(function (p) {
+      return !(p.showstack && p.showstack.authored === true);
+    });
+    if (!generic.length) return;
+
+    cell.startBatch('phase11-convert-to-authored');
+    try {
+      generic.forEach(function (port) {
+        // Safety net: re-anchor any link an engineer may have wired to a
+        // generic port. In v2.2 this should be rare (links use port ids
+        // auto-assigned by JointJS), but the cost is low and the safety is high.
+        reanchorLinksFromPort(cell, port.id);
+        cell.removePort(port.id);
+      });
+    } finally {
+      cell.stopBatch('phase11-convert-to-authored');
+    }
+  }
+
+  // Stub — Plan 11-06 replaces this body with the Q7 auto-expansion logic
+  // (compute min-size from live port set + label widths, grow shape if needed,
+  // fire .sfd-toast "Shape resized to fit ports").
+  function maybeAutoExpand(cell) {
+    // Phase 11 Plan 11-06 fills in.
+  }
+
+  // Mutators — every call ends with scheduleAutosave() because `change:ports`
+  // is NOT in the line ~1716 graph-event listener (RESEARCH Pitfall 7).
+
+  function addAuthoredPort(cell, edge, label) {
+    var undo = (window.__sfd && window.__sfd.undo) || null;
+    if (undo && typeof undo.beginBatch === 'function') undo.beginBatch();
+    try {
+      if (!cellHasAnyAuthoredPort(cell)) {
+        // D-13 whole-shape switch: drop the 4 v2.2 generic ports atomically
+        // BEFORE adding the first authored port.
+        convertCellFromGenericToAuthored(cell);
+      }
+      cell.addPort({
+        group: directionForEdge(edge),                      // 'in' or 'out' — uses Phase 8 standardPortGroups
+        attrs: {
+          portBody: {
+            magnet: (directionForEdge(edge) === 'in') ? 'passive' : true,
+            r: 4, fill: '#fff', stroke: '#666',
+            'stroke-width': 1,
+            opacity: 0                                       // hover-revealed (Phase 8 CSS Section 7)
+          },
+          label: { text: label }                             // JointJS reads this for SVG label
+        },
+        args: { x: 0, y: 0 },                                // will be set by redistributeEdgePorts below
+        // Plan 11-04 replaces portLabelPositionForEdge / portLabelMarkupForEdge
+        // with real per-edge implementations (RESEARCH §Q10). Stubs in this plan.
+        label: {
+          position: portLabelPositionForEdge(edge),
+          markup:   portLabelMarkupForEdge()
+        },
+        // Phase 11 custom namespace — mirrors cell.showstack convention.
+        showstack: { label: label, edge: edge, authored: true }
+      });
+      redistributeEdgePorts(cell, edge);
+      maybeAutoExpand(cell);                                 // Plan 11-06 fills the body
+    } finally {
+      if (undo && typeof undo.endBatch === 'function') undo.endBatch();
+    }
+    scheduleAutosave();
+  }
+
+  function removeAuthoredPortWithSurvival(cell, portId) {
+    // Capture edge BEFORE removePort — the port object goes away.
+    var port = cell.getPort(portId);
+    var savedEdge = (port && port.showstack && port.showstack.edge) || 'left';
+
+    // Step 1: re-anchor every connected link to the edge midpoint.
+    // MUST happen before removePort — JointJS auto-deletes orphan links otherwise.
+    reanchorLinksFromPort(cell, portId);
+
+    // Step 2: remove the port. JointJS finds no stale references and skips link cleanup.
+    cell.removePort(portId);
+
+    // Step 3: re-snap remaining ports on the same edge.
+    redistributeEdgePorts(cell, savedEdge);
+
+    // NOT calling maybeAutoExpand here (RESEARCH §Q5 — removal never shrinks).
+    // NOT restoring generics on last-removal (RESEARCH §Q5 — "this shape is yours now").
+
+    scheduleAutosave();
+  }
+
+  function renameAuthoredPort(cell, portId, newLabel) {
+    // Two writes per RESEARCH §Q4: attrs.label.text drives SVG rendering,
+    // showstack.label is the engineer-facing source of truth.
+    cell.portProp(portId, 'showstack/label', newLabel);
+    cell.portProp(portId, 'attrs/label/text', newLabel);
+    maybeAutoExpand(cell);                                   // may grow shape if label widened
+    scheduleAutosave();
+  }
+
+  // Stubs — Plan 11-04 replaces these with the per-edge implementations
+  // from RESEARCH §Q10. Stub return values are placeholders that JointJS
+  // accepts but produce no visible label (which is fine: Plan 11-02 ships
+  // only the data layer; label rendering is Plan 11-04's job).
+  function portLabelPositionForEdge(edge) {
+    // Plan 11-04 replaces with per-edge x/y/textAnchor switch (RESEARCH §Q10).
+    return { name: 'manual', args: { x: 0, y: 0 } };
+  }
+  function portLabelMarkupForEdge() {
+    // Plan 11-04 replaces with full font-attrs markup (RESEARCH §Q10).
+    return [{ tagName: 'text', selector: 'label' }];
+  }
+
   // ---- Console (180×60, teal #0d9488 left band) ----
   joint.shapes.showstack.Console = joint.dia.Element.extend({
     markup: [
@@ -306,6 +524,7 @@
       return magnet && magnet.getAttribute('magnet') !== 'passive';
     },
     validateConnection: function (sourceView, sourceMagnet, targetView, targetMagnet) {
+      // Phase 11 — per-port snap targeting honored automatically; see addAuthoredPort().
       // CON-03 — both ends MUST be magnets (ports). Mid-shape drops have null magnet.
       if (!sourceMagnet || !targetMagnet) return false;
       // Reject self-connections (same shape on both ends).
@@ -1776,6 +1995,21 @@
   // Phase 9 manual-flush seam — Cmd+S shortcut (deferred to v2.3) or any
   // future caller can force an immediate save.
   window.__sfd.save = function () { return flushAutosave({ force: true }); };
+  // Phase 11 — engineer-authored port helpers (Plans 11-03/05/06 consume this).
+  window.__sfd.ports = {
+    // Data accessors
+    getByEdge:           getAuthoredPortsByEdge,
+    hasAuthored:         cellHasAnyAuthoredPort,
+    directionForEdge:    directionForEdge,
+    // Mutators (each ends with scheduleAutosave())
+    add:                 addAuthoredPort,
+    removeWithSurvival:  removeAuthoredPortWithSurvival,
+    rename:              renameAuthoredPort,
+    redistribute:        redistributeEdgePorts,
+    reanchorFromPort:    reanchorLinksFromPort,
+    // Geometry
+    edgeMidpoint:        edgeMidpointInPaperCoords,
+  };
 
   // ══════════════════════════════════════════════════════════════
   // Plan 10-03 — Circuit-label autocomplete combobox (LBL-01..03)
