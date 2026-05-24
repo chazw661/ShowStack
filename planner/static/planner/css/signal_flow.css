@@ -597,17 +597,23 @@
 
 /* =========================================================================
    SECTION 12 — Autocomplete dropdown (Phase 10 LBL-01..03)
-   Wraps the #sfd-circuit-label input with a positioned <ul> listbox.
+   Wraps any autocomplete input with a positioned <ul> listbox.
    ARIA combobox pattern: input role="combobox" + listbox role="listbox".
    DOM injection + behavior wired by Plan 10-03. !important required to
    override Django admin base CSS (per CLAUDE.md "Coding Conventions").
+   Plan 11-01 refactor: listbox now carries class .sfd-ac-listbox instead of
+   the hardcoded id #sfd-label-suggestions, so multiple widget instances can
+   coexist (e.g. circuit-label + per-port-row inputs in Plan 11-03).
    ========================================================================= */
 
 .sfd-autocomplete-wrapper {
   position: relative !important;
 }
 
-#sfd-label-suggestions {
+/* Plan 11-01: class-based rule replaces #sfd-label-suggestions id selector.
+   Each attached listbox gets id="sfd-label-suggestions-<unique>" AND
+   class="sfd-ac-listbox", so this rule covers all instances. */
+.sfd-ac-listbox {
   position: absolute;
   top: 100%;
   left: 0;
@@ -626,7 +632,7 @@
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-#sfd-label-suggestions[hidden] {
+.sfd-ac-listbox[hidden] {
   display: none !important;
 }
 

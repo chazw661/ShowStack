@@ -30,6 +30,11 @@
   var labelAutocompleteUrl = container.dataset.labelAutocompleteUrl;  // Phase 10 plan 10-03
   // (exportPngUrl is not needed — PNG export is fully client-side via html-to-image)
 
+  // Plan 11-01: counter for uniquifying listbox ids across multiple attachAutocompleteToInput calls.
+  // inputEl.id is preferred; this counter is the fallback when inputEl has no id.
+  // SECURITY NOTE: ids here are always developer-controlled (never user-supplied data).
+  var _acAttachCounter = 0;
+
   // Confirm JointJS UMD bundle loaded and exposes `joint` global.
   if (typeof joint === 'undefined') {
     console.error('[SFD] joint is not defined — check vendor/joint.min.js load order in editor.html');
@@ -1783,51 +1788,73 @@
 
   var circuitLabelInput = document.getElementById('sfd-circuit-label');
 
-  // Create the listbox and wrap the input field in a relative-position container.
-  // The CSS Section 12 (plan 10-02) styles .sfd-autocomplete-wrapper and
-  // #sfd-label-suggestions — we only need the DOM structure here.
-  var acListbox = null;
-  var acTimer = null;
-  var acActiveIndex = -1;
-
-  // DOM-readiness note (plan-checker finding, 2026-05-22):
-  // initAutocomplete() is called at the bottom of this IIFE. Safe because
-  // editor.html:160 loads signal_flow_editor.js with the `defer` attribute,
-  // so DOM is fully parsed before this script evaluates. If the `defer`
-  // attribute is ever removed from the <script> tag, wrap the init call in
-  // a DOMContentLoaded listener or this will hit null elements.
-  function initAutocomplete() {
-    if (!circuitLabelInput || !labelAutocompleteUrl) return;
+  // ── Plan 11-01: Generalized combobox factory ──────────────────────────────
+  // attachAutocompleteToInput(inputEl, url, onSelect)
+  //
+  // Replaces the Phase 10 hardcoded initAutocomplete(). Same ARIA combobox
+  // widget behavior — 1-char threshold, 200ms debounce, ≤8 results (server),
+  // alphabetical, "label — source" display, ArrowUp/Down/Enter/Escape nav,
+  // blur-close, click-select — but parameterized so multiple inputs can each
+  // have their own independent widget instance.
+  //
+  // Parameters:
+  //   inputEl  — the <input> element to attach the widget to (required)
+  //   url      — the autocomplete endpoint URL (required; ?q= appended)
+  //   onSelect — optional callback(label: string) fired when a suggestion is
+  //              selected or freeform text is committed on blur.
+  //              When null/undefined: falls back to dispatching a synthetic
+  //              'input' event on inputEl for Phase 9 BC (D-14).
+  //
+  // Listbox id: 'sfd-label-suggestions-<inputEl.id>' when inputEl has an id,
+  //             'sfd-label-suggestions-anon-<_acAttachCounter>' otherwise.
+  // SECURITY NOTE: ids here are always developer-controlled strings.
+  //
+  // DOM-readiness (plan-checker finding 2026-05-22): called at IIFE bottom.
+  // editor.html loads this file with `defer`, so DOM is parsed first. If
+  // `defer` is ever removed, wrap the call in a DOMContentLoaded listener.
+  // ─────────────────────────────────────────────────────────────────────────
+  function attachAutocompleteToInput(inputEl, url, onSelect) {
+    if (!inputEl || !url) return;
 
     // Wrap input's parent .sfd-field div — add wrapper class for CSS positioning.
-    var fieldDiv = circuitLabelInput.closest('.sfd-field');
+    var fieldDiv = inputEl.closest('.sfd-field');
     if (!fieldDiv) return;
     fieldDiv.classList.add('sfd-autocomplete-wrapper');
 
+    // Per-attachment state — scoped inside this closure so multiple instances
+    // never share listbox, timer, active-index, or results.
+    var acListbox = null;
+    var acTimer = null;
+    var acActiveIndex = -1;
+
+    // Uniquify listbox id so multiple attachments don't collide on the same id.
+    var listboxId = 'sfd-label-suggestions-' + (inputEl.id || ('anon-' + (++_acAttachCounter)));
+
     // Create listbox element.
     acListbox = document.createElement('ul');
-    acListbox.id = 'sfd-label-suggestions';
+    acListbox.id = listboxId;
+    acListbox.className = 'sfd-ac-listbox';   // class-based CSS hook (Plan 11-01 refactor)
     acListbox.setAttribute('role', 'listbox');
     acListbox.setAttribute('hidden', '');
     fieldDiv.appendChild(acListbox);
 
     // ARIA: wire combobox role onto the input.
-    circuitLabelInput.setAttribute('role', 'combobox');
-    circuitLabelInput.setAttribute('aria-autocomplete', 'list');
-    circuitLabelInput.setAttribute('aria-expanded', 'false');
-    circuitLabelInput.setAttribute('aria-haspopup', 'listbox');
-    circuitLabelInput.setAttribute('aria-controls', 'sfd-label-suggestions');
+    inputEl.setAttribute('role', 'combobox');
+    inputEl.setAttribute('aria-autocomplete', 'list');
+    inputEl.setAttribute('aria-expanded', 'false');
+    inputEl.setAttribute('aria-haspopup', 'listbox');
+    inputEl.setAttribute('aria-controls', listboxId);
 
-    // Input event — debounced fetch.
-    circuitLabelInput.addEventListener('input', function () {
-      var q = circuitLabelInput.value.trim();
+    // Input event — debounced fetch (D-01: 1-char threshold, 200ms debounce).
+    inputEl.addEventListener('input', function () {
+      var q = inputEl.value.trim();
       if (acTimer) clearTimeout(acTimer);
       if (q.length < 1) { closeAcListbox(); return; }
       acTimer = setTimeout(function () { fetchAcResults(q); }, 200);
     });
 
     // Keyboard navigation.
-    circuitLabelInput.addEventListener('keydown', function (evt) {
+    inputEl.addEventListener('keydown', function (evt) {
       if (!acListbox || acListbox.hasAttribute('hidden')) return;
       var rows = Array.from(acListbox.querySelectorAll('.sfd-ac-row'));
       if (!rows.length) return;
@@ -1851,88 +1878,98 @@
     });
 
     // Blur close with delay so click on a row registers first.
-    circuitLabelInput.addEventListener('blur', function () {
-      setTimeout(closeAcListbox, 150);
+    // After closing, fire onSelect with the current typed value (freeform commit).
+    inputEl.addEventListener('blur', function () {
+      setTimeout(function () {
+        closeAcListbox();
+        if (typeof onSelect === 'function') onSelect(inputEl.value);
+      }, 150);
     });
-  }
 
-  function fetchAcResults(q) {
-    if (!labelAutocompleteUrl) return;
-    var url = labelAutocompleteUrl + '?q=' + encodeURIComponent(q);
-    getJSON(url)
-      .then(function (data) { renderAcResults(data.results || []); })
-      .catch(function () { closeAcListbox(); });
-  }
+    function fetchAcResults(q) {
+      var fetchUrl = url + '?q=' + encodeURIComponent(q);
+      getJSON(fetchUrl)
+        .then(function (data) { renderAcResults(data.results || []); })
+        .catch(function () { closeAcListbox(); });
+    }
 
-  function renderAcResults(results) {
-    if (!acListbox) return;
-    acListbox.innerHTML = '';
-    acActiveIndex = -1;
-    if (!results.length) { closeAcListbox(); return; }
+    function renderAcResults(results) {
+      if (!acListbox) return;
+      acListbox.innerHTML = '';
+      acActiveIndex = -1;
+      if (!results.length) { closeAcListbox(); return; }
 
-    results.forEach(function (rec, i) {
-      var li = document.createElement('li');
-      li.className = 'sfd-ac-row';
-      li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', 'false');
-      li.id = 'sfd-ac-row-' + i;
+      results.forEach(function (rec, i) {
+        var li = document.createElement('li');
+        li.className = 'sfd-ac-row';
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', 'false');
+        li.id = listboxId + '-row-' + i;
 
-      // XSS-safe: textContent only (PATTERNS.md rule).
-      var labelSpan = document.createElement('span');
-      labelSpan.textContent = rec.label || '';
-      var sourceSpan = document.createElement('span');
-      sourceSpan.className = 'sfd-ac-source';
-      sourceSpan.textContent = rec.source ? ('— ' + rec.source) : '';
+        // XSS-safe: textContent only (PATTERNS.md rule — T-11-01-01).
+        var labelSpan = document.createElement('span');
+        labelSpan.textContent = rec.label || '';
+        var sourceSpan = document.createElement('span');
+        sourceSpan.className = 'sfd-ac-source';
+        sourceSpan.textContent = rec.source ? ('— ' + rec.source) : '';
 
-      li.appendChild(labelSpan);
-      li.appendChild(sourceSpan);
+        li.appendChild(labelSpan);
+        li.appendChild(sourceSpan);
 
-      li.addEventListener('mousedown', function (evt) {
-        // mousedown fires before blur — prevent blur from firing first.
-        evt.preventDefault();
+        li.addEventListener('mousedown', function (evt) {
+          // mousedown fires before blur — prevent blur from closing first.
+          evt.preventDefault();
+        });
+        li.addEventListener('click', function () { selectAcRow(li, rec.label); });
+        li.addEventListener('mouseover', function () {
+          var rows = Array.from(acListbox.querySelectorAll('.sfd-ac-row'));
+          acActiveIndex = rows.indexOf(li);
+          updateAcActive(rows);
+        });
+
+        acListbox.appendChild(li);
       });
-      li.addEventListener('click', function () { selectAcRow(li, rec.label); });
-      li.addEventListener('mouseover', function () {
-        var rows = Array.from(acListbox.querySelectorAll('.sfd-ac-row'));
-        acActiveIndex = rows.indexOf(li);
-        updateAcActive(rows);
+
+      acListbox.removeAttribute('hidden');
+      inputEl.setAttribute('aria-expanded', 'true');
+    }
+
+    function selectAcRow(rowEl, label) {
+      // label may come from the rec or from the row's first span text.
+      var chosen = label || (rowEl.querySelector('span') && rowEl.querySelector('span').textContent) || '';
+      inputEl.value = chosen;
+      closeAcListbox();
+      // Back-compat: dispatch synthetic input event so the Phase 9 inspector
+      // listener still fires (D-14).
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      // Phase 11 hook: fire onSelect callback when caller wants direct notification.
+      if (typeof onSelect === 'function') onSelect(chosen);
+    }
+
+    function updateAcActive(rows) {
+      rows.forEach(function (r, i) {
+        r.setAttribute('aria-selected', String(i === acActiveIndex));
       });
+      if (acActiveIndex >= 0) {
+        inputEl.setAttribute('aria-activedescendant', listboxId + '-row-' + acActiveIndex);
+      }
+    }
 
-      acListbox.appendChild(li);
-    });
-
-    acListbox.removeAttribute('hidden');
-    circuitLabelInput.setAttribute('aria-expanded', 'true');
-  }
-
-  function selectAcRow(rowEl, label) {
-    // label may come from the rec or from the row's first span text.
-    var chosen = label || (rowEl.querySelector('span') && rowEl.querySelector('span').textContent) || '';
-    circuitLabelInput.value = chosen;
-    closeAcListbox();
-    // D-14: dispatch synthetic input event so existing Phase 9 inspector listener fires.
-    circuitLabelInput.dispatchEvent(new Event('input', { bubbles: true }));
-  }
-
-  function updateAcActive(rows) {
-    rows.forEach(function (r, i) {
-      r.setAttribute('aria-selected', String(i === acActiveIndex));
-    });
-    if (acActiveIndex >= 0) {
-      circuitLabelInput.setAttribute('aria-activedescendant', 'sfd-ac-row-' + acActiveIndex);
+    function closeAcListbox() {
+      if (!acListbox) return;
+      acListbox.setAttribute('hidden', '');
+      acListbox.innerHTML = '';
+      acActiveIndex = -1;
+      inputEl.setAttribute('aria-expanded', 'false');
+      inputEl.removeAttribute('aria-activedescendant');
     }
   }
 
-  function closeAcListbox() {
-    if (!acListbox) return;
-    acListbox.setAttribute('hidden', '');
-    acListbox.innerHTML = '';
-    acActiveIndex = -1;
-    circuitLabelInput.setAttribute('aria-expanded', 'false');
-    circuitLabelInput.removeAttribute('aria-activedescendant');
-  }
-
-  initAutocomplete();
+  // Existing circuit-label call site — null onSelect preserves Phase 10 BC
+  // (only the synthetic 'input' event shim fires; no extra callback).
+  // Plan 11-03 will call: attachAutocompleteToInput(rowInput, labelAutocompleteUrl,
+  //   function(label){ renameAuthoredPort(cell, portId, label); })
+  attachAutocompleteToInput(circuitLabelInput, labelAutocompleteUrl, null);
 
   // ══════════════════════════════════════════════════════════════
   // Plan 10-03 — PNG export handler (EXP-01)
