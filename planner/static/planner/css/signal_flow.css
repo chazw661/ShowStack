@@ -24,9 +24,16 @@
  *   4. Right inspector panel (#sfd-inspector + .sfd-field + .sfd-segmented)
  *   5. Equipment picker modal (.sfd-picker-overlay + .sfd-pick-*)
  *   6. Toast (.sfd-toast)
- *   7. JointJS port hover-reveal
+ *   7. JointJS port hover-reveal (Phase 8; amended Phase 11 — see Section 14)
  *   8. Selection visual (.is-selected + .sfd-multi-bbox)
  *   9. Empty canvas hint (.sfd-empty-hint)
+ *  10. 409 Conflict banner (Phase 9 D-07)
+ *  11. Orphan ghost render (Phase 9 D-15 + SHP-07)
+ *  12. Autocomplete dropdown (Phase 10 LBL-01..03)
+ *  13. Export button group (Phase 10 EXP-01)
+ *  14. Port-label rendering (Phase 11 D-08 — perpendicular-inside)
+ *  15. Resize handles (Phase 11 D-05 — four corners)
+ *  16. Inspector port-list rows + trash icon (Phase 11 D-02 / D-04)
  */
 
 /* =========================================================================
@@ -694,4 +701,104 @@
 #sfd-export-png:disabled {
   opacity: 0.6 !important;
   cursor: not-allowed !important;
+}
+
+/* =========================================================================
+   SECTION 16 — Inspector port-list rows + trash icon (Phase 11 D-02 / D-04)
+   Admin-DOM rules — !important per file-header convention. Built by JS in
+   buildPortAuthorBlock() (signal_flow_editor.js — Plan 11-03). Engineer
+   authors ports per edge via the rows here; Phase 10 combobox attaches
+   to each .sfd-port-label-input via attachAutocompleteToInput().
+   ========================================================================= */
+
+#sfd-inspector .sfd-field--port-author {
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid #e0e0e0 !important;
+}
+
+#sfd-inspector .sfd-port-section-title {
+  margin: 0 0 8px 0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: #555 !important;
+}
+
+#sfd-inspector .sfd-port-edge-section {
+  margin-bottom: 12px !important;
+}
+
+#sfd-inspector .sfd-port-edge-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 4px !important;
+}
+
+#sfd-inspector .sfd-port-edge-name {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #333 !important;
+}
+
+#sfd-inspector .sfd-port-add {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  background: #f5f5f5 !important;
+  border: 1px solid #d0d0d0 !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+  color: #0d9488 !important;
+}
+#sfd-inspector .sfd-port-add:hover {
+  background: #e8e8e8 !important;
+}
+
+#sfd-inspector .sfd-port-list {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+#sfd-inspector .sfd-port-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 0 !important;
+}
+
+#sfd-inspector .sfd-port-ordinal {
+  font-size: 11px !important;
+  color: #888 !important;
+  min-width: 16px !important;
+  text-align: right !important;
+}
+
+#sfd-inspector .sfd-port-label-input {
+  flex: 1 !important;
+  font-size: 12px !important;
+  padding: 4px 6px !important;
+  border: 1px solid #d0d0d0 !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+}
+#sfd-inspector .sfd-port-label-input:focus {
+  outline: none !important;
+  border-color: #0d9488 !important;
+}
+
+#sfd-inspector .sfd-port-remove {
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  color: #777 !important;
+}
+#sfd-inspector .sfd-port-remove:hover {
+  background: #fde2e2 !important;
+  color: #c53030 !important;
 }
