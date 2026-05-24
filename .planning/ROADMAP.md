@@ -46,7 +46,7 @@ Phase numbering continues from v2.2 (next integer is 10). Build order is depende
   - [x] 10-02-PLAN.md — JS + HTML + CSS: Processor + Amp shape classes, sidebar tiles, export button scaffold, CSS sections 12+13
   - [x] 10-03-PLAN.md — JS behavior: autocomplete combobox widget + PNG export handler
 - [ ] **Phase 11: Per-Shape Labeled Ports + Resizable Shapes** — engineer-authored ports on all 4 edges (Top / Bottom / Left / Right per amended PORT-01) with auto-equal-spacing, dropdown-or-custom labels (consuming Phase 10's autocomplete plumbing via a refactored `attachAutocompleteToInput` factory), corner-handle shape resize via a custom `joint.elementTools.Control` subclass (MPL-2.0 only; `joint.elementTools.Resize` is JointJS+ paid and NOT used) gated by a per-type min-size computed from live port set + label widths, connector snap targeting updated to per-port endpoints with whole-shape v2.2 back-compat (zero authored ports → 4 generic ports preserved). Closes PORT-01..06, SHP-RESIZE-01..03.
-  **Plans:** 6 plans
+  **Plans:** 8 plans (6 + 2 gap-closure from browser UAT)
   Plans:
   - [ ] 11-01-PLAN.md — Foundation: amend REQUIREMENTS.md PORT-01 (4 edges) + refactor Phase 10 combobox into reusable `attachAutocompleteToInput(inputEl, url, onSelect)` factory
   - [ ] 11-02-PLAN.md — Port data model: module-scope helpers (addAuthoredPort, removeAuthoredPortWithSurvival, renameAuthoredPort, redistributeEdgePorts, convertCellFromGenericToAuthored, reanchorLinksFromPort, edgeMidpointInPaperCoords, directionForEdge); D-13 whole-shape back-compat switch; window.__sfd.ports surface
@@ -54,6 +54,8 @@ Phase numbering continues from v2.2 (next integer is 10). Build order is depende
   - [ ] 11-04-PLAN.md — Canvas label rendering: replace stubs with per-edge portLabelPositionForEdge (top y+14 / bottom y-6 / left x+8 / right x-8) + portLabelMarkupForEdge (11px system fonts); CSS Section 14 (labels always-visible) + Section 7 header amendment
   - [ ] 11-05-PLAN.md — Corner-handle resize tool: CornerResize subclass of joint.elementTools.Control (4 corners, snap-then-clamp); computeMinSize + ABSOLUTE_FLOORS table; change:size graph listener for autosave + live re-distribute; CSS Section 15
   - [ ] 11-06-PLAN.md — PORT-06 auto-expansion: replace maybeAutoExpand stub with Q7 implementation (Math.ceil snap, top-left anchored, .sfd-toast "Shape resized to fit ports.")
+  - [ ] 11-07-PLAN.md — Gap closure (JS + backend): per-shape autocomplete scoping (GAP-11.1), authored-port click-magnet visibility (GAP-11.2, BLOCKER), stale-listbox purge (GAP-11.3), Top/Bottom computeMinSize Σ(label widths) (GAP-11.5)
+  - [ ] 11-08-PLAN.md — Gap closure (CSS-only): align .sfd-port-label-input colors with Section 4 inspector-input pattern so port-row text is readable on dark navy (GAP-11.4)
 - [ ] **Phase 12: Boundary Lines + Text Annotations** — toolbar boundary-draw mode with color + style picker (solid/dashed/dotted/double), inspector edit for selected boundary lines, freeform text labels with font-size + color, full integration with the autosave + undo + 409 + keepalive paths from v2.2. Closes DRAW-01..04, TXT-01..03.
 
 ### Carried decisions (still in force)
@@ -82,5 +84,5 @@ _(empty)_
 | 8. Canvas, Smart Shapes & Connectors | v2.2 | 6/6 | ✅ Complete | 2026-05-21 |
 | 9. Autosave & Orphan Rendering | v2.2 | 4/4 | ✅ Complete | 2026-05-22 |
 | 10. Autocomplete, PNG Export & New Shape Types | v2.3 | 3/3 | Complete    | 2026-05-23 |
-| 11. Per-Shape Labeled Ports + Resizable Shapes | v2.3 | 0/6 | Not started | — |
+| 11. Per-Shape Labeled Ports + Resizable Shapes | v2.3 | 0/8 | In progress (gap closure planned) | — |
 | 12. Boundary Lines + Text Annotations | v2.3 | 0/TBD | Not started | — |
