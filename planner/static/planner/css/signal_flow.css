@@ -828,3 +828,34 @@
   font-size: 11px !important;
   fill: #444 !important;
 }
+
+/* =========================================================================
+   SECTION 15 — Resize handles (Phase 11 D-05 — four corners)
+   SVG rules — !important for defence-in-depth (file-header convention).
+   JointJS renders the CornerResize tool's children inside
+   <g class="joint-tool" /> wrapping the <rect selector="handle">.
+   Visual treatment matches Section 8 selection visual accent (#0d9488 teal).
+   Pattern model: signal_flow.css:497-518 (.joint-element.is-selected).
+   Two-selector form per rule defends against JointJS 4.2.4 variations in
+   how `selector` attribute is serialized on rendered tool children.
+   ========================================================================= */
+
+/* Base handle rect — teal square with white outline */
+#sfd-paper .joint-tools .joint-tool [selector="handle"],
+#sfd-paper g.joint-tool rect[joint-selector="handle"] {
+  fill: #0d9488 !important;
+  stroke: #ffffff !important;
+  stroke-width: 1 !important;
+}
+
+/* Hover state — slightly darker teal on hover */
+#sfd-paper .joint-tools .joint-tool:hover [selector="handle"],
+#sfd-paper g.joint-tool:hover rect[joint-selector="handle"] {
+  fill: #0f766e !important;
+  stroke: #ffffff !important;
+}
+
+/* Cursor — nwse for all 4 corners in v2.3 (per-corner cursors deferred to v2.4+) */
+#sfd-paper .joint-tools .joint-tool {
+  cursor: nwse-resize !important;
+}
