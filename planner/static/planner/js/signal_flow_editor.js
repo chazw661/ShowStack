@@ -286,8 +286,7 @@
           label: { text: label }                             // JointJS reads this for SVG label
         },
         args: { x: 0, y: 0 },                                // will be set by redistributeEdgePorts below
-        // Plan 11-04 replaces portLabelPositionForEdge / portLabelMarkupForEdge
-        // with real per-edge implementations (RESEARCH §Q10). Stubs in this plan.
+        // Per-edge label positioning + markup — RESEARCH §Q10 (Plan 11-04).
         label: {
           position: portLabelPositionForEdge(edge),
           markup:   portLabelMarkupForEdge()
@@ -333,17 +332,51 @@
     scheduleAutosave();
   }
 
-  // Stubs — Plan 11-04 replaces these with the per-edge implementations
-  // from RESEARCH §Q10. Stub return values are placeholders that JointJS
-  // accepts but produce no visible label (which is fine: Plan 11-02 ships
-  // only the data layer; label rendering is Plan 11-04's job).
   function portLabelPositionForEdge(edge) {
-    // Plan 11-04 replaces with per-edge x/y/textAnchor switch (RESEARCH §Q10).
-    return { name: 'manual', args: { x: 0, y: 0 } };
+    // RESEARCH §Q10 — per-edge label position relative to the port dot.
+    // EDGE_PADDING_PERPENDICULAR_INSIDE = 8px (offset from edge into shape body).
+    // Labels render INSIDE the shape body, perpendicular to the edge (D-08).
+    // No rotation — text always reads horizontally left-to-right (engineer readability).
+    switch (edge) {
+      case 'top':
+        // Label below the dot (port at y=0, label at y=14 → INSIDE shape body).
+        return { name: 'manual',
+                 args: { x: 0, y: 14,
+                         attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
+      case 'bottom':
+        // Label above the dot (port at y=height; label at y=-6 relative to port → INSIDE).
+        return { name: 'manual',
+                 args: { x: 0, y: -6,
+                         attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
+      case 'left':
+        // Label right of the dot (port at x=0, label at x=8 → INSIDE).
+        return { name: 'manual',
+                 args: { x: 8, y: 4,
+                         attrs: { '.joint-port-label': { textAnchor: 'start' } } } };
+      case 'right':
+        // Label left of the dot (port at x=width, label at x=-8 → INSIDE).
+        return { name: 'manual',
+                 args: { x: -8, y: 4,
+                         attrs: { '.joint-port-label': { textAnchor: 'end' } } } };
+    }
+    // Defensive fallback (callers in addAuthoredPort already restrict edge to T/B/L/R).
+    return { name: 'manual', args: { x: 0, y: 0,
+                                     attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
   }
   function portLabelMarkupForEdge() {
-    // Plan 11-04 replaces with full font-attrs markup (RESEARCH §Q10).
-    return [{ tagName: 'text', selector: 'label' }];
+    // RESEARCH §Q10 — single SVG <text> element with explicit font attrs.
+    // 11px system-fonts-only (PNG export font-taint constraint, REQUIREMENTS line 100).
+    // pointer-events: none so the label never blocks port-hover or link-drag.
+    return [{
+      tagName: 'text',
+      selector: 'label',
+      attributes: {
+        'font-size': 11,
+        'font-family': FONT_STACK,
+        fill: '#444',
+        'pointer-events': 'none',
+      },
+    }];
   }
 
   // ---- Console (180×60, teal #0d9488 left band) ----

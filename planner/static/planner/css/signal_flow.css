@@ -487,9 +487,13 @@
 }
 
 /* =========================================================================
-   SECTION 7 — JointJS port hover-reveal
-   RESEARCH §2 — ports are opacity:0 in shape definitions; reveal on element
-   hover or while a link is being dragged onto a target magnet.
+   SECTION 7 — JointJS port hover-reveal (Phase 8)
+   RESEARCH §2 — port DOTS are opacity:0 in shape definitions (attrs.portBody.opacity:0);
+   reveal on element hover or while a link is being dragged onto a target magnet.
+
+   Phase 11 cross-reference: the opacity:0 default applies only to the
+   .joint-port circle (the dot). Port LABELS render via .joint-port-label text
+   and stay always-visible — see Section 14 below.
    ========================================================================= */
 
 .joint-paper .joint-element:hover .joint-port circle {
@@ -801,4 +805,26 @@
 #sfd-inspector .sfd-port-remove:hover {
   background: #fde2e2 !important;
   color: #c53030 !important;
+}
+
+/* =========================================================================
+   SECTION 14 — Port-label rendering (Phase 11 D-08 — perpendicular-inside)
+   Phase 11 authored ports get a <text class="joint-port-label"> rendered
+   INSIDE the shape body, perpendicular to the edge (D-08). Labels are
+   ALWAYS visible (do not hover-reveal — engineers identify ports by labels).
+   Port DOTS still hover-reveal per Section 7 (unchanged).
+
+   Defense-in-depth font lock: PNG export must not taint the canvas with
+   cross-origin webfonts. System-fonts-only constraint locked at milestone
+   level (REQUIREMENTS line 100). JS markup also sets font-family inline
+   (portLabelMarkupForEdge); these CSS rules win the specificity battle if
+   anything else interferes (e.g. the django-admin-interface theme).
+   ========================================================================= */
+
+.joint-port-label text {
+  opacity: 1 !important;
+  pointer-events: none !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 11px !important;
+  fill: #444 !important;
 }
