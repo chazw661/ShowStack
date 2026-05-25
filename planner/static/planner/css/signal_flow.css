@@ -727,7 +727,7 @@
   font-weight: 600 !important;
   text-transform: uppercase !important;
   letter-spacing: 0.5px !important;
-  color: #555 !important;
+  color: #aaa !important;                /* GAP-11.7: muted on dark navy */
 }
 
 #sfd-inspector .sfd-port-edge-section {
@@ -744,7 +744,7 @@
 #sfd-inspector .sfd-port-edge-name {
   font-size: 12px !important;
   font-weight: 500 !important;
-  color: #333 !important;
+  color: #eee !important;                /* GAP-11.7: primary text on dark navy */
 }
 
 #sfd-inspector .sfd-port-add {
@@ -775,7 +775,7 @@
 
 #sfd-inspector .sfd-port-ordinal {
   font-size: 11px !important;
-  color: #888 !important;
+  color: #aaa !important;                /* GAP-11.7: muted on dark navy */
   min-width: 16px !important;
   text-align: right !important;
 }
