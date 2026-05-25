@@ -302,14 +302,15 @@
         group: directionForEdge(edge),                      // 'in' or 'out' — uses Phase 8 standardPortGroups
         attrs: {
           portBody: {
-            magnet: (directionForEdge(edge) === 'in') ? 'passive' : true,
+            magnet: true,                                    // GAP-11.6: engineer-authored ports are
+                                                              // bidirectional drag sources on all 4 edges.
+                                                              // Phase 8 generic ports keep their
+                                                              // directional magnet:'passive' for Top/Left
+                                                              // (in standardPortGroups) — back-compat path
+                                                              // for shapes with zero authored ports.
             r: 4, fill: '#fff', stroke: '#666',
             'stroke-width': 1,
-            opacity: 1                                       // GAP-11.2: authored ports always visible
-                                                              // — labels next to them (Section 14) make
-                                                              // the click affordance obvious. Phase 8
-                                                              // generic ports in standardPortGroups
-                                                              // still opacity:0 (Section 7 hover-reveal).
+            opacity: 1                                       // GAP-11.2: authored ports always visible.
           },
           label: { text: label }                             // JointJS reads this for SVG label
         },
