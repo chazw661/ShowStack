@@ -1,15 +1,15 @@
 ---
-status: diagnosed
+status: resolved
 phase: 11-ports-and-resize
 source: [11-VERIFICATION.md]
 started: 2026-05-24T00:00:00Z
 updated: 2026-05-25T00:00:00Z
-pass: 2
+pass: 3
 ---
 
 ## Current Test
 
-[Pass 2 complete — 3 passed, 2 issues opened as GAP-11.6 + GAP-11.7]
+[Pass 3 complete — all 5 re-UAT items + 2 inline gap closures approved by Charlie 2026-05-25]
 
 ## Tests
 
@@ -41,15 +41,19 @@ notes: "Charlie: 'Resize works.' (Pass 2, 2026-05-25)."
 ## Summary
 
 total: 5
-passed: 3
-issues: 2
+passed: 5
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
 
+## Pass 3 (2026-05-25) — Final approval
+
+Charlie: "all approved." All 5 Pass 2 re-UAT items pass, plus the 2 follow-up gaps (GAP-11.6 + GAP-11.7) closed inline mid-session and confirmed working in the browser.
+
 ## Pass 1 History (resolved 2026-05-24 via 11-07 + 11-08 + CR-01 fix)
 
-Pass 1 reported 5 gaps (GAP-11.1..11.5). Gap-closure plans 11-07 + 11-08 + CR-01 shipped. Pass 2 confirmed 3/5 gaps fully closed; surfaced 2 new gaps below.
+Pass 1 reported 5 gaps (GAP-11.1..11.5). Gap-closure plans 11-07 + 11-08 + CR-01 shipped. Pass 2 confirmed 3/5 gaps fully closed and surfaced GAP-11.6 + GAP-11.7. Both closed inline (commits 34a4176 + 48aaff7) and confirmed by Charlie in Pass 3.
 
 ## Gaps
 
@@ -65,19 +69,25 @@ root_cause: |
   Charlie's expectation: engineer placed the port → engineer chose direction → all 4 edges should be drag sources.
 decision: Drop direction rule for authored ports. Make all engineer-authored ports magnet:true (bidirectional). Generic Phase 8 ports (zero authored) preserve original directional convention.
 fix_location: planner/static/planner/js/signal_flow_editor.js, addAuthoredPort() ~line 305
-status: open
+status: resolved
+resolved_in: 34a4176 (2026-05-25)
+resolved_notes: "Inline fix: addAuthoredPort uses magnet:true unconditionally on all 4 edges. Confirmed by Charlie in Pass 3 after a hard reload + fresh ports."
 
 ### GAP-11.7 — Port-label input text washed out when blurred
 severity: medium
 source_test: Re-UAT-3+4 (Pass 2)
 symptom: Typed text in `.sfd-port-label-input` is readable when the input has focus, but too light to read when blurred.
 root_cause: |
-  Section 16 CSS rule `#sfd-inspector .sfd-port-label-input { color: #eee !important; }` (line 788-797)
-  should apply in all states regardless of focus. Reported failure suggests another selector wins
-  on blur — possibilities:
-    - django-admin-interface override with higher specificity AND !important
-    - A more specific selector elsewhere in signal_flow.css that targets the unfocused state
-    - The Section 4 inspector-input base rule somehow ranking higher on blur
-  Pure speculation without DOM diagnostic — do NOT patch without seeing the cascade.
-diagnostic_needed: DevTools → select a blurred port-label input → Computed tab → expand `color` → screenshot showing which rule wins.
-status: awaiting_data
+  Original framing (input text on blur) was wrong — Charlie's Pass 2 screenshot
+  showed the .sfd-port-label-input was already correctly dark-navy + #eee. The
+  actually-unreadable elements were the SURROUNDING port-block labels in
+  Section 16 (Plan 11-03), which Plan 11-03 picked for a light background:
+    .sfd-port-section-title  color #555  ("PORTS" header)
+    .sfd-port-edge-name      color #333  ("Top/Bottom/Left/Right")
+    .sfd-port-ordinal        color #888  (row "1")
+  All three are inside #sfd-inspector which has a dark-navy background — same
+  class of bug as the original GAP-11.4 but on neighbor elements.
+diagnostic_needed: Resolved via screenshot (Charlie's Image #1, 2026-05-25). DevTools Computed tab not needed.
+status: resolved
+resolved_in: 48aaff7 (2026-05-25)
+resolved_notes: "Inline fix: 3 colors flipped to inspector-palette values (#555→#aaa, #333→#eee, #888→#aaa). Confirmed by Charlie in Pass 3."

@@ -137,4 +137,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-22 — Milestone v2.3 (Signal Flow Diagrammer Export & Enhancements) opened. Driver: GitHub issue #14 + carried scope from v2.2 Phase 10. 22 requirements across 6 categories (PORT, SHP-RESIZE, SHP, DRAW, TXT, LBL, EXP) mapped to 3 phases (10/11/12). State stays in the existing `SignalFlowDiagram.canvas_state` JSONField — no model migrations expected. Awaiting plan-phase to start Phase 10.*
+*Last updated: 2026-05-25 — Phase 11 (Per-Shape Labeled Ports + Resizable Shapes) complete. Closes PORT-01..06 + SHP-RESIZE-01..03. Two gap-closure cycles + 4 inline gap fixes shipped (GAP-11.1..11.7 + CR-01). Engineer-authored ports on all 4 edges (bidirectional magnets), corner-handle resize via joint.elementTools.Control subclass with Σ(label widths) min-size clamp, autosave + 409 + undo all wired. v2.2 back-compat preserved (zero authored ports → original 4 generic ports + directional convention). Next: Phase 12 (Boundary Lines + Text Annotations) — DRAW-01..04 + TXT-01..03.*

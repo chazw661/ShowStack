@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: one-liners
-status: executing
+status: milestone_complete
 stopped_at: Completed 11-08-PLAN.md (gap closure GAP-11.4)
 last_updated: "2026-05-24T20:53:36.418Z"
 last_activity: 2026-05-24 -- Completed 11-08-PLAN.md (gap closure GAP-11.4)
 progress:
   total_phases: 11
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 57
   completed_plans: 57
-  percent: 100
+  percent: 109
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase --phase — 11
+**Current focus:** Phase 12 — Boundary Lines + Text Annotations (next)
 
 ## Current Position
 
-Phase: 11 (ports-and-resize) — gap-closure plans complete (11-07 + 11-08); awaiting re-UAT
-Plan: 2 of 2 (gap-closure batch)
-Status: Phase 11 gap closure shipped — Charlie to re-run UAT for GAP-11.1..11.5
-Last activity: 2026-05-24 -- Completed 11-08-PLAN.md (gap closure GAP-11.4)
+Phase: 12
+Plan: Not started
+Status: Phase 11 complete; Phase 12 pending discuss/plan
+Last activity: 2026-05-25
 
-Progress: [██████████] 100%
+Progress: [█████████░] Phase 11/12 of v2.3
 
 ## Roadmap Summary
 

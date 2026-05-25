@@ -1,18 +1,25 @@
 ---
 phase: 11-ports-and-resize
-verified: 2026-05-24T21:30:00Z
+verified: 2026-05-25T00:00:00Z
 updated: 2026-05-25T00:00:00Z
-status: gaps_found
-score: 14/14 structural pass + 3/5 browser UAT pass; 2 new gaps surfaced (GAP-11.6 high, GAP-11.7 medium)
+status: passed
+score: 14/14 structural + 5/5 Pass 2 browser UAT + 2 inline gaps closed and approved by Charlie in Pass 3
 overrides_applied: 0
+pass3_final:
+  approved_by: Charlie
+  approved_at: 2026-05-25
+  approval_quote: "all approved."
+  inline_closures:
+    - "GAP-11.6 (high) — commit 34a4176 — addAuthoredPort magnet:true on all 4 edges (was directionForEdge-gated). Browser cache + pre-existing-port gotcha confirmed by Charlie after hard reload + fresh ports."
+    - "GAP-11.7 (medium) — commit 48aaff7 — Section 16 port-block label colors (#555→#aaa section title, #333→#eee edge name, #888→#aaa ordinal). Diagnosed from Charlie's screenshot — original framing was wrong; the dim text was the surrounding labels, not the input."
 pass2_uat_results:
   passed:
     - "Re-UAT-1 (GAP-11.1) — per-shape autocomplete confirmed by Charlie 2026-05-25"
     - "Re-UAT-5 (GAP-11.5 + PORT-06) — Σ(label widths) auto-expansion working"
     - "Re-UAT-6 (SHP-RESIZE-02/03) — resize + clamp + autosave + undo working"
   failed:
-    - "GAP-11.6 (high) — Top + Left authored ports pan-drag shape instead of starting connector; Bottom + Right work. Cause: Phase 8 magnet:'passive' direction convention. Fix: drop direction rule for authored ports, magnet:true on all 4 edges."
-    - "GAP-11.7 (medium) — Port-label input text washed out when blurred; readable when focused. Cause: unknown CSS cascade override, awaiting DevTools Computed-tab data from Charlie before patching."
+    - "GAP-11.6 (high) — RESOLVED in 34a4176 + Pass 3"
+    - "GAP-11.7 (medium) — RESOLVED in 48aaff7 + Pass 3"
 re_verification:
   previous_status: gaps_found
   previous_score: "9/9 structural + 5 functional gaps reported in browser UAT"
