@@ -618,6 +618,114 @@
     if (view) view.removeTools();
   }
 
+  // ──────────────────────────────────────────────────────────────
+  // Phase 12 — Pen-tool draw-boundary state machine (DRAW-01).
+  // Sticky mode per D-01: enters on toolbar click, exits on Esc, re-click
+  // of the boundary button, or click of the text-mode button. Click-each-
+  // vertex per D-02. Snap-to-20px-grid when toggle is on per D-03.
+  // ──────────────────────────────────────────────────────────────
+
+  var drawState = {
+    active: false,               // true while in draw-boundary mode
+    vertices: [],                // [{x, y}, ...] accumulated since mode entry
+    livePreview: null,           // SVG <polyline> showing placed vertices
+    liveSegment: null,           // SVG <line> showing "to cursor" segment
+  };
+
+  function createPreviewPolyline() {
+    var el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', '#0d9488');
+    el.setAttribute('stroke-width', '2');
+    el.setAttribute('stroke-dasharray', '4 3');
+    el.setAttribute('pointer-events', 'none');
+    var vp = paper.viewport || paper.svg;
+    if (vp && vp.appendChild) vp.appendChild(el);
+    return el;
+  }
+
+  function createPreviewSegment() {
+    var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    el.setAttribute('stroke', '#0d9488');
+    el.setAttribute('stroke-width', '2');
+    el.setAttribute('stroke-dasharray', '2 3');
+    el.setAttribute('pointer-events', 'none');
+    el.setAttribute('x1', '0'); el.setAttribute('y1', '0');
+    el.setAttribute('x2', '0'); el.setAttribute('y2', '0');
+    var vp = paper.viewport || paper.svg;
+    if (vp && vp.appendChild) vp.appendChild(el);
+    return el;
+  }
+
+  function updatePreviewPolyline() {
+    if (!drawState.livePreview) return;
+    var pts = drawState.vertices.map(function (v) { return v.x + ',' + v.y; }).join(' ');
+    drawState.livePreview.setAttribute('points', pts);
+  }
+
+  function enterBoundaryMode() {
+    // D-01 — if text mode is active, exit it (handoff to Plan 04's exitTextMode).
+    if (typeof exitTextMode === 'function' && typeof textModeActive !== 'undefined' && textModeActive) {
+      exitTextMode();
+    }
+    drawState.active = true;
+    drawState.vertices = [];
+    drawState.livePreview = createPreviewPolyline();
+    drawState.liveSegment = createPreviewSegment();
+
+    var btn = document.getElementById('sfd-tool-boundary');
+    if (btn) {
+      btn.classList.add('is-active');
+      btn.setAttribute('aria-pressed', 'true');
+    }
+    // D-07 — cursor change MUST use setProperty(... 'important') per CLAUDE.md.
+    var paperEl = document.getElementById('sfd-paper');
+    if (paperEl) paperEl.style.setProperty('cursor', 'crosshair', 'important');
+  }
+
+  function exitBoundaryMode() {
+    drawState.active = false;
+    drawState.vertices = [];
+    if (drawState.livePreview && drawState.livePreview.parentNode) {
+      drawState.livePreview.parentNode.removeChild(drawState.livePreview);
+    }
+    if (drawState.liveSegment && drawState.liveSegment.parentNode) {
+      drawState.liveSegment.parentNode.removeChild(drawState.liveSegment);
+    }
+    drawState.livePreview = null;
+    drawState.liveSegment = null;
+
+    var btn = document.getElementById('sfd-tool-boundary');
+    if (btn) {
+      btn.classList.remove('is-active');
+      btn.setAttribute('aria-pressed', 'false');
+    }
+    var paperEl = document.getElementById('sfd-paper');
+    // Empty string clears the inline cursor; CSS-defined default cursor resumes.
+    if (paperEl) paperEl.style.setProperty('cursor', '', 'important');
+  }
+
+  function commitOrCancelBoundary() {
+    if (drawState.vertices.length < 2) {
+      // D-02 — single vertex or zero = no polyline created.
+      drawState.vertices = [];
+      updatePreviewPolyline();
+      return;
+    }
+    var cell = new joint.shapes.showstack.BoundaryLine({
+      vertices: drawState.vertices.slice(),
+      color: lastBoundaryColor || '#000000',
+      lineStyle: lastBoundaryStyle || 'solid',
+    });
+    graph.addCell(cell);
+    applyBoundaryRender(cell);
+    cell.toBack();                       // D-13 — behind shapes/connectors
+    drawState.vertices = [];
+    updatePreviewPolyline();
+    // Sticky mode stays active per D-01 — engineer can immediately draw the next.
+    // graph.addCell auto-triggers scheduleAutosave via the existing 'add' listener.
+  }
+
   // ---- Console (180×60, teal #0d9488 left band) ----
   joint.shapes.showstack.Console = joint.dia.Element.extend({
     markup: [
@@ -934,6 +1042,12 @@
   // Module-scoped — plan 05 will read/write these from the UX layer.
   var currentViewport = { x: 0, y: 0, scale: 1, snapEnabled: true };
   var currentVersion = 1;
+
+  // Phase 12 — session-sticky defaults for next-created boundary.
+  // Closure-scoped; reset on page reload. Mutated BEFORE scheduleAutosave
+  // per Plan 05 inspector-click handlers (Pattern Violation 1).
+  var lastBoundaryColor = '#000000';    // D-09 initial — black
+  var lastBoundaryStyle = 'solid';      // D-12 initial — solid
 
   getJSON(stateUrl)
     .then(function (state) {
@@ -1373,6 +1487,66 @@
   snapToggleBtn.addEventListener('click', function () { setSnap(!currentViewport.snapEnabled); });
   setSnap(currentViewport.snapEnabled);   // apply initial state from plan-04 viewport load
 
+  // Phase 12 — Toolbar wiring: draw-boundary mode toggle (D-01 sticky).
+  var toolBoundaryBtn = document.getElementById('sfd-tool-boundary');
+  if (toolBoundaryBtn) {
+    toolBoundaryBtn.addEventListener('click', function () {
+      if (drawState.active) {
+        exitBoundaryMode();             // re-click exits per D-01
+      } else {
+        enterBoundaryMode();
+      }
+    });
+  }
+
+  // Pen-tool vertex placement — only fires when drawState.active is true.
+  // Rubber-band listener has its own `if (drawState.active) return;` guard
+  // so both listeners coexist safely.
+  paper.on('blank:pointerdown', function (evt, x, y) {
+    if (!drawState.active) return;
+    if (panState.spaceDown) return;        // WARNING 5 — spacebar pan trumps pen-tool
+    var pt = { x: x, y: y };
+    if (window.__sfd && window.__sfd.viewport && window.__sfd.viewport.snapEnabled) {
+      pt.x = Math.round(pt.x / 20) * 20;
+      pt.y = Math.round(pt.y / 20) * 20;
+    }
+    drawState.vertices.push(pt);
+    updatePreviewPolyline();
+  });
+
+  // Live "to cursor" segment — refresh on every move while drawing.
+  paper.on('blank:pointermove', function (evt, x, y) {
+    if (!drawState.active) return;
+    if (!drawState.vertices.length) return;
+    var last = drawState.vertices[drawState.vertices.length - 1];
+    var pt = { x: x, y: y };
+    if (window.__sfd && window.__sfd.viewport && window.__sfd.viewport.snapEnabled) {
+      pt.x = Math.round(pt.x / 20) * 20;
+      pt.y = Math.round(pt.y / 20) * 20;
+    }
+    if (!drawState.liveSegment) return;
+    drawState.liveSegment.setAttribute('x1', String(last.x));
+    drawState.liveSegment.setAttribute('y1', String(last.y));
+    drawState.liveSegment.setAttribute('x2', String(pt.x));
+    drawState.liveSegment.setAttribute('y2', String(pt.y));
+  });
+
+  // Double-click commits (D-02).
+  paper.on('blank:pointerdblclick', function (/* evt, x, y */) {
+    if (!drawState.active) return;
+    commitOrCancelBoundary();
+  });
+
+  // Esc commits or cancels boundary draw mode (D-02, D-05).
+  document.addEventListener('keydown', function (evt) {
+    if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
+    if (evt.key === 'Escape' && drawState.active) {
+      evt.preventDefault();
+      commitOrCancelBoundary();
+      exitBoundaryMode();
+    }
+  });
+
   // ──────────────────────────────────────────────────────────────
   // Custom event-sourced undo / redo stack (CNV-05).
   //
@@ -1620,6 +1794,7 @@
   // Rubber-band drag on blank canvas — RESEARCH §8.
   // Gated against panState.spaceDown so space+drag is always a pan.
   paper.on('blank:pointerdown', function (evt, x, y) {
+    if (drawState.active) return;                              // Phase 12 — Risk #1 guard
     if (panState.spaceDown || evt.button !== 0) return;
     var startLocal = { x: x, y: y };
     var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
