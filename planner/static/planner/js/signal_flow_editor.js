@@ -619,6 +619,88 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  // Phase 12 — Boundary vertex-edit handle (DRAW-04).
+  // Per-vertex circular handle in teal #0d9488 (matches Phase 11 D-05
+  // corner-resize handle language). Visible 6px circle + transparent 12px
+  // hit-area sibling. Snap-to-20px-grid via window.__sfd.viewport.snapEnabled
+  // (WARNING 4 — same expression Plans 03 + 04 read for snap branches).
+  // ──────────────────────────────────────────────────────────────
+
+  var BoundaryVertex = joint.elementTools.Control.extend({
+    children: [{
+      tagName: 'circle',
+      selector: 'handle',
+      attributes: {
+        r: 6,                                  // D-06 visible radius
+        fill: '#0d9488',                       // teal — Phase 11 D-05 parity
+        stroke: '#fff',
+        'stroke-width': 1,
+        cursor: 'move',
+      }
+    }, {
+      tagName: 'circle',
+      selector: 'hitArea',
+      attributes: {
+        r: 12,                                 // 12px hit-target
+        fill: 'transparent',
+        cursor: 'move',
+      }
+    }],
+
+    getPosition: function (view) {
+      var verts = view.model.prop('vertices') || [];
+      var v = verts[this.options.vertexIndex];
+      return v ? { x: v.x, y: v.y } : { x: 0, y: 0 };
+    },
+
+    setPosition: function (view, coordinates) {
+      var model = view.model;
+      var idx = this.options.vertexIndex;
+      // Violation 7 — .slice() COPY of the live array before mutation.
+      var verts = (model.prop('vertices') || []).slice();
+      var newX = coordinates.x;
+      var newY = coordinates.y;
+      // Same snap rule as Phase 11 CornerResize.setPosition (D-03 + Phase 8 D-13).
+      // WARNING 4 — Plans 03 + 04 (pen-tool, place-text) use the SAME expression.
+      if (window.__sfd && window.__sfd.viewport && window.__sfd.viewport.snapEnabled) {
+        newX = Math.round(newX / 20) * 20;
+        newY = Math.round(newY / 20) * 20;
+      }
+      verts[idx] = { x: newX, y: newY };
+      model.prop('vertices', verts);
+      // The graph.on('change:vertices', ...) listener re-renders + refreshes tools
+      // + calls scheduleAutosave. Do NOT call applyBoundaryRender here.
+    }
+  });
+
+  // Per-boundary attach — installs one BoundaryVertex per vertex via a ToolsView.
+  var _vertexAttachedCell = null;          // parallel to Phase 11 _resizeAttachedCell
+
+  function attachBoundaryVertexTools(cell) {
+    if (!cell || !cell.findView) return;
+    if (cell.get('type') !== 'showstack.BoundaryLine') return;
+    var view = cell.findView(paper);
+    if (!view) return;
+    view.removeTools();                    // clear any prior tools
+    var verts = cell.prop('vertices') || [];
+    var tools = verts.map(function (_, i) {
+      return new BoundaryVertex({ vertexIndex: i });
+    });
+    view.addTools(new joint.dia.ToolsView({
+      name: 'sfd-boundary-vertices',
+      tools: tools,
+    }));
+    _vertexAttachedCell = cell;
+  }
+
+  function detachBoundaryVertexTools(cell) {
+    if (!cell || !cell.findView) return;
+    var view = cell.findView(paper);
+    if (view) view.removeTools();
+    if (_vertexAttachedCell === cell) _vertexAttachedCell = null;
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // Phase 12 — Pen-tool draw-boundary state machine (DRAW-01).
   // Sticky mode per D-01: enters on toolbar click, exits on Esc, re-click
   // of the boundary button, or click of the text-mode button. Click-each-
@@ -2365,7 +2447,41 @@
   window.__sfd.onSelectionChanged = function (selectedIds) {
     if (selectedIds.length === 1) {
       var cell = graph.getCell(selectedIds[0]);
+
+      // Phase 12 — Boundary selection branch (DRAW-03, DRAW-04).
+      if (cell && cell.get && cell.get('type') === 'showstack.BoundaryLine') {
+        if (_resizeAttachedCell) {
+          detachResizeTools(_resizeAttachedCell);
+          _resizeAttachedCell = null;
+        }
+        if (_vertexAttachedCell && _vertexAttachedCell !== cell) {
+          detachBoundaryVertexTools(_vertexAttachedCell);
+        }
+        setInspectorMode('boundary', cell);
+        showInspector();
+        attachBoundaryVertexTools(cell);
+        return;
+      }
+
+      // Phase 12 — Text selection branch (TXT-03 selection-only; dblclick edit lives in Plan 04).
+      if (cell && cell.get && cell.get('type') === 'showstack.TextLabel') {
+        if (_resizeAttachedCell) {
+          detachResizeTools(_resizeAttachedCell);
+          _resizeAttachedCell = null;
+        }
+        if (_vertexAttachedCell) {
+          detachBoundaryVertexTools(_vertexAttachedCell);
+        }
+        setInspectorMode('text', cell);
+        showInspector();
+        return;
+      }
+
       if (cell && cell.isLink && cell.isLink()) {
+        if (_vertexAttachedCell) {
+          detachBoundaryVertexTools(_vertexAttachedCell);
+          _vertexAttachedCell = null;
+        }
         setInspectorMode('connector', cell);
         showInspector();
         // Phase 11 — detach resize tools (link selected, not an element).
@@ -2376,6 +2492,10 @@
         return;
       }
       if (cell && cell.isElement && cell.isElement()) {
+        if (_vertexAttachedCell) {
+          detachBoundaryVertexTools(_vertexAttachedCell);
+          _vertexAttachedCell = null;
+        }
         setInspectorMode('node', cell);
         showInspector();
         // Phase 11 — attach corner-resize handles to the single selected element.
@@ -2393,6 +2513,11 @@
     if (_resizeAttachedCell) {
       detachResizeTools(_resizeAttachedCell);
       _resizeAttachedCell = null;
+    }
+    // Phase 12 — same for vertex tools.
+    if (_vertexAttachedCell) {
+      detachBoundaryVertexTools(_vertexAttachedCell);
+      _vertexAttachedCell = null;
     }
   };
 
@@ -3197,6 +3322,18 @@
   // also trigger autosave. Manual drag-end is already caught by element:pointerup.
   graph.on('add remove change:source change:target change:size', scheduleAutosave);
   paper.on('element:pointerup', scheduleAutosave);
+
+  // Phase 12 — Standalone change:vertices listener (Violation 5).
+  // Do NOT extend the comma-list above — naïve listening with applyBoundaryRender
+  // write-back could re-fire change events. Explicit listener gives us deterministic
+  // re-render + tool refresh + autosave call.
+  graph.on('change:vertices', function (cell) {
+    if (cell.get('type') !== 'showstack.BoundaryLine') return;
+    applyBoundaryRender(cell);
+    var view = cell.findView(paper);
+    if (view) view.updateTools();
+    scheduleAutosave();
+  });
 
   // Phase 11 D-06 — live port re-distribute during resize drag. Skips
   // shapes with no authored ports (back-compat — Phase 8 generic ports
