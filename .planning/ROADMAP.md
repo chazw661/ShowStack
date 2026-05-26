@@ -56,16 +56,16 @@ Phase numbering continues from v2.2 (next integer is 10). Build order is depende
   - [x] 11-06-PLAN.md — PORT-06 auto-expansion: replace maybeAutoExpand stub with Q7 implementation (Math.ceil snap, top-left anchored, .sfd-toast "Shape resized to fit ports.")
   - [x] 11-07-PLAN.md — Gap closure (JS + backend): per-shape autocomplete scoping (GAP-11.1), authored-port click-magnet visibility (GAP-11.2, BLOCKER), stale-listbox purge (GAP-11.3), Top/Bottom computeMinSize Σ(label widths) (GAP-11.5)
   - [x] 11-08-PLAN.md — Gap closure (CSS-only): align .sfd-port-label-input colors with Section 4 inspector-input pattern so port-row text is readable on dark navy (GAP-11.4)
-- [ ] **Phase 12: Boundary Lines + Text Annotations** — toolbar boundary-draw mode with color + style picker (solid/dashed/dotted/double), inspector edit for selected boundary lines, freeform text labels with font-size + color, full integration with the autosave + undo + 409 + keepalive paths from v2.2. Closes DRAW-01..04, TXT-01..03.
+- [x] **Phase 12: Boundary Lines + Text Annotations** — toolbar boundary-draw mode with color + style picker (solid/dashed/dotted/double), inspector edit for selected boundary lines, freeform text labels with font-size + color, full integration with the autosave + undo + 409 + keepalive paths from v2.2. Closes DRAW-01..04, TXT-01..03. (2026-05-26)
   **Plans:** 7 plans
   Plans:
-  - [ ] 12-01-cell-class-registration.md — JS cell-class registration: BoundaryLine + TextLabel + applyBoundaryRender + palette/style constants (Wave 1)
-  - [ ] 12-02-css-sections-17-and-18.md — CSS Sections 17 (DRAW) + 18 (TXT) skeleton + section-list update (Wave 1)
-  - [ ] 12-03-toolbar-and-draw-boundary-mode.md — Toolbar create-tools group + draw-boundary pen-tool state machine + rubber-band guard + Esc commit/cancel (Wave 2)
-  - [ ] 12-04-text-place-mode-and-inline-edit.md — Place-text mode + inline-edit overlay + dblclick re-entry + pan/zoom force-commit (Wave 3)
-  - [ ] 12-05-inspector-mode-panels.md — Inspector boundary-mode + text-mode panels: color swatches, line-style + font-size segmented, setInspectorMode branches (Wave 4)
-  - [ ] 12-06-vertex-tools-and-selection-wiring.md — BoundaryVertex elementTools.Control + attachBoundaryVertexTools + onSelectionChanged branches + change:vertices listener (Wave 5)
-  - [ ] 12-07-backend-tests.md — Regression tests for IDOR pass-through + canvas_state opacity (R-04, R-13, R-14) (Wave 1 — independent)
+  - [x] 12-01-PLAN.md — JS cell-class registration: BoundaryLine + TextLabel + applyBoundaryRender + palette/style constants (Wave 1)
+  - [x] 12-02-PLAN.md — CSS Sections 17 (DRAW) + 18 (TXT) skeleton + section-list update (Wave 1)
+  - [x] 12-03-PLAN.md — Toolbar create-tools group + draw-boundary pen-tool state machine + rubber-band guard + Esc commit/cancel (Wave 2)
+  - [x] 12-04-PLAN.md — Place-text mode + inline-edit overlay + dblclick re-entry + pan/zoom force-commit (Wave 3)
+  - [x] 12-05-PLAN.md — Inspector boundary-mode + text-mode panels: color swatches, line-style + font-size segmented, setInspectorMode branches (Wave 4)
+  - [x] 12-06-PLAN.md — BoundaryVertex elementTools.Control + attachBoundaryVertexTools + onSelectionChanged branches + change:vertices listener (Wave 5)
+  - [x] 12-07-PLAN.md — Regression tests for IDOR pass-through + canvas_state opacity (R-04, R-13, R-14) (Wave 1 — independent)
 
 ### Carried decisions (still in force)
 

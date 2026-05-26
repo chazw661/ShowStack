@@ -1,16 +1,16 @@
 ---
-gsd_state_version: 1.0
+gsd-state-version: 1.0
 milestone: v2.0
 milestone_name: one-liners
 status: completed
-stopped_at: Phase 12 context gathered
-last_updated: "2026-05-26T19:26:00.015Z"
-last_activity: 2026-05-25
+stopped_at: Phase 12 implementation complete — awaiting UAT
+last_updated: "2026-05-26T20:30:00.000Z"
+last_activity: 2026-05-26 -- Phase 12 execution complete
 progress:
   total_phases: 12
-  completed_phases: 11
-  total_plans: 57
-  completed_plans: 57
+  completed_phases: 12
+  total_plans: 64
+  completed_plans: 64
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** ShowStack knows your patch, your labels, and your gear; once entered, that data drives every export your show needs.
-**Current focus:** Phase 12 — Boundary Lines + Text Annotations (next)
+**Current focus:** Phase 12 — boundaries-and-text (implementation complete, UAT pending)
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
-Status: Phase 11 complete; Phase 12 pending discuss/plan
-Last activity: 2026-05-25
+Phase: 12 (boundaries-and-text) — COMPLETE
+Plan: 7 of 7
+Status: All Phase 12 plans shipped — awaiting verifier + browser UAT
+Last activity: 2026-05-26 -- Phase 12 execution complete
 
-Progress: [█████████░] Phase 11/12 of v2.3
+Progress: [██████████] Phase 12/12 of v2.3
 
 ## Roadmap Summary
 
