@@ -4,7 +4,7 @@ milestone: v2.0
 milestone_name: one-liners
 status: completed
 stopped_at: Phase 12 context gathered
-last_updated: "2026-05-26T01:40:19.633Z"
+last_updated: "2026-05-26T19:26:00.015Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 12
@@ -81,7 +81,7 @@ Last session: --stopped-at
 Stopped at: Phase 12 context gathered
 Resume file: --resume-file
 
-**Planned Phase:** 11 (Per-Shape Labeled Ports + Resizable Shapes (gap closure)) — 2 plans — 2026-05-24T20:34:04.025Z
+**Planned Phase:** 12 (Boundary Lines + Text Annotations) — 7 plans — 2026-05-26T19:26:00.005Z
 
 ## Deferred Items
 
