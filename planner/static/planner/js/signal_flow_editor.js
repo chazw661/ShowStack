@@ -761,6 +761,128 @@
   });
 
   // ──────────────────────────────────────────────────────────────
+  // Phase 12 — Decorative cell classes (DRAW + TXT).
+  // No ports. No magnets. No equipment GFK (server's IDOR allowlist
+  // bypasses these via planner/views.py:7693 `continue`).
+  // ──────────────────────────────────────────────────────────────
+
+  // Palette constants (D-09, D-19).
+  var BOUNDARY_PALETTE = ['#000000','#666666','#dc2626','#ea580c','#eab308','#16a34a','#2563eb','#9333ea'];
+  var TEXT_PALETTE     = BOUNDARY_PALETTE.concat(['#ffffff']);                       // D-19 — +white
+  var BOUNDARY_LINE_STYLES = {
+    solid:  { dasharray: 'none',  doubleVisible: false },
+    dashed: { dasharray: '6 4',   doubleVisible: false },
+    dotted: { dasharray: '1 3',   doubleVisible: false },
+    double: { dasharray: 'none',  doubleVisible: true  },
+  };
+  var TEXT_FONT_SIZES = { small: 12, medium: 16, large: 24 };                       // D-19
+
+  // ---- BoundaryLine — decorative polyline, no ports, no magnets (DRAW) ----
+  // VERTEX STORAGE: cell.prop('vertices') — array of {x, y} in paper-local coords.
+  // DOUBLE-LINE: lineSecondary polyline is display:none for solid/dashed/dotted
+  // and display:inline (with same color, no dasharray, +3 y-offset) for 'double'.
+  joint.shapes.showstack.BoundaryLine = joint.dia.Element.extend({
+    markup: [
+      { tagName: 'g',        selector: 'lineGroup' },
+      { tagName: 'polyline', selector: 'linePrimary' },
+      { tagName: 'polyline', selector: 'lineSecondary' },
+    ],
+    defaults: joint.util.deepSupplement({
+      type: 'showstack.BoundaryLine',
+      // size + position are not meaningful for a polyline; vertices array drives
+      // the rendered geometry. Zero size keeps JointJS layout helpers (snap-to-
+      // grid on cell.position()) from accidentally applying.
+      size: { width: 0, height: 0 },
+      attrs: {
+        linePrimary: {
+          fill: 'none',
+          stroke: '#000000',
+          'stroke-width': 2,
+          'stroke-dasharray': 'none',
+          'stroke-linejoin': 'round',
+          'stroke-linecap': 'round',
+          'pointer-events': 'stroke',
+        },
+        lineSecondary: {
+          fill: 'none',
+          stroke: '#000000',
+          'stroke-width': 2,
+          'stroke-dasharray': 'none',
+          'stroke-linejoin': 'round',
+          'stroke-linecap': 'round',
+          display: 'none',
+          'pointer-events': 'none',
+        },
+      },
+      // Custom property bag — survives toJSON round-trip via JointJS cell.attributes.
+      vertices:    [],             // [{x, y}, ...] — paper-local coords
+      color:       '#000000',
+      lineStyle:   'solid',        // 'solid' | 'dashed' | 'dotted' | 'double'
+      strokeWidth: 2,              // fixed at 2 in v2.3; not engineer-configurable
+    }, joint.dia.Element.prototype.defaults),
+  });
+
+  // ---- TextLabel — single SVG <text> child + transient HTML <input> for edit (TXT) ----
+  // INLINE-EDIT (D-16/D-17) is owned by Plan 04; this class declares the persisted form.
+  joint.shapes.showstack.TextLabel = joint.dia.Element.extend({
+    markup: [
+      { tagName: 'rect', selector: 'hitArea' },    // invisible drag/select target
+      { tagName: 'text', selector: 'label' },
+    ],
+    defaults: joint.util.deepSupplement({
+      type: 'showstack.TextLabel',
+      size: { width: 60, height: 22 },             // initial — auto-recomputed by Plan 04 on commit
+      attrs: {
+        hitArea: {
+          refWidth: '100%', refHeight: '100%',
+          fill: 'transparent',
+          stroke: 'none',
+        },
+        label: {
+          refX: '50%', refY: '50%',
+          textAnchor: 'middle', textVerticalAnchor: 'middle',
+          fontSize: 16,                            // D-19 medium default
+          fontFamily: FONT_STACK,                  // system fonts only (PNG-export font-taint)
+          fill: '#000000',                         // D-19 black default
+          text: '',                                // populated by Plan 04 inline-edit on commit
+        },
+      },
+      // Custom property bag.
+      fontSize: 16,
+      color:    '#000000',
+    }, joint.dia.Element.prototype.defaults),
+  });
+
+  // applyBoundaryRender — single source of truth for re-rendering both polylines
+  // after any vertex / color / lineStyle change. Called from:
+  //   - Plan 03 commitOrCancelBoundary() after addCell
+  //   - Plan 05 inspector swatch/segmented click handlers
+  //   - Plan 06 graph.on('change:vertices', ...) listener
+  // For v2.3 the double-line uses a flat (0, +3) y-offset on the secondary polyline
+  // (acceptable for mostly-horizontal architectural boundaries; per-segment unit-
+  // normal math is a Risk #3 v2.4 follow-up).
+  function applyBoundaryRender(cell) {
+    var verts = cell.prop('vertices') || [];
+    var primaryPoints   = verts.map(function (v) { return v.x + ',' + v.y; }).join(' ');
+    var secondaryPoints = verts.map(function (v) { return v.x + ',' + (v.y + 3); }).join(' ');
+    var style = BOUNDARY_LINE_STYLES[cell.prop('lineStyle') || 'solid'];
+    var color = cell.prop('color') || '#000000';
+
+    cell.attr({
+      linePrimary: {
+        points: primaryPoints,
+        stroke: color,
+        'stroke-dasharray': style.dasharray,
+      },
+      lineSecondary: {
+        points: secondaryPoints,
+        stroke: color,
+        display: style.doubleVisible ? 'inline' : 'none',
+      },
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // Graph + Paper init.
   // PITFALLS §1: pass cellNamespace AND cellViewNamespace.
   // ──────────────────────────────────────────────────────────────
