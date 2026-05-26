@@ -2480,6 +2480,14 @@
   var nodeDeleteBtn = null;
   var inspectorCurrentNode = null;    // the cell currently shown in node mode
 
+  // Phase 12 — inspector mode-current trackers (parallel to inspectorCurrentNode / inspectorCurrentLink).
+  var inspectorCurrentBoundary = null;
+  var inspectorCurrentText = null;
+
+  // Lazy-built mode blocks (built on first show, cached after).
+  var boundaryModeBlock = null;
+  var textModeBlock = null;
+
   function buildNodeModeBlock() {
     if (!inspectorEl) return;
     nodeModeBlock = document.createElement('div');
@@ -2535,6 +2543,250 @@
       inspectorCurrentNode = null;
       hideInspector();
     });
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase 12 — Boundary-mode inspector panel (DRAW-02, DRAW-03).
+  // ──────────────────────────────────────────────────────────────
+
+  // Safe-by-construction: returns a fixed-literal SVG snippet for the segmented
+  // button content. No user input is interpolated; innerHTML use is acceptable.
+  function renderLineStylePreviewSVG(style) {
+    var dashAttr = '';
+    if (style === 'dashed') dashAttr = ' stroke-dasharray="6 4"';
+    else if (style === 'dotted') dashAttr = ' stroke-dasharray="1 3"';
+    if (style === 'double') {
+      return '<svg viewBox="0 0 28 12" aria-hidden="true">' +
+             '<line x1="2" y1="4" x2="26" y2="4" stroke="currentColor" stroke-width="2"/>' +
+             '<line x1="2" y1="9" x2="26" y2="9" stroke="currentColor" stroke-width="2"/>' +
+             '</svg>';
+    }
+    return '<svg viewBox="0 0 28 12" aria-hidden="true">' +
+           '<line x1="2" y1="6" x2="26" y2="6" stroke="currentColor" stroke-width="2"' + dashAttr + '/>' +
+           '</svg>';
+  }
+
+  // Violation 1 — mutation order: sticky default FIRST, then cell, then render, then autosave.
+  function applyBoundaryColor(cell, hex) {
+    if (!cell) return;
+    lastBoundaryColor = hex;              // 1. sticky default
+    cell.prop('color', hex);              // 2. cell mutation
+    applyBoundaryRender(cell);            // 3. SVG render
+    refreshBoundaryModeBlock(cell);       // 4. inspector active-state visual
+    scheduleAutosave();                   // 5. autosave LAST
+  }
+
+  function applyBoundaryLineStyle(cell, style) {
+    if (!cell) return;
+    lastBoundaryStyle = style;
+    cell.prop('lineStyle', style);
+    applyBoundaryRender(cell);
+    refreshBoundaryModeBlock(cell);
+    scheduleAutosave();
+  }
+
+  function buildBoundaryModeBlock() {
+    if (!inspectorEl) return;
+    boundaryModeBlock = document.createElement('div');
+    boundaryModeBlock.setAttribute('data-mode', 'boundary');
+    boundaryModeBlock.style.setProperty('display', 'none', 'important');
+
+    // --- Color swatches: 4×2 grid (D-09 8 colors) ---
+    var colorField = document.createElement('div');
+    colorField.className = 'sfd-field';
+    colorField.setAttribute('data-mode', 'boundary');
+    var colorLabel = document.createElement('label');
+    colorLabel.textContent = 'Color';                       // XSS-safe textContent
+    colorField.appendChild(colorLabel);
+    var swatchGrid = document.createElement('div');
+    swatchGrid.className = 'sfd-color-swatches';
+    BOUNDARY_PALETTE.forEach(function (hex) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sfd-color-swatch';
+      btn.setAttribute('data-color', hex);
+      btn.setAttribute('aria-label', 'Color ' + hex);
+      btn.style.setProperty('background-color', hex, 'important');
+      btn.addEventListener('click', function () {
+        applyBoundaryColor(inspectorCurrentBoundary, hex);
+      });
+      swatchGrid.appendChild(btn);
+    });
+    colorField.appendChild(swatchGrid);
+
+    // --- Line-style segmented: solid / dashed / dotted / double (D-11, D-12) ---
+    var styleField = document.createElement('div');
+    styleField.className = 'sfd-field';
+    styleField.setAttribute('data-mode', 'boundary');
+    var styleLabel = document.createElement('label');
+    styleLabel.textContent = 'Line style';
+    styleField.appendChild(styleLabel);
+    var styleSeg = document.createElement('div');
+    styleSeg.className = 'sfd-segmented';
+    styleSeg.setAttribute('role', 'group');
+    styleSeg.setAttribute('aria-label', 'Boundary line style');
+    ['solid', 'dashed', 'dotted', 'double'].forEach(function (s) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('data-style', s);
+      btn.setAttribute('aria-label', 'Line style ' + s);
+      // Fixed-literal SVG content — safe-by-construction (no user input).
+      btn.innerHTML = renderLineStylePreviewSVG(s);
+      btn.addEventListener('click', function () {
+        applyBoundaryLineStyle(inspectorCurrentBoundary, s);
+      });
+      styleSeg.appendChild(btn);
+    });
+    styleField.appendChild(styleSeg);
+
+    boundaryModeBlock.appendChild(colorField);
+    boundaryModeBlock.appendChild(styleField);
+    inspectorEl.appendChild(boundaryModeBlock);
+  }
+
+  function refreshBoundaryModeBlock(cell) {
+    if (!boundaryModeBlock || !cell) return;
+    var color = cell.prop('color') || '#000000';
+    var style = cell.prop('lineStyle') || 'solid';
+    // Sync color swatch active state.
+    var swatches = boundaryModeBlock.querySelectorAll('.sfd-color-swatch');
+    for (var i = 0; i < swatches.length; i++) {
+      var s = swatches[i];
+      if (s.getAttribute('data-color') === color) {
+        s.setAttribute('data-active', 'true');
+      } else {
+        s.removeAttribute('data-active');
+      }
+    }
+    // Sync line-style segmented active state.
+    var styleBtns = boundaryModeBlock.querySelectorAll('.sfd-segmented button[data-style]');
+    for (var j = 0; j < styleBtns.length; j++) {
+      var b = styleBtns[j];
+      if (b.getAttribute('data-style') === style) {
+        b.setAttribute('data-active', 'true');
+      } else {
+        b.removeAttribute('data-active');
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Phase 12 — Text-mode inspector panel (TXT-02).
+  // ──────────────────────────────────────────────────────────────
+
+  // Violation 1 — mutation order parallel to boundary.
+  function applyTextColor(cell, hex) {
+    if (!cell) return;
+    lastTextColor = hex;
+    cell.prop('color', hex);
+    cell.attr('label/fill', hex);
+    refreshTextModeBlock(cell);
+    scheduleAutosave();
+  }
+
+  function applyTextFontSize(cell, size) {
+    if (!cell) return;
+    var px = TEXT_FONT_SIZES[size];                    // 12 / 16 / 24
+    if (!px) return;
+    lastTextSize = px;
+    cell.prop('fontSize', px);
+    cell.attr('label/fontSize', px);
+    // Auto-refit cell width/height to the new font-size.
+    var text = cell.attr('label/text') || '';
+    var w = (typeof measureTextLabelWidth === 'function') ? measureTextLabelWidth(text, px) + 8 : Math.max(60, px * 4);
+    var h = Math.max(22, px + 6);
+    cell.resize(Math.ceil(w), Math.ceil(h));
+    refreshTextModeBlock(cell);
+    scheduleAutosave();
+  }
+
+  function buildTextModeBlock() {
+    if (!inspectorEl) return;
+    textModeBlock = document.createElement('div');
+    textModeBlock.setAttribute('data-mode', 'text');
+    textModeBlock.style.setProperty('display', 'none', 'important');
+
+    // --- Color swatches: 3×3 grid (D-19 9 colors incl. white) ---
+    var colorField = document.createElement('div');
+    colorField.className = 'sfd-field';
+    colorField.setAttribute('data-mode', 'text');
+    var colorLabel = document.createElement('label');
+    colorLabel.textContent = 'Color';
+    colorField.appendChild(colorLabel);
+    var swatchGrid = document.createElement('div');
+    swatchGrid.className = 'sfd-color-swatches sfd-color-swatches--text';
+    TEXT_PALETTE.forEach(function (hex) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sfd-color-swatch';
+      btn.setAttribute('data-color', hex);
+      btn.setAttribute('aria-label', 'Color ' + hex);
+      btn.style.setProperty('background-color', hex, 'important');
+      btn.addEventListener('click', function () {
+        applyTextColor(inspectorCurrentText, hex);
+      });
+      swatchGrid.appendChild(btn);
+    });
+    colorField.appendChild(swatchGrid);
+
+    // --- Font-size segmented: S / M / L (D-19) ---
+    var sizeField = document.createElement('div');
+    sizeField.className = 'sfd-field';
+    sizeField.setAttribute('data-mode', 'text');
+    var sizeLabel = document.createElement('label');
+    sizeLabel.textContent = 'Font size';
+    sizeField.appendChild(sizeLabel);
+    var sizeSeg = document.createElement('div');
+    sizeSeg.className = 'sfd-segmented sfd-text-fontsize-segmented';
+    sizeSeg.setAttribute('role', 'group');
+    sizeSeg.setAttribute('aria-label', 'Text font size');
+    ['small', 'medium', 'large'].forEach(function (sz) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('data-size', sz);
+      btn.setAttribute('aria-label', sz + ' (' + TEXT_FONT_SIZES[sz] + ' px)');
+      // XSS-safe: textContent (NOT innerHTML); user input is not interpolated.
+      btn.textContent = sz === 'small' ? 'S' : (sz === 'medium' ? 'M' : 'L');
+      btn.addEventListener('click', function () {
+        applyTextFontSize(inspectorCurrentText, sz);
+      });
+      sizeSeg.appendChild(btn);
+    });
+    sizeField.appendChild(sizeSeg);
+
+    textModeBlock.appendChild(colorField);
+    textModeBlock.appendChild(sizeField);
+    inspectorEl.appendChild(textModeBlock);
+  }
+
+  function refreshTextModeBlock(cell) {
+    if (!textModeBlock || !cell) return;
+    var color = cell.prop('color') || '#000000';
+    var fontSize = cell.prop('fontSize') || 16;
+    // Map px back to size keyword for the segmented button data-size match.
+    var sizeKey = null;
+    if (fontSize === 12) sizeKey = 'small';
+    else if (fontSize === 24) sizeKey = 'large';
+    else sizeKey = 'medium';
+
+    var swatches = textModeBlock.querySelectorAll('.sfd-color-swatch');
+    for (var i = 0; i < swatches.length; i++) {
+      var s = swatches[i];
+      if (s.getAttribute('data-color') === color) {
+        s.setAttribute('data-active', 'true');
+      } else {
+        s.removeAttribute('data-active');
+      }
+    }
+    var sizeBtns = textModeBlock.querySelectorAll('.sfd-segmented button[data-size]');
+    for (var j = 0; j < sizeBtns.length; j++) {
+      var b = sizeBtns[j];
+      if (b.getAttribute('data-size') === sizeKey) {
+        b.setAttribute('data-active', 'true');
+      } else {
+        b.removeAttribute('data-active');
+      }
+    }
   }
 
   // =========================================================================
@@ -2710,8 +2962,12 @@
       });
       if (nodeModeBlock) nodeModeBlock.style.setProperty('display', 'none', 'important');
       if (portAuthorBlock) portAuthorBlock.style.setProperty('display', 'none', 'important');
+      if (boundaryModeBlock) boundaryModeBlock.style.setProperty('display', 'none', 'important');
+      if (textModeBlock) textModeBlock.style.setProperty('display', 'none', 'important');
       inspectorCurrentLink = cell;
       inspectorCurrentNode = null;
+      inspectorCurrentBoundary = null;
+      inspectorCurrentText = null;
       syncInspectorFromLink(cell);
     } else if (mode === 'node') {
       if (inspectorHeader) inspectorHeader.textContent = 'Node';
@@ -2719,8 +2975,12 @@
         row.style.setProperty('display', 'none', 'important');
       });
       nodeModeBlock.style.setProperty('display', 'block', 'important');
+      if (boundaryModeBlock) boundaryModeBlock.style.setProperty('display', 'none', 'important');
+      if (textModeBlock) textModeBlock.style.setProperty('display', 'none', 'important');
       inspectorCurrentNode = cell;
       inspectorCurrentLink = null;
+      inspectorCurrentBoundary = null;
+      inspectorCurrentText = null;
       // Hide the Re-link button when the cell has no equipment GFK
       // (pure Generic shape with no contentTypeId — nothing to relink to).
       var prop = cell.prop('showstack') || {};
@@ -2735,6 +2995,38 @@
       if (!portAuthorBlock) buildPortAuthorBlock();
       portAuthorBlock.style.setProperty('display', 'block', 'important');
       refreshPortAuthorBlock(cell);
+    } else if (mode === 'boundary') {
+      if (inspectorHeader) inspectorHeader.textContent = 'Boundary';
+      // Hide all other mode blocks.
+      connectorFieldRows.forEach(function (row) {
+        row.style.setProperty('display', 'none', 'important');
+      });
+      if (nodeModeBlock) nodeModeBlock.style.setProperty('display', 'none', 'important');
+      if (portAuthorBlock) portAuthorBlock.style.setProperty('display', 'none', 'important');
+      if (textModeBlock) textModeBlock.style.setProperty('display', 'none', 'important');
+      // Show the boundary block.
+      if (!boundaryModeBlock) buildBoundaryModeBlock();
+      if (boundaryModeBlock) boundaryModeBlock.style.setProperty('display', 'block', 'important');
+      inspectorCurrentBoundary = cell;
+      inspectorCurrentText = null;
+      inspectorCurrentLink = null;
+      inspectorCurrentNode = null;
+      refreshBoundaryModeBlock(cell);
+    } else if (mode === 'text') {
+      if (inspectorHeader) inspectorHeader.textContent = 'Text';
+      connectorFieldRows.forEach(function (row) {
+        row.style.setProperty('display', 'none', 'important');
+      });
+      if (nodeModeBlock) nodeModeBlock.style.setProperty('display', 'none', 'important');
+      if (portAuthorBlock) portAuthorBlock.style.setProperty('display', 'none', 'important');
+      if (boundaryModeBlock) boundaryModeBlock.style.setProperty('display', 'none', 'important');
+      if (!textModeBlock) buildTextModeBlock();
+      if (textModeBlock) textModeBlock.style.setProperty('display', 'block', 'important');
+      inspectorCurrentText = cell;
+      inspectorCurrentBoundary = null;
+      inspectorCurrentLink = null;
+      inspectorCurrentNode = null;
+      refreshTextModeBlock(cell);
     }
   }
 
