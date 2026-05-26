@@ -34,6 +34,8 @@
  *  14. Port-label rendering (Phase 11 D-08 — perpendicular-inside)
  *  15. Resize handles (Phase 11 D-05 — four corners)
  *  16. Inspector port-list rows + trash icon (Phase 11 D-02 / D-04)
+ *  17. Boundary lines — DRAW (Phase 12 D-04 toolbar group, D-09 color swatches, D-12 line-style picker)
+ *  18. Text annotations — TXT (Phase 12 D-19 font-size segmented, D-19 9-color picker incl. white)
  */
 
 /* =========================================================================
@@ -872,4 +874,88 @@
 /* Cursor — nwse for all 4 corners in v2.3 (per-corner cursors deferred to v2.4+) */
 #sfd-paper .joint-tools .joint-tool {
   cursor: nwse-resize !important;
+}
+
+/* =========================================================================
+   SECTION 17 — Boundary lines (Phase 12 DRAW-01..04)
+   Toolbar buttons #sfd-tool-boundary / #sfd-tool-text inherit Section 1
+   button styling and the `.is-active` teal active-state. Inspector
+   boundary-mode panel uses an 8-swatch color grid (D-09) and a 4-button
+   line-style segmented picker (D-12).
+   Dark-navy inspector palette (#eee primary, #aaa muted) per Phase 11
+   GAP-11.7 user-MEMORY rule — light-bg defaults must not leak into the
+   new panel.
+   ========================================================================= */
+
+/* Color swatch grid — 4×2 for boundary panel. Text panel overrides to 3×3
+   in Section 18 via the `.sfd-color-swatches--text` modifier. */
+.sfd-color-swatches {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 4px !important;
+  margin-top: 4px !important;
+}
+
+.sfd-color-swatch {
+  width: 100% !important;
+  height: 28px !important;
+  border: 1px solid #444 !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  /* background-color is set inline by JS to each palette hex —
+     do NOT set a fallback here. */
+}
+
+.sfd-color-swatch[data-active="true"] {
+  box-shadow: 0 0 0 2px #0d9488 inset, 0 0 0 1px #fff inset !important;
+}
+
+/* Line-style segmented preview — SVG <line> sized to render inside each
+   segmented button. The segmented base styling (background, hover, active)
+   comes from Section 4 .sfd-segmented; this rule only sizes the SVG. */
+.sfd-segmented button[data-style] svg {
+  display: block !important;
+  width: 28px !important;
+  height: 12px !important;
+}
+
+/* Field labels inside boundary-mode + text-mode panels — dark-navy muted
+   per the inspector palette. */
+#sfd-inspector .sfd-field[data-mode="boundary"] label,
+#sfd-inspector .sfd-field[data-mode="text"] label {
+  color: #aaa !important;
+  font-size: 11px !important;
+}
+
+/* =========================================================================
+   SECTION 18 — Text annotations (Phase 12 TXT-01..03)
+   Inline-edit overlay <input> (D-16, D-17), font-size segmented S/M/L
+   (D-19), 9-color picker including white (D-19).
+   ========================================================================= */
+
+/* Inline-edit overlay <input> — positioned absolutely over the cell bbox
+   during edit. JS (Plan 04) sets font-size + color inline via
+   setProperty(... 'important') to match the cell's current props. */
+.sfd-text-edit-overlay {
+  position: absolute !important;
+  border: 1px solid #0d9488 !important;
+  background-color: transparent !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  z-index: 100 !important;
+}
+
+/* Font-size segmented S/M/L — each button shows its size letter scaled
+   proportionally so engineer recognizes 'small'/'medium'/'large' at a glance. */
+.sfd-text-fontsize-segmented button[data-size="small"]  { font-size: 11px !important; }
+.sfd-text-fontsize-segmented button[data-size="medium"] { font-size: 13px !important; }
+.sfd-text-fontsize-segmented button[data-size="large"]  { font-size: 16px !important; }
+
+/* Text-mode 9-color picker — 3×3 grid (includes white per D-19).
+   Overrides the 4×2 grid from Section 17. */
+.sfd-color-swatches--text {
+  grid-template-columns: repeat(3, 1fr) !important;
 }
