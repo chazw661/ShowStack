@@ -726,6 +726,143 @@
     // graph.addCell auto-triggers scheduleAutosave via the existing 'add' listener.
   }
 
+  // ──────────────────────────────────────────────────────────────
+  // Phase 12 — Place-text mode (TXT-01) + inline-edit lifecycle.
+  // ──────────────────────────────────────────────────────────────
+
+  function enterTextMode() {
+    // D-01 — if boundary draw is active, exit it (cross-mode handoff).
+    if (drawState.active) exitBoundaryMode();
+    textModeActive = true;
+    var btn = document.getElementById('sfd-tool-text');
+    if (btn) {
+      btn.classList.add('is-active');
+      btn.setAttribute('aria-pressed', 'true');
+    }
+    var paperEl = document.getElementById('sfd-paper');
+    if (paperEl) paperEl.style.setProperty('cursor', 'crosshair', 'important');
+  }
+
+  function exitTextMode() {
+    textModeActive = false;
+    var btn = document.getElementById('sfd-tool-text');
+    if (btn) {
+      btn.classList.remove('is-active');
+      btn.setAttribute('aria-pressed', 'false');
+    }
+    var paperEl = document.getElementById('sfd-paper');
+    if (paperEl) paperEl.style.setProperty('cursor', '', 'important');
+  }
+
+  // Canvas-2D measure for auto-fit cell width on commit. Mirrors the Phase 11
+  // measureLabelWidth pattern.
+  function measureTextLabelWidth(text, fontSize) {
+    if (!text) return 0;
+    var ctx = document.createElement('canvas').getContext('2d');
+    ctx.font = fontSize + 'px ' + 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    return ctx.measureText(text).width;
+  }
+
+  // Inline-edit entry — mounts a transient <input> overlay over the cell bbox.
+  function enterTextEditMode(cell, wasPlaced) {
+    if (inTextEdit) return;
+    inTextEdit = true;
+    textEditCell = cell;
+    textEditWasPlaced = !!wasPlaced;
+
+    // Hide the SVG glyph during edit so a stale label doesn't sit under the input.
+    cell.attr('label/display', 'none');
+
+    var paperEl = document.getElementById('sfd-paper');
+    var screenBbox = paper.localToPaperRect(cell.getBBox());
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'sfd-text-edit-overlay';
+    input.value = cell.attr('label/text') || '';
+    // Position absolutely over the cell screen bbox.
+    // Per CLAUDE.md admin-CSS override rule, every inline style uses setProperty(... 'important').
+    input.style.setProperty('left',   screenBbox.x + 'px', 'important');
+    input.style.setProperty('top',    screenBbox.y + 'px', 'important');
+    input.style.setProperty('width',  Math.max(60, screenBbox.width)  + 'px', 'important');
+    input.style.setProperty('height', screenBbox.height + 'px', 'important');
+    input.style.setProperty('font-size', (cell.prop('fontSize') || 16) + 'px', 'important');
+    input.style.setProperty('color',     (cell.prop('color')    || '#000000'),  'important');
+
+    // Append to the paper's parent (HTML overlay must be HTML, not SVG child).
+    (paperEl && paperEl.parentNode || document.body).appendChild(input);
+    textEditOverlay = input;
+
+    input.addEventListener('blur', function () { commitTextEdit(); });
+    input.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') {
+        evt.preventDefault();           // D-18 — Enter commits, no newline insertion
+        commitTextEdit();
+      } else if (evt.key === 'Escape') {
+        evt.preventDefault();
+        cancelTextEdit();
+      }
+    });
+    input.focus();
+    input.select();
+  }
+
+  function commitTextEdit() {
+    if (!inTextEdit) return;
+    var cell = textEditCell;
+    var input = textEditOverlay;
+    var raw = (input && input.value) || '';
+    var value = raw.trim();
+    // Tear down the overlay FIRST so a re-entrant call (blur fires after focus
+    // is removed) does not double-commit.
+    teardownTextEditOverlay();
+    if (!cell) return;
+    if (value === '') {
+      // D-18 — empty commit auto-deletes.
+      cell.remove();
+      return;
+    }
+    // Persist the text + auto-fit cell width.
+    // WARNING 3 — cell.resize(...) fires change:size which is caught by the
+    // existing autosave listener; cell.attr('label/text', ...) does not
+    // trigger autosave on its own (the listener does not include change:attrs).
+    // If the new value measures to the same width as the prior value (same
+    // characters + same font), cell.resize is a no-op and no change:size
+    // fires. Defence-in-depth: explicit scheduleAutosave() below.
+    cell.attr('label/text', value);
+    cell.attr('label/display', null);
+    var fontSize = cell.prop('fontSize') || 16;
+    var w = measureTextLabelWidth(value, fontSize) + 8;     // 4px padding each side per D-19
+    var h = Math.max(22, fontSize + 6);
+    cell.resize(Math.ceil(w), Math.ceil(h));
+    scheduleAutosave();                                     // WARNING 3 — defence-in-depth
+  }
+
+  function cancelTextEdit() {
+    if (!inTextEdit) return;
+    var cell = textEditCell;
+    var wasPlaced = textEditWasPlaced;
+    teardownTextEditOverlay();
+    if (!cell) return;
+    if (wasPlaced) {
+      // D-16 — Esc on a freshly placed empty cell removes it.
+      cell.remove();
+    } else {
+      // D-16 — re-entered edit (D-17 dblclick): keep existing text; just restore SVG.
+      cell.attr('label/display', null);
+    }
+  }
+
+  function teardownTextEditOverlay() {
+    if (textEditOverlay && textEditOverlay.parentNode) {
+      textEditOverlay.parentNode.removeChild(textEditOverlay);
+    }
+    textEditOverlay = null;
+    textEditCell = null;
+    textEditWasPlaced = false;
+    inTextEdit = false;
+  }
+
   // ---- Console (180×60, teal #0d9488 left band) ----
   joint.shapes.showstack.Console = joint.dia.Element.extend({
     markup: [
@@ -1048,6 +1185,20 @@
   // per Plan 05 inspector-click handlers (Pattern Violation 1).
   var lastBoundaryColor = '#000000';    // D-09 initial — black
   var lastBoundaryStyle = 'solid';      // D-12 initial — solid
+
+  // Phase 12 — session-sticky defaults for next-placed text label.
+  // Closure-scoped; reset on page reload.
+  var lastTextSize  = 16;            // D-19 medium default
+  var lastTextColor = '#000000';     // D-19 black default
+
+  // Phase 12 — text-mode + inline-edit state. textModeActive is the sticky
+  // mode flag (parallel to drawState.active). inTextEdit is the per-edit
+  // flag used by the pan/zoom force-commit hooks (Risk #5, BLOCKER 1).
+  var textModeActive = false;
+  var inTextEdit = false;
+  var textEditCell = null;           // the cell currently being edited (null when not)
+  var textEditOverlay = null;        // the transient <input> overlay element
+  var textEditWasPlaced = false;     // true if this edit session is a fresh place (D-16 Esc cancel rules)
 
   getJSON(stateUrl)
     .then(function (state) {
@@ -1395,6 +1546,7 @@
     if (!panState.dragging) return;
     var dx = evt.clientX - panState.startX;
     var dy = evt.clientY - panState.startY;
+    if (inTextEdit) commitTextEdit();          // Phase 12 BLOCKER 1 — Risk #5 force-commit on pan
     paper.translate(panState.baseTx + dx, panState.baseTy + dy);
     currentViewport.x = panState.baseTx + dx;
     currentViewport.y = panState.baseTy + dy;
@@ -1416,6 +1568,7 @@
 
   function setZoom(newScale) {
     newScale = Math.max(0.25, Math.min(2.0, newScale));
+    if (inTextEdit) commitTextEdit();          // Phase 12 BLOCKER 1 — Risk #5 force-commit on zoom
     paper.scale(newScale, newScale);
     currentViewport.scale = newScale;
     if (zoomLevelEl) zoomLevelEl.textContent = Math.round(newScale * 100) + '%';
@@ -1499,6 +1652,20 @@
     });
   }
 
+  // Phase 12 — Toolbar wiring: place-text mode toggle (D-01 sticky).
+  var toolTextBtn = document.getElementById('sfd-tool-text');
+  if (toolTextBtn) {
+    toolTextBtn.addEventListener('click', function () {
+      if (textModeActive) {
+        // Re-click exits per D-01. If an edit is mid-flight, force-commit first.
+        if (inTextEdit) commitTextEdit();
+        exitTextMode();
+      } else {
+        enterTextMode();
+      }
+    });
+  }
+
   // Pen-tool vertex placement — only fires when drawState.active is true.
   // Rubber-band listener has its own `if (drawState.active) return;` guard
   // so both listeners coexist safely.
@@ -1544,6 +1711,44 @@
       evt.preventDefault();
       commitOrCancelBoundary();
       exitBoundaryMode();
+    }
+  });
+
+  // Phase 12 — Place-text blank:pointerdown listener (TXT-01).
+  // Coexists with the pen-tool listener above (each early-exits on its own mode).
+  paper.on('blank:pointerdown', function (evt, x, y) {
+    if (!textModeActive) return;
+    if (panState.spaceDown) return;        // WARNING 5 — spacebar pan trumps place-text
+    if (inTextEdit) return;                // a placed cell is already in edit; click commits via blur
+    var pt = { x: x, y: y };
+    if (window.__sfd && window.__sfd.viewport && window.__sfd.viewport.snapEnabled) {
+      pt.x = Math.round(pt.x / 20) * 20;
+      pt.y = Math.round(pt.y / 20) * 20;
+    }
+    // Initial size — auto-fit happens on commit. Start narrow.
+    var cell = new joint.shapes.showstack.TextLabel({
+      position: pt,
+      fontSize: lastTextSize,
+      color:    lastTextColor,
+      attrs: {
+        label: {
+          fontSize: lastTextSize,
+          fill:     lastTextColor,
+          text:     '',
+        },
+      },
+    });
+    graph.addCell(cell);
+    cell.toFront();                 // D-14 — text always on top
+    enterTextEditMode(cell, /* wasPlaced= */ true);
+  });
+
+  // D-17 — double-click on a placed TextLabel re-enters edit mode.
+  paper.on('element:pointerdblclick', function (elementView, evt) {
+    var cell = elementView.model;
+    if (cell && cell.get('type') === 'showstack.TextLabel') {
+      if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+      enterTextEditMode(cell, /* wasPlaced= */ false);
     }
   });
 
@@ -1795,6 +2000,7 @@
   // Gated against panState.spaceDown so space+drag is always a pan.
   paper.on('blank:pointerdown', function (evt, x, y) {
     if (drawState.active) return;                              // Phase 12 — Risk #1 guard
+    if (textModeActive) return;                                // Phase 12 BLOCKER 2 — place-text takes precedence
     if (panState.spaceDown || evt.button !== 0) return;
     var startLocal = { x: x, y: y };
     var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
