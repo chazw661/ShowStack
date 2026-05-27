@@ -7950,6 +7950,10 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
     For Amp: top/left edges (inbound) → AmpChannel.channel_name; bottom/right
     edges (outbound) → the NL4/NL8/CaCom/SC32 char-field labels declared on
     the Amp row. Empty/blank values are skipped (Pitfall 5).
+
+    For Console: inbound → ConsoleInput.source; outbound → ConsoleAuxOutput.name,
+    then ConsoleMatrixOutput.name, then ConsoleStereoOutput.name. Same UAT
+    contract as Amp — both I/O groups appear in every dropdown, inputs first.
     """
     from django.contrib.contenttypes.models import ContentType
 
@@ -7973,37 +7977,89 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
     if getattr(obj, 'project_id', None) != current_project.id:
         return None
 
-    if not isinstance(obj, Amp):
-        return None     # unsupported — caller falls back to project-wide list
-
     # UAT 2026-05-27 — show both inputs and outputs in every port dropdown,
     # regardless of which edge is being authored. The engineer chooses what's
     # appropriate; we don't restrict by direction.
     results = []
 
-    # Inputs — AmpChannel.channel_name (non-blank).
-    ch_qs = (obj.channels
-             .exclude(channel_name='')
-             .order_by('channel_number')
-             .values_list('channel_name', flat=True))
-    for name in ch_qs:
-        results.append({'label': name, 'source': 'Amp Channel'})
+    if isinstance(obj, Amp):
+        # Inputs — AmpChannel.channel_name (non-blank).
+        ch_qs = (obj.channels
+                 .exclude(channel_name='')
+                 .order_by('channel_number')
+                 .values_list('channel_name', flat=True))
+        for name in ch_qs:
+            results.append({'label': name, 'source': 'Amp Channel'})
 
-    # Outputs — NL4/NL8/CaCom/SC32 char fields on the Amp instance.
-    for field_name, source_tag in _AMP_OUTPUT_FIELDS:
-        val = (getattr(obj, field_name, '') or '').strip()
-        if val:
-            results.append({'label': val, 'source': source_tag})
+        # Outputs — NL4/NL8/CaCom/SC32 char fields on the Amp instance.
+        for field_name, source_tag in _AMP_OUTPUT_FIELDS:
+            val = (getattr(obj, field_name, '') or '').strip()
+            if val:
+                results.append({'label': val, 'source': source_tag})
+    elif isinstance(obj, Console):
+        # Inputs — ConsoleInput.source (signal name). pk order = engineer's
+        # entry order (typically CH1, CH2, …); ConsoleInput has no Meta
+        # ordering and input_ch is a free-text CharField so a numeric sort
+        # isn't safe across all consoles.
+        input_qs = (ConsoleInput.objects
+                    .filter(console=obj)
+                    .exclude(source='')
+                    .exclude(source__isnull=True)
+                    .order_by('pk')
+                    .values_list('source', flat=True))
+        for name in input_qs:
+            results.append({'label': name, 'source': 'Console Input'})
+
+        # Outputs — Aux first, then Matrix, then Stereo. Tag strings match
+        # the project-wide SOURCES list where they overlap ('Console Aux Out')
+        # and add new tags for Matrix/Stereo (instance-scoped only — the
+        # project-wide fallback still excludes them, by design).
+        #
+        # UAT 2026-05-27 — every authored output appears in the dropdown,
+        # named or not. When .name is blank, fall back to the positional
+        # identifier ('Aux 1', 'Matrix 3', 'Stereo Left') so the engineer
+        # can still pick the bus by number. Inputs deliberately keep the
+        # name-required behavior: a 72-channel console has 72 default-empty
+        # ConsoleInput rows from the CSV import and surfacing them all as
+        # "Input 1"…"Input 72" would flood the dropdown.
+        for aux_number, name in (ConsoleAuxOutput.objects
+                                 .filter(console=obj)
+                                 .order_by('pk')
+                                 .values_list('aux_number', 'name')):
+            label = (name or '').strip() or 'Aux {0}'.format(aux_number)
+            results.append({'label': label, 'source': 'Console Aux Out'})
+
+        for matrix_number, name in (ConsoleMatrixOutput.objects
+                                    .filter(console=obj)
+                                    .order_by('pk')
+                                    .values_list('matrix_number', 'name')):
+            label = (name or '').strip() or 'Matrix {0}'.format(matrix_number)
+            results.append({'label': label, 'source': 'Console Matrix Out'})
+
+        # ConsoleStereoOutput.Meta.ordering = ['stereo_type'] → L, M, R.
+        # STEREO_CHOICES: L='Stereo Left', R='Stereo Right', M='Mono'.
+        STEREO_DISPLAY = dict(ConsoleStereoOutput.STEREO_CHOICES)
+        for stereo_type, name in (ConsoleStereoOutput.objects
+                                  .filter(console=obj)
+                                  .values_list('stereo_type', 'name')):
+            label = (name or '').strip() or STEREO_DISPLAY.get(stereo_type, stereo_type)
+            results.append({'label': label, 'source': 'Console Stereo Out'})
+    else:
+        return None     # unsupported — caller falls back to project-wide list
 
     if q:
         q_lower = q.lower()
         results = [r for r in results if q_lower in r['label'].lower()]
 
     # Dedupe by (label, source). Insertion order is preserved so inputs
-    # (AmpChannel rows, appended first) appear before outputs (NL4/NL8/CaCom/
-    # SC32 fields, appended second). Within each section, results stay in
-    # natural order — channel_number for inputs, connector-declaration order
-    # for outputs. Do NOT alphabetical-sort here.
+    # (appended first) always appear before outputs (appended second). Within
+    # each section, results stay in their natural source order. Do NOT
+    # alphabetical-sort here.
+    #
+    # UAT 2026-05-27 — no row cap. A linked Console row can carry 48-72
+    # inputs PLUS aux/matrix/stereo outputs, blowing past the previous
+    # [:50] cap and truncating every output off the end of the list.
+    # Project-scoped + IDOR-guarded already, so there's no abuse surface.
     seen = set()
     unique = []
     for r in results:
@@ -8012,7 +8068,7 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
             seen.add(key)
             unique.append(r)
 
-    return unique[:50]
+    return unique
 
 
 @staff_member_required
