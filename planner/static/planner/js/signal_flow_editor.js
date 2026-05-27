@@ -362,10 +362,15 @@
   }
 
   function portLabelPositionForEdge(edge) {
-    // RESEARCH §Q10 — per-edge label position relative to the port dot.
-    // EDGE_PADDING_PERPENDICULAR_INSIDE = 8px (offset from edge into shape body).
-    // Labels render INSIDE the shape body, perpendicular to the edge (D-08).
-    // No rotation — text always reads horizontally left-to-right (engineer readability).
+    // Per-edge label position relative to the port dot. Labels render INSIDE
+    // the shape body, perpendicular to the edge (D-08). No rotation — text
+    // always reads horizontally left-to-right (engineer readability).
+    //
+    // UAT — 2026-05-27:
+    //   - Bottom y bumped -6 → -14 so the label clears the bottom border.
+    //   - Left/right x bumped ±8 → ±14 for the same reason.
+    //   - Left/right y bumped 4 → 14 so the side label sits below the cell
+    //     name (which is anchored at vertical center) and doesn't run into it.
     switch (edge) {
       case 'top':
         // Label below the dot (port at y=0, label at y=14 → INSIDE shape body).
@@ -373,19 +378,19 @@
                  args: { x: 0, y: 14,
                          attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
       case 'bottom':
-        // Label above the dot (port at y=height; label at y=-6 relative to port → INSIDE).
+        // Label above the dot (port at y=height; label at y=-14 relative to port → INSIDE).
         return { name: 'manual',
-                 args: { x: 0, y: -6,
+                 args: { x: 0, y: -14,
                          attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
       case 'left':
-        // Label right of the dot (port at x=0, label at x=8 → INSIDE).
+        // Label right of the dot + below the cell-label vertical center.
         return { name: 'manual',
-                 args: { x: 8, y: 4,
+                 args: { x: 14, y: 14,
                          attrs: { '.joint-port-label': { textAnchor: 'start' } } } };
       case 'right':
-        // Label left of the dot (port at x=width, label at x=-8 → INSIDE).
+        // Label left of the dot + below the cell-label vertical center.
         return { name: 'manual',
-                 args: { x: -8, y: 4,
+                 args: { x: -14, y: 14,
                          attrs: { '.joint-port-label': { textAnchor: 'end' } } } };
     }
     // Defensive fallback (callers in addAuthoredPort already restrict edge to T/B/L/R).
