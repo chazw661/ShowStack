@@ -912,7 +912,7 @@
     // characters + same font), cell.resize is a no-op and no change:size
     // fires. Defence-in-depth: explicit scheduleAutosave() below.
     cell.attr('label/text', value);
-    cell.attr('label/display', null);
+    cell.removeAttr('label/display');         // restore visibility — null doesn't reliably remove
     var fontSize = cell.prop('fontSize') || 16;
     var w = measureTextLabelWidth(value, fontSize) + 8;     // 4px padding each side per D-19
     var h = Math.max(22, fontSize + 6);
@@ -931,7 +931,7 @@
       cell.remove();
     } else {
       // D-16 — re-entered edit (D-17 dblclick): keep existing text; just restore SVG.
-      cell.attr('label/display', null);
+      cell.removeAttr('label/display');
     }
   }
 
@@ -1271,7 +1271,7 @@
   // Phase 12 — session-sticky defaults for next-placed text label.
   // Closure-scoped; reset on page reload.
   var lastTextSize  = 16;            // D-19 medium default
-  var lastTextColor = '#000000';     // D-19 black default
+  var lastTextColor = '#ffffff';     // default white — readable on dark surfaces
 
   // Phase 12 — text-mode + inline-edit state. textModeActive is the sticky
   // mode flag (parallel to drawState.active). inTextEdit is the per-edit
@@ -1731,6 +1731,8 @@
       } else {
         enterBoundaryMode();
       }
+      // Drop focus so Enter (commit key) doesn't re-trigger this click.
+      toolBoundaryBtn.blur();
     });
   }
 
@@ -1745,6 +1747,7 @@
       } else {
         enterTextMode();
       }
+      toolTextBtn.blur();
     });
   }
 
@@ -1786,10 +1789,12 @@
     commitOrCancelBoundary();
   });
 
-  // Esc commits or cancels boundary draw mode (D-02, D-05).
+  // Esc or Enter commits / cancels boundary draw mode (D-02, D-05).
+  // Enter is a natural commit key — users instinctively press it after placing vertices.
   document.addEventListener('keydown', function (evt) {
     if (/INPUT|TEXTAREA|SELECT/.test(evt.target.tagName)) return;
-    if (evt.key === 'Escape' && drawState.active) {
+    if (!drawState.active) return;
+    if (evt.key === 'Escape' || evt.key === 'Enter') {
       evt.preventDefault();
       commitOrCancelBoundary();
       exitBoundaryMode();
