@@ -8218,11 +8218,22 @@ def signal_flow_label_autocomplete(request):
         'showstack.Amp':       {'Amp Channel'},
         'showstack.Processor': {'P1 Input', 'P1 Output', 'Galaxy Input', 'Galaxy Output'},
     }
+    # UAT 2026-05-27 — shapes with no signal-name catalog. Port labels here
+    # are pure freeform (e.g. SpeakerArray names like 'KARA 1 Top', 'SUB L'
+    # are physical-position descriptors, not signals routed elsewhere in
+    # the project). Returning [] short-circuits both the per-instance and
+    # project-wide paths; the frontend's empty-results branch closes the
+    # listbox, so no dropdown ever renders.
+    SHAPE_CLASS_BLOCK = {'showstack.SpeakerArray'}
     try:
         q = (request.GET.get('q') or '').strip()
         current_project = getattr(request, 'current_project', None)
         if not current_project:
             return JsonResponse({'error': 'No active project'}, status=400)
+
+        shape_class = (request.GET.get('shape_class') or '').strip()
+        if shape_class in SHAPE_CLASS_BLOCK:
+            return JsonResponse({'results': []})
 
         # Phase 12 UAT — cell-instance-specific I/O lookup.
         # When the engineer is authoring a port on a specific equipment cell,
@@ -8276,7 +8287,7 @@ def signal_flow_label_autocomplete(request):
 
         # Phase 11 GAP-11.1: optionally narrow SOURCES to the requesting shape's catalog.
         # Allowlist-only: unknown shape_class → fall through (no exception, no 500).
-        shape_class = (request.GET.get('shape_class') or '').strip()
+        # shape_class was parsed and SHAPE_CLASS_BLOCK already short-circuited above.
         if shape_class and shape_class in SHAPE_CLASS_SOURCES:
             allowed_tags = SHAPE_CLASS_SOURCES[shape_class]
             SOURCES = [row for row in SOURCES if row[3] in allowed_tags]
