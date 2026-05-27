@@ -376,26 +376,26 @@
         // Label below the dot (port at y=0, label at y=14 → INSIDE shape body).
         return { name: 'manual',
                  args: { x: 0, y: 14,
-                         attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
+                         attrs: { label: { textAnchor: 'middle' } } } };
       case 'bottom':
         // Label above the dot (port at y=height; label at y=-14 relative to port → INSIDE).
         return { name: 'manual',
                  args: { x: 0, y: -14,
-                         attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
+                         attrs: { label: { textAnchor: 'middle' } } } };
       case 'left':
         // Label right of the dot + below the cell-label vertical center.
         return { name: 'manual',
                  args: { x: 14, y: 14,
-                         attrs: { '.joint-port-label': { textAnchor: 'start' } } } };
+                         attrs: { label: { textAnchor: 'start' } } } };
       case 'right':
         // Label left of the dot + below the cell-label vertical center.
         return { name: 'manual',
                  args: { x: -14, y: 14,
-                         attrs: { '.joint-port-label': { textAnchor: 'end' } } } };
+                         attrs: { label: { textAnchor: 'end' } } } };
     }
     // Defensive fallback (callers in addAuthoredPort already restrict edge to T/B/L/R).
     return { name: 'manual', args: { x: 0, y: 0,
-                                     attrs: { '.joint-port-label': { textAnchor: 'middle' } } } };
+                                     attrs: { label: { textAnchor: 'middle' } } } };
   }
   function portLabelMarkupForEdge() {
     // RESEARCH §Q10 — single SVG <text> element with explicit font attrs.
@@ -967,7 +967,7 @@
       attrs: {
         body:  { refWidth: '100%', refHeight: '100%', fill: '#ffffff', stroke: '#333', 'stroke-width': 1.5 },
         band:  { x: 0, y: 0, width: 6, refHeight: '100%', fill: '#0d9488' },
-        label: { refX: 16, refY: '50%', textAnchor: 'start', textVerticalAnchor: 'middle',
+        label: { refX: '50%', refY: '50%', textAnchor: 'middle', textVerticalAnchor: 'middle',
                  fontSize: 13, fontFamily: FONT_STACK, fill: '#111', text: 'Console' },
       },
       ports: portsForRect(180, 60),
@@ -987,7 +987,7 @@
       attrs: {
         body:  { refWidth: '100%', refHeight: '100%', fill: '#ffffff', stroke: '#333', 'stroke-width': 1.5 },
         band:  { x: 0, y: 0, width: 6, refHeight: '100%', fill: '#475569' },
-        label: { refX: 16, refY: '50%', textAnchor: 'start', textVerticalAnchor: 'middle',
+        label: { refX: '50%', refY: '50%', textAnchor: 'middle', textVerticalAnchor: 'middle',
                  fontSize: 13, fontFamily: FONT_STACK, fill: '#111', text: 'Device' },
       },
       ports: portsForRect(140, 56),
@@ -1068,7 +1068,7 @@
       attrs: {
         body:  { refWidth: '100%', refHeight: '100%', fill: '#ffffff', stroke: '#333', 'stroke-width': 1.5 },
         band:  { x: 0, y: 0, width: 6, refHeight: '100%', fill: '#b45309' },
-        label: { refX: 16, refY: '50%', textAnchor: 'start', textVerticalAnchor: 'middle',
+        label: { refX: '50%', refY: '50%', textAnchor: 'middle', textVerticalAnchor: 'middle',
                  fontSize: 13, fontFamily: FONT_STACK, fill: '#111', text: 'Processor' },
       },
       ports: portsForRect(160, 60),
@@ -1089,7 +1089,7 @@
       attrs: {
         body:  { refWidth: '100%', refHeight: '100%', fill: '#ffffff', stroke: '#333', 'stroke-width': 1.5 },
         band:  { x: 0, y: 0, width: 6, refHeight: '100%', fill: '#15803d' },
-        label: { refX: 16, refY: '50%', textAnchor: 'start', textVerticalAnchor: 'middle',
+        label: { refX: '50%', refY: '50%', textAnchor: 'middle', textVerticalAnchor: 'middle',
                  fontSize: 13, fontFamily: FONT_STACK, fill: '#111', text: 'Amp' },
       },
       ports: portsForRect(140, 60),
