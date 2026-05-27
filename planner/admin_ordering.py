@@ -88,10 +88,12 @@ def ordered_get_app_list(request, app_label=None):
         # the admin sidebar link is suppressed. Re-enable by removing from this
         # set when the changelist 500 is investigated.
         'consoleimport',
-        # Signal Flow Diagrammer — editor lives at /audiopatch/signal-flow/;
-        # admin changelist is for superuser inspection only, not end-user navigation.
-        # Same pattern as multitracksession / multitracktemplate.
-        'signalflowdiagram',
+        # Signal Flow Diagrammer — 2026-05-27 UAT: surfaced in the sidebar so
+        # the editor can be opened from a project-scoped admin session. The
+        # changelist redirects to /audiopatch/signal-flow/ (planner.admin
+        # SignalFlowDiagramAdmin.changelist_view), so clicking the sidebar
+        # entry lands directly in the user-facing diagram list.
+        # 'signalflowdiagram',
     }
     
     # Define the correct order with proper groupings
