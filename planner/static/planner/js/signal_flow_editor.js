@@ -1272,7 +1272,7 @@
   // Phase 12 — session-sticky defaults for next-placed text label.
   // Closure-scoped; reset on page reload.
   var lastTextSize  = 16;            // D-19 medium default
-  var lastTextColor = '#ffffff';     // default white — readable on dark surfaces
+  var lastTextColor = '#000000';     // default black — readable on the white canvas paper
 
   // Phase 12 — text-mode + inline-edit state. textModeActive is the sticky
   // mode flag (parallel to drawState.active). inTextEdit is the per-edit
