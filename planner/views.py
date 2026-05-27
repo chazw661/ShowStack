@@ -7976,25 +7976,24 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
     if not isinstance(obj, Amp):
         return None     # unsupported — caller falls back to project-wide list
 
-    is_in  = edge in ('top', 'left')
-    is_out = edge in ('bottom', 'right')
-    want_in  = is_in  or not edge       # no edge param → return both
-    want_out = is_out or not edge
-
+    # UAT 2026-05-27 — show both inputs and outputs in every port dropdown,
+    # regardless of which edge is being authored. The engineer chooses what's
+    # appropriate; we don't restrict by direction.
     results = []
-    if want_in:
-        ch_qs = (obj.channels
-                 .exclude(channel_name='')
-                 .order_by('channel_number')
-                 .values_list('channel_name', flat=True))
-        for name in ch_qs:
-            results.append({'label': name, 'source': 'Amp Channel'})
 
-    if want_out:
-        for field_name, source_tag in _AMP_OUTPUT_FIELDS:
-            val = (getattr(obj, field_name, '') or '').strip()
-            if val:
-                results.append({'label': val, 'source': source_tag})
+    # Inputs — AmpChannel.channel_name (non-blank).
+    ch_qs = (obj.channels
+             .exclude(channel_name='')
+             .order_by('channel_number')
+             .values_list('channel_name', flat=True))
+    for name in ch_qs:
+        results.append({'label': name, 'source': 'Amp Channel'})
+
+    # Outputs — NL4/NL8/CaCom/SC32 char fields on the Amp instance.
+    for field_name, source_tag in _AMP_OUTPUT_FIELDS:
+        val = (getattr(obj, field_name, '') or '').strip()
+        if val:
+            results.append({'label': val, 'source': source_tag})
 
     if q:
         q_lower = q.lower()

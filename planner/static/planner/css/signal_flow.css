@@ -627,22 +627,23 @@
    Each attached listbox gets id="sfd-label-suggestions-<unique>" AND
    class="sfd-ac-listbox", so this rule covers all instances. */
 .sfd-ac-listbox {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 1100;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-top: none;
-  border-radius: 0 0 4px 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-height: 220px;
-  overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1100 !important;
+  background: #ffffff !important;
+  color-scheme: light !important;      /* defeat browser dark-mode form styling */
+  border: 1px solid #cbd5e1 !important;
+  border-top: none !important;
+  border-radius: 0 0 4px 4px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+  max-height: 220px !important;
+  overflow-y: auto !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18) !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
 }
 
 .sfd-ac-listbox[hidden] {
@@ -650,14 +651,15 @@
 }
 
 .sfd-ac-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 7px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #1e293b;
-  border-bottom: 1px solid #f1f5f9;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 7px 12px !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  color: #111827 !important;           /* near-black for max contrast on white */
+  background: #ffffff !important;
+  border-bottom: 1px solid #f1f5f9 !important;
 }
 
 .sfd-ac-row:last-child {
@@ -667,13 +669,14 @@
 .sfd-ac-row[aria-selected="true"],
 .sfd-ac-row:hover {
   background: #e0f2fe !important;
+  color: #111827 !important;
 }
 
 .sfd-ac-source {
-  font-size: 11px;
-  color: #64748b;
-  white-space: nowrap;
-  margin-left: 8px;
+  font-size: 11px !important;
+  color: #475569 !important;           /* slate — readable against white row */
+  white-space: nowrap !important;
+  margin-left: 8px !important;
 }
 
 /* =========================================================================
