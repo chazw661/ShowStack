@@ -7960,6 +7960,12 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
     GalaxyOutput.label via galaxy_config. Blank .label rows fall back to the
     positional identifier ('Analog 1', 'AES 4', 'AVB 8') — fixed 16-in/16-out
     catalog per processor means the positional fallback never floods.
+
+    For Device: inbound → DeviceInput.signal_name; outbound → DeviceOutput.signal_name.
+    Blank signal_name falls back to 'Input N' / 'Output N' so every physical port
+    surfaces regardless of signal-naming completeness. Ordered by input_number /
+    output_number — the engineer adds I/O in port order and the auto-numbering
+    save() hook (planner/models.py:1528, 1566) keeps that intent.
     """
     from django.contrib.contenttypes.models import ContentType
 
@@ -8112,6 +8118,26 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
                     results.append({'label': final, 'source': 'Galaxy Output'})
         else:
             return None     # unknown device_type — fall back to project-wide
+    elif isinstance(obj, Device):
+        # Inputs — DeviceInput.signal_name ordered by input_number. Blank
+        # signal_name falls back to 'Input N' so every physical port surfaces
+        # regardless of signal-naming completeness. The auto-numbering save()
+        # hook (planner/models.py:1528) guarantees input_number is set.
+        for input_number, signal_name in (DeviceInput.objects
+                                          .filter(device=obj)
+                                          .order_by('input_number')
+                                          .values_list('input_number', 'signal_name')):
+            label = (signal_name or '').strip() or 'Input {0}'.format(input_number)
+            results.append({'label': label, 'source': 'Device Input'})
+
+        # Outputs — same shape as inputs. DeviceOutput.signal_name is
+        # blank=True, null=True; output_number gets auto-set by save() hook.
+        for output_number, signal_name in (DeviceOutput.objects
+                                           .filter(device=obj)
+                                           .order_by('output_number')
+                                           .values_list('output_number', 'signal_name')):
+            label = (signal_name or '').strip() or 'Output {0}'.format(output_number)
+            results.append({'label': label, 'source': 'Device Output'})
     else:
         return None     # unsupported — caller falls back to project-wide list
 
