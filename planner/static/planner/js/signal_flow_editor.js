@@ -871,6 +871,9 @@
     input.style.setProperty('height', screenBbox.height + 'px', 'important');
     input.style.setProperty('font-size', (cell.prop('fontSize') || 16) + 'px', 'important');
     input.style.setProperty('color',     (cell.prop('color')    || '#000000'),  'important');
+    // Explicit white background — defeats both browser dark-mode form styling and stale CSS cache.
+    input.style.setProperty('background-color', '#ffffff', 'important');
+    input.style.setProperty('color-scheme', 'light', 'important');
 
     // Append to the paper's parent (HTML overlay must be HTML, not SVG child).
     (paperEl && paperEl.parentNode || document.body).appendChild(input);
