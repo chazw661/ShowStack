@@ -7999,7 +7999,11 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
         q_lower = q.lower()
         results = [r for r in results if q_lower in r['label'].lower()]
 
-    # Dedupe by (label, source).
+    # Dedupe by (label, source). Insertion order is preserved so inputs
+    # (AmpChannel rows, appended first) appear before outputs (NL4/NL8/CaCom/
+    # SC32 fields, appended second). Within each section, results stay in
+    # natural order — channel_number for inputs, connector-declaration order
+    # for outputs. Do NOT alphabetical-sort here.
     seen = set()
     unique = []
     for r in results:
@@ -8008,7 +8012,6 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
             seen.add(key)
             unique.append(r)
 
-    unique.sort(key=lambda r: r['label'].lower())
     return unique[:50]
 
 
