@@ -8242,7 +8242,18 @@ def signal_flow_label_autocomplete(request):
 
         # (Model, label_field, project-scope kwarg, human source tag).
         # SystemProcessor is intentionally NOT in this list (D-05).
+        #
+        # DeviceInput appears TWICE under the same 'Device Input' tag —
+        # once for console_input__source, once for signal_name. The
+        # DeviceInputInlineForm (planner/forms.py:384-440) binds the
+        # engineer's pick to the console_input FK and never writes
+        # signal_name, so the production data path leaves signal_name=''
+        # and the visible label lives on the linked ConsoleInput.source.
+        # The signal_name entry stays for legacy / direct-edit rows. The
+        # (val, tag) dedupe below collapses any overlap.
         SOURCES = [
+            (DeviceInput,      'console_input__source', 'device__project',
+             'Device Input'),
             (DeviceInput,      'signal_name',  'device__project',
              'Device Input'),
             (DeviceOutput,     'signal_name',  'device__project',
