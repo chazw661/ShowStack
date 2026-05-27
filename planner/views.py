@@ -8119,19 +8119,29 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
         else:
             return None     # unknown device_type — fall back to project-wide
     elif isinstance(obj, Device):
-        # Inputs — DeviceInput.signal_name ordered by input_number. Blank
-        # signal_name falls back to 'Input N' so every physical port surfaces
-        # regardless of signal-naming completeness. The auto-numbering save()
-        # hook (planner/models.py:1528) guarantees input_number is set.
-        for input_number, signal_name in (DeviceInput.objects
-                                          .filter(device=obj)
-                                          .order_by('input_number')
-                                          .values_list('input_number', 'signal_name')):
-            label = (signal_name or '').strip() or 'Input {0}'.format(input_number)
+        # Inputs — DeviceInputInlineForm (planner/forms.py:384-440) only
+        # binds (input_number, console_input FK) and never writes signal_name,
+        # so on disk signal_name stays '' and the human label lives on
+        # console_input.source. UAT 2026-05-27 — surface that source as the
+        # dropdown label. Precedence: explicit signal_name (legacy/direct
+        # edit) → console_input.source → positional 'Input N' fallback.
+        for input_number, signal_name, ci_source in (
+            DeviceInput.objects
+            .filter(device=obj)
+            .order_by('input_number')
+            .values_list('input_number', 'signal_name', 'console_input__source')
+        ):
+            label = (
+                (signal_name or '').strip()
+                or (ci_source or '').strip()
+                or 'Input {0}'.format(input_number)
+            )
             results.append({'label': label, 'source': 'Device Input'})
 
-        # Outputs — same shape as inputs. DeviceOutput.signal_name is
-        # blank=True, null=True; output_number gets auto-set by save() hook.
+        # Outputs — DeviceOutputInlineForm.save() (planner/forms.py:546)
+        # mirrors console_output.name into signal_name on every save, so
+        # signal_name is the authoritative on-disk label here. Positional
+        # fallback ('Output N') for rows the engineer hasn't routed yet.
         for output_number, signal_name in (DeviceOutput.objects
                                            .filter(device=obj)
                                            .order_by('output_number')
