@@ -7898,6 +7898,121 @@ def signal_flow_autocomplete(request):
         return JsonResponse({'error': 'Server error.'}, status=500)
 
 
+# Phase 12 UAT — Amp output channel fields (CharField labels on the Amp instance).
+# Defined module-level so the helper below stays readable.
+_AMP_OUTPUT_FIELDS = [
+    ('nl4_a_pair_1', 'NL4-A 1'),
+    ('nl4_a_pair_2', 'NL4-A 2'),
+    ('nl4_b_pair_1', 'NL4-B 1'),
+    ('nl4_b_pair_2', 'NL4-B 2'),
+    ('nl8_a_pair_1', 'NL8-A 1'),
+    ('nl8_a_pair_2', 'NL8-A 2'),
+    ('nl8_a_pair_3', 'NL8-A 3'),
+    ('nl8_a_pair_4', 'NL8-A 4'),
+    ('nl8_b_pair_1', 'NL8-B 1'),
+    ('nl8_b_pair_2', 'NL8-B 2'),
+    ('nl8_b_pair_3', 'NL8-B 3'),
+    ('nl8_b_pair_4', 'NL8-B 4'),
+    ('cacom_1_ch1', 'CaCom 1-1'),
+    ('cacom_1_ch2', 'CaCom 1-2'),
+    ('cacom_1_ch3', 'CaCom 1-3'),
+    ('cacom_1_ch4', 'CaCom 1-4'),
+    ('cacom_2_ch1', 'CaCom 2-1'),
+    ('cacom_2_ch2', 'CaCom 2-2'),
+    ('cacom_2_ch3', 'CaCom 2-3'),
+    ('cacom_2_ch4', 'CaCom 2-4'),
+    ('cacom_3_ch1', 'CaCom 3-1'),
+    ('cacom_3_ch2', 'CaCom 3-2'),
+    ('cacom_3_ch3', 'CaCom 3-3'),
+    ('cacom_3_ch4', 'CaCom 3-4'),
+    ('cacom_4_ch1', 'CaCom 4-1'),
+    ('cacom_4_ch2', 'CaCom 4-2'),
+    ('cacom_4_ch3', 'CaCom 4-3'),
+    ('cacom_4_ch4', 'CaCom 4-4'),
+    ('sc32_ch1',  'SC32-1'),  ('sc32_ch2',  'SC32-2'),
+    ('sc32_ch3',  'SC32-3'),  ('sc32_ch4',  'SC32-4'),
+    ('sc32_ch5',  'SC32-5'),  ('sc32_ch6',  'SC32-6'),
+    ('sc32_ch7',  'SC32-7'),  ('sc32_ch8',  'SC32-8'),
+    ('sc32_ch9',  'SC32-9'),  ('sc32_ch10', 'SC32-10'),
+    ('sc32_ch11', 'SC32-11'), ('sc32_ch12', 'SC32-12'),
+    ('sc32_ch13', 'SC32-13'), ('sc32_ch14', 'SC32-14'),
+    ('sc32_ch15', 'SC32-15'), ('sc32_ch16', 'SC32-16'),
+]
+
+
+def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
+    """Return port-label suggestions for a single equipment instance.
+
+    Returns None when the request can't be served by an instance-specific
+    lookup (unknown content type, IDOR-out-of-project, unsupported model).
+    The caller falls back to the project-wide autocomplete in that case.
+
+    For Amp: top/left edges (inbound) → AmpChannel.channel_name; bottom/right
+    edges (outbound) → the NL4/NL8/CaCom/SC32 char-field labels declared on
+    the Amp row. Empty/blank values are skipped (Pitfall 5).
+    """
+    from django.contrib.contenttypes.models import ContentType
+
+    try:
+        ct = ContentType.objects.filter(id=int(ct_id)).first()
+    except (TypeError, ValueError):
+        return None
+    if ct is None:
+        return None
+    model_cls = ct.model_class()
+    if model_cls is None:
+        return None
+    try:
+        obj = model_cls.objects.filter(id=int(oid)).first()
+    except (TypeError, ValueError):
+        return None
+    if obj is None:
+        return None
+
+    # IDOR — instance must belong to the requester's active project.
+    if getattr(obj, 'project_id', None) != current_project.id:
+        return None
+
+    if not isinstance(obj, Amp):
+        return None     # unsupported — caller falls back to project-wide list
+
+    is_in  = edge in ('top', 'left')
+    is_out = edge in ('bottom', 'right')
+    want_in  = is_in  or not edge       # no edge param → return both
+    want_out = is_out or not edge
+
+    results = []
+    if want_in:
+        ch_qs = (obj.channels
+                 .exclude(channel_name='')
+                 .order_by('channel_number')
+                 .values_list('channel_name', flat=True))
+        for name in ch_qs:
+            results.append({'label': name, 'source': 'Amp Channel'})
+
+    if want_out:
+        for field_name, source_tag in _AMP_OUTPUT_FIELDS:
+            val = (getattr(obj, field_name, '') or '').strip()
+            if val:
+                results.append({'label': val, 'source': source_tag})
+
+    if q:
+        q_lower = q.lower()
+        results = [r for r in results if q_lower in r['label'].lower()]
+
+    # Dedupe by (label, source).
+    seen = set()
+    unique = []
+    for r in results:
+        key = (r['label'], r['source'])
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+
+    unique.sort(key=lambda r: r['label'].lower())
+    return unique[:50]
+
+
 @staff_member_required
 @require_GET
 def signal_flow_label_autocomplete(request):
@@ -7946,6 +8061,22 @@ def signal_flow_label_autocomplete(request):
         current_project = getattr(request, 'current_project', None)
         if not current_project:
             return JsonResponse({'error': 'No active project'}, status=400)
+
+        # Phase 12 UAT — cell-instance-specific I/O lookup.
+        # When the engineer is authoring a port on a specific equipment cell,
+        # the dropdown should show that record's actual I/O labels, not project-wide.
+        # Triggered by `ct` (content-type id) + `oid` (object id) + `edge` query params.
+        # Currently implemented for showstack.Amp; other shapes fall through to the
+        # project-wide list below.
+        ct_id = request.GET.get('ct')
+        oid = request.GET.get('oid')
+        edge = (request.GET.get('edge') or '').lower()
+        if ct_id and oid:
+            instance_results = _signal_flow_instance_port_labels(
+                ct_id, oid, edge, q, current_project
+            )
+            if instance_results is not None:
+                return JsonResponse({'results': instance_results})
 
         # (Model, label_field, project-scope kwarg, human source tag).
         # SystemProcessor is intentionally NOT in this list (D-05).

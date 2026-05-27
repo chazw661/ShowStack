@@ -3025,11 +3025,25 @@
 
     // GAP-11.1: scope autocomplete to the cell's catalog. Backend's SHAPE_CLASS_SOURCES
     // allowlist filters SOURCES; unknown / missing shape_class → full 9-source fallback.
-    var portAutocompleteUrl = labelAutocompleteUrl
+    var basePortAutocompleteUrl = labelAutocompleteUrl
       + (labelAutocompleteUrl.indexOf('?') === -1 ? '?' : '&')
       + 'shape_class=' + encodeURIComponent(cell.get('type') || '');
+    // Phase 12 UAT — instance-specific dropdown when the cell is linked to an
+    // equipment record. Backend uses (ct, oid, edge) to scope to that instance's
+    // I/O fields (e.g. Amp → AmpChannel + NL4/NL8/CaCom/SC32). Empty/missing
+    // showstack link falls through to the project-wide list above.
+    var ssProp = cell.prop('showstack') || {};
+    var instanceQuery = '';
+    if (ssProp.contentTypeId && ssProp.objectId) {
+      instanceQuery = '&ct=' + encodeURIComponent(ssProp.contentTypeId)
+                    + '&oid=' + encodeURIComponent(ssProp.objectId);
+    }
 
     PORT_EDGES.forEach(function (edge) {
+      // Per-edge URL so the backend can filter inputs vs outputs by direction.
+      var portAutocompleteUrl = basePortAutocompleteUrl
+        + instanceQuery
+        + '&edge=' + encodeURIComponent(edge);
       var listEl = portEdgeLists[edge];
       // Clear existing rows (preserves the section header above the <ul>).
       while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
@@ -3071,7 +3085,8 @@
             portAutocompleteUrl,
             function (label) {
               window.__sfd.ports.rename(capturedCell, capturedPortId, label);
-            }
+            },
+            { triggerOnFocus: true }      // Phase 12 UAT — dropdown opens on focus
           );
 
           // Trash-icon click — wraps removeWithSurvival in undo batch (Phase 9 pattern).
@@ -3478,8 +3493,10 @@
   // editor.html loads this file with `defer`, so DOM is parsed first. If
   // `defer` is ever removed, wrap the call in a DOMContentLoaded listener.
   // ─────────────────────────────────────────────────────────────────────────
-  function attachAutocompleteToInput(inputEl, url, onSelect) {
+  function attachAutocompleteToInput(inputEl, url, onSelect, opts) {
     if (!inputEl || !url) return;
+    opts = opts || {};
+    var triggerOnFocus = !!opts.triggerOnFocus;
 
     // Wrap input's parent .sfd-field div — add wrapper class for CSS positioning.
     var fieldDiv = inputEl.closest('.sfd-field');
@@ -3514,9 +3531,20 @@
     inputEl.addEventListener('input', function () {
       var q = inputEl.value.trim();
       if (acTimer) clearTimeout(acTimer);
-      if (q.length < 1) { closeAcListbox(); return; }
+      if (q.length < 1) {
+        if (triggerOnFocus) { fetchAcResults(''); return; }
+        closeAcListbox(); return;
+      }
       acTimer = setTimeout(function () { fetchAcResults(q); }, 200);
     });
+
+    // Phase 12 UAT — open the dropdown on focus so the engineer sees the cell's
+    // available I/O without needing to type a character first.
+    if (triggerOnFocus) {
+      inputEl.addEventListener('focus', function () {
+        fetchAcResults(inputEl.value.trim());
+      });
+    }
 
     // Keyboard navigation.
     inputEl.addEventListener('keydown', function (evt) {
