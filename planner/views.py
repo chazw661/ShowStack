@@ -7954,6 +7954,12 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
     For Console: inbound → ConsoleInput.source; outbound → ConsoleAuxOutput.name,
     then ConsoleMatrixOutput.name, then ConsoleStereoOutput.name. Same UAT
     contract as Amp — both I/O groups appear in every dropdown, inputs first.
+
+    For SystemProcessor: branches on device_type. P1 → P1Input.label then
+    P1Output.label via the OneToOne p1_config. GALAXY → GalaxyInput.label then
+    GalaxyOutput.label via galaxy_config. Blank .label rows fall back to the
+    positional identifier ('Analog 1', 'AES 4', 'AVB 8') — fixed 16-in/16-out
+    catalog per processor means the positional fallback never floods.
     """
     from django.contrib.contenttypes.models import ContentType
 
@@ -8044,6 +8050,68 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
                                   .values_list('stereo_type', 'name')):
             label = (name or '').strip() or STEREO_DISPLAY.get(stereo_type, stereo_type)
             results.append({'label': label, 'source': 'Console Stereo Out'})
+    elif isinstance(obj, SystemProcessor):
+        # Cells link to SystemProcessor (the GFK target — see editor.js:1058);
+        # P1 vs GALAXY routing comes from device_type. Each sub-processor has
+        # its own input/output table reached via the OneToOne back-relation.
+        # Blank .label rows fall back to the positional identifier — fixed
+        # 16-in/16-out catalog per processor (Analog 1-4, AES 1-4, AVB 1-8)
+        # means the fallback never floods the dropdown (different tradeoff
+        # from Console, where 72 default-empty inputs would).
+        if obj.device_type == 'P1':
+            p1 = getattr(obj, 'p1_config', None)
+            if p1 is not None:
+                P1_IN_DISPLAY = dict(P1Input.INPUT_TYPES)
+                for input_type, channel_number, label in (
+                    P1Input.objects
+                    .filter(p1_processor=p1)
+                    .order_by('input_type', 'channel_number')
+                    .values_list('input_type', 'channel_number', 'label')
+                ):
+                    final = (label or '').strip() or '{0} {1}'.format(
+                        P1_IN_DISPLAY.get(input_type, input_type), channel_number
+                    )
+                    results.append({'label': final, 'source': 'P1 Input'})
+
+                P1_OUT_DISPLAY = dict(P1Output.OUTPUT_TYPES)
+                for output_type, channel_number, label in (
+                    P1Output.objects
+                    .filter(p1_processor=p1)
+                    .order_by('output_type', 'channel_number')
+                    .values_list('output_type', 'channel_number', 'label')
+                ):
+                    final = (label or '').strip() or '{0} {1}'.format(
+                        P1_OUT_DISPLAY.get(output_type, output_type), channel_number
+                    )
+                    results.append({'label': final, 'source': 'P1 Output'})
+        elif obj.device_type == 'GALAXY':
+            galaxy = getattr(obj, 'galaxy_config', None)
+            if galaxy is not None:
+                GX_IN_DISPLAY = dict(GalaxyInput.INPUT_TYPE_CHOICES)
+                for input_type, channel_number, label in (
+                    GalaxyInput.objects
+                    .filter(galaxy_processor=galaxy)
+                    .order_by('input_type', 'channel_number')
+                    .values_list('input_type', 'channel_number', 'label')
+                ):
+                    final = (label or '').strip() or '{0} {1}'.format(
+                        GX_IN_DISPLAY.get(input_type, input_type), channel_number
+                    )
+                    results.append({'label': final, 'source': 'Galaxy Input'})
+
+                GX_OUT_DISPLAY = dict(GalaxyOutput.OUTPUT_TYPE_CHOICES)
+                for output_type, channel_number, label in (
+                    GalaxyOutput.objects
+                    .filter(galaxy_processor=galaxy)
+                    .order_by('output_type', 'channel_number')
+                    .values_list('output_type', 'channel_number', 'label')
+                ):
+                    final = (label or '').strip() or '{0} {1}'.format(
+                        GX_OUT_DISPLAY.get(output_type, output_type), channel_number
+                    )
+                    results.append({'label': final, 'source': 'Galaxy Output'})
+        else:
+            return None     # unknown device_type — fall back to project-wide
     else:
         return None     # unsupported — caller falls back to project-wide list
 
