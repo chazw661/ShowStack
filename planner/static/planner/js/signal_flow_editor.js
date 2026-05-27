@@ -853,7 +853,8 @@
     textEditWasPlaced = !!wasPlaced;
 
     // Hide the SVG glyph during edit so a stale label doesn't sit under the input.
-    cell.attr('label/display', 'none');
+    // Use opacity (numeric, no null/removeAttr quirks) instead of display.
+    cell.attr('label/opacity', 0);
 
     var paperEl = document.getElementById('sfd-paper');
     var screenBbox = paper.localToPaperRect(cell.getBBox());
@@ -912,7 +913,7 @@
     // characters + same font), cell.resize is a no-op and no change:size
     // fires. Defence-in-depth: explicit scheduleAutosave() below.
     cell.attr('label/text', value);
-    cell.removeAttr('label/display');         // restore visibility — null doesn't reliably remove
+    cell.attr('label/opacity', 1);            // restore visibility (matches opacity-hide in enterTextEditMode)
     var fontSize = cell.prop('fontSize') || 16;
     var w = measureTextLabelWidth(value, fontSize) + 8;     // 4px padding each side per D-19
     var h = Math.max(22, fontSize + 6);
@@ -931,7 +932,7 @@
       cell.remove();
     } else {
       // D-16 — re-entered edit (D-17 dblclick): keep existing text; just restore SVG.
-      cell.removeAttr('label/display');
+      cell.attr('label/opacity', 1);
     }
   }
 
