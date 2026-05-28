@@ -3723,4 +3723,72 @@
     });
   }
 
+  // PDF export — render via html-to-image (same fidelity as PNG), then embed
+  // centered on a letter-size page via jsPDF. Orientation is auto-picked
+  // from the paper aspect ratio so wide diagrams land on landscape and tall
+  // ones on portrait. Margin = 36pt (0.5 inch); image is scaled to fit the
+  // available area while preserving aspect ratio, then centered on the page.
+  var exportPdfBtn = document.getElementById('sfd-export-pdf');
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener('click', function () {
+      if (typeof htmlToImage === 'undefined') {
+        showToast('Export unavailable: html-to-image library not loaded.', 'error');
+        return;
+      }
+      // jsPDF UMD bundle exposes window.jspdf.jsPDF.
+      var jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      if (typeof jsPDFCtor !== 'function') {
+        showToast('Export unavailable: jsPDF library not loaded.', 'error');
+        return;
+      }
+
+      exportPdfBtn.disabled = true;
+      showToast('Generating PDF…', 'info');
+
+      var diagramName = (container.dataset.diagramName || '').trim();
+      var slug = diagramName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      var date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      var filename = (slug || 'signal-flow') + '-' + date + '.pdf';
+
+      htmlToImage.toPng(paperEl, {
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+        width: paper.options.width,
+        height: paper.options.height,
+      })
+        .then(function (dataUrl) {
+          var img = new Image();
+          return new Promise(function (resolve, reject) {
+            img.onload = function () { resolve({ dataUrl: dataUrl, w: img.width, h: img.height }); };
+            img.onerror = reject;
+            img.src = dataUrl;
+          });
+        })
+        .then(function (rendered) {
+          var orientation = (rendered.w >= rendered.h) ? 'landscape' : 'portrait';
+          var pdf = new jsPDFCtor({ orientation: orientation, unit: 'pt', format: 'letter' });
+          var pageW = pdf.internal.pageSize.getWidth();
+          var pageH = pdf.internal.pageSize.getHeight();
+          var margin = 36;                                 // 0.5" all sides
+          var availW = pageW - 2 * margin;
+          var availH = pageH - 2 * margin;
+          var scale = Math.min(availW / rendered.w, availH / rendered.h);
+          var renderW = rendered.w * scale;
+          var renderH = rendered.h * scale;
+          var x = (pageW - renderW) / 2;                   // center on page
+          var y = (pageH - renderH) / 2;
+          pdf.addImage(rendered.dataUrl, 'PNG', x, y, renderW, renderH);
+          pdf.save(filename);
+          showToast('PDF exported.', 'success');
+        })
+        .catch(function (err) {
+          console.error('[SFD] PDF export failed', err);
+          showToast('Export failed. Try again.', 'error');
+        })
+        .finally(function () {
+          exportPdfBtn.disabled = false;
+        });
+    });
+  }
+
 })();

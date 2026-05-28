@@ -69,6 +69,7 @@
     <span class="sfd-toolbar-divider"></span>
     <div class="sfd-btn-group" data-group="export" id="sfd-export-group">
       <button type="button" id="sfd-export-png" aria-label="Export PNG">PNG</button>
+      <button type="button" id="sfd-export-pdf" aria-label="Export PDF">PDF</button>
     </div>
   </div>
 
@@ -158,9 +159,10 @@
 {# Phase 8: equipment picker modal (hidden by default; opened by JS in plan 04). #}
 {% include "planner/signal_flow/_equipment_picker_modal.html" %}
 
-{# Vendor bundles — load order matters: joint first, then html-to-image, then app JS. #}
+{# Vendor bundles — load order matters: joint first, then html-to-image, then jsPDF, then app JS. #}
 {# joint is NOT deferred — it must be on `window.joint` when signal_flow_editor.js evaluates. #}
 <script src="{% static 'planner/js/vendor/joint.min.js' %}"></script>
 <script src="{% static 'planner/js/vendor/html-to-image.min.js' %}"></script>
+<script src="{% static 'planner/js/vendor/jspdf.umd.min.js' %}"></script>
 <script src="{% static 'planner/js/signal_flow_editor.js' %}" defer></script>
 {% endblock %}
