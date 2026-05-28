@@ -3723,11 +3723,12 @@
     });
   }
 
-  // PDF export — render via html-to-image (same fidelity as PNG), then embed
-  // centered on a letter-size page via jsPDF. Orientation is auto-picked
-  // from the paper aspect ratio so wide diagrams land on landscape and tall
-  // ones on portrait. Margin = 36pt (0.5 inch); image is scaled to fit the
-  // available area while preserving aspect ratio, then centered on the page.
+  // PDF export — render via html-to-image (same fidelity as PNG), crop the
+  // rendered canvas to the content bounding box so empty whitespace doesn't
+  // shrink the diagram, then embed centered on a letter-size jsPDF page.
+  // Orientation auto-picks from the cropped aspect ratio (wide → landscape,
+  // tall → portrait). Margin = 36pt (0.5"); cropped image is scaled to fill
+  // the available area preserving aspect ratio, then centered on the page.
   var exportPdfBtn = document.getElementById('sfd-export-pdf');
   if (exportPdfBtn) {
     exportPdfBtn.addEventListener('click', function () {
@@ -3750,19 +3751,49 @@
       var date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       var filename = (slug || 'signal-flow') + '-' + date + '.pdf';
 
-      htmlToImage.toPng(paperEl, {
-        pixelRatio: 2,
+      // Compute content bbox in paper coords. Pad 32px each side so port
+      // labels and connector arrowheads at the diagram edges clear the
+      // crop. Fall back to full paper if joint exposes no usable bbox.
+      var paperW = paper.options.width;
+      var paperH = paper.options.height;
+      var contentBBox = null;
+      try {
+        if (typeof paper.getContentBBox === 'function') contentBBox = paper.getContentBBox();
+      } catch (e) { contentBBox = null; }
+      var hasContent = contentBBox && contentBBox.width > 0 && contentBBox.height > 0;
+      var pad = 32;
+      var cropX = hasContent ? Math.max(0, contentBBox.x - pad) : 0;
+      var cropY = hasContent ? Math.max(0, contentBBox.y - pad) : 0;
+      var cropW = hasContent
+        ? Math.min(paperW - cropX, contentBBox.width + 2 * pad)
+        : paperW;
+      var cropH = hasContent
+        ? Math.min(paperH - cropY, contentBBox.height + 2 * pad)
+        : paperH;
+
+      var PIXEL_RATIO = 2;
+      htmlToImage.toCanvas(paperEl, {
+        pixelRatio: PIXEL_RATIO,
         backgroundColor: '#ffffff',
-        width: paper.options.width,
-        height: paper.options.height,
+        width: paperW,
+        height: paperH,
       })
-        .then(function (dataUrl) {
-          var img = new Image();
-          return new Promise(function (resolve, reject) {
-            img.onload = function () { resolve({ dataUrl: dataUrl, w: img.width, h: img.height }); };
-            img.onerror = reject;
-            img.src = dataUrl;
-          });
+        .then(function (fullCanvas) {
+          // Crop in canvas-pixel space (lossless — same pixel grid as the
+          // source render). White-fill the destination first so partial
+          // bbox overruns at the paper edge don't bleed transparent.
+          var sx = cropX * PIXEL_RATIO;
+          var sy = cropY * PIXEL_RATIO;
+          var sw = cropW * PIXEL_RATIO;
+          var sh = cropH * PIXEL_RATIO;
+          var cropped = document.createElement('canvas');
+          cropped.width = sw;
+          cropped.height = sh;
+          var ctx = cropped.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, sw, sh);
+          ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+          return { dataUrl: cropped.toDataURL('image/png'), w: sw, h: sh };
         })
         .then(function (rendered) {
           var orientation = (rendered.w >= rendered.h) ? 'landscape' : 'portrait';
