@@ -8219,12 +8219,13 @@ def signal_flow_label_autocomplete(request):
         'showstack.Processor': {'P1 Input', 'P1 Output', 'Galaxy Input', 'Galaxy Output'},
     }
     # UAT 2026-05-27 — shapes with no signal-name catalog. Port labels here
-    # are pure freeform (e.g. SpeakerArray names like 'KARA 1 Top', 'SUB L'
-    # are physical-position descriptors, not signals routed elsewhere in
-    # the project). Returning [] short-circuits both the per-instance and
-    # project-wide paths; the frontend's empty-results branch closes the
-    # listbox, so no dropdown ever renders.
-    SHAPE_CLASS_BLOCK = {'showstack.SpeakerArray'}
+    # are pure freeform: SpeakerArray names ('KARA 1 Top', 'SUB L') are
+    # physical-position descriptors, and CommBeltPack port labels are
+    # channel/role assignments authored on the diagram itself, not signals
+    # routed elsewhere in the project. Returning [] short-circuits both
+    # the per-instance and project-wide paths; the frontend's empty-results
+    # branch closes the listbox, so no dropdown ever renders.
+    SHAPE_CLASS_BLOCK = {'showstack.SpeakerArray', 'showstack.CommBeltPack'}
     try:
         q = (request.GET.get('q') or '').strip()
         current_project = getattr(request, 'current_project', None)
