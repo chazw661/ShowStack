@@ -5881,17 +5881,20 @@ def _build_picker_data(session, existing_tracks, current_project=None):
     # 'dante' → by dante stream number. Channels without the relevant
     # field sort to the end.
     mode = session.track_order_mode
+    # Issue #15: channels with default_record=False are excluded from the
+    # picker entirely. The Default Record checkbox on each channel is the
+    # opt-in switch for "include this channel in multitrack sessions".
     inputs_qs = list(
-        ConsoleInput.objects.filter(console=console).exclude(id__in=used_ids['input'])
+        ConsoleInput.objects.filter(console=console, default_record=True).exclude(id__in=used_ids['input'])
     )
     aux_qs = list(
-        ConsoleAuxOutput.objects.filter(console=console).exclude(id__in=used_ids['aux'])
+        ConsoleAuxOutput.objects.filter(console=console, default_record=True).exclude(id__in=used_ids['aux'])
     )
     matrix_qs = list(
-        ConsoleMatrixOutput.objects.filter(console=console).exclude(id__in=used_ids['matrix'])
+        ConsoleMatrixOutput.objects.filter(console=console, default_record=True).exclude(id__in=used_ids['matrix'])
     )
     stereo_qs = list(
-        ConsoleStereoOutput.objects.filter(console=console).exclude(id__in=used_ids['stereo'])
+        ConsoleStereoOutput.objects.filter(console=console, default_record=True).exclude(id__in=used_ids['stereo'])
     )
 
     if mode == 'dante':
@@ -6727,16 +6730,14 @@ def multitrack_add_tracks(request, session_id):
             .values_list('id', flat=True)
         ) & set(selections.get('stereo', []) or [])
 
-        # POL-01 / POL-02 — bulk-load channel seed fields so each new track can be
-        # seeded with enabled = channel.default_record and color_override =
-        # channel.default_record_color. One query per source_type (4 total),
-        # restricted to the IDs we'll actually use. ConsoleInput/Aux/Matrix/Stereo
-        # all expose the two seed fields after migration 0155.
+        # POL-01 — bulk-load channel default_record so each new track can be
+        # seeded with enabled = channel.default_record. One query per
+        # source_type (4 total), restricted to the IDs we'll actually use.
         seed_maps = {
-            'input':  {row[0]: (row[1], row[2]) for row in ConsoleInput.objects.filter(id__in=valid_input_ids).values_list('id', 'default_record', 'default_record_color')},
-            'aux':    {row[0]: (row[1], row[2]) for row in ConsoleAuxOutput.objects.filter(id__in=valid_aux_ids).values_list('id', 'default_record', 'default_record_color')},
-            'matrix': {row[0]: (row[1], row[2]) for row in ConsoleMatrixOutput.objects.filter(id__in=valid_matrix_ids).values_list('id', 'default_record', 'default_record_color')},
-            'stereo': {row[0]: (row[1], row[2]) for row in ConsoleStereoOutput.objects.filter(id__in=valid_stereo_ids).values_list('id', 'default_record', 'default_record_color')},
+            'input':  dict(ConsoleInput.objects.filter(id__in=valid_input_ids).values_list('id', 'default_record')),
+            'aux':    dict(ConsoleAuxOutput.objects.filter(id__in=valid_aux_ids).values_list('id', 'default_record')),
+            'matrix': dict(ConsoleMatrixOutput.objects.filter(id__in=valid_matrix_ids).values_list('id', 'default_record')),
+            'stereo': dict(ConsoleStereoOutput.objects.filter(id__in=valid_stereo_ids).values_list('id', 'default_record')),
         }
 
         # Determine starting track_number (D-10 append rule)
@@ -6758,19 +6759,13 @@ def multitrack_add_tracks(request, session_id):
             for raw_id in raw_list:
                 if raw_id in valid_ids:
                     max_n += 1
-                    seed_record, seed_hex = seed_maps[src_type].get(raw_id, (True, ''))
-                    # Defence-in-depth (T-05-03-01): drop seed hex if it does
-                    # not match _HEX_COLOR_RE. Bad hex in the DB (legacy data,
-                    # direct SQL edit) must NOT crash the picker-add path.
-                    if seed_hex and not _HEX_COLOR_RE.match(seed_hex):
-                        seed_hex = ''
+                    seed_record = seed_maps[src_type].get(raw_id, True)
                     new_rows.append(MultitrackTrack(
                         session=session,
                         track_number=max_n,
                         source_type=src_type,
                         source_id=raw_id,
                         enabled=bool(seed_record),
-                        color_override=seed_hex,
                     ))
 
         for m in validated_manuals:

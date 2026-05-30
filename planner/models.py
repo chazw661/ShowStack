@@ -945,13 +945,8 @@ class ConsoleInput(models.Model):
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
     default_record = models.BooleanField(
         default=True,
-        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
-    )
-    default_record_color = models.CharField(
-        max_length=7,
-        blank=True,
-        default='',
-        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+        verbose_name="Include in multitrack",
+        help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
 
     group = models.CharField(max_length=100, blank=True, null=True)
@@ -993,13 +988,8 @@ class ConsoleAuxOutput(models.Model):
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
     default_record = models.BooleanField(
         default=True,
-        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
-    )
-    default_record_color = models.CharField(
-        max_length=7,
-        blank=True,
-        default='',
-        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+        verbose_name="Include in multitrack",
+        help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
 
     def __str__(self):
@@ -1022,13 +1012,8 @@ class ConsoleMatrixOutput(models.Model):
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
     default_record = models.BooleanField(
         default=True,
-        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
-    )
-    default_record_color = models.CharField(
-        max_length=7,
-        blank=True,
-        default='',
-        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+        verbose_name="Include in multitrack",
+        help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
 
     def __str__(self):
@@ -1048,13 +1033,8 @@ class ConsoleStereoOutput(models.Model):
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
     default_record = models.BooleanField(
         default=True,
-        help_text="If True, new multitrack sessions pre-check (enable) tracks created from this channel. POL-01.",
-    )
-    default_record_color = models.CharField(
-        max_length=7,
-        blank=True,
-        default='',
-        help_text="Optional hex seed color (#RRGGBB) for tracks created from this channel. Empty = no seed; per-track override always wins. POL-02.",
+        verbose_name="Include in multitrack",
+        help_text="If checked, this channel appears in the multitrack picker and is pre-armed for recording. Uncheck to hide it from multitrack sessions entirely.",
     )
 
     def __str__(self):
