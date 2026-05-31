@@ -545,7 +545,6 @@ class Project(models.Model):
                             input_type=p1_input.input_type,
                             channel_number=p1_input.channel_number,
                             label=p1_input.label,
-                            origin_device_output=None  # Will need device mapping if needed
                         )
                     
                     # Duplicate P1Outputs
@@ -573,7 +572,6 @@ class Project(models.Model):
                             input_type=galaxy_input.input_type,
                             channel_number=galaxy_input.channel_number,
                             label=galaxy_input.label,
-                            origin_device_output=None  # Will need device mapping if needed
                         )
                     
                     # Duplicate GalaxyOutputs
@@ -2017,31 +2015,15 @@ class P1Input(models.Model):
     input_type = models.CharField(max_length=10, choices=INPUT_TYPES)
     channel_number = models.PositiveIntegerField()
     label = models.CharField(max_length=100, blank=True, null=True, help_text="Channel label/name")
-    
-    # Origin for Analog and AES inputs only
-    origin_device_output = models.ForeignKey(
-        'DeviceOutput',
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        help_text="Source device output (for Analog/AES only)",
-        related_name='p1_inputs'
-    )
-    
+
     class Meta:
         unique_together = ['p1_processor', 'input_type', 'channel_number']
         ordering = ['input_type', 'channel_number']
         verbose_name = "P1 Input"
         verbose_name_plural = "P1 Inputs"
-    
+
     def __str__(self):
         return f"{self.get_input_type_display()} {self.channel_number} - {self.label or 'Unlabeled'}"
-    
-    def clean(self):
-        from django.core.exceptions import ValidationError
-        # AVB inputs should not have origin_device_output
-        if self.input_type == 'AVB' and self.origin_device_output:
-            raise ValidationError("AVB inputs should not have an origin device output")
 
 
 class P1Output(models.Model):
@@ -2121,15 +2103,7 @@ class GalaxyInput(models.Model):
     input_type = models.CharField(max_length=10, choices=INPUT_TYPE_CHOICES)
     channel_number = models.PositiveIntegerField()
     label = models.CharField(max_length=100, blank=True, help_text="Channel label")
-    origin_device_output = models.ForeignKey(
-        'DeviceOutput',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='galaxy_inputs',
-        help_text="Source device output for this input"
-    )
-    
+
     class Meta:
         ordering = ['input_type', 'channel_number']
         unique_together = [['galaxy_processor', 'input_type', 'channel_number']]

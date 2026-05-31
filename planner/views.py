@@ -142,17 +142,13 @@ def p1_processor_export(request, p1_processor_id):
         
         # Write inputs
         writer.writerow(['P1 INPUTS'])
-        writer.writerow(['Type', 'Channel', 'Label', 'Origin Device', 'Origin Output'])
-        
+        writer.writerow(['Type', 'Channel', 'Label'])
+
         for inp in p1.inputs.all():
-            origin_device = inp.origin_device_output.device.name if inp.origin_device_output else ''
-            origin_output = f"Output {inp.origin_device_output.output_number}: {inp.origin_device_output.signal_name}" if inp.origin_device_output else ''
             writer.writerow([
                 inp.get_input_type_display(),
                 inp.channel_number,
                 inp.label,
-                origin_device,
-                origin_output
             ])
         
         writer.writerow([])  # Empty row
@@ -186,21 +182,12 @@ def p1_processor_export(request, p1_processor_id):
         
         # Export inputs
         for inp in p1.inputs.all():
-            input_data = {
+            export_data['inputs'].append({
                 'type': inp.input_type,
                 'type_display': inp.get_input_type_display(),
                 'channel': inp.channel_number,
-                'label': inp.label
-            }
-            
-            if inp.origin_device_output:
-                input_data['origin'] = {
-                    'device': inp.origin_device_output.device.name,
-                    'output_number': inp.origin_device_output.output_number,
-                    'signal_name': inp.origin_device_output.signal_name
-                }
-            
-            export_data['inputs'].append(input_data)
+                'label': inp.label,
+            })
         
         # Export outputs
         for out in p1.outputs.all():
@@ -270,17 +257,13 @@ def galaxy_processor_export(request, galaxy_processor_id):
         
         # Write inputs
         writer.writerow(['GALAXY INPUTS'])
-        writer.writerow(['Type', 'Channel', 'Label', 'Origin Device', 'Origin Output'])
-        
+        writer.writerow(['Type', 'Channel', 'Label'])
+
         for inp in galaxy.inputs.all():
-            origin_device = inp.origin_device_output.device.name if inp.origin_device_output else ''
-            origin_output = f"Output {inp.origin_device_output.output_number}: {inp.origin_device_output.signal_name}" if inp.origin_device_output else ''
             writer.writerow([
                 inp.get_input_type_display(),
                 inp.channel_number,
                 inp.label,
-                origin_device,
-                origin_output
             ])
         
         writer.writerow([])  # Empty row
@@ -316,21 +299,12 @@ def galaxy_processor_export(request, galaxy_processor_id):
         
         # Export inputs
         for inp in galaxy.inputs.all():
-            input_data = {
+            export_data['inputs'].append({
                 'type': inp.input_type,
                 'type_display': inp.get_input_type_display(),
                 'channel': inp.channel_number,
-                'label': inp.label
-            }
-            
-            if inp.origin_device_output:
-                input_data['origin'] = {
-                    'device': inp.origin_device_output.device.name,
-                    'output_number': inp.origin_device_output.output_number,
-                    'signal_name': inp.origin_device_output.signal_name
-                }
-            
-            export_data['inputs'].append(input_data)
+                'label': inp.label,
+            })
         
         # Export outputs
         for out in galaxy.outputs.all():

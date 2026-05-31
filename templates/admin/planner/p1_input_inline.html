@@ -54,10 +54,22 @@
 <div class="js-inline-admin-formset inline-group" id="{{ inline_admin_formset.formset.prefix }}-group">
   <div class="tabular inline-related {{ inline_admin_formset.opts.classes }}">
     {{ inline_admin_formset.formset.management_form }}
-    
+
+    {# Issue #16: single combobox per channel. Suggestions come from project
+       device-output signal names; the user can type freely or pick one. #}
+    {% with first_form=inline_admin_formset.0.form %}
+      {% if first_form.input_suggestions %}
+        <datalist id="p1-input-suggestions">
+          {% for name in first_form.input_suggestions %}
+            <option value="{{ name }}"></option>
+          {% endfor %}
+        </datalist>
+      {% endif %}
+    {% endwith %}
+
     <fieldset class="module {{ inline_admin_formset.classes }}">
       <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
-      
+
       <table width="100%" cellspacing="0">
         <tbody>
           {# Row 1: AES/EBU 1-4 and Analog 1-4 #}
@@ -75,17 +87,13 @@
                   {% for hidden in inline_admin_form.form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
-                  
+
                   <div class="type-label">
                     {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}
                   </div>
-                  
+
                   <div class="label-field">
                     {{ inline_admin_form.form.label }}
-                  </div>
-                  
-                  <div class="select">
-                    {{ inline_admin_form.form.origin_device_output }}
                   </div>
                 </td>
               {% endif %}
@@ -107,15 +115,15 @@
                   {% for hidden in inline_admin_form.form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
-                  
+
                   <div class="type-label">
                     {{ inline_admin_form.form.instance.get_input_type_display }} {{ inline_admin_form.form.instance.channel_number }}
                   </div>
-                  
+
                   <div class="label-field">
                     {{ inline_admin_form.form.label }}
                   </div>
-                  
+
                   <div style="color: #666; font-size: 10px;">
                     Network Stream
                   </div>

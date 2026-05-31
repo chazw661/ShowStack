@@ -329,31 +329,14 @@ def _create_input_table(inputs, title, header_style, cell_style, num_channels):
         channel_headers.append(Paragraph(f"<b>Ch {ch_num}</b>", header_style))
     table_data.append(channel_headers)
     
-    # Label row
+    # Label row (Issue #16: source/origin row removed with origin_device_output)
     label_row = []
     for ch_num in range(1, num_channels + 1):
         inp = inputs_dict.get(ch_num)
         label = inp.label if inp and inp.label else ''
         label_row.append(Paragraph(label, cell_style))
     table_data.append(label_row)
-    
-    # Source/Origin row
-    source_row = []
-    for ch_num in range(1, num_channels + 1):
-        inp = inputs_dict.get(ch_num)
-        if inp and inp.label:  # Only if channel is actually used
-            # For Analog and AES, show origin_device_output
-            if inp.input_type in ['ANALOG', 'AES'] and inp.origin_device_output:
-                source = str(inp.origin_device_output)
-            elif inp.input_type == 'AVB':
-                source = 'Network Stream'
-            else:
-                source = ''
-        else:
-            source = ''
-        source_row.append(Paragraph(source, cell_style))
-    table_data.append(source_row)
-    
+
     # Calculate column widths
     col_width = 10.0*inch / num_channels
     col_widths = [col_width] * num_channels
@@ -410,30 +393,14 @@ def _create_input_table_range(inputs, title, header_style, cell_style, start_ch,
         channel_headers.append(Paragraph(f"<b>Ch {ch_num}</b>", header_style))
     table_data.append(channel_headers)
     
-    # Label row
+    # Label row (Issue #16: source/origin row removed with origin_device_output)
     label_row = []
     for ch_num in range(start_ch, end_ch + 1):
         inp = inputs_dict.get(ch_num)
         label = inp.label if inp and inp.label else ''
         label_row.append(Paragraph(label, cell_style))
     table_data.append(label_row)
-    
-    # Source/Origin row
-    source_row = []
-    for ch_num in range(start_ch, end_ch + 1):
-        inp = inputs_dict.get(ch_num)
-        if inp and inp.label:  # Only if channel is actually used
-            if inp.input_type in ['ANALOG', 'AES'] and inp.origin_device_output:
-                source = str(inp.origin_device_output)
-            elif inp.input_type == 'AVB':
-                source = 'Network Stream'
-            else:
-                source = ''
-        else:
-            source = ''
-        source_row.append(Paragraph(source, cell_style))
-    table_data.append(source_row)
-    
+
     # Calculate column widths
     num_channels = end_ch - start_ch + 1
     col_width = 10.0*inch / num_channels

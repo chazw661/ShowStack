@@ -2147,17 +2147,17 @@ class P1InputInline(admin.TabularInline):
     model = P1Input
     form = P1InputInlineForm
     extra = 0
-    fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+    fields = ['input_type', 'channel_number', 'label']
     readonly_fields = ['input_type', 'channel_number']
     can_delete = False
     template = 'admin/planner/p1_input_inline.html'  # Use custom template
-     
+
     def has_add_permission(self, request, obj=None):
         return False
-    
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related('origin_device_output__device').order_by('input_type', 'channel_number')
+        return qs.order_by('input_type', 'channel_number')
     
     class Media:
         js = ('admin/js/p1_input_admin.js',)
@@ -2449,17 +2449,17 @@ class GalaxyInputInline(admin.TabularInline):
     model = GalaxyInput
     form = GalaxyInputInlineForm
     extra = 0
-    fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+    fields = ['input_type', 'channel_number', 'label']
     readonly_fields = ['input_type', 'channel_number']
     can_delete = False
     template = 'admin/planner/galaxy_input_inline.html'
-     
+
     def has_add_permission(self, request, obj=None):
         return False
-    
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related('origin_device_output__device').order_by('input_type', 'channel_number')
+        return qs.order_by('input_type', 'channel_number')
     
     class Media:
         js = ('admin/js/galaxy_input_admin.js',)

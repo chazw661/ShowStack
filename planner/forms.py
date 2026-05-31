@@ -709,72 +709,59 @@ from django import forms
 from .models import P1Processor, P1Input, P1Output, DeviceOutput
 
 
-# Replace the P1InputInlineForm in forms.py with this version that handles 'None' strings:
+def _processor_input_suggestions(project):
+    """Device-output signal names for the processor-input datalist.
+
+    Issue #16: the Processor input row used to have separate Name + Origin
+    dropdown fields. We collapsed them into a single combobox bound to
+    `label`. The user can either type freely or pick from the suggestions
+    sourced here. Scoped by project to avoid leaking signal names from
+    other shows.
+    """
+    if project is None:
+        return []
+    from .models import Device
+    seen = set()
+    suggestions = []
+    qs = (Device.objects
+          .filter(project=project)
+          .prefetch_related('outputs')
+          .order_by('name'))
+    for device in qs:
+        for output in device.outputs.order_by('output_number'):
+            name = (output.signal_name or '').strip()
+            if not name:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            suggestions.append(name)
+    return suggestions
+
 
 class P1InputInlineForm(forms.ModelForm):
-    """Form for P1 Input inline admin"""
+    """Form for P1 Input inline admin.
+
+    Issue #16: single combobox for the channel name. The HTML datalist is
+    rendered once per inline in the template (see p1_input_inline.html).
+    """
     class Meta:
         model = P1Input
-        fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+        fields = ['input_type', 'channel_number', 'label']
         widgets = {
-            'label': forms.TextInput(attrs={'class': 'vTextField'}),
+            'label': forms.TextInput(attrs={
+                'class': 'vTextField',
+                'list': 'p1-input-suggestions',
+                'autocomplete': 'off',
+            }),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Configure the origin_device_output dropdown
-        if 'origin_device_output' in self.fields:
-            # Build grouped choices
-            grouped = []
-            
-            # Get all devices that have outputs with console connections
-            from .models import Device
-            # Get the current project from the P1 processor
-            project = None
-            if self.instance and self.instance.pk and self.instance.p1_processor:
-                project = self.instance.p1_processor.system_processor.project
-
-            # Filter devices by project
-            device_queryset = Device.objects.prefetch_related('outputs').order_by('name')
-            if project:
-                device_queryset = device_queryset.filter(project=project)
-
-            for device in device_queryset:
-                opts = []
-                # Filter outputs that have a console connection (using GenericForeignKey)
-                for output in device.outputs.filter(content_type__isnull=False, object_id__isnull=False).order_by('output_number'):
-                    # Use signal_name if available, otherwise show output number
-                    if output.signal_name:
-                        label = output.signal_name
-                    else:
-                        # Only show output number if we don't have a signal name
-                        output_num = output.output_number if output.output_number is not None else ""
-                        label = f"Output {output_num}" if output_num else "Unnamed Output"
-                    
-                    opts.append((output.pk, label))
-                
-                if opts:
-                    grouped.append((device.name, opts))
-            
-            # Set the choices with blank option first
-            self.fields['origin_device_output'].choices = [("", "-- Select source --")] + grouped
-            
-            # Set initial value if editing
-            if self.instance and self.instance.pk and self.instance.origin_device_output:
-                self.fields['origin_device_output'].initial = self.instance.origin_device_output.pk
-            
-            # Make it optional
-            self.fields['origin_device_output'].required = False
-            
-            # Add CSS class for styling
-            self.fields['origin_device_output'].widget.attrs['class'] = 'vSelect'
-        
-        # Hide the origin_device_output field for AVB inputs (they don't use it)
-        if self.instance and self.instance.pk:
-            if self.instance.input_type == 'AVB':
-                self.fields['origin_device_output'].widget = forms.HiddenInput()
-                self.fields['origin_device_output'].required = False
+        project = None
+        if self.instance and self.instance.pk and self.instance.p1_processor_id:
+            project = self.instance.p1_processor.system_processor.project
+        self.input_suggestions = _processor_input_suggestions(project)
 
 class P1OutputInlineForm(forms.ModelForm):
     """Form for P1 Output inline admin"""
@@ -846,59 +833,28 @@ class P1ProcessorAdminForm(forms.ModelForm):
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 
 class GalaxyInputInlineForm(forms.ModelForm):
-    """Form for GALAXY Input inline admin"""
+    """Form for GALAXY Input inline admin.
+
+    Issue #16: single combobox for the channel name. The HTML datalist is
+    rendered once per inline in the template (see galaxy_input_inline.html).
+    """
     class Meta:
         model = GalaxyInput
-        fields = ['input_type', 'channel_number', 'label', 'origin_device_output']
+        fields = ['input_type', 'channel_number', 'label']
         widgets = {
-            'label': forms.TextInput(attrs={'class': 'vTextField'}),
+            'label': forms.TextInput(attrs={
+                'class': 'vTextField',
+                'list': 'galaxy-input-suggestions',
+                'autocomplete': 'off',
+            }),
         }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-        # Configure the origin_device_output dropdown
-        if 'origin_device_output' in self.fields:
-            # Build grouped choices
-            grouped = []
-            
-            # Get all devices that have outputs with console connections
-            from .models import Device
-            for device in Device.objects.prefetch_related('outputs').order_by('name'):
-                opts = []
-                # Filter outputs that have a console connection (using GenericForeignKey)
-                for output in device.outputs.filter(content_type__isnull=False, object_id__isnull=False).order_by('output_number'):
-                    # Use signal_name if available, otherwise show output number
-                    if output.signal_name:
-                        label = output.signal_name
-                    else:
-                        # Only show output number if we don't have a signal name
-                        output_num = output.output_number if output.output_number is not None else ""
-                        label = f"Output {output_num}" if output_num else "Unnamed Output"
-                    
-                    opts.append((output.pk, label))
-                
-                if opts:
-                    grouped.append((device.name, opts))
-            
-            # Set the choices with blank option first
-            self.fields['origin_device_output'].choices = [("", "-- Select source --")] + grouped
-            
-            # Set initial value if editing
-            if self.instance and self.instance.pk and self.instance.origin_device_output:
-                self.fields['origin_device_output'].initial = self.instance.origin_device_output.pk
-            
-            # Make it optional
-            self.fields['origin_device_output'].required = False
-            
-            # Add CSS class for styling
-            self.fields['origin_device_output'].widget.attrs['class'] = 'vSelect'
-        
-        # Hide the origin_device_output field for AVB inputs (network streams)
-        if self.instance and self.instance.pk:
-            if self.instance.input_type == 'AVB':
-                self.fields['origin_device_output'].widget = forms.HiddenInput()
-                self.fields['origin_device_output'].required = False
+        project = None
+        if self.instance and self.instance.pk and self.instance.galaxy_processor_id:
+            project = self.instance.galaxy_processor.system_processor.project
+        self.input_suggestions = _processor_input_suggestions(project)
 
 
 class GalaxyOutputInlineForm(forms.ModelForm):
