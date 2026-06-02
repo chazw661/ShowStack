@@ -298,11 +298,14 @@ def export_system_report(request):
             if inputs.exists():
                 input_data = []
                 for inp in inputs:
-                    # Get label from linked console input
-                    input_label = ''
+                    # Prefer engineer-authored signal_name; fall back to the
+                    # linked console_input.source for legacy rows that only
+                    # set the FK.
+                    input_label = (inp.signal_name or '').strip()
                     console_source = ''
                     if inp.console_input:
-                        input_label = inp.console_input.source or ''
+                        if not input_label:
+                            input_label = inp.console_input.source or ''
                         if inp.console_input.console:
                             console_input_num = inp.console_input.input_ch
                             console_source = f"{inp.console_input.console.name} - Input {console_input_num}"

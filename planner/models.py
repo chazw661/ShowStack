@@ -1494,7 +1494,7 @@ class Device(models.Model):
 class DeviceInput(models.Model):
     device = models.ForeignKey(Device, related_name="inputs", on_delete=models.CASCADE)
     input_number = models.IntegerField(blank=True, null=True)
-    signal_name = models.CharField(max_length=100)  # e.g. "Wless 1 Analogue"
+    signal_name = models.CharField(max_length=100, blank=True)  # e.g. "Wless 1 Analogue"
     console_input = models.ForeignKey(
         'ConsoleInput', 
         on_delete=models.SET_NULL, 

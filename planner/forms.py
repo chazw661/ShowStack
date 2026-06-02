@@ -285,63 +285,60 @@ from .models import (
 )
 
 
+def _device_input_suggestions(project_id):
+    """ConsoleInput.source values for the device-input datalist.
+
+    Mirrors the Processor Issue #16 pattern: the inline used to render a
+    Console Input dropdown FK. We replaced that with a single free-text
+    signal_name combobox + datalist, scoped to the current project so
+    names don't leak across shows. Existing rows keep their console_input
+    FK (the device PDF's 'Console Source' column still reads it); new
+    rows just store signal_name.
+    """
+    if not project_id:
+        return []
+    seen = set()
+    suggestions = []
+    qs = (ConsoleInput.objects
+          .filter(console__project_id=project_id)
+          .exclude(source__isnull=True)
+          .exclude(source='')
+          .order_by('console__name', 'input_ch'))
+    for source in qs.values_list('source', flat=True):
+        name = source.strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        suggestions.append(name)
+    return suggestions
+
+
 class DeviceInputInlineForm(forms.ModelForm):
-    console_input = forms.ChoiceField(
-        label="Console Input",
-        required=False,
-        widget=forms.Select,
-        choices=[],
-    )
+    """Inline form for I/O Device Inputs.
+
+    Single combobox bound to ``signal_name`` — the engineer can type freely
+    or pick from a datalist sourced from project ConsoleInput.source values
+    (see ``_device_input_suggestions``). The HTML datalist is rendered once
+    per inline in ``device_input_grid.html``.
+    """
 
     class Meta:
         model = DeviceInput
-        fields = ("input_number", "console_input")
+        fields = ("input_number", "signal_name")
+        widgets = {
+            'signal_name': forms.TextInput(attrs={
+                'class': 'vTextField',
+                'list': 'device-input-suggestions',
+                'autocomplete': 'off',
+            }),
+        }
 
     def __init__(self, *args, **kwargs):
-        # Extract project_id from kwargs
         project_id = kwargs.pop('project_id', None)
-        
         super().__init__(*args, **kwargs)
         self.fields['input_number'].required = False
-
-        grouped = []
-        
-        # Filter consoles to current project only
-        console_qs = Console.objects.prefetch_related("consoleinput_set")
-        if project_id:
-            console_qs = console_qs.filter(project_id=project_id)
-        
-        # For every Console and do Python-side filtering
-        for console in console_qs:
-            # Sort console inputs numerically by input_ch
-            console_inputs = sorted(
-                [ci for ci in console.consoleinput_set.all() if ci.source],
-                key=lambda ci: int(ci.input_ch) if ci.input_ch.isdigit() else float('inf')
-            )
-            opts = [
-               (ci.pk, ci.source)
-                for ci in console_inputs
-            ]
-            if opts:
-                grouped.append((console.name, opts))
-
-        # always start with the blank header
-        self.fields["console_input"].choices = [("", "---------")] + grouped
-
-        # if we're editing an existing DeviceInput, preserve its current value
-        if getattr(self, "instance", None) and self.instance.pk:
-            self.fields["console_input"].initial = self.instance.console_input_id
-
-    def clean_console_input(self):
-        """Convert the choice field value to the actual model instance"""
-        console_input_id = self.cleaned_data.get('console_input')
-        if console_input_id:
-            try:
-                from .models import ConsoleInput
-                return ConsoleInput.objects.get(pk=console_input_id)
-            except ConsoleInput.DoesNotExist:
-                return None
-        return None
+        self.fields['signal_name'].required = False
+        self.input_suggestions = _device_input_suggestions(project_id)
 
 
 class DeviceOutputInlineForm(forms.ModelForm):

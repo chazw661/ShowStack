@@ -1,5 +1,6 @@
 {% load i18n admin_urls static admin_modify %}
 {% load custom_tags chunk_filters %}
+{% include "admin/planner/_combobox_assets.html" %}
 
 <style>
   .p1-input-cell {
@@ -20,28 +21,6 @@
     padding: 2px;
     margin-bottom: 5px;
   }
-  /* Force dropdown to be taller and wrap text */
-  .p1-input-cell select {
-    width: 100%;
-    font-size: 9px;  /* Smaller font */
-    padding: 4px 2px;
-    height: 50px;  /* Tall enough for 2 lines */
-    line-height: 1.4;
-    word-wrap: break-word;
-    word-break: break-word;
-    white-space: pre-wrap;  /* Preserve wrapping */
-    text-align-last: center;  /* Center the selected text */
-  }
-  /* For Firefox */
-  .p1-input-cell select::-moz-focus-inner {
-    white-space: pre-wrap;
-  }
-  /* Make the text wrap at the dash */
-  .p1-input-cell select option {
-    white-space: pre-wrap;
-    word-break: break-all;
-    padding: 2px;
-  }
   .input-type-header {
     background-color: #79aec8;
     color: white;
@@ -55,9 +34,7 @@
   <div class="tabular inline-related {{ inline_admin_formset.opts.classes }}">
     {{ inline_admin_formset.formset.management_form }}
 
-    {# Issue #16: single combobox per channel. Suggestions come from project
-       device-output signal names; the user can type freely or pick one. #}
-    {% with first_form=inline_admin_formset.0.form %}
+    {% with first_form=inline_admin_formset.forms.0 %}
       {% if first_form.input_suggestions %}
         <datalist id="p1-input-suggestions">
           {% for name in first_form.input_suggestions %}
@@ -72,7 +49,6 @@
 
       <table width="100%" cellspacing="0">
         <tbody>
-          {# Row 1: AES/EBU 1-4 and Analog 1-4 #}
           <tr>
             <td colspan="8" class="input-type-header">AES/EBU (1-4) and Analog (1-4)</td>
           </tr>
@@ -80,7 +56,6 @@
             {% for inline_admin_form in inline_admin_formset %}
               {% if 'AES' in inline_admin_form.form.instance.get_input_type_display or 'Analog' in inline_admin_form.form.instance.get_input_type_display %}
                 <td class="p1-input-cell">
-                  {# Hidden fields #}
                   {% if inline_admin_form.fk_field %}
                     {{ inline_admin_form.fk_field.field }}
                   {% endif %}
@@ -100,7 +75,6 @@
             {% endfor %}
           </tr>
 
-          {# Row 2: AVB 1-8 #}
           <tr>
             <td colspan="8" class="input-type-header">AVB (1-8)</td>
           </tr>
@@ -108,7 +82,6 @@
             {% for inline_admin_form in inline_admin_formset %}
               {% if 'AVB' in inline_admin_form.form.instance.get_input_type_display %}
                 <td class="p1-input-cell">
-                  {# Hidden fields #}
                   {% if inline_admin_form.fk_field %}
                     {{ inline_admin_form.fk_field.field }}
                   {% endif %}

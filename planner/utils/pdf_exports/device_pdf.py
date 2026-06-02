@@ -65,20 +65,24 @@ def export_device_pdf(device):
             input_label = ''
             console_source = ''
             
-            if inp and inp.console_input:
-                # ConsoleInput.source contains dropdown values like "wless", "podium", "Vid L"
-                input_label = inp.console_input.source or ''
-                
-                if inp.console_input.console:
-                    console_input_num = inp.console_input.input_ch
-                    console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
-            
+            if inp:
+                # Prefer the engineer-authored signal_name; fall back to the
+                # linked console_input.source for legacy rows that only set
+                # the FK.
+                input_label = (inp.signal_name or '').strip()
+                if inp.console_input:
+                    if not input_label:
+                        input_label = inp.console_input.source or ''
+                    if inp.console_input.console:
+                        console_input_num = inp.console_input.input_ch
+                        console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
+
             input_data.append([
                 str(num),
                 input_label,
                 console_source
             ])
-        
+
         col_widths = [0.5*inch, 2*inch, 6.5*inch]
         input_table = Table(input_data, colWidths=col_widths)
         input_table.setStyle([
@@ -256,10 +260,13 @@ def export_all_devices_pdf(current_project):
                     input_label = ''
                     console_source = ''
                     
-                    if inp and inp.console_input:
-                        input_label = inp.console_input.source or ''
-                        if inp.console_input.console:
-                            console_source = f"{inp.console_input.console.name} - In {inp.console_input.input_ch}"
+                    if inp:
+                        input_label = (inp.signal_name or '').strip()
+                        if inp.console_input:
+                            if not input_label:
+                                input_label = inp.console_input.source or ''
+                            if inp.console_input.console:
+                                console_source = f"{inp.console_input.console.name} - In {inp.console_input.input_ch}"
                     
                     input_data.append([
                         str(num),

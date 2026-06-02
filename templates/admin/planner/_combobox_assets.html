@@ -1,0 +1,176 @@
+<style>
+  .combobox-wrap {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+  }
+  .combobox-wrap > input {
+    width: 100%;
+    padding-right: 20px !important;
+    box-sizing: border-box;
+  }
+  .combobox-toggle {
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    bottom: 1px;
+    width: 18px;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    border-left: 1px solid rgba(128, 128, 128, 0.35);
+    cursor: pointer;
+    color: inherit;
+    font-size: 10px;
+    line-height: 1;
+    opacity: 0.7;
+  }
+  .combobox-toggle:hover { opacity: 1; }
+  .combobox-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin: 2px 0 0 0;
+    padding: 0;
+    list-style: none;
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 3px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 1000;
+    text-align: left;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+  .combobox-panel li {
+    padding: 5px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .combobox-panel li.active,
+  .combobox-panel li:hover {
+    background: var(--primary, #79aec8);
+    color: var(--primary-fg, #fff);
+  }
+</style>
+
+<script>
+(function () {
+  function enhance(input) {
+    if (input.dataset.comboboxEnhanced) return;
+    var datalist = document.getElementById(input.getAttribute('list'));
+    if (!datalist) return;
+    var options = Array.prototype.slice
+      .call(datalist.querySelectorAll('option'))
+      .map(function (o) { return o.value; })
+      .filter(function (v) { return v; });
+    if (!options.length) return;
+    input.dataset.comboboxEnhanced = '1';
+
+    var wrap = document.createElement('span');
+    wrap.className = 'combobox-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.tabIndex = -1;
+    toggle.className = 'combobox-toggle';
+    toggle.setAttribute('aria-label', 'Show suggestions');
+    toggle.innerHTML = '▾'; // ▾
+    wrap.appendChild(toggle);
+
+    var panel = document.createElement('ul');
+    panel.className = 'combobox-panel';
+    panel.hidden = true;
+    wrap.appendChild(panel);
+
+    var activeIndex = -1;
+    var filtered = [];
+
+    function render(filter) {
+      var f = (filter || '').toLowerCase();
+      filtered = f
+        ? options.filter(function (o) { return o.toLowerCase().indexOf(f) !== -1; })
+        : options.slice();
+      panel.innerHTML = '';
+      if (!filtered.length) {
+        panel.hidden = true;
+        return;
+      }
+      filtered.forEach(function (value, i) {
+        var li = document.createElement('li');
+        li.textContent = value;
+        li.dataset.idx = i;
+        li.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          pick(value);
+        });
+        panel.appendChild(li);
+      });
+      activeIndex = -1;
+      panel.hidden = false;
+    }
+
+    function pick(value) {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      panel.hidden = true;
+      input.focus();
+    }
+
+    function setActive(i) {
+      var items = panel.querySelectorAll('li');
+      if (!items.length) return;
+      if (i < 0) i = items.length - 1;
+      if (i >= items.length) i = 0;
+      items.forEach(function (el) { el.classList.remove('active'); });
+      items[i].classList.add('active');
+      items[i].scrollIntoView({ block: 'nearest' });
+      activeIndex = i;
+    }
+
+    input.addEventListener('focus', function () { render(input.value); });
+    input.addEventListener('input', function () { render(input.value); });
+    input.addEventListener('keydown', function (e) {
+      if (panel.hidden) {
+        if (e.key === 'ArrowDown') { render(''); e.preventDefault(); }
+        return;
+      }
+      if (e.key === 'ArrowDown') { setActive(activeIndex + 1); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { setActive(activeIndex - 1); e.preventDefault(); }
+      else if (e.key === 'Enter' && activeIndex >= 0) { pick(filtered[activeIndex]); e.preventDefault(); }
+      else if (e.key === 'Escape') { panel.hidden = true; }
+    });
+    input.addEventListener('blur', function () {
+      setTimeout(function () { panel.hidden = true; }, 150);
+    });
+    toggle.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      if (panel.hidden) {
+        input.focus();
+        render('');
+      } else {
+        panel.hidden = true;
+      }
+    });
+  }
+
+  function init() {
+    document.querySelectorAll('input[list]').forEach(enhance);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>

@@ -1,5 +1,6 @@
 {% load custom_tags chunk_filters %}
 {% load i18n admin_urls static admin_modify chunk_filters %}
+{% include "admin/planner/_combobox_assets.html" %}
 <style>
   .device-input-cell {
     padding: 5px;
@@ -12,18 +13,27 @@
     margin-bottom: 5px;
     font-size: 13px;
   }
-  .device-input-cell .select {
-    margin-top: 3px;
-  }
-  .device-input-cell select {
+  .device-input-cell input[type="text"] {
     width: 100%;
     font-size: 12px;
+    padding: 2px;
+    box-sizing: border-box;
   }
 </style>
 
 <div class="js-inline-admin-formset inline-group">
   <div class="tabular inline-related">
     {{ inline_admin_formset.formset.management_form }}
+
+    {% with first_form=inline_admin_formset.forms.0 %}
+      {% if first_form.input_suggestions %}
+        <datalist id="device-input-suggestions">
+          {% for name in first_form.input_suggestions %}
+            <option value="{{ name }}"></option>
+          {% endfor %}
+        </datalist>
+      {% endif %}
+    {% endwith %}
 
     <fieldset class="module {{ inline_admin_formset.classes }}">
       <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
@@ -34,23 +44,18 @@
             <tr class="form-row">
               {% for form in form_chunk %}
                 <td class="device-input-cell">
-                  {# hidden PK/FK fields etc. #}
                   {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
-                  <input type="hidden" name="{{ form.input_number.html_name }}" 
-                         id="{{ form.input_number.id_for_label }}" 
+                  <input type="hidden" name="{{ form.input_number.html_name }}"
+                         id="{{ form.input_number.id_for_label }}"
                          value="{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}">
 
-                  {# Input number - handle None values #}
                   <div class="number">
                     In {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
                   </div>
 
-                  {# Console input dropdown #}
-                  <div class="select">
-                    {{ form.console_input }}
-                  </div>
+                  {{ form.signal_name }}
                 </td>
               {% endfor %}
             </tr>
