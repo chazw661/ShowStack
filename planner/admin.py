@@ -2984,11 +2984,33 @@ class PACableAdmin(BaseEquipmentAdmin):
         })
     )
     
-    actions = ['export_cable_schedule','assign_color']
+    actions = ['export_cable_schedule', 'assign_color', 'duplicate_cable_runs']
 
-
-    
-
+    @admin.action(description='Duplicate selected cable runs')
+    def duplicate_cable_runs(self, request, queryset):
+        """Issue #22: clone each selected PACableSchedule row (including its
+        PAFanOut children) so engineers can use a similar cable definition
+        as a starting point for a new run."""
+        n_cables = 0
+        n_fans = 0
+        for cable in queryset:
+            fan_outs = list(cable.fan_outs.all())
+            cable.pk = None
+            cable._state.adding = True
+            cable.save()
+            for fan in fan_outs:
+                fan.pk = None
+                fan._state.adding = True
+                fan.cable_schedule = cable
+                fan.save()
+            n_cables += 1
+            n_fans += len(fan_outs)
+        suffix = f' with {n_fans} fan-out(s).' if n_fans else '.'
+        self.message_user(
+            request,
+            f'Duplicated {n_cables} cable run(s)' + suffix,
+            messages.SUCCESS,
+        )
 
     def color_display(self, obj):
         """Show a small color preview in the list"""
