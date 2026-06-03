@@ -1577,10 +1577,34 @@ class AmpAdminForm(forms.ModelForm):
 
 
 
+class AmpLocationFilter(admin.SimpleListFilter):
+    """Project-scoped 'By location' filter on the Amp changelist (#21).
+
+    The default ``list_filter = ('location', ...)`` used Django's
+    RelatedFieldListFilter, which queries every Location row regardless of
+    the current project — a multi-tenancy leak. This scopes the dropdown to
+    locations belonging to ``request.current_project`` only.
+    """
+    title = 'Location'
+    parameter_name = 'location'
+
+    def lookups(self, request, model_admin):
+        current_project = getattr(request, 'current_project', None)
+        if current_project:
+            locations = Location.objects.filter(project=current_project).order_by('name')
+            return [(loc.id, loc.name) for loc in locations]
+        return []
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(location_id=self.value())
+        return queryset
+
+
 class AmpAdmin(BaseEquipmentAdmin):
     form = AmpAdminForm
     list_display = ('name', 'location', 'amp_model', 'ip_address', 'color_preview')
-    list_filter = ('location', 'amp_model__manufacturer', 'amp_model__model_name')
+    list_filter = (AmpLocationFilter, 'amp_model__manufacturer', 'amp_model__model_name')
     search_fields = ('name', 'ip_address')
     ordering = ['location', 'name']
     actions = ['assign_color_to_amps']
