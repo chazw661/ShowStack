@@ -2819,7 +2819,7 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
 
 # Add these to your admin.py file
 
-from .models import PACableSchedule, PAZone, PAFanOut
+from .models import PACableSchedule, PAZone, PAFanOut, PAFanOutExtension, PACoupler
 from .forms import PACableInlineForm, PAZoneForm
 
 class PACableInline(admin.TabularInline):
@@ -2842,8 +2842,8 @@ class PAFanOutInline(admin.TabularInline):
         """Inline for managing multiple fan outs per cable run"""
         model = PAFanOut
         extra = 1
-        fields = ['fan_out_type', 'quantity', 'extension_cable', 'extension_length']
-        
+        fields = ['fan_out_type', 'quantity']
+
         def get_formset(self, request, obj=None, **kwargs):
             formset = super().get_formset(request, obj, **kwargs)
             formset.form.base_fields['fan_out_type'].widget.attrs.update({
@@ -2944,8 +2944,8 @@ class PAFanOutInline(admin.TabularInline):
     """Inline for managing multiple fan outs per cable run"""
     model = PAFanOut
     extra = 1
-    fields = ['fan_out_type', 'quantity', 'extension_cable', 'extension_length']
-    
+    fields = ['fan_out_type', 'quantity']
+
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         formset.form.base_fields['fan_out_type'].widget.attrs.update({
@@ -2958,10 +2958,79 @@ class PAFanOutInline(admin.TabularInline):
         return formset
 
 
+class PAFanOutExtensionInline(admin.TabularInline):
+    """Issue #23: extensions live in their own table so a fan-out can have
+    multiple. The fan_out dropdown is scoped to the current cable's fan-outs
+    so the engineer doesn't see (or accidentally pick) fan-outs from a
+    different cable / project.
+    """
+    model = PAFanOutExtension
+    fk_name = 'cable_schedule'  # the model has two FKs; Django needs to know which is the parent link
+    extra = 1
+    fields = ['fan_out', 'extension_cable', 'extension_length', 'quantity']
+    verbose_name = 'Fan-out Extension'
+    # Issue #23 follow-up: this text is the section header. Putting the
+    # save-first workflow note here (server-rendered) so it's never missed
+    # — JS-injected hints have proven flaky in this admin theme.
+    verbose_name_plural = (
+        'Fan-out Extensions  '
+        '(after adding fan-outs above, click Save below — '
+        'they then become selectable in the Fan Out dropdown here)'
+    )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'fan_out':
+            cable_id = request.resolver_match.kwargs.get('object_id') if request.resolver_match else None
+            if cable_id:
+                kwargs['queryset'] = PAFanOut.objects.filter(cable_schedule_id=cable_id)
+            else:
+                kwargs['queryset'] = PAFanOut.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class PACouplerInline(admin.TabularInline):
+    """Issue #23 follow-up: couplers are their own row type on a cable run.
+
+    Engineers used to pick coupler types from the PAFanOut dropdown, which
+    confused the fan-out aggregation (a coupler isn't a fan-out). Listed
+    here as a third inline below fan-outs and extensions.
+    """
+    model = PACoupler
+    extra = 1
+    fields = ['coupler_type', 'quantity']
+    verbose_name = 'PA Coupler'
+    verbose_name_plural = 'PA Couplers'
+
+
 class PACableAdmin(BaseEquipmentAdmin):
     """Admin for PA Cable Schedule"""
     form = PACableInlineForm
-    inlines = [PAFanOutInline]  # Add this line
+    inlines = [PAFanOutInline, PAFanOutExtensionInline, PACouplerInline]
+
+    class Media:
+        js = ('admin/js/pa_cable_inlines.js',)
+
+    def response_post_save_change(self, request, obj):
+        """Issue #23: keep the engineer on the cable edit page after Save so
+        a newly-added fan-out becomes available in the Fan-out Extensions
+        dropdown without a manual page refresh. The ``?saved=1`` query
+        param is picked up by ``pa_cable_inlines.js`` to render a visible
+        confirmation banner — without it the default 'changed successfully'
+        message is small and easy to miss, which made the save+reload feel
+        like nothing had happened.
+        """
+        return HttpResponseRedirect(request.path + '?saved=1')
+
+    def response_post_save_add(self, request, obj):
+        """Mirror of response_post_save_change for the add flow — land on
+        the new cable's edit page so the engineer can immediately add
+        fan-outs and extensions."""
+        url = reverse(
+            'admin:%s_%s_change' % (obj._meta.app_label, obj._meta.model_name),
+            args=[obj.pk],
+            current_app=self.admin_site.name,
+        )
+        return HttpResponseRedirect(url + '?saved=1')
     list_display = [
     'label','destination', 'count', 'length',
     'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
@@ -3148,7 +3217,7 @@ class PACableAdmin(BaseEquipmentAdmin):
        # Calculate fan out totals with 20% overage and merge extensions into cable counts
         fan_out_summary = {}
         
-        for cable in qs.prefetch_related('fan_outs'):
+        for cable in qs.prefetch_related('fan_outs__extensions'):
             for fan_out in cable.fan_outs.all():
                 # Count fan outs
                 if fan_out.fan_out_type:
@@ -3159,19 +3228,15 @@ class PACableAdmin(BaseEquipmentAdmin):
                             'with_overage': 0
                         }
                     fan_out_summary[fan_out_name]['total_quantity'] += fan_out.quantity
-                
-                # Merge extension cables into cable_summary
-                if fan_out.extension_cable and fan_out.extension_length:
-                    ext_length = fan_out.extension_length
-                    ext_qty = fan_out.quantity
-                    
-                    # Map extension cable type to cable summary name
-                    ext_cable_map = {
-                        'NL4': 'NL 4',
-                        'NL8': 'NL 8',
-                    }
-                    cable_name = ext_cable_map.get(fan_out.extension_cable, fan_out.extension_cable)
-                    
+
+                # Merge each extension into cable_summary (issue #23: extensions
+                # now have their own quantity field — fan-out qty is no longer
+                # the multiplier).
+                ext_cable_map = {'NL4': 'NL 4', 'NL8': 'NL 8'}
+                for ext in fan_out.extensions.all():
+                    ext_length = ext.extension_length
+                    ext_qty = ext.quantity
+                    cable_name = ext_cable_map.get(ext.extension_cable, ext.extension_cable)
                     if cable_name not in cable_summary:
                         cable_summary[cable_name] = {
                             'total_runs': 0, 'total_length': 0,
@@ -3182,7 +3247,6 @@ class PACableAdmin(BaseEquipmentAdmin):
                             'fives': 0, 'fives_with_safety': 0,
                             'couplers': 0,
                         }
-                    
                     entry = cable_summary[cable_name]
                     if ext_length >= 100:
                         entry['hundreds'] += ext_qty
@@ -3194,7 +3258,6 @@ class PACableAdmin(BaseEquipmentAdmin):
                         entry['tens'] += ext_qty
                     elif ext_length > 0:
                         entry['fives'] += ext_qty
-                    
                     entry['total_runs'] += ext_qty
                     entry['total_length'] += ext_length * ext_qty
                     

@@ -2266,18 +2266,16 @@ class PACableSchedule(models.Model):
         ('EDISON_20_AMP' , 'Edison 20amp'),
     ]
     
-    # Fan Out options
+    # Fan Out options — issue #23 follow-up: coupler types removed from this
+    # dropdown and modeled as their own PACoupler entity. Couplers are not
+    # fan-outs and their old presence here was muddying the aggregation.
     FAN_OUT_CHOICES = [
         ('', 'None'),
         ('NL4_Y', 'NL4 Y'),
-        ('NL4_COUPLER', 'NL4 Coupler'),
-        ('DOFILL' , 'DOFill'),
-        ('DOSUB' , 'DOSub'),
-        ('CACOM COUPLER' , 'CACOM Coupler'),
+        ('DOFILL', 'DOFill'),
+        ('DOSUB', 'DOSub'),
         ('NL8_Y', 'NL8 Y'),
-        ('NL8_COUPLER', 'NL8 Coupler'),
         ('NL4_TO_NL8', 'NL4 to NL8'),
-        
     ]
     
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
@@ -2418,16 +2416,19 @@ class PACableSchedule(models.Model):
     
     @property
     def fan_out_summary(self):
-        """Get a summary of all fan outs for display"""
-        fan_outs = self.fan_outs.all()
-        if not fan_outs:
-            return ""
+        """Get a summary of all fan outs (and couplers) for display"""
         parts = []
-        for fo in fan_outs:
+        for fo in self.fan_outs.prefetch_related('extensions'):
             text = f"{fo.get_fan_out_type_display()} x{fo.quantity}"
-            if fo.extension_cable and fo.extension_length:
-                text += f", +{fo.extension_cable} {fo.extension_length}' x{fo.quantity}"
+            ext_parts = [
+                f"+{ext.extension_cable} {ext.extension_length}' x{ext.quantity}"
+                for ext in fo.extensions.all()
+            ]
+            if ext_parts:
+                text += ", " + ", ".join(ext_parts)
             parts.append(text)
+        for c in self.couplers.all():
+            parts.append(f"{c.get_coupler_type_display()} x{c.quantity}")
         return ", ".join(parts)
     
     @property
@@ -2477,45 +2478,115 @@ class PAFanOut(models.Model):
                 validators=[MinValueValidator(1)]
             )
 
-            EXTENSION_CABLE_CHOICES = [
-        ('', 'None'),
-        ('NL4', 'NL4'),
-        ('NL8', 'NL8'),
-    ]
-    
-            EXTENSION_LENGTH_CHOICES = [
-                (0, 'None'),
-                (6, "6'"),
-                (25, "25'"),
-                (50, "50'"),
-                (100, "100'"),
-                (150, "150'"),
-            ]
-            
-            extension_cable = models.CharField(
-                max_length=10,
-                choices=EXTENSION_CABLE_CHOICES,
-                blank=True,
-                default='',
-                verbose_name="Extension Cable"
-            )
-            extension_length = models.IntegerField(
-                choices=EXTENSION_LENGTH_CHOICES,
-                default=0,
-                verbose_name="Extension Length"
-            )
-                    
             class Meta:
                 verbose_name = "PA Fan Out"
                 verbose_name_plural = "PA Fan Outs"
                 ordering = ['id']  # SAFE DEFAULT
-                     
-            
+
             def __str__(self):
                 result = f"{self.get_fan_out_type_display()} x{self.quantity}"
-                if self.extension_cable and self.extension_length:
-                    result += f" +{self.extension_cable} {self.extension_length}'"
+                ext_parts = [str(e) for e in self.extensions.all()]
+                if ext_parts:
+                    result += " +" + ", ".join(ext_parts)
                 return result
+
+
+class PAFanOutExtension(models.Model):
+    """Issue #23: a fan-out can have N extension cables, each with its own
+    quantity. Previously this was a single (extension_cable, extension_length)
+    pair on PAFanOut whose count was bound to the fan-out's quantity — which
+    was wrong (one fan-out of qty 3 might use only 1 extension, etc.).
+    """
+    EXTENSION_CABLE_CHOICES = [
+        ('NL4', 'NL4'),
+        ('NL8', 'NL8'),
+    ]
+    EXTENSION_LENGTH_CHOICES = [
+        (6, "6'"),
+        (25, "25'"),
+        (50, "50'"),
+        (100, "100'"),
+        (150, "150'"),
+    ]
+
+    # The cable_schedule FK is a small denormalization needed by Django
+    # admin's inline machinery (admin.E202) — the inline must point at the
+    # parent admin's model directly. It is kept in sync with
+    # fan_out.cable_schedule in save().
+    cable_schedule = models.ForeignKey(
+        'PACableSchedule',
+        on_delete=models.CASCADE,
+        related_name='fan_out_extensions',
+    )
+    fan_out = models.ForeignKey(
+        'PAFanOut',
+        on_delete=models.CASCADE,
+        related_name='extensions',
+    )
+    extension_cable = models.CharField(
+        max_length=10,
+        choices=EXTENSION_CABLE_CHOICES,
+        verbose_name="Extension Cable",
+    )
+    extension_length = models.IntegerField(
+        choices=EXTENSION_LENGTH_CHOICES,
+        verbose_name="Extension Length",
+    )
+    quantity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+    )
+
+    class Meta:
+        verbose_name = "Fan-out Extension"
+        verbose_name_plural = "Fan-out Extensions"
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.extension_cable} {self.extension_length}' x{self.quantity}"
+
+    def save(self, *args, **kwargs):
+        # Keep cable_schedule pointing at the same cable as the chosen
+        # fan-out so the two FKs can't drift apart even if a fan-out is
+        # later reparented.
+        if self.fan_out_id and self.fan_out.cable_schedule_id != self.cable_schedule_id:
+            self.cable_schedule = self.fan_out.cable_schedule
+        super().save(*args, **kwargs)
+
+
+class PACoupler(models.Model):
+    """Issue #23 follow-up: couplers used to be mixed into PAFanOut's
+    FAN_OUT_CHOICES, which made aggregation noisy (a coupler isn't a
+    fan-out). Modeled here as its own child of PACableSchedule so the
+    cable edit page has its own 'Add Coupler' affordance.
+    """
+    COUPLER_TYPE_CHOICES = [
+        ('NL4_COUPLER', 'NL4 Coupler'),
+        ('NL8_COUPLER', 'NL8 Coupler'),
+        ('CACOM_COUPLER', 'CACOM Coupler'),
+    ]
+
+    cable_schedule = models.ForeignKey(
+        'PACableSchedule',
+        on_delete=models.CASCADE,
+        related_name='couplers',
+    )
+    coupler_type = models.CharField(
+        max_length=20,
+        choices=COUPLER_TYPE_CHOICES,
+    )
+    quantity = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+    )
+
+    class Meta:
+        verbose_name = 'PA Coupler'
+        verbose_name_plural = 'PA Couplers'
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.get_coupler_type_display()} x{self.quantity}"
             
 
 

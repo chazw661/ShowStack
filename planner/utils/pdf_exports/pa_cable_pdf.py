@@ -221,17 +221,15 @@ def generate_pa_cable_pdf(queryset):
             if fives_safe > 0:
                 quick_order_data.append([cable_name, "5'", str(fives_safe)])
 
-    # Add extension cables to quick order totals
-    for cable in queryset.prefetch_related('fan_outs'):
+    # Add extension cables to quick order totals (issue #23: extensions now
+    # live in their own table with per-extension quantity).
+    ext_cable_map = {'NL4': 'NL 4', 'NL8': 'NL 8'}
+    for cable in queryset.prefetch_related('fan_outs__extensions'):
         for fan_out in cable.fan_outs.all():
-            if fan_out.extension_cable and fan_out.extension_length:
-                ext_cable_map = {
-                    'NL4': 'NL 4',
-                    'NL8': 'NL 8',
-                }
-                cable_name = ext_cable_map.get(fan_out.extension_cable, fan_out.extension_cable)
-                ext_length = fan_out.extension_length
-                ext_qty = fan_out.quantity
+            for ext in fan_out.extensions.all():
+                cable_name = ext_cable_map.get(ext.extension_cable, ext.extension_cable)
+                ext_length = ext.extension_length
+                ext_qty = ext.quantity
                 
                 length_label = f"{ext_length}'"
                 # Check if this cable+length already exists in quick_order_data
