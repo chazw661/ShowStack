@@ -1,5 +1,31 @@
-bashcat > templates/admin/planner/amp/change_form.html << 'EOF'
 {% extends "admin/change_form.html" %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script>
+    // Issue #19: a quick double-click on "Save" was occasionally creating
+    // two amps. Disable submit buttons on the first submit so the second
+    // click is a no-op. setTimeout(0) defers the disable past the form
+    // submission so the clicked button's name (_save / _addanother /
+    // _continue) is still included in the POST data.
+    document.addEventListener('DOMContentLoaded', function () {
+        var form = document.getElementById('amp_form');
+        if (!form) return;
+        form.addEventListener('submit', function () {
+            var buttons = form.querySelectorAll(
+                '.submit-row input[type="submit"], .submit-row button[type="submit"]'
+            );
+            setTimeout(function () {
+                buttons.forEach(function (btn) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.6';
+                    btn.style.cursor = 'wait';
+                });
+            }, 0);
+        });
+    });
+    </script>
+{% endblock %}
 
 {% block field_sets %}
     {# Render only Basic Information fieldset first #}
@@ -8,12 +34,12 @@ bashcat > templates/admin/planner/amp/change_form.html << 'EOF'
             {% include "admin/includes/fieldset.html" %}
         {% endif %}
     {% endfor %}
-    
+
     {# Then render AMP CHANNELS inline #}
     {% for inline_admin_formset in inline_admin_formsets %}
         {% include inline_admin_formset.opts.template %}
     {% endfor %}
-    
+
     {# Then render remaining fieldsets (outputs) #}
     {% for fieldset in adminform %}
         {% if "Basic Information" not in fieldset.name %}
