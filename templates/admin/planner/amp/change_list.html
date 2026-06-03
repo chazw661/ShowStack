@@ -495,11 +495,11 @@
                 <span class="location-name">{{ group.location.name }}</span>
                 <span class="location-amp-count">{{ group.amp_count }} amp{{ group.amp_count|pluralize }}</span>
                 <div class="location-order-btns" onclick="event.stopPropagation()">
-                    <button class="location-order-btn" 
-                            onclick="reorderLocation({{ group.location.id }}, 'up')" 
+                    <button type="button" class="location-order-btn"
+                            onclick="reorderLocation({{ group.location.id }}, 'up')"
                             title="Move up">▲</button>
-                    <button class="location-order-btn" 
-                            onclick="reorderLocation({{ group.location.id }}, 'down')" 
+                    <button type="button" class="location-order-btn"
+                            onclick="reorderLocation({{ group.location.id }}, 'down')"
                             title="Move down">▼</button>
                 </div>
             </div>
@@ -561,7 +561,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
-                <button class="add-divider-btn"
+                <button type="button" class="add-divider-btn"
                         onclick="addDivider({{ group.location.id }})">
                     + Add Divider
                 </button>
@@ -927,9 +927,9 @@
             $cell.append($input);
             $cell.append('<span class="amp-divider-line"></span>');
             var $actions = $('<td class="amp-divider-actions"></td>');
-            $actions.append($('<button class="amp-order-btn" title="Move up">▲</button>').on('click', function(e){ e.stopPropagation(); reorderDivider(locId, d.id, 'up'); }));
-            $actions.append($('<button class="amp-order-btn" title="Move down">▼</button>').on('click', function(e){ e.stopPropagation(); reorderDivider(locId, d.id, 'down'); }));
-            $actions.append($('<button class="amp-order-btn amp-divider-delete" title="Delete">✕</button>').on('click', function(e){ e.stopPropagation(); deleteDivider(locId, d.id); }));
+            $actions.append($('<button type="button" class="amp-order-btn" title="Move up">▲</button>').on('click', function(e){ e.stopPropagation(); reorderDivider(locId, d.id, 'up'); }));
+            $actions.append($('<button type="button" class="amp-order-btn" title="Move down">▼</button>').on('click', function(e){ e.stopPropagation(); reorderDivider(locId, d.id, 'down'); }));
+            $actions.append($('<button type="button" class="amp-order-btn amp-divider-delete" title="Delete">✕</button>').on('click', function(e){ e.stopPropagation(); deleteDivider(locId, d.id); }));
             $tr.append($cell).append($actions);
             return $tr;
         }
