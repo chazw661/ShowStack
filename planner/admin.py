@@ -3007,9 +3007,6 @@ class PACableAdmin(BaseEquipmentAdmin):
     form = PACableInlineForm
     inlines = [PAFanOutInline, PAFanOutExtensionInline, PACouplerInline]
 
-    class Media:
-        js = ('admin/js/pa_cable_inlines.js',)
-
     def response_post_save_change(self, request, obj):
         """Issue #23: keep the engineer on the cable edit page after Save so
         a newly-added fan-out becomes available in the Fan-out Extensions
@@ -3211,7 +3208,12 @@ class PACableAdmin(BaseEquipmentAdmin):
                         'tens_with_safety': math.ceil(tens * 1.2),
                         'fives': fives,
                         'fives_with_safety': math.ceil(fives * 1.2),
-                        'couplers': hundreds - 1 if hundreds > 1 else 0,
+                        # Issue #23 follow-up: couplers are now an explicit
+                        # PACoupler entity. The legacy hundreds-1 "between
+                        # consecutive 100' runs" estimate would double up
+                        # with the user-added rows, so this starts at 0 and
+                        # the loop below increments it from PACoupler.
+                        'couplers': 0,
                     }
         
        # Calculate fan out totals with 20% overage and merge extensions into cable counts
@@ -3267,15 +3269,54 @@ class PACableAdmin(BaseEquipmentAdmin):
                     entry['twenty_fives_with_safety'] = math.ceil(entry['twenty_fives'] * 1.2)
                     entry['tens_with_safety'] = math.ceil(entry['tens'] * 1.2)
                     entry['fives_with_safety'] = math.ceil(entry['fives'] * 1.2)
-        
+
+        # Issue #23 follow-up: add explicit PACoupler counts into the
+        # 'COUPLERS' column of the corresponding cable-type row. These are
+        # user-managed coupler items, distinct from the auto-derived
+        # 'between 100' runs' estimate calculated above.
+        coupler_cable_map = {
+            'NL4_COUPLER': 'NL 4',
+            'NL8_COUPLER': 'NL 8',
+            'CACOM_COUPLER': 'CA-COM',
+        }
+        empty_summary = lambda: {
+            'total_runs': 0, 'total_length': 0,
+            'hundreds': 0, 'hundreds_with_safety': 0,
+            'fifties': 0, 'fifties_with_safety': 0,
+            'twenty_fives': 0, 'twenty_fives_with_safety': 0,
+            'tens': 0, 'tens_with_safety': 0,
+            'fives': 0, 'fives_with_safety': 0,
+            'couplers': 0,
+        }
+        coupler_summary = {}  # for the Quick Order List row group
+        for cable in qs.prefetch_related('couplers'):
+            for c in cable.couplers.all():
+                cable_name = coupler_cable_map.get(c.coupler_type)
+                if not cable_name:
+                    continue
+                if cable_name not in cable_summary:
+                    cable_summary[cable_name] = empty_summary()
+                cable_summary[cable_name]['couplers'] += c.quantity
+
+                label = c.get_coupler_type_display()
+                if label not in coupler_summary:
+                    coupler_summary[label] = {'total_quantity': 0, 'with_overage': 0}
+                coupler_summary[label]['total_quantity'] += c.quantity
+
         # Calculate 20% overage for each fan out type
         for fan_out_type in fan_out_summary:
             total = fan_out_summary[fan_out_type]['total_quantity']
             fan_out_summary[fan_out_type]['with_overage'] = math.ceil(total * 1.2)
-        
+
+        # ... and for each coupler type
+        for coupler_label in coupler_summary:
+            total = coupler_summary[coupler_label]['total_quantity']
+            coupler_summary[coupler_label]['with_overage'] = math.ceil(total * 1.2)
+
         # Add to context
         response.context_data['cable_summary'] = cable_summary
         response.context_data['fan_out_summary'] = fan_out_summary
+        response.context_data['coupler_summary'] = coupler_summary
         response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
         
         return response
@@ -3353,16 +3394,31 @@ class PACableAdmin(BaseEquipmentAdmin):
         
         grand_total = 0
         grand_total_with_overage = 0
-        
+
+        # Issue #23 follow-up: tally explicit PACoupler rows by cable-type
+        # display name so the CSV's 'Couplers Needed' column matches the
+        # admin summary (no more legacy hundreds-1 auto-calc).
+        coupler_totals = {}
+        _coupler_cable_map = {
+            'NL4_COUPLER': 'NL 4',
+            'NL8_COUPLER': 'NL 8',
+            'CACOM_COUPLER': 'CA-COM',
+        }
+        for cable in queryset.prefetch_related('couplers'):
+            for c in cable.couplers.all():
+                name = _coupler_cable_map.get(c.coupler_type)
+                if name:
+                    coupler_totals[name] = coupler_totals.get(name, 0) + c.quantity
+
         for cable_type, totals in cable_totals.items():
             total = totals['total_length']
             overage = total * 0.2
             total_with_overage = total * 1.2
-            
+
             hundreds = int(total_with_overage / 100)
             twenty_fives = int((total_with_overage % 100) / 25)
             remainder = total_with_overage % 25
-            couplers = hundreds - 1 if hundreds > 1 else 0
+            couplers = coupler_totals.get(cable_type, 0)
             
             writer.writerow([
                 cable_type,
@@ -3479,7 +3535,14 @@ class PACableAdmin(BaseEquipmentAdmin):
         css = {
             'all': ('planner/css/pa_cable_admin.css',)
         }
-        js = ('planner/js/pa_cable_calculations.js',)
+        # Issue #23: pa_cable_inlines.js handles the X-button delete UX and
+        # the post-save banner. MUST be defined together with the other
+        # assets here — a second `class Media` further up would silently
+        # overwrite this one (Python class-body semantics).
+        js = (
+            'planner/js/pa_cable_calculations.js',
+            'admin/js/pa_cable_inlines.js',
+        )
 
 
     def get_queryset(self, request):

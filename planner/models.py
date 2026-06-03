@@ -2417,6 +2417,9 @@ class PACableSchedule(models.Model):
     @property
     def fan_out_summary(self):
         """Get a summary of all fan outs (and couplers) for display"""
+        # Same PK guard as PAFanOut.__str__ — reverse-FK managers need a PK.
+        if not self.pk:
+            return ""
         parts = []
         for fo in self.fan_outs.prefetch_related('extensions'):
             text = f"{fo.get_fan_out_type_display()} x{fo.quantity}"
@@ -2485,9 +2488,15 @@ class PAFanOut(models.Model):
 
             def __str__(self):
                 result = f"{self.get_fan_out_type_display()} x{self.quantity}"
-                ext_parts = [str(e) for e in self.extensions.all()]
-                if ext_parts:
-                    result += " +" + ", ".join(ext_parts)
+                # Reverse-FK access requires a PK — Django calls __str__ on
+                # unsaved instances during form validation / change logging,
+                # which would otherwise raise ValueError ("'PAFanOut'
+                # instance needs to have a primary key value before this
+                # relationship can be used.").
+                if self.pk:
+                    ext_parts = [str(e) for e in self.extensions.all()]
+                    if ext_parts:
+                        result += " +" + ", ".join(ext_parts)
                 return result
 
 

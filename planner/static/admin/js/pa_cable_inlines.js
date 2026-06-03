@@ -16,17 +16,36 @@
         if (checkbox.dataset.xified) return;
         checkbox.dataset.xified = '1';
         checkbox.style.display = 'none';
-        var td = checkbox.closest('td.delete') || checkbox.parentNode;
-        var label = td.querySelector && td.querySelector('label');
-        if (label) label.style.display = 'none';
+
+        // Find the cell that holds this delete control. Could be td.delete,
+        // could be just a td, depending on theme. Hide any wrapping <label>
+        // (the "DELETE?" prompt) so only our ✕ button is visible.
+        var td = checkbox.closest('td.delete') || checkbox.closest('td') || checkbox.parentNode;
+        var labels = td.querySelectorAll ? td.querySelectorAll('label') : [];
+        for (var i = 0; i < labels.length; i++) labels[i].style.display = 'none';
 
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'inline-deletelink pa-x-delete';
+        // Custom class only — do NOT reuse Django's `inline-deletelink`,
+        // which applies text-indent:-9999px + a background-image and would
+        // collapse the visible ✕ into an empty 16×16 box.
+        btn.className = 'pa-x-delete';
         btn.textContent = '✕';
-        btn.style.cssText =
-            'background:transparent;border:0;color:#c66;font-size:16px;' +
-            'cursor:pointer;padding:2px 6px;font-weight:bold;line-height:1;';
+        btn.setAttribute('style',
+            'display:inline-block;' +
+            'background:transparent;' +
+            'border:0;' +
+            'color:#d05a5a;' +
+            'font-size:18px;' +
+            'font-weight:bold;' +
+            'line-height:1;' +
+            'cursor:pointer;' +
+            'padding:2px 8px;' +
+            'text-indent:0;' +
+            'width:auto;' +
+            'height:auto;' +
+            'overflow:visible;'
+        );
 
         var row = checkbox.closest('tr');
         function apply() {
@@ -42,7 +61,14 @@
             checkbox.checked = !checkbox.checked;
             apply();
         });
-        td.insertBefore(btn, checkbox);
+
+        // Insert at the START of the cell — bullet-proof against wrapping
+        // <label>s or theme variations (insertBefore on a non-child throws).
+        if (td.firstChild) {
+            td.insertBefore(btn, td.firstChild);
+        } else {
+            td.appendChild(btn);
+        }
         apply();
     }
 
@@ -102,12 +128,25 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function xifyAll() {
+        // Broad selector — catches every Django inline DELETE checkbox on
+        // the page regardless of how the surrounding theme wraps it.
         var checkboxes = document.querySelectorAll(
-            '.inline-related input[type="checkbox"][name$="-DELETE"]'
+            'input[type="checkbox"][name$="-DELETE"]'
         );
         for (var i = 0; i < checkboxes.length; i++) xify(checkboxes[i]);
+    }
 
+    document.addEventListener('DOMContentLoaded', function () {
+        xifyAll();
         maybeShowSavedBanner();
+
+        // Django's inline JS rebuilds the formset when 'Add another' is
+        // clicked — re-run after any DOM mutation so newly-saved rows
+        // (and any late re-renders by the theme) also get their X button.
+        if (window.MutationObserver) {
+            var mo = new MutationObserver(function () { xifyAll(); });
+            mo.observe(document.body, { childList: true, subtree: true });
+        }
     });
 })();

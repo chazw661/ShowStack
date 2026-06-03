@@ -259,7 +259,19 @@ def generate_pa_cable_pdf(queryset):
     for fan_out_type, total_qty in fan_out_summary.items():
         qty_with_safety = math.ceil(total_qty * 1.2)
         quick_order_data.append([fan_out_type, "Fan Out", str(qty_with_safety)])
-    
+
+    # Issue #23 follow-up: add PA Couplers to the Quick Order list. Each
+    # PACoupler row represents a discrete coupler item the engineer needs;
+    # roll them up by coupler type with the standard 20% safety margin.
+    coupler_summary = {}
+    for cable in queryset.prefetch_related('couplers'):
+        for c in cable.couplers.all():
+            label = c.get_coupler_type_display()
+            coupler_summary[label] = coupler_summary.get(label, 0) + c.quantity
+    for coupler_label, total_qty in coupler_summary.items():
+        qty_with_safety = math.ceil(total_qty * 1.2)
+        quick_order_data.append([coupler_label, 'Coupler', str(qty_with_safety)])
+
     if len(quick_order_data) > 1:
         # Quick order table style
         qo_style = TableStyle([
