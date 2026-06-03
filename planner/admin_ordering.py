@@ -88,6 +88,10 @@ def ordered_get_app_list(request, app_label=None):
         # the admin sidebar link is suppressed. Re-enable by removing from this
         # set when the changelist 500 is investigated.
         'consoleimport',
+        # MultitrackTemplate — hidden from sidebar (issue #17). Templates are
+        # already managed from within the Multitrack module UI, so the duplicate
+        # sidebar link was just noise.
+        'multitracktemplate',
         # Signal Flow Diagrammer — 2026-05-27 UAT: surfaced in the sidebar so
         # the editor can be opened from a project-scoped admin session. The
         # changelist redirects to /audiopatch/signal-flow/ (planner.admin
