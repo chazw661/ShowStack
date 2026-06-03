@@ -1655,6 +1655,54 @@ class AmpAdmin(BaseEquipmentAdmin):
                 from django.http import JsonResponse
                 return JsonResponse({'success': False})
             
+            elif action == 'reorder_amp':
+                # Issue #18: swap an amp's sort_order with an adjacent amp in
+                # the same location. The template's JS passes both IDs so we
+                # don't have to re-derive the visual order here — that keeps
+                # the swap correct even when many existing rows still share
+                # sort_order=0 from before this change.
+                amp_id = request.POST.get('id')
+                other_id = request.POST.get('other_id')
+                from django.http import JsonResponse
+                if amp_id and other_id and hasattr(request, 'current_project') and request.current_project:
+                    try:
+                        amp = Amp.objects.get(id=amp_id, project=request.current_project)
+                        other = Amp.objects.get(id=other_id, project=request.current_project)
+                        if amp.location_id == other.location_id:
+                            amp.sort_order, other.sort_order = other.sort_order, amp.sort_order
+                            if amp.sort_order == other.sort_order:
+                                other.sort_order = amp.sort_order + 1
+                            amp.save(update_fields=['sort_order'])
+                            other.save(update_fields=['sort_order'])
+                            return JsonResponse({'success': True})
+                    except Amp.DoesNotExist:
+                        pass
+                return JsonResponse({'success': False})
+
+            elif action == 'set_amp_order':
+                # Issue #18: persist the order from a header-click sort. The
+                # JS sorts client-side (it knows how to compare IPs by octet)
+                # and sends back the new ordered list of IDs for one location.
+                ids_raw = request.POST.get('ids', '')
+                from django.http import JsonResponse
+                try:
+                    id_list = [int(x) for x in ids_raw.split(',') if x]
+                except ValueError:
+                    id_list = []
+                if id_list and hasattr(request, 'current_project') and request.current_project:
+                    amps = list(Amp.objects.filter(
+                        id__in=id_list,
+                        project=request.current_project,
+                    ))
+                    if len(amps) == len(id_list) and len({a.location_id for a in amps}) == 1:
+                        amp_map = {a.id: a for a in amps}
+                        for i, amp_id in enumerate(id_list):
+                            amp = amp_map[amp_id]
+                            amp.sort_order = i + 1
+                            amp.save(update_fields=['sort_order'])
+                        return JsonResponse({'success': True})
+                return JsonResponse({'success': False})
+
             elif action == 'reorder_location':
                 loc_id = request.POST.get('id')
                 direction = request.POST.get('direction')

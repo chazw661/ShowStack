@@ -1781,16 +1781,26 @@ class Amp(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         old_model = None
-        
+
         if not is_new:
             try:
                 old_amp = Amp.objects.get(pk=self.pk)
                 old_model = old_amp.amp_model
             except Amp.DoesNotExist:
                 pass
-        
+        elif self.location_id and not self.sort_order:
+            # Issue #18: park new amps at the bottom of their location group
+            # so the changelist matches what the engineer expects after
+            # clicking "Add Amp". Only triggers when sort_order is the default
+            # 0 — explicit callers can still set their own.
+            max_order = Amp.objects.filter(
+                project=self.project,
+                location=self.location,
+            ).aggregate(models.Max('sort_order'))['sort_order__max'] or 0
+            self.sort_order = max_order + 1
+
         super().save(*args, **kwargs)
-        
+
         # Auto-create/update channels when amp is created or model changes
         if is_new or (old_model and old_model != self.amp_model):
             self.setup_channels()

@@ -98,6 +98,21 @@
             text-align: left;
             border-bottom: 1px solid #333;
         }
+        .amp-group-table thead th.sortable-header {
+            cursor: pointer;
+            user-select: none;
+        }
+        .amp-group-table thead th.sortable-header:hover {
+            background: #243042;
+            color: #cde;
+        }
+        .amp-group-table thead th .sort-indicator {
+            display: inline-block;
+            margin-left: 4px;
+            color: #4a9eff;
+            font-size: 9px;
+            width: 8px;
+        }
         .amp-group-table tbody tr.amp-row {
             border-bottom: 1px solid #2a2a2a;
             cursor: pointer;
@@ -493,11 +508,11 @@
                     <thead>
                         <tr>
                             <th style="width:30px;"></th>
-                            <th>Name</th>
-                            <th>Model</th>
-                            <th>IP Address</th>
+                            <th class="sortable-header" data-sort-key="name" title="Click to sort by name">Name<span class="sort-indicator"></span></th>
+                            <th class="sortable-header" data-sort-key="model" title="Click to sort by model">Model<span class="sort-indicator"></span></th>
+                            <th class="sortable-header" data-sort-key="ip" title="Click to sort by IP address">IP Address<span class="sort-indicator"></span></th>
                             <th>Color</th>
-                            <th style="width:50px;"></th>
+                            <th style="width:120px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -505,6 +520,9 @@
                         {% if item.type == 'amp' %}
                         {% with amp=item.obj %}
                         <tr class="amp-row" data-amp-id="{{ amp.id }}"
+                            data-sort-name="{{ amp.name|default_if_none:''|escape }}"
+                            data-sort-model="{% if amp.amp_model %}{{ amp.amp_model|escape }}{% endif %}"
+                            data-sort-ip="{{ amp.ip_address|default_if_none:'' }}"
                             {% if amp.color %}style="background-color: {{ amp.color }}20;"{% endif %}>
                             <td>
                                 <span class="expand-icon">▶</span>
@@ -518,6 +536,14 @@
                                 {% else %}—{% endif %}
                             </td>
                             <td class="amp-row-actions">
+                                <button type="button"
+                                        class="amp-order-btn amp-row-move-up"
+                                        title="Move amp up"
+                                        data-amp-id="{{ amp.id }}">▲</button>
+                                <button type="button"
+                                        class="amp-order-btn amp-row-move-down"
+                                        title="Move amp down"
+                                        data-amp-id="{{ amp.id }}">▼</button>
                                 <button type="button"
                                         class="amp-row-delete"
                                         title="Delete amp"
@@ -762,6 +788,118 @@
                 success: function(r) { if (r.success) location.reload(); }
             });
         };
+
+        // ── Amp row reorder (▲▼ per row, issue #18) ─────────────────────
+        // Swap the row with its DOM-adjacent amp-row in the same group.
+        // We move the DOM nodes ourselves (including the hidden details row
+        // that follows each amp) and persist the swap silently, so a quick
+        // click doesn't trigger a full page reload + lose any open expand.
+        $(document).on('click', '.amp-row-move-up, .amp-row-move-down', function(e) {
+            e.stopPropagation();
+            var $btn = $(this);
+            var ampId = $btn.data('amp-id');
+            var direction = $btn.hasClass('amp-row-move-up') ? 'up' : 'down';
+            var $row = $('tr.amp-row[data-amp-id="' + ampId + '"]');
+            var $details = $('#amp-details-' + ampId);
+            var $tbody = $row.closest('tbody');
+            var $allAmpRows = $tbody.find('tr.amp-row');
+            var idx = $allAmpRows.index($row);
+            var swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (swapIdx < 0 || swapIdx >= $allAmpRows.length) return;
+
+            var $other = $allAmpRows.eq(swapIdx);
+            var otherId = $other.data('amp-id');
+            var $otherDetails = $('#amp-details-' + otherId);
+
+            if (direction === 'up') {
+                $other.before($row);
+                $row.after($details);
+            } else {
+                $otherDetails.after($row);
+                $row.after($details);
+            }
+
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: { action: 'reorder_amp', id: ampId, other_id: otherId },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            // Dividers reference amp positions by index — refresh them now
+            // that the amp rows shifted.
+            var locId = $row.closest('.location-group').data('location-id');
+            if (typeof renderDividers === 'function' && locId) renderDividers(locId);
+        });
+
+        // ── Column header sort (issue #18) ──────────────────────────────
+        // Sorts the visible rows in the clicked group's table client-side
+        // (with proper octet IP compare) and then persists the new order
+        // so manual ▲▼ tweaks afterwards stay consistent.
+        function ipCompare(a, b) {
+            if (!a) return b ? 1 : 0;
+            if (!b) return -1;
+            var as = a.split('.').map(function(x){ return parseInt(x, 10); });
+            var bs = b.split('.').map(function(x){ return parseInt(x, 10); });
+            for (var i = 0; i < 4; i++) {
+                var av = isNaN(as[i]) ? 0 : as[i];
+                var bv = isNaN(bs[i]) ? 0 : bs[i];
+                if (av !== bv) return av < bv ? -1 : 1;
+            }
+            return 0;
+        }
+
+        $(document).on('click', '.amp-group-table .sortable-header', function() {
+            var $th = $(this);
+            var key = $th.data('sort-key');
+            var $table = $th.closest('table');
+            var $headers = $table.find('.sortable-header');
+            var currentDir = $th.data('sort-dir');
+            var newDir = currentDir === 'asc' ? 'desc' : 'asc';
+
+            $headers.removeData('sort-dir').removeAttr('data-sort-dir')
+                    .find('.sort-indicator').text('');
+            $th.attr('data-sort-dir', newDir).data('sort-dir', newDir)
+               .find('.sort-indicator').text(newDir === 'asc' ? '▲' : '▼');
+
+            var $tbody = $table.find('tbody');
+            var rows = $tbody.find('tr.amp-row').toArray();
+
+            rows.sort(function(a, b) {
+                var va = $(a).data('sort-' + key);
+                var vb = $(b).data('sort-' + key);
+                va = va == null ? '' : ('' + va);
+                vb = vb == null ? '' : ('' + vb);
+                var cmp;
+                if (key === 'ip') {
+                    cmp = ipCompare(va, vb);
+                } else {
+                    var la = va.toLowerCase(), lb = vb.toLowerCase();
+                    cmp = la < lb ? -1 : (la > lb ? 1 : 0);
+                }
+                return newDir === 'asc' ? cmp : -cmp;
+            });
+
+            // Move each amp-row + its details-row into the new positions.
+            var sortedIds = [];
+            rows.forEach(function(row) {
+                var ampId = $(row).data('amp-id');
+                sortedIds.push(ampId);
+                $tbody.append(row);
+                var $details = $('#amp-details-' + ampId);
+                if ($details.length) $tbody.append($details);
+            });
+
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: { action: 'set_amp_order', ids: sortedIds.join(',') },
+                headers: { 'X-CSRFToken': getCookie('csrftoken'), 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            var locId = $table.closest('.location-group').data('location-id');
+            if (typeof renderDividers === 'function' && locId) renderDividers(locId);
+        });
 
         // ── Amp Dividers ─────────────────────────────────────────────
         window.CSRF_TOKEN = '{{ csrf_token }}';
