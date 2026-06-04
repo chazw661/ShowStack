@@ -1801,8 +1801,127 @@ class AmpAdmin(BaseEquipmentAdmin):
             extra_context['all_locations'] = all_locations
             extra_context['has_grouped_layout'] = True
         
-        return super().changelist_view(request, extra_context=extra_context)    
-            
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def get_urls(self):
+        # Issue #25: graphical 'amp rack' overview tab. Read-only reference
+        # view — engineers use it while wiring racks. Edits still go through
+        # the standard amp change form.
+        urls = super().get_urls()
+        custom = [
+            path(
+                'rack-view/',
+                self.admin_site.admin_view(self.rack_view),
+                name='planner_amp_rack_view',
+            ),
+        ]
+        return custom + urls
+
+    def rack_view(self, request):
+        current_project = getattr(request, 'current_project', None)
+        locations_with_amps = []
+
+        if current_project:
+            amps_qs = (
+                Amp.objects
+                .filter(project=current_project)
+                .select_related('location', 'amp_model')
+                .prefetch_related('channels')
+                .order_by('location__sort_order', 'location__name', 'sort_order', 'name')
+            )
+            amps = list(amps_qs)
+            dividers = list(
+                AmpDivider.objects
+                .filter(project=current_project)
+                .select_related('location')
+            )
+
+            def build_card(amp):
+                channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
+                model = amp.amp_model
+
+                nl4_rows = []
+                if model and model.nl4_connector_count >= 1:
+                    nl4_rows.append(('A', '1/2', amp.nl4_a_pair_1))
+                    nl4_rows.append(('A', '3/4', amp.nl4_a_pair_2))
+                if model and model.nl4_connector_count >= 2:
+                    nl4_rows.append(('B', '5/6', amp.nl4_b_pair_1))
+                    nl4_rows.append(('B', '7/8', amp.nl4_b_pair_2))
+
+                cacom_rows = []
+                if model and model.cacom_output_count:
+                    for i in range(1, min(model.cacom_output_count + 1, 5)):
+                        base_ch = (i - 1) * 4
+                        for n in range(1, 5):
+                            cacom_rows.append((
+                                i,
+                                base_ch + n,
+                                getattr(amp, f'cacom_{i}_ch{n}', ''),
+                            ))
+
+                return {
+                    'type': 'amp',
+                    'amp': amp,
+                    'channels': channels,
+                    'nl4_rows': nl4_rows,
+                    'cacom_rows': cacom_rows,
+                }
+
+            # Group amps by location first, in the order they'll display.
+            amps_by_loc = {}
+            for amp in amps:
+                amps_by_loc.setdefault(amp.location_id, []).append(amp)
+
+            # Dividers are positioned by `after` index (stored in sort_order):
+            # the divider renders directly below amps_in_loc[after]. -1 means
+            # before all amps; >= len(amps) means after all of them. Matches
+            # the changelist semantics (templates/admin/planner/amp/change_list.html
+            # renderDividers()).
+            divs_by_loc = {}
+            for d in dividers:
+                divs_by_loc.setdefault(d.location_id, []).append(d)
+
+            for loc_id, loc_amps in amps_by_loc.items():
+                items = []
+                loc_divs = divs_by_loc.get(loc_id, [])
+                # Group dividers by their `after` index for fast lookup.
+                divs_at = {}
+                for d in loc_divs:
+                    divs_at.setdefault(d.sort_order, []).append(d)
+                for after_idx, ds in divs_at.items():
+                    ds.sort(key=lambda d: d.id)  # stable order for same anchor
+
+                # Dividers anchored before the first amp (after < 0).
+                for after_idx in sorted(k for k in divs_at if k < 0):
+                    for d in divs_at[after_idx]:
+                        items.append({'type': 'divider', 'divider': d})
+
+                for idx, amp in enumerate(loc_amps):
+                    items.append(build_card(amp))
+                    for d in divs_at.get(idx, []):
+                        items.append({'type': 'divider', 'divider': d})
+
+                # Dividers anchored past the last amp.
+                last_idx = len(loc_amps) - 1
+                for after_idx in sorted(k for k in divs_at if k > last_idx):
+                    for d in divs_at[after_idx]:
+                        items.append({'type': 'divider', 'divider': d})
+
+                locations_with_amps.append({
+                    'location': loc_amps[0].location,
+                    'items': items,
+                })
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Amp Rack View',
+            'opts': self.model._meta,
+            'locations_with_amps': locations_with_amps,
+            'current_project': current_project,
+            'has_view_permission': True,
+        }
+        return render(request, 'admin/planner/amp/rack_view.html', context)
+
     def color_preview(self, obj):
         """Show a small color preview in the list"""
         if obj.color:
@@ -1831,7 +1950,7 @@ class AmpAdmin(BaseEquipmentAdmin):
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
             ('Basic Information', {
-                'fields': ('location', 'amp_model', 'name', 'ip_address', 'color')
+                'fields': ('location', 'amp_model', 'name', 'ip_address', 'preset', 'color')
             }),
         ]
         

@@ -1647,6 +1647,12 @@ class Amp(models.Model):
     )
     sort_order = models.IntegerField(default=0, help_text="Order within location group")
     ip_address = models.GenericIPAddressField(blank=True, null=True)
+    preset = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="Preset name loaded on this amp (e.g., 'KS28 SUB', 'K2 MAIN')"
+    )
 
     color = models.CharField(
         max_length=7,
@@ -1655,7 +1661,7 @@ class Amp(models.Model):
         default='#FFFFFF',
         help_text="Background color for this amp in lists (hex code, e.g., #FF5733)"
     )
-    
+
     # NL4 Connector A (if present)
     nl4_a_pair_1 = models.CharField(
         max_length=50, blank=True, 

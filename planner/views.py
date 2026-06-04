@@ -3154,22 +3154,28 @@ def amp_divider_sync(request):
         
         result = []
         for i, d in enumerate(dividers_data):
+            # Issue #25: the changelist tracks divider position as an `after`
+            # index (which amp to sit below). The rack view needs the same
+            # position server-side so it can mirror the changelist layout,
+            # so persist `after` into sort_order. Falls back to the array
+            # index when `after` is missing (legacy clients).
+            after = d.get('after')
+            if after is None:
+                after = i
             db_id = d.get('id')
             if db_id and db_id in existing:
-                # Update existing
                 div = existing[db_id]
                 div.label = d.get('label', '')
-                div.sort_order = i
+                div.sort_order = after
                 div.save()
                 seen_ids.add(db_id)
             else:
-                # Create new
                 div = AmpDivider.objects.create(
                     location=location, project=project,
-                    label=d.get('label', ''), sort_order=i
+                    label=d.get('label', ''), sort_order=after,
                 )
                 seen_ids.add(div.id)
-            result.append({'db_id': div.id, 'sort_order': i})
+            result.append({'db_id': div.id, 'sort_order': after})
         
         # Delete removed dividers
         for did, div in existing.items():
