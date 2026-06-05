@@ -1592,6 +1592,7 @@ AMP_PRESET_SUGGESTIONS = (
     'K2_110',
     'K2_90',
     'K2_70',
+    'CUSTOM',
 )
 
 
