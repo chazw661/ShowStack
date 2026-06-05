@@ -39,7 +39,7 @@ from .models import ConsoleImport
 from .models import MultitrackSession, MultitrackTrack
 from .models import MultitrackTemplate, MultitrackTemplateSlot
 from .models import SignalFlowDiagram
-from .models import Location, Amp, AmpChannel, AmpDivider
+from .models import Location, Amp, AmpChannel, AmpDivider, AMP_PRESET_SUGGESTIONS
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup
@@ -1512,12 +1512,34 @@ class AmpChannelInline(admin.TabularInline):
         return FormSetWithParent
 
 
+class AmpPresetInput(forms.TextInput):
+    """Issue #26: text input backed by a <datalist> of common L-Acoustics
+    presets. Users can either pick a suggestion or type anything custom."""
+
+    def render(self, name, value, attrs=None, renderer=None):
+        from django.utils.html import format_html, format_html_join
+        list_id = f'id_{name}_datalist'
+        attrs = dict(attrs or {})
+        attrs['list'] = list_id
+        attrs.setdefault('autocomplete', 'off')
+        input_html = super().render(name, value, attrs, renderer)
+        options_html = format_html_join(
+            '', '<option value="{}"></option>',
+            ((p,) for p in AMP_PRESET_SUGGESTIONS),
+        )
+        return format_html(
+            '{}<datalist id="{}">{}</datalist>',
+            input_html, list_id, options_html,
+        )
+
+
 class AmpAdminForm(forms.ModelForm):
     class Meta:
         model = Amp
         fields = '__all__'
         widgets = {
             'color': forms.TextInput(attrs={'type': 'color', 'value': '#FFFFFF'}),
+            'preset': AmpPresetInput(attrs={'class': 'vTextField'}),
         }
     
     def __init__(self, *args, **kwargs):

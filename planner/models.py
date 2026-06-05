@@ -1571,6 +1571,30 @@ class DeviceOutput(models.Model):
     #-------Amps--------
 
 
+# Issue #26: suggested presets for the Amp.preset dropdown. Free-text is
+# still allowed — the admin renders an <input list> so users can pick one
+# of these or type any custom name.
+AMP_PRESET_SUGGESTIONS = (
+    'KARA II_110',
+    'KARA II_90',
+    'KARA II_70',
+    'KARA',
+    'KIVA',
+    'KIVA II',
+    'X8',
+    'X12',
+    '5XT',
+    'SB18_60',
+    'SB18_100',
+    'KS28_60',
+    'KS28_100',
+    'KS_28_100',
+    'K2_110',
+    'K2_90',
+    'K2_70',
+)
+
+
 # Updated models based on spreadsheet analysis
 # Add these models to your existing models.py file
 
