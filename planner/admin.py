@@ -1513,31 +1513,23 @@ class AmpChannelInline(admin.TabularInline):
 
 
 class AmpPresetInput(forms.TextInput):
-    """Issue #26: custom combobox for Amp.preset — clicking the chevron
-    always shows every suggestion (the HTML5 datalist filters by current
-    value, which hid all but the matching one). Free text is preserved:
-    users can pick a suggestion or type any custom preset name."""
-
-    class Media:
-        css = {'all': ('admin/css/amp_preset_combo.css',)}
-        js = ('admin/js/amp_preset_combo.js',)
+    """Issue #26: text input backed by a <datalist> of common L-Acoustics
+    presets. Users can either pick a suggestion or type anything custom."""
 
     def render(self, name, value, attrs=None, renderer=None):
         from django.utils.html import format_html, format_html_join
+        list_id = f'id_{name}_datalist'
         attrs = dict(attrs or {})
+        attrs['list'] = list_id
         attrs.setdefault('autocomplete', 'off')
         input_html = super().render(name, value, attrs, renderer)
         options_html = format_html_join(
-            '',
-            '<li class="amp-preset-option" data-value="{0}">{0}</li>',
+            '', '<option value="{}"></option>',
             ((p,) for p in AMP_PRESET_SUGGESTIONS),
         )
         return format_html(
-            '<div class="amp-preset-combo">{}'
-            '<button type="button" class="amp-preset-toggle" tabindex="-1" '
-            'aria-label="Show presets">&#9662;</button>'
-            '<ul class="amp-preset-menu" hidden>{}</ul></div>',
-            input_html, options_html,
+            '{}<datalist id="{}">{}</datalist>',
+            input_html, list_id, options_html,
         )
 
 
