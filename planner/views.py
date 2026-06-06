@@ -3186,6 +3186,96 @@ def amp_divider_sync(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
+# --------- Issue #27: inline edit endpoints for the unified rack page ---------
+
+# Fields editable inline on an Amp card.
+_INLINE_AMP_FIELDS = (
+    {'name', 'ip_address', 'preset'}
+    | {f'nl4_{a}_pair_{i}' for a in 'ab' for i in (1, 2)}
+    | {f'nl8_{a}_pair_{i}' for a in 'ab' for i in (1, 2, 3, 4)}
+    | {f'cacom_{c}_ch{n}' for c in (1, 2, 3, 4) for n in (1, 2, 3, 4)}
+    | {f'sc32_ch{n}' for n in range(1, 17)}
+)
+_INLINE_CHANNEL_FIELDS = {'channel_name', 'avb_stream', 'aes_input', 'analog_input'}
+
+
+def _project_or_403(request):
+    project = getattr(request, 'current_project', None)
+    if not project:
+        return None
+    return project
+
+
+@require_POST
+@login_required
+def amp_inline_update(request, amp_id):
+    """Issue #27: update a single Amp field from the rack page.
+
+    Whitelists which fields the client can write so a stray JS bug or
+    malicious POST can't reach e.g. `project_id` and re-tenant the row.
+    """
+    project = _project_or_403(request)
+    if not project:
+        return JsonResponse({'success': False, 'error': 'No project'}, status=400)
+    amp = get_object_or_404(Amp, id=amp_id, project=project)
+    field = request.POST.get('field', '')
+    if field not in _INLINE_AMP_FIELDS:
+        return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
+    value = request.POST.get('value', '')
+    if field == 'ip_address':
+        value = value.strip() or None
+    setattr(amp, field, value)
+    try:
+        amp.save(update_fields=[field])
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    return JsonResponse({'success': True})
+
+
+@require_POST
+@login_required
+def amp_channel_inline_update(request, channel_id):
+    """Issue #27: update a single AmpChannel field from the rack page."""
+    project = _project_or_403(request)
+    if not project:
+        return JsonResponse({'success': False, 'error': 'No project'}, status=400)
+    channel = get_object_or_404(AmpChannel, id=channel_id, amp__project=project)
+    field = request.POST.get('field', '')
+    if field not in _INLINE_CHANNEL_FIELDS:
+        return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
+    value = request.POST.get('value', '')
+    setattr(channel, field, value)
+    channel.save(update_fields=[field])
+    return JsonResponse({'success': True})
+
+
+@require_POST
+@login_required
+def amp_inline_create(request):
+    """Issue #27: create a new Amp from the rack page's per-location
+    '+ Add Amp' button. Takes the minimum needed to scaffold channels
+    (location + amp_model + name); everything else gets edited inline."""
+    from .models import AmpModel
+    project = _project_or_403(request)
+    if not project:
+        return JsonResponse({'success': False, 'error': 'No project'}, status=400)
+    try:
+        location = get_object_or_404(Location, id=request.POST.get('location_id'), project=project)
+        amp_model = get_object_or_404(AmpModel, id=request.POST.get('amp_model_id'))
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    name = (request.POST.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'success': False, 'error': 'Name required'}, status=400)
+    amp = Amp.objects.create(
+        project=project,
+        location=location,
+        amp_model=amp_model,
+        name=name,
+    )
+    return JsonResponse({'success': True, 'amp_id': amp.id})
+
+
 def all_amps_pdf_export(request):
     """Export all amplifiers to PDF - filtered by current project"""
     

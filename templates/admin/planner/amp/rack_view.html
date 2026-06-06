@@ -1,86 +1,112 @@
 {% extends "admin/base_site.html" %}
 {% load i18n admin_urls static %}
 
-{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block title %}Amp Rack View | {{ site_title|default:_('Django site admin') }}{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
     &rsaquo; <a href="{% url 'admin:app_list' app_label='planner' %}">{% trans 'Planner' %}</a>
-    &rsaquo; <a href="{% url 'admin:planner_amp_changelist' %}">Amplifier Assignments</a>
-    &rsaquo; Rack View
+    &rsaquo; Amplifier Assignments
 </div>
 {% endblock %}
 
 {% block extrastyle %}
 {{ block.super }}
 <style>
+    /* ── Toolbar at top ───────────────────────────────────────── */
     .rack-toolbar {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin: 0 0 16px 0;
+        gap: 12px;
+        flex-wrap: wrap;
     }
-    .rack-toolbar h1 {
-        margin: 0;
-        font-size: 20px;
-        color: #e0e0e0;
-    }
-    a.rack-back-btn,
-    a.rack-back-btn:link,
-    a.rack-back-btn:visited,
-    a.rack-back-btn:hover,
-    a.rack-back-btn:focus,
-    a.rack-back-btn:active {
+    .rack-toolbar h1 { margin: 0; font-size: 22px; color: #e0e0e0; }
+    .rack-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .rack-btn {
         background-color: #4a9eff;
         color: #ffffff !important;
-        padding: 8px 15px;
+        padding: 8px 14px;
         text-decoration: none;
         border-radius: 4px;
         font-size: 13px;
         font-weight: 600;
+        border: none;
+        cursor: pointer;
     }
+    .rack-btn:hover { filter: brightness(1.1); }
+    .rack-btn.purple { background-color: #6a5acd; }
+    .rack-btn.amber  { background-color: #d4a373; }
 
-    /* Divider rows (mirror the changelist look — issue #25) */
-    .rack-divider {
+    /* ── Filter row (search + location chips) ─────────────────── */
+    .rack-filter-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+    .rack-search {
+        background: #1a2533;
+        border: 1px solid #444;
+        color: #e0e0e0;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        min-width: 220px;
+    }
+    .rack-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .rack-chip {
+        background: #1a2533;
+        border: 1px solid #444;
+        color: #9ab;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .rack-chip.active { background: #2a3f5f; color: #fff; border-color: #4a9eff; }
+
+    /* ── Location group ───────────────────────────────────────── */
+    .rack-location { margin-bottom: 28px; }
+    .rack-location-header {
         display: flex;
         align-items: center;
-        gap: 16px;
-        margin: 32px 0;
-        padding: 0 6px;
-        color: #4a9eff;
-        font-size: 22px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+        gap: 10px;
+        padding: 8px 0 8px;
+        border-bottom: 1px solid #444;
+        margin-bottom: 16px;
+        cursor: pointer;
+        user-select: none;
     }
-    .rack-divider::before,
-    .rack-divider::after {
-        content: "";
-        flex: 1;
-        height: 1px;
-        background: #4a9eff55;
+    .rack-location-chevron {
+        color: #9ab;
+        font-size: 14px;
+        transition: transform 0.2s;
+        width: 16px;
+        flex-shrink: 0;
     }
-    .rack-divider:empty::before,
-    .rack-divider:empty::after {
-        background: #4a9eff33;
-    }
-
-    /* Location header */
-    .rack-location {
-        margin-bottom: 28px;
-    }
+    .rack-location-chevron.open { transform: rotate(90deg); }
     .rack-location-name {
         font-size: 26px;
         font-weight: bold;
         color: #9ab;
-        padding: 10px 0 8px;
-        border-bottom: 1px solid #444;
-        margin-bottom: 16px;
         letter-spacing: 0.04em;
+        flex: 1;
     }
+    .rack-location-count {
+        font-size: 12px;
+        color: #9ab;
+        background: rgba(0,0,0,0.3);
+        padding: 2px 10px;
+        border-radius: 10px;
+    }
+    .rack-location-body { display: none; }
+    .rack-location-body.open { display: block; }
 
-    /* Each amp card (front-panel layout) */
+    /* ── Amp card (front-panel layout) ─────────────────────────── */
     .amp-card {
         display: grid;
         grid-template-columns: 380px 1fr 240px;
@@ -101,71 +127,126 @@
         grid-column: 1 / -1;
         background: #1a2533;
         padding: 6px 10px;
-        font-weight: bold;
-        color: #ffe066;
         border-bottom: 1px solid #444;
         display: flex;
-        justify-content: space-between;
+        gap: 10px;
         align-items: center;
     }
-    .amp-card-header a {
-        color: #ffe066;
-        text-decoration: none;
+    .amp-card-header .amp-name-input {
+        background: transparent !important;
+        color: #ffe066 !important;
+        border: 1px solid transparent !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
+        padding: 2px 6px !important;
+        flex: 1;
+        min-width: 140px;
     }
-    .amp-card-header a:hover { text-decoration: underline; }
-    .amp-card-meta {
-        font-weight: normal;
-        color: #9ab;
+    .amp-card-header .amp-name-input:hover,
+    .amp-card-header .amp-name-input:focus {
+        border-color: #444 !important;
+        background: #0e1820 !important;
+        outline: none !important;
+    }
+    .amp-card-meta { color: #9ab; font-size: 11px; }
+    .amp-card-actions { display: flex; gap: 4px; }
+    .amp-card-actions a, .amp-card-actions button {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid #444;
+        color: #ccc !important;
+        padding: 3px 8px;
+        border-radius: 3px;
+        cursor: pointer;
         font-size: 11px;
+        text-decoration: none;
+        line-height: 1.4;
+    }
+    .amp-card-actions a:hover, .amp-card-actions button:hover {
+        background: rgba(255,255,255,0.15); color: #fff !important;
+    }
+    .amp-card-actions .amp-delete-btn {
+        color: #ff7373 !important;
+        border-color: #66333355;
+    }
+    .amp-card-actions .amp-delete-btn:hover {
+        background: rgba(255,82,82,0.15);
+        color: #ff7373 !important;
     }
 
-    /* Input area (left) */
+    /* ── Editable cells ──────────────────────────────────────── */
     .amp-input-table {
         width: 100%;
         border-collapse: collapse;
     }
     .amp-input-table th,
     .amp-input-table td {
-        padding: 3px 6px;
+        padding: 0;
         border: 1px solid #3a3a3a;
-        text-align: left;
         font-size: 11px;
     }
     .amp-input-table th {
         background: #1a2533;
         color: #9ab;
         font-weight: normal;
+        padding: 3px 6px;
     }
     .amp-input-table .input-header-analog {
         background: #ffe066 !important;
         color: #222 !important;
         font-weight: bold;
         text-align: center;
+        padding: 3px 6px;
     }
     .amp-input-table .input-header-aes {
         background: #9ed87a !important;
         color: #222 !important;
         font-weight: bold;
         text-align: center;
+        padding: 3px 6px;
     }
     .amp-input-table .ch-num {
         background: #1a2533;
         color: #9ab;
         text-align: center;
         width: 28px;
+        padding: 3px 6px;
     }
     .amp-input-table .stream-col {
         background: #1a2533;
         color: #9ab;
         text-align: center;
-        width: 60px;
-    }
-    .amp-input-table .input-val {
-        background: #fff !important;
-        color: #222 !important;
+        width: 80px;
+        padding: 0;
     }
 
-    /* Middle: IP + PRESET */
+    /* Generic editable input style */
+    .amp-cell-input {
+        width: 100%;
+        background: #ffffff !important;
+        color: #222 !important;
+        border: none !important;
+        padding: 3px 6px !important;
+        font-size: 11px !important;
+        font-family: inherit !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+    }
+    .amp-cell-input:focus {
+        outline: 2px solid #4a9eff !important;
+        outline-offset: -2px;
+    }
+    .amp-cell-input.saving { background: #fff7d0 !important; }
+    .amp-cell-input.saved  { background: #e0fbe0 !important; }
+    .amp-cell-input.error  { background: #ffd0d0 !important; }
+
+    select.amp-cell-input {
+        background-color: #ffffff !important;
+        -webkit-appearance: menulist !important;
+        appearance: menulist !important;
+    }
+
+    /* ── Middle: IP + PRESET pills ────────────────────────────── */
     .amp-card-middle {
         display: flex;
         flex-direction: column;
@@ -178,9 +259,7 @@
         padding: 6px 10px;
         border: 1px solid #c0a020;
         border-radius: 3px;
-        font-weight: bold;
         text-align: center;
-        font-size: 12px;
     }
     .amp-card-middle .pill .label {
         font-size: 10px;
@@ -189,21 +268,34 @@
         margin-bottom: 2px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        font-weight: bold;
     }
-    .amp-card-middle .pill .val {
-        font-size: 14px;
+    .amp-card-middle .pill input,
+    .amp-card-middle .pill select {
+        width: 100% !important;
+        background: transparent !important;
         color: #222 !important;
+        border: none !important;
+        text-align: center !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
+        padding: 2px !important;
+        margin: 0 !important;
+        font-family: inherit !important;
+        box-sizing: border-box !important;
     }
-    .amp-card-middle .pill.empty .val {
-        color: #888 !important;
-        font-weight: normal;
-        font-style: italic;
+    .amp-card-middle .pill input:focus,
+    .amp-card-middle .pill select:focus {
+        outline: 2px solid #4a9eff !important;
+        outline-offset: -2px;
+        background: rgba(255,255,255,0.4) !important;
     }
+    .amp-card-middle .pill.saving { background: #fff7d0 !important; }
+    .amp-card-middle .pill.saved  { background: #e0fbe0 !important; }
+    .amp-card-middle .pill.error  { background: #ffd0d0 !important; }
 
-    /* Right: outputs */
-    .amp-output-block {
-        margin-bottom: 8px;
-    }
+    /* ── Right: outputs ──────────────────────────────────────── */
+    .amp-output-block { margin-bottom: 8px; }
     .amp-output-title {
         background: #c03a3a;
         color: #fff;
@@ -219,7 +311,7 @@
         border-collapse: collapse;
     }
     .amp-output-table td {
-        padding: 3px 6px;
+        padding: 0;
         border: 1px solid #3a3a3a;
         font-size: 11px;
     }
@@ -228,10 +320,7 @@
         color: #9ab;
         text-align: center;
         width: 50px;
-    }
-    .amp-output-table td.val-col {
-        background: #fff !important;
-        color: #222 !important;
+        padding: 3px 6px;
     }
     .empty-output {
         padding: 6px;
@@ -239,6 +328,58 @@
         font-style: italic;
         font-size: 11px;
         text-align: center;
+    }
+
+    /* ── Dividers ─────────────────────────────────────────────── */
+    .rack-divider {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 32px 0;
+        padding: 0 6px;
+        color: #4a9eff;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+    .rack-divider::before,
+    .rack-divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: #4a9eff55;
+    }
+
+    /* ── Add Amp form per location group ──────────────────────── */
+    .add-amp-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 6px;
+        background: rgba(74, 158, 255, 0.05);
+        border: 1px dashed #4a9eff55;
+        border-radius: 4px;
+        margin-bottom: 14px;
+    }
+    .add-amp-row label { color: #9ab; font-size: 12px; }
+    .add-amp-row select, .add-amp-row input {
+        background: #1a2533;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        padding: 5px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+    }
+    .add-amp-row .add-amp-btn {
+        background: #4a9eff;
+        color: #fff !important;
+        border: none;
+        padding: 5px 14px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
     }
 
     .no-amps {
@@ -249,120 +390,542 @@
         border: 1px dashed #444;
         border-radius: 4px;
     }
+
+    /* ── Locations modal ──────────────────────────────────────── */
+    .rack-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+    .rack-modal.open { display: flex; }
+    .rack-modal-panel {
+        background: #1a2533;
+        border: 1px solid #444;
+        border-radius: 6px;
+        padding: 20px;
+        min-width: 420px;
+        max-width: 90vw;
+        max-height: 85vh;
+        overflow-y: auto;
+        color: #e0e0e0;
+    }
+    .rack-modal-panel h2 {
+        margin: 0 0 16px;
+        font-size: 16px;
+        color: #ffe066;
+    }
+    .rack-modal-close {
+        float: right;
+        background: transparent;
+        border: none;
+        color: #9ab;
+        font-size: 18px;
+        cursor: pointer;
+    }
+    .loc-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px solid #2a3f5f;
+    }
+    .loc-row input {
+        flex: 1;
+        background: #0e1820;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 13px;
+    }
+    .loc-row .loc-mini-btn {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid #444;
+        color: #ccc;
+        padding: 2px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px;
+    }
+    .loc-row .loc-delete { color: #ff7373; border-color: #66333355; }
+    .add-loc-row { display: flex; gap: 8px; margin-top: 12px; }
+    .add-loc-row input {
+        flex: 1;
+        background: #0e1820;
+        color: #e0e0e0;
+        border: 1px solid #444;
+        padding: 6px 10px;
+        border-radius: 3px;
+    }
+    .add-loc-row button {
+        background: #4a9eff;
+        color: #fff;
+        border: none;
+        padding: 6px 14px;
+        border-radius: 3px;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
 {% block content_title %}
 <div class="rack-toolbar">
-    <h1>{{ title }}{% if current_project %} &mdash; {{ current_project.name }}{% endif %}</h1>
-    <a href="{% url 'admin:planner_amp_changelist' %}" class="rack-back-btn">&larr; Back to Amp List</a>
+    <h1>Amplifier Assignments{% if request.current_project %} &mdash; {{ request.current_project.name }}{% endif %}</h1>
+    {% if request.current_project %}
+    <div class="rack-actions">
+        <button type="button" class="rack-btn purple" onclick="openLocationsModal()">Locations</button>
+        <a class="rack-btn" href="{% url 'planner:all_amps_pdf_export' %}">Export to PDF</a>
+        <button type="button" class="rack-btn amber" onclick="collapseAll()">Collapse / Expand All</button>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block content %}
-{% if not current_project %}
-    <div class="no-amps">Select a project to see the rack view.</div>
-{% elif not locations_with_amps %}
-    <div class="no-amps">No amplifiers in this project yet. Add some amps from the <a href="{% url 'admin:planner_amp_changelist' %}">Amplifier Assignments</a> page.</div>
+{% if not request.current_project %}
+    <div class="no-amps">Select a project to see amplifier assignments.</div>
 {% else %}
 
-    {% for group in locations_with_amps %}
-    <div class="rack-location">
-        <div class="rack-location-name">{{ group.location.name }}</div>
-
-        {% for item in group.items %}
-        {% if item.type == 'divider' %}
-        <div class="rack-divider">{{ item.divider.label|default:"" }}</div>
-        {% else %}
-        {% with card=item %}
-        <div class="amp-card" style="{% if card.amp.color and card.amp.color != '#FFFFFF' %}border-left: 6px solid {{ card.amp.color }};{% endif %}">
-            <div class="amp-card-header">
-                <a href="{% url 'admin:planner_amp_change' card.amp.pk %}">{{ card.amp.name }}</a>
-                <span class="amp-card-meta">{{ card.amp.amp_model|default:"" }}</span>
-            </div>
-
-            {# ── Left: Inputs ─────────────────────────────────── #}
-            <div class="amp-card-section">
-                <table class="amp-input-table">
-                    <thead>
-                        <tr>
-                            <th class="stream-col">AVB stream</th>
-                            <th class="ch-num">XLR</th>
-                            <th class="input-header-analog">Input Analogue</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ch in card.channels %}
-                        <tr>
-                            <td class="stream-col">{{ ch.avb_stream|default:"—" }}</td>
-                            <td class="ch-num">{{ ch.channel_number }}</td>
-                            <td class="input-val">{{ ch.analog_input|default:"" }}</td>
-                        </tr>
-                        {% endfor %}
-                        <tr><th colspan="2"></th><th class="input-header-aes">Input AES</th></tr>
-                        {% for ch in card.channels %}
-                        <tr>
-                            <td class="stream-col"></td>
-                            <td class="ch-num">{{ ch.channel_number }}</td>
-                            <td class="input-val">{{ ch.aes_input|default:"" }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            {# ── Middle: IP + PRESET ──────────────────────────── #}
-            <div class="amp-card-section amp-card-middle">
-                <div class="pill {% if not card.amp.ip_address %}empty{% endif %}">
-                    <span class="label">IP Address</span>
-                    <span class="val">{{ card.amp.ip_address|default:"—" }}</span>
-                </div>
-                <div class="pill {% if not card.amp.preset %}empty{% endif %}">
-                    <span class="label">Preset</span>
-                    <span class="val">{{ card.amp.preset|default:"—" }}</span>
-                </div>
-            </div>
-
-            {# ── Right: Outputs ───────────────────────────────── #}
-            <div class="amp-card-section">
-                {% if card.cacom_rows %}
-                <div class="amp-output-block">
-                    <div class="amp-output-title">CaCom Out</div>
-                    <table class="amp-output-table">
-                        {% for connector, ch_num, val in card.cacom_rows %}
-                        <tr>
-                            <td class="label-col">{{ ch_num }}</td>
-                            <td class="val-col">{{ val|default:"" }}</td>
-                        </tr>
-                        {% endfor %}
-                    </table>
-                </div>
-                {% endif %}
-
-                {% if card.nl4_rows %}
-                <div class="amp-output-block">
-                    <div class="amp-output-title">NL4 Out</div>
-                    <table class="amp-output-table">
-                        {% for conn, pair, val in card.nl4_rows %}
-                        <tr>
-                            <td class="label-col">{{ pair }}</td>
-                            <td class="val-col">{{ val|default:"" }}</td>
-                        </tr>
-                        {% endfor %}
-                    </table>
-                </div>
-                {% endif %}
-
-                {% if not card.cacom_rows and not card.nl4_rows %}
-                <div class="empty-output">No speaker outputs configured</div>
-                {% endif %}
-            </div>
-        </div>
-        {% endwith %}
-        {% endif %}
+<div class="rack-filter-row">
+    <input type="text" class="rack-search" id="rack-search" placeholder="Search amps by name, IP, or label…">
+    <div class="rack-chips" id="rack-chips">
+        <button type="button" class="rack-chip active" data-loc="all">All</button>
+        {% for group in grouped_amps %}
+        <button type="button" class="rack-chip" data-loc="{{ group.location.id }}">{{ group.location.name }} <span style="opacity:0.6">{{ group.amp_count }}</span></button>
         {% endfor %}
     </div>
-    {% endfor %}
+</div>
+
+{% if not grouped_amps %}
+    <div class="no-amps">
+        No amplifiers yet. Add a location from <button type="button" class="rack-btn purple" onclick="openLocationsModal()">Locations</button>, then add amps below it.
+    </div>
+{% endif %}
+
+{% for group in grouped_amps %}
+<div class="rack-location" data-location-id="{{ group.location.id }}">
+    <div class="rack-location-header" onclick="toggleLocation(this)">
+        <span class="rack-location-chevron open">▶</span>
+        <span class="rack-location-name">{{ group.location.name }}</span>
+        <span class="rack-location-count">{{ group.amp_count }} amp{{ group.amp_count|pluralize }}</span>
+    </div>
+    <div class="rack-location-body open">
+
+        {% for item in group.items %}
+            {% if item.type == 'divider' %}
+                <div class="rack-divider">{{ item.obj.label|default:"" }}</div>
+            {% else %}
+            {% with card=item.card %}
+            <div class="amp-card"
+                 data-amp-id="{{ card.amp.pk }}"
+                 data-amp-name="{{ card.amp.name|lower }}"
+                 data-amp-ip="{{ card.amp.ip_address|default:'' }}"
+                 style="{% if card.amp.color and card.amp.color != '#FFFFFF' %}border-left: 6px solid {{ card.amp.color }};{% endif %}">
+
+                <div class="amp-card-header">
+                    <input type="text"
+                           class="amp-cell-input amp-name-input"
+                           value="{{ card.amp.name }}"
+                           data-amp-id="{{ card.amp.pk }}"
+                           data-field="name">
+                    <span class="amp-card-meta">{{ card.amp.amp_model|default:"" }}</span>
+                    <div class="amp-card-actions">
+                        <a href="{% url 'admin:planner_amp_change' card.amp.pk %}" title="Open the full change form">Deep edit</a>
+                        <button type="button" class="amp-delete-btn"
+                                onclick="deleteAmp({{ card.amp.pk }}, '{{ card.amp.name|escapejs }}')"
+                                title="Delete this amp">×</button>
+                    </div>
+                </div>
+
+                {# ── Left: Inputs ───────────────────────────── #}
+                <div class="amp-card-section">
+                    <table class="amp-input-table">
+                        <thead>
+                            <tr>
+                                <th class="stream-col">AVB stream</th>
+                                <th class="ch-num">XLR</th>
+                                <th class="input-header-analog">Input Analogue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ch in card.channels %}
+                            <tr>
+                                <td class="stream-col">
+                                    <select class="amp-cell-input"
+                                            data-channel-id="{{ ch.pk }}"
+                                            data-field="avb_stream">
+                                        <option value=""></option>
+                                        {% for i in "0123456789012345"|make_list %}{% endfor %}
+                                        {% for n in ch.AVB_CHOICES %}
+                                            {% if n.0 %}<option value="{{ n.0 }}"{% if ch.avb_stream == n.0 %} selected{% endif %}>{{ n.1 }}</option>{% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td class="ch-num">{{ ch.channel_number }}</td>
+                                <td>
+                                    <input type="text" class="amp-cell-input"
+                                           value="{{ ch.analog_input }}"
+                                           data-channel-id="{{ ch.pk }}"
+                                           data-field="analog_input">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            <tr><th colspan="2"></th><th class="input-header-aes">Input AES</th></tr>
+                            {% for ch in card.channels %}
+                            <tr>
+                                <td class="stream-col"></td>
+                                <td class="ch-num">{{ ch.channel_number }}</td>
+                                <td>
+                                    <input type="text" class="amp-cell-input"
+                                           value="{{ ch.aes_input }}"
+                                           data-channel-id="{{ ch.pk }}"
+                                           data-field="aes_input">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {# ── Middle: IP + PRESET ────────────────────── #}
+                <div class="amp-card-section amp-card-middle">
+                    <div class="pill">
+                        <span class="label">IP Address</span>
+                        <input type="text"
+                               value="{{ card.amp.ip_address|default:'' }}"
+                               data-amp-id="{{ card.amp.pk }}"
+                               data-field="ip_address"
+                               class="amp-pill-input">
+                    </div>
+                    <div class="pill">
+                        <span class="label">Preset</span>
+                        <input type="text" list="amp-preset-options"
+                               value="{{ card.amp.preset|default:'' }}"
+                               data-amp-id="{{ card.amp.pk }}"
+                               data-field="preset"
+                               autocomplete="off"
+                               class="amp-pill-input">
+                    </div>
+                </div>
+
+                {# ── Right: Outputs ─────────────────────────── #}
+                <div class="amp-card-section">
+                    {% if card.cacom_rows %}
+                    <div class="amp-output-block">
+                        <div class="amp-output-title">CaCom Out</div>
+                        <table class="amp-output-table">
+                            {% for row in card.cacom_rows %}
+                            <tr>
+                                <td class="label-col">{{ row.ch }}</td>
+                                <td>
+                                    <input type="text" class="amp-cell-input"
+                                           value="{{ row.value }}"
+                                           data-amp-id="{{ card.amp.pk }}"
+                                           data-field="{{ row.field }}">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if card.nl4_rows %}
+                    <div class="amp-output-block">
+                        <div class="amp-output-title">NL4 Out</div>
+                        <table class="amp-output-table">
+                            {% for row in card.nl4_rows %}
+                            <tr>
+                                <td class="label-col">{{ row.pair }}</td>
+                                <td>
+                                    <input type="text" class="amp-cell-input"
+                                           value="{{ row.value }}"
+                                           data-amp-id="{{ card.amp.pk }}"
+                                           data-field="{{ row.field }}">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if not card.cacom_rows and not card.nl4_rows %}
+                    <div class="empty-output">No speaker outputs configured</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endwith %}
+            {% endif %}
+        {% endfor %}
+
+        {# ── '+ Add Amp' form for this location ───────────────── #}
+        <div class="add-amp-row">
+            <label>+ Add Amp:</label>
+            <select class="add-amp-model" data-loc-id="{{ group.location.id }}">
+                <option value="">Pick amp model…</option>
+                {% for m in all_amp_models %}
+                <option value="{{ m.id }}">{{ m.manufacturer }} {{ m.model_name }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" class="add-amp-name" data-loc-id="{{ group.location.id }}" placeholder="Name (e.g. LA12X-1)">
+            <button type="button" class="add-amp-btn"
+                    onclick="addAmp({{ group.location.id }})">Add</button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{# ── Preset dropdown options (shared across all cards) ──────── #}
+<datalist id="amp-preset-options">
+    {% for p in 'KARA II_110,KARA II_90,KARA II_70,KARA,KIVA,KIVA II,X8,X12,5XT,SB18_60,SB18_100,KS28_60,KS28_100,KS_28_100,K2_110,K2_90,K2_70,CUSTOM'|cut:'' %}{% endfor %}
+    <option value="KARA II_110"></option>
+    <option value="KARA II_90"></option>
+    <option value="KARA II_70"></option>
+    <option value="KARA"></option>
+    <option value="KIVA"></option>
+    <option value="KIVA II"></option>
+    <option value="X8"></option>
+    <option value="X12"></option>
+    <option value="5XT"></option>
+    <option value="SB18_60"></option>
+    <option value="SB18_100"></option>
+    <option value="KS28_60"></option>
+    <option value="KS28_100"></option>
+    <option value="KS_28_100"></option>
+    <option value="K2_110"></option>
+    <option value="K2_90"></option>
+    <option value="K2_70"></option>
+    <option value="CUSTOM"></option>
+</datalist>
+
+{# ── Locations modal ────────────────────────────────────────── #}
+<div class="rack-modal" id="locations-modal" onclick="if(event.target===this)closeLocationsModal()">
+    <div class="rack-modal-panel">
+        <button type="button" class="rack-modal-close" onclick="closeLocationsModal()">✕</button>
+        <h2>Locations</h2>
+        <div id="locations-list">
+            {% for loc in all_locations %}
+            <div class="loc-row" data-loc-id="{{ loc.id }}">
+                <input type="text" value="{{ loc.name }}" onblur="renameLocation({{ loc.id }}, this.value)">
+                <button type="button" class="loc-mini-btn" onclick="reorderLocation({{ loc.id }}, 'up')" title="Move up">▲</button>
+                <button type="button" class="loc-mini-btn" onclick="reorderLocation({{ loc.id }}, 'down')" title="Move down">▼</button>
+                <button type="button" class="loc-mini-btn loc-delete" onclick="deleteLocation({{ loc.id }}, '{{ loc.name|escapejs }}')">Delete</button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="add-loc-row">
+            <input type="text" id="new-loc-name" placeholder="New location name (e.g. HL Racks)">
+            <button type="button" onclick="addLocation()">+ Add</button>
+        </div>
+    </div>
+</div>
 
 {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+(function() {
+    'use strict';
+
+    // CSRF helper — uses Django's standard cookie.
+    function getCSRF() {
+        var name = 'csrftoken';
+        var cookies = document.cookie.split(';');
+        for (var i = 0; i < cookies.length; i++) {
+            var c = cookies[i].trim();
+            if (c.startsWith(name + '=')) return decodeURIComponent(c.substring(name.length + 1));
+        }
+        return '';
+    }
+
+    function postForm(url, data) {
+        var fd = new FormData();
+        Object.keys(data).forEach(function (k) { fd.append(k, data[k]); });
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCSRF(), 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd,
+            credentials: 'same-origin',
+        }).then(function (r) { return r.json(); });
+    }
+
+    // ───── Inline autosave on every editable cell ─────
+    function bindAutosave() {
+        document.querySelectorAll('.amp-cell-input, .amp-pill-input').forEach(function (el) {
+            if (el.dataset.boundAutosave) return;
+            el.dataset.boundAutosave = '1';
+            var lastValue = el.value;
+            el.addEventListener('change', function () { save(el); });
+            el.addEventListener('blur', function () {
+                if (el.value !== lastValue) save(el);
+            });
+        });
+    }
+
+    function save(el) {
+        var ampId = el.dataset.ampId;
+        var channelId = el.dataset.channelId;
+        var field = el.dataset.field;
+        if (!field || (!ampId && !channelId)) return;
+        var url;
+        if (channelId) {
+            url = '/audiopatch/api/amp-channel/' + channelId + '/inline-update/';
+        } else {
+            url = '/audiopatch/api/amp/' + ampId + '/inline-update/';
+        }
+        flashState(el, 'saving');
+        postForm(url, { field: field, value: el.value })
+            .then(function (r) {
+                if (r.success) {
+                    flashState(el, 'saved');
+                    setTimeout(function () { flashState(el, null); }, 600);
+                } else {
+                    flashState(el, 'error');
+                    console.warn('Save failed:', r.error);
+                }
+            })
+            .catch(function (err) {
+                flashState(el, 'error');
+                console.error(err);
+            });
+    }
+
+    function flashState(el, cls) {
+        // Status class lives on the pill div for pill inputs (so background shows).
+        var pill = el.closest('.pill');
+        var target = pill || el;
+        target.classList.remove('saving', 'saved', 'error');
+        if (cls) target.classList.add(cls);
+    }
+
+    // ───── Collapse / expand location groups ─────
+    window.toggleLocation = function (header) {
+        var body = header.nextElementSibling;
+        var chev = header.querySelector('.rack-location-chevron');
+        body.classList.toggle('open');
+        chev.classList.toggle('open');
+    };
+
+    window.collapseAll = function () {
+        var allOpen = document.querySelectorAll('.rack-location-body.open').length ===
+                      document.querySelectorAll('.rack-location-body').length;
+        document.querySelectorAll('.rack-location').forEach(function (loc) {
+            var body = loc.querySelector('.rack-location-body');
+            var chev = loc.querySelector('.rack-location-chevron');
+            if (allOpen) {
+                body.classList.remove('open');
+                chev.classList.remove('open');
+            } else {
+                body.classList.add('open');
+                chev.classList.add('open');
+            }
+        });
+    };
+
+    // ───── Add Amp inline ─────
+    window.addAmp = function (locId) {
+        var modelSel = document.querySelector('.add-amp-model[data-loc-id="' + locId + '"]');
+        var nameInp  = document.querySelector('.add-amp-name[data-loc-id="' + locId + '"]');
+        if (!modelSel.value) { alert('Pick an amp model first.'); return; }
+        if (!nameInp.value.trim()) { alert('Name required.'); nameInp.focus(); return; }
+        postForm('/audiopatch/api/amp/inline-create/', {
+            location_id: locId,
+            amp_model_id: modelSel.value,
+            name: nameInp.value.trim(),
+        }).then(function (r) {
+            if (r.success) {
+                location.reload();
+            } else {
+                alert('Add failed: ' + (r.error || 'unknown error'));
+            }
+        });
+    };
+
+    // ───── Delete amp ─────
+    window.deleteAmp = function (ampId, ampName) {
+        if (!confirm('Delete amp "' + ampName + '"? This cannot be undone.')) return;
+        postForm('/admin/planner/amp/' + ampId + '/delete/', { post: 'yes' })
+            .then(function () { location.reload(); })
+            .catch(function () { location.reload(); });
+    };
+
+    // ───── Locations modal ─────
+    window.openLocationsModal = function () {
+        document.getElementById('locations-modal').classList.add('open');
+    };
+    window.closeLocationsModal = function () {
+        document.getElementById('locations-modal').classList.remove('open');
+    };
+
+    var CHANGELIST_URL = window.location.pathname.replace(/\/rack-view\/?$/, '/');
+
+    window.addLocation = function () {
+        var inp = document.getElementById('new-loc-name');
+        var name = inp.value.trim();
+        if (!name) return;
+        postForm(CHANGELIST_URL, { action: 'add_location', name: name })
+            .then(function (r) { if (r.success) location.reload(); else alert(r.error || 'Add failed'); });
+    };
+
+    window.renameLocation = function (id, name) {
+        if (!name.trim()) return;
+        postForm(CHANGELIST_URL, { action: 'rename_location', id: id, name: name.trim() });
+    };
+
+    window.deleteLocation = function (id, name) {
+        if (!confirm('Delete location "' + name + '"? Amps will be unassigned.')) return;
+        postForm(CHANGELIST_URL, { action: 'delete_location', id: id })
+            .then(function (r) { if (r.success) location.reload(); });
+    };
+
+    window.reorderLocation = function (id, direction) {
+        postForm(CHANGELIST_URL, { action: 'reorder_location', id: id, direction: direction })
+            .then(function (r) { if (r.success) location.reload(); });
+    };
+
+    // ───── Search + location chip filter ─────
+    function applyFilter() {
+        var search = (document.getElementById('rack-search').value || '').toLowerCase();
+        var activeChip = document.querySelector('.rack-chip.active');
+        var locFilter = activeChip ? activeChip.dataset.loc : 'all';
+
+        document.querySelectorAll('.rack-location').forEach(function (loc) {
+            var locId = loc.dataset.locationId;
+            var locVisible = (locFilter === 'all' || locFilter === locId);
+            if (!locVisible) { loc.style.display = 'none'; return; }
+            loc.style.display = '';
+
+            var anyVisible = false;
+            loc.querySelectorAll('.amp-card').forEach(function (card) {
+                var name = (card.dataset.ampName || '').toLowerCase();
+                var ip   = (card.dataset.ampIp || '').toLowerCase();
+                var matches = !search || name.indexOf(search) !== -1 || ip.indexOf(search) !== -1
+                              || (card.textContent || '').toLowerCase().indexOf(search) !== -1;
+                card.style.display = matches ? '' : 'none';
+                if (matches) anyVisible = true;
+            });
+            // If nothing matches inside this location, hide the location too.
+            if (search && !anyVisible) loc.style.display = 'none';
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        bindAutosave();
+        var search = document.getElementById('rack-search');
+        if (search) search.addEventListener('input', applyFilter);
+        document.querySelectorAll('.rack-chip').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                document.querySelectorAll('.rack-chip').forEach(function (c) { c.classList.remove('active'); });
+                chip.classList.add('active');
+                applyFilter();
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}
