@@ -1685,22 +1685,36 @@ class AmpAdmin(BaseEquipmentAdmin):
                 return JsonResponse({'success': False})
             
             elif action == 'delete_location':
-                loc_id = request.POST.get('id')
-                if loc_id:
-                    try:
-                        loc = Location.objects.get(
-                            id=loc_id,
-                            project=request.current_project
-                        )
-                        # Unassign amps
-                        Amp.objects.filter(location=loc).update(location=None)
-                        loc.delete()
-                        from django.http import JsonResponse
-                        return JsonResponse({'success': True})
-                    except Location.DoesNotExist:
-                        pass
+                # Issue #27: the previous handler tried to NULL out amps'
+                # location FK before delete, but Amp.location is NOT NULL —
+                # the IntegrityError surfaced to the user as a silent failure.
+                # Refuse the delete if amps still live there and tell the
+                # client what to do.
                 from django.http import JsonResponse
-                return JsonResponse({'success': False})
+                loc_id = request.POST.get('id')
+                if not loc_id:
+                    return JsonResponse({'success': False, 'error': 'Missing id'})
+                try:
+                    loc = Location.objects.get(
+                        id=loc_id,
+                        project=request.current_project,
+                    )
+                except Location.DoesNotExist:
+                    return JsonResponse({'success': False, 'error': 'Not found'})
+                amp_count = Amp.objects.filter(location=loc).count()
+                if amp_count:
+                    return JsonResponse({
+                        'success': False,
+                        'error': (
+                            f'"{loc.name}" still has {amp_count} amp'
+                            f'{"s" if amp_count != 1 else ""}. '
+                            'Move or delete the amps before deleting the location.'
+                        ),
+                    })
+                # Clean up any dividers anchored to this empty location.
+                AmpDivider.objects.filter(location=loc).delete()
+                loc.delete()
+                return JsonResponse({'success': True})
             
             elif action == 'reorder_amp':
                 # Issue #18: swap an amp's sort_order with an adjacent amp in
@@ -1807,8 +1821,6 @@ class AmpAdmin(BaseEquipmentAdmin):
                     AmpDivider.objects.filter(location=loc, project=request.current_project)
                     .order_by('sort_order')
                 )
-                if not amps:
-                    continue
                 # Issue #27: build per-card data so the unified rack template
                 # can render every amp's front-panel fields inline.
                 cards = []
