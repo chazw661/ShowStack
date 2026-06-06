@@ -25,7 +25,12 @@
     }
     .rack-toolbar h1 { margin: 0; font-size: 22px; color: #e0e0e0; }
     .rack-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .rack-btn {
+    .rack-btn,
+    a.rack-btn:link,
+    a.rack-btn:visited,
+    a.rack-btn:hover,
+    a.rack-btn:focus,
+    a.rack-btn:active {
         background-color: #4a9eff;
         color: #ffffff !important;
         padding: 8px 14px;
@@ -37,8 +42,12 @@
         cursor: pointer;
     }
     .rack-btn:hover { filter: brightness(1.1); }
-    .rack-btn.purple { background-color: #6a5acd; }
-    .rack-btn.amber  { background-color: #d4a373; }
+    .rack-btn.purple,
+    a.rack-btn.purple:link,
+    a.rack-btn.purple:visited { background-color: #6a5acd; }
+    .rack-btn.amber,
+    a.rack-btn.amber:link,
+    a.rack-btn.amber:visited { background-color: #d4a373; }
 
     /* ── Filter row (search + location chips) ─────────────────── */
     .rack-filter-row {
