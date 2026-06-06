@@ -3104,30 +3104,28 @@ def amp_divider_delete(request, divider_id):
 
 @require_POST
 def amp_divider_reorder(request, divider_id):
-    """Move a divider up or down"""
+    """Move a divider up or down.
+
+    Issue #27: AmpDivider.sort_order stores the `after` index (which amp
+    to sit below). 'up' decrements toward -1 (before first amp), 'down'
+    increments toward N (after last amp). The previous swap-with-
+    adjacent logic was from the old changelist and produced wrong
+    positions in the rack render path.
+    """
     try:
-        data = request.POST
         divider = get_object_or_404(AmpDivider, id=divider_id)
-        direction = data.get('direction')
-        location_items = get_location_items(divider.location, divider.project)
-        idx = next((i for i, item in enumerate(location_items) if item.get('type') == 'divider' and item['obj'].id == divider.id), None)
-        if idx is None:
-            return JsonResponse({'success': False, 'error': 'Divider not found'})
-        if direction == 'up' and idx > 0:
-            swap_idx = idx - 1
-        elif direction == 'down' and idx < len(location_items) - 1:
-            swap_idx = idx + 1
+        direction = request.POST.get('direction')
+        amp_count = Amp.objects.filter(
+            location=divider.location, project=divider.project,
+        ).count()
+        if direction == 'up':
+            divider.sort_order = max(-1, divider.sort_order - 1)
+        elif direction == 'down':
+            divider.sort_order = min(amp_count, divider.sort_order + 1)
         else:
-            return JsonResponse({'success': False, 'error': 'Cannot move'})
-        item_a = location_items[idx]
-        item_b = location_items[swap_idx]
-        a_order = item_a['obj'].sort_order
-        b_order = item_b['obj'].sort_order
-        item_a['obj'].sort_order = b_order
-        item_b['obj'].sort_order = a_order
-        item_a['obj'].save()
-        item_b['obj'].save()
-        return JsonResponse({'success': True})
+            return JsonResponse({'success': False, 'error': 'Bad direction'})
+        divider.save(update_fields=['sort_order'])
+        return JsonResponse({'success': True, 'sort_order': divider.sort_order})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 

@@ -331,25 +331,66 @@
     }
 
     /* ── Dividers ─────────────────────────────────────────────── */
+    /* Issue #27: double horizontal lines with the label between them. */
     .rack-divider {
+        position: relative;
+        margin: 32px 0;
+        padding: 22px 6px;
+        border-top: 2px solid #4a9eff88;
+        border-bottom: 2px solid #4a9eff88;
         display: flex;
         align-items: center;
-        gap: 16px;
-        margin: 32px 0;
-        padding: 0 6px;
-        color: #4a9eff;
-        font-size: 22px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+        gap: 10px;
     }
-    .rack-divider::before,
-    .rack-divider::after {
-        content: "";
+    .rack-divider-label {
         flex: 1;
-        height: 1px;
-        background: #4a9eff55;
+        background: transparent !important;
+        border: 1px dashed transparent !important;
+        color: #4a9eff !important;
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.12em !important;
+        text-transform: uppercase !important;
+        text-align: center !important;
+        padding: 4px 8px !important;
+        font-family: inherit !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
     }
+    .rack-divider-label:hover,
+    .rack-divider-label:focus {
+        border-color: #4a9eff66 !important;
+        outline: none !important;
+        background: rgba(74, 158, 255, 0.06) !important;
+    }
+    .rack-divider-actions { display: flex; gap: 4px; }
+    .rack-divider-btn {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid #444;
+        color: #ccc !important;
+        padding: 3px 9px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px;
+        line-height: 1.4;
+    }
+    .rack-divider-btn:hover { background: rgba(255,255,255,0.15); color: #fff !important; }
+    .rack-divider-btn.delete {
+        color: #ff7373 !important;
+        border-color: #66333355;
+    }
+    .rack-divider-btn.delete:hover { background: rgba(255,82,82,0.15); }
+    .add-divider-btn {
+        background: transparent;
+        border: 1px dashed #4a9eff66;
+        color: #4a9eff !important;
+        padding: 6px 14px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        margin-left: 8px;
+    }
+    .add-divider-btn:hover { background: rgba(74,158,255,0.1); border-color: #4a9eff; }
 
     /* ── Add Amp form per location group ──────────────────────── */
     .add-amp-row {
@@ -523,7 +564,20 @@
 
         {% for item in group.items %}
             {% if item.type == 'divider' %}
-                <div class="rack-divider">{{ item.obj.label|default:"" }}</div>
+            <div class="rack-divider" data-divider-id="{{ item.obj.id }}">
+                <input type="text" class="rack-divider-label"
+                       value="{{ item.obj.label }}"
+                       placeholder="— divider label —"
+                       data-divider-id="{{ item.obj.id }}">
+                <div class="rack-divider-actions">
+                    <button type="button" class="rack-divider-btn"
+                            onclick="reorderDivider({{ item.obj.id }}, 'up')" title="Move up">▲</button>
+                    <button type="button" class="rack-divider-btn"
+                            onclick="reorderDivider({{ item.obj.id }}, 'down')" title="Move down">▼</button>
+                    <button type="button" class="rack-divider-btn delete"
+                            onclick="deleteDivider({{ item.obj.id }})" title="Delete divider">✕</button>
+                </div>
+            </div>
             {% else %}
             {% with card=item.card %}
             <div class="amp-card"
@@ -679,6 +733,8 @@
             <input type="text" class="add-amp-name" data-loc-id="{{ group.location.id }}" placeholder="Name (e.g. LA12X-1)">
             <button type="button" class="add-amp-btn"
                     onclick="addAmp({{ group.location.id }})">Add</button>
+            <button type="button" class="add-divider-btn"
+                    onclick="addDivider({{ group.location.id }})">+ Add Divider</button>
         </div>
     </div>
 </div>
@@ -852,6 +908,50 @@
         });
     };
 
+    // ───── Dividers ─────
+    window.addDivider = function (locId) {
+        var projectId = {{ request.current_project.id|default:"null" }};
+        if (!projectId) return;
+        postForm('/audiopatch/api/amp/divider/add/', {
+            location_id: locId, project_id: projectId, label: '',
+        }).then(function (r) {
+            if (r.success) location.reload();
+            else alert(r.error || 'Add divider failed');
+        });
+    };
+
+    window.reorderDivider = function (dividerId, direction) {
+        postForm('/audiopatch/api/amp/divider/' + dividerId + '/reorder/', { direction: direction })
+            .then(function (r) {
+                if (r.success) location.reload();
+                else alert(r.error || 'Reorder failed');
+            });
+    };
+
+    window.deleteDivider = function (dividerId) {
+        if (!confirm('Delete this divider?')) return;
+        postForm('/audiopatch/api/amp/divider/' + dividerId + '/delete/', {})
+            .then(function () { location.reload(); });
+    };
+
+    function bindDividerLabelAutosave() {
+        document.querySelectorAll('.rack-divider-label').forEach(function (el) {
+            if (el.dataset.boundDividerSave) return;
+            el.dataset.boundDividerSave = '1';
+            var last = el.value;
+            el.addEventListener('blur', function () {
+                if (el.value === last) return;
+                last = el.value;
+                postForm('/audiopatch/api/amp/divider/' + el.dataset.dividerId + '/update/', {
+                    label: el.value,
+                });
+            });
+            el.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') el.blur();
+            });
+        });
+    }
+
     // ───── Delete amp ─────
     window.deleteAmp = function (ampId, ampName) {
         if (!confirm('Delete amp "' + ampName + '"? This cannot be undone.')) return;
@@ -928,6 +1028,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         bindAutosave();
+        bindDividerLabelAutosave();
         var search = document.getElementById('rack-search');
         if (search) search.addEventListener('input', applyFilter);
         document.querySelectorAll('.rack-chip').forEach(function (chip) {
