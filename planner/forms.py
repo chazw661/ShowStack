@@ -275,12 +275,15 @@ class NameOnlyForm(forms.ModelForm):
 
 #----------Device dropdowns--------
 from django import forms
+from django.db.models import Prefetch, IntegerField
+from django.db.models.functions import Cast
 from .models import (
     DeviceInput,
     DeviceOutput,
     ConsoleInput,
     ConsoleAuxOutput,
     ConsoleMatrixOutput,
+    ConsoleStereoOutput,
     Console,
 )
 
@@ -365,14 +368,26 @@ class DeviceOutputInlineForm(forms.ModelForm):
         self.fields['signal_name'].widget = forms.HiddenInput()
 
         grouped = []
-        
-        # Filter consoles to current project only
-        console_qs = Console.objects.prefetch_related(
-            "consoleauxoutput_set", "consolematrixoutput_set", "consolestereooutput_set"
+
+        # Order outputs to match the Console admin inlines (aux_number / matrix_number
+        # are CharFields, so cast to int for natural 1, 2, …, 10 order). Issue #28.
+        aux_qs = ConsoleAuxOutput.objects.annotate(
+            _num=Cast('aux_number', IntegerField())
+        ).order_by('_num')
+        matrix_qs = ConsoleMatrixOutput.objects.annotate(
+            _num=Cast('matrix_number', IntegerField())
+        ).order_by('_num')
+        stereo_qs = ConsoleStereoOutput.objects.order_by('stereo_type')
+
+        # Filter consoles to current project only; order matches the Consoles list.
+        console_qs = Console.objects.order_by('-is_template', 'name').prefetch_related(
+            Prefetch("consoleauxoutput_set", queryset=aux_qs),
+            Prefetch("consolematrixoutput_set", queryset=matrix_qs),
+            Prefetch("consolestereooutput_set", queryset=stereo_qs),
         )
         if project_id:
             console_qs = console_qs.filter(project_id=project_id)
-        
+
         for console in console_qs:
             opts = []
             # Aux outputs
