@@ -302,11 +302,14 @@ def _device_input_suggestions(project_id):
         return []
     seen = set()
     suggestions = []
+    # input_ch is a CharField, so cast to int for natural 1, 2, …, 10 order
+    # (otherwise "10" sorts before "2"). Issue #28.
     qs = (ConsoleInput.objects
           .filter(console__project_id=project_id)
           .exclude(source__isnull=True)
           .exclude(source='')
-          .order_by('console__name', 'input_ch'))
+          .annotate(_ch_num=Cast('input_ch', IntegerField()))
+          .order_by('console__name', '_ch_num'))
     for source in qs.values_list('source', flat=True):
         name = source.strip()
         if not name or name in seen:
