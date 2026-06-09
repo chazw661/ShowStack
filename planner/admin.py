@@ -1826,17 +1826,30 @@ class AmpAdmin(BaseEquipmentAdmin):
                 cards = []
                 for amp in amps:
                     channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
-                    # Issue #31: rack view shows a single Outputs block of four
-                    # numbered rows from Amp.output_1..output_4. Connector-specific
-                    # fields (NL4 / NL8 / Cacom / SC32) stay on the Deep-edit form.
-                    output_rows = [
+                    model = amp.amp_model
+                    # Issue #31: NL4 Out block now renders as four generic
+                    # numbered rows from Amp.output_1..output_4 (matches the
+                    # original spreadsheet). CaCom Out keeps its model-driven
+                    # per-channel rendering as before.
+                    nl4_rows = [
                         {'label': str(n), 'field': f'output_{n}', 'value': getattr(amp, f'output_{n}', '')}
                         for n in (1, 2, 3, 4)
                     ]
+                    cacom_rows = []
+                    if model and model.cacom_output_count:
+                        for ci in range(1, min(model.cacom_output_count + 1, 5)):
+                            base = (ci - 1) * 4
+                            for n in range(1, 5):
+                                cacom_rows.append({
+                                    'ch': base + n,
+                                    'field': f'cacom_{ci}_ch{n}',
+                                    'value': getattr(amp, f'cacom_{ci}_ch{n}', ''),
+                                })
                     cards.append({
                         'amp': amp,
                         'channels': channels,
-                        'output_rows': output_rows,
+                        'nl4_rows': nl4_rows,
+                        'cacom_rows': cacom_rows,
                     })
                 # Items list — for divider rendering anchored to amp index.
                 items_order = []
