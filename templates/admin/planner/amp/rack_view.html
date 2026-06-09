@@ -116,12 +116,13 @@
     .rack-location-body.open { display: block; }
 
     /* ── Amp card (front-panel layout) ─────────────────────────── */
-    /* Issue #30: middle column shrunk to a fixed 200px (IP / Preset /
-       per-channel setting dropdowns) so the outputs column grows to take
-       the remaining width and accommodate longer Cacom / NL4 labels. */
+    /* Issue #30 v2: middle column takes the remaining width so the four
+       per-channel setting dropdowns can sit side-by-side under Preset;
+       outputs column kept just slightly wider than the original 240px
+       to fit longer Cacom / NL4 labels without ballooning the whole row. */
     .amp-card {
         display: grid;
-        grid-template-columns: 380px 200px 1fr;
+        grid-template-columns: 380px 1fr 280px;
         gap: 0;
         border: 1px solid #444;
         margin-bottom: 14px;
@@ -306,31 +307,34 @@
     .amp-card-middle .pill.saved  { background: #e0fbe0 !important; }
     .amp-card-middle .pill.error  { background: #ffd0d0 !important; }
 
-    /* Issue #30: per-channel setting dropdowns stacked under Preset. */
+    /* Issue #30 v2: per-channel setting dropdowns in a single horizontal
+       row under Preset. Each cell stacks its 'CH N' label above the select. */
     .amp-channel-settings {
         display: flex;
-        flex-direction: column;
-        gap: 4px;
-        margin-top: 4px;
+        flex-direction: row;
+        gap: 6px;
+        margin-top: 6px;
     }
     .amp-channel-setting-row {
-        display: grid;
-        grid-template-columns: 36px 1fr;
-        align-items: center;
-        gap: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
+        flex: 1 1 0;
+        min-width: 0;
     }
     .amp-channel-setting-label {
-        font-size: 10px;
+        font-size: 9px;
         color: #9ab;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         font-weight: bold;
-        text-align: right;
+        text-align: center;
     }
     select.amp-channel-setting-select {
         width: 100% !important;
-        padding: 3px 4px !important;
-        font-size: 12px !important;
+        padding: 2px 4px !important;
+        font-size: 11px !important;
         border: 1px solid #555 !important;
         border-radius: 3px !important;
         background-color: #ffffff !important;
