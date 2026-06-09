@@ -122,7 +122,7 @@
        to fit longer Cacom / NL4 labels without ballooning the whole row. */
     .amp-card {
         display: grid;
-        grid-template-columns: 380px 1fr 280px;
+        grid-template-columns: 380px 1fr 320px;
         gap: 0;
         border: 1px solid #444;
         margin-bottom: 14px;
@@ -339,7 +339,10 @@
         border-radius: 3px !important;
         background-color: #ffffff !important;
         color: #222 !important;
+        text-align: center !important;
+        text-align-last: center !important;
     }
+    select.amp-channel-setting-select option { text-align: center; }
 
     /* ── Right: outputs ──────────────────────────────────────── */
     .amp-output-block { margin-bottom: 8px; }
