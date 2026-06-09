@@ -1826,29 +1826,17 @@ class AmpAdmin(BaseEquipmentAdmin):
                 cards = []
                 for amp in amps:
                     channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
-                    model = amp.amp_model
-                    nl4_rows = []
-                    if model and model.nl4_connector_count >= 1:
-                        nl4_rows.append({'pair': '1/2', 'field': 'nl4_a_pair_1', 'value': amp.nl4_a_pair_1})
-                        nl4_rows.append({'pair': '3/4', 'field': 'nl4_a_pair_2', 'value': amp.nl4_a_pair_2})
-                    if model and model.nl4_connector_count >= 2:
-                        nl4_rows.append({'pair': '5/6', 'field': 'nl4_b_pair_1', 'value': amp.nl4_b_pair_1})
-                        nl4_rows.append({'pair': '7/8', 'field': 'nl4_b_pair_2', 'value': amp.nl4_b_pair_2})
-                    cacom_rows = []
-                    if model and model.cacom_output_count:
-                        for ci in range(1, min(model.cacom_output_count + 1, 5)):
-                            base = (ci - 1) * 4
-                            for n in range(1, 5):
-                                cacom_rows.append({
-                                    'ch': base + n,
-                                    'field': f'cacom_{ci}_ch{n}',
-                                    'value': getattr(amp, f'cacom_{ci}_ch{n}', ''),
-                                })
+                    # Issue #31: rack view shows a single Outputs block of four
+                    # numbered rows from Amp.output_1..output_4. Connector-specific
+                    # fields (NL4 / NL8 / Cacom / SC32) stay on the Deep-edit form.
+                    output_rows = [
+                        {'label': str(n), 'field': f'output_{n}', 'value': getattr(amp, f'output_{n}', '')}
+                        for n in (1, 2, 3, 4)
+                    ]
                     cards.append({
                         'amp': amp,
                         'channels': channels,
-                        'nl4_rows': nl4_rows,
-                        'cacom_rows': cacom_rows,
+                        'output_rows': output_rows,
                     })
                 # Items list — for divider rendering anchored to amp index.
                 items_order = []

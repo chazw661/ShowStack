@@ -737,14 +737,14 @@
                 </div>
 
                 {# ── Right: Outputs ─────────────────────────── #}
+                {# ── Right: Outputs (issue #31) ─────────────── #}
                 <div class="amp-card-section">
-                    {% if card.cacom_rows %}
                     <div class="amp-output-block">
-                        <div class="amp-output-title">CaCom Out</div>
+                        <div class="amp-output-title">Outputs</div>
                         <table class="amp-output-table">
-                            {% for row in card.cacom_rows %}
+                            {% for row in card.output_rows %}
                             <tr>
-                                <td class="label-col">{{ row.ch }}</td>
+                                <td class="label-col">{{ row.label }}</td>
                                 <td>
                                     <input type="text" class="amp-cell-input"
                                            value="{{ row.value }}"
@@ -755,30 +755,6 @@
                             {% endfor %}
                         </table>
                     </div>
-                    {% endif %}
-
-                    {% if card.nl4_rows %}
-                    <div class="amp-output-block">
-                        <div class="amp-output-title">NL4 Out</div>
-                        <table class="amp-output-table">
-                            {% for row in card.nl4_rows %}
-                            <tr>
-                                <td class="label-col">{{ row.pair }}</td>
-                                <td>
-                                    <input type="text" class="amp-cell-input"
-                                           value="{{ row.value }}"
-                                           data-amp-id="{{ card.amp.pk }}"
-                                           data-field="{{ row.field }}">
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </table>
-                    </div>
-                    {% endif %}
-
-                    {% if not card.cacom_rows and not card.nl4_rows %}
-                    <div class="empty-output">No speaker outputs configured</div>
-                    {% endif %}
                 </div>
             </div>
             {% endwith %}

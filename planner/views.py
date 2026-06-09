@@ -3189,6 +3189,7 @@ def amp_divider_sync(request):
 # Fields editable inline on an Amp card.
 _INLINE_AMP_FIELDS = (
     {'name', 'ip_address', 'preset'}
+    | {f'output_{i}' for i in (1, 2, 3, 4)}
     | {f'nl4_{a}_pair_{i}' for a in 'ab' for i in (1, 2)}
     | {f'nl8_{a}_pair_{i}' for a in 'ab' for i in (1, 2, 3, 4)}
     | {f'cacom_{c}_ch{n}' for c in (1, 2, 3, 4) for n in (1, 2, 3, 4)}

@@ -1717,8 +1717,17 @@ class Amp(models.Model):
     )
 
     # NL4 Connector A (if present)
+    # Issue #31: four generic outputs labeled 1-4 surfaced on the rack-view
+    # card (matches the original spreadsheet). Connector-specific fields below
+    # (NL4 / NL8 / Cacom / SC32) stay on the model so the Deep-edit form is
+    # unchanged, but the rack view only edits these four.
+    output_1 = models.CharField(max_length=50, blank=True, default='', verbose_name="Output 1")
+    output_2 = models.CharField(max_length=50, blank=True, default='', verbose_name="Output 2")
+    output_3 = models.CharField(max_length=50, blank=True, default='', verbose_name="Output 3")
+    output_4 = models.CharField(max_length=50, blank=True, default='', verbose_name="Output 4")
+
     nl4_a_pair_1 = models.CharField(
-        max_length=50, blank=True, 
+        max_length=50, blank=True,
         verbose_name="NL4-A Pair 1 +/-",
         help_text="e.g., 'Ch1/Ch2' or 'Left/Right'"
     )
