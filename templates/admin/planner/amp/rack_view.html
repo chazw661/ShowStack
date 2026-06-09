@@ -886,9 +886,29 @@
             if (el.dataset.boundAutosave) return;
             el.dataset.boundAutosave = '1';
             var lastValue = el.value;
-            el.addEventListener('change', function () { save(el); });
+            // Issue #30 follow-up: native <datalist> filters its options by
+            // whatever is in the input, so once Preset has a value the dropdown
+            // collapses to "things that start with KIVA". Clear on focus to show
+            // the full list; restore on blur if the user didn't pick anything.
+            var isPresetCombo = el.dataset.field === 'preset' && el.hasAttribute('list');
+            if (isPresetCombo) {
+                el.addEventListener('focus', function () {
+                    el.dataset.previousValue = el.value;
+                    el.value = '';
+                });
+            }
+            el.addEventListener('change', function () {
+                save(el);
+                lastValue = el.value;
+            });
             el.addEventListener('blur', function () {
-                if (el.value !== lastValue) save(el);
+                if (isPresetCombo && el.value === '' && el.dataset.previousValue) {
+                    el.value = el.dataset.previousValue;
+                }
+                if (el.value !== lastValue) {
+                    save(el);
+                    lastValue = el.value;
+                }
             });
         });
     }
