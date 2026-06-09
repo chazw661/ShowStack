@@ -1893,6 +1893,20 @@ class AmpChannel(models.Model):
     channel_name = models.CharField(max_length=100, blank=True, default="")
     AVB_CHOICES = [(f'AVB {i}', f'AVB {i}') for i in range(1, 17)]
     AVB_CHOICES.insert(0, ('', '---------'))
+
+    # Issue #30: per-channel speaker-zone routing label that lived in the
+    # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.).
+    CHANNEL_SETTING_CHOICES = [('', '---------')] + [
+        (f'{zone}_{slot}', f'{zone}_{slot}')
+        for zone in ('PA', 'LF', 'HF', 'SB')
+        for slot in ('A', 'B', 'C', 'D')
+    ]
+    channel_setting = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=CHANNEL_SETTING_CHOICES,
+        verbose_name="Channel Setting",
+        help_text="Speaker-zone routing label for this channel",
+    )
     
     # Input source (only show relevant options based on amp model)
     avb_stream = models.CharField(

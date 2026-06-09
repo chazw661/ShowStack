@@ -3194,7 +3194,7 @@ _INLINE_AMP_FIELDS = (
     | {f'cacom_{c}_ch{n}' for c in (1, 2, 3, 4) for n in (1, 2, 3, 4)}
     | {f'sc32_ch{n}' for n in range(1, 17)}
 )
-_INLINE_CHANNEL_FIELDS = {'channel_name', 'avb_stream', 'aes_input', 'analog_input'}
+_INLINE_CHANNEL_FIELDS = {'channel_name', 'avb_stream', 'aes_input', 'analog_input', 'channel_setting'}
 
 
 def _project_or_403(request):

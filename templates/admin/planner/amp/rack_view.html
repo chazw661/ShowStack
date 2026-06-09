@@ -116,9 +116,12 @@
     .rack-location-body.open { display: block; }
 
     /* ── Amp card (front-panel layout) ─────────────────────────── */
+    /* Issue #30: middle column shrunk to a fixed 200px (IP / Preset /
+       per-channel setting dropdowns) so the outputs column grows to take
+       the remaining width and accommodate longer Cacom / NL4 labels. */
     .amp-card {
         display: grid;
-        grid-template-columns: 380px 1fr 240px;
+        grid-template-columns: 380px 200px 1fr;
         gap: 0;
         border: 1px solid #444;
         margin-bottom: 14px;
@@ -302,6 +305,37 @@
     .amp-card-middle .pill.saving { background: #fff7d0 !important; }
     .amp-card-middle .pill.saved  { background: #e0fbe0 !important; }
     .amp-card-middle .pill.error  { background: #ffd0d0 !important; }
+
+    /* Issue #30: per-channel setting dropdowns stacked under Preset. */
+    .amp-channel-settings {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 4px;
+    }
+    .amp-channel-setting-row {
+        display: grid;
+        grid-template-columns: 36px 1fr;
+        align-items: center;
+        gap: 6px;
+    }
+    .amp-channel-setting-label {
+        font-size: 10px;
+        color: #9ab;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: bold;
+        text-align: right;
+    }
+    select.amp-channel-setting-select {
+        width: 100% !important;
+        padding: 3px 4px !important;
+        font-size: 12px !important;
+        border: 1px solid #555 !important;
+        border-radius: 3px !important;
+        background-color: #ffffff !important;
+        color: #222 !important;
+    }
 
     /* ── Right: outputs ──────────────────────────────────────── */
     .amp-output-block { margin-bottom: 8px; }
@@ -660,7 +694,7 @@
                     </table>
                 </div>
 
-                {# ── Middle: IP + PRESET ────────────────────── #}
+                {# ── Middle: IP + PRESET + per-channel settings (#30) ── #}
                 <div class="amp-card-section amp-card-middle">
                     <div class="pill">
                         <span class="label">IP Address</span>
@@ -678,6 +712,20 @@
                                data-field="preset"
                                autocomplete="off"
                                class="amp-pill-input">
+                    </div>
+                    <div class="amp-channel-settings">
+                        {% for ch in card.channels %}
+                        <div class="amp-channel-setting-row">
+                            <span class="amp-channel-setting-label">Ch {{ ch.channel_number }}</span>
+                            <select class="amp-cell-input amp-channel-setting-select"
+                                    data-channel-id="{{ ch.pk }}"
+                                    data-field="channel_setting">
+                                {% for val, lbl in ch.CHANNEL_SETTING_CHOICES %}
+                                <option value="{{ val }}"{% if ch.channel_setting == val %} selected{% endif %}>{{ lbl }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
 
