@@ -34,7 +34,7 @@ import csv
 from django.shortcuts import redirect
 from .models import Project
 from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask, CommConfigNetworkPort
-from .models import Amp, AmpDivider, Location
+from .models import Amp, AmpDivider, Location, AmpLocation
 import hashlib
 import os
 from io import BytesIO
@@ -64,7 +64,7 @@ from .models import (
     P1Processor, P1Input, P1Output,
     CommBeltPack, CommChannel, CommPosition, CommCrewName,
     Device, Device, DeviceInput, DeviceOutput,
-    SystemProcessor, Amp, AmpChannel, Location, PACableSchedule, PAZone,
+    SystemProcessor, Amp, AmpChannel, Location, AmpLocation, PACableSchedule, PAZone,
     ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile,
     AmplifierAssignment,
     MultitrackSession, MultitrackTrack,
@@ -2669,7 +2669,7 @@ def dashboard(request):
     # Amp Stats
     amp_stats = {
         'total': Amp.objects.count(),
-        'locations': Location.objects.count(),
+        'locations': AmpLocation.objects.count(),
         'channels': 0,
     }
   
@@ -3065,7 +3065,7 @@ def amp_divider_add(request):
     """Add a new divider to a location"""
     try:
         data = request.POST
-        location = get_object_or_404(Location, id=data['location_id'])
+        location = get_object_or_404(AmpLocation, id=data['location_id'])
         project = get_object_or_404(Project, id=data['project_id'])
         # Place at end of location items
         location_items = get_location_items(location, project)
@@ -3142,7 +3142,7 @@ def get_location_items(location, project):
 def amp_divider_sync(request):
     """Sync all dividers for a location from localStorage state"""
     try:
-        location = get_object_or_404(Location, id=request.POST.get('location_id'))
+        location = get_object_or_404(AmpLocation, id=request.POST.get('location_id'))
         project = get_object_or_404(Project, id=request.POST.get('project_id'))
         dividers_data = json.loads(request.POST.get('dividers', '[]'))
         
@@ -3258,7 +3258,7 @@ def amp_inline_create(request):
     if not project:
         return JsonResponse({'success': False, 'error': 'No project'}, status=400)
     try:
-        location = get_object_or_404(Location, id=request.POST.get('location_id'), project=project)
+        location = get_object_or_404(AmpLocation, id=request.POST.get('location_id'), project=project)
         amp_model = get_object_or_404(AmpModel, id=request.POST.get('amp_model_id'))
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
@@ -5431,7 +5431,7 @@ def dashboard_stats(request):
             'proc_p1': SystemProcessor.objects.filter(**{**p, 'device_type': 'P1'}).count(),
             'proc_galaxy': SystemProcessor.objects.filter(**{**p, 'device_type': 'GALAXY'}).count(),
             'amp_total': Amp.objects.filter(**p).count(),
-            'amp_locations': Location.objects.filter(**p).count(),
+            'amp_locations': AmpLocation.objects.filter(**p).count(),
             'pa_cables': PACableSchedule.objects.filter(**p).count(),
             'pa_zones': PAZone.objects.filter(**p).count(),
             'sv_total': SoundvisionPrediction.objects.filter(**p).count(),

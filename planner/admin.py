@@ -39,7 +39,7 @@ from .models import ConsoleImport
 from .models import MultitrackSession, MultitrackTrack
 from .models import MultitrackTemplate, MultitrackTemplateSlot
 from .models import SignalFlowDiagram
-from .models import Location, Amp, AmpChannel, AmpDivider, AMP_PRESET_SUGGESTIONS
+from .models import Location, AmpLocation, Amp, AmpChannel, AmpDivider, AMP_PRESET_SUGGESTIONS
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup
@@ -1613,7 +1613,7 @@ class AmpLocationFilter(admin.SimpleListFilter):
     def lookups(self, request, model_admin):
         current_project = getattr(request, 'current_project', None)
         if current_project:
-            locations = Location.objects.filter(project=current_project).order_by('name')
+            locations = AmpLocation.objects.filter(project=current_project).order_by('name')
             return [(loc.id, loc.name) for loc in locations]
         return []
 
@@ -1653,10 +1653,10 @@ class AmpAdmin(BaseEquipmentAdmin):
                 name = request.POST.get('name', '').strip()
                 if name and hasattr(request, 'current_project') and request.current_project:
                     # Get max sort_order
-                    max_order = Location.objects.filter(
+                    max_order = AmpLocation.objects.filter(
                         project=request.current_project
                     ).aggregate(models.Max('sort_order'))['sort_order__max'] or 0
-                    loc = Location.objects.create(
+                    loc = AmpLocation.objects.create(
                         name=name,
                         project=request.current_project,
                         sort_order=max_order + 1
@@ -1665,13 +1665,13 @@ class AmpAdmin(BaseEquipmentAdmin):
                     return JsonResponse({'success': True, 'id': loc.id, 'name': loc.name})
                 from django.http import JsonResponse
                 return JsonResponse({'success': False, 'error': 'Invalid name or no project'})
-            
+
             elif action == 'rename_location':
                 loc_id = request.POST.get('id')
                 name = request.POST.get('name', '').strip()
                 if loc_id and name:
                     try:
-                        loc = Location.objects.get(
+                        loc = AmpLocation.objects.get(
                             id=loc_id,
                             project=request.current_project
                         )
@@ -1679,11 +1679,11 @@ class AmpAdmin(BaseEquipmentAdmin):
                         loc.save()
                         from django.http import JsonResponse
                         return JsonResponse({'success': True})
-                    except Location.DoesNotExist:
+                    except AmpLocation.DoesNotExist:
                         pass
                 from django.http import JsonResponse
                 return JsonResponse({'success': False})
-            
+
             elif action == 'delete_location':
                 # Issue #27: the previous handler tried to NULL out amps'
                 # location FK before delete, but Amp.location is NOT NULL —
@@ -1695,11 +1695,11 @@ class AmpAdmin(BaseEquipmentAdmin):
                 if not loc_id:
                     return JsonResponse({'success': False, 'error': 'Missing id'})
                 try:
-                    loc = Location.objects.get(
+                    loc = AmpLocation.objects.get(
                         id=loc_id,
                         project=request.current_project,
                     )
-                except Location.DoesNotExist:
+                except AmpLocation.DoesNotExist:
                     return JsonResponse({'success': False, 'error': 'Not found'})
                 amp_count = Amp.objects.filter(location=loc).count()
                 if amp_count:
@@ -1769,11 +1769,11 @@ class AmpAdmin(BaseEquipmentAdmin):
                 direction = request.POST.get('direction')
                 if loc_id and direction:
                     try:
-                        loc = Location.objects.get(
+                        loc = AmpLocation.objects.get(
                             id=loc_id,
                             project=request.current_project
                         )
-                        locations = list(Location.objects.filter(
+                        locations = list(AmpLocation.objects.filter(
                             project=request.current_project
                         ).order_by('sort_order', 'name'))
                         idx = next((i for i, l in enumerate(locations) if l.id == loc.id), None)
@@ -1795,7 +1795,7 @@ class AmpAdmin(BaseEquipmentAdmin):
                                 swap.save()
                         from django.http import JsonResponse
                         return JsonResponse({'success': True})
-                    except Location.DoesNotExist:
+                    except AmpLocation.DoesNotExist:
                         pass
                 from django.http import JsonResponse
                 return JsonResponse({'success': False})
@@ -1803,7 +1803,7 @@ class AmpAdmin(BaseEquipmentAdmin):
         # Build grouped data for template
         if hasattr(request, 'current_project') and request.current_project:
             from django.db.models import Count
-            locations = Location.objects.filter(
+            locations = AmpLocation.objects.filter(
                 project=request.current_project
             ).annotate(
                 amp_count=Count('amps')
@@ -1996,11 +1996,11 @@ class AmpAdmin(BaseEquipmentAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Filter dropdown options based on current project"""
         if db_field.name == "location":
-            # Only show locations from the current project
+            # Only show amp locations from the current project (issue #29)
             if hasattr(request, 'current_project') and request.current_project:
-                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
+                kwargs["queryset"] = AmpLocation.objects.filter(project=request.current_project)
             else:
-                kwargs["queryset"] = Location.objects.none()
+                kwargs["queryset"] = AmpLocation.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     #----Only show Amps in this project
@@ -2114,11 +2114,6 @@ class LocationAdmin(BaseEquipmentAdmin):
         )
     export_pdf_button.short_description = 'Export Inventory'
     export_pdf_button.allow_tags = True
-    
-    def amp_count(self, obj):
-        """Show how many amps are in this location"""
-        return obj.amps.count()
-    amp_count.short_description = 'Amps'
     
     def processor_count(self, obj):
         """Show how many processors are in this location"""

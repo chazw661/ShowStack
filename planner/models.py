@@ -81,9 +81,10 @@ class Project(models.Model):
             
             # Track old_id -> new_object mappings for relationships
             location_map = {}
+            amp_location_map = {}
             console_map = {}
             amp_map = {}
-            
+
             # 1. Duplicate Locations (needed for other models)
             for location in self.location_set.all():
                 new_location = Location.objects.create(
@@ -92,6 +93,16 @@ class Project(models.Model):
                     description=location.description
                 )
                 location_map[location.id] = new_location
+
+            # 1b. Duplicate AmpLocations (issue #29)
+            for amp_location in self.amplocation_set.all():
+                new_amp_location = AmpLocation.objects.create(
+                    project=new_project,
+                    name=amp_location.name,
+                    sort_order=amp_location.sort_order,
+                    description=amp_location.description,
+                )
+                amp_location_map[amp_location.id] = new_amp_location
             
             # 2. Duplicate Consoles and their related objects
             for console in self.console_set.all():
@@ -188,8 +199,8 @@ class Project(models.Model):
             
             # 4. Duplicate Amplifiers
             for amp in self.amp_set.all():
-                new_location = location_map.get(amp.location_id) if amp.location_id else None
-                
+                new_location = amp_location_map.get(amp.location_id) if amp.location_id else None
+
                 # Amp requires a location - skip if we can't map it
                 if not new_location:
                     continue
@@ -1600,19 +1611,37 @@ AMP_PRESET_SUGGESTIONS = (
 # Add these models to your existing models.py file
 
 class Location(models.Model):
-    """Physical locations where amplifiers are deployed"""
+    """Physical locations for non-amp equipment (consoles, I/O devices, processors, beltpacks)."""
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
-    name = models.CharField(max_length=100, help_text="e.g., HL LA Racks, HR LA Racks, Monitor World")
+    name = models.CharField(max_length=100, help_text="e.g., FOH, Monitor World, Stage")
     sort_order = models.IntegerField(default=0)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return self.name
-    
+
     class Meta:
         verbose_name = "Equip Location"
         verbose_name_plural = "Equip Locations"
+        ordering = ['sort_order', 'name']
+
+
+class AmpLocation(models.Model):
+    """Physical amp-rack locations. Issue #29: separated from Location so the
+    Amp Assignment page doesn't list equipment locations and vice versa."""
+    project = models.ForeignKey('Project', on_delete=models.CASCADE)
+    name = models.CharField(max_length=100, help_text="e.g., HL LA Racks, HR LA Racks, SL Sub Racks")
+    sort_order = models.IntegerField(default=0)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Amp Location"
+        verbose_name_plural = "Amp Locations"
         ordering = ['sort_order', 'name']
 
 
@@ -1661,7 +1690,7 @@ class AmpModel(models.Model):
 class Amp(models.Model):
     """Individual amplifier instance"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='amps')
+    location = models.ForeignKey(AmpLocation, on_delete=models.CASCADE, related_name='amps')
     amp_model = models.ForeignKey(AmpModel, on_delete=models.PROTECT, 
         null=True,  
         blank=True )
@@ -1900,7 +1929,7 @@ class AmpChannel(models.Model):
 class AmpDivider(models.Model):
     """A labeled divider row that can be placed between amps in a location group"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
-    location = models.ForeignKey('Location', on_delete=models.CASCADE, related_name='amp_dividers')
+    location = models.ForeignKey('AmpLocation', on_delete=models.CASCADE, related_name='amp_dividers')
     label = models.CharField(max_length=100, default='', blank=True)
     sort_order = models.IntegerField(default=0)
 

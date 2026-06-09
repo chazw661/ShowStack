@@ -31,7 +31,7 @@ def export_all_locations_pdf(request):
     Generate PDF showing ALL locations with their equipment
     Organized by location, then by module within each location
     """
-    from planner.models import Location
+    from planner.models import Location, Amp
     
     # Get all locations for current project
     if hasattr(request, 'current_project') and request.current_project:
@@ -213,8 +213,9 @@ def export_all_locations_pdf(request):
                 story.append(Spacer(1, 0.15*inch))
         
        
-        # AMPLIFIERS
-        amps = location.amps.filter(project=location.project).select_related('amp_model').all()
+        # AMPLIFIERS — issue #29: amps live on AmpLocation now, so equipment
+        # Locations no longer surface amps in this PDF.
+        amps = Amp.objects.none()
         if amps.exists():
             has_equipment = True
             story.append(Paragraph("Amplifiers", subheader_style))
@@ -332,7 +333,7 @@ def export_location_pdf(request, location_id):
     Generate PDF showing all equipment in a specific location
     Organized by module: Consoles, Devices, Amps, System Processors, Comm Belt Packs
     """
-    from planner.models import Location
+    from planner.models import Location, Amp
     
     # Get location and related equipment
     location = Location.objects.select_related('project').prefetch_related(
@@ -503,8 +504,8 @@ def export_location_pdf(request, location_id):
   
     
    
-    # SECTION 3: AMPLIFIERS
-    amps = location.amps.filter(project=location.project).select_related('amp_model').all()
+    # SECTION 3: AMPLIFIERS — issue #29: amps live on AmpLocation now.
+    amps = Amp.objects.none()
     if amps.exists():
         story.append(Paragraph("Amplifiers", subheader_style))
         
