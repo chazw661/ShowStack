@@ -1592,6 +1592,9 @@ AMP_PRESET_SUGGESTIONS = (
     'KARA',
     'KIVA',
     'KIVA II',
+    'Syva',
+    'Syva Low',
+    'Syva Sub',
     'X8',
     'X12',
     '5XT',
@@ -1603,6 +1606,8 @@ AMP_PRESET_SUGGESTIONS = (
     'K2_110',
     'K2_90',
     'K2_70',
+    'L2',
+    'L2D',
     'CUSTOM',
 )
 
