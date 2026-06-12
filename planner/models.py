@@ -3425,6 +3425,13 @@ class MicAssignment(models.Model):
         
     @property
     def active_slot(self):
+        # Issue #35: when the MicSession admin saves the inline formset it
+        # may hand Django MicAssignment instances whose pk has already been
+        # cleared (rows tombstoned for deletion). Touching presenter_slots
+        # — a reverse FK manager — on a pk-less instance raises ValueError,
+        # which then 500s the change form. Short-circuit safely instead.
+        if self.pk is None:
+            return None
         slot = self.presenter_slots.filter(is_active=True).first()
         if not slot:
             slot = self.presenter_slots.order_by('order').first()
