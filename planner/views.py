@@ -3248,6 +3248,22 @@ def amp_channel_inline_update(request, channel_id):
     return JsonResponse({'success': True})
 
 
+def _mic_assignment_editor_or_403(request, mic):
+    """Permission helper shared by the MicAssignment AJAX endpoints
+    (issue #36): only the owning project's owner or an editor member
+    may mutate mic rows."""
+    project = mic.session.day.project
+    if request.user.is_superuser:
+        return None
+    if project.owner_id == request.user.id:
+        return None
+    if ProjectMember.objects.filter(
+        user=request.user, project=project, role='editor'
+    ).exists():
+        return None
+    return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+
+
 @require_POST
 @login_required
 def mic_assignment_delete(request, mic_id):
@@ -3255,18 +3271,50 @@ def mic_assignment_delete(request, mic_id):
     MicSession admin change form. Posts here from the inline's "X"
     button instead of using Django's default "Delete?" checkbox."""
     mic = get_object_or_404(MicAssignment, id=mic_id)
-    project = mic.session.day.project
-    allowed = (
-        request.user.is_superuser
-        or project.owner_id == request.user.id
-        or ProjectMember.objects.filter(
-            user=request.user, project=project, role='editor'
-        ).exists()
-    )
-    if not allowed:
-        return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+    deny = _mic_assignment_editor_or_403(request, mic)
+    if deny:
+        return deny
     mic.delete()
+    # Keep MicSession.num_mics in sync; otherwise the next session save
+    # would treat the row as "excess" via create_mic_assignments.
+    session = mic.session
+    session.num_mics = session.mic_assignments.count()
+    session.save(update_fields=['num_mics'])
     return JsonResponse({'success': True})
+
+
+@require_POST
+@login_required
+def mic_assignment_insert(request, mic_id):
+    """Issue #36 follow-up: insert a new MicAssignment above or below
+    the anchor row. Shifts every rf_number at-or-after the insertion
+    point up by one inside a transaction; bumps MicSession.num_mics so
+    create_mic_assignments doesn't later prune the row."""
+    anchor = get_object_or_404(MicAssignment, id=mic_id)
+    deny = _mic_assignment_editor_or_403(request, anchor)
+    if deny:
+        return deny
+    position = request.POST.get('position')
+    if position not in ('above', 'below'):
+        return JsonResponse({'success': False, 'error': 'Invalid position'}, status=400)
+
+    new_rf = anchor.rf_number if position == 'above' else anchor.rf_number + 1
+    session = anchor.session
+
+    from django.db import transaction
+    with transaction.atomic():
+        # Iterate in reverse so each save sees a unique rf_number.
+        to_shift = list(
+            MicAssignment.objects.filter(session=session, rf_number__gte=new_rf)
+            .order_by('-rf_number')
+        )
+        for m in to_shift:
+            m.rf_number += 1
+            m.save(update_fields=['rf_number'])
+        new_mic = MicAssignment.objects.create(session=session, rf_number=new_rf)
+        session.num_mics = session.mic_assignments.count()
+        session.save(update_fields=['num_mics'])
+    return JsonResponse({'success': True, 'new_id': new_mic.id})
 
 
 @require_POST

@@ -4963,28 +4963,35 @@ class MicAssignmentInline(BaseEquipmentInline):
     model = MicAssignment
     form = MicAssignmentForm
     extra = 0
-    # Issue #36: one-click "×" delete in place of Django's default
-    # "Delete?" checkbox column. The X posts to mic_assignment_delete
-    # and removes the row immediately (no Save required).
-    fields = ['rf_number', 'mic_type', 'is_micd', 'is_d_mic', 'notes', 'delete_x']
+    # Issue #36: one-click row actions in place of Django's default
+    # "Delete?" checkbox. The three buttons (insert-above ↑, insert-
+    # below ↓, delete ×) all hit AJAX endpoints; insert reloads the
+    # page so the renumbered rows show correctly.
+    fields = ['rf_number', 'mic_type', 'is_micd', 'is_d_mic', 'notes', 'row_actions']
     ordering = ['rf_number']
-    readonly_fields = ['rf_number', 'delete_x']
+    readonly_fields = ['rf_number', 'row_actions']
     can_delete = False
 
     class Media:
         js = ('admin/js/mic_assignment_delete.js',)
 
-    def delete_x(self, obj):
+    def row_actions(self, obj):
         if not obj.pk:
             return ''
-        return format_html(
-            '<a href="#" class="mic-delete-x" data-mic-id="{}" '
-            'title="Delete this mic" '
-            'style="color:#ff4d4d;text-decoration:none;font-weight:bold;'
-            'font-size:18px;line-height:1;padding:2px 8px;">×</a>',
-            obj.pk,
+        btn_style = (
+            'text-decoration:none;font-weight:bold;font-size:16px;'
+            'line-height:1;padding:2px 6px;margin:0 2px;'
         )
-    delete_x.short_description = ''
+        return format_html(
+            '<a href="#" class="mic-insert" data-mic-id="{0}" data-position="above" '
+            'title="Add mic above" style="color:#4a9eff;{1}">↑</a>'
+            '<a href="#" class="mic-insert" data-mic-id="{0}" data-position="below" '
+            'title="Add mic below" style="color:#4a9eff;{1}">↓</a>'
+            '<a href="#" class="mic-delete-x" data-mic-id="{0}" '
+            'title="Delete this mic" style="color:#ff4d4d;{1}">×</a>',
+            obj.pk, btn_style,
+        )
+    row_actions.short_description = ''
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Filter presenter dropdown by current project"""
