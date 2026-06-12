@@ -5173,9 +5173,11 @@ class MicSessionAdmin(BaseEquipmentAdmin):
     mic_usage.short_description = "Mics Used"
     
     def edit_mics_link(self, obj):
+        # Issue #33: renamed from "Quick Edit" — the link actually opens the
+        # full Mic Tracker show view, not an inline edit form.
         url = f'/audiopatch/mic-tracker/?session={obj.id}'
-        return format_html('<a href="{}" class="button">Quick Edit</a>', url)
-        edit_mics_link.short_description = "Quick Edit"
+        return format_html('<a href="{}" class="button">Show View</a>', url)
+    edit_mics_link.short_description = "Show View"
     
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
