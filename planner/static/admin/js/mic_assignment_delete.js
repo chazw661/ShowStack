@@ -1,7 +1,7 @@
-// Issue #36: row-action buttons (insert above/below, delete) for the
-// MicAssignment inline on the MicSession admin change form. All three
-// hit AJAX endpoints; delete removes the row in place, insert reloads
-// the page so the renumbered rf_numbers and ordering refresh.
+// Issue #36: one-click delete for the MicAssignment inline on the
+// MicSession admin change form. Clicking the X immediately POSTs to
+// /audiopatch/api/mic-assignment/<id>/delete/ and removes the row;
+// no "Delete?" checkbox + save round-trip required.
 (function () {
     'use strict';
 
@@ -16,83 +16,42 @@
         return '';
     }
 
-    function post(url) {
-        return fetch(url, {
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.mic-delete-x');
+        if (!btn) return;
+        e.preventDefault();
+        if (btn.dataset.deleting === '1') return;
+
+        var micId = btn.dataset.micId;
+        if (!micId) return;
+        if (!window.confirm('Delete this mic? This cannot be undone.')) return;
+
+        btn.dataset.deleting = '1';
+        btn.style.opacity = '0.5';
+
+        fetch('/audiopatch/api/mic-assignment/' + micId + '/delete/', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
                 'X-CSRFToken': getCookie('csrftoken'),
                 'X-Requested-With': 'XMLHttpRequest',
-                'Content-Type': 'application/x-www-form-urlencoded',
             },
-        }).then(function (r) {
-            return r.json().then(function (d) { return { ok: r.ok, data: d }; });
-        });
-    }
-
-    document.addEventListener('click', function (e) {
-        // ── Delete ───────────────────────────────────────────────
-        var delBtn = e.target.closest('.mic-delete-x');
-        if (delBtn) {
-            e.preventDefault();
-            if (delBtn.dataset.busy === '1') return;
-            if (!window.confirm('Delete this mic? This cannot be undone.')) return;
-            delBtn.dataset.busy = '1';
-            delBtn.style.opacity = '0.5';
-            post('/audiopatch/api/mic-assignment/' + delBtn.dataset.micId + '/delete/')
-                .then(function (resp) {
-                    if (resp.ok && resp.data.success) {
-                        var row = delBtn.closest('tr');
-                        if (row) row.parentNode.removeChild(row);
-                    } else {
-                        delBtn.dataset.busy = '';
-                        delBtn.style.opacity = '';
-                        alert('Delete failed: ' + (resp.data.error || 'unknown error'));
-                    }
-                })
-                .catch(function (err) {
-                    delBtn.dataset.busy = '';
-                    delBtn.style.opacity = '';
-                    alert('Delete failed: ' + err);
-                });
-            return;
-        }
-
-        // ── Insert above / below ─────────────────────────────────
-        var insBtn = e.target.closest('.mic-insert');
-        if (insBtn) {
-            e.preventDefault();
-            if (insBtn.dataset.busy === '1') return;
-            insBtn.dataset.busy = '1';
-            insBtn.style.opacity = '0.5';
-            var fd = new URLSearchParams();
-            fd.append('position', insBtn.dataset.position);
-            fetch('/audiopatch/api/mic-assignment/' + insBtn.dataset.micId + '/insert/', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken'),
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: fd.toString(),
+        })
+            .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+            .then(function (resp) {
+                if (resp.ok && resp.data.success) {
+                    var row = btn.closest('tr');
+                    if (row) row.parentNode.removeChild(row);
+                } else {
+                    btn.dataset.deleting = '';
+                    btn.style.opacity = '';
+                    alert('Delete failed: ' + (resp.data.error || 'unknown error'));
+                }
             })
-                .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-                .then(function (resp) {
-                    if (resp.ok && resp.data.success) {
-                        // Reload so renumbered rows + new row appear.
-                        window.location.reload();
-                    } else {
-                        insBtn.dataset.busy = '';
-                        insBtn.style.opacity = '';
-                        alert('Add failed: ' + (resp.data.error || 'unknown error'));
-                    }
-                })
-                .catch(function (err) {
-                    insBtn.dataset.busy = '';
-                    insBtn.style.opacity = '';
-                    alert('Add failed: ' + err);
-                });
-        }
+            .catch(function (err) {
+                btn.dataset.deleting = '';
+                btn.style.opacity = '';
+                alert('Delete failed: ' + err);
+            });
     });
 })();
