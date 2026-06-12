@@ -68,13 +68,19 @@
     .btn-mtt-ghost   { background: var(--bg-raised); color: var(--text-secondary); border: 1px solid var(--border-bright); }
     .btn-mtt-export  { background: var(--bg-raised); color: var(--accent-amber); border: 1px solid rgba(255,171,0,0.3); }
 
+    /* Issue #34: bigger, brighter session-action icons (Duplicate / Settings /
+       Delete) so the gear in particular is easier to spot. */
     .btn-icon-sm {
-        width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--border);
-        background: var(--bg-raised); color: var(--text-dim); font-size: 13px; cursor: pointer;
+        width: 40px; height: 40px; border-radius: 6px; border: 1px solid var(--border-bright);
+        background: var(--bg-raised); color: var(--text-primary); font-size: 20px; line-height: 1;
+        cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center;
         transition: all 0.15s; text-decoration: none; padding: 0; font-family: inherit;
     }
-    .btn-icon-sm:hover { border-color: var(--border-bright); color: var(--text-secondary); }
+    .btn-icon-sm:hover {
+        border-color: var(--accent-amber); color: var(--accent-amber);
+        background: #2a2a3a;
+    }
 
     .mtt-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
     .mtt-day-header {
@@ -118,7 +124,7 @@
     }
     .session-tab:hover { color: var(--text-secondary); }
     .session-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
-    .session-actions { display: flex; gap: 4px; align-items: center; padding-left: 10px; border-left: 1px solid var(--border); height: 30px; margin-left: auto; }
+    .session-actions { display: flex; gap: 8px; align-items: center; padding-left: 12px; border-left: 1px solid var(--border); height: 44px; margin-left: auto; }
     .session-panel { display: none; }
     .session-panel.active { display: block; }
     .mtt-session-stats { font-size: 10px; color: var(--text-dim); padding: 6px 14px; background: #0f0f1a; border-top: 1px solid var(--border); display: flex; gap: 16px; }
