@@ -3250,6 +3250,27 @@ def amp_channel_inline_update(request, channel_id):
 
 @require_POST
 @login_required
+def mic_assignment_delete(request, mic_id):
+    """Issue #36: one-click delete for a MicAssignment row inside the
+    MicSession admin change form. Posts here from the inline's "X"
+    button instead of using Django's default "Delete?" checkbox."""
+    mic = get_object_or_404(MicAssignment, id=mic_id)
+    project = mic.session.day.project
+    allowed = (
+        request.user.is_superuser
+        or project.owner_id == request.user.id
+        or ProjectMember.objects.filter(
+            user=request.user, project=project, role='editor'
+        ).exists()
+    )
+    if not allowed:
+        return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+    mic.delete()
+    return JsonResponse({'success': True})
+
+
+@require_POST
+@login_required
 def amp_inline_create(request):
     """Issue #27: create a new Amp from the rack page's per-location
     '+ Add Amp' button. Takes the minimum needed to scaffold channels

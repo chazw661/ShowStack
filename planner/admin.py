@@ -4963,11 +4963,28 @@ class MicAssignmentInline(BaseEquipmentInline):
     model = MicAssignment
     form = MicAssignmentForm
     extra = 0
-    fields = ['rf_number', 'mic_type', 'is_micd', 'is_d_mic', 'notes']
+    # Issue #36: one-click "×" delete in place of Django's default
+    # "Delete?" checkbox column. The X posts to mic_assignment_delete
+    # and removes the row immediately (no Save required).
+    fields = ['rf_number', 'mic_type', 'is_micd', 'is_d_mic', 'notes', 'delete_x']
     ordering = ['rf_number']
-    readonly_fields = ['rf_number']
+    readonly_fields = ['rf_number', 'delete_x']
+    can_delete = False
 
-    
+    class Media:
+        js = ('admin/js/mic_assignment_delete.js',)
+
+    def delete_x(self, obj):
+        if not obj.pk:
+            return ''
+        return format_html(
+            '<a href="#" class="mic-delete-x" data-mic-id="{}" '
+            'title="Delete this mic" '
+            'style="color:#ff4d4d;text-decoration:none;font-weight:bold;'
+            'font-size:18px;line-height:1;padding:2px 8px;">×</a>',
+            obj.pk,
+        )
+    delete_x.short_description = ''
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Filter presenter dropdown by current project"""
