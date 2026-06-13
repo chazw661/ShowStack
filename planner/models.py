@@ -3125,7 +3125,37 @@ class MicSession(models.Model):
             # Remove excess assignments (from the end)
             excess = self.mic_assignments.filter(rf_number__gt=self.num_mics)
             excess.delete()
-    
+
+    def renumber_assignments(self):
+        """Collapse MicAssignment.rf_number to consecutive 1..N and sync
+        num_mics. Idempotent; returns True if anything was written.
+
+        Two-pass via negative rf values to stay collision-safe against
+        legacy rows that share an rf_number (issue #36 dup cleanup)."""
+        from django.db import transaction
+
+        assignments = list(
+            self.mic_assignments.order_by('rf_number', 'id')
+        )
+        if not assignments:
+            return False
+
+        current = [a.rf_number for a in assignments]
+        desired = list(range(1, len(assignments) + 1))
+        if current == desired and self.num_mics == len(assignments):
+            return False
+
+        with transaction.atomic():
+            for i, a in enumerate(assignments, start=1):
+                a.rf_number = -i
+                a.save(update_fields=['rf_number'])
+            for i, a in enumerate(assignments, start=1):
+                a.rf_number = i
+                a.save(update_fields=['rf_number'])
+            self.num_mics = len(assignments)
+            self.save(update_fields=['num_mics'])
+        return True
+
     def get_mic_usage_stats(self):
         """Get statistics about mic usage in this session"""
         assignments = self.mic_assignments.all()

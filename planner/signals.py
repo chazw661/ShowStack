@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from .models import (
     UserProfile,
     ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
+    MicSession, MicAssignment,
 )
 
 
@@ -92,6 +93,16 @@ def consolematrixoutput_to_manual(sender, instance, **kwargs):
     else:
         label = '(deleted matrix)'
     _convert_orphans_to_manual('matrix', instance.pk, label)
+
+
+@receiver(post_delete, sender=MicAssignment)
+def renumber_mic_assignments_after_delete(sender, instance, **kwargs):
+    """Issue #36: keep MicAssignment.rf_number consecutive 1..N after any
+    delete. Uses filter(...).first() so cascade-from-session deletes (where
+    the session is gone) no-op silently instead of raising DoesNotExist."""
+    session = MicSession.objects.filter(pk=instance.session_id).first()
+    if session is not None:
+        session.renumber_assignments()
 
 
 @receiver(post_delete, sender=ConsoleStereoOutput)

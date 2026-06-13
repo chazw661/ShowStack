@@ -18,7 +18,6 @@ Usage:
 """
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
 
 from planner.models import MicSession
 
@@ -50,8 +49,6 @@ class Command(BaseCommand):
 
         for session in qs.order_by('id'):
             total_sessions += 1
-            # Order by current rf_number, then id to break ties (the
-            # duplicates from the reverted feature).
             assignments = list(
                 session.mic_assignments.order_by('rf_number', 'id')
             )
@@ -70,22 +67,8 @@ class Command(BaseCommand):
                 f"num_mics {session.num_mics} -> {len(assignments)}"
             ))
 
-            if not apply_changes:
-                continue
-
-            with transaction.atomic():
-                # Two-pass to dodge any future unique constraint: first
-                # park each row at a negative rf so the renumber can't
-                # collide with another row's current value.
-                for i, a in enumerate(assignments, start=1):
-                    a.rf_number = -i
-                    a.save(update_fields=['rf_number'])
-                for i, a in enumerate(assignments, start=1):
-                    a.rf_number = i
-                    a.save(update_fields=['rf_number'])
-                    total_rows_changed += 1
-                session.num_mics = len(assignments)
-                session.save(update_fields=['num_mics'])
+            if apply_changes and session.renumber_assignments():
+                total_rows_changed += len(assignments)
 
         verb = "renumbered" if apply_changes else "would renumber"
         self.stdout.write(self.style.SUCCESS(
