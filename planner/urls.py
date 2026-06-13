@@ -173,6 +173,8 @@ urlpatterns = [
     path('api/mic/slot/remove/', views.remove_presenter_slot, name='remove_presenter_slot'),
 
     path('api/mic/slot/upload-photo/', views.upload_slot_photo, name='upload_slot_photo'),
+    # Issue #39: server-side fetch of a dragged image URL (CORS workaround).
+    path('api/mic/slot/upload-photo-from-url/', views.upload_slot_photo_from_url, name='upload_slot_photo_from_url'),
 
     path('api/mic/slot/update/', views.update_slot_field, name='update_slot_field'),
     path('api/mic/slot/assign-group/', views.assign_slot_group, name='assign_slot_group'),

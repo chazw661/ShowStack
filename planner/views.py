@@ -1698,7 +1698,97 @@ def upload_slot_photo(request):
             return JsonResponse({'success': True, 'photo_url': slot.photo_data})
         except PresenterSlot.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Slot not found'})
-    return JsonResponse({'success': False})        
+    return JsonResponse({'success': False})
+
+
+@require_POST
+@login_required
+def upload_slot_photo_from_url(request):
+    """Issue #39: fetch an image URL server-side and store it on the
+    presenter slot, used when a user drags an HTML <img> from another
+    site into the photo zone (where client-side fetch is blocked by CORS).
+
+    Body (JSON): {slot_id, url}
+
+    Hardening:
+    - Auth + project allowlist matching mic_assignment_reorder.
+    - URL must be http/https with a public-routable host (rejects
+      private, loopback, link-local, reserved, multicast).
+    - 10s connect/read timeout, 5 MB max response, image/* content-type.
+    """
+    import base64
+    import ipaddress
+    import socket
+    import urllib.parse
+
+    import requests
+
+    MAX_BYTES = 5 * 1024 * 1024
+
+    try:
+        data = json.loads(request.body)
+        slot_id = int(data['slot_id'])
+        url = (data['url'] or '').strip()
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
+
+    try:
+        slot = PresenterSlot.objects.select_related(
+            'assignment__session__day__project'
+        ).get(id=slot_id)
+    except PresenterSlot.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Slot not found'}, status=404)
+
+    project = slot.assignment.session.day.project
+    allowed = (
+        request.user.is_superuser
+        or project.owner_id == request.user.id
+        or ProjectMember.objects.filter(
+            user=request.user, project=project, role='editor'
+        ).exists()
+    )
+    if not allowed:
+        return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        return JsonResponse({'success': False, 'error': 'Only http(s) URLs accepted'}, status=400)
+
+    # SSRF guard: every resolved address must be public.
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror:
+        return JsonResponse({'success': False, 'error': 'Cannot resolve host'}, status=400)
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return JsonResponse({'success': False, 'error': 'Refused: internal host'}, status=400)
+
+    try:
+        resp = requests.get(url, timeout=10, stream=True)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        return JsonResponse({'success': False, 'error': f'Fetch failed: {e}'}, status=400)
+
+    content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+    if not content_type.startswith('image/'):
+        return JsonResponse({'success': False, 'error': 'URL did not return an image'}, status=400)
+
+    buf = bytearray()
+    for chunk in resp.iter_content(chunk_size=64 * 1024):
+        buf.extend(chunk)
+        if len(buf) > MAX_BYTES:
+            resp.close()
+            return JsonResponse({'success': False, 'error': 'Image exceeds 5 MB limit'}, status=400)
+
+    b64 = base64.b64encode(bytes(buf)).decode('utf-8')
+    slot.photo_data = f'data:{content_type};base64,{b64}'
+    slot.save(update_fields=['photo_data'])
+    return JsonResponse({'success': True, 'photo_url': slot.photo_data})
 
 
 @require_POST
