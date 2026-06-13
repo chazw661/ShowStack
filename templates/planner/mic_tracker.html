@@ -110,9 +110,11 @@
     .mtt-session-collapse.collapsed { transform: rotate(-90deg); }
     .mtt-session-body { }
     .mtt-session-body.collapsed { display: none; }
-    .mtt-session-date { font-size: 10px; color: var(--text-dim); background: var(--bg-raised); padding: 2px 8px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
-    .mtt-session-name { font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.04em; }
-    .mtt-session-loc { font-size: 11px; color: var(--text-dim); }
+    .mtt-session-date,
+    .mtt-session-name,
+    .mtt-session-loc,
+    .mtt-session-time { font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.04em; }
+    .mtt-session-date { white-space: nowrap; flex-shrink: 0; }
 
     .session-tabs { display: flex; height: 46px; align-items: stretch; flex-shrink: 0; margin-right: 8px; }
     .session-tab {
@@ -462,6 +464,7 @@
                     <span class="mtt-session-date">{{ session.day.date|date:"m/d" }}</span>
                     <span class="mtt-session-name">{{ session.name }}</span>
                     {% if session.location %}<span class="mtt-session-loc">· {{ session.location }}</span>{% endif %}
+                    {% if session.start_time %}<span class="mtt-session-time">· {{ session.start_time|time:"g:i A" }}{% if session.end_time %} – {{ session.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}
                     {% if not is_viewer %}
                     <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
