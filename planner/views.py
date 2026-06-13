@@ -3271,6 +3271,117 @@ def mic_assignment_delete(request, mic_id):
 
 @require_POST
 @login_required
+def mic_assignment_reorder(request):
+    """Issue #38: drag-and-drop reorder of presenters between MicAssignment
+    rows in the mic tracker.
+
+    Body (JSON):
+        action: 'swap' or 'move'
+        source_id: MicAssignment.id being dragged
+        target_id: MicAssignment.id being dropped on (swap) or near (move)
+        position: 'above' or 'below' (move only)
+
+    Mutates only the active PresenterSlot's `presenter` field on each
+    affected row. Hardware-bound fields (rf_number, mic_type, placement,
+    sensitivity, output_level, shared_presenters) stay where they were.
+    """
+    MULTI_SLOT_ERR = (
+        "Drag-and-drop is only supported for single-presenter rows. "
+        "Edit multi-presenter rows manually."
+    )
+
+    try:
+        data = json.loads(request.body)
+        action = data.get('action')
+        source_id = int(data['source_id'])
+        target_id = int(data['target_id'])
+        position = data.get('position', 'above')
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
+
+    if action not in ('swap', 'move'):
+        return JsonResponse({'success': False, 'error': 'Invalid action'}, status=400)
+    if position not in ('above', 'below'):
+        return JsonResponse({'success': False, 'error': 'Invalid position'}, status=400)
+    if source_id == target_id:
+        return JsonResponse({'success': True})
+
+    try:
+        source = MicAssignment.objects.select_related('session__day__project').get(id=source_id)
+        target = MicAssignment.objects.select_related('session__day__project').get(id=target_id)
+    except MicAssignment.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Not found'}, status=404)
+
+    if source.session_id != target.session_id:
+        return JsonResponse({
+            'success': False, 'error': 'Cross-session reorder not supported'
+        }, status=400)
+
+    project = source.session.day.project
+    allowed = (
+        request.user.is_superuser
+        or project.owner_id == request.user.id
+        or ProjectMember.objects.filter(
+            user=request.user, project=project, role='editor'
+        ).exists()
+    )
+    if not allowed:
+        return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+
+    def _ensure_active_slot(assignment):
+        slot = assignment.presenter_slots.filter(is_active=True).first()
+        if not slot:
+            slot = assignment.presenter_slots.order_by('order').first()
+        if not slot:
+            slot = PresenterSlot.objects.create(
+                assignment=assignment, order=0, is_active=True
+            )
+        return slot
+
+    with transaction.atomic():
+        if action == 'swap':
+            if source.presenter_slots.count() > 1 or target.presenter_slots.count() > 1:
+                return JsonResponse({'success': False, 'error': MULTI_SLOT_ERR}, status=400)
+            src_slot = _ensure_active_slot(source)
+            tgt_slot = _ensure_active_slot(target)
+            src_slot.presenter, tgt_slot.presenter = tgt_slot.presenter, src_slot.presenter
+            src_slot.save(update_fields=['presenter'])
+            tgt_slot.save(update_fields=['presenter'])
+        else:  # move — kanban rotation across single-presenter rows
+            assignments = list(
+                source.session.mic_assignments.order_by('rf_number')
+            )
+            ids = [a.id for a in assignments]
+            source_idx = ids.index(source_id)
+            target_idx = ids.index(target_id)
+
+            lo, hi = min(source_idx, target_idx), max(source_idx, target_idx)
+            for a in assignments[lo:hi + 1]:
+                if a.presenter_slots.count() > 1:
+                    return JsonResponse({'success': False, 'error': MULTI_SLOT_ERR}, status=400)
+
+            slots = [_ensure_active_slot(a) for a in assignments]
+            presenters = [s.presenter for s in slots]
+
+            moved = presenters.pop(source_idx)
+            insert_idx = target_idx
+            if source_idx < target_idx:
+                insert_idx -= 1
+            if position == 'below':
+                insert_idx += 1
+            insert_idx = max(0, min(insert_idx, len(presenters)))
+            presenters.insert(insert_idx, moved)
+
+            for slot, new_p in zip(slots, presenters):
+                if (slot.presenter_id or None) != (new_p.id if new_p else None):
+                    slot.presenter = new_p
+                    slot.save(update_fields=['presenter'])
+
+    return JsonResponse({'success': True})
+
+
+@require_POST
+@login_required
 def amp_inline_create(request):
     """Issue #27: create a new Amp from the rack page's per-location
     '+ Add Amp' button. Takes the minimum needed to scaffold channels

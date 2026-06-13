@@ -245,6 +245,8 @@ urlpatterns = [
     path('api/amp/inline-create/', views.amp_inline_create, name='amp_inline_create'),
     # Issue #36: one-click mic delete inside the MicSession admin inline.
     path('api/mic-assignment/<int:mic_id>/delete/', views.mic_assignment_delete, name='mic_assignment_delete'),
+    # Issue #38: drag-and-drop reorder of presenters in the mic tracker.
+    path('api/mic-assignment/reorder/', views.mic_assignment_reorder, name='mic_assignment_reorder'),
     path('pa-cables/all/pdf/', views.all_pa_cables_pdf_export, name='all_pa_cables_pdf_export'),
     path('comm-beltpacks/all/pdf/', views.all_comm_beltpacks_pdf_export, name='all_comm_beltpacks_pdf_export'),
     path('comm-crew-names/import-csv/', views.import_comm_crew_names_csv, name='import_comm_crew_names_csv'),

@@ -400,6 +400,13 @@
     .a2-slot-micd-btn.off { background: var(--bg-input); color: var(--text-dim); }
     .a2-slot-micd-btn.on  { background: var(--accent-green); color: #000; border-color: var(--accent-green); box-shadow: 0 0 8px rgba(0,230,118,0.35); }
     .a2-slot-micd-btn:hover { opacity: 0.85; }
+
+    /* ── Issue #38: drag-and-drop presenter reorder ── */
+    .a1-row-draggable { cursor: grab; }
+    .a1-row-draggable.dragging { opacity: 0.4; cursor: grabbing; }
+    .a1-row.drop-above { box-shadow: inset 0 3px 0 var(--accent-blue); }
+    .a1-row.drop-below { box-shadow: inset 0 -3px 0 var(--accent-blue); }
+    .a1-row.drop-swap { background: rgba(74,158,255,0.18); }
     </style>
 {% endblock %}
 
@@ -554,8 +561,9 @@
 
                             {% else %}
                             {# ── SINGLE PRESENTER row ── #}
-                            <tr class="a1-row {% if assignment.is_micd %}row-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
-                                id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
+                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
+                                id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}"
+                                {% if not is_viewer %}draggable="true"{% endif %}>
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
                                     <span class="group-dot {% if assignment.group %}color-{{ assignment.group.color }}{% else %}empty{% endif %}"
@@ -1524,6 +1532,99 @@ document.querySelectorAll('[data-session-id]').forEach(function(session) {
         if (btn) btn.click();
     }
 });
+
+// ─── Issue #38: drag-and-drop presenter reorder on A1 rows ───
+(function micDragDrop() {
+    let draggedRow = null;
+
+    function clearDropHints() {
+        document.querySelectorAll('.a1-row.drop-above, .a1-row.drop-below, .a1-row.drop-swap')
+            .forEach(el => el.classList.remove('drop-above', 'drop-below', 'drop-swap'));
+    }
+
+    function zoneFor(row, clientY) {
+        const rect = row.getBoundingClientRect();
+        const y = clientY - rect.top;
+        const h = rect.height;
+        if (y < h * 0.25) return 'above';
+        if (y > h * 0.75) return 'below';
+        return 'swap';
+    }
+
+    function sameSession(a, b) {
+        const aSession = a.closest('.mtt-session')?.dataset.sessionId;
+        const bSession = b.closest('.mtt-session')?.dataset.sessionId;
+        return aSession && aSession === bSession;
+    }
+
+    function isValidTarget(row) {
+        // Single-presenter rows only — multi-slot rows have data-slot-id.
+        return row
+            && row.classList.contains('a1-row')
+            && row.dataset.assignmentId
+            && !row.dataset.slotId;
+    }
+
+    document.addEventListener('dragstart', (e) => {
+        const row = e.target.closest('.a1-row-draggable');
+        if (!row) return;
+        draggedRow = row;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', row.dataset.assignmentId || '');
+    });
+
+    document.addEventListener('dragend', () => {
+        if (draggedRow) draggedRow.classList.remove('dragging');
+        clearDropHints();
+        draggedRow = null;
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (!draggedRow) return;
+        const row = e.target.closest('.a1-row');
+        if (!isValidTarget(row) || row === draggedRow || !sameSession(draggedRow, row)) {
+            clearDropHints();
+            return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropHints();
+        row.classList.add('drop-' + zoneFor(row, e.clientY));
+    });
+
+    document.addEventListener('drop', async (e) => {
+        const dragged = draggedRow;
+        if (!dragged) return;
+        const row = e.target.closest('.a1-row');
+        if (!isValidTarget(row) || row === dragged || !sameSession(dragged, row)) return;
+        e.preventDefault();
+        const zone = zoneFor(row, e.clientY);
+        const sourceId = parseInt(dragged.dataset.assignmentId, 10);
+        const targetId = parseInt(row.dataset.assignmentId, 10);
+        clearDropHints();
+
+        const body = zone === 'swap'
+            ? { action: 'swap', source_id: sourceId, target_id: targetId }
+            : { action: 'move', source_id: sourceId, target_id: targetId, position: zone };
+
+        try {
+            const resp = await fetch('/audiopatch/api/mic-assignment/reorder/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+                body: JSON.stringify(body),
+            });
+            const json = await resp.json();
+            if (!json.success) {
+                alert(json.error || 'Reorder failed.');
+                return;
+            }
+            window.location.reload();
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+    });
+})();
 </script>
 
 {% endblock %}
