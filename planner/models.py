@@ -3861,7 +3861,7 @@ class AudioChecklist(models.Model):
 class SoundvisionPrediction(models.Model):
     """Main prediction file from L'Acoustics Soundvision"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE) 
-    show_day = models.ForeignKey('ShowDay', on_delete=models.CASCADE, related_name='predictions')
+    show_day = models.ForeignKey('ShowDay', on_delete=models.SET_NULL, null=True, blank=True, related_name='predictions')
     file_name = models.CharField(max_length=255)
     version = models.CharField(max_length=50, blank=True)
     date_generated = models.DateField(null=True, blank=True)
