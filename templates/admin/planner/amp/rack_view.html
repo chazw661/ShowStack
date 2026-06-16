@@ -758,7 +758,29 @@
                     </div>
                     {% endif %}
 
+                    {# Issue #41: SC32 Out — 16 outs on amps like LA7.16i. #}
+                    {% if card.sc32_rows %}
+                    <div class="amp-output-block">
+                        <div class="amp-output-title">SC32 Out</div>
+                        <table class="amp-output-table">
+                            {% for row in card.sc32_rows %}
+                            <tr>
+                                <td class="label-col">{{ row.ch }}</td>
+                                <td>
+                                    <input type="text" class="amp-cell-input"
+                                           value="{{ row.value }}"
+                                           data-amp-id="{{ card.amp.pk }}"
+                                           data-field="{{ row.field }}">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                    {% endif %}
+
                     {# Issue #31: NL4 Out is now the four generic numbered outputs. #}
+                    {# Issue #41: only render NL4 block on amps that actually have NL4 connectors. #}
+                    {% if card.has_nl4 %}
                     <div class="amp-output-block">
                         <div class="amp-output-title">NL4 Out</div>
                         <table class="amp-output-table">
@@ -775,6 +797,7 @@
                             {% endfor %}
                         </table>
                     </div>
+                    {% endif %}
                 </div>
             </div>
             {% endwith %}

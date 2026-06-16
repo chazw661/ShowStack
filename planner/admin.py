@@ -1845,11 +1845,26 @@ class AmpAdmin(BaseEquipmentAdmin):
                                     'field': f'cacom_{ci}_ch{n}',
                                     'value': getattr(amp, f'cacom_{ci}_ch{n}', ''),
                                 })
+                    # Issue #41: LA7.16i and similar amps expose 16 outs over a
+                    # single SC32 connector; render those as their own block
+                    # instead of the generic four-output NL4 block.
+                    sc32_rows = []
+                    sc32_count = getattr(model, 'sc32_connector_count', 0) if model else 0
+                    if sc32_count:
+                        for n in range(1, 17):
+                            sc32_rows.append({
+                                'ch': n,
+                                'field': f'sc32_ch{n}',
+                                'value': getattr(amp, f'sc32_ch{n}', ''),
+                            })
+                    has_nl4 = bool(model and model.nl4_connector_count)
                     cards.append({
                         'amp': amp,
                         'channels': channels,
                         'nl4_rows': nl4_rows,
                         'cacom_rows': cacom_rows,
+                        'sc32_rows': sc32_rows,
+                        'has_nl4': has_nl4,
                     })
                 # Items list — for divider rendering anchored to amp index.
                 items_order = []

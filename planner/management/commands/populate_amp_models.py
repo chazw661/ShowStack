@@ -48,6 +48,19 @@ class Command(BaseCommand):
                 'nl4_connector_count': 1,
                 'cacom_output_count': 0,
             },
+            {
+                # Issue #41: 16 outputs over a single SC32 connector,
+                # not NL4.
+                'manufacturer': 'L-Acoustics',
+                'model_name': 'LA7.16i',
+                'channel_count': 16,
+                'has_analog_inputs': False,
+                'has_aes_inputs': True,
+                'has_avb_inputs': True,
+                'nl4_connector_count': 0,
+                'cacom_output_count': 0,
+                'sc32_connector_count': 1,
+            },
             # Powersoft
             {
                 'manufacturer': 'Powersoft',
@@ -117,7 +130,7 @@ class Command(BaseCommand):
         skipped_count = 0
 
         for amp_data in amp_models:
-            obj, created = AmpModel.objects.get_or_create(
+            obj, created = AmpModel.objects.update_or_create(
                 manufacturer=amp_data['manufacturer'],
                 model_name=amp_data['model_name'],
                 defaults=amp_data
