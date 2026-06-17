@@ -665,20 +665,18 @@
                             {% for ch in card.channels %}
                             <tr>
                                 <td class="stream-col">
-                                    <select class="amp-cell-input"
-                                            data-channel-id="{{ ch.pk }}"
-                                            data-field="avb_stream">
-                                        <option value=""></option>
-                                        {% for i in "0123456789012345"|make_list %}{% endfor %}
-                                        {% for n in ch.AVB_CHOICES %}
-                                            {% if n.0 %}<option value="{{ n.0 }}"{% if ch.avb_stream == n.0 %} selected{% endif %}>{{ n.1 }}</option>{% endif %}
-                                        {% endfor %}
-                                    </select>
+                                    {# Issue #43: text+datalist so processor output labels can suggest "AVB N - Name". #}
+                                    <input type="text" class="amp-cell-input"
+                                           value="{{ ch.avb_stream }}"
+                                           list="amp-avb-input-options"
+                                           data-channel-id="{{ ch.pk }}"
+                                           data-field="avb_stream">
                                 </td>
                                 <td class="ch-num">{{ ch.channel_number }}</td>
                                 <td>
                                     <input type="text" class="amp-cell-input"
                                            value="{{ ch.analog_input }}"
+                                           list="amp-analog-input-options"
                                            data-channel-id="{{ ch.pk }}"
                                            data-field="analog_input">
                                 </td>
@@ -692,6 +690,7 @@
                                 <td>
                                     <input type="text" class="amp-cell-input"
                                            value="{{ ch.aes_input }}"
+                                           list="amp-aes-input-options"
                                            data-channel-id="{{ ch.pk }}"
                                            data-field="aes_input">
                                 </td>
@@ -851,6 +850,17 @@
     <option value="CUSTOM"></option>
 </datalist>
 
+{# Issue #43: processor output labels surfaced as datalist hints on the amp input fields. #}
+<datalist id="amp-analog-input-options">
+    {% for v in analog_input_options %}<option value="{{ v }}"></option>{% endfor %}
+</datalist>
+<datalist id="amp-aes-input-options">
+    {% for v in aes_input_options %}<option value="{{ v }}"></option>{% endfor %}
+</datalist>
+<datalist id="amp-avb-input-options">
+    {% for v in avb_input_options %}<option value="{{ v }}"></option>{% endfor %}
+</datalist>
+
 {# ── Locations modal ────────────────────────────────────────── #}
 <div class="rack-modal" id="locations-modal" onclick="if(event.target===this)closeLocationsModal()">
     <div class="rack-modal-panel">
@@ -910,12 +920,13 @@
             if (el.dataset.boundAutosave) return;
             el.dataset.boundAutosave = '1';
             var lastValue = el.value;
-            // Issue #30 follow-up: native <datalist> filters its options by
-            // whatever is in the input, so once Preset has a value the dropdown
-            // collapses to "things that start with KIVA". Clear on focus to show
-            // the full list; restore on blur if the user didn't pick anything.
-            var isPresetCombo = el.dataset.field === 'preset' && el.hasAttribute('list');
-            if (isPresetCombo) {
+            // Issue #30 follow-up + #43: native <datalist> filters its options
+            // by whatever is in the input, so once a combobox has a value the
+            // dropdown collapses to "things that start with that value". Clear
+            // on focus to show the full list; restore on blur if the user
+            // didn't pick anything.
+            var isCombobox = el.hasAttribute('list');
+            if (isCombobox) {
                 el.addEventListener('focus', function () {
                     el.dataset.previousValue = el.value;
                     el.value = '';
@@ -926,7 +937,7 @@
                 lastValue = el.value;
             });
             el.addEventListener('blur', function () {
-                if (isPresetCombo && el.value === '' && el.dataset.previousValue) {
+                if (isCombobox && el.value === '' && el.dataset.previousValue) {
                     el.value = el.dataset.previousValue;
                 }
                 if (el.value !== lastValue) {

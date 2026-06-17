@@ -1892,13 +1892,82 @@ class AmpAdmin(BaseEquipmentAdmin):
                 })
 
             all_locations = list(locations)
-            from .models import AmpModel
+            from .models import AmpModel, P1Output, GalaxyOutput
             extra_context['grouped_amps'] = active_locations
             extra_context['all_locations'] = all_locations
             extra_context['all_amp_models'] = list(
                 AmpModel.objects.all().order_by('manufacturer', 'model_name')
             )
             extra_context['has_grouped_layout'] = True
+
+            # Issue #43: surface processor output labels as datalist
+            # suggestions on the amp's Analogue / AES / AVB input fields.
+            # Unlabeled outputs are skipped; entries get a "(<processor>)"
+            # suffix only when two processors expose the same label at the
+            # same slot, so a single-processor setup stays terse.
+            from collections import defaultdict
+
+            p1_outs = P1Output.objects.filter(
+                p1_processor__system_processor__project=request.current_project
+            ).select_related('p1_processor__system_processor')
+            gal_outs = GalaxyOutput.objects.filter(
+                galaxy_processor__system_processor__project=request.current_project
+            ).select_related('galaxy_processor__system_processor')
+
+            tagged = []  # (output_type, channel_number, label, processor_name)
+            for o in p1_outs:
+                label = (o.label or '').strip()
+                if not label:
+                    continue
+                tagged.append((
+                    o.output_type, o.channel_number, label,
+                    o.p1_processor.system_processor.name,
+                ))
+            for o in gal_outs:
+                label = (o.label or '').strip()
+                if not label:
+                    continue
+                tagged.append((
+                    o.output_type, o.channel_number, label,
+                    o.galaxy_processor.system_processor.name,
+                ))
+
+            def _build_simple(kind):
+                # by_label[label] -> set of processor names
+                by_label = defaultdict(set)
+                for t, _ch, lbl, proc in tagged:
+                    if t == kind:
+                        by_label[lbl].add(proc)
+                out = []
+                for lbl, procs in by_label.items():
+                    if len(procs) == 1:
+                        out.append(lbl)
+                    else:
+                        for proc in procs:
+                            out.append(f'{lbl} ({proc})')
+                return sorted(out)
+
+            def _build_avb():
+                # Group by (channel_number, label) so two processors that
+                # emit the same labeled stream collapse, and only ambiguous
+                # ones grow the "(proc)" suffix.
+                by_slot = defaultdict(set)
+                for t, ch, lbl, proc in tagged:
+                    if t == 'AVB':
+                        by_slot[(ch, lbl)].add(proc)
+                rows = []  # (channel_number, display_string) so sort is numeric
+                for (ch, lbl), procs in by_slot.items():
+                    if len(procs) == 1:
+                        rows.append((ch, f'AVB {ch} - {lbl}'))
+                    else:
+                        for proc in procs:
+                            rows.append((ch, f'AVB {ch} - {lbl} ({proc})'))
+                rows.sort()  # (channel_number, display) — numeric primary
+                return [s for _ch, s in rows]
+
+            extra_context['analog_input_options'] = _build_simple('ANALOG')
+            extra_context['aes_input_options'] = _build_simple('AES')
+            extra_context['avb_input_options'] = _build_avb()
 
         return super().changelist_view(request, extra_context=extra_context)
 
