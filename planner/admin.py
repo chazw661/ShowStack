@@ -5002,7 +5002,7 @@ class MicAssignmentForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         # Extract the instance BEFORE calling super
         instance = kwargs.get('instance')
-        
+
         # If editing existing record with shared_presenters, convert to text
         if instance and instance.pk and instance.shared_presenters:
             if isinstance(instance.shared_presenters, list):
@@ -5011,9 +5011,18 @@ class MicAssignmentForm(forms.ModelForm):
                     # Temporarily replace the list with text for display
                     instance._original_shared = instance.shared_presenters
                     instance.shared_presenters = '\n'.join(instance.shared_presenters)
-        
+
         super().__init__(*args, **kwargs)
-        
+
+        # Issue #44: rf_number is in the admin's readonly_fields so the
+        # user has no input box for it, but the model column is NOT NULL
+        # with MinValueValidator(1). Without this opt-out, every new row
+        # added via "Add another Mic Assignment" fails ModelForm validation
+        # and the whole MicSession save is rejected silently. The
+        # MicAssignmentInlineFormSet below auto-assigns a value before save.
+        if 'rf_number' in self.fields:
+            self.fields['rf_number'].required = False
+
         # Now customize the field
         self.fields['shared_presenters'] = forms.CharField(
             required=False,
@@ -5043,9 +5052,64 @@ class MicAssignmentForm(forms.ModelForm):
         else:
             return [n.strip() for n in value.split(',') if n.strip()]
     
+class MicAssignmentInlineFormSet(forms.BaseInlineFormSet):
+    """Issue #44: auto-assign rf_number to MicAssignment rows that the
+    user adds via the inline's "Add another" button. The admin marks
+    rf_number as readonly so the user can't type one — without this
+    every new row fails ModelForm validation and the whole MicSession
+    save is silently rejected.
+
+    Existing rows are untouched; new rows get max(existing rf_number)+i+1.
+    MicSession.renumber_assignments() in save_formset collapses to 1..N
+    and syncs num_mics afterwards.
+
+    save_new_objects is overridden too: Django's default skips extra
+    forms whose form fields weren't touched, but the engineer's mental
+    model is "click Add another = create a real slot I'll fill in later
+    from the rack view". Once clean() has stamped an rf_number on the
+    instance, we save the row regardless of has_changed.
+    """
+
+    def clean(self):
+        super().clean()
+        session = self.instance
+        if not session or not session.pk:
+            return
+        existing_max = MicAssignment.objects.filter(session=session).aggregate(
+            m=Max('rf_number')
+        )['m'] or 0
+        next_n = existing_max + 1
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data'):
+                continue
+            if form.cleaned_data.get('DELETE'):
+                continue
+            if not form.instance.pk and not form.instance.rf_number:
+                form.instance.rf_number = next_n
+                form.cleaned_data['rf_number'] = next_n
+                next_n += 1
+
+    def save_new_objects(self, commit=True):
+        self.new_objects = []
+        for form in self.extra_forms:
+            if self.can_delete and self._should_delete_form(form):
+                continue
+            # Field-level errors → don't try to save (e.g. invalid mic_type).
+            if form.errors:
+                continue
+            # Only save rows that survived clean()'s rf_number assignment.
+            if not getattr(form.instance, 'rf_number', None):
+                continue
+            self.new_objects.append(self.save_new(form, commit=commit))
+        if not commit:
+            self.saved_forms.extend(self.new_objects)
+        return self.new_objects
+
+
 class MicAssignmentInline(BaseEquipmentInline):
     model = MicAssignment
     form = MicAssignmentForm
+    formset = MicAssignmentInlineFormSet
     extra = 0
     # Issue #36: one-click "×" delete in place of Django's default
     # "Delete?" checkbox column. The X posts to mic_assignment_delete
@@ -5285,6 +5349,16 @@ class MicSessionAdmin(BaseEquipmentAdmin):
         # Update mic assignments if num_mics changed
         if 'num_mics' in form.changed_data:
             obj.create_mic_assignments()
+
+    def save_formset(self, request, form, formset, change):
+        # Issue #44: after the inline formset saves (which now auto-
+        # assigns rf_number to new rows via MicAssignmentInlineFormSet),
+        # collapse the assignments back to 1..N and sync num_mics so a
+        # subsequent num_mics-driven create_mic_assignments doesn't
+        # delete the row we just added.
+        super().save_formset(request, form, formset, change)
+        if formset.model is MicAssignment and form.instance and form.instance.pk:
+            form.instance.renumber_assignments()
 
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
