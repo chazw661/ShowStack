@@ -945,10 +945,10 @@ class ConsoleInput(models.Model):
     
     source_hardware = models.CharField(
         max_length=50,
-        choices=SOURCE_HARDWARE_CHOICES,
         blank=True,
         null=True,
-        verbose_name="Source Hardware"
+        verbose_name="Source Hardware",
+        help_text="Pick from the shared Source Hardware list. Manage entries via the Source Hardware Options admin page.",
     )
 
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
@@ -972,7 +972,20 @@ class ConsoleInput(models.Model):
             return f"Input {self.input_ch}"
         else:
             return f"Input {self.pk or 'New'}"
-        
+
+
+
+class SourceHardwareOption(models.Model):
+    label = models.CharField(max_length=50, unique=True)
+    sort_order = models.PositiveIntegerField(default=100)
+
+    class Meta:
+        ordering = ['sort_order', 'label']
+        verbose_name = "Source Hardware Option"
+        verbose_name_plural = "Source Hardware Options"
+
+    def __str__(self):
+        return self.label
 
 
 class ConsoleAuxOutput(models.Model):

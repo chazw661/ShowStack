@@ -29,6 +29,7 @@ urlpatterns = [
    
      #-----Consoles
     path("consoles/<int:console_id>/", views.console_detail, name="console_detail"),
+    path('source-hardware-options/add/', views.add_source_hardware_option, name='add_source_hardware_option'),
     
     # P1 Processor URLs
     path('p1/<int:p1_processor_id>/export/', views.p1_processor_export, name='p1_processor_export'),

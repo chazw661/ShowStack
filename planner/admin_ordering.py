@@ -116,6 +116,7 @@ def ordered_get_app_list(request, app_label=None):
         # Main Equipment (5-8)
         'location': 5,
         'console': 6,
+        'sourcehardwareoption': 6.5,
         'device': 7,
         'amp': 8,
         'ampmodel': 8.5,

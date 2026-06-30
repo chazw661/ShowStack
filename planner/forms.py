@@ -49,6 +49,11 @@ class NameOnlyForm(forms.ModelForm):
 # ─── Console Input Form ────────────────────────────────────────────────────────
 
 class ConsoleInputForm(forms.ModelForm):
+    source_hardware = forms.ChoiceField(
+        required=False,
+        choices=[('', '---------')],
+    )
+
     class Meta:
         model = ConsoleInput
         fields = [

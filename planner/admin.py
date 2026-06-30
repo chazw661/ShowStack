@@ -34,7 +34,7 @@ from django.db import models
 
 # Model imports (add the mic tracking models to your existing model imports)
 from .models import Device, DeviceInput, DeviceOutput
-from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
+from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, SourceHardwareOption
 from .models import ConsoleImport
 from .models import MultitrackSession, MultitrackTrack
 from .models import MultitrackTemplate, MultitrackTemplateSlot
@@ -612,14 +612,31 @@ class ConsoleInputInline(admin.TabularInline):
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
+        from planner.models import SourceHardwareOption
 
         class PrepopulatedFormSet(formset):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
 
+                source_hardware_options = list(
+                    SourceHardwareOption.objects.values_list('label', flat=True)
+                )
+                base_choices = [(o, o) for o in source_hardware_options]
+
                 for form in self.forms:
                     for field in form.fields.values():
                         field.required = False
+
+                    if 'source_hardware' in form.fields:
+                        current = form.instance.source_hardware if form.instance.pk else None
+                        choices = list(base_choices)
+                        if current and current not in source_hardware_options:
+                            choices.append((current, current))
+                        form.fields['source_hardware'].choices = (
+                            [('', '---------')]
+                            + choices
+                            + [('__add_new__', '+ Add new…')]
+                        )
 
                 for index, form in enumerate(self.forms):
                     if not form.instance.pk:
@@ -627,7 +644,7 @@ class ConsoleInputInline(admin.TabularInline):
 
 
             def add_fields(self, form, index):
-                super().add_fields(form, index)    
+                super().add_fields(form, index)
 
                 if hasattr(form, 'fields') and 'DELETE' in form.fields:
                      form.fields['DELETE'].label = ""
@@ -635,8 +652,8 @@ class ConsoleInputInline(admin.TabularInline):
 
         original_str = self.model.__str__
         self.model.__str__ = lambda self: ""
-        
-        return PrepopulatedFormSet       
+
+        return PrepopulatedFormSet
 
                
        
@@ -1090,7 +1107,8 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     class Media:
         js = ['planner/js/mono_stereo_handler.js',
             'planner/js/global_nav.js',
-            'admin/js/console_autofill.js',]
+            'admin/js/console_autofill.js',
+            'admin/js/console_source_hardware.js',]
         css = {
             'all': ['admin/css/dark_mode.css',
                     'planner/css/custom_admin.css',
@@ -6539,8 +6557,46 @@ class MultitrackTemplateAdmin(BaseEquipmentAdmin):
     # ==================== REGISTER ALL MODELS ====================
 from planner.admin_site import showstack_admin_site
 
+
+class SourceHardwareOptionAdmin(BaseAdmin):
+    list_display = ['label', 'sort_order']
+    list_editable = ['sort_order']
+    search_fields = ['label']
+    ordering = ['sort_order', 'label']
+
+    class Media:
+        js = ['admin/js/source_hardware_back_button.js']
+
+    def has_module_permission(self, request):
+        return request.user.is_authenticated
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_authenticated
+
+    def _user_can_edit(self, request):
+        if request.user.is_superuser:
+            return True
+        if not request.user.is_authenticated:
+            return False
+        if Project.objects.filter(owner=request.user).exists():
+            return True
+        return ProjectMember.objects.filter(
+            user=request.user, role='editor'
+        ).exists()
+
+    def has_add_permission(self, request):
+        return self._user_can_edit(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._user_can_edit(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._user_can_edit(request)
+
+
 # Register all equipment admin classes
 showstack_admin_site.register(Console, ConsoleAdmin)
+showstack_admin_site.register(SourceHardwareOption, SourceHardwareOptionAdmin)
 showstack_admin_site.register(MultitrackSession, MultitrackSessionAdmin)
 showstack_admin_site.register(MultitrackTemplate, MultitrackTemplateAdmin)
 showstack_admin_site.register(ConsoleImport, ConsoleImportAdmin)

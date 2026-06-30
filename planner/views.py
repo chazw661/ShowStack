@@ -123,6 +123,34 @@ def console_detail(request, console_id):
 
 
 
+#-----Source Hardware Options (inline add for Console Input dropdown)----
+
+
+@login_required
+@require_POST
+def add_source_hardware_option(request):
+    from .models import SourceHardwareOption, Project, ProjectMember
+
+    user = request.user
+    if not user.is_superuser:
+        owns_project = Project.objects.filter(owner=user).exists()
+        is_editor = ProjectMember.objects.filter(user=user, role='editor').exists()
+        if not (owns_project or is_editor):
+            return JsonResponse({'error': 'Permission denied.'}, status=403)
+
+    label = (request.POST.get('label') or '').strip()
+    if not label:
+        return JsonResponse({'error': 'Label is required.'}, status=400)
+    if len(label) > 50:
+        return JsonResponse({'error': 'Label must be 50 characters or fewer.'}, status=400)
+
+    option, created = SourceHardwareOption.objects.get_or_create(
+        label=label,
+        defaults={'sort_order': 9999},
+    )
+    return JsonResponse({'id': option.id, 'label': option.label, 'created': created})
+
+
 #-----Mic Tracer----
 
 
