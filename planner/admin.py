@@ -1089,7 +1089,8 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     
     class Media:
         js = ['planner/js/mono_stereo_handler.js',
-            'planner/js/global_nav.js',]
+            'planner/js/global_nav.js',
+            'admin/js/console_autofill.js',]
         css = {
             'all': ['admin/css/dark_mode.css',
                     'planner/css/custom_admin.css',
