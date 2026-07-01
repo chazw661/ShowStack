@@ -759,14 +759,24 @@ def crew_member_add(request, crew_id):
             if CrewMember.objects.filter(crew=crew, user=user_obj).exists():
                 messages.error(request, f'{user_obj.username} is already in "{crew.name}".')
                 return redirect('crew_detail', crew_id=crew.id)
-            CrewMember.objects.create(crew=crew, user=user_obj, default_role=default_role)
+            cm = CrewMember.objects.create(crew=crew, user=user_obj, default_role=default_role)
             messages.success(request, f'Added {user_obj.username} to "{crew.name}".')
+            # issue #49: notify at roster-add time (D-10 log + swallow).
+            try:
+                send_crew_roster_added_email(cm, request)
+            except Exception:
+                logger.exception("Crew-roster-added email failed for %s", user_obj.email)
         elif '@' in raw:
             if CrewMember.objects.filter(crew=crew, email__iexact=raw).exists():
                 messages.error(request, f'{raw} is already pending in "{crew.name}".')
                 return redirect('crew_detail', crew_id=crew.id)
-            CrewMember.objects.create(crew=crew, email=raw, default_role=default_role)
+            cm = CrewMember.objects.create(crew=crew, email=raw, default_role=default_role)
             messages.success(request, f'Added pending member {raw} to "{crew.name}" — will claim on signup.')
+            # issue #49: nudge pending members to sign up now (D-10 log + swallow).
+            try:
+                send_crew_roster_signup_invite_email(cm, request)
+            except Exception:
+                logger.exception("Crew-roster-signup-invite email failed for %s", raw)
         else:
             messages.error(request, f'No user found matching "{raw}". To pre-invite, enter a full email address.')
     except Exception as e:
@@ -802,6 +812,102 @@ def crew_member_remove(request, crew_id, member_id):
 
 
 # ==================== PHASE 6: BULK-ADD CREW TO PROJECT ====================
+
+def send_crew_roster_added_email(crew_member, request):
+    """Notify an existing ShowStack user they were added to a crew roster (issue #49).
+
+    Fires from crew_member_add when the resolved User FK is set. Access is
+    NOT yet active — crew rosters are private; the second email lands when
+    the owner bulk-adds the crew to a project. This one just lets them
+    know they're on the roster so a future project add isn't a surprise.
+
+    D-10: log + swallow. A Resend hiccup must not undo the CrewMember row.
+    """
+    import resend
+    import os
+
+    recipient = (crew_member.user.email or '').strip() if crew_member.user_id else ''
+    if not recipient:
+        return
+
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    owner = crew_member.crew.owner
+    owner_label = owner.get_full_name() or owner.username
+
+    subject = f"{owner_label} added you to the '{crew_member.crew.name}' crew"
+    html = f"""
+<h2>You're on a ShowStack crew</h2>
+<p><strong>{owner_label}</strong> added you to their crew:</p>
+<ul>
+    <li><strong>Crew:</strong> {crew_member.crew.name}</li>
+    <li><strong>Your default role:</strong> {crew_member.get_default_role_display()}</li>
+</ul>
+<p>No action required. When {owner_label} adds this crew to a project, your
+access will activate automatically and you'll get another email with a link
+to open the project.</p>
+<hr>
+<p><small>ShowStack — Professional Audio Production Management</small></p>
+"""
+    try:
+        resend.Emails.send({
+            "from": "ShowStack <noreply@showstack.io>",
+            "to": [recipient],
+            "subject": subject,
+            "html": html,
+        })
+        print(f"Crew-roster-added email sent to {recipient}")
+    except Exception as e:
+        # D-10: log + swallow — do NOT re-raise.
+        print(f"Crew-roster-added email error: {e}")
+
+
+def send_crew_roster_signup_invite_email(crew_member, request):
+    """Notify a pending (no-account) email they were added to a crew roster (issue #49).
+
+    Fires from crew_member_add for email-only rows (user=NULL). Nudges the
+    recipient to sign up now so a later bulk-add auto-activates their
+    ProjectMember via the auto-claim hook in marketing/views.register.
+
+    D-10: log + swallow.
+    """
+    import resend
+    import os
+    from django.urls import reverse
+
+    resend.api_key = os.environ.get('RESEND_API_KEY')
+    signup_url = request.build_absolute_uri(reverse('register'))
+    owner = crew_member.crew.owner
+    owner_label = owner.get_full_name() or owner.username
+
+    subject = f"{owner_label} added you to the '{crew_member.crew.name}' crew on ShowStack"
+    html = f"""
+<h2>You've been added to a ShowStack crew</h2>
+<p><strong>{owner_label}</strong> added you to their crew:</p>
+<ul>
+    <li><strong>Crew:</strong> {crew_member.crew.name}</li>
+    <li><strong>Your default role:</strong> {crew_member.get_default_role_display()}</li>
+</ul>
+<p>You don't have a ShowStack account yet. Sign up with <strong>{crew_member.email}</strong>
+so when {owner_label} adds this crew to a project, your access activates
+automatically:</p>
+<p><a href="{signup_url}" style="display:inline-block;padding:12px 24px;background:#4a9eff;color:white;text-decoration:none;border-radius:6px;margin:20px 0;">
+Sign up for ShowStack</a></p>
+<p><small>Use the email address above when registering so your access connects automatically.</small></p>
+<hr>
+<p><small>ShowStack — Professional Audio Production Management</small></p>
+"""
+    try:
+        resend.Emails.send({
+            "from": "ShowStack <noreply@showstack.io>",
+            "to": [crew_member.email],
+            "subject": subject,
+            "html": html,
+        })
+        print(f"Crew-roster-signup-invite email sent to {crew_member.email}")
+    except Exception as e:
+        # D-10: log + swallow — do NOT re-raise.
+        print(f"Crew-roster-signup-invite email error: {e}")
+
 
 def send_crew_added_email(project_member, request):
     """Inform a user they have been added to a project via crew bulk-add (SPEC-06-R04).
