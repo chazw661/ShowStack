@@ -3280,6 +3280,9 @@ class MicAssignment(models.Model):
     'MicGroup', on_delete=models.SET_NULL,
     null=True, blank=True, related_name='assignments'
 )
+    groups = models.ManyToManyField(
+        'MicGroup', blank=True, related_name='multi_assignments'
+    )
 
     
     # Mic details
@@ -3508,16 +3511,22 @@ class PresenterSlot(models.Model):
         help_text="Base64 encoded photo data"
     )
     group = models.ForeignKey(
-        'MicGroup', 
-        null=True, blank=True, 
+        'MicGroup',
+        null=True, blank=True,
         on_delete=models.SET_NULL,
         related_name='slot_assignments'
+    )
+    groups = models.ManyToManyField(
+        'MicGroup', blank=True, related_name='slot_multi_assignments'
     )
     a2_group = models.ForeignKey(
         'MicGroup',
         null=True, blank=True,
         on_delete=models.SET_NULL,
         related_name='slot_a2_assignments'
+    )
+    a2_groups = models.ManyToManyField(
+        'MicGroup', blank=True, related_name='slot_a2_multi_assignments'
     )
     is_micd = models.BooleanField(default=False)
     

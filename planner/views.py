@@ -664,7 +664,37 @@ def mic_tracker_view(request):
         'is_viewer': is_viewer,  # ADD THIS LINE
     }  # ← This closing brace needs to be indented with 4 spaces, not at column 0
     
-    return render(request, 'planner/mic_tracker.html', context) 
+    return render(request, 'planner/mic_tracker.html', context)
+
+
+def mic_tracker_overview_view(request):
+    """View-only overview of every day × session in the current project.
+
+    Independent from mic_tracker_view. Renders a compact read-only summary
+    so the A1 engineer can scan the full show during rehearsals without
+    losing edit context on the main tracker page.
+    """
+    if not hasattr(request, 'current_project') or not request.current_project:
+        return redirect('planner:mic_tracker')
+
+    from django.db.models import Prefetch
+    days = ShowDay.objects.filter(project=request.current_project).order_by('date').prefetch_related(
+        Prefetch(
+            'sessions__mic_assignments',
+            queryset=MicAssignment.objects.prefetch_related(
+                'presenter_slots__presenter',
+                'presenter_slots__groups',
+                'groups',
+            ),
+        ),
+    )
+    days_data = [{'day': d, 'sessions': d.sessions.all()} for d in days]
+    show_info = MicShowInfo.objects.filter(project=request.current_project).first()
+
+    return render(request, 'planner/mic_tracker_overview.html', {
+        'show_info': show_info,
+        'days_data': days_data,
+    })
 
 
 
@@ -1600,28 +1630,51 @@ def update_slot_field(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
+def _resolve_group_ids(data, session_id):
+    """Return a list of valid MicGroup ids from request payload.
+
+    Accepts either `group_ids: [..]` (new multi-select payload) or
+    legacy single `group_id`. Filters to ids that belong to the same
+    session so a malformed client can't smuggle in foreign groups.
+    """
+    if 'group_ids' in data:
+        raw = data.get('group_ids') or []
+    elif data.get('group_id'):
+        raw = [data['group_id']]
+    else:
+        raw = []
+    if not raw:
+        return []
+    return list(
+        MicGroup.objects.filter(id__in=raw, session_id=session_id)
+        .values_list('id', flat=True)
+    )
+
+
 @require_POST
 def assign_slot_group(request):
     try:
         data = json.loads(request.body)
         slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
-        group_id = data.get('group_id')
-        slot.group = MicGroup.objects.get(id=group_id) if group_id else None
-        slot.save()
-        return JsonResponse({'success': True})
+        ids = _resolve_group_ids(data, slot.assignment.session_id)
+        slot.groups.set(ids)
+        slot.group_id = ids[0] if ids else None
+        slot.save(update_fields=['group'])
+        return JsonResponse({'success': True, 'group_ids': ids})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
-    
+
 
 @require_POST
 def assign_slot_a2_group(request):
     try:
         data = json.loads(request.body)
         slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
-        group_id = data.get('group_id')
-        slot.a2_group = MicGroup.objects.get(id=group_id) if group_id else None
-        slot.save()
-        return JsonResponse({'success': True})
+        ids = _resolve_group_ids(data, slot.assignment.session_id)
+        slot.a2_groups.set(ids)
+        slot.a2_group_id = ids[0] if ids else None
+        slot.save(update_fields=['a2_group'])
+        return JsonResponse({'success': True, 'group_ids': ids})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
@@ -1973,15 +2026,18 @@ def manage_mic_groups(request, session_id):
     groups = list(session.mic_groups.values('id', 'name', 'color'))
     return JsonResponse({'success': True, 'groups': groups})
 
-@staff_member_required  
+@require_POST
 def assign_mic_group(request):
-    if request.method == 'POST':
+    try:
         data = json.loads(request.body)
         assignment = get_object_or_404(MicAssignment, id=data['assignment_id'])
-        group_id = data.get('group_id')
-        assignment.group = MicGroup.objects.get(id=group_id) if group_id else None
-        assignment.save()
-        return JsonResponse({'success': True})
+        ids = _resolve_group_ids(data, assignment.session_id)
+        assignment.groups.set(ids)
+        assignment.group_id = ids[0] if ids else None
+        assignment.save(update_fields=['group'])
+        return JsonResponse({'success': True, 'group_ids': ids})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
 
 @require_http_methods(["GET"])
 def get_assignment_details(request, assignment_id):

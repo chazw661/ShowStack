@@ -323,6 +323,23 @@
     .group-dot.color-purple { background: #b464ff; }
     .group-dot.color-teal   { background: #00bcd4; }
 
+    /* Multi-group dot stack containers (A1 and A2). The stack itself is the
+       click target for the picker; individual dots inside don't react to hover.
+       Stacked dots shrink and drop their border so up to ~5 groups fit in the
+       narrow GRP column without overlapping. !important is used because the
+       base .group-dot rule has equal specificity in some cascades and the row
+       tint classes can otherwise win. */
+    .group-dot-stack { display: inline-flex !important; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 2px; cursor: pointer; padding: 1px; border-radius: 4px; transition: background 0.1s; vertical-align: middle; box-sizing: content-box; }
+    .group-dot-stack:hover { background: rgba(255,255,255,0.06); }
+    .group-dot-stack > .group-dot { width: 8px !important; height: 8px !important; border-width: 0 !important; box-sizing: content-box !important; cursor: pointer; flex: 0 0 auto; }
+    .group-dot-stack > .group-dot.empty { width: 14px !important; height: 14px !important; border-width: 2px !important; }
+    .group-dot-stack > .group-dot:hover { transform: none; }
+    .a2-group-dot-stack { display: inline-flex !important; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 2px; cursor: pointer; padding: 1px 2px; border-radius: 4px; margin-left: 6px; vertical-align: middle; transition: background 0.1s; box-sizing: content-box; }
+    .a2-group-dot-stack:hover { background: rgba(255,255,255,0.06); }
+    .a2-group-dot-stack > .a2-group-dot { width: 8px !important; height: 8px !important; border-width: 0 !important; box-sizing: content-box !important; margin-left: 0 !important; flex: 0 0 auto; }
+    .a2-group-dot-stack > .a2-group-dot.empty { width: 12px !important; height: 12px !important; border-width: 2px !important; }
+    .a2-group-dot-stack > .a2-group-dot:hover { transform: none; }
+
     .group-picker { position: absolute; z-index: 500; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 6px; padding: 10px; min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none; }
     .group-picker.open { display: block; }
     .group-picker-title { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
@@ -380,7 +397,7 @@
     .group-add-btn { background: var(--accent-blue); color: #000; border: none; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .group-modal-close { float: right; background: none; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; margin-top: -4px; }
 
-    .a1-group-cell { width: 28px; text-align: center; padding: 0 4px !important; position: relative; }
+    .a1-group-cell { width: 54px; text-align: center; padding: 0 4px !important; position: relative; }
 
     /* Per-slot MIC'D button in A2 chip list */
     .a2-slot-chip { gap: 5px; }
@@ -440,6 +457,7 @@
         <div class="mtt-header-actions">
             {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
             <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:#ffffff !important;">👤 Presenters</a>
+            <a href="{% url 'planner:mic_tracker_overview' %}" class="btn-mtt btn-mtt-export">👁 Overview</a>
             <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
         </div>
@@ -494,7 +512,7 @@
                         <table class="a1-table">
                             <thead>
                                 <tr>
-                                    <th style="width:44px;padding:4px 0;text-align:center;">
+                                    <th style="width:62px;padding:4px 0;text-align:center;">
                                         {% if not is_viewer %}
                                         <button onclick="openGroupManager({{ session.id }})"
                                                 style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
@@ -516,15 +534,23 @@
                             {% if slot_count > 1 %}
                             {# ── MULTI-PRESENTER: stacked equal-weight rows, RF# only on first ── #}
                             {% for slot in slots %}
-                            <tr class="a1-row {% if slot.is_micd %}row-micd{% endif %} {% if slot.group %}group-{{ slot.group.color }}{% elif assignment.group %}group-{{ assignment.group.color }}{% endif %}"
+                            {% with slot_groups=slot.groups.all fallback_group=assignment.groups.first %}
+                            {% with first_slot_group=slot_groups.0 %}
+                            <tr class="a1-row {% if slot.is_micd %}row-micd{% endif %} {% if first_slot_group %}group-{{ first_slot_group.color }}{% elif fallback_group %}group-{{ fallback_group.color }}{% endif %}"
                                 id="a1-slot-row-{{ slot.id }}"
                                 data-assignment-id="{{ assignment.id }}"
                                 data-slot-id="{{ slot.id }}">
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
-                                    <span class="group-dot {% if slot.group %}color-{{ slot.group.color }}{% elif assignment.group %}color-{{ assignment.group.color }}{% else %}empty{% endif %}"
+                                    <span class="group-dot-stack"
+                                          id="a1-slot-group-stack-{{ slot.id }}"
+                                          style="display:inline-flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:2px;vertical-align:middle;cursor:pointer;padding:1px;"
+                                          data-target="slot" data-slot-id="{{ slot.id }}"
+                                          data-group-ids="{% for g in slot_groups %}{{ g.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
                                           onclick="openSlotGroupPicker({{ slot.id }}, {{ session.id }}, this)"
-                                          title="{% if slot.group %}{{ slot.group.name }}{% elif assignment.group %}{{ assignment.group.name }}{% else %}Assign group{% endif %}"></span>
+                                          title="{% if slot_groups %}{% for g in slot_groups %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% elif fallback_group %}{{ fallback_group.name }}{% else %}Assign group{% endif %}">
+                                        {% if slot_groups %}{% for g in slot_groups %}<span class="group-dot color-{{ g.color }}" style="width:8px;height:8px;border:0;flex:0 0 auto;box-sizing:content-box;display:inline-block;"></span>{% endfor %}{% else %}<span class="group-dot {% if fallback_group %}color-{{ fallback_group.color }}{% else %}empty{% endif %}"></span>{% endif %}
+                                    </span>
                                     <div class="group-picker" id="slot-group-picker-{{ slot.id }}"></div>
                                     {% endif %}
                                 </td>
@@ -560,18 +586,27 @@
                                            {% if is_viewer %}readonly{% endif %}>
                                 </td>
                             </tr>
+                            {% endwith %}{% endwith %}
                             {% endfor %}
 
                             {% else %}
                             {# ── SINGLE PRESENTER row ── #}
-                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if assignment.group %}group-{{ assignment.group.color }}{% endif %}"
+                            {% with assn_groups=assignment.groups.all %}
+                            {% with first_assn_group=assn_groups.0 %}
+                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if first_assn_group %}group-{{ first_assn_group.color }}{% endif %}"
                                 id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}"
                                 {% if not is_viewer %}draggable="true"{% endif %}>
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
-                                    <span class="group-dot {% if assignment.group %}color-{{ assignment.group.color }}{% else %}empty{% endif %}"
+                                    <span class="group-dot-stack"
+                                          id="a1-assn-group-stack-{{ assignment.id }}"
+                                          style="display:inline-flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:2px;vertical-align:middle;cursor:pointer;padding:1px;"
+                                          data-target="assignment" data-assignment-id="{{ assignment.id }}"
+                                          data-group-ids="{% for g in assn_groups %}{{ g.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
                                           onclick="openGroupPicker({{ assignment.id }}, {{ session.id }}, this)"
-                                          title="{% if assignment.group %}{{ assignment.group.name }}{% else %}Assign group{% endif %}"></span>
+                                          title="{% if assn_groups %}{% for g in assn_groups %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Assign group{% endif %}">
+                                        {% if assn_groups %}{% for g in assn_groups %}<span class="group-dot color-{{ g.color }}" style="width:8px;height:8px;border:0;flex:0 0 auto;box-sizing:content-box;display:inline-block;"></span>{% endfor %}{% else %}<span class="group-dot empty"></span>{% endif %}
+                                    </span>
                                     <div class="group-picker" id="group-picker-{{ assignment.id }}"></div>
                                     {% endif %}
                                 </td>
@@ -609,6 +644,7 @@
                                            {% if is_viewer %}readonly{% endif %}>
                                 </td>
                             </tr>
+                            {% endwith %}{% endwith %}
                             {% endif %}
 
                             {% endwith %}
@@ -642,12 +678,18 @@
                                     {% endif %}
                                     {% if not is_viewer %}
                                     {% with active_slot=assignment.active_slot %}
-                                    <span class="a2-group-dot {% if active_slot.a2_group %}color-{{ active_slot.a2_group.color }}{% else %}empty{% endif %}"
+                                    {% with a2_groups=active_slot.a2_groups.all %}
+                                    <span class="a2-group-dot-stack"
                                           id="a2-group-dot-{{ assignment.id }}"
+                                          style="display:inline-flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:2px;vertical-align:middle;cursor:pointer;padding:1px 2px;margin-left:6px;"
                                           data-active-slot-id="{{ active_slot.id|default:0 }}"
+                                          data-group-ids="{% for g in a2_groups %}{{ g.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
                                           onclick="openA2GroupPicker({{ assignment.id }}, {{ session.id }}, this)"
-                                          title="{% if active_slot.a2_group %}{{ active_slot.a2_group.name }}{% else %}Assign group{% endif %}"></span>
+                                          title="{% if a2_groups %}{% for g in a2_groups %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Assign group{% endif %}">
+                                        {% if a2_groups %}{% for g in a2_groups %}<span class="a2-group-dot color-{{ g.color }}" style="width:8px;height:8px;border:0;flex:0 0 auto;box-sizing:content-box;display:inline-block;margin-left:0;"></span>{% endfor %}{% else %}<span class="a2-group-dot empty"></span>{% endif %}
+                                    </span>
                                     <div class="group-picker" id="a2-group-picker-{{ assignment.id }}"></div>
+                                    {% endwith %}
                                     {% endwith %}
                                     {% endif %}
                                 </div>
@@ -815,7 +857,6 @@
             {% if not is_viewer %}
             <div class="mtt-add-session-bar">
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
-                <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;"
             </div>
             {% endif %}
 
@@ -872,7 +913,7 @@
 </div>
 
 <datalist id="presenters-datalist"></datalist>
-<script src="{% static 'admin/js/mic_tracker_v4.js' %}"></script>
+<script src="{% static 'admin/js/mic_tracker_v5.js' %}"></script>
 
 <script>
 // ── Session tab switching ──────────────────────────────────────

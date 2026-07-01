@@ -1,0 +1,261 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Mic Tracker — Overview{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'planner:mic_tracker' %}">Mic Tracker</a>
+    &rsaquo; Overview
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+    :root {
+        --bg-base:       #0f0f1a;
+        --bg-card:       #181828;
+        --bg-raised:     #1e1e32;
+        --border:        #2a2a45;
+        --border-bright: #3a3a60;
+        --accent-blue:   #4a9eff;
+        --text-primary:  #e8e8f0;
+        --text-secondary:#9090b0;
+        --text-dim:      #505070;
+    }
+
+    body { background: var(--bg-base); color: var(--text-primary); }
+
+    #mto-root { padding: 0 0 48px; }
+
+    .mto-header {
+        display: flex; align-items: center; gap: 16px;
+        padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+        background: var(--bg-card);
+    }
+    .mto-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
+    .mto-sub { font-size: 11px; color: var(--text-dim); }
+    .mto-header-actions { margin-left: auto; display: flex; gap: 8px; }
+    #mto-root a.mto-back-btn,
+    #mto-root a.mto-back-btn:link,
+    #mto-root a.mto-back-btn:visited {
+        display: inline-block; padding: 8px 14px;
+        background: var(--accent-blue); color: #ffffff !important;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+        border: none; border-radius: 4px; text-decoration: none;
+    }
+    #mto-root a.mto-back-btn:hover { background: #6cb0ff; color: #ffffff !important; text-decoration: none; }
+
+    .mto-day-anchors {
+        display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+        margin: 16px 24px; padding: 8px 12px;
+        background: var(--bg-raised); border: 1px solid var(--border); border-radius: 6px;
+        font-size: 11px;
+    }
+    .mto-anchor-label { color: var(--text-dim); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .mto-day-anchors a { color: var(--accent-blue); text-decoration: none; padding: 2px 6px; border-radius: 3px; }
+    .mto-day-anchors a:hover { background: rgba(74,158,255,0.15); }
+
+    .mto-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .mto-day-header {
+        padding: 10px 14px;
+        background: #1a1a30; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 12px;
+    }
+    .mto-day-name { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
+    .mto-day-stats { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+
+    .mto-session-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        gap: 12px;
+        padding: 12px 14px;
+    }
+    .mto-session {
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        background: var(--bg-base);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .mto-session-header {
+        padding: 8px 12px;
+        background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        font-size: 12px;
+    }
+    .mto-session-name { font-weight: 700; color: var(--text-primary); }
+    .mto-session-loc, .mto-session-time { color: var(--text-dim); }
+
+    .mto-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mto-table thead th {
+        text-align: left; padding: 6px 10px; font-size: 10px; font-weight: 700;
+        letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+        background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
+    }
+    .mto-th-rf { width: 50px; text-align: center !important; }
+    .mto-th-grp { width: 50px; text-align: center !important; }
+    .mto-th-type { width: 110px; }
+    .mto-th-micd { width: 70px; text-align: center !important; }
+
+    .mto-row td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .mto-row:last-child td { border-bottom: 0; }
+    .mto-row.mto-tint-blue   { border-left: 4px solid #4a9eff; }
+    .mto-row.mto-tint-amber  { border-left: 4px solid #ffab00; }
+    .mto-row.mto-tint-red    { border-left: 4px solid #ff5252; }
+    .mto-row.mto-tint-purple { border-left: 4px solid #b464ff; }
+    .mto-row.mto-tint-teal   { border-left: 4px solid #00bcd4; }
+    .mto-row-micd { background: rgba(108, 224, 108, 0.04); }
+
+    .mto-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid transparent; }
+    .mto-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
+    .mto-dot.color-blue   { background: #4a9eff; }
+    .mto-dot.color-amber  { background: #ffab00; }
+    .mto-dot.color-red    { background: #ff5252; }
+    .mto-dot.color-purple { background: #b464ff; }
+    .mto-dot.color-teal   { background: #00bcd4; }
+
+    .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); }
+    .mto-grp { text-align: center; }
+    .mto-presenter { color: var(--text-primary); }
+    .mto-unassigned { color: var(--text-dim); font-style: italic; }
+    .mto-dash { color: var(--text-dim); }
+    .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
+    .mto-micd-on { color: #6ce06c; }
+    .mto-micd-off { color: var(--text-dim); }
+    .mto-empty-large { padding: 48px 24px; text-align: center; margin: 24px; border: 1px dashed var(--border-bright); border-radius: 6px; }
+    .mto-empty-large-title { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; }
+    .mto-empty-large-sub { font-size: 12px; color: var(--text-dim); }
+
+    /* Mic type badge (reused visually from the A1 tab). */
+    .mto-type-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+        background: rgba(255,255,255,0.06); color: var(--text-secondary);
+    }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div id="mto-root">
+    <div class="mto-header">
+        <div>
+            <div class="mto-title">🎤 Mic Tracker — Overview</div>
+            <div class="mto-sub">Read-only roster across every day and session. Group colors mirror the A1 tab.</div>
+        </div>
+        <div class="mto-header-actions">
+            <a class="mto-back-btn" href="{% url 'planner:mic_tracker' %}">← Back to Mic Tracker</a>
+        </div>
+    </div>
+
+    {% if days_data %}
+    <div class="mto-day-anchors">
+        <span class="mto-anchor-label">Jump to:</span>
+        {% for day_data in days_data %}
+        <a href="#mto-day-{{ day_data.day.id }}">{{ day_data.day.date|date:"D M j" }}</a>
+        {% endfor %}
+    </div>
+
+    {% for day_data in days_data %}
+    <section class="mto-day" id="mto-day-{{ day_data.day.id }}">
+        <header class="mto-day-header">
+            <span class="mto-day-name">{{ day_data.day }}</span>
+            {% with stats=day_data.day.get_all_mics_status %}
+            <span class="mto-day-stats">{{ stats.used }}/{{ stats.total }} mic'd · {{ day_data.day.sessions.count }} session{{ day_data.day.sessions.count|pluralize }}</span>
+            {% endwith %}
+        </header>
+
+        <div class="mto-session-grid">
+        {% for session in day_data.sessions %}
+        <div class="mto-session">
+            <header class="mto-session-header">
+                <span class="mto-session-name">{{ session.name }}</span>
+                {% if session.location %}<span class="mto-session-loc">· {{ session.location }}</span>{% endif %}
+                {% if session.start_time %}<span class="mto-session-time">· {{ session.start_time|time:"g:i A" }}{% if session.end_time %} – {{ session.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}
+            </header>
+            <table class="mto-table">
+                <thead>
+                    <tr>
+                        <th class="mto-th-rf">RF</th>
+                        <th class="mto-th-grp">Group</th>
+                        <th class="mto-th-type">Type</th>
+                        <th>Presenter</th>
+                        <th class="mto-th-micd">Mic'd</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for assignment in session.mic_assignments.all %}
+                {% with slots=assignment.presenter_slots.all slot_count=assignment.presenter_slots.count %}
+                {% if slot_count > 1 %}
+                {% for slot in slots %}
+                {% with slot_groups=slot.groups.all fallback_group=assignment.groups.first %}
+                {% with first_slot_group=slot_groups.0 %}
+                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %} {% if first_slot_group %}mto-tint-{{ first_slot_group.color }}{% elif fallback_group %}mto-tint-{{ fallback_group.color }}{% endif %}">
+                    <td class="mto-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
+                    <td class="mto-grp">
+                        {% if first_slot_group %}<span class="mto-dot color-{{ first_slot_group.color }}" title="{{ first_slot_group.name }}"></span>
+                        {% elif fallback_group %}<span class="mto-dot color-{{ fallback_group.color }}" title="{{ fallback_group.name }}"></span>
+                        {% else %}<span class="mto-dot empty"></span>{% endif %}
+                    </td>
+                    <td>
+                        {% if slot.mic_type %}<span class="mto-type-badge">{{ slot.mic_type }}</span>
+                        {% else %}<span class="mto-dash">—</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if slot.presenter %}<span class="mto-presenter">{{ slot.presenter.name }}</span>
+                        {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
+                    </td>
+                    <td class="mto-micd">{% if slot.is_micd %}<span class="mto-micd-on">ON</span>{% else %}<span class="mto-micd-off">—</span>{% endif %}</td>
+                </tr>
+                {% endwith %}{% endwith %}
+                {% endfor %}
+                {% else %}
+                {% with assn_groups=assignment.groups.all %}
+                {% with first_assn_group=assn_groups.0 %}
+                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %} {% if first_assn_group %}mto-tint-{{ first_assn_group.color }}{% endif %}">
+                    <td class="mto-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
+                    <td class="mto-grp">
+                        {% if first_assn_group %}<span class="mto-dot color-{{ first_assn_group.color }}" title="{{ first_assn_group.name }}"></span>
+                        {% else %}<span class="mto-dot empty"></span>{% endif %}
+                    </td>
+                    <td>
+                        {% with active_slot=assignment.active_slot %}
+                        {% if active_slot.mic_type %}<span class="mto-type-badge">{{ active_slot.mic_type }}</span>
+                        {% else %}<span class="mto-dash">—</span>{% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        {% with active=assignment.active_slot %}
+                        {% if active and active.presenter %}<span class="mto-presenter">{{ active.presenter.name }}</span>
+                        {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="mto-micd">{% if assignment.is_micd %}<span class="mto-micd-on">ON</span>{% else %}<span class="mto-micd-off">—</span>{% endif %}</td>
+                </tr>
+                {% endwith %}{% endwith %}
+                {% endif %}
+                {% endwith %}
+                {% empty %}
+                <tr><td colspan="5" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% empty %}
+        <div style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;grid-column:1/-1;">No sessions in this day.</div>
+        {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    {% else %}
+    <div class="mto-empty-large">
+        <div class="mto-empty-large-title">No show days yet</div>
+        <div class="mto-empty-large-sub">Go to the Mic Tracker page and add a show day to populate this overview.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

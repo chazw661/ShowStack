@@ -158,6 +158,7 @@ urlpatterns = [
     path('api/mic/delete-session/', views.delete_session, name='delete_session'),
     path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
+    path('mic-tracker/overview/', views.mic_tracker_overview_view, name='mic_tracker_overview'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     # In urls.py
