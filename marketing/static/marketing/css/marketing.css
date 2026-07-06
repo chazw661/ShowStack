@@ -1445,18 +1445,24 @@ h4 { font-size: var(--font-size-xl); }
     .features-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .features-grid.compact {
         grid-template-columns: repeat(3, 1fr);
     }
-    
+}
+
+/* At iPad landscape (~900-1024px) pricing keeps 3-col but tighter; footer
+   keeps 4-col. Below 900px they collapse. Previously pricing dropped
+   straight to 1-col at 1024px which left the whole landscape viewport
+   showing a single narrow card. */
+@media (max-width: 900px) {
     .pricing-grid {
         grid-template-columns: 1fr;
         max-width: 400px;
         margin-left: auto;
         margin-right: auto;
     }
-    
+
     .footer-grid {
         grid-template-columns: 1fr 1fr;
     }
