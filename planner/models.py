@@ -1918,8 +1918,6 @@ class AmpChannel(models.Model):
     amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
     channel_number = models.IntegerField()
     channel_name = models.CharField(max_length=100, blank=True, default="")
-    AVB_CHOICES = [(f'AVB {i}', f'AVB {i}') for i in range(1, 17)]
-    AVB_CHOICES.insert(0, ('', '---------'))
 
     # Issue #30: per-channel speaker-zone routing label that lived in the
     # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.).
@@ -1934,11 +1932,13 @@ class AmpChannel(models.Model):
         verbose_name="Channel Setting",
         help_text="Speaker-zone routing label for this channel",
     )
-    
-    # Input source (only show relevant options based on amp model)
+
+    # Issue #50: sized to hold the rack view's datalist suggestions
+    # ("AVB <ch> - <processor output label>", up to ~110 chars). SQLite
+    # silently accepted the old max_length=10; Postgres rejected the write,
+    # so the field appeared to "reset" on Railway after each edit.
     avb_stream = models.CharField(
-        max_length=10,
-        choices=AVB_CHOICES,
+        max_length=120,
         blank=True,
         null=True,
         verbose_name="AVB Stream",
