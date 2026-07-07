@@ -1468,6 +1468,41 @@ h4 { font-size: var(--font-size-xl); }
     }
 }
 
+/* iPhone portrait (~375-430px). The 768px block below handles the tablet
+   collapse; this block trims down padding and font-size headroom that
+   still hurts at true phone widths. */
+@media (max-width: 480px) {
+    :root {
+        --container-padding: 1rem;
+    }
+
+    /* Login / register / password-reset. At 375px the default 3rem outer
+       + 3rem inner padding ate ~192px, leaving inputs ~180px wide. */
+    .auth-section {
+        padding: var(--spacing-lg) var(--spacing-md);
+        min-height: auto;
+    }
+
+    .auth-container {
+        padding: var(--spacing-xl) var(--spacing-lg);
+    }
+
+    .auth-logo .brand-icon {
+        width: 40px;
+        height: 40px;
+        font-size: var(--font-size-xl);
+    }
+
+    /* Long product names in the hero were overflowing at 375px because
+       word-break defaults let a 40px h1 push past the container. */
+    .hero-title,
+    .page-hero h1 {
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        hyphens: auto;
+    }
+}
+
 @media (max-width: 768px) {
     :root {
         --font-size-5xl: 2.5rem;
