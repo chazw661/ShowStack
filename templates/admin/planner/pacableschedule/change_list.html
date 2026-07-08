@@ -60,7 +60,14 @@
 {% block object-tools-items %}
     {{ block.super }}
     <li>
-        <a href="{% url 'planner:all_pa_cables_pdf_export' %}" 
+        <a href="{% url 'planner:import_pa_cables_csv' %}"
+           class="export-pdf-btn"
+           style="background-color: #417690 !important; color: white !important; padding: 10px 20px !important;">
+            IMPORT CSV
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'planner:all_pa_cables_pdf_export' %}"
            class="export-pdf-btn"
            target="_blank"
            style="background-color: #417690 !important; color: white !important; padding: 10px 20px !important;">

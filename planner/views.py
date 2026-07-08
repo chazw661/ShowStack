@@ -3713,6 +3713,283 @@ def import_comm_crew_names_csv(request):
     return TemplateResponse(request, 'admin/planner/commcrewname/import_csv.html', context)
 
 
+#----Issue #51: PA Cable CSV Import---
+
+def _pa_cable_csv_sample_response():
+    """Return a downloadable sample CSV so users can grab the exact layout."""
+    from .models import PACableSchedule
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="pa_cables_sample.csv"'
+    writer = csv.writer(response)
+    writer.writerow([
+        'Label', 'Destination', 'Count', 'Cable', 'Length',
+        'Notes', 'Drawing Ref', 'Fan Outs', 'Extensions', 'Couplers',
+    ])
+    writer.writerow([
+        'HL', 'K2 - Top', 3, 'NL_4', 100,
+        'Clr. 1 Top 2', 'DIM-01', 'NL4_Y x2; NL8_Y x1',
+        'NL4_Y: NL4 25 x1; NL8_Y: NL8 50 x2',
+        'NL4_COUPLER x1',
+    ])
+    writer.writerow(['HR', 'K2 - Top', 3, 'NL_4', 100, '', '', 'NL4_Y x2', '', ''])
+    writer.writerow(['SL', 'KS28 - Sub', 2, 'NL_8', 75, '', '', '', '', 'NL8_COUPLER x2'])
+    writer.writerow(['FF1', 'X8 - Front Fill', 4, 'NL4_JUMPER', 3, 'Downstage lip', '', '', '', ''])
+    return response
+
+
+def _norm_key(s):
+    """Normalize a header/choice key: upper, strip, collapse whitespace/underscores/hyphens."""
+    if s is None:
+        return ''
+    s = str(s).strip().upper()
+    for ch in (' ', '_', '-', '/', "'"):
+        s = s.replace(ch, '')
+    return s
+
+
+def _resolve_choice(value, choices):
+    """Match value against a Django choices list by either code or display name,
+    tolerating case/underscore/space/hyphen differences. Returns the code or None."""
+    if not value:
+        return None
+    target = _norm_key(value)
+    for code, label in choices:
+        if _norm_key(code) == target or _norm_key(label) == target:
+            return code
+    return None
+
+
+def _parse_qty_item(item, choices):
+    """Parse '<TYPE> x<N>' into (code, qty). Returns (None, 0) if unparseable."""
+    import re
+    if not item or not item.strip():
+        return None, 0
+    m = re.match(r'^\s*(.+?)\s*[xX]\s*(\d+)\s*$', item.strip())
+    if m:
+        raw_type, qty = m.group(1), int(m.group(2))
+    else:
+        raw_type, qty = item.strip(), 1
+    code = _resolve_choice(raw_type, choices)
+    return code, qty
+
+
+def _parse_extension_item(item, fan_choices, ext_cable_choices, ext_length_choices):
+    """Parse '<FAN_TYPE>: <EXT_CABLE> <LEN> x<N>' into (fan_code, ext_cable_code, ext_length, qty).
+    Returns None on failure."""
+    import re
+    if not item or ':' not in item:
+        return None
+    fan_part, ext_part = item.split(':', 1)
+    fan_code = _resolve_choice(fan_part, fan_choices)
+    if not fan_code:
+        return None
+    m = re.match(r"^\s*(\S+)\s+(\d+)'?\s*[xX]?\s*(\d+)?\s*$", ext_part.strip())
+    if not m:
+        return None
+    ext_cable = _resolve_choice(m.group(1), ext_cable_choices)
+    if not ext_cable:
+        return None
+    length_val = int(m.group(2))
+    if not any(length_val == choice_val for choice_val, _ in ext_length_choices):
+        return None
+    qty = int(m.group(3)) if m.group(3) else 1
+    return fan_code, ext_cable, length_val, qty
+
+
+@staff_member_required
+def import_pa_cables_csv(request):
+    """Issue #51: bulk-import PA Cable entries (with fan-outs, extensions, and
+    couplers) from a CSV. Rows are scoped to the current project; new zone
+    labels are auto-created within that project."""
+    from .models import PACableSchedule, PAZone, PAFanOut, PAFanOutExtension, PACoupler
+    from io import TextIOWrapper
+    from django.template.response import TemplateResponse
+
+    if request.GET.get('sample') == '1':
+        return _pa_cable_csv_sample_response()
+
+    if not hasattr(request, 'current_project') or not request.current_project:
+        messages.error(request, "No project selected. Please select a project first.")
+        return HttpResponseRedirect(reverse('admin:planner_pacableschedule_changelist'))
+
+    project = request.current_project
+    if not isinstance(project, Project):
+        try:
+            project = Project.objects.get(id=project)
+        except Project.DoesNotExist:
+            messages.error(request, "Invalid project selected.")
+            return HttpResponseRedirect(reverse('admin:planner_pacableschedule_changelist'))
+
+    if request.method == 'POST' and request.FILES.get('csv_file'):
+        csv_file = request.FILES['csv_file']
+        try:
+            file_data = TextIOWrapper(csv_file.file, encoding='utf-8-sig', errors='replace')
+            reader = csv.DictReader(file_data)
+        except Exception as e:
+            messages.error(request, f"Could not read CSV: {e}")
+            return HttpResponseRedirect(reverse('planner:import_pa_cables_csv'))
+
+        header_alias = {
+            'LABEL': 'label', 'ZONE': 'label',
+            'DESTINATION': 'destination', 'DEST': 'destination',
+            'COUNT': 'count', 'QTY': 'count', 'QUANTITY': 'count',
+            'CABLE': 'cable', 'CABLETYPE': 'cable', 'TYPE': 'cable',
+            'LENGTH': 'length', 'LENGTHFT': 'length', 'LENGTHFEET': 'length',
+            'NOTES': 'notes', 'NOTE': 'notes',
+            'DRAWINGREF': 'drawing_ref', 'DRAWING': 'drawing_ref', 'REF': 'drawing_ref',
+            'FANOUTS': 'fan_outs', 'FANOUT': 'fan_outs', 'FAN': 'fan_outs',
+            'EXTENSIONS': 'extensions', 'EXTENSION': 'extensions', 'EXT': 'extensions',
+            'COUPLERS': 'couplers', 'COUPLER': 'couplers',
+        }
+
+        fan_choices = PACableSchedule.FAN_OUT_CHOICES
+        cable_choices = PACableSchedule.CABLE_TYPE_CHOICES
+        coupler_choices = PACoupler.COUPLER_TYPE_CHOICES
+        ext_cable_choices = PAFanOutExtension.EXTENSION_CABLE_CHOICES
+        ext_length_choices = PAFanOutExtension.EXTENSION_LENGTH_CHOICES
+
+        imported = 0
+        errors = []
+        zones_created = 0
+
+        for row_num, raw_row in enumerate(reader, start=2):  # start=2 accounts for header row
+            row = {header_alias.get(_norm_key(k), _norm_key(k).lower()): (v or '').strip()
+                   for k, v in raw_row.items() if k}
+
+            if not any(row.values()):
+                continue
+
+            zone_name = row.get('label', '')
+            cable_raw = row.get('cable', '')
+            if not zone_name and not cable_raw:
+                # Fully unlabeled row — skip silently
+                continue
+            if not zone_name:
+                errors.append(f"Row {row_num}: missing Label")
+                continue
+            if not cable_raw:
+                errors.append(f"Row {row_num}: missing Cable")
+                continue
+
+            cable_code = _resolve_choice(cable_raw, cable_choices)
+            if not cable_code:
+                errors.append(f"Row {row_num}: unknown Cable '{cable_raw}'")
+                continue
+
+            try:
+                count = int(row.get('count') or 1)
+            except ValueError:
+                errors.append(f"Row {row_num}: invalid Count '{row.get('count')}'")
+                continue
+            try:
+                length = int(row.get('length') or 0)
+            except ValueError:
+                errors.append(f"Row {row_num}: invalid Length '{row.get('length')}'")
+                continue
+
+            try:
+                with transaction.atomic():
+                    zone, created = PAZone.objects.get_or_create(
+                        project=project,
+                        name=zone_name[:20],
+                        defaults={'zone_type': 'CUSTOM'},
+                    )
+                    if created:
+                        zones_created += 1
+
+                    cable = PACableSchedule.objects.create(
+                        project=project,
+                        label=zone,
+                        destination=row.get('destination', ''),
+                        count=count,
+                        cable=cable_code,
+                        length=length,
+                        notes=row.get('notes') or None,
+                        drawing_ref=row.get('drawing_ref') or None,
+                    )
+
+                    # Fan-outs — 'NL4_Y x2; NL8_Y x1'
+                    fan_by_type = {}
+                    for item in (row.get('fan_outs') or '').split(';'):
+                        if not item.strip():
+                            continue
+                        code, qty = _parse_qty_item(item, fan_choices)
+                        if not code:
+                            errors.append(f"Row {row_num}: unknown Fan Out '{item.strip()}'")
+                            continue
+                        fan = PAFanOut.objects.create(
+                            cable_schedule=cable, fan_out_type=code, quantity=qty
+                        )
+                        fan_by_type.setdefault(code, fan)
+
+                    # Extensions — 'NL4_Y: NL4 25 x1; NL8_Y: NL8 50 x2'
+                    for item in (row.get('extensions') or '').split(';'):
+                        if not item.strip():
+                            continue
+                        parsed = _parse_extension_item(
+                            item, fan_choices, ext_cable_choices, ext_length_choices
+                        )
+                        if not parsed:
+                            errors.append(f"Row {row_num}: unparseable Extension '{item.strip()}'")
+                            continue
+                        fan_code, ext_cable, ext_length, ext_qty = parsed
+                        parent_fan = fan_by_type.get(fan_code)
+                        if not parent_fan:
+                            # Extension references a fan-out that wasn't declared in Fan Outs
+                            # column. Create a stub fan-out with qty=1 so the extension has
+                            # something to attach to.
+                            parent_fan = PAFanOut.objects.create(
+                                cable_schedule=cable, fan_out_type=fan_code, quantity=1
+                            )
+                            fan_by_type[fan_code] = parent_fan
+                        PAFanOutExtension.objects.create(
+                            cable_schedule=cable,
+                            fan_out=parent_fan,
+                            extension_cable=ext_cable,
+                            extension_length=ext_length,
+                            quantity=ext_qty,
+                        )
+
+                    # Couplers — 'NL4_COUPLER x1'
+                    for item in (row.get('couplers') or '').split(';'):
+                        if not item.strip():
+                            continue
+                        code, qty = _parse_qty_item(item, coupler_choices)
+                        if not code:
+                            errors.append(f"Row {row_num}: unknown Coupler '{item.strip()}'")
+                            continue
+                        PACoupler.objects.create(
+                            cable_schedule=cable, coupler_type=code, quantity=qty
+                        )
+
+                    imported += 1
+            except Exception as e:
+                errors.append(f"Row {row_num}: {e}")
+
+        summary = f"Imported {imported} cable entr{'y' if imported == 1 else 'ies'}"
+        if zones_created:
+            summary += f", auto-created {zones_created} zone(s)"
+        if errors:
+            messages.warning(
+                request,
+                summary + f". {len(errors)} issue(s): " + " | ".join(errors[:8])
+                + (" …" if len(errors) > 8 else "")
+            )
+        else:
+            messages.success(request, summary + '.')
+
+        return HttpResponseRedirect(reverse('admin:planner_pacableschedule_changelist'))
+
+    context = {
+        'title': 'Import PA Cable Entries from CSV',
+        'opts': PACableSchedule._meta,
+        'cable_choices': PACableSchedule.CABLE_TYPE_CHOICES,
+        'fan_choices': [c for c in PACableSchedule.FAN_OUT_CHOICES if c[0]],
+        'coupler_choices': PACoupler.COUPLER_TYPE_CHOICES,
+        'ext_cable_choices': PAFanOutExtension.EXTENSION_CABLE_CHOICES,
+        'ext_length_choices': PAFanOutExtension.EXTENSION_LENGTH_CHOICES,
+    }
+    return TemplateResponse(request, 'admin/planner/pacableschedule/import_csv.html', context)
 
 
 #--------System Processor PDF Expport----

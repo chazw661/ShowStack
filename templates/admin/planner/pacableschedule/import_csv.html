@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<h1>Import PA Cable Entries from CSV</h1>
+
+<div style="background: #2a2a2a; color: #eee; padding: 18px; margin: 20px 0; border-left: 4px solid #417690; border-radius: 4px;">
+    <h3 style="margin-top: 0; color: #79aec8;">CSV Layout</h3>
+    <p>The first row must be a header. Column order does not matter and matching is case-insensitive.
+       Rows are added to the <strong>currently-selected project</strong>. New zone labels are auto-created.</p>
+
+    <table style="width: 100%; border-collapse: collapse; background: #1e1e1e;">
+        <thead>
+            <tr style="background: #417690; color: white;">
+                <th style="padding: 6px 8px; text-align: left; border: 1px solid #356683;">Column</th>
+                <th style="padding: 6px 8px; text-align: left; border: 1px solid #356683;">Required</th>
+                <th style="padding: 6px 8px; text-align: left; border: 1px solid #356683;">Format</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Label</td><td style="padding: 6px 8px; border: 1px solid #333;">Yes</td><td style="padding: 6px 8px; border: 1px solid #333;">Zone code, e.g. <code>HL</code>, <code>FF1</code></td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Destination</td><td style="padding: 6px 8px; border: 1px solid #333;">Yes</td><td style="padding: 6px 8px; border: 1px solid #333;">Free text, e.g. <code>K2 - Top</code></td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Count</td><td style="padding: 6px 8px; border: 1px solid #333;">Yes</td><td style="padding: 6px 8px; border: 1px solid #333;">Integer — number of runs</td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Cable</td><td style="padding: 6px 8px; border: 1px solid #333;">Yes</td><td style="padding: 6px 8px; border: 1px solid #333;">One of the codes or display names listed below</td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Length</td><td style="padding: 6px 8px; border: 1px solid #333;">Yes</td><td style="padding: 6px 8px; border: 1px solid #333;">Integer feet per run</td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Notes</td><td style="padding: 6px 8px; border: 1px solid #333;">No</td><td style="padding: 6px 8px; border: 1px solid #333;">Free text</td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Drawing Ref</td><td style="padding: 6px 8px; border: 1px solid #333;">No</td><td style="padding: 6px 8px; border: 1px solid #333;">Free text</td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Fan Outs</td><td style="padding: 6px 8px; border: 1px solid #333;">No</td><td style="padding: 6px 8px; border: 1px solid #333;"><code>TYPE xN</code>, multiple separated by <code>;</code></td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Extensions</td><td style="padding: 6px 8px; border: 1px solid #333;">No</td><td style="padding: 6px 8px; border: 1px solid #333;"><code>FAN_TYPE: EXT_CABLE LENGTH xN</code>, semicolon-separated</td></tr>
+            <tr><td style="padding: 6px 8px; border: 1px solid #333;">Couplers</td><td style="padding: 6px 8px; border: 1px solid #333;">No</td><td style="padding: 6px 8px; border: 1px solid #333;"><code>TYPE xN</code>, semicolon-separated</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div style="background: #1e1e1e; color: #eee; padding: 18px; margin: 20px 0; border-left: 4px solid #417690; border-radius: 4px;">
+    <h3 style="margin-top: 0; color: #79aec8;">Example row</h3>
+    <pre style="background: #111; color: #eee; padding: 12px; border-radius: 4px; overflow-x: auto;">Label,Destination,Count,Cable,Length,Notes,Drawing Ref,Fan Outs,Extensions,Couplers
+HL,K2 - Top,3,NL_4,100,Clr. 1 Top 2,DIM-01,NL4_Y x2; NL8_Y x1,NL4_Y: NL4 25 x1; NL8_Y: NL8 50 x2,NL4_COUPLER x1</pre>
+
+    <p style="margin-bottom: 0;">
+        <a href="{% url 'planner:import_pa_cables_csv' %}?sample=1"
+           style="display: inline-block; background: #417690; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none;">
+            Download sample CSV
+        </a>
+    </p>
+</div>
+
+<div style="background: #1e1e1e; color: #eee; padding: 18px; margin: 20px 0; border-left: 4px solid #417690; border-radius: 4px;">
+    <h3 style="margin-top: 0; color: #79aec8;">Accepted values</h3>
+
+    <p style="margin-bottom: 4px;"><strong>Cable</strong> (use code or display name):</p>
+    <ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2;">
+        {% for code, label in cable_choices %}
+            <li><code>{{ code }}</code> &nbsp;/&nbsp; {{ label }}</li>
+        {% endfor %}
+    </ul>
+
+    <p style="margin-bottom: 4px;"><strong>Fan Out types:</strong></p>
+    <ul style="columns: 2; -webkit-columns: 2; -moz-columns: 2;">
+        {% for code, label in fan_choices %}
+            <li><code>{{ code }}</code> &nbsp;/&nbsp; {{ label }}</li>
+        {% endfor %}
+    </ul>
+
+    <p style="margin-bottom: 4px;"><strong>Coupler types:</strong></p>
+    <ul>
+        {% for code, label in coupler_choices %}
+            <li><code>{{ code }}</code> &nbsp;/&nbsp; {{ label }}</li>
+        {% endfor %}
+    </ul>
+
+    <p style="margin-bottom: 4px;"><strong>Extension cable types:</strong>
+        {% for code, label in ext_cable_choices %}<code>{{ code }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+    </p>
+    <p style="margin-bottom: 0;"><strong>Extension lengths (ft):</strong>
+        {% for value, label in ext_length_choices %}{{ value }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </p>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div style="margin: 20px 0;">
+        <label for="csv_file" style="display: block; margin-bottom: 6px; font-weight: bold;">Select CSV file:</label>
+        <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
+    </div>
+
+    <div style="margin: 20px 0;">
+        <input type="submit" value="Import PA Cables" class="default"
+               style="padding: 10px 22px; background: #417690; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+        <a href="{% url 'admin:planner_pacableschedule_changelist' %}" style="margin-left: 12px;">Cancel</a>
+    </div>
+</form>
+{% endblock %}
