@@ -5640,6 +5640,54 @@ def audio_checklist_delete_task(request):
 @login_required
 @require_POST
 @csrf_protect
+def audio_checklist_move_task(request):
+    """API endpoint to move a task up or down within its column (issue #54).
+
+    Reorders within the same checklist AND task_type (setup/daily) only. Swaps
+    the task with its immediate neighbour, then renumbers sort_order densely so
+    ties/gaps in legacy data can't wedge the ordering.
+    """
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        direction = data.get('direction')  # 'up' or 'down'
+        if direction not in ('up', 'down'):
+            return JsonResponse({'error': 'Invalid direction'}, status=400)
+
+        task = AudioChecklistTask.objects.get(id=task_id)
+
+        # Verify user has access to this project
+        current_project_id = request.session.get('current_project_id')
+        if task.checklist.project_id != current_project_id:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+
+        siblings = list(
+            task.checklist.tasks.filter(task_type=task.task_type)
+            .order_by('sort_order', 'id')
+        )
+        idx = next(i for i, t in enumerate(siblings) if t.id == task.id)
+        target = idx - 1 if direction == 'up' else idx + 1
+
+        # Already at the top/bottom — nothing to do.
+        if target < 0 or target >= len(siblings):
+            return JsonResponse({'success': True, 'moved': False})
+
+        siblings[idx], siblings[target] = siblings[target], siblings[idx]
+        for order, t in enumerate(siblings):
+            if t.sort_order != order:
+                t.sort_order = order
+                t.save(update_fields=['sort_order'])
+
+        return JsonResponse({'success': True, 'moved': True})
+    except AudioChecklistTask.DoesNotExist:
+        return JsonResponse({'error': 'Task not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@csrf_protect
 def audio_checklist_reset(request):
     """API endpoint to reset checklists to defaults"""
     try:

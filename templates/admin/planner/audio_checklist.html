@@ -261,6 +261,21 @@
         font-size: 12px;
     }
 
+    .move-btn {
+        background-color: #555;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+    }
+
+    .move-btn:hover {
+        background-color: #4a9eff;
+    }
+
     .day-checkbox {
         width: 20px;
         height: 20px;
@@ -537,7 +552,7 @@ function createSetupTable(sectionName, type, tasks, taskStatuses) {
         <th style="background-color: #ffc107; color: #000;">TASK</th>
         <th style="background-color: #000; color: #fff; width: 90px;">STAGE</th>
         <th style="background-color: #000; color: #fff; width: 110px;">STATUS</th>
-        <th style="width: 40px;">Actions</th>
+        <th style="width: 110px;">Actions</th>
     `;
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -574,7 +589,7 @@ function createDailyTable(sectionName, type, tasks, taskStatuses) {
                    style="background:transparent;border:none;border-bottom:1px dashed #0008;color:#000;font-weight:700;font-size:12px;width:100%;text-align:center;outline:none;padding:2px;">
         </th>`;
     }
-    dayHeadersHtml += '<th rowspan="2" style="width: 60px;">Actions</th>';
+    dayHeadersHtml += '<th rowspan="2" style="width: 110px;">Actions</th>';
     dayHeaderRow.innerHTML = dayHeadersHtml;
     thead.appendChild(dayHeaderRow);
     
@@ -619,11 +634,13 @@ function createSetupRow(sectionName, type, task, taskStatus) {
                 <option value="na" ${status === 'na' ? 'selected' : ''}>N/A</option>
             </select>
         </td>
-        <td>
+        <td style="white-space: nowrap;">
+            <button class="move-btn" title="Move up" onclick="moveTask(${task.id}, 'up')">▲</button>
+            <button class="move-btn" title="Move down" onclick="moveTask(${task.id}, 'down')">▼</button>
             <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
         </td>
     `;
-    
+
     return row;
 }
 
@@ -656,12 +673,27 @@ function createDailyRow(sectionName, type, task, taskStatus) {
                    ${taskStatus.day4 === 'complete' ? 'checked' : ''}
                    onchange="updateDayStatus(${task.id}, 'day4', this.checked)">
         </td>
-        <td>
+        <td style="white-space: nowrap;">
+            <button class="move-btn" title="Move up" onclick="moveTask(${task.id}, 'up')">▲</button>
+            <button class="move-btn" title="Move down" onclick="moveTask(${task.id}, 'down')">▼</button>
             <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
         </td>
     `;
-    
+
     return row;
+}
+
+async function moveTask(taskId, direction) {
+    const result = await apiCall('{% url "planner:audio_checklist_move_task" %}', {
+        task_id: taskId,
+        direction: direction,
+    });
+    if (result && result.success) {
+        if (result.moved) {
+            await loadData();
+            showNotification('Moved');
+        }
+    }
 }
 
 async function updateTask(taskId, field, value) {
