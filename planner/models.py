@@ -4222,9 +4222,11 @@ class AudioChecklist(models.Model):
     """Audio checklist section (FOH, A2, Video) linked to a project"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='audio_checklists')
     name = models.CharField(max_length=100)  # e.g., "FOH Check List", "A2 Check List"
+    # Issue #55: number of day columns shown for daily tasks (add/subtract days).
+    num_days = models.PositiveIntegerField(default=4)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = "Audio Checklist"
         verbose_name_plural = "Audio Checklists"
@@ -4391,7 +4393,12 @@ class AudioChecklistTask(models.Model):
     day2_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
     day3_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
     day4_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not-started')
-    
+
+    # Issue #55: per-day statuses for daily tasks, keyed by day number as a
+    # string, e.g. {"1": "complete", "2": "not-started"}. Supports an arbitrary
+    # number of days (add/subtract). Setup tasks keep using day1_status.
+    day_statuses = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

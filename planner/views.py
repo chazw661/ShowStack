@@ -5460,23 +5460,29 @@ def audio_checklist_data(request):
     
     for checklist in AudioChecklist.objects.filter(project=project).prefetch_related('tasks'):
         checklist_name = checklist.name
-        checklists[checklist_name] = {'setup': [], 'daily': []}
-        statuses[checklist_name] = {'setup': [], 'daily': []}
-        
+        # Issue #55: num_days drives how many daily columns the UI renders.
+        checklists[checklist_name] = {'setup': [], 'daily': [], 'num_days': checklist.num_days}
+        statuses[checklist_name] = {'setup': [], 'daily': [], 'num_days': checklist.num_days}
+
         for task in checklist.tasks.all().order_by('task_type', 'sort_order'):
             task_data = {
                 'id': task.id,
                 'task': task.task,
                 'stage': task.stage,
             }
-            status_data = {
-                'id': task.id,
-                'day1': task.day1_status,
-                'day2': task.day2_status,
-                'day3': task.day3_status,
-                'day4': task.day4_status,
-            }
-            
+            if task.task_type == 'daily':
+                # Per-day statuses keyed by day number (issue #55).
+                status_data = {
+                    'id': task.id,
+                    'days': task.day_statuses or {},
+                }
+            else:
+                # Setup tasks carry a single status (stored in day1_status).
+                status_data = {
+                    'id': task.id,
+                    'day1': task.day1_status,
+                }
+
             checklists[checklist_name][task.task_type].append(task_data)
             statuses[checklist_name][task.task_type].append(status_data)
     
@@ -5527,35 +5533,32 @@ def audio_checklist_update_status(request):
     try:
         data = json.loads(request.body)
         task_id = data.get('task_id')
-        day = data.get('day')  # 'day1', 'day2', 'day3', 'day4'
+        day = data.get('day')  # setup: 'day1'; daily: a day number like '1', '2', ...
         status = data.get('status')  # 'not-started', 'in-progress', 'complete', 'na'
-        
+
         task = AudioChecklistTask.objects.get(id=task_id)
-        
+
         # Verify user has access to this project
         current_project_id = request.session.get('current_project_id')
         if task.checklist.project_id != current_project_id:
             return JsonResponse({'error': 'Access denied'}, status=403)
-        
-        # Update the appropriate day status
-        if day == 'day1':
-            task.day1_status = status
-        elif day == 'day2':
-            task.day2_status = status
-        elif day == 'day3':
-            task.day3_status = status
-        elif day == 'day4':
-            task.day4_status = status
-        
-        # For setup tasks, sync all days to the same status
-        if task.task_type == 'setup':
+
+        if task.task_type == 'daily':
+            # Issue #55: store per-day status in the flexible JSON map. `day`
+            # is the day number; tolerate the legacy 'dayN' form too.
+            day_key = str(day).replace('day', '')
+            day_statuses = dict(task.day_statuses or {})
+            day_statuses[day_key] = status
+            task.day_statuses = day_statuses
+            task.save(update_fields=['day_statuses', 'updated_at'])
+        else:
+            # Setup tasks carry a single status (kept in day1_status).
             task.day1_status = status
             task.day2_status = status
             task.day3_status = status
             task.day4_status = status
-        
-        task.save()
-        
+            task.save()
+
         return JsonResponse({'success': True})
     except AudioChecklistTask.DoesNotExist:
         return JsonResponse({'error': 'Task not found'}, status=404)
@@ -5681,6 +5684,46 @@ def audio_checklist_move_task(request):
         return JsonResponse({'success': True, 'moved': True})
     except AudioChecklistTask.DoesNotExist:
         return JsonResponse({'error': 'Task not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+@csrf_protect
+def audio_checklist_set_days(request):
+    """API endpoint to add/subtract daily-task day columns (issue #55).
+
+    Sets num_days on a single checklist (section). Clamped to 1..14. The client
+    sends the desired count; existing per-day statuses beyond the new count are
+    kept in day_statuses (not deleted), so shrinking then growing is lossless.
+    """
+    MIN_DAYS, MAX_DAYS = 1, 14
+    try:
+        data = json.loads(request.body)
+        checklist_name = data.get('checklist_name')
+
+        current_project_id = request.session.get('current_project_id')
+        if not current_project_id:
+            return JsonResponse({'error': 'No project selected'}, status=400)
+
+        checklist = AudioChecklist.objects.get(
+            project_id=current_project_id,
+            name=checklist_name,
+        )
+
+        try:
+            num_days = int(data.get('num_days'))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'Invalid day count'}, status=400)
+
+        num_days = max(MIN_DAYS, min(MAX_DAYS, num_days))
+        checklist.num_days = num_days
+        checklist.save(update_fields=['num_days', 'updated_at'])
+
+        return JsonResponse({'success': True, 'num_days': num_days})
+    except AudioChecklist.DoesNotExist:
+        return JsonResponse({'error': 'Checklist not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 

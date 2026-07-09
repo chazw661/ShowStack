@@ -357,13 +357,6 @@
         <button class="btn" onclick="window.print()">🖨️ Print</button>
         <button class="btn" onclick="openSaveTemplateModal()" style="background:#1a3a5a;border-color:#4a9eff;color:#4a9eff;">💾 Save as Template</button>
         <button class="btn" onclick="openLoadTemplateModal()" style="background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;">📂 Load Template</button>
-        <select id="dayFilter" onchange="filterByDay()">
-            <option value="all">All Days</option>
-            <option value="day1">Day 1</option>
-            <option value="day2">Day 2</option>
-            <option value="day3">Day 3</option>
-            <option value="day4">Day 4</option>
-        </select>
     </div>
 
     <div class="checklist-tabs" id="checklistTabs">
@@ -519,19 +512,33 @@ function renderChecklists() {
 
         // Right column - Daily tasks
         if (!dailyDisabled && section.daily && section.daily.length > 0) {
+            const numDays = section.num_days || 4;
             const dailyDiv = document.createElement('div');
             dailyDiv.style.flex = '1';
-            
+
             const dailyHeader = document.createElement('h4');
             dailyHeader.style.color = '#ffc107';
             dailyHeader.style.backgroundColor = '#333';
             dailyHeader.style.padding = '8px';
             dailyHeader.style.marginBottom = '10px';
             dailyHeader.style.borderRadius = '4px';
-            dailyHeader.textContent = 'Daily Tasks';
+            dailyHeader.style.display = 'flex';
+            dailyHeader.style.justifyContent = 'space-between';
+            dailyHeader.style.alignItems = 'center';
+            // Issue #55: add/subtract day columns from the Daily Tasks header.
+            dailyHeader.innerHTML = `
+                <span>Daily Tasks</span>
+                <span>
+                    <button class="btn" style="padding: 3px 10px; font-size: 12px;"
+                            onclick="changeDays('${sectionName}', -1)" ${numDays <= 1 ? 'disabled' : ''}>− Day</button>
+                    <span style="margin: 0 8px; font-size: 12px; color: #ccc;">${numDays} day${numDays === 1 ? '' : 's'}</span>
+                    <button class="btn" style="padding: 3px 10px; font-size: 12px;"
+                            onclick="changeDays('${sectionName}', 1)" ${numDays >= 14 ? 'disabled' : ''}>+ Day</button>
+                </span>
+            `;
             dailyDiv.appendChild(dailyHeader);
-            
-            const dailyTable = createDailyTable(sectionName, 'daily', section.daily, sectionStatuses.daily);
+
+            const dailyTable = createDailyTable(sectionName, 'daily', section.daily, sectionStatuses.daily, numDays);
             dailyDiv.appendChild(dailyTable);
             layoutDiv.appendChild(dailyDiv);
         }
@@ -567,21 +574,20 @@ function createSetupTable(sectionName, type, tasks, taskStatuses) {
     return table;
 }
 
-function createDailyTable(sectionName, type, tasks, taskStatuses) {
+function createDailyTable(sectionName, type, tasks, taskStatuses, numDays) {
     const table = document.createElement('table');
     table.className = 'checklist-table';
     table.style.width = '100%';
-    
+
     const thead = document.createElement('thead');
-    
+
     // Day headers row - editable labels stored in localStorage
     const dayHeaderRow = document.createElement('tr');
-    const prefix = sectionName.split(' ')[0];
     let dayHeadersHtml = '<th rowspan="2" style="background-color: #ffc107; color: #000; width: 300px;">TASK</th>';
-    for (let d = 1; d <= 4; d++) {
+    for (let d = 1; d <= numDays; d++) {
         const label = getDayLabel(sectionName, d);
         dayHeadersHtml += `<th style="background-color: #ffc107; color: #000; min-width:80px;">
-            <input class="day-label-input" 
+            <input class="day-label-input"
                    value="${label}"
                    data-section="${sectionName}" data-day="${d}"
                    onblur="setDayLabel('${sectionName}', ${d}, this.value); this.closest('table').querySelectorAll('.day-col-${d}').forEach(el => el.setAttribute('data-label', this.value));"
@@ -592,12 +598,12 @@ function createDailyTable(sectionName, type, tasks, taskStatuses) {
     dayHeadersHtml += '<th rowspan="2" style="width: 110px;">Actions</th>';
     dayHeaderRow.innerHTML = dayHeadersHtml;
     thead.appendChild(dayHeaderRow);
-    
+
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
     tasks.forEach((task, index) => {
-        const row = createDailyRow(sectionName, type, task, taskStatuses[index]);
+        const row = createDailyRow(sectionName, type, task, taskStatuses[index], numDays);
         tbody.appendChild(row);
     });
     table.appendChild(tbody);
@@ -644,43 +650,50 @@ function createSetupRow(sectionName, type, task, taskStatus) {
     return row;
 }
 
-function createDailyRow(sectionName, type, task, taskStatus) {
+function createDailyRow(sectionName, type, task, taskStatus, numDays) {
     const row = document.createElement('tr');
     row.dataset.taskId = task.id;
-    
-    row.innerHTML = `
+
+    const days = (taskStatus && taskStatus.days) || {};
+    let cells = `
         <td>
-            <input type="text" class="task-input" value="${task.task}" 
+            <input type="text" class="task-input" value="${task.task}"
                    onchange="updateTask(${task.id}, 'task', this.value)">
         </td>
-        <td style="text-align: center;">
-            <input type="checkbox" class="day-checkbox" 
-                   ${taskStatus.day1 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus(${task.id}, 'day1', this.checked)">
-        </td>
-        <td style="text-align: center;">
-            <input type="checkbox" class="day-checkbox"
-                   ${taskStatus.day2 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus(${task.id}, 'day2', this.checked)">
-        </td>
+    `;
+    for (let d = 1; d <= numDays; d++) {
+        const checked = days[d] === 'complete' ? 'checked' : '';
+        cells += `
         <td style="text-align: center;">
             <input type="checkbox" class="day-checkbox"
-                   ${taskStatus.day3 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus(${task.id}, 'day3', this.checked)">
-        </td>
-        <td style="text-align: center;">
-            <input type="checkbox" class="day-checkbox"
-                   ${taskStatus.day4 === 'complete' ? 'checked' : ''}
-                   onchange="updateDayStatus(${task.id}, 'day4', this.checked)">
-        </td>
+                   ${checked}
+                   onchange="updateDayStatus(${task.id}, ${d}, this.checked)">
+        </td>`;
+    }
+    cells += `
         <td style="white-space: nowrap;">
             <button class="move-btn" title="Move up" onclick="moveTask(${task.id}, 'up')">▲</button>
             <button class="move-btn" title="Move down" onclick="moveTask(${task.id}, 'down')">▼</button>
             <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
         </td>
     `;
+    row.innerHTML = cells;
 
     return row;
+}
+
+async function changeDays(sectionName, delta) {
+    const current = (checklists[sectionName] && checklists[sectionName].num_days) || 4;
+    const target = current + delta;
+    if (target < 1 || target > 14) return;
+    const result = await apiCall('{% url "planner:audio_checklist_set_days" %}', {
+        checklist_name: sectionName,
+        num_days: target,
+    });
+    if (result && result.success) {
+        await loadData();
+        showNotification(`Now ${result.num_days} day${result.num_days === 1 ? '' : 's'}`);
+    }
 }
 
 async function moveTask(taskId, direction) {
@@ -787,21 +800,38 @@ async function resetAll() {
 }
 
 function exportToCSV() {
-    let csv = 'Section,Type,Task,Stage,Day 1,Day 2,Day 3,Day 4\n';
-    
+    // Issue #55: day columns are variable — size the export to the widest section.
+    let maxDays = 1;
+    Object.keys(checklists).forEach(sectionName => {
+        maxDays = Math.max(maxDays, checklists[sectionName].num_days || 4);
+    });
+
+    const dayHeaders = [];
+    for (let d = 1; d <= maxDays; d++) dayHeaders.push(`Day ${d}`);
+    let csv = `Section,Type,Task,Stage,${dayHeaders.join(',')}\n`;
+
     Object.keys(checklists).forEach(sectionName => {
         const section = checklists[sectionName];
         const sectionStatuses = statuses[sectionName];
-        
+
         ['setup', 'daily'].forEach(type => {
             section[type].forEach((task, index) => {
                 const taskStatus = sectionStatuses[type][index];
-                csv += `"${sectionName}","${type}","${task.task}","${task.stage || ''}",`;
-                csv += `"${taskStatus.day1}","${taskStatus.day2}","${taskStatus.day3}","${taskStatus.day4}"\n`;
+                csv += `"${sectionName}","${type}","${task.task}","${task.stage || ''}"`;
+                for (let d = 1; d <= maxDays; d++) {
+                    let val = '';
+                    if (type === 'setup') {
+                        val = d === 1 ? (taskStatus.day1 || '') : '';
+                    } else {
+                        val = (taskStatus.days && taskStatus.days[d]) || 'not-started';
+                    }
+                    csv += `,"${val}"`;
+                }
+                csv += '\n';
             });
         });
     });
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -809,41 +839,6 @@ function exportToCSV() {
     a.download = `audio_checklist_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     showNotification('Exported to CSV');
-}
-
-function filterByDay() {
-    const filter = document.getElementById('dayFilter').value;
-    const tables = document.querySelectorAll('.checklist-table');
-    
-    tables.forEach(table => {
-        const headers = table.querySelectorAll('thead th');
-        const rows = table.querySelectorAll('tbody tr');
-        
-        if (filter === 'all') {
-            headers.forEach(th => th.style.display = '');
-            rows.forEach(row => {
-                row.querySelectorAll('td').forEach(td => td.style.display = '');
-            });
-        } else {
-            const dayNum = filter.replace('day', '');
-            headers.forEach((th, index) => {
-                if (index <= 1 || index === parseInt(dayNum) + 1 || index === 6) {
-                    th.style.display = '';
-                } else {
-                    th.style.display = 'none';
-                }
-            });
-            rows.forEach(row => {
-                row.querySelectorAll('td').forEach((td, index) => {
-                    if (index <= 1 || index === parseInt(dayNum) + 1 || index === 6) {
-                        td.style.display = '';
-                    } else {
-                        td.style.display = 'none';
-                    }
-                });
-            });
-        }
-    });
 }
 
 // Initialize on load
