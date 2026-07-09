@@ -429,6 +429,51 @@
             {% endif %}
         </div>
 
+        <!-- Add this crew to a project -->
+        <div class="card">
+            <h3>Add to a Project</h3>
+            <p class="danger-zone-text" style="margin-bottom: 15px;">
+                Adds every crew member to the selected project. Registered members
+                (<strong>Active</strong>) get access immediately; pending members are emailed a
+                signup invite and gain access automatically when they register.
+            </p>
+            {% if owned_projects %}
+            <form method="post" id="add-crew-to-project-form"
+                  action="{% url 'bulk_add_crew' 0 crew.id %}" class="add-member-form">
+                {% csrf_token %}
+                <input type="hidden" name="return_to" value="crew_detail">
+                <div class="form-group">
+                    <label for="project-select">Project</label>
+                    <select id="project-select" name="project_select" class="form-control">
+                        {% for project in owned_projects %}
+                        <option value="{{ project.id }}">{{ project.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn-add"
+                        {% if not has_members %}disabled{% endif %}>
+                    Add this crew to project
+                </button>
+            </form>
+            {% if not has_members %}
+            <p class="empty-state" style="margin-top: 10px;">Add at least one member above before adding this crew to a project.</p>
+            {% endif %}
+            <script>
+                (function () {
+                    var form = document.getElementById('add-crew-to-project-form');
+                    var select = document.getElementById('project-select');
+                    // {% url 'bulk_add_crew' 0 crew.id %} renders with project id 0 as a
+                    // placeholder; swap in the selected project id on submit.
+                    form.addEventListener('submit', function () {
+                        form.action = form.action.replace('/projects/0/', '/projects/' + select.value + '/');
+                    });
+                })();
+            </script>
+            {% else %}
+            <p class="empty-state">You don't own any projects yet. Create a project first, then add this crew to it.</p>
+            {% endif %}
+        </div>
+
         <!-- Delete crew danger zone -->
         <div class="card">
             <h3>Delete Crew</h3>

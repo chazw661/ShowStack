@@ -703,10 +703,15 @@ def crew_detail(request, crew_id):
         messages.error(request, 'Only the crew owner can view this roster.')
         return redirect('crew_index')
     members = crew.crewmember_set.select_related('user').all()
+    # Projects this owner can bulk-add the crew to (issue #52: let the owner
+    # add the crew to a project straight from the roster page).
+    owned_projects = Project.objects.filter(owner=request.user).order_by('-start_date')
     return render(request, 'accounts/crew_detail.html', {
         'crew': crew,
         'members': members,
         'role_choices': CrewMember.ROLES,
+        'owned_projects': owned_projects,
+        'has_members': members.exists(),
     })
 
 
@@ -1034,6 +1039,10 @@ def bulk_add_crew(request, project_id, crew_id):
     Per Pitfall 2: uses .save() (via ProjectMember.objects.create) rather than
     bulk_create so auto_now_add fires for invited_at.
     """
+    # issue #52: the crew_detail "Add to a Project" form posts to the placeholder
+    # project id 0 and carries the real id in project_select (for the no-JS case).
+    if project_id == 0:
+        project_id = request.POST.get('project_select') or 0
     project = get_object_or_404(Project, id=project_id)
     # Mirror accounts/views.py:128-131 — project owner gate.
     if project.owner != request.user:
@@ -1110,8 +1119,12 @@ def bulk_add_crew(request, project_id, crew_id):
     )
     messages.success(
         request,
-        f"Added {len(to_add)} members from {crew.name}; "
+        f"Added {len(to_add)} members from {crew.name} to {project.name}; "
         f"{already} were already on this project."
         f"{pending_clause}"
     )
+    # issue #52: when the owner adds the crew from the crew roster page, return
+    # them there instead of the project invite page.
+    if request.POST.get('return_to') == 'crew_detail':
+        return redirect('crew_detail', crew_id=crew.id)
     return redirect('invite_user', project_id=project.id)
