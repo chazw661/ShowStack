@@ -222,7 +222,7 @@
     {% if owner_crews %}
     {% for crew in owner_crews %}
     <div class="card" style="margin-top: 20px;">
-        <h3>{{ crew.name }} ({{ crew.eligible_count }} eligible to add)</h3>
+        <h3>{{ crew.name }} ({{ crew.eligible_count }} eligible to add{% if crew.pending_count %}, {{ crew.pending_count }} pending signup{% endif %})</h3>
         <p>
             {% for cm in crew.member_display %}
                 {% if cm.is_already_member %}
@@ -237,7 +237,7 @@
         <form method="post" action="{% url 'bulk_add_crew' project.id crew.id %}">
             {% csrf_token %}
             <button type="submit" class="btn-primary"
-                    {% if crew.eligible_count == 0 %}disabled{% endif %}>
+                    {% if not crew.can_submit %}disabled{% endif %}>
                 Add this crew
             </button>
         </form>

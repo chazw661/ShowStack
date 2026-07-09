@@ -189,6 +189,7 @@ def invite_user(request, project_id):
     for crew_obj in owner_crews_qs:
         members_payload = []
         eligible_count = 0
+        pending_count = 0
         for cm in crew_obj.crewmember_set.all():
             if cm.user_id is None:
                 members_payload.append({
@@ -196,8 +197,11 @@ def invite_user(request, project_id):
                     'is_already_member': False,
                     'is_pending': True,
                 })
-                # Pending-email rows do not count toward eligible_count —
-                # they materialize via the auto-claim hook (Plan 05) on register.
+                # Pending-email rows do not create a ProjectMember now, but the
+                # "Add this crew" action still records a CrewProjectAdd row so the
+                # auto-claim hook (Plan 05) materializes their access on signup.
+                # They must count toward being able to submit (issue #52).
+                pending_count += 1
             else:
                 is_member = cm.user_id in existing_member_ids
                 members_payload.append({
@@ -211,6 +215,10 @@ def invite_user(request, project_id):
             'id': crew_obj.id,
             'name': crew_obj.name,
             'eligible_count': eligible_count,
+            'pending_count': pending_count,
+            # issue #52: submittable when there are registered members to add
+            # OR pending members whose future access needs a CrewProjectAdd row.
+            'can_submit': (eligible_count + pending_count) > 0,
             'member_display': members_payload,
         })
 
