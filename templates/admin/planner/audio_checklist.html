@@ -443,6 +443,9 @@ function setDayLabel(sectionName, dayNum, value) {
 
 var activeTab = 'FOH Check List';
 
+// Issue #53: checklists that no longer expose a Daily Tasks column.
+const DAILY_DISABLED_CHECKLISTS = ['Prep Check List'];
+
 function switchTab(tabName, btn) {
     activeTab = tabName;
     document.querySelectorAll('.checklist-tab').forEach(t => t.classList.remove('active'));
@@ -458,16 +461,18 @@ function renderChecklists() {
         const section = checklists[sectionName];
         const sectionStatuses = statuses[sectionName] || {setup:{}, daily:{}};
         if (!checklists[sectionName]) return;
+        // Issue #53: the Prep ("Pre Pro") checklist has no Daily Tasks.
+        const dailyDisabled = DAILY_DISABLED_CHECKLISTS.includes(sectionName);
         const sectionDiv = document.createElement('div');
         sectionDiv.className = 'checklist-section';
-        
+
         const header = document.createElement('div');
         header.className = 'section-header';
         header.innerHTML = `
             <span class="section-title">${sectionName}</span>
             <div>
                 <button class="btn" style="padding: 5px 15px; font-size: 12px; margin-right: 10px;" onclick="addSetupTask('${sectionName}')">+ Setup Task</button>
-                <button class="btn" style="padding: 5px 15px; font-size: 12px;" onclick="addDailyTask('${sectionName}')">+ Daily Task</button>
+                ${dailyDisabled ? '' : `<button class="btn" style="padding: 5px 15px; font-size: 12px;" onclick="addDailyTask('${sectionName}')">+ Daily Task</button>`}
             </div>
         `;
         sectionDiv.appendChild(header);
@@ -480,7 +485,8 @@ function renderChecklists() {
         // Left column - Setup tasks (one-time)
         if (section.setup && section.setup.length > 0) {
             const setupDiv = document.createElement('div');
-            setupDiv.style.flex = '0 0 55%';
+            // Take the full width when the Daily column is disabled (issue #53).
+            setupDiv.style.flex = dailyDisabled ? '1' : '0 0 55%';
             
             const setupHeader = document.createElement('h4');
             setupHeader.style.color = '#ffc107';
@@ -497,7 +503,7 @@ function renderChecklists() {
         }
 
         // Right column - Daily tasks
-        if (section.daily && section.daily.length > 0) {
+        if (!dailyDisabled && section.daily && section.daily.length > 0) {
             const dailyDiv = document.createElement('div');
             dailyDiv.style.flex = '1';
             

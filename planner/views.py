@@ -5578,11 +5578,18 @@ def audio_checklist_add_task(request):
         if not current_project_id:
             return JsonResponse({'error': 'No project selected'}, status=400)
         
+        # Issue #53: the Prep ("Pre Pro") checklist has no Daily Tasks column.
+        if task_type == 'daily' and checklist_name == 'Prep Check List':
+            return JsonResponse(
+                {'error': 'The Prep checklist does not support daily tasks.'},
+                status=400,
+            )
+
         checklist = AudioChecklist.objects.get(
             project_id=current_project_id,
             name=checklist_name
         )
-        
+
         # Get the next sort order
         max_order = checklist.tasks.filter(task_type=task_type).aggregate(
             Max('sort_order')
