@@ -280,7 +280,7 @@ class NameOnlyForm(forms.ModelForm):
 
 #----------Device dropdowns--------
 from django import forms
-from django.db.models import Prefetch, IntegerField
+from django.db.models import Prefetch, IntegerField, Case, When, Value
 from django.db.models.functions import Cast
 from .models import (
     DeviceInput,
@@ -291,6 +291,25 @@ from .models import (
     ConsoleStereoOutput,
     Console,
 )
+
+
+def _numeric_channel_order(field_name):
+    """Safe integer ordering for a CharField channel-number field.
+
+    input_ch / aux_number / matrix_number are CharFields, so we cast to int
+    for natural 1, 2, …, 10 order (otherwise "10" sorts before "2"). But a
+    bare ``Cast(field, IntegerField())`` raises DataError on PostgreSQL the
+    moment ANY row holds a non-numeric value (e.g. a typo'd ``input_ch``),
+    which silently broke the whole device I/O dropdown for that project
+    (Issue #56). Guard the cast with a regex so non-numeric rows sort to the
+    end instead of blowing up the query. Mirrors ConsoleInputInline.get_queryset.
+    """
+    return Case(
+        When(**{f"{field_name}__regex": r'^\d+$'},
+             then=Cast(field_name, IntegerField())),
+        default=Value(99999),
+        output_field=IntegerField(),
+    )
 
 
 def _device_input_suggestions(project_id):
@@ -308,12 +327,13 @@ def _device_input_suggestions(project_id):
     seen = set()
     suggestions = []
     # input_ch is a CharField, so cast to int for natural 1, 2, …, 10 order
-    # (otherwise "10" sorts before "2"). Issue #28.
+    # (otherwise "10" sorts before "2"). Issue #28. A non-numeric input_ch
+    # must NOT crash the whole query — see _numeric_channel_order (Issue #56).
     qs = (ConsoleInput.objects
           .filter(console__project_id=project_id)
           .exclude(source__isnull=True)
           .exclude(source='')
-          .annotate(_ch_num=Cast('input_ch', IntegerField()))
+          .annotate(_ch_num=_numeric_channel_order('input_ch'))
           .order_by('console__name', '_ch_num'))
     for source in qs.values_list('source', flat=True):
         name = source.strip()
@@ -379,11 +399,12 @@ class DeviceOutputInlineForm(forms.ModelForm):
 
         # Order outputs to match the Console admin inlines (aux_number / matrix_number
         # are CharFields, so cast to int for natural 1, 2, …, 10 order). Issue #28.
+        # A non-numeric aux/matrix number must NOT crash the query — Issue #56.
         aux_qs = ConsoleAuxOutput.objects.annotate(
-            _num=Cast('aux_number', IntegerField())
+            _num=_numeric_channel_order('aux_number')
         ).order_by('_num')
         matrix_qs = ConsoleMatrixOutput.objects.annotate(
-            _num=Cast('matrix_number', IntegerField())
+            _num=_numeric_channel_order('matrix_number')
         ).order_by('_num')
         stereo_qs = ConsoleStereoOutput.objects.order_by('stereo_type')
 
