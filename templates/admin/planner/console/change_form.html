@@ -48,6 +48,167 @@
         border: 1px solid #555;
     }
 </style>
+
+<!-- Issue #57 Fix: Persist expanded fieldsets using hidden form field + URL parameter -->
+<script>
+(function() {
+    'use strict';
+    
+    const LOG_PREFIX = '[Issue #57]';
+    
+    function log() {
+        try {
+            console.log(LOG_PREFIX, ...arguments);
+        } catch (e) {}
+    }
+    
+    log('Script loaded');
+    
+    /**
+     * Read expanded fieldset names from URL parameter
+     */
+    function getExpandedFromURL() {
+        const params = new URLSearchParams(window.location.search);
+        const expandedParam = params.get('expanded');
+        
+        if (!expandedParam) {
+            log('No expanded parameter in URL');
+            return [];
+        }
+        
+        try {
+            // Try to parse as JSON first (server sends JSON array)
+            return JSON.parse(decodeURIComponent(expandedParam));
+        } catch (e) {
+            // Fall back to comma-separated
+            return expandedParam.split(',').map(s => s.trim());
+        }
+    }
+    
+    /**
+     * Expand fieldsets based on URL parameter
+     */
+    function expandFromURL() {
+        const expandedNames = getExpandedFromURL();
+        if (expandedNames.length === 0) {
+            log('No fieldsets to expand from URL');
+            return;
+        }
+        
+        log('Fieldsets to expand:', expandedNames);
+        
+        // Use requestAnimationFrame to wait for DOM to be ready
+        const attemptExpand = () => {
+            const fieldsets = document.querySelectorAll('fieldset.collapse');
+            
+            if (fieldsets.length === 0) {
+                log('Fieldsets not found, retrying...');
+                requestAnimationFrame(attemptExpand);
+                return;
+            }
+            
+            log(`Found ${fieldsets.length} fieldsets, expanding...`);
+            
+            let expanded = 0;
+            fieldsets.forEach((fieldset) => {
+                const h2 = fieldset.querySelector('h2');
+                if (!h2) return;
+                
+                const fieldsetTitle = h2.textContent.trim().split('(')[0].trim();
+                
+                if (expandedNames.includes(fieldsetTitle)) {
+                    log(`  Expanding: ${fieldsetTitle}`);
+                    
+                    // Expand the fieldset
+                    fieldset.classList.remove('collapsed');
+                    
+                    // Update the toggle link text
+                    const toggleLink = h2.querySelector('.collapse-toggle');
+                    if (toggleLink) {
+                        toggleLink.textContent = 'Hide';
+                    }
+                    
+                    expanded++;
+                }
+            });
+            
+            log(`Expanded ${expanded} fieldsets`);
+        };
+        
+        attemptExpand();
+    }
+    
+    /**
+     * Setup form submission to capture expanded fieldsets
+     */
+    function setupFormSubmission() {
+        const form = document.querySelector('form');
+        if (!form) {
+            log('Form not found');
+            return;
+        }
+        
+        function captureExpandedFieldsets() {
+            const expandedNames = [];
+            const fieldsets = document.querySelectorAll('fieldset.collapse');
+            
+            fieldsets.forEach((fieldset) => {
+                // A fieldset is expanded if it does NOT have 'collapsed' class
+                if (!fieldset.classList.contains('collapsed')) {
+                    const h2 = fieldset.querySelector('h2');
+                    if (h2) {
+                        const title = h2.textContent.trim().split('(')[0].trim();
+                        expandedNames.push(title);
+                    }
+                }
+            });
+            
+            log('Captured expanded fieldsets:', expandedNames);
+            
+            if (expandedNames.length > 0) {
+                // Add to URL for server-side redirect
+                const currentAction = form.action;
+                const separator = currentAction.includes('?') ? '&' : '?';
+                const expandedParam = 'expanded=' + encodeURIComponent(JSON.stringify(expandedNames));
+                
+                form.action = currentAction + separator + expandedParam;
+                log('Updated form action with expanded parameter');
+            }
+        }
+        
+        // Hook all submit buttons
+        form.querySelectorAll('button, input[type="submit"]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                log('Submit button clicked, capturing expanded fieldsets');
+                captureExpandedFieldsets();
+            });
+        });
+        
+        log('Form submission hooks installed');
+    }
+    
+    // Run on DOMContentLoaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            log('DOMContentLoaded fired');
+            expandFromURL();
+            setupFormSubmission();
+        });
+    } else {
+        log('DOM already ready');
+        expandFromURL();
+        setupFormSubmission();
+    }
+    
+    // Also attempt to expand after window load (after collapse.js runs)
+    window.addEventListener('load', function() {
+        log('Window load event fired');
+        setTimeout(expandFromURL, 100);
+    });
+    
+    log('Initialization complete');
+})();
+</script>
 {% endblock %}
 
 {% block content %}
