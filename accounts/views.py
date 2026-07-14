@@ -772,8 +772,28 @@ def crew_member_add(request, crew_id):
             if CrewMember.objects.filter(crew=crew, user=user_obj).exists():
                 messages.error(request, f'{user_obj.username} is already in "{crew.name}".')
                 return redirect('crew_detail', crew_id=crew.id)
-            cm = CrewMember.objects.create(crew=crew, user=user_obj, default_role=default_role)
-            messages.success(request, f'Added {user_obj.username} to "{crew.name}".')
+            
+            # Issue #58: Check if there's a pending CrewMember with the same email (D-03)
+            # If found, convert it from pending email to actual user instead of creating a duplicate
+            pending_cm = CrewMember.objects.filter(
+                crew=crew,
+                email__iexact=user_obj.email,
+                user__isnull=True
+            ).first()
+            
+            if pending_cm is not None:
+                # D-01: UPDATE IN PLACE — convert pending email to user (preserves added_at)
+                pending_cm.user = user_obj
+                pending_cm.email = None
+                pending_cm.default_role = default_role
+                pending_cm.save(update_fields=['user', 'email', 'default_role'])
+                cm = pending_cm
+                messages.success(request, f'Converted {user_obj.email} to {user_obj.username} in "{crew.name}".')
+            else:
+                # Normal path: create new CrewMember for user
+                cm = CrewMember.objects.create(crew=crew, user=user_obj, default_role=default_role)
+                messages.success(request, f'Added {user_obj.username} to "{crew.name}".')
+            
             # issue #49: notify at roster-add time (D-10 log + swallow).
             try:
                 send_crew_roster_added_email(cm, request)
