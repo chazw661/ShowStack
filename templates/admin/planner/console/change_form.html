@@ -48,28 +48,46 @@
         border: 1px solid #555;
     }
 
-    /* Issue #57 Debug indicator */
-    .issue57-debug {
-        background-color: #fff3cd;
-        border: 2px solid #ffc107;
-        padding: 10px;
-        margin-bottom: 10px;
-        font-weight: bold;
-        color: #856404;
-        display: block;
+    /* Issue #57: Force all fieldset.collapse to be visible */
+    fieldset.collapse {
+        display: block !important;
+    }
+    
+    fieldset.collapse.collapsed {
+        display: block !important;
+    }
+    
+    fieldset.collapse.collapsed > * {
+        display: block !important;
+    }
+    
+    /* Ensure inline tables are visible */
+    .module table {
+        display: table !important;
+    }
+    
+    .module tbody {
+        display: table-row-group !important;
+    }
+    
+    .module tr {
+        display: table-row !important;
+    }
+    
+    .module td {
+        display: table-cell !important;
     }
 </style>
 
 <script>
-// Issue #57: Log to console to verify template is being used
-console.log('[Issue #57] Template loaded - if you see this, the template is working!');
+console.log('[Issue #57] HEAD script executing - using CSS-only solution');
 </script>
 {% endblock %}
 
 {% block content %}
-<!-- ISSUE #57 DEBUG: Show visual indicator that template is working -->
-<div class="issue57-debug">
-    ✅ ISSUE #57: Template is loading! Check console for [Issue #57] messages.
+<!-- Issue #57 DEBUG: Show visual indicator that template is working -->
+<div style="background-color: #fff3cd; border: 2px solid #ffc107; padding: 10px; margin-bottom: 10px; font-weight: bold; color: #856404;">
+    ✅ ISSUE #57: Template loaded - Fieldsets should be permanently visible via CSS
 </div>
 
 <!-- Spreadsheet Mode Indicator -->
@@ -137,59 +155,9 @@ console.log('[Issue #57] Template loaded - if you see this, the template is work
 
 {{ block.super }}
 
-<!-- Issue #57: Prevent collapse.js from collapsing fieldsets -->
-<script>
-console.log('[Issue #57] Main script block executing');
-
-// Ensure all collapse fieldsets stay expanded
-function keepFieldsetsExpanded() {
-    console.log('[Issue #57] keepFieldsetsExpanded() called');
-    
-    const fieldsets = document.querySelectorAll('fieldset.collapse');
-    console.log('[Issue #57] Found ' + fieldsets.length + ' fieldsets to process');
-    
-    // Remove any collapsed class and add expanded class
-    fieldsets.forEach(function(fieldset, index) {
-        if (fieldset.classList.contains('collapsed')) {
-            console.log('[Issue #57] Removing collapsed from fieldset ' + index);
-            fieldset.classList.remove('collapsed');
-        }
-        
-        fieldset.classList.add('expanded');
-        
-        // Update toggle link if it exists
-        const h2 = fieldset.querySelector('h2');
-        if (h2) {
-            const link = h2.querySelector('.collapse-toggle');
-            if (link) {
-                link.textContent = 'Hide';
-            }
-        }
-    });
-    
-    console.log('[Issue #57] Fieldsets processed');
-}
-
-// Call immediately
-keepFieldsetsExpanded();
-
-// Call on DOMContentLoaded
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', keepFieldsetsExpanded);
-}
-
-// Call on window load
-window.addEventListener('load', keepFieldsetsExpanded);
-
-// Keep trying to prevent collapse.js from collapsing
-setInterval(keepFieldsetsExpanded, 1000);
-
-console.log('[Issue #57] Script setup complete - fieldsets should stay expanded');
-</script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('[Issue #57] DOMContentLoaded - spreadsheet mode initializing');
+    console.log('[Issue #57] DOMContentLoaded - initializing spreadsheet mode');
     
     // Show status bar
     const statusBar = document.getElementById('statusBar');
