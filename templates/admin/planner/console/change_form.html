@@ -49,66 +49,9 @@
     }
 </style>
 
-<!-- Issue #57: Intercept 'collapsed' class with MutationObserver -->
 <script>
-(function() {
-    'use strict';
-    
-    console.log('[Issue #57] MutationObserver script starting...');
-    
-    // Use MutationObserver to catch when collapse.js adds 'collapsed' class
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                const element = mutation.target;
-                
-                // Check if this is a fieldset.collapse that just got 'collapsed' class
-                if (element.classList && element.classList.contains('collapse')) {
-                    if (element.classList.contains('collapsed')) {
-                        console.log('[Issue #57] Detected collapsed class on', element.querySelector('h2')?.textContent || 'unknown fieldset');
-                        
-                        // Remove collapsed class immediately
-                        element.classList.remove('collapsed');
-                        element.classList.add('expanded');
-                        
-                        // Update toggle link
-                        const h2 = element.querySelector('h2');
-                        if (h2) {
-                            const link = h2.querySelector('.collapse-toggle');
-                            if (link) {
-                                link.textContent = 'Hide';
-                            }
-                        }
-                        
-                        console.log('[Issue #57] Removed collapsed class, fieldset should be expanded');
-                    }
-                }
-            }
-        });
-    });
-    
-    // Start observing immediately
-    if (document.body) {
-        console.log('[Issue #57] document.body exists, starting observer');
-        observer.observe(document.body, {
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class']
-        });
-    } else {
-        console.log('[Issue #57] document.body not ready, waiting for DOM');
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('[Issue #57] DOMContentLoaded, starting observer');
-            observer.observe(document.body, {
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class']
-            });
-        });
-    }
-    
-    console.log('[Issue #57] MutationObserver setup complete');
-})();
+// Log immediately to verify script is running
+console.log('[Issue #57] Script loaded in HEAD');
 </script>
 {% endblock %}
 
@@ -178,8 +121,57 @@
 
 {{ block.super }}
 
+<!-- Issue #57: Prevent collapse.js from collapsing fieldsets -->
+<script>
+console.log('[Issue #57] Script executing in content block');
+
+// Simple approach: Watch for mutations and remove 'collapsed' class
+function setupCollapseInterception() {
+    console.log('[Issue #57] setupCollapseInterception() called');
+    
+    const observer = new MutationObserver(function(mutations) {
+        for (let mutation of mutations) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const el = mutation.target;
+                
+                // Check if this element has 'collapse' class and 'collapsed' was just added
+                if (el.classList && el.classList.contains('collapse')) {
+                    if (el.classList.contains('collapsed')) {
+                        console.log('[Issue #57] Removing collapsed class');
+                        el.classList.remove('collapsed');
+                        el.classList.add('expanded');
+                    }
+                }
+            }
+        }
+    });
+    
+    console.log('[Issue #57] Starting observer on document.body');
+    observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class']
+    });
+    
+    console.log('[Issue #57] Observer started successfully');
+}
+
+// Run as soon as possible
+if (document.readyState === 'loading') {
+    console.log('[Issue #57] Page still loading, waiting for DOMContentLoaded');
+    document.addEventListener('DOMContentLoaded', setupCollapseInterception);
+} else {
+    console.log('[Issue #57] Page already loaded, running setupCollapseInterception immediately');
+    setupCollapseInterception();
+}
+
+console.log('[Issue #57] Script setup complete');
+</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('[Issue #57] DOMContentLoaded event fired');
+    
     // Show status bar
     const statusBar = document.getElementById('statusBar');
     if (statusBar) {
@@ -197,7 +189,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentFieldSpan.textContent = label.textContent.replace(':', '');
             }
             
-            // Add active cell class
             this.classList.add('active-cell');
         });
         
