@@ -48,46 +48,41 @@
         border: 1px solid #555;
     }
 
-    /* Issue #57: Force all fieldset.collapse to be visible */
+    /* Issue #57: Remove the 'collapsed' class styling completely */
+    /* This overrides ANY inline or class-based styles that hide the fieldset */
     fieldset.collapse {
         display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
     
     fieldset.collapse.collapsed {
         display: block !important;
+        visibility: visible !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
     
-    fieldset.collapse.collapsed > * {
-        display: block !important;
-    }
-    
-    /* Ensure inline tables are visible */
-    .module table {
-        display: table !important;
-    }
-    
-    .module tbody {
-        display: table-row-group !important;
-    }
-    
-    .module tr {
-        display: table-row !important;
-    }
-    
-    .module td {
-        display: table-cell !important;
+    /* Make sure ALL children are visible */
+    fieldset.collapse * {
+        display: revert !important;
+        visibility: visible !important;
+        height: auto !important;
     }
 </style>
 
 <script>
-console.log('[Issue #57] HEAD script executing - using CSS-only solution');
+console.log('[Issue #57] HEAD - CSS-based solution with enhanced specificity');
 </script>
 {% endblock %}
 
 {% block content %}
 <!-- Issue #57 DEBUG: Show visual indicator that template is working -->
 <div style="background-color: #fff3cd; border: 2px solid #ffc107; padding: 10px; margin-bottom: 10px; font-weight: bold; color: #856404;">
-    ✅ ISSUE #57: Template loaded - Fieldsets should be permanently visible via CSS
+    ✅ ISSUE #57: Template loaded - fieldsets should be visible via CSS
 </div>
 
 <!-- Spreadsheet Mode Indicator -->
@@ -155,9 +150,50 @@ console.log('[Issue #57] HEAD script executing - using CSS-only solution');
 
 {{ block.super }}
 
+<!-- Issue #57: Remove inline styles that might be hiding fieldsets -->
+<script>
+console.log('[Issue #57] Content block - removing any inline styles');
+
+function removeCollapseStyles() {
+    const fieldsets = document.querySelectorAll('fieldset.collapse');
+    
+    fieldsets.forEach(function(fieldset) {
+        // Remove any display: none or visibility: hidden from inline styles
+        fieldset.style.display = '';
+        fieldset.style.visibility = '';
+        fieldset.style.height = '';
+        fieldset.style.maxHeight = '';
+        fieldset.style.overflow = '';
+        
+        // Remove display:none from all children
+        const allChildren = fieldset.querySelectorAll('*');
+        allChildren.forEach(function(child) {
+            child.style.display = '';
+            child.style.visibility = '';
+        });
+    });
+    
+    console.log('[Issue #57] Removed inline styles from ' + fieldsets.length + ' fieldsets');
+}
+
+// Run immediately
+removeCollapseStyles();
+
+// Run on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', removeCollapseStyles);
+
+// Run on window load
+window.addEventListener('load', removeCollapseStyles);
+
+// Run every 100ms to catch any late-applied styles
+setInterval(removeCollapseStyles, 100);
+
+console.log('[Issue #57] Inline style removal setup complete');
+</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('[Issue #57] DOMContentLoaded - initializing spreadsheet mode');
+    console.log('[Issue #57] DOMContentLoaded');
     
     // Show status bar
     const statusBar = document.getElementById('statusBar');
