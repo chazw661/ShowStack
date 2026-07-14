@@ -48,6 +48,37 @@
         border: 1px solid #555;
     }
 </style>
+
+<!-- Issue #57: Prevent fieldset collapse by pre-adding 'expanded' class before collapse.js runs -->
+<script>
+(function() {
+    'use strict';
+    
+    // Mark all collapse fieldsets as 'expanded' BEFORE collapse.js loads
+    // This prevents collapse.js from adding the 'collapsed' class
+    function expandAllFieldsets() {
+        const fieldsets = document.querySelectorAll('fieldset.collapse');
+        fieldsets.forEach(fieldset => {
+            // Add 'expanded' class BEFORE collapse.js sees it
+            // collapse.js checks for this class and doesn't add 'collapsed' if found
+            fieldset.classList.add('expanded');
+        });
+        console.log('[Issue #57] Pre-expanded ' + fieldsets.length + ' fieldsets');
+    }
+    
+    // Run this as early as possible, before other scripts
+    if (document.readyState === 'loading') {
+        // DOM still loading - add it to the document
+        document.addEventListener('DOMContentLoaded', expandAllFieldsets, true);
+    } else {
+        // DOM already loaded, run immediately
+        expandAllFieldsets();
+    }
+    
+    // Also run it after a short delay to be extra safe
+    setTimeout(expandAllFieldsets, 50);
+})();
+</script>
 {% endblock %}
 
 {% block content %}
