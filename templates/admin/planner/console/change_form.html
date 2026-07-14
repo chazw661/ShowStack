@@ -49,78 +49,65 @@
     }
 </style>
 
-<!-- Issue #57: Force fieldsets to stay expanded by removing 'collapsed' class after collapse.js runs -->
+<!-- Issue #57: Intercept 'collapsed' class with MutationObserver -->
 <script>
 (function() {
     'use strict';
     
-    console.log('[Issue #57] Script initializing...');
+    console.log('[Issue #57] MutationObserver script starting...');
     
-    /**
-     * Remove collapsed class from all collapse fieldsets
-     * This prevents them from being hidden
-     */
-    function forceExpanded() {
-        const fieldsets = document.querySelectorAll('fieldset.collapse');
-        console.log('[Issue #57] Found ' + fieldsets.length + ' fieldsets');
-        
-        fieldsets.forEach((fieldset, i) => {
-            // Remove 'collapsed' class if present
-            if (fieldset.classList.contains('collapsed')) {
-                console.log('[Issue #57] Removing collapsed class from fieldset ' + i);
-                fieldset.classList.remove('collapsed');
-            }
-            
-            // Ensure 'expanded' class is present
-            fieldset.classList.add('expanded');
-            
-            // Update the toggle link text to 'Hide'
-            const h2 = fieldset.querySelector('h2');
-            if (h2) {
-                const toggleLink = h2.querySelector('.collapse-toggle');
-                if (toggleLink) {
-                    toggleLink.textContent = 'Hide';
-                    console.log('[Issue #57] Set toggle text to Hide');
+    // Use MutationObserver to catch when collapse.js adds 'collapsed' class
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const element = mutation.target;
+                
+                // Check if this is a fieldset.collapse that just got 'collapsed' class
+                if (element.classList && element.classList.contains('collapse')) {
+                    if (element.classList.contains('collapsed')) {
+                        console.log('[Issue #57] Detected collapsed class on', element.querySelector('h2')?.textContent || 'unknown fieldset');
+                        
+                        // Remove collapsed class immediately
+                        element.classList.remove('collapsed');
+                        element.classList.add('expanded');
+                        
+                        // Update toggle link
+                        const h2 = element.querySelector('h2');
+                        if (h2) {
+                            const link = h2.querySelector('.collapse-toggle');
+                            if (link) {
+                                link.textContent = 'Hide';
+                            }
+                        }
+                        
+                        console.log('[Issue #57] Removed collapsed class, fieldset should be expanded');
+                    }
                 }
             }
         });
-    }
+    });
     
-    // Run immediately
-    console.log('[Issue #57] Running forceExpanded immediately');
-    forceExpanded();
-    
-    // Run on DOMContentLoaded
-    if (document.readyState === 'loading') {
+    // Start observing immediately
+    if (document.body) {
+        console.log('[Issue #57] document.body exists, starting observer');
+        observer.observe(document.body, {
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    } else {
+        console.log('[Issue #57] document.body not ready, waiting for DOM');
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('[Issue #57] DOMContentLoaded - running forceExpanded');
-            forceExpanded();
+            console.log('[Issue #57] DOMContentLoaded, starting observer');
+            observer.observe(document.body, {
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class']
+            });
         });
     }
     
-    // Run on window load (after collapse.js has definitely run)
-    window.addEventListener('load', function() {
-        console.log('[Issue #57] Window load - running forceExpanded');
-        forceExpanded();
-    });
-    
-    // Run multiple times with delays to guarantee it works
-    setTimeout(() => {
-        console.log('[Issue #57] Timeout 50ms - running forceExpanded');
-        forceExpanded();
-    }, 50);
-    
-    setTimeout(() => {
-        console.log('[Issue #57] Timeout 200ms - running forceExpanded');
-        forceExpanded();
-    }, 200);
-    
-    setTimeout(() => {
-        console.log('[Issue #57] Timeout 500ms - running forceExpanded');
-        forceExpanded();
-    }, 500);
-    
-    console.log('[Issue #57] Script initialization complete');
+    console.log('[Issue #57] MutationObserver setup complete');
 })();
 </script>
 {% endblock %}
