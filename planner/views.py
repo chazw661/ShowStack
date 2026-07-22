@@ -2956,7 +2956,7 @@ def ip_address_report(request):
     # If no project selected, show empty or redirect
     if not current_project:
         context = {
-            'title': 'IP Address Management',
+            'title': 'IP Address Manager',
             'modules': [],
             'no_project': True,
         }
@@ -2971,7 +2971,7 @@ def ip_address_report(request):
     
     # Organize data by module type
     context = {
-        'title': 'IP Address Management',
+        'title': 'IP Address Manager',
         'modules': [
             {
                 'name': 'Mixing Consoles',
