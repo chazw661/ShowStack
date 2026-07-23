@@ -334,6 +334,59 @@
             opacity: 1;
         }
     }
+
+    /* ── Issue #62: themed banners for the title + action rows,
+       and undo the global indigo input bleed on the checklist itself.
+       #content prefix beats the base_site global input override. ── */
+    #content .checklist-header {
+        background: linear-gradient(135deg, rgba(44,39,90,0.88) 0%, rgba(24,21,52,0.92) 100%);
+        border: 1px solid rgba(167,139,250,0.16);
+        border-radius: 14px;
+        padding: 20px 24px;
+        box-shadow: 0 8px 26px rgba(5,3,22,0.35);
+    }
+    #content .controls {
+        background: linear-gradient(135deg, rgba(44,39,90,0.72) 0%, rgba(24,21,52,0.78) 100%);
+        border: 1px solid rgba(167,139,250,0.14);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 20px;
+        box-shadow: 0 6px 20px rgba(5,3,22,0.30);
+    }
+
+    /* Restore the checklist's own input styling (global admin theme was
+       overriding these to indigo and flattening the status colors) */
+    #content .task-input {
+        background-color: #333 !important;
+        color: #e0e0e0 !important;
+        border: 1px solid #444 !important;
+    }
+    #content .task-input.status-not-started { background-color: rgba(33,150,243,0.3) !important; border-color: #2196F3 !important; color: #e0e0e0 !important; }
+    #content .task-input.status-in-progress { background-color: rgba(255,193,7,0.3) !important; border-color: #FFC107 !important; color: #e0e0e0 !important; }
+    #content .task-input.status-trouble-shooting { background-color: rgba(244,67,54,0.3) !important; border-color: #f44336 !important; color: #e0e0e0 !important; }
+    #content .task-input.status-complete { background-color: rgba(76,175,80,0.85) !important; border-color: #4CAF50 !important; color: #fff !important; }
+    #content .task-input.status-na { background-color: rgba(117,117,117,0.3) !important; border-color: #757575 !important; color: #e0e0e0 !important; }
+    #content .stage-select, #content .status-select {
+        background-color: #333 !important;
+        color: #e0e0e0 !important;
+        border: 1px solid #444 !important;
+    }
+    #content .task-input:focus, #content .stage-select:focus, #content .status-select:focus {
+        outline: none !important;
+        box-shadow: none !important;
+        border-color: #4a9eff !important;
+    }
+
+    /* Pivot: row "open space" gets the indigo gradient; text boxes stay gray.
+       Default / not-started rows show the gradient (so left & right boxes match);
+       active statuses tint the row so status color-coding still works. */
+    #content .checklist-table tbody tr,
+    #content .checklist-table tbody tr.status-not-started {
+        background: linear-gradient(135deg, rgba(44,39,90,0.60) 0%, rgba(24,21,52,0.66) 100%) !important;
+    }
+    #content .checklist-table tbody tr.status-in-progress { background: rgba(255,193,7,0.16) !important; }
+    #content .checklist-table tbody tr.status-complete    { background: rgba(76,175,80,0.24) !important; }
+    #content .checklist-table tbody tr.status-na          { background: rgba(96,125,139,0.18) !important; }
 </style>
 {% endblock %}
 

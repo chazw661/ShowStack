@@ -814,10 +814,19 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         ConsoleAuxOutputInline,
         ConsoleMatrixOutputInline,
         ConsoleStereoOutputInline,
-        DanteConsoleConfigInline
     ]
     
     actions = ['export_yamaha_rivage_csvs',]
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """Show the console's name as the page header instead of the generic
+        'Change console' title."""
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj is not None:
+            extra_context['title'] = str(obj)
+            extra_context['subtitle'] = None
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def has_add_permission(self, request):
         """Only editors and owners can add"""

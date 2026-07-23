@@ -125,13 +125,13 @@ html[data-theme="auto"] {
             <span style="color: #4ecca3; font-weight: 600; font-size: 14px;">{{ current_project.name }}</span>
         </div>
     {% endif %}
-        <button onclick="helpOpen()" style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;" onmouseover="this.style.color='#00ff88';this.style.borderColor='#00ff88'" onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">? Help</button>
+        <button onclick="helpOpen()" style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;" onmouseover="this.style.color='#c4b5fd';this.style.borderColor='#a78bfa'" onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">? Help</button>
 
     {# Phase 6 (D-04, D-12): My Crew link — always visible for authenticated users. #}
     {% if user.is_authenticated %}
     <a href="{% url 'crew_index' %}"
        style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;text-decoration:none;"
-       onmouseover="this.style.color='#00ff88';this.style.borderColor='#00ff88'"
+       onmouseover="this.style.color='#c4b5fd';this.style.borderColor='#a78bfa'"
        onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">My Crew</a>
     {% endif %}
 
@@ -723,6 +723,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
+<!-- Drop any stray auto-focus on the skip-to-content link so it stays hidden -->
+<script>
+(function(){
+  function blurSkip(){
+    var link = document.querySelector('.skip-to-content-link, a[href="#content-start"]');
+    if (link && document.activeElement === link) { link.blur(); }
+  }
+  document.addEventListener('DOMContentLoaded', blurSkip);
+  window.addEventListener('load', function(){ setTimeout(blurSkip, 0); });
+})();
+</script>
+
 <!-- Favicon and App Icons -->
 <link rel="icon" type="image/png" sizes="32x32" href="{% static 'admin/img/favicon_32x32.png' %}">
 <link rel="icon" type="image/png" sizes="16x16" href="{% static 'admin/img/favicon_16x16.png' %}">
@@ -1235,6 +1247,316 @@ select.bus-type-variable {
     background-color: #4a2a2a !important;
     color: #ff9090 !important;
     border-color: #ff9090 !important;
+}
+
+/* ============================================================
+   ShowStack chrome — indigo/violet "glass" theme (Issue #62)
+   Loaded last so it overrides the near-black/green rules above.
+   ============================================================ */
+
+/* Skip-to-content link: hide off-screen until keyboard focus */
+a.skip-to-content-link,
+.skip-to-content-link {
+    position: absolute !important;
+    left: -9999px !important;
+    top: auto !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+/* Keep it visually hidden in EVERY state — the browser was treating the
+   on-load auto-focus as keyboard focus and leaking the box through. It stays
+   in the DOM and focusable, so screen readers / keyboard skip still work. */
+a.skip-to-content-link:focus,
+.skip-to-content-link:focus,
+a.skip-to-content-link:focus-visible,
+.skip-to-content-link:focus-visible,
+a.skip-to-content-link:active,
+.skip-to-content-link:active {
+    position: absolute !important;
+    left: -9999px !important;
+    top: auto !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    pointer-events: none !important;
+}
+
+/* Page background — deep indigo gradient (fixed so it fills tall pages) */
+html, body {
+    background: linear-gradient(165deg, #171338 0%, #100d2c 55%, #0b0920 100%) !important;
+    background-attachment: fixed !important;
+}
+body, #container, .main, #content, #content-main, .content, .colMS, .colM {
+    background-color: transparent !important;
+    background: transparent !important;
+    color: #d9d6f5 !important;
+}
+
+/* Top bar / header */
+#header {
+    position: relative !important;
+    background: linear-gradient(180deg, rgba(26,22,66,0.96) 0%, rgba(18,15,46,0.96) 100%) !important;
+    color: #ecebff !important;
+    border-bottom: 1px solid rgba(167,139,250,0.28) !important;
+    box-shadow: 0 6px 26px rgba(5,3,22,0.5) !important;
+}
+#header::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #8b5cf6 0%, #e879c9 50%, #4fd6d0 100%);
+    z-index: 2;
+}
+#branding h1 span span { color: #8ba4ff !important; }
+#user-tools, #user-tools a { color: #cfccec !important; border-bottom-color: rgba(167,139,250,0.3) !important; }
+
+/* Project switcher dropdown */
+#project-switcher {
+    background: #241f4a !important;
+    color: #ecebff !important;
+    border: 1px solid rgba(167,139,250,0.45) !important;
+    border-radius: 6px !important;
+}
+
+/* "Project Dashboard" button → violet gradient */
+.dashboard-button,
+.dashboard-button:link,
+.dashboard-button:visited {
+    background: linear-gradient(135deg, #7c5cff 0%, #5b3fd6 100%) !important;
+    box-shadow: 0 4px 14px rgba(124,92,255,0.40) !important;
+    color: #fff !important;
+}
+.dashboard-button:hover {
+    background: linear-gradient(135deg, #8b6bff 0%, #6b4fe6 100%) !important;
+    box-shadow: 0 6px 22px rgba(124,92,255,0.58) !important;
+}
+
+/* Breadcrumbs */
+div.breadcrumbs {
+    background: rgba(18,15,46,0.92) !important;
+    color: #aba8d6 !important;
+    border-bottom: 1px solid rgba(167,139,250,0.14) !important;
+}
+div.breadcrumbs a { color: #a78bfa !important; }
+div.breadcrumbs a:hover { color: #c4b5fd !important; }
+
+/* Left navigation sidebar */
+#nav-sidebar {
+    background: linear-gradient(180deg, rgba(26,22,62,0.92) 0%, rgba(15,12,40,0.94) 100%) !important;
+    border-right: 1px solid rgba(167,139,250,0.16) !important;
+}
+#nav-sidebar a, #nav-sidebar a:link, #nav-sidebar a:visited { color: #d9d6f5 !important; }
+#nav-sidebar a:hover, #nav-sidebar a:focus { color: #c4b5fd !important; background: rgba(139,92,246,0.10) !important; }
+#nav-sidebar .current-app, #nav-sidebar .current-model { background: rgba(139,92,246,0.14) !important; }
+#nav-sidebar .current a, #nav-sidebar .current a:link, #nav-sidebar .current a:visited { color: #b79bff !important; }
+#nav-sidebar .module th, #nav-sidebar .module caption, #nav-sidebar h2, #nav-sidebar h3 {
+    background: transparent !important;
+    color: #8481b0 !important;
+    letter-spacing: 0.06em;
+}
+#nav-sidebar .app-label, #nav-sidebar .model-label, #nav-sidebar span, #nav-sidebar .caption { color: #d9d6f5 !important; }
+#nav-filter, input#nav-filter {
+    background: #1c1840 !important;
+    color: #d9d6f5 !important;
+    border: 1px solid rgba(167,139,250,0.22) !important;
+    border-radius: 6px !important;
+}
+#nav-filter:focus { border-color: rgba(167,139,250,0.55) !important; outline: none !important; }
+
+/* Content panels / modules & fieldsets */
+.module, fieldset, .inline-group {
+    background: linear-gradient(155deg, rgba(40,35,82,0.62), rgba(22,19,48,0.66)) !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 8px 26px rgba(5,3,22,0.35) !important;
+}
+.module h2, .module caption, fieldset h2 {
+    background: rgba(139,92,246,0.12) !important;
+    color: #ecebff !important;
+}
+
+/* Result tables */
+#changelist, #result_list { background: transparent !important; }
+#result_list thead th { background: rgba(32,27,66,0.92) !important; color: #d9d6f5 !important; border-bottom: 1px solid rgba(167,139,250,0.2) !important; }
+#result_list tbody tr { background: rgba(22,18,48,0.55) !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+#result_list tbody tr:nth-child(even) { background: rgba(34,29,72,0.5) !important; }
+#result_list tbody tr:hover { background: rgba(139,92,246,0.12) !important; }
+#result_list tbody td, #result_list tbody th { color: #d9d6f5 !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+
+/* Changelist filter sidebar */
+#changelist-filter { background: rgba(18,15,46,0.9) !important; border-left: 1px solid rgba(167,139,250,0.14) !important; }
+#changelist-filter a { color: #8ba4ff !important; }
+#changelist-filter a:hover { color: #c4b5fd !important; }
+
+/* Buttons */
+.button, input[type="submit"], input[type="button"], .submit-row input, a.button {
+    background: linear-gradient(135deg, #6d5cff 0%, #5240c9 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: 0 2px 10px rgba(109,92,255,0.30) !important;
+}
+.button:hover, input[type="submit"]:hover, input[type="button"]:hover, .submit-row input:hover, a.button:hover {
+    background: linear-gradient(135deg, #7d6cff 0%, #6250d9 100%) !important;
+    box-shadow: 0 4px 16px rgba(109,92,255,0.48) !important;
+}
+.default, input[type="submit"].default { background: linear-gradient(135deg, #43e08f 0%, #2bb673 100%) !important; color: #06210f !important; }
+.default:hover, input[type="submit"].default:hover { background: linear-gradient(135deg, #55e89c 0%, #34c47f 100%) !important; }
+
+/* Form inputs — neutral gray by default (no indigo) across all admin pages */
+input[type="text"], input[type="password"], input[type="email"],
+input[type="url"], input[type="number"], input[type="tel"],
+select, textarea {
+    background-color: #262626 !important;
+    color: #e0e0e0 !important;
+    border: 1px solid #3d3d3d !important;
+}
+input:focus, select:focus, textarea:focus {
+    border-color: #4a9eff !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(74,158,255,0.20) !important;
+}
+
+/* Generic links */
+a, a:link, a:visited { color: #8ba4ff !important; }
+a:hover, a:focus, a:active { color: #c4b5fd !important; }
+
+/* Page content title (e.g. "Equipment Management") */
+#content > h1, #content-main > h1, .dashboard #content h1 {
+    background: linear-gradient(120deg, #ffffff 0%, #b8a6ff 100%) !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.01em !important;
+}
+
+/* Sidebar rows: strip per-row dark backgrounds so the indigo gradient shows.
+   The sidebar is built from .module tables, so exclude it from the glass-card
+   treatment applied to content modules above. */
+#nav-sidebar .module,
+#nav-sidebar table,
+#nav-sidebar caption,
+#nav-sidebar tbody,
+#nav-sidebar tr,
+#nav-sidebar th,
+#nav-sidebar td {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
+#nav-sidebar th a, #nav-sidebar td a {
+    background: transparent !important;
+    border-radius: 6px !important;
+    transition: background .18s ease, color .18s ease !important;
+}
+#nav-sidebar tr:hover th a,
+#nav-sidebar th a:hover,
+#nav-sidebar td a:hover {
+    background: rgba(139,92,246,0.16) !important;
+    color: #c4b5fd !important;
+}
+#nav-sidebar .current-model th a,
+#nav-sidebar .current-model td a,
+#nav-sidebar .current a,
+#nav-sidebar .current a:link,
+#nav-sidebar .current a:visited {
+    background: rgba(139,92,246,0.22) !important;
+    color: #c4b5fd !important;
+}
+
+/* Changelist action bar & paginator (were near-black) — theme to match table */
+#changelist .actions,
+.actions {
+    background: rgba(38,32,78,0.78) !important;
+    color: #d9d6f5 !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(167,139,250,0.16) !important;
+}
+#changelist .actions label,
+#changelist .actions .action-counter,
+#changelist .actions .all,
+#changelist .actions .question,
+#changelist .actions .clear,
+.actions label, .actions .action-counter { color: #aba8d6 !important; }
+
+.paginator {
+    background: rgba(38,32,78,0.62) !important;
+    color: #aba8d6 !important;
+    border: none !important;
+    border-top: 1px solid rgba(167,139,250,0.14) !important;
+}
+.paginator a, .paginator a:link, .paginator a:visited { color: #8ba4ff !important; }
+.paginator .this-page { color: #ecebff !important; }
+
+/* Changelist search toolbar (was near-black) */
+#toolbar,
+#changelist #toolbar,
+form#changelist-search {
+    background: rgba(38,32,78,0.78) !important;
+    color: #d9d6f5 !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(167,139,250,0.16) !important;
+}
+#toolbar label, #toolbar #searchbar { color: #ecebff !important; }
+#toolbar svg, #changelist-search svg { fill: #aba8d6 !important; color: #aba8d6 !important; }
+
+/* Console change form: don't apply the indigo "glass" module treatment here —
+   it looked out of place on just the Console Information panel. Keep all
+   sections flat/neutral to match the inline grids. */
+body.model-console .module,
+body.model-console fieldset,
+body.model-console .inline-group {
+    background: #1a1a1a !important;
+    box-shadow: none !important;
+}
+/* Console Information header: drop the violet tint (the odd-colored row).
+   fieldset.aligned = the main form fieldset, so this won't touch the blue
+   collapsible inline headers. */
+body.model-console fieldset.aligned > h2 {
+    background: #2a2a2a !important;
+    color: #f0f0f0 !important;
+}
+/* Revert the input/output dropdowns to their original native format
+   (native chevron + dark box) instead of the flat themed select.
+   #content prefix beats Django admin's `#content select { appearance:none }`. */
+body.model-console #content .inline-group td select,
+body.model-console #content .inline-group td select.mono_stereo-select,
+body.model-console #content .inline-group td select.variable-select {
+    -webkit-appearance: menulist !important;
+    -moz-appearance: menulist !important;
+    appearance: menulist !important;
+    background-image: none !important;
+    background: #000 !important;
+    background-color: #000 !important;
+    color: #fff !important;
+    border: 1px solid #555 !important;
+    border-radius: 4px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+}
+/* Console data fields: black fill (matching the row) with rounded edges,
+   like the original layout — not the global neutral-gray. */
+body.model-console #content input[type="text"],
+body.model-console #content input[type="number"],
+body.model-console #content input[type="url"],
+body.model-console #content input[type="email"],
+body.model-console #content input[type="tel"] {
+    background: #000 !important;
+    background-color: #000 !important;
+    color: #fff !important;
+    border: 1px solid #3a3a3a !important;
+    border-radius: 6px !important;
 }
 </style>
 

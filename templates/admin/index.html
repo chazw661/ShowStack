@@ -9,26 +9,40 @@
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
   :root {
-    --bg: #080812;
-    --surface: #0e0e1e;
-    --surface2: #13132a;
-    --border: rgba(255,255,255,0.1);
-    --border-bright: rgba(74,158,255,0.3);
-    --text: #e2e2f0;
-    --text-dim: #9090b0;
-    --text-muted: #9090b0;
-    --accent: #4a9eff;
-    --accent-glow: rgba(74,158,255,0.15);
-    --green: #3dd68c;
-    --amber: #f0a500;
-    --red: #ff5a5a;
-    --purple: #a78bfa;
-    --teal: #2dd4bf;
+    --bg: #0f0d28;
+    --bg-grad-1: rgba(139,92,246,0.18);
+    --bg-grad-2: rgba(79,214,208,0.10);
+    --surface: linear-gradient(155deg, rgba(44,39,90,0.80), rgba(24,21,52,0.82));
+    --surface-solid: #1b1840;
+    --surface2: rgba(50,45,100,0.55);
+    --border: rgba(255,255,255,0.09);
+    --border-bright: rgba(167,139,250,0.55);
+    --text: #ecebff;
+    --text-dim: #aba8d6;
+    --text-muted: #8481b0;
+    --accent: #8ba4ff;
+    --accent-glow: rgba(139,92,246,0.18);
+    --green: #43e08f;
+    --amber: #f7b733;
+    --red: #ff6b8a;
+    --purple: #b79bff;
+    --teal: #4fd6d0;
+    --magenta: #e879c9;
+    --shadow-card: 0 10px 30px rgba(5,3,22,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+    --shadow-hover: 0 22px 50px rgba(5,3,22,0.62), 0 8px 32px rgba(139,92,246,0.30);
   }
 
   #content-main { padding: 0 !important; }
-  #content { padding: 0 !important; background: var(--bg) !important; }
-  .ss-dash { font-family: 'DM Sans', sans-serif; background: var(--bg); min-height: 100vh; padding: 32px 40px; color: var(--text); }
+  #content { padding: 0 !important; background: transparent !important; }
+  /* Admin page title ("Equipment Management") sits above the dashboard —
+     give it a themed title bar aligned with the dashboard content. */
+  #content > h1 { padding: 22px 40px 16px 40px !important; margin: 0 !important; border-bottom: 1px solid rgba(167,139,250,0.14) !important; }
+  .ss-dash { font-family: 'DM Sans', sans-serif;
+    background:
+      radial-gradient(1100px 560px at 12% -12%, var(--bg-grad-1), transparent 55%),
+      radial-gradient(900px 460px at 92% 0%, var(--bg-grad-2), transparent 52%),
+      linear-gradient(165deg, #1a1642 0%, #100d2c 55%, #0b0920 100%);
+    min-height: 100vh; padding: 32px 40px; color: var(--text); }
   .ss-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; gap: 20px; }
   .ss-project-name { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; font-family: 'DM Mono', monospace; }
   .ss-title { font-size: 1.8rem; font-weight: 600; color: var(--text); letter-spacing: -0.02em; line-height: 1.1; }
@@ -37,13 +51,13 @@
   .ss-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 8px; font-size: 0.8rem; font-weight: 500; cursor: pointer; text-decoration: none; border: 1px solid var(--border); background: var(--surface2); color: var(--text-dim); transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
   .ss-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
-  .ss-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; margin-bottom: 32px; position: relative; overflow: hidden; }
-  .ss-diagram::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% -20%, rgba(74,158,255,0.04) 0%, transparent 60%); pointer-events: none; }
+  .ss-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px; margin-bottom: 32px; position: relative; overflow: hidden; box-shadow: var(--shadow-card); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .ss-diagram::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% -20%, rgba(139,92,246,0.10) 0%, transparent 60%); pointer-events: none; }
   .ss-diagram-title { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: #b0b0dd; font-family: 'DM Mono', monospace; margin-bottom: 28px; }
   .ss-flow { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 16px; row-gap: 16px; align-items: stretch; position: relative; }
 
-  .ss-node { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 20px 16px; position: relative; transition: border-color 0.2s, transform 0.2s; text-decoration: none; cursor: pointer; display: block; min-width: 0; }
-  .ss-node:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .ss-node { background: linear-gradient(158deg, rgba(52,46,104,0.72), rgba(28,24,58,0.74)); border: 1px solid var(--border); border-radius: 14px; padding: 20px 16px; position: relative; transition: transform .28s cubic-bezier(.2,.7,.25,1), box-shadow .28s, border-color .28s; text-decoration: none; cursor: pointer; display: block; min-width: 0; box-shadow: var(--shadow-card); animation: ss-rise .5s cubic-bezier(.2,.7,.25,1) backwards; }
+  .ss-node:hover { border-color: var(--border-bright); transform: translateY(-4px); box-shadow: var(--shadow-hover); }
   .ss-node-icon { font-size: 1.4rem; margin-bottom: 10px; display: block; }
   .ss-node-label { display: none; }
   .ss-node-name { font-size: 0.95rem; font-weight: 600; color: var(--text); margin-bottom: 12px; }
@@ -61,15 +75,15 @@
   .ss-status-dot.empty { background: var(--text-muted); box-shadow: none; }
 
   .ss-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
-  .ss-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-decoration: none; display: block; transition: border-color 0.2s, background 0.2s; }
-  .ss-card:hover { border-color: var(--border-bright); background: var(--surface2); }
+  .ss-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; text-decoration: none; display: block; transition: transform .28s cubic-bezier(.2,.7,.25,1), box-shadow .28s, border-color .28s; box-shadow: var(--shadow-card); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); animation: ss-rise .5s cubic-bezier(.2,.7,.25,1) backwards; }
+  .ss-card:hover { border-color: var(--border-bright); transform: translateY(-5px); box-shadow: var(--shadow-hover); }
   .ss-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
   .ss-card-icon { font-size: 1.1rem; }
   .ss-card-label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: #a0a0cc; font-family: 'DM Mono', monospace; }
   .ss-card-title { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 12px; }
   .ss-card-metrics { display: flex; gap: 16px; }
   .ss-metric { display: flex; flex-direction: column; }
-  .ss-metric-val { font-size: 1.4rem; font-weight: 600; color: var(--text); font-family: 'DM Mono', monospace; line-height: 1; }
+  .ss-metric-val { font-size: 1.4rem; font-weight: 600; background: linear-gradient(120deg, #e4dcff 0%, #8ba4ff 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: var(--text); font-family: 'DM Mono', monospace; line-height: 1; }
   .ss-metric-label { font-size: 0.68rem; color: #a0a0cc; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
 
   .ss-card.comm { border-left: 3px solid var(--amber); }
@@ -86,6 +100,24 @@
 
   .ss-node-icon { width: 28px; height: 28px; margin-bottom: 10px; display: block; color: var(--accent); stroke-width: 1.5; }
   .ss-card-icon { width: 20px; height: 20px; color: var(--text-dim); stroke-width: 1.5; }
+
+  @keyframes ss-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .ss-flow > a:nth-of-type(1){animation-delay:.03s}
+  .ss-flow > a:nth-of-type(2){animation-delay:.08s}
+  .ss-flow > a:nth-of-type(3){animation-delay:.13s}
+  .ss-flow > a:nth-of-type(4){animation-delay:.18s}
+  .ss-flow > a:nth-of-type(5){animation-delay:.23s}
+  .ss-flow > a:nth-of-type(6){animation-delay:.28s}
+  .ss-flow > a:nth-of-type(7){animation-delay:.33s}
+  .ss-flow > a:nth-of-type(8){animation-delay:.38s}
+  .ss-grid > *:nth-child(1){animation-delay:.30s}
+  .ss-grid > *:nth-child(2){animation-delay:.36s}
+  .ss-grid > *:nth-child(3){animation-delay:.42s}
+  .ss-grid > *:nth-child(4){animation-delay:.48s}
+  .ss-grid > *:nth-child(5){animation-delay:.54s}
+  .ss-grid > *:nth-child(6){animation-delay:.60s}
+  @media (prefers-reduced-motion: reduce) { .ss-node, .ss-card { animation: none; } }
+
   @media (max-width: 900px) {
     .ss-flow { grid-template-columns: 1fr 1fr; }
     .ss-grid { grid-template-columns: 1fr 1fr; }
@@ -198,6 +230,14 @@
           <div class="ss-node-stat"><span class="ss-node-stat-label">Sessions</span><span class="ss-node-stat-val" id="stat-multitrack">—</span></div>
         </div>
       </a>
+      <a class="ss-node" href="/admin/planner/audiochecklist/">
+        <div class="ss-status-dot"></div>
+        <svg class="ss-node-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+        <div class="ss-node-name">Audio Checklist</div>
+        <div class="ss-node-stats">
+          <div class="ss-node-stat"><span class="ss-node-stat-label">A2 · Prep</span><span class="ss-node-stat-val">FOH</span></div>
+        </div>
+      </a>
     </div>
   </div>
 
@@ -213,8 +253,8 @@
         <div class="ss-metric"><span class="ss-metric-val" id="m-checked">—</span><span class="ss-metric-label">Checked Out</span></div>
       </div>
       <div style="display:flex;gap:8px;">
-        <a href="/admin/planner/commbeltpack/" style="flex:1;padding:7px 10px;background:#1a1a2a;border:1px solid #2a2a4a;border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#4a9eff'" onmouseout="this.style.borderColor='#2a2a4a'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg> Belt Packs</a>
-        <a href="/audiopatch/comm-config/" style="flex:1;padding:7px 10px;background:#1a1a2a;border:1px solid #2a2a4a;border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#4a9eff'" onmouseout="this.style.borderColor='#2a2a4a'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> Config</a>
+        <a href="/admin/planner/commbeltpack/" style="flex:1;padding:7px 10px;background:rgba(50,45,100,0.42);border:1px solid rgba(255,255,255,0.10);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg> Belt Packs</a>
+        <a href="/audiopatch/comm-config/" style="flex:1;padding:7px 10px;background:rgba(50,45,100,0.42);border:1px solid rgba(255,255,255,0.10);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> Config</a>
       </div>
     </div>
     <a class="ss-card mic" href="/audiopatch/mic-tracker/">
@@ -235,13 +275,6 @@
         <div class="ss-metric"><span class="ss-metric-val" id="m-amps-power">—</span><span class="ss-metric-label">Amps in Plans</span></div>
       </div>
     </a>
-    <a class="ss-card check" href="/admin/planner/audiochecklist/">
-      <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg><span class="ss-card-label">Operations</span></div>
-      <div class="ss-card-title">Audio Checklist</div>
-      <div class="ss-card-metrics">
-        <div class="ss-metric"><span class="ss-metric-val">FOH</span><span class="ss-metric-label">A2 · Prep</span></div>
-      </div>
-    </a>
     <a class="ss-card net" href="/audiopatch/ip-addresses/">
       <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg><span class="ss-card-label">Network</span></div>
       <div class="ss-card-title">IP Address Manager</div>
@@ -251,9 +284,9 @@
     </a>
     <a class="ss-card signalflow" href="/audiopatch/signal-flow/">
       <div class="ss-card-header"><svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="6" height="4" rx="1"/><rect x="16" y="3" width="6" height="4" rx="1"/><rect x="9" y="17" width="6" height="4" rx="1"/><line x1="5" y1="7" x2="12" y2="17"/><line x1="19" y1="7" x2="12" y2="17"/></svg><span class="ss-card-label">Documentation</span></div>
-      <div class="ss-card-title">Signal Flow</div>
+      <div class="ss-card-title">Diagrammer</div>
       <div class="ss-card-metrics">
-        <div class="ss-metric"><span class="ss-metric-val">SVG</span><span class="ss-metric-label">Diagrammer</span></div>
+        <div class="ss-metric"><span class="ss-metric-val">SVG</span><span class="ss-metric-label">Editor</span></div>
       </div>
     </a>
   </div>

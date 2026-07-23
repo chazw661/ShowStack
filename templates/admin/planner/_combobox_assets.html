@@ -73,6 +73,11 @@
     if (!options.length) return;
     input.dataset.comboboxEnhanced = '1';
 
+    // Drop the native datalist binding so the browser's built-in dropdown
+    // doesn't pop up alongside our custom combobox panel (double-menu bug).
+    // Options were already captured above, so the panel still works.
+    input.removeAttribute('list');
+
     var wrap = document.createElement('span');
     wrap.className = 'combobox-wrap';
     input.parentNode.insertBefore(wrap, input);
