@@ -39,7 +39,7 @@ class Command(BaseCommand):
             'systemprocessor', 'p1processor', 'p1input', 'p1output',
             'galaxyprocessor', 'galaxyinput', 'galaxyoutput',
             # PA Cables
-            'pacableschedule', 'pafanout', 'pazone',
+            'pacableschedule', 'pafanout', 'pafanoutextension', 'pacoupler', 'pazone',
             # Speaker arrays
             'speakerarray', 'speakercabinet',
             # Comms
@@ -56,6 +56,8 @@ class Command(BaseCommand):
             'location', 'project', 'projectmember', 'invitation',
             # Checklists
             'audiochecklist', 'audiochecklisttask',
+            # Multitrack
+            'multitracksession', 'multitracktemplate', 'multitracktemplateslot',
         ]
         
         self.stdout.write('\nConfiguring permissions...')
