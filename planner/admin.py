@@ -832,24 +832,18 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     def name_with_template_badge(self, obj):
@@ -1402,24 +1396,18 @@ class DeviceAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
 
@@ -1456,24 +1444,18 @@ class AmpModelAdmin(admin.ModelAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
@@ -2138,24 +2120,18 @@ class AmpAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)    
 
     @admin.action(description='Assign color to selected amps')
@@ -2250,24 +2226,18 @@ class LocationAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)    
 
 
@@ -2397,24 +2367,18 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)    
 
 
@@ -2695,24 +2659,18 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)    
     
     class Media:
@@ -2992,24 +2950,18 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)    
     
     class Media:
@@ -3124,24 +3076,18 @@ class PAZoneAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
@@ -3718,24 +3664,18 @@ class PACableAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -3792,24 +3732,18 @@ class CommChannelAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -3944,24 +3878,18 @@ class CommPositionAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -4020,24 +3948,18 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     def save_model(self, request, obj, form, change):
@@ -4930,24 +4852,18 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
 
@@ -5226,24 +5142,18 @@ class ShowDayAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         if ProjectMember.objects.filter(user=request.user, role='owner').exists():
             return True
         return super().has_delete_permission(request, obj) 
@@ -5286,24 +5196,18 @@ class PresenterAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -5406,24 +5310,18 @@ class MicSessionAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         if ProjectMember.objects.filter(user=request.user, role='owner').exists():
             return True
         return super().has_delete_permission(request, obj)
@@ -5481,24 +5379,18 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         if ProjectMember.objects.filter(user=request.user, role='owner').exists():
             return True
         return super().has_delete_permission(request, obj)
@@ -5555,24 +5447,18 @@ class MicShowInfoAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
@@ -5632,24 +5518,18 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -5998,24 +5878,18 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)   
 
     class Media:
@@ -6037,24 +5911,18 @@ class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -6089,24 +5957,18 @@ class AudioChecklistAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
 
@@ -6238,24 +6100,18 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)   
 
     
@@ -6324,24 +6180,18 @@ class SpeakerArrayAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
     
     class Media:
@@ -6363,24 +6213,18 @@ class SpeakerCabinetAdmin(BaseEquipmentAdmin):
         """Only editors and owners can add"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
     
     def has_delete_permission(self, request, obj=None):
         """Only editors and owners can delete"""
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj) 
     
 
@@ -6443,22 +6287,16 @@ class MultitrackSessionAdmin(BaseEquipmentAdmin):
     def has_add_permission(self, request):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
 
     def has_change_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
@@ -6478,22 +6316,16 @@ class ConsoleImportAdmin(BaseEquipmentAdmin):
     def has_add_permission(self, request):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
 
     def has_change_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
@@ -6544,22 +6376,16 @@ class MultitrackTemplateAdmin(BaseEquipmentAdmin):
     def has_add_permission(self, request):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
 
     def has_change_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
@@ -6782,22 +6608,16 @@ class SignalFlowDiagramAdmin(BaseEquipmentAdmin):
     def has_add_permission(self, request):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_add_permission(request)
 
     def has_change_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         if request.user.is_superuser:
             return True
-        if request.user.groups.filter(name='Viewer').exists():
-            return False
         return super().has_delete_permission(request, obj)
 
 
