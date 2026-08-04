@@ -386,6 +386,18 @@
     .a2-group-pill.color-teal   { background: rgba(0,188,212,0.15);  color: #00bcd4; border: 1px solid rgba(0,188,212,0.3); }
     .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
 
+    /* Add Day / Add Session modals — centered overlay (Issue #64) */
+    .mtt-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .mtt-modal.hidden { display: none; }
+    .mtt-modal-box { background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 8px; padding: 24px 26px; width: 100%; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+    .mtt-modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 18px; }
+    .mtt-modal-field { margin-bottom: 14px; }
+    .mtt-modal-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .mtt-modal-input { width: 100%; box-sizing: border-box; background: var(--bg-input); border: 1px solid var(--border-bright); color: var(--text-primary); border-radius: 5px; padding: 9px 12px; font-size: 14px; }
+    .mtt-modal-input:focus { outline: none; border-color: var(--accent-blue); }
+    .mtt-modal-error { font-size: 13px; color: var(--accent-red); margin-bottom: 12px; }
+    .mtt-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
     .group-manage-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .group-manage-modal.hidden { display: none; }
     .group-manage-box { background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 8px; padding: 24px; min-width: 320px; max-width: 400px; }
