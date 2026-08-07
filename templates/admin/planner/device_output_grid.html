@@ -1,29 +1,39 @@
 {% load custom_tags chunk_filters %}
 {% load i18n admin_urls static admin_modify chunk_filters %}
+{% include "admin/planner/_combobox_assets.html" %}
 <style>
   .device-output-cell {
-    padding: 5px;  /* Reduced from 10px */
+    padding: 5px;
     border: 1px solid #ddd;
     text-align: center;
     width: 12.5%;  /* Force consistent width for 8 columns */
   }
   .device-output-cell .number {
     font-weight: bold;
-    margin-bottom: 5px;  /* Reduced from 8px */
-    font-size: 13px;  /* Slightly smaller */
+    margin-bottom: 5px;
+    font-size: 13px;
   }
-  .device-output-cell .select {
-    margin-top: 3px;  /* Reduced from 5px */
-  }
-  .device-output-cell select {
+  .device-output-cell input[type="text"] {
     width: 100%;
-    font-size: 12px;  /* Smaller font in dropdown */
+    font-size: 12px;
+    padding: 2px;
+    box-sizing: border-box;
   }
 </style>
 
 <div class="js-inline-admin-formset inline-group">
   <div class="tabular inline-related">
     {{ inline_admin_formset.formset.management_form }}
+
+    {% with first_form=inline_admin_formset.forms.0 %}
+      {% if first_form.output_suggestions %}
+        <datalist id="device-output-suggestions">
+          {% for name in first_form.output_suggestions %}
+            <option value="{{ name }}"></option>
+          {% endfor %}
+        </datalist>
+      {% endif %}
+    {% endwith %}
 
     <fieldset class="module {{ inline_admin_formset.classes }}">
       <h2>{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h2>
@@ -34,34 +44,18 @@
             <tr class="form-row">
               {% for form in form_chunk %}
                 <td class="device-output-cell">
-                  {# hidden PK/FK fields etc. #}
                   {% for hidden in form.hidden_fields %}
                     {{ hidden }}
                   {% endfor %}
-                  <input type="hidden" name="{{ form.output_number.html_name }}" 
-                        id="{{ form.output_number.id_for_label }}" 
-                        value="{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}">
-                  
-                  {# Hidden signal_name field #}
-                  <input type="hidden" name="{{ form.signal_name.html_name }}" 
-                         id="{{ form.signal_name.id_for_label }}" 
-                         value="{{ form.signal_name.value|default:'' }}">
+                  <input type="hidden" name="{{ form.output_number.html_name }}"
+                         id="{{ form.output_number.id_for_label }}"
+                         value="{{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}">
 
-                  {# Output number #}
                   <div class="number">
-                    {% if form.instance.output_number %}
-                      Out {{ form.instance.output_number }}
-                    {% elif form.initial.output_number %}
-                      Out {{ form.initial.output_number }}
-                    {% else %}
-                      Out {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
-                    {% endif %}
+                    Out {{ forloop.parentloop.counter0|multiply:8|add:forloop.counter }}
                   </div>
 
-                  {# Console output dropdown #}
-                  <div class="select">
-                    {{ form.console_output }}
-                  </div>
+                  {{ form.signal_name }}
                 </td>
               {% endfor %}
             </tr>

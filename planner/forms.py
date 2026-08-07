@@ -344,6 +344,49 @@ def _device_input_suggestions(project_id):
     return suggestions
 
 
+def _device_output_suggestions(project_id):
+    """Console output names for the device-output datalist.
+
+    Output counterpart of ``_device_input_suggestions``. The output inline
+    used to render a Console Output FK dropdown (aux/matrix/stereo). When the
+    project had no named console outputs that dropdown was empty, so the whole
+    output section looked read-only — the engineer literally had nothing to
+    pick and no way to type a name (Issue #65). We replaced it with the same
+    free-text signal_name combobox + datalist the input side already uses,
+    scoped to the current project. Suggestions are drawn from the project's
+    ConsoleAuxOutput / ConsoleMatrixOutput / ConsoleStereoOutput names, ordered
+    to match the Console admin inlines (aux first, then matrix, then stereo).
+    """
+    if not project_id:
+        return []
+    seen = set()
+    suggestions = []
+
+    aux_qs = (ConsoleAuxOutput.objects
+              .filter(console__project_id=project_id)
+              .exclude(name__isnull=True).exclude(name='')
+              .annotate(_ch_num=_numeric_channel_order('aux_number'))
+              .order_by('console__name', '_ch_num'))
+    matrix_qs = (ConsoleMatrixOutput.objects
+                 .filter(console__project_id=project_id)
+                 .exclude(name__isnull=True).exclude(name='')
+                 .annotate(_ch_num=_numeric_channel_order('matrix_number'))
+                 .order_by('console__name', '_ch_num'))
+    stereo_qs = (ConsoleStereoOutput.objects
+                 .filter(console__project_id=project_id)
+                 .exclude(name__isnull=True).exclude(name='')
+                 .order_by('console__name', 'stereo_type'))
+
+    for qs in (aux_qs, matrix_qs, stereo_qs):
+        for output_name in qs.values_list('name', flat=True):
+            name = (output_name or '').strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            suggestions.append(name)
+    return suggestions
+
+
 class DeviceInputInlineForm(forms.ModelForm):
     """Inline form for I/O Device Inputs.
 
@@ -373,130 +416,38 @@ class DeviceInputInlineForm(forms.ModelForm):
 
 
 class DeviceOutputInlineForm(forms.ModelForm):
-    console_output = forms.ChoiceField(
-        label="Console Output",
-        required=False,
-        widget=forms.Select,
-        choices=[],
-    )
+    """Inline form for I/O Device Outputs.
+
+    Single combobox bound to ``signal_name`` — the engineer can type freely
+    or pick from a datalist sourced from the project's console output names
+    (see ``_device_output_suggestions``). The HTML datalist is rendered once
+    per inline in ``device_output_grid.html``.
+
+    This replaces the old Console Output FK dropdown, which rendered empty
+    (and therefore looked locked/read-only) whenever the project had no named
+    console outputs — the engineer had nothing to select and no way to type a
+    name (Issue #65). Mirrors ``DeviceInputInlineForm``. Existing rows keep any
+    content_type/object_id GenericFK they already had; downstream consumers
+    (P1/Galaxy processor dropdowns, Signal Flow) read ``signal_name`` directly.
+    """
 
     class Meta:
         model = DeviceOutput
-        fields = ("output_number", "signal_name")  # Remove console_output from here
-        
+        fields = ("output_number", "signal_name")
+        widgets = {
+            'signal_name': forms.TextInput(attrs={
+                'class': 'vTextField',
+                'list': 'device-output-suggestions',
+                'autocomplete': 'off',
+            }),
+        }
+
     def __init__(self, *args, **kwargs):
-        # Extract project_id from kwargs
         project_id = kwargs.pop('project_id', None)
-        
         super().__init__(*args, **kwargs)
         self.fields['output_number'].required = False
         self.fields['signal_name'].required = False
-
-        # Hide signal_name widget
-        self.fields['signal_name'].widget = forms.HiddenInput()
-
-        grouped = []
-
-        # Order outputs to match the Console admin inlines (aux_number / matrix_number
-        # are CharFields, so cast to int for natural 1, 2, …, 10 order). Issue #28.
-        # A non-numeric aux/matrix number must NOT crash the query — Issue #56.
-        aux_qs = ConsoleAuxOutput.objects.annotate(
-            _num=_numeric_channel_order('aux_number')
-        ).order_by('_num')
-        matrix_qs = ConsoleMatrixOutput.objects.annotate(
-            _num=_numeric_channel_order('matrix_number')
-        ).order_by('_num')
-        stereo_qs = ConsoleStereoOutput.objects.order_by('stereo_type')
-
-        # Filter consoles to current project only; order matches the Consoles list.
-        console_qs = Console.objects.order_by('-is_template', 'name').prefetch_related(
-            Prefetch("consoleauxoutput_set", queryset=aux_qs),
-            Prefetch("consolematrixoutput_set", queryset=matrix_qs),
-            Prefetch("consolestereooutput_set", queryset=stereo_qs),
-        )
-        if project_id:
-            console_qs = console_qs.filter(project_id=project_id)
-
-        for console in console_qs:
-            opts = []
-            # Aux outputs
-            for ao in console.consoleauxoutput_set.all():
-                if ao.name:
-                    opts.append((f"aux_{ao.pk}", ao.name))
-            # Matrix outputs  
-            for mo in console.consolematrixoutput_set.all():
-                if mo.name:
-                    opts.append((f"matrix_{mo.pk}", mo.name))
-
-            for so in console.consolestereooutput_set.all():
-                if so.name:
-                    opts.append((f"stereo_{so.pk}", so.name))       
-
-            if opts:
-                grouped.append((console.name, opts))
-
-        self.fields["console_output"].choices = [("", "---------")] + grouped
-
-        # Set initial value if editing
-        if self.instance and self.instance.pk and self.instance.console_output:
-            if isinstance(self.instance.console_output, ConsoleAuxOutput):
-                self.fields["console_output"].initial = f"aux_{self.instance.console_output.pk}"
-            elif isinstance(self.instance.console_output, ConsoleMatrixOutput):
-                self.fields["console_output"].initial = f"matrix_{self.instance.console_output.pk}"
-
-    def clean_console_output(self):
-        """Convert the choice field value to a dict with the object and its type"""
-        console_output_value = self.cleaned_data.get('console_output')
-        
-        if console_output_value and console_output_value != '':
-            # Parse the type and ID
-            output_type, output_id = console_output_value.split('_')
-            
-            if output_type == 'aux':
-                return {
-                    'object': ConsoleAuxOutput.objects.get(pk=output_id),
-                    'type': 'aux'
-                }
-            elif output_type == 'matrix':
-                return {
-                    'object': ConsoleMatrixOutput.objects.get(pk=output_id),
-                    'type': 'matrix'    
-                }
-            
-
-
-
-            elif output_type == 'stereo':
-                return {
-                    'object': ConsoleStereoOutput.objects.get(pk=output_id),
-                    'type': 'stereo'
-                }
-        return None
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        
-        console_output_data = self.cleaned_data.get('console_output')
-        
-        if console_output_data:
-            console_output = console_output_data['object']
-            output_type = console_output_data['type']
-            
-            if output_type == 'aux':
-                instance.content_type = ContentType.objects.get_for_model(ConsoleAuxOutput)
-            elif output_type == 'matrix':
-                instance.content_type = ContentType.objects.get_for_model(ConsoleMatrixOutput)
-            
-            instance.object_id = console_output.pk
-            instance.signal_name = console_output.name
-        else:
-            instance.content_type = None
-            instance.object_id = None
-            instance.signal_name = ""
-        
-        if commit:
-            instance.save()
-        return instance
+        self.output_suggestions = _device_output_suggestions(project_id)
 
 
 
