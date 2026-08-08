@@ -110,6 +110,9 @@
     font-size: 12px;
 }
 .group-hidden { display: none !important; }
+/* Issue #66: whole beltpack row is clickable, not just the tiny number. */
+#result_list tbody tr.bp-clickable-row { cursor: pointer; }
+#result_list tbody tr.bp-clickable-row:hover > * { background-color: #1e2d3d !important; }
 </style>
 {% endblock %}
 
@@ -217,6 +220,27 @@
             buildGroup('wireless',  'Wireless',  '\uD83D\uDCE1', '',          groups.wireless);
             buildGroup('hardwired', 'Hardwired', '\uD83D\uDD0C', 'hardwired', groups.hardwired);
             if (groups.unknown.length) buildGroup('unknown', 'Other', '?', '', groups.unknown);
+
+            // \u2500\u2500 Whole-row click opens the beltpack editor (Issue #66) \u2500\u2500
+            // Only the bp_number cell was a link, and the number is a tiny
+            // target. Make clicking anywhere on the row navigate to that same
+            // edit URL, while leaving the inline-edit widgets (position, name,
+            // headset, ip, checked-out), channel badges, links, and the action
+            // checkbox untouched so they keep working.
+            rows.forEach(function(row) {
+                var link = row.querySelector('.field-bp_number a');
+                if (!link) return;
+                row.classList.add('bp-clickable-row');
+                row.addEventListener('click', function(e) {
+                    // Ignore clicks on interactive / inline-edit elements.
+                    if (e.target.closest('a, input, select, textarea, button, label, .ch-badge')) return;
+                    // Don't hijack a text selection.
+                    if (window.getSelection && String(window.getSelection())) return;
+                    // Left-click, no modifier keys.
+                    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    window.location.href = link.href;
+                });
+            });
         });
     })();
 
