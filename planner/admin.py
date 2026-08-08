@@ -4244,9 +4244,30 @@ class CommBeltPackChannelInline(admin.TabularInline):
     """Inline for managing belt pack channels"""
     model = CommBeltPackChannel
     extra = 0  # Don't show empty forms by default
-    fields = ['channel_number', 'channel']
+    # Issue #66: one-click "×" delete in place of Django's default "Delete?"
+    # checkbox column, which rendered as a tiny near-invisible checkbox on the
+    # dark admin theme. The X posts to comm_beltpack_channel_delete and removes
+    # the row immediately (no Save required). Mirrors MicAssignmentInline (#36).
+    fields = ['channel_number', 'channel', 'delete_x']
+    readonly_fields = ['delete_x']
+    can_delete = False
     ordering = ['channel_number']
-    
+
+    class Media:
+        js = ('admin/js/comm_beltpack_channel_delete.js',)
+
+    def delete_x(self, obj):
+        if not obj.pk:
+            return ''
+        return format_html(
+            '<a href="#" class="bpchannel-delete-x" data-bpchannel-id="{}" '
+            'title="Delete this channel" '
+            'style="color:#ff4d4d;text-decoration:none;font-weight:bold;'
+            'font-size:18px;line-height:1;padding:2px 8px;">×</a>',
+            obj.pk,
+        )
+    delete_x.short_description = ''
+
     def has_add_permission(self, request, obj=None):
         """Allow users with change permission on parent to add channels"""
         if request.user.is_superuser:

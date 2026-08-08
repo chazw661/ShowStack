@@ -62,7 +62,7 @@ from .models import (
     Console, ConsoleInput,
     GalaxyProcessor, GalaxyInput, GalaxyOutput,
     P1Processor, P1Input, P1Output,
-    CommBeltPack, CommChannel, CommPosition, CommCrewName,
+    CommBeltPack, CommBeltPackChannel, CommChannel, CommPosition, CommCrewName,
     Device, Device, DeviceInput, DeviceOutput,
     SystemProcessor, Amp, AmpChannel, Location, AmpLocation, PACableSchedule, PAZone,
     ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup, PresenterSlot, PowerDistributionPlan, AmplifierProfile,
@@ -3440,6 +3440,29 @@ def mic_assignment_delete(request, mic_id):
     if not allowed:
         return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
     mic.delete()
+    return JsonResponse({'success': True})
+
+
+@require_POST
+@login_required
+def comm_beltpack_channel_delete(request, channel_id):
+    """Issue #66: one-click delete for a CommBeltPackChannel row inside the
+    CommBeltPack admin change form. Posts here from the inline's "X" button
+    instead of Django's default "Delete?" checkbox (which rendered as a tiny,
+    near-invisible checkbox on the dark admin theme). Mirrors
+    ``mic_assignment_delete``."""
+    bp_channel = get_object_or_404(CommBeltPackChannel, id=channel_id)
+    project = bp_channel.beltpack.project
+    allowed = (
+        request.user.is_superuser
+        or project.owner_id == request.user.id
+        or ProjectMember.objects.filter(
+            user=request.user, project=project, role='editor'
+        ).exists()
+    )
+    if not allowed:
+        return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+    bp_channel.delete()
     return JsonResponse({'success': True})
 
 
