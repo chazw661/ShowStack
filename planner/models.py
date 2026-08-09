@@ -3181,21 +3181,54 @@ class MicSession(models.Model):
         }
     
     def duplicate_to_session(self, target_session):
-        """Duplicate all mic assignments to another session"""
-        for assignment in self.mic_assignments.all():
-            new_assignment = MicAssignment.objects.create(
-                session=target_session,
-                rf_number=assignment.rf_number,
-                mic_type=assignment.mic_type,
-                presenter_name=assignment.presenter_name,
-                is_micd=assignment.is_micd,
-                is_d_mic=assignment.is_d_mic,
-                notes=assignment.notes
-            )
-            # Copy shared presenters
-            if assignment.shared_presenters:
-                new_assignment.shared_presenters = assignment.shared_presenters
-                new_assignment.save()
+        """Duplicate all mic assignments — with their presenter slots and
+        shared presenters — from this session into target_session.
+
+        Note: per-session MicGroups (color groups) are not carried over; the
+        duplicated assignments/slots start with no group.
+        """
+        from django.db import transaction
+
+        with transaction.atomic():
+            for assignment in self.mic_assignments.all():
+                new_assignment = MicAssignment.objects.create(
+                    session=target_session,
+                    rf_number=assignment.rf_number,
+                    mic_type=assignment.mic_type,
+                    is_micd=assignment.is_micd,
+                    is_d_mic=assignment.is_d_mic,
+                    active_presenter_index=assignment.active_presenter_index,
+                    placement=assignment.placement,
+                    sensitivity=assignment.sensitivity,
+                    output_level=assignment.output_level,
+                    notes=assignment.notes,
+                )
+
+                # Shared presenters live on a through model that also carries
+                # per-assignment placement/order.
+                for spa in assignment.shared_presenter_assignments.all():
+                    SharedPresenterAssignment.objects.create(
+                        mic_assignment=new_assignment,
+                        presenter=spa.presenter,
+                        placement=spa.placement,
+                        order=spa.order,
+                    )
+
+                # Presenter slots are the source of truth for the A2 / slot UI.
+                for slot in assignment.presenter_slots.all():
+                    PresenterSlot.objects.create(
+                        assignment=new_assignment,
+                        presenter=slot.presenter,
+                        order=slot.order,
+                        is_active=slot.is_active,
+                        mic_type=slot.mic_type,
+                        placement=slot.placement,
+                        sensitivity=slot.sensitivity,
+                        output_level=slot.output_level,
+                        notes=slot.notes,
+                        photo_data=slot.photo_data,
+                        is_micd=slot.is_micd,
+                    )
 
 class MicGroup(models.Model):
     GROUP_COLORS = [

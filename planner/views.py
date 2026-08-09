@@ -849,33 +849,55 @@ def bulk_update_mics(request):
 @staff_member_required
 @require_POST
 def duplicate_session(request):
-    """AJAX endpoint to duplicate a session's mic assignments to another session"""
+    """AJAX endpoint: duplicate a session into a brand-new session in the same
+    day. Copies the session config plus all mic assignments, presenter slots,
+    and shared presenters.
+
+    Body: {source_session_id, target_session_name}
+    """
     try:
         data = json.loads(request.body)
         source_session_id = data.get('source_session_id')
-        target_session_id = data.get('target_session_id')
-        
+        target_session_name = (data.get('target_session_name') or '').strip()
+
+        if not source_session_id:
+            return JsonResponse({'success': False, 'error': 'source_session_id is required.'})
+        if not target_session_name:
+            return JsonResponse({'success': False, 'error': 'A name for the new session is required.'})
+
         source_session = get_object_or_404(MicSession, id=source_session_id)
-        target_session = get_object_or_404(MicSession, id=target_session_id)
-        
+
         with transaction.atomic():
-            # Clear target session first if requested
-            if data.get('clear_target', False):
-                target_session.mic_assignments.all().delete()
-                target_session.num_mics = source_session.num_mics
-                target_session.save()
-                target_session.create_mic_assignments()
-            
-            # Copy assignments
-            source_session.duplicate_to_session(target_session)
-        
+            # Append after existing sessions in the same day.
+            order = source_session.day.sessions.count()
+
+            new_session = MicSession.objects.create(
+                day=source_session.day,
+                name=target_session_name,
+                session_type=source_session.session_type,
+                start_time=source_session.start_time,
+                end_time=source_session.end_time,
+                location=source_session.location,
+                notes=source_session.notes,
+                num_mics=source_session.num_mics,
+                column_position=source_session.column_position,
+                order=order,
+            )
+
+            # MicSession.save() auto-created blank assignments; clear them so
+            # the copied assignments don't collide or double up.
+            new_session.mic_assignments.all().delete()
+
+            source_session.duplicate_to_session(new_session)
+
         return JsonResponse({
             'success': True,
-            'message': f'Successfully duplicated {source_session.name} to {target_session.name}'
+            'session_id': new_session.id,
+            'message': f'Duplicated "{source_session.name}" to "{new_session.name}"'
         })
-    
+
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})  
+        return JsonResponse({'success': False, 'error': str(e)})
     
 
 # ── Add/replace these two functions in planner/views.py ──────────────────────
