@@ -246,7 +246,38 @@
             background: #e7f3ff;
             color: #0066cc;
         }
-        
+
+        .role-form {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .role-form select {
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+            background: #fff;
+            color: #333;
+            cursor: pointer;
+        }
+
+        .role-form button {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: none;
+            background: #4a9eff;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .role-form button:hover {
+            background: #3a8eef;
+        }
+
         .equipment-placeholder {
             text-align: center;
             padding: 60px 20px;
@@ -341,7 +372,18 @@
                         <span class="member-name">{{ membership.user.get_full_name|default:membership.user.username }}</span>
                         <span class="member-email">{{ membership.user.email }}</span>
                     </div>
+                    {% if is_owner %}
+                    <form class="role-form" method="post" action="{% url 'change_member_role' project.id membership.id %}">
+                        {% csrf_token %}
+                        <select name="role">
+                            <option value="editor" {% if membership.role == 'editor' %}selected{% endif %}>Editor — can view and edit</option>
+                            <option value="viewer" {% if membership.role == 'viewer' %}selected{% endif %}>Viewer — can only view</option>
+                        </select>
+                        <button type="submit">Save</button>
+                    </form>
+                    {% else %}
                     <span class="role-badge role-{{ membership.role }}">{{ membership.role }}</span>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>

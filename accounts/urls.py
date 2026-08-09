@@ -51,6 +51,7 @@ urlpatterns = [
     path('set-project/<int:project_id>/', views.set_project, name='set_project'),
     path('delete-project/<int:project_id>/', views.delete_project, name='delete_project'),
     path('leave-project/<int:project_id>/', views.leave_project, name='leave_project'),
+    path('projects/<int:project_id>/members/<int:member_id>/role/', views.change_member_role, name='change_member_role'),
 
     path('projects/request/<uuid:invite_token>/', views.project_request_access, name='request_access'),
     path('projects/<int:project_id>/requests/', views.project_access_requests, name='access_requests'),

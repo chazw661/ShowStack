@@ -488,8 +488,90 @@ def leave_project(request, project_id):
         messages.success(request, f'You have left: {project_name}')
     except ProjectMember.DoesNotExist:
         messages.error(request, "Project membership not found.")
-    
+
     return redirect('dashboard')
+
+
+def sync_user_permission_groups(user):
+    """Reconcile a user's GLOBAL Django Editor/Viewer groups with their
+    per-project ProjectMember roles.
+
+    Background: the global 'Viewer' group gates several features across ALL
+    projects (multitrack, signal-flow upload, etc. in planner/views.py), and
+    the invite-accept flow naively drops users into a global group. When a
+    role changes we must re-derive the correct global groups from the user's
+    highest role anywhere, or an upgraded editor stays blocked (and a
+    downgraded viewer stays unblocked).
+
+    Rule: a user gets edit access if they own any project or are an editor on
+    any project. Such a user must be in 'Editor' and must NOT be in 'Viewer'
+    (otherwise the global-Viewer gate blocks them everywhere). A user who is
+    only ever a viewer belongs in 'Viewer' and not 'Editor'.
+    """
+    has_edit_access = (
+        Project.objects.filter(owner=user).exists()
+        or ProjectMember.objects.filter(user=user, role='editor').exists()
+    )
+    has_viewer_role = ProjectMember.objects.filter(user=user, role='viewer').exists()
+
+    editor_group, _ = Group.objects.get_or_create(name='Editor')
+    viewer_group, _ = Group.objects.get_or_create(name='Viewer')
+
+    if has_edit_access:
+        user.groups.add(editor_group)
+        user.groups.remove(viewer_group)
+    else:
+        user.groups.remove(editor_group)
+        if has_viewer_role:
+            user.groups.add(viewer_group)
+        else:
+            user.groups.remove(viewer_group)
+
+
+@login_required
+def change_member_role(request, project_id, member_id):
+    """Change an existing project member's role (owner only).
+
+    Fills the gap where roles could only be set at invite time. Updates the
+    per-project ProjectMember.role (authoritative for admin equipment editing)
+    and re-syncs the member's global permission groups.
+    """
+    project = get_object_or_404(Project, id=project_id)
+
+    if project.owner != request.user and not request.user.is_superuser:
+        messages.error(request, 'Only the project owner can change member roles.')
+        return redirect('project_detail', project_id=project.id)
+
+    if request.method != 'POST':
+        return redirect('project_detail', project_id=project.id)
+
+    membership = get_object_or_404(ProjectMember, id=member_id, project=project)
+
+    new_role = request.POST.get('role')
+    valid_roles = [choice[0] for choice in ProjectMember.ROLES]
+    if new_role not in valid_roles:
+        messages.error(request, 'Invalid role.')
+        return redirect('project_detail', project_id=project.id)
+
+    if membership.role == new_role:
+        messages.info(
+            request,
+            f'{membership.user.get_full_name() or membership.user.username} '
+            f'is already {membership.get_role_display()}.'
+        )
+        return redirect('project_detail', project_id=project.id)
+
+    with transaction.atomic():
+        membership.role = new_role
+        membership.save(update_fields=['role'])
+        sync_user_permission_groups(membership.user)
+
+    messages.success(
+        request,
+        f'{membership.user.get_full_name() or membership.user.username} '
+        f'is now {membership.get_role_display()}.'
+    )
+    return redirect('project_detail', project_id=project.id)
 
 
 from planner.models import ProjectAccessRequest
