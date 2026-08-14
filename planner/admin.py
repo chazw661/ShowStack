@@ -5118,13 +5118,54 @@ class MicAssignmentInline(BaseEquipmentInline):
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
+class ShowDayAdminForm(forms.ModelForm):
+    """Validates the ShowDay (project, date) uniqueness in-form.
+
+    `project` is excluded from the admin form and assigned in save_model, so
+    Django's built-in uniqueness check can't cover the unique_together on
+    (project, date). Without this, adding a Day for a date that already exists
+    in the project raises an IntegrityError → 500 instead of a form error.
+    """
+    class Meta:
+        model = ShowDay
+        fields = ['date', 'name', 'is_collapsed', 'order']
+
+    def clean(self):
+        cleaned = super().clean()
+        date = cleaned.get('date')
+        # On edit the instance already carries its project; on add the admin
+        # injects request.current_project onto the form as `current_project`.
+        project = self.instance.project if self.instance.project_id else getattr(self, 'current_project', None)
+        if date and project:
+            dupes = ShowDay.objects.filter(project=project, date=date)
+            if self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                self.add_error('date', 'A day already exists for this date in this project. '
+                                       'Pick a different date, or edit the existing day.')
+        return cleaned
+
+
 class ShowDayAdmin(BaseEquipmentAdmin):
+    form = ShowDayAdminForm
     list_display = ('date', 'name', 'session_count', 'total_mics', 'mics_used', 'view_day_link')
     list_filter = ('date',)
     search_fields = ('name',)
     ordering = ['date']
     exclude = ['project']
-    
+
+    def get_form(self, request, obj=None, **kwargs):
+        """Inject the current project so the form can validate uniqueness on add."""
+        form_class = super().get_form(request, obj, **kwargs)
+        current_project = getattr(request, 'current_project', None)
+
+        class _ProjectAwareForm(form_class):
+            def __init__(self, *args, **inner_kwargs):
+                super().__init__(*args, **inner_kwargs)
+                self.current_project = current_project
+
+        return _ProjectAwareForm
+
     def session_count(self, obj):
         return obj.sessions.count()
     session_count.short_description = "Sessions"
