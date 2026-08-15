@@ -387,6 +387,14 @@
     #content .checklist-table tbody tr.status-in-progress { background: rgba(255,193,7,0.16) !important; }
     #content .checklist-table tbody tr.status-complete    { background: rgba(76,175,80,0.24) !important; }
     #content .checklist-table tbody tr.status-na          { background: rgba(96,125,139,0.18) !important; }
+
+    /* Daily-task per-day status dropdown — color-coded like the setup-task
+       STATUS dropdown. The extra .day-status-select class raises specificity
+       so these win over the flat indigo #content .status-select rule above. */
+    #content .day-status-select.status-not-started { background-color: rgba(33,150,243,0.30) !important;  border-color:#2196F3 !important; color:#e0e0e0 !important; }
+    #content .day-status-select.status-in-progress { background-color: rgba(255,193,7,0.30) !important;   border-color:#FFC107 !important; color:#e0e0e0 !important; }
+    #content .day-status-select.status-complete    { background-color: rgba(76,175,80,0.85) !important;   border-color:#4CAF50 !important; color:#fff !important; font-weight:600; }
+    #content .day-status-select.status-na          { background-color: rgba(117,117,117,0.30) !important; border-color:#757575 !important; color:#e0e0e0 !important; }
 </style>
 {% endblock %}
 
@@ -639,7 +647,7 @@ function createDailyTable(sectionName, type, tasks, taskStatuses, numDays) {
     let dayHeadersHtml = '<th rowspan="2" style="background-color: #ffc107; color: #000; width: 300px;">TASK</th>';
     for (let d = 1; d <= numDays; d++) {
         const label = getDayLabel(sectionName, d);
-        dayHeadersHtml += `<th style="background-color: #ffc107; color: #000; min-width:80px;">
+        dayHeadersHtml += `<th style="background-color: #ffc107; color: #000; min-width:104px;">
             <input class="day-label-input"
                    value="${label}"
                    data-section="${sectionName}" data-day="${d}"
@@ -715,12 +723,16 @@ function createDailyRow(sectionName, type, task, taskStatus, numDays) {
         </td>
     `;
     for (let d = 1; d <= numDays; d++) {
-        const checked = days[d] === 'complete' ? 'checked' : '';
+        const dstatus = days[d] || 'not-started';
         cells += `
         <td style="text-align: center;">
-            <input type="checkbox" class="day-checkbox"
-                   ${checked}
-                   onchange="updateDayStatus(${task.id}, ${d}, this.checked)">
+            <select class="status-select day-status-select status-${dstatus}"
+                    onchange="updateDayStatusSelect(${task.id}, ${d}, this.value, this)">
+                <option value="not-started" ${dstatus === 'not-started' ? 'selected' : ''}>Not Started</option>
+                <option value="in-progress" ${dstatus === 'in-progress' ? 'selected' : ''}>In Progress</option>
+                <option value="complete" ${dstatus === 'complete' ? 'selected' : ''}>Complete</option>
+                <option value="na" ${dstatus === 'na' ? 'selected' : ''}>N/A</option>
+            </select>
         </td>`;
     }
     cells += `
@@ -794,6 +806,18 @@ async function updateDayStatus(taskId, day, checked) {
         status: status,
     });
     if (result && result.success) {
+        showNotification('Saved');
+    }
+}
+
+async function updateDayStatusSelect(taskId, day, value, selectEl) {
+    const result = await apiCall('{% url "planner:audio_checklist_update_status" %}', {
+        task_id: taskId,
+        day: day,
+        status: value,
+    });
+    if (result && result.success) {
+        selectEl.className = `status-select day-status-select status-${value}`;
         showNotification('Saved');
     }
 }
