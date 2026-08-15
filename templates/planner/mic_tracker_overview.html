@@ -172,7 +172,7 @@
         {% for session in day_data.sessions %}
         <div class="mto-session">
             <header class="mto-session-header">
-                <span class="mto-session-name">{{ session.name }}</span>
+                <span class="mto-session-name"{% if session.name_color %} style="background:{{ session.name_color }};color:{{ session.name_text_color }};padding:2px 8px;border-radius:4px;"{% endif %}>{{ session.name }}</span>
                 {% if session.location %}<span class="mto-session-loc">· {{ session.location }}</span>{% endif %}
                 {% if session.start_time %}<span class="mto-session-time">· {{ session.start_time|time:"g:i A" }}{% if session.end_time %} – {{ session.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}
             </header>
