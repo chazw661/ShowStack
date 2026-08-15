@@ -5290,7 +5290,7 @@ class MicSessionAdmin(BaseEquipmentAdmin):
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('day', 'name', 'session_type', 'location')
+            'fields': ('day', 'name', 'name_color', 'session_type', 'location')
         }),
         ('Schedule', {
             'fields': ('start_time', 'end_time')

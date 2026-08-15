@@ -14,7 +14,8 @@ from django.db import models, transaction
 
 from django.contrib.auth.models import User
 from django.db import models
-import uuid 
+from colorfield.fields import ColorField
+import uuid
 
 
 # ==================== PROJECT SYSTEM MODELS ====================
@@ -3106,14 +3107,36 @@ class MicSession(models.Model):
         help_text="Position in the display grid (0-2 for 3-column layout)"
     )
     order = models.IntegerField(default=0, help_text="Display order within the day")
-    
+
+    # Optional highlight color for the session name in the Mic Tracker.
+    # Blank = default styling.
+    name_color = ColorField(
+        blank=True,
+        default='',
+        help_text="Optional highlight color for the session name in the Mic Tracker. Leave blank for default styling."
+    )
+
     class Meta:
         verbose_name = "Mic Session"
         verbose_name_plural = "Mic Sessions" # Child
         ordering = ['day', 'order']  # or ['id']
-    
+
     def __str__(self):
         return f"{self.day.date.strftime('%m/%d')} - {self.name}"
+
+    def name_text_color(self):
+        """Return a readable text color ('#111' or '#fff') for the chosen
+        name_color background, based on perceived luminance. Empty when no
+        highlight color is set."""
+        hexval = (self.name_color or '').lstrip('#')
+        if len(hexval) != 6:
+            return ''
+        try:
+            r, g, b = int(hexval[0:2], 16), int(hexval[2:4], 16), int(hexval[4:6], 16)
+        except ValueError:
+            return ''
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return '#111' if luminance > 150 else '#fff'
     
     def save(self, *args, **kwargs):
         is_new = self.pk is None
