@@ -962,7 +962,10 @@ def export_mic_tracker(request):
         writer.writerow([f'Day: {day}'])
 
         for session in day.sessions.order_by('order'):
-            writer.writerow([f'Session: {session.name}'])
+            if session.name_color:
+                writer.writerow([f'Session: {session.name}', 'Highlight Color:', session.name_color])
+            else:
+                writer.writerow([f'Session: {session.name}'])
             writer.writerow([
                 'RF#', 'Presenter(s)', 'Type',
                 'Placement', 'Sensitivity', 'Output Level', 'Notes'
@@ -1096,7 +1099,23 @@ def export_mic_tracker_pdf(request):
         story.append(Paragraph(str(day), style_day))
 
         for session in day.sessions.order_by('order'):
-            story.append(Paragraph(f'Session: {session.name}', style_session))
+            sess_style = style_session
+            if session.name_color:
+                # Highlight the session heading with its chosen color; use a
+                # contrast text color so the name stays readable. Guard against
+                # any bad value so the export can never 500.
+                try:
+                    sess_style = ParagraphStyle(
+                        f'session_{session.id}',
+                        parent=style_session,
+                        backColor=colors.HexColor(session.name_color),
+                        textColor=colors.HexColor(session.name_text_color() or '#ffffff'),
+                        borderPadding=(3, 5, 3, 5),
+                        leading=16,
+                    )
+                except (ValueError, AttributeError):
+                    sess_style = style_session
+            story.append(Paragraph(f'Session: {session.name}', sess_style))
 
             for assignment in session.mic_assignments.order_by('rf_number'):
                 slots = list(assignment.presenter_slots.order_by('order'))
