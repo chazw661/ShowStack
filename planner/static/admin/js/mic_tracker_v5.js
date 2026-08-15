@@ -25,6 +25,7 @@ let currentSharedPresenters = [];
 
 // Update a single field via AJAX
 async function updateField(assignmentId, field, value) {
+    if (typeof saveSaving === 'function') saveSaving();
     try {
         const response = await fetch('/audiopatch/api/mic/update/', {
             method: 'POST',
@@ -60,15 +61,18 @@ async function updateField(assignmentId, field, value) {
             
             // Visual feedback
             flashElement(document.querySelector(`[data-assignment-id="${assignmentId}"]`), 'success');
-            
+            if (typeof saveOk === 'function') saveOk();
+
             return data;
         } else {
             console.error('Update failed:', data.error);
+            if (typeof saveFailed === 'function') saveFailed();
             showNotification('Update failed: ' + data.error, 'error');
             throw new Error(data.error);
         }
     } catch (error) {
         console.error('Error updating field:', error);
+        if (typeof saveFailed === 'function') saveFailed();
         showNotification('Error updating field', 'error');
         throw error;
     }

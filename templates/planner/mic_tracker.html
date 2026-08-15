@@ -456,7 +456,7 @@
 <div id="mic-tracker-root">
 
     <div id="mic-tracker-update-banner">
-        🔄 <strong id="banner-message">Updates Available — refreshing in 5s</strong>
+        🔄 <strong id="banner-message">Updates available</strong>
         <button onclick="location.reload()" style="margin-left:12px;background:#000;color:#4a9eff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:700;">Refresh Now</button>
         <button id="banner-dismiss" style="margin-left:6px;background:transparent;border:1px solid #000;color:#000;padding:6px 12px;border-radius:4px;cursor:pointer;">Dismiss</button>
     </div>
@@ -1142,6 +1142,7 @@ function toggleSlotRows(assignmentId) {
 async function updateSlotField(slotId, field, value) {
     if (!slotId) return;
     markLocalChange();
+    saveSaving();
     try {
         const resp = await fetch('/audiopatch/api/mic/slot/update/', {
             method: 'POST',
@@ -1149,8 +1150,9 @@ async function updateSlotField(slotId, field, value) {
             body: JSON.stringify({slot_id: slotId, field: field, value: value})
         });
         const data = await resp.json();
-        if (!data.success) showNotification('Update failed: ' + (data.error || ''), 'error');
-    } catch(e) { showNotification('Error updating field', 'error'); }
+        if (!data.success) { saveFailed(); showNotification('Update failed: ' + (data.error || ''), 'error'); }
+        else { saveOk(); }
+    } catch(e) { saveFailed(); showNotification('Error updating field', 'error'); }
 }
 
 // ── Slot group picker ──────────────────────────────────────────
@@ -1300,34 +1302,74 @@ function getCsrfToken() {
 var lastLocalChange = 0;
 function markLocalChange() { lastLocalChange = Date.now(); }
 
+// ── Save-state indicator ───────────────────────────────────────
+// A single unobtrusive pill (bottom-right) that reports whether the
+// last edit persisted. This is the reassurance users previously only
+// got from a full page reload — so we no longer need to auto-reload.
+var _saveHideTimer = null;
+function _saveStateEl() {
+    var el = document.getElementById('mtt-save-state');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'mtt-save-state';
+        el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;'
+            + 'font:600 12px/1 system-ui,-apple-system,sans-serif;padding:9px 15px;'
+            + 'border-radius:999px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.35);'
+            + 'opacity:0;transition:opacity .2s;pointer-events:none;';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+function showSaveState(text, color, autohide) {
+    var el = _saveStateEl();
+    el.textContent = text;
+    el.style.background = color;
+    el.style.opacity = '1';
+    if (_saveHideTimer) { clearTimeout(_saveHideTimer); _saveHideTimer = null; }
+    if (autohide) _saveHideTimer = setTimeout(function() { el.style.opacity = '0'; }, 1400);
+}
+function saveSaving() { showSaveState('Saving…', '#b8860b', false); }
+function saveOk()     { showSaveState('Saved ✓', '#2e7d32', true); }
+function saveFailed() { showSaveState('Save failed', '#c62828', false); }
+// expose for mic_tracker_v5.js (loaded in a separate <script>)
+window.saveSaving = saveSaving; window.saveOk = saveOk; window.saveFailed = saveFailed;
+
+// ── Debounce helper ────────────────────────────────────────────
+function debounce(fn, wait) {
+    var t;
+    return function() {
+        var ctx = this, args = arguments;
+        clearTimeout(t);
+        t = setTimeout(function() { fn.apply(ctx, args); }, wait);
+    };
+}
+
+// ── Passive update banner (never yanks the page out from under you) ──
+// Polls the project checksum; when another user changes something we
+// surface a dismissible "Updates available" banner with a manual Refresh
+// button — but ONLY while this user isn't mid-edit, and we NEVER auto-reload.
 (function() {
     let lastChecksum = null;
-    let countdownTimer = null;
+    let pendingUpdate = false;
 
-    function startCountdown() {
-        // Already counting down — don't restart
-        if (countdownTimer) return;
+    function isEditing() {
+        const ae = document.activeElement;
+        if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return true;
+        // an open presenter/group dropdown means the user is actively working
+        if (document.querySelector('.presenter-dd.open, .presenter-dropdown.open, .group-picker.open')) return true;
+        return false;
+    }
+
+    function showBanner() {
         const banner = document.getElementById('mic-tracker-update-banner');
         const msg = document.getElementById('banner-message');
         const dismiss = document.getElementById('banner-dismiss');
-        if (!banner || !msg || !dismiss) { location.reload(); return; }
-        let count = 5;
-        msg.textContent = 'Updates Available — refreshing in ' + count + 's';
+        if (!banner || !msg || !dismiss) return;
+        msg.textContent = 'Updates available';
         banner.style.setProperty('display', 'block', 'important');
-        countdownTimer = setInterval(function() {
-            count--;
-            if (count <= 0) {
-                clearInterval(countdownTimer);
-                countdownTimer = null;
-                location.reload();
-            } else {
-                msg.textContent = 'Updates Available — refreshing in ' + count + 's';
-            }
-        }, 1000);
         dismiss.onclick = function() {
-            clearInterval(countdownTimer);
-            countdownTimer = null;
             banner.style.setProperty('display', 'none', 'important');
+            pendingUpdate = false;
         };
     }
 
@@ -1340,12 +1382,13 @@ function markLocalChange() { lastLocalChange = Date.now(); }
             if (lastChecksum === null) { lastChecksum = data.checksum; return; }
             if (data.checksum !== lastChecksum) {
                 lastChecksum = data.checksum;
-                // If this user saved something in the last 10 seconds, the
-                // change is ours — update the checksum silently, no countdown.
-                const timeSinceLocalSave = Date.now() - lastLocalChange;
-                if (timeSinceLocalSave < 10000) return;
-                startCountdown();
+                // Our own save within the last 10s — absorb it silently.
+                if (Date.now() - lastLocalChange < 10000) return;
+                pendingUpdate = true;
             }
+            // Surface a pending update only when the user is idle, so we never
+            // interrupt typing or steal focus. No countdown, no auto-reload.
+            if (pendingUpdate && !isEditing()) showBanner();
         } catch(e) {}
     }
     setInterval(check, 5000);
@@ -1407,7 +1450,15 @@ function syncPresenterToA1(assignmentId, name, slotId) {
     }
 }
 
+// Debounced dispatcher — avoid firing a lookup on every keystroke.
+var _presenterSearchTimers = {};
 function searchPresenters(assignmentId, query) {
+    clearTimeout(_presenterSearchTimers[assignmentId]);
+    _presenterSearchTimers[assignmentId] = setTimeout(function() {
+        _searchPresentersNow(assignmentId, query);
+    }, 200);
+}
+function _searchPresentersNow(assignmentId, query) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     fetch('/audiopatch/api/presenters/list/?q=' + encodeURIComponent(query))
         .then(r => r.json())
