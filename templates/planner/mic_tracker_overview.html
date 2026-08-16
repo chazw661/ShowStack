@@ -69,7 +69,7 @@
 
     .mto-session-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
         gap: 12px;
         padding: 12px 14px;
     }
@@ -121,7 +121,7 @@
     .mto-dot.color-purple { background: #b464ff; }
     .mto-dot.color-teal   { background: #00bcd4; }
 
-    .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); }
+    .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); white-space: nowrap; }
     .mto-grp { text-align: center; }
     .mto-presenter { color: var(--text-primary); }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
