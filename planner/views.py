@@ -1997,14 +1997,16 @@ def add_presenter_slot(request):
         # Get next order number
         last_slot = assignment.presenter_slots.order_by('-order').first()
         next_order = (last_slot.order + 1) if last_slot else 0
-        
-        # Create new slot but keep current active slot unchanged
+
+        # Make the new (empty) slot the active one so it can be named
+        # immediately — a freshly added presenter is the one you want to edit.
+        assignment.presenter_slots.update(is_active=False)
         slot = PresenterSlot.objects.create(
             assignment=assignment,
             order=next_order,
-            is_active=False
+            is_active=True
         )
-        
+
         slots = assignment.presenter_slots.order_by('order')
         return JsonResponse({
             'success': True,
@@ -2046,9 +2048,45 @@ def remove_presenter_slot(request):
         
         return JsonResponse({'success': True})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})    
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
+@require_POST
+def activate_presenter_slot(request):
+    """Make a specific presenter slot the active one (clicking its chip)."""
+    try:
+        data = json.loads(request.body)
+        assignment_id = data.get('assignment_id')
+        slot_id = data.get('slot_id')
+        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        slots = list(assignment.presenter_slots.order_by('order'))
+        if not slots:
+            return JsonResponse({'success': False, 'error': 'No slots'})
+        target_index = next((i for i, s in enumerate(slots) if s.id == slot_id), None)
+        if target_index is None:
+            return JsonResponse({'success': False, 'error': 'Slot not found'})
+        for i, slot in enumerate(slots):
+            slot.is_active = (i == target_index)
+            slot.save()
+        active = slots[target_index]
+        return JsonResponse({
+            'success': True,
+            'slot_id': active.id,
+            'presenter_name': active.presenter.name if active.presenter else '',
+            'presenter_id': active.presenter.id if active.presenter else None,
+            'mic_type': active.mic_type,
+            'placement': active.placement,
+            'sensitivity': active.sensitivity,
+            'output_level': active.output_level,
+            'notes': active.notes,
+            'slot_index': target_index,
+            'slot_count': len(slots),
+            'photo_url': active.photo_data or None,
+            'a2_group_color': active.a2_group.color if active.a2_group else None,
+            'a2_group_name': active.a2_group.name if active.a2_group else None,
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
 @staff_member_required

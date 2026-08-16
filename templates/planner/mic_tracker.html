@@ -872,7 +872,9 @@
                                 </div>
                                 <div class="a2-slot-list">
                                     {% for slot in slots %}
-                                    <div class="a2-slot-chip {% if slot.is_active %}active{% endif %} {% if slot.is_micd %}micd{% endif %}" data-slot-id="{{ slot.id }}">
+                                    <div class="a2-slot-chip {% if slot.is_active %}active{% endif %} {% if slot.is_micd %}micd{% endif %}" data-slot-id="{{ slot.id }}"
+                                         onclick="activateSlot({{ assignment.id }}, {{ slot.id }})" style="cursor:pointer;"
+                                         title="{% if is_viewer %}View this presenter{% else %}Click to edit this presenter{% endif %}">
                                         <span class="a2-slot-micd-dot {% if slot.is_micd %}on{% endif %}"></span>
                                         {{ slot.presenter.name|default:"Unassigned" }}
                                         {% if not is_viewer %}
@@ -969,6 +971,28 @@
 </div>
 
 <datalist id="presenters-datalist"></datalist>
+
+<script>
+// Restore the saved A1/A2 tab immediately — BEFORE the render-blocking
+// scripts below — so the page never flashes A1 before switching to A2.
+(function() {
+    try {
+        document.querySelectorAll('[data-session-id]').forEach(function(session) {
+            var sid = session.dataset.sessionId;
+            var tab = localStorage.getItem('sessionTab-' + sid);
+            if (!tab) return;
+            var panel = document.getElementById('session-' + sid + '-' + tab);
+            if (!panel) return;
+            session.querySelectorAll('.session-panel').forEach(function(p) { p.classList.remove('active'); });
+            session.querySelectorAll('.session-tab').forEach(function(t) { t.classList.remove('active'); });
+            panel.classList.add('active');
+            var btn = session.querySelector('.session-tab[onclick*="\'' + tab + '\'"]');
+            if (btn) btn.classList.add('active');
+        });
+    } catch (e) {}
+})();
+</script>
+
 <script src="{% static 'admin/js/mic_tracker_v5.js' %}"></script>
 
 <script>
@@ -1573,12 +1597,28 @@ async function prevSlot(assignmentId) {
     if (data.success) applySlotData(assignmentId, data);
 }
 
+// Clicking a presenter chip makes that slot active and focuses its name field
+// so it can be edited directly (no need to page through with PREV/NEXT).
+async function activateSlot(assignmentId, slotId) {
+    try {
+        const resp = await fetch('/audiopatch/api/mic/slot/activate/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId, slot_id: slotId}) });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!data.success) return;
+        applySlotData(assignmentId, data);
+        const inp = document.getElementById('presenter-input-' + assignmentId);
+        if (inp && !inp.readOnly) { inp.focus(); inp.select(); }
+    } catch (e) {}
+}
+
 async function addPresenterSlot(assignmentId) {
     try {
         const resp = await fetch('/audiopatch/api/mic/slot/add/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId}) });
         if (!resp.ok) { alert('Could not add presenter (server said ' + resp.status + '). Try refreshing the page.'); return; }
         const data = await resp.json();
-        if (data.success) location.reload();
+        // The new slot is created active; flag it so that after the reload we
+        // focus its (empty) name field and confirm the save.
+        if (data.success) { try { sessionStorage.setItem('mtt-added-slot', assignmentId); } catch (e) {} location.reload(); }
         else alert(data.error || 'Could not add presenter.');
     } catch (e) { alert('Could not add presenter — network error. Try refreshing the page.'); }
 }
@@ -1692,6 +1732,20 @@ document.querySelectorAll('[data-session-id]').forEach(function(session) {
         if (btn) btn.click();
     }
 });
+
+// After "+ Add Presenter" reloaded the page, focus the new (active, empty)
+// slot's name field and confirm the save — so it's obviously ready to edit.
+(function() {
+    var added;
+    try { added = sessionStorage.getItem('mtt-added-slot'); sessionStorage.removeItem('mtt-added-slot'); } catch (e) { return; }
+    if (!added) return;
+    var inp = document.getElementById('presenter-input-' + added);
+    if (inp && !inp.readOnly) {
+        inp.scrollIntoView({block: 'center'});
+        inp.focus(); inp.select();
+    }
+    if (typeof showSaveState === 'function') showSaveState('Presenter added ✓', '#2e7d32', true);
+})();
 
 // ─── Issue #38: drag-and-drop presenter reorder on A1 rows ───
 (function micDragDrop() {
