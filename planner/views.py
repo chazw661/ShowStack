@@ -1266,7 +1266,7 @@ def update_mic_assignment(request):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
             assignment.save()
         elif field in ('presenter', 'presenter_name', 'presenter_id', 'mic_type',
-                    'placement', 'sensitivity', 'output_level', 'notes'):
+                    'headset_color', 'placement', 'sensitivity', 'output_level', 'notes'):
             slot = assignment.presenter_slots.filter(is_active=True).first()
             if not slot:
                 slot = assignment.presenter_slots.order_by('order').first()

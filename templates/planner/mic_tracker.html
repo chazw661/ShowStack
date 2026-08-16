@@ -259,7 +259,7 @@
     .a2-unassigned { color: #6060a0; font-style: italic; font-size: 13px; }
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
-    .a2-setting-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); }
+    .a2-setting-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #c3ccd8; margin-bottom: 1px; }
     .a2-select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; border-radius: 3px; padding: 3px 6px; font-family: inherit; cursor: pointer; }
     .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
     .a2-select option { background: #1e1e32; }
@@ -805,6 +805,15 @@
                                                 <option value="PODIUM"    {% if active_slot.mic_type == 'PODIUM'    %}selected{% endif %}>Podium</option>
                                                 <option value="BOOM"      {% if active_slot.mic_type == 'BOOM'      %}selected{% endif %}>Boom</option>
                                                 <option value="INSTRUMENT"{% if active_slot.mic_type == 'INSTRUMENT'%}selected{% endif %}>Instrument</option>
+                                            </select>
+                                        </div>
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Headset Color</span>
+                                            <select class="a2-select" onchange="updateField({{ assignment.id }}, 'headset_color', this.value)" {% if is_viewer %}disabled{% endif %}>
+                                                <option value="">— select —</option>
+                                                <option value="BEIGE" {% if active_slot.headset_color == 'BEIGE' %}selected{% endif %}>Beige</option>
+                                                <option value="BROWN" {% if active_slot.headset_color == 'BROWN' %}selected{% endif %}>Brown</option>
+                                                <option value="BLACK" {% if active_slot.headset_color == 'BLACK' %}selected{% endif %}>Black</option>
                                             </select>
                                         </div>
                                         <div class="a2-setting">

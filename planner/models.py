@@ -3280,6 +3280,13 @@ class MicAssignment(models.Model):
     ('INSTRUMENT', 'Instrument'),
 ]
 
+    HEADSET_COLOR_CHOICES = [
+    ('', '---'),
+    ('BEIGE', 'Beige'),
+    ('BROWN', 'Brown'),
+    ('BLACK', 'Black'),
+]
+
     PLACEMENT_CHOICES = [
     ('', '---'),
     ('LEFT_EAR', 'Left Ear'),
@@ -3551,6 +3558,7 @@ class PresenterSlot(models.Model):
     order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=False)
     mic_type = models.CharField(max_length=20, choices=MicAssignment.MIC_TYPES, blank=True)
+    headset_color = models.CharField(max_length=10, choices=MicAssignment.HEADSET_COLOR_CHOICES, blank=True)
     placement = models.CharField(max_length=20, choices=MicAssignment.PLACEMENT_CHOICES, blank=True)
     sensitivity = models.CharField(max_length=10, choices=MicAssignment.SENSITIVITY_CHOICES, blank=True)
     output_level = models.CharField(max_length=10, choices=MicAssignment.OUTPUT_LEVEL_CHOICES, blank=True)
