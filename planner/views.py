@@ -967,7 +967,7 @@ def export_mic_tracker(request):
             else:
                 writer.writerow([f'Session: {session.name}'])
             writer.writerow([
-                'RF#', 'Presenter(s)', 'Type',
+                'RF#', 'Presenter(s)', 'Type', 'Headset Color',
                 'Placement', 'Sensitivity', 'Output Level', 'Notes'
             ])
 
@@ -976,7 +976,7 @@ def export_mic_tracker(request):
                 slots = list(assignment.presenter_slots.order_by('order'))
                 if not slots:
                     writer.writerow([
-                        f'{assignment.rf_number:02d}', '', '', '', '', '', ''
+                        f'{assignment.rf_number:02d}', '', '', '', '', '', '', ''
                     ])
                     continue
 
@@ -986,6 +986,7 @@ def export_mic_tracker(request):
                         f'{assignment.rf_number:02d}' if i == 0 else '',
                         presenter_name,
                         slot.mic_type or '',
+                        slot.get_headset_color_display() if slot.headset_color else '',
                         slot.get_placement_display() if slot.placement else '',
                         slot.sensitivity or '',
                         slot.output_level or '',
@@ -1151,6 +1152,8 @@ def export_mic_tracker_pdf(request):
                     details = []
                     details += field_block('PRESENTER', presenter_name)
                     details += field_block('TYPE',      slot.mic_type or assignment.mic_type or '')
+                    if slot.headset_color:
+                        details += field_block('HEADSET COLOR', slot.get_headset_color_display())
                     details += field_block('PLACEMENT', slot.get_placement_display() if slot.placement else '')
                     details += field_block('SENSITIVITY', slot.sensitivity or '')
                     details += field_block('OUTPUT LEVEL', slot.output_level or '')
