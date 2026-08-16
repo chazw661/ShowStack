@@ -1257,7 +1257,7 @@ async function uploadPhotoForSlot(slotId, assignmentId, input) {
     const fd = new FormData();
     fd.append('slot_id', slotId);
     fd.append('photo', input.files[0]);
-    const resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', { method: 'POST', headers: {'X-CSRFToken': csrftoken}, body: fd });
+    const resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', { method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}, body: fd });
     const data = await resp.json();
     if (data.success && data.photo_url) {
         const zone = document.getElementById('photo-zone-' + assignmentId);
@@ -1562,28 +1562,35 @@ function assignPresenter(assignmentId, value) {
 }
 
 async function nextSlot(assignmentId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/next/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId}) });
+    const resp = await fetch('/audiopatch/api/mic/slot/next/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId}) });
     const data = await resp.json();
     if (data.success) applySlotData(assignmentId, data);
 }
 
 async function prevSlot(assignmentId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/prev/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId}) });
+    const resp = await fetch('/audiopatch/api/mic/slot/prev/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId}) });
     const data = await resp.json();
     if (data.success) applySlotData(assignmentId, data);
 }
 
 async function addPresenterSlot(assignmentId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/add/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId}) });
-    const data = await resp.json();
-    if (data.success) location.reload();
+    try {
+        const resp = await fetch('/audiopatch/api/mic/slot/add/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId}) });
+        if (!resp.ok) { alert('Could not add presenter (server said ' + resp.status + '). Try refreshing the page.'); return; }
+        const data = await resp.json();
+        if (data.success) location.reload();
+        else alert(data.error || 'Could not add presenter.');
+    } catch (e) { alert('Could not add presenter — network error. Try refreshing the page.'); }
 }
 
 async function removePresenterSlot(assignmentId, slotId) {
-    const resp = await fetch('/audiopatch/api/mic/slot/remove/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrftoken}, body: JSON.stringify({assignment_id: assignmentId, slot_id: slotId}) });
-    const data = await resp.json();
-    if (data.success) location.reload();
-    else alert(data.error);
+    try {
+        const resp = await fetch('/audiopatch/api/mic/slot/remove/', { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()}, body: JSON.stringify({assignment_id: assignmentId, slot_id: slotId}) });
+        if (!resp.ok) { alert('Could not remove presenter (server said ' + resp.status + '). Try refreshing the page.'); return; }
+        const data = await resp.json();
+        if (data.success) location.reload();
+        else alert(data.error || 'Could not remove presenter.');
+    } catch (e) { alert('Could not remove presenter — network error. Try refreshing the page.'); }
 }
 
 function applySlotData(assignmentId, data) {
@@ -1873,13 +1880,13 @@ document.querySelectorAll('[data-session-id]').forEach(function(session) {
                 fd.append('photo', file);
                 resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': csrftoken },
+                    headers: { 'X-CSRFToken': getCsrfToken() },
                     body: fd,
                 });
             } else {
                 resp = await fetch('/audiopatch/api/mic/slot/upload-photo-from-url/', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                     body: JSON.stringify({ slot_id: slotId, url: url }),
                 });
             }
