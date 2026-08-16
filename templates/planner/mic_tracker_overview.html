@@ -69,12 +69,14 @@
 
     .mto-session-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(360px, 720px));
+        justify-content: center;
+        gap: 18px;
         padding: 12px 14px;
     }
     .mto-session {
         border: 1px solid var(--border);
+        border-left: 4px solid var(--accent-blue);
         border-radius: 5px;
         background: var(--bg-base);
         overflow: hidden;
@@ -98,10 +100,10 @@
         background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
         white-space: nowrap;
     }
-    .mto-th-rf { width: 9%; text-align: center !important; }
-    .mto-th-grp { width: 12%; text-align: center !important; }
-    .mto-th-type { width: 21%; }
-    .mto-th-micd { width: 17%; text-align: center !important; }
+    .mto-th-rf { width: 8%; text-align: center !important; }
+    .mto-th-grp { width: 10%; text-align: center !important; }
+    .mto-th-type { width: 20%; }
+    .mto-th-micd { width: 14%; text-align: center !important; }
 
     .mto-row td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle;
         overflow-wrap: break-word; }
@@ -180,7 +182,7 @@
 
         <div class="mto-session-grid">
         {% for session in day_data.sessions %}
-        <div class="mto-session">
+        <div class="mto-session"{% if session.name_color %} style="border-left-color: {{ session.name_color }};"{% endif %}>
             <header class="mto-session-header">
                 <span class="mto-session-name"{% if session.name_color %} style="background:{{ session.name_color }};color:{{ session.name_text_color }};padding:2px 8px;border-radius:4px;"{% endif %}>{{ session.name }}</span>
                 {% if session.location %}<span class="mto-session-loc">· {{ session.location }}</span>{% endif %}
