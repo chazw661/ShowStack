@@ -90,18 +90,19 @@
     .mto-session-name { font-weight: 700; color: var(--text-primary); }
     .mto-session-loc, .mto-session-time { color: var(--text-dim); }
 
-    .mto-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mto-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
     .mto-table thead th {
-        text-align: left; padding: 6px 10px; font-size: 10px; font-weight: 700;
+        text-align: left; padding: 5px 6px; font-size: 10px; font-weight: 700;
         letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
         background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
     }
-    .mto-th-rf { width: 50px; text-align: center !important; }
-    .mto-th-grp { width: 50px; text-align: center !important; }
-    .mto-th-type { width: 110px; }
-    .mto-th-micd { width: 70px; text-align: center !important; }
+    .mto-th-rf { width: 32px; text-align: center !important; }
+    .mto-th-grp { width: 32px; text-align: center !important; }
+    .mto-th-type { width: 74px; }
+    .mto-th-micd { width: 58px; text-align: center !important; }
 
-    .mto-row td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .mto-row td { padding: 5px 6px; border-bottom: 1px solid var(--border); vertical-align: middle;
+        overflow-wrap: anywhere; word-break: break-word; }
     .mto-row:last-child td { border-bottom: 0; }
     .mto-row.mto-tint-blue   { border-left: 4px solid #4a9eff; }
     .mto-row.mto-tint-amber  { border-left: 4px solid #ffab00; }
@@ -137,8 +138,9 @@
     /* Mic type badge (reused visually from the A1 tab). */
     .mto-type-badge {
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+        padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 700;
         background: rgba(255,255,255,0.06); color: var(--text-secondary);
+        white-space: nowrap; max-width: 100%;
     }
     </style>
 {% endblock %}
