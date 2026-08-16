@@ -168,6 +168,16 @@
 
 {% block content %}
 {% csrf_token %}
+<div id="mto-update-banner" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999;
+     background:linear-gradient(90deg,#ff8a00,#ff3d54); color:#fff; padding:14px 20px; text-align:center;
+     font-size:16px; font-weight:800; letter-spacing:0.01em; box-shadow:0 6px 28px rgba(255,61,84,0.55);
+     border-bottom:2px solid rgba(255,255,255,0.4);">
+    ⚠️ The show was updated — refresh to see the latest
+    <button onclick="location.reload()" style="margin-left:14px; background:#fff; color:#c0102f; border:none;
+        padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:800; font-size:15px;">🔄 Refresh Now</button>
+    <button id="mto-banner-dismiss" style="margin-left:8px; background:transparent; border:1px solid rgba(255,255,255,0.6);
+        color:#fff; padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
+</div>
 <div id="mto-root">
     <div class="mto-header">
         <div>
@@ -297,6 +307,45 @@
     {% endif %}
 </div>
 
+<script>
+// "Updates available" poll — the Overview page previously had no polling, so
+// users on it never saw refresh warnings. Same mechanism as the main tracker.
+(function() {
+    var banner = document.getElementById('mto-update-banner');
+    var dismissBtn = document.getElementById('mto-banner-dismiss');
+    var lastChecksum = null;
+    var lastLocalChange = 0;
+    var pendingUpdate = false;
+    var dismissed = false;
+
+    // Toggling Mic'd here is our own change — don't warn ourselves about it.
+    window.mtoMarkLocalChange = function() { lastLocalChange = Date.now(); };
+
+    if (dismissBtn) dismissBtn.onclick = function() {
+        if (banner) banner.style.display = 'none';
+        pendingUpdate = false; dismissed = true;
+    };
+
+    async function check() {
+        try {
+            var r = await fetch('/api/mic-tracker-checksum/?t=' + Date.now(), { cache: 'no-store' });
+            if (!r.ok) return;
+            var data = await r.json();
+            if (!data.checksum) return;
+            if (lastChecksum === null) { lastChecksum = data.checksum; return; }
+            if (data.checksum !== lastChecksum) {
+                lastChecksum = data.checksum;
+                if (Date.now() - lastLocalChange < 10000) return;  // our own toggle
+                pendingUpdate = true; dismissed = false;
+            }
+            if (pendingUpdate && !dismissed && banner) banner.style.display = 'block';
+        } catch (e) {}
+    }
+    setInterval(check, 5000);
+    setTimeout(check, 5000);
+})();
+</script>
+
 {% if not is_viewer %}
 <script>
 // Make the overview Mic'd badges interactive, mirroring the A2 page:
@@ -341,6 +390,7 @@
         var turningOn = !btn.classList.contains('on');
         try { await post('/audiopatch/api/mic/slot/toggle-micd/', {slot_id: slotId, is_micd: turningOn}); }
         catch (e) { alert("Could not update Mic'd — " + e.message + ". Refresh and try again."); return; }
+        if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
         // Clear every slot button for this assignment, then light the toggled one.
         document.querySelectorAll('.mto-micd-btn[data-assignment-id="' + assignmentId + '"][data-slot-id]')
                 .forEach(function(b) { setBtn(b, false); });
@@ -353,6 +403,7 @@
         var turningOn = !btn.classList.contains('on');
         try { await post('/audiopatch/api/mic/update/', {assignment_id: assignmentId, field: 'is_micd', value: turningOn}); }
         catch (e) { alert("Could not update Mic'd — " + e.message + ". Refresh and try again."); return; }
+        if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
         setBtn(btn, turningOn);
     };
 })();
