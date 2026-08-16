@@ -785,6 +785,21 @@ async function updateTask(taskId, field, value) {
     }
 }
 
+// Keep the in-memory `statuses` cache in sync after a save. switchTab() re-renders
+// from this cache WITHOUT re-fetching, so without this the change reverts the moment
+// you leave the tab (even though the DB already saved it). kind = 'setup' | 'daily'.
+function syncStatusCache(taskId, kind, apply) {
+    const section = checklists[activeTab];
+    const sectionStatuses = statuses[activeTab];
+    if (!section || !sectionStatuses) return;
+    const list = section[kind] || [];
+    const idx = list.findIndex(t => t && t.id === taskId);
+    if (idx === -1) return;
+    if (!sectionStatuses[kind]) sectionStatuses[kind] = [];
+    if (!sectionStatuses[kind][idx]) sectionStatuses[kind][idx] = (kind === 'daily' ? {days: {}} : {});
+    apply(sectionStatuses[kind][idx]);
+}
+
 async function updateSetupStatus(taskId, value, selectElement) {
     const result = await apiCall('{% url "planner:audio_checklist_update_status" %}', {
         task_id: taskId,
@@ -794,6 +809,7 @@ async function updateSetupStatus(taskId, value, selectElement) {
     if (result && result.success) {
         const row = selectElement.closest('tr');
         row.className = `status-${value}`;
+        syncStatusCache(taskId, 'setup', s => { s.day1 = value; });
         showNotification('Saved');
     }
 }
@@ -806,6 +822,7 @@ async function updateDayStatus(taskId, day, checked) {
         status: status,
     });
     if (result && result.success) {
+        syncStatusCache(taskId, 'daily', s => { if (!s.days) s.days = {}; s.days[day] = status; });
         showNotification('Saved');
     }
 }
@@ -818,6 +835,7 @@ async function updateDayStatusSelect(taskId, day, value, selectEl) {
     });
     if (result && result.success) {
         selectEl.className = `status-select day-status-select status-${value}`;
+        syncStatusCache(taskId, 'daily', s => { if (!s.days) s.days = {}; s.days[day] = value; });
         showNotification('Saved');
     }
 }
