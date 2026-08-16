@@ -50,9 +50,24 @@ async function updateField(assignmentId, field, value) {
             // Update presenter display if needed
             if (field === 'presenter_name' || field === 'presenter_id' || field === 'shared_presenters') {
                 updatePresenterDisplay(assignmentId, data.presenter_display, data.presenter_count);
-                // Update active slot chip
+                // Update the active slot chip's LABEL only — update just the
+                // text node so its ✕ (remove) and MIC'D child buttons survive.
+                // (activeChip.textContent = ... would delete those children, which
+                // is why a freshly-added/renamed presenter lost its ✕ button.)
                 const activeChip = document.querySelector(`#slot-queue-${assignmentId} .a2-slot-chip.active`);
-                if (activeChip) activeChip.textContent = data.presenter_display || 'Unassigned';
+                if (activeChip) {
+                    const label = data.presenter_display || 'Unassigned';
+                    let labelNode = null;
+                    for (const n of activeChip.childNodes) {
+                        if (n.nodeType === 3 && n.textContent.trim()) { labelNode = n; break; }
+                    }
+                    if (labelNode) {
+                        labelNode.textContent = ' ' + label + ' ';
+                    } else {
+                        activeChip.insertBefore(document.createTextNode(' ' + label + ' '),
+                                                activeChip.querySelector('.a2-slot-remove'));
+                    }
+                }
                 // Issue #10: sync photo zone with the newly-assigned presenter's headshot
                 if (typeof syncAssignmentPhoto === 'function') {
                     syncAssignmentPhoto(assignmentId, data.slot_photo_data || '', data.active_slot_id || null);
