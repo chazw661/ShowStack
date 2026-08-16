@@ -1439,7 +1439,10 @@ function debounce(fn, wait) {
 
     async function check() {
         try {
-            const r = await fetch('/api/mic-tracker-checksum/');
+            // Cache-bust + no-store so a caching proxy / browser on a slow
+            // shared network can't feed this machine a stale checksum (which
+            // would silently suppress the "Updates available" banner).
+            const r = await fetch('/api/mic-tracker-checksum/?t=' + Date.now(), { cache: 'no-store' });
             if (!r.ok) return;
             const data = await r.json();
             if (!data.checksum) return;

@@ -4447,13 +4447,27 @@ def populate_amp_models_view(request):
 #------Auto Refresh for Mic Tracker------
 
 
+def _no_cache(response):
+    """Prevent browsers AND intermediary proxies from caching a response.
+
+    The mic-tracker "Updates available" poll is a GET; on slow/shared venue
+    networks a caching proxy (or aggressive browser heuristic caching) can
+    hand some machines a stale checksum forever, so they never see the refresh
+    banner. These headers force every poll to hit the server fresh.
+    """
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
+
+
 @login_required
 @require_http_methods(["GET"])
 def mic_tracker_checksum(request):
     """Return a checksum of mic tracker data to detect changes."""
     project_id = request.session.get('current_project_id')
     if not project_id:
-        return JsonResponse({'checksum': None})
+        return _no_cache(JsonResponse({'checksum': None}))
 
     sessions = MicSession.objects.filter(
         day__project_id=project_id
@@ -4475,7 +4489,7 @@ def mic_tracker_checksum(request):
     }, default=str)
 
     checksum = hashlib.md5(data_string.encode()).hexdigest()
-    return JsonResponse({'checksum': checksum})
+    return _no_cache(JsonResponse({'checksum': checksum}))
 
 
 
