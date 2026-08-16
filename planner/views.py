@@ -691,9 +691,20 @@ def mic_tracker_overview_view(request):
     days_data = [{'day': d, 'sessions': d.sessions.all()} for d in days]
     show_info = MicShowInfo.objects.filter(project=request.current_project).first()
 
+    # Read-only gating for the Mic'd toggles — same rule as mic_tracker_view.
+    from planner.models import Project, ProjectMember
+    is_viewer = False
+    if not request.user.is_superuser:
+        if ProjectMember.objects.filter(user=request.user, role='viewer').exists():
+            has_editor = ProjectMember.objects.filter(user=request.user, role='editor').exists()
+            owns_projects = Project.objects.filter(owner=request.user).exists()
+            if not has_editor and not owns_projects:
+                is_viewer = True
+
     return render(request, 'planner/mic_tracker_overview.html', {
         'show_info': show_info,
         'days_data': days_data,
+        'is_viewer': is_viewer,
     })
 
 

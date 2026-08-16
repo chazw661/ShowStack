@@ -137,6 +137,21 @@
         padding: 2px 7px; border-radius: 4px;
     }
     .mto-micd-off { color: var(--text-dim); }
+    /* Interactive Mic'd toggle — mirrors the A2 button, styled like the badge. */
+    .mto-micd-btn {
+        font-family: inherit; cursor: pointer; white-space: nowrap;
+        background: transparent; border: 1px solid var(--border-bright);
+        font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
+        padding: 2px 8px; border-radius: 4px; color: var(--text-dim);
+        transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    .mto-micd-btn.on { background: rgba(47,224,106,0.16); color: #2fe06a; border-color: rgba(47,224,106,0.5); }
+    .mto-micd-btn.off:hover { color: #2fe06a; border-color: rgba(47,224,106,0.5); background: rgba(47,224,106,0.08); }
+    .mto-micd-btn.on:hover { background: rgba(47,224,106,0.28); }
+    .mto-micd-btn:disabled { cursor: default; border-color: transparent; }
+    .mto-micd-btn:disabled.off { color: var(--text-dim); }
+    .mto-micd-btn:disabled:hover { background: transparent; border-color: transparent; }
+    .mto-micd-btn:disabled.on:hover { background: rgba(47,224,106,0.16); border-color: rgba(47,224,106,0.5); }
     .mto-empty-large { padding: 48px 24px; text-align: center; margin: 24px; border: 1px dashed var(--border-bright); border-radius: 6px; }
     .mto-empty-large-title { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; }
     .mto-empty-large-sub { font-size: 12px; color: var(--text-dim); }
@@ -152,6 +167,7 @@
 {% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div id="mto-root">
     <div class="mto-header">
         <div>
@@ -220,7 +236,12 @@
                         {% if slot.presenter %}<span class="mto-presenter">{{ slot.presenter.name }}</span>
                         {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
                     </td>
-                    <td class="mto-micd">{% if slot.is_micd %}<span class="mto-micd-on">MIC'D</span>{% else %}<span class="mto-micd-off">—</span>{% endif %}</td>
+                    <td class="mto-micd">
+                        <button type="button" class="mto-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
+                                data-assignment-id="{{ assignment.id }}" data-slot-id="{{ slot.id }}"
+                                onclick="mtoToggleSlotMicd({{ assignment.id }}, {{ slot.id }}, this)"
+                                {% if is_viewer %}disabled{% endif %}>{% if slot.is_micd %}MIC'D{% else %}—{% endif %}</button>
+                    </td>
                 </tr>
                 {% endwith %}{% endwith %}
                 {% endfor %}
@@ -245,7 +266,12 @@
                         {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
                         {% endwith %}
                     </td>
-                    <td class="mto-micd">{% if assignment.is_micd %}<span class="mto-micd-on">MIC'D</span>{% else %}<span class="mto-micd-off">—</span>{% endif %}</td>
+                    <td class="mto-micd">
+                        <button type="button" class="mto-micd-btn {% if assignment.is_micd %}on{% else %}off{% endif %}"
+                                data-assignment-id="{{ assignment.id }}"
+                                onclick="mtoToggleMicd({{ assignment.id }}, this)"
+                                {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}MIC'D{% else %}—{% endif %}</button>
+                    </td>
                 </tr>
                 {% endwith %}{% endwith %}
                 {% endif %}
@@ -270,4 +296,66 @@
     </div>
     {% endif %}
 </div>
+
+{% if not is_viewer %}
+<script>
+// Make the overview Mic'd badges interactive, mirroring the A2 page:
+//  · slot rows  → /api/mic/slot/toggle-micd/  (radio within an assignment)
+//  · single-presenter rows → /api/mic/update/ field is_micd (simple toggle)
+(function() {
+    function getCookie(name) {
+        var v = null;
+        if (document.cookie && document.cookie !== '') {
+            document.cookie.split(';').forEach(function(c) {
+                c = c.trim();
+                if (c.substring(0, name.length + 1) === name + '=') v = decodeURIComponent(c.substring(name.length + 1));
+            });
+        }
+        return v;
+    }
+    function csrf() { return getCookie('csrftoken'); }
+
+    function setBtn(btn, on) {
+        btn.classList.toggle('on', on);
+        btn.classList.toggle('off', !on);
+        btn.textContent = on ? "MIC'D" : '—';
+        var row = btn.closest('.mto-row');
+        if (row) row.classList.toggle('mto-row-micd', on);
+    }
+
+    async function post(url, body) {
+        var resp = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Could not update Mic'd.");
+        return data;
+    }
+
+    // Per-slot Mic'd — radio: only one slot per assignment can be Mic'd.
+    window.mtoToggleSlotMicd = async function(assignmentId, slotId, btn) {
+        if (btn.disabled) return;
+        var turningOn = !btn.classList.contains('on');
+        try { await post('/audiopatch/api/mic/slot/toggle-micd/', {slot_id: slotId, is_micd: turningOn}); }
+        catch (e) { alert("Could not update Mic'd — " + e.message + ". Refresh and try again."); return; }
+        // Clear every slot button for this assignment, then light the toggled one.
+        document.querySelectorAll('.mto-micd-btn[data-assignment-id="' + assignmentId + '"][data-slot-id]')
+                .forEach(function(b) { setBtn(b, false); });
+        if (turningOn) setBtn(btn, true);
+    };
+
+    // Per-assignment Mic'd — simple toggle.
+    window.mtoToggleMicd = async function(assignmentId, btn) {
+        if (btn.disabled) return;
+        var turningOn = !btn.classList.contains('on');
+        try { await post('/audiopatch/api/mic/update/', {assignment_id: assignmentId, field: 'is_micd', value: turningOn}); }
+        catch (e) { alert("Could not update Mic'd — " + e.message + ". Refresh and try again."); return; }
+        setBtn(btn, turningOn);
+    };
+})();
+</script>
+{% endif %}
 {% endblock %}
