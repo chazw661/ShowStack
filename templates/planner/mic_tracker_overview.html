@@ -69,7 +69,7 @@
 
     .mto-session-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
         gap: 12px;
         padding: 12px 14px;
     }
@@ -92,16 +92,17 @@
 
     .mto-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
     .mto-table thead th {
-        text-align: left; padding: 5px 6px; font-size: 10px; font-weight: 700;
-        letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+        text-align: left; padding: 6px 12px; font-size: 10px; font-weight: 700;
+        letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim);
         background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
+        white-space: nowrap;
     }
-    .mto-th-rf { width: 32px; text-align: center !important; }
-    .mto-th-grp { width: 32px; text-align: center !important; }
-    .mto-th-type { width: 74px; }
-    .mto-th-micd { width: 58px; text-align: center !important; }
+    .mto-th-rf { width: 40px; text-align: center !important; }
+    .mto-th-grp { width: 56px; text-align: center !important; }
+    .mto-th-type { width: 96px; }
+    .mto-th-micd { width: 74px; text-align: center !important; }
 
-    .mto-row td { padding: 5px 6px; border-bottom: 1px solid var(--border); vertical-align: middle;
+    .mto-row td { padding: 6px 12px; border-bottom: 1px solid var(--border); vertical-align: middle;
         overflow-wrap: anywhere; word-break: break-word; }
     .mto-row:last-child td { border-bottom: 0; }
     .mto-row.mto-tint-blue   { border-left: 4px solid #4a9eff; }
@@ -109,7 +110,7 @@
     .mto-row.mto-tint-red    { border-left: 4px solid #ff5252; }
     .mto-row.mto-tint-purple { border-left: 4px solid #b464ff; }
     .mto-row.mto-tint-teal   { border-left: 4px solid #00bcd4; }
-    .mto-row-micd { background: rgba(47, 224, 106, 0.10); }
+    .mto-row-micd { background: transparent; }
 
     .mto-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid transparent; }
     .mto-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
@@ -126,9 +127,11 @@
     .mto-dash { color: var(--text-dim); }
     .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
     .mto-micd-on {
-        display: inline-block; background: #2fe06a; color: #04240f;
-        font-weight: 800; font-size: 9px; letter-spacing: 0.06em;
-        padding: 3px 8px; border-radius: 10px; box-shadow: 0 0 8px rgba(47,224,106,0.5);
+        display: inline-block; white-space: nowrap;
+        background: rgba(47,224,106,0.16); color: #2fe06a;
+        border: 1px solid rgba(47,224,106,0.5);
+        font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
+        padding: 2px 7px; border-radius: 4px;
     }
     .mto-micd-off { color: var(--text-dim); }
     .mto-empty-large { padding: 48px 24px; text-align: center; margin: 24px; border: 1px dashed var(--border-bright); border-radius: 6px; }
