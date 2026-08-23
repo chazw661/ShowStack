@@ -4497,10 +4497,15 @@ def mic_tracker_checksum(request):
         session__day__project_id=project_id
     ).values('id', 'rf_number', 'is_micd', 'is_d_mic').order_by('id')
 
-    # Include presenter slots so name/type/notes changes trigger refresh
+    # Include presenter slots so edits trigger a refresh banner for other users.
+    # Covers every field editable from the A2 card and the Overview tab
+    # (headset_color/placement added so Overview edits to them also notify).
     slots = PresenterSlot.objects.filter(
         assignment__session__day__project_id=project_id
-    ).values('id', 'assignment_id', 'presenter_id', 'mic_type', 'is_micd', 'is_active').order_by('id')
+    ).values(
+        'id', 'assignment_id', 'presenter_id', 'mic_type',
+        'headset_color', 'placement', 'is_micd', 'is_active',
+    ).order_by('id')
 
     data_string = json.dumps({
         'sessions': list(sessions),
