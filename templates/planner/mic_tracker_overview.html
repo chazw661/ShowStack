@@ -88,14 +88,18 @@
     .mto-day-stats { font-size: 11px; color: var(--text-dim); margin-left: auto; }
 
     .mto-session-grid {
-        display: grid;
-        /* Issue #68: wider cards to fit the added editable columns. */
-        grid-template-columns: repeat(auto-fit, minmax(660px, 1fr));
-        justify-content: start;
+        /* Issue #68: fixed-width session cards that never shrink — when more
+           sessions than fit, scroll horizontally instead of squishing fields. */
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: flex-start;
         gap: 18px;
-        padding: 12px 14px;
+        padding: 12px 14px 16px;
+        overflow-x: auto;
     }
     .mto-session {
+        flex: 0 0 740px;
+        width: 740px;
         border: 1px solid var(--border);
         border-left: 4px solid var(--accent-blue);
         border-radius: 5px;
@@ -121,14 +125,16 @@
         background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
         white-space: nowrap;
     }
-    .mto-th-rf { width: 6%; text-align: center !important; }
-    .mto-th-grp { width: 6%; text-align: center !important; }
-    .mto-th-type { width: 13%; }
-    .mto-th-hc { width: 12%; }
-    .mto-th-pl { width: 14%; }
-    .mto-th-pres { width: 17%; }
-    .mto-th-notes { width: 20%; }
-    .mto-th-micd { width: 12%; text-align: center !important; }
+    /* Fixed px widths (card is a fixed 740px, table-layout: fixed) so field
+       text stays readable and never compresses. Sum ≈ 736 ≤ card inner width. */
+    .mto-th-rf { width: 42px; text-align: center !important; }
+    .mto-th-grp { width: 40px; text-align: center !important; }
+    .mto-th-type { width: 100px; }
+    .mto-th-hc { width: 96px; }
+    .mto-th-pl { width: 108px; }
+    .mto-th-pres { width: 135px; }
+    .mto-th-notes { width: 155px; }
+    .mto-th-micd { width: 60px; text-align: center !important; }
 
     /* Issue #68: inline editable controls in the overview table. */
     .mto-edit-select, .mto-edit-input {
