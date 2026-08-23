@@ -504,9 +504,11 @@
 {% endblock %}
 
 {% block content %}
-{# Guarantees the csrftoken cookie is (re)set on every load so getCsrfToken()
-   always has a token — Safari's ITP purges cookies aggressively, which was
-   silently 403-ing background saves and stopping updates from reaching others. #}
+{% comment %}
+Guarantees the csrftoken cookie is (re)set on every load so getCsrfToken()
+always has a token — Safari's ITP purges cookies aggressively, which was
+silently 403-ing background saves and stopping updates from reaching others.
+{% endcomment %}
 {% csrf_token %}
 <div id="mic-tracker-root">
 

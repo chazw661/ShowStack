@@ -1,9 +1,10 @@
-{# Issue #68: shared editable cells for the Mic Tracker Overview table.
-   Renders Type / Headset / Placement / Presenter / Notes for one presenter slot.
-   Expects in context: edit_slot, is_viewer, mic_types, headset_colors, placements.
-   Presenter stays a read-only display (edited on the A2 card). Photo + Sensitivity
-   + Output Level are intentionally excluded per the issue. #}
-{% load static %}
+{% comment %}
+Issue #68: shared editable cells for the Mic Tracker Overview table.
+Renders Type / Headset / Placement / Presenter / Notes for one presenter slot.
+Expects in context: edit_slot, is_viewer, mic_types, headset_colors, placements.
+Presenter stays a read-only display (edited on the A2 card). Photo + Sensitivity
++ Output Level are intentionally excluded per the issue.
+{% endcomment %}
 
 {# ── Type ── #}
 <td class="mto-type-cell">
