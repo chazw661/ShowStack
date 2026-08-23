@@ -98,8 +98,8 @@
         overflow-x: auto;
     }
     .mto-session {
-        flex: 0 0 630px;
-        width: 630px;
+        flex: 0 0 700px;
+        width: 700px;
         border: 1px solid var(--border);
         border-left: 4px solid var(--accent-blue);
         border-radius: 5px;
@@ -126,20 +126,20 @@
         white-space: nowrap;
     }
     /* Fixed px widths (card is a fixed width, table-layout: fixed) so field
-       text stays readable and never compresses. Sum ≈ 625 ≤ card inner width. */
-    .mto-th-rf { width: 42px; text-align: center !important; }
-    .mto-th-type { width: 105px; }
-    .mto-th-hc { width: 95px; }
-    .mto-th-pl { width: 110px; }
-    .mto-th-pres { width: 210px; }
-    .mto-th-micd { width: 62px; text-align: center !important; }
+       text stays readable and never compresses. Sum ≈ 690 ≤ card inner width. */
+    .mto-th-rf { width: 40px; text-align: center !important; }
+    .mto-th-type { width: 128px; }
+    .mto-th-hc { width: 118px; }
+    .mto-th-pl { width: 140px; }
+    .mto-th-pres { width: 200px; }
+    .mto-th-micd { width: 64px; text-align: center !important; }
 
     /* Issue #68: inline editable controls in the overview table. */
     .mto-edit-select, .mto-edit-input {
         width: 100%; box-sizing: border-box;
         background: var(--bg-raised); color: var(--text-primary);
         border: 1px solid var(--border); border-radius: 4px;
-        font-size: 11px; padding: 3px 5px; font-family: inherit;
+        font-size: 12px; padding: 4px 2px 4px 5px; font-family: inherit;
         transition: border-color 0.12s;
     }
     .mto-edit-select:focus, .mto-edit-input:focus { border-color: var(--accent-blue); outline: none; }
@@ -149,7 +149,7 @@
     .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: #2fe06a; }
     .mto-dim { color: var(--text-secondary); }
 
-    .mto-row td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle;
+    .mto-row td { padding: 6px 5px; border-bottom: 1px solid var(--border); vertical-align: middle;
         overflow-wrap: break-word; }
     .mto-row:last-child td { border-bottom: 0; }
     .mto-row-micd { background: transparent; }
