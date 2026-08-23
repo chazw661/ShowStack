@@ -1,0 +1,52 @@
+{# Issue #68: shared editable cells for the Mic Tracker Overview table.
+   Renders Type / Headset / Placement / Presenter / Notes for one presenter slot.
+   Expects in context: edit_slot, is_viewer, mic_types, headset_colors, placements.
+   Presenter stays a read-only display (edited on the A2 card). Photo + Sensitivity
+   + Output Level are intentionally excluded per the issue. #}
+{% load static %}
+
+{# ── Type ── #}
+<td class="mto-type-cell">
+    {% if edit_slot.id and not is_viewer %}
+    <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'mic_type', this.value, this)">
+        {% for val, label in mic_types %}<option value="{{ val }}" {% if edit_slot.mic_type == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
+    </select>
+    {% elif edit_slot.mic_type %}<span class="mto-type-badge">{{ edit_slot.mic_type }}</span>
+    {% else %}<span class="mto-dash">—</span>{% endif %}
+</td>
+
+{# ── Headset Color ── #}
+<td class="mto-hc-cell">
+    {% if edit_slot.id and not is_viewer %}
+    <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'headset_color', this.value, this)">
+        {% for val, label in headset_colors %}<option value="{{ val }}" {% if edit_slot.headset_color == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
+    </select>
+    {% elif edit_slot.headset_color %}<span class="mto-dim">{{ edit_slot.get_headset_color_display }}</span>
+    {% else %}<span class="mto-dash">—</span>{% endif %}
+</td>
+
+{# ── Placement ── #}
+<td class="mto-pl-cell">
+    {% if edit_slot.id and not is_viewer %}
+    <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'placement', this.value, this)">
+        {% for val, label in placements %}<option value="{{ val }}" {% if edit_slot.placement == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
+    </select>
+    {% elif edit_slot.placement %}<span class="mto-dim">{{ edit_slot.get_placement_display }}</span>
+    {% else %}<span class="mto-dash">—</span>{% endif %}
+</td>
+
+{# ── Presenter (read-only display) ── #}
+<td>
+    {% if edit_slot.presenter %}<span class="mto-presenter">{{ edit_slot.presenter.name }}</span>
+    {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
+</td>
+
+{# ── Notes ── #}
+<td class="mto-notes-cell">
+    {% if edit_slot.id and not is_viewer %}
+    <input type="text" class="mto-edit-input" value="{{ edit_slot.notes|default:'' }}"
+           placeholder="allergies, notes…"
+           onchange="mtoSaveSlotField({{ edit_slot.id }}, 'notes', this.value, this)">
+    {% elif edit_slot.notes %}<span class="mto-dim">{{ edit_slot.notes }}</span>
+    {% else %}<span class="mto-dash">—</span>{% endif %}
+</td>

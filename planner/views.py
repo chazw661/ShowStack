@@ -705,6 +705,11 @@ def mic_tracker_overview_view(request):
         'show_info': show_info,
         'days_data': days_data,
         'is_viewer': is_viewer,
+        # Issue #68: editable A2-style fields on the overview (except photo +
+        # sensitivity/output "beltpack" settings). Reuse the model choice lists.
+        'mic_types': MicAssignment.MIC_TYPES,
+        'headset_colors': MicAssignment.HEADSET_COLOR_CHOICES,
+        'placements': MicAssignment.PLACEMENT_CHOICES,
     })
 
 
@@ -1677,7 +1682,7 @@ def update_slot_field(request):
         slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
         field = data['field']
         value = data['value']
-        if field in ('notes', 'mic_type', 'placement', 'sensitivity', 'output_level'):
+        if field in ('notes', 'mic_type', 'headset_color', 'placement', 'sensitivity', 'output_level'):
             setattr(slot, field, value)
             slot.save()
             return JsonResponse({'success': True})

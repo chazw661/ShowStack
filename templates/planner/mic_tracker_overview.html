@@ -48,6 +48,26 @@
     }
     #mto-root a.mto-back-btn:hover { background: #6cb0ff; color: #ffffff !important; text-decoration: none; }
 
+    /* Issue #68: top-level Tracker | Overview tab strip (shared with main page). */
+    .mtt-toplevel-tabs { display: flex; gap: 4px; padding: 0 24px; margin: 14px 0 0;
+        border-bottom: 1px solid var(--border); }
+    #mto-root a.mtt-toplevel-tab,
+    #mto-root a.mtt-toplevel-tab:link,
+    #mto-root a.mtt-toplevel-tab:visited {
+        display: inline-block; padding: 10px 22px; text-decoration: none;
+        font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--text-secondary); border: 1px solid transparent; border-bottom: none;
+        border-radius: 6px 6px 0 0;
+    }
+    #mto-root a.mtt-toplevel-tab:hover { color: var(--text-primary); background: var(--bg-raised); }
+    #mto-root a.mtt-toplevel-tab.active,
+    #mto-root a.mtt-toplevel-tab.active:link,
+    #mto-root a.mtt-toplevel-tab.active:visited {
+        color: var(--accent-blue); background: var(--bg-card);
+        border-color: var(--border); border-bottom: 2px solid var(--bg-card);
+        margin-bottom: -1px;
+    }
+
     .mto-day-anchors {
         display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
         margin: 16px 24px; padding: 8px 12px;
@@ -69,7 +89,8 @@
 
     .mto-session-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(360px, 720px));
+        /* Issue #68: wider cards to fit the added editable columns. */
+        grid-template-columns: repeat(auto-fit, minmax(660px, 1fr));
         justify-content: start;
         gap: 18px;
         padding: 12px 14px;
@@ -100,10 +121,29 @@
         background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
         white-space: nowrap;
     }
-    .mto-th-rf { width: 8%; text-align: center !important; }
-    .mto-th-grp { width: 10%; text-align: center !important; }
-    .mto-th-type { width: 20%; }
-    .mto-th-micd { width: 14%; text-align: center !important; }
+    .mto-th-rf { width: 6%; text-align: center !important; }
+    .mto-th-grp { width: 6%; text-align: center !important; }
+    .mto-th-type { width: 13%; }
+    .mto-th-hc { width: 12%; }
+    .mto-th-pl { width: 14%; }
+    .mto-th-pres { width: 17%; }
+    .mto-th-notes { width: 20%; }
+    .mto-th-micd { width: 12%; text-align: center !important; }
+
+    /* Issue #68: inline editable controls in the overview table. */
+    .mto-edit-select, .mto-edit-input {
+        width: 100%; box-sizing: border-box;
+        background: var(--bg-raised); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 4px;
+        font-size: 11px; padding: 3px 5px; font-family: inherit;
+        transition: border-color 0.12s;
+    }
+    .mto-edit-select:focus, .mto-edit-input:focus { border-color: var(--accent-blue); outline: none; }
+    .mto-edit-select { cursor: pointer; }
+    .mto-edit-select option { background: #1e1e32; color: var(--text-primary); }
+    .mto-edit-input::placeholder { color: var(--text-dim); }
+    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: #2fe06a; }
+    .mto-dim { color: var(--text-secondary); }
 
     .mto-row td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle;
         overflow-wrap: break-word; }
@@ -182,11 +222,13 @@
     <div class="mto-header">
         <div>
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
-            <div class="mto-sub">Read-only roster across every day and session. Group colors mirror the A1 tab.</div>
+            <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement, Notes and Mic'd are editable here.</div>
         </div>
-        <div class="mto-header-actions">
-            <a class="mto-back-btn" href="{% url 'planner:mic_tracker' %}">← Back to Mic Tracker</a>
-        </div>
+    </div>
+
+    <div class="mtt-toplevel-tabs">
+        <a class="mtt-toplevel-tab" href="{% url 'planner:mic_tracker' %}">Tracker</a>
+        <a class="mtt-toplevel-tab active" href="{% url 'planner:mic_tracker_overview' %}">Overview</a>
     </div>
 
     {% if days_data %}
@@ -220,7 +262,10 @@
                         <th class="mto-th-rf">RF</th>
                         <th class="mto-th-grp">Grp</th>
                         <th class="mto-th-type">Type</th>
-                        <th>Presenter</th>
+                        <th class="mto-th-hc">Headset</th>
+                        <th class="mto-th-pl">Placement</th>
+                        <th class="mto-th-pres">Presenter</th>
+                        <th class="mto-th-notes">Notes</th>
                         <th class="mto-th-micd">Mic'd</th>
                     </tr>
                 </thead>
@@ -238,14 +283,7 @@
                         {% elif fallback_group %}<span class="mto-dot color-{{ fallback_group.color }}" title="{{ fallback_group.name }}"></span>
                         {% else %}<span class="mto-dot empty"></span>{% endif %}
                     </td>
-                    <td>
-                        {% if slot.mic_type %}<span class="mto-type-badge">{{ slot.mic_type }}</span>
-                        {% else %}<span class="mto-dash">—</span>{% endif %}
-                    </td>
-                    <td>
-                        {% if slot.presenter %}<span class="mto-presenter">{{ slot.presenter.name }}</span>
-                        {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
-                    </td>
+                    {% include "planner/_mto_row_fields.html" with edit_slot=slot %}
                     <td class="mto-micd">
                         <button type="button" class="mto-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
                                 data-assignment-id="{{ assignment.id }}" data-slot-id="{{ slot.id }}"
@@ -258,24 +296,14 @@
                 {% else %}
                 {% with assn_groups=assignment.groups.all %}
                 {% with first_assn_group=assn_groups.0 %}
+                {% with active_slot=assignment.active_slot %}
                 <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %} {% if first_assn_group %}mto-tint-{{ first_assn_group.color }}{% endif %}">
                     <td class="mto-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
                     <td class="mto-grp">
                         {% if first_assn_group %}<span class="mto-dot color-{{ first_assn_group.color }}" title="{{ first_assn_group.name }}"></span>
                         {% else %}<span class="mto-dot empty"></span>{% endif %}
                     </td>
-                    <td>
-                        {% with active_slot=assignment.active_slot %}
-                        {% if active_slot.mic_type %}<span class="mto-type-badge">{{ active_slot.mic_type }}</span>
-                        {% else %}<span class="mto-dash">—</span>{% endif %}
-                        {% endwith %}
-                    </td>
-                    <td>
-                        {% with active=assignment.active_slot %}
-                        {% if active and active.presenter %}<span class="mto-presenter">{{ active.presenter.name }}</span>
-                        {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
-                        {% endwith %}
-                    </td>
+                    {% include "planner/_mto_row_fields.html" with edit_slot=active_slot %}
                     <td class="mto-micd">
                         <button type="button" class="mto-micd-btn {% if assignment.is_micd %}on{% else %}off{% endif %}"
                                 data-assignment-id="{{ assignment.id }}"
@@ -283,11 +311,11 @@
                                 {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}MIC'D{% else %}—{% endif %}</button>
                     </td>
                 </tr>
-                {% endwith %}{% endwith %}
+                {% endwith %}{% endwith %}{% endwith %}
                 {% endif %}
                 {% endwith %}
                 {% empty %}
-                <tr><td colspan="5" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
+                <tr><td colspan="8" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -405,6 +433,16 @@
         catch (e) { alert("Could not update Mic'd — " + e.message + ". Refresh and try again."); return; }
         if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
         setBtn(btn, turningOn);
+    };
+
+    // Issue #68: save an editable A2 field (Type/Headset/Placement/Notes) on a
+    // specific presenter slot. Always targets the explicit slot_id so multi-
+    // presenter rows edit the right slot (not just the active one).
+    window.mtoSaveSlotField = async function(slotId, field, value, el) {
+        try { await post('/audiopatch/api/mic/slot/update/', {slot_id: slotId, field: field, value: value}); }
+        catch (e) { alert('Could not save — ' + e.message + '. Refresh and try again.'); return; }
+        if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
+        if (el) { el.classList.add('mto-saved-flash'); setTimeout(function() { el.classList.remove('mto-saved-flash'); }, 700); }
     };
 })();
 </script>

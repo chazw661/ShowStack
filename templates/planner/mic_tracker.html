@@ -68,6 +68,26 @@
     .btn-mtt-ghost   { background: var(--bg-raised); color: var(--text-secondary); border: 1px solid var(--border-bright); }
     .btn-mtt-export  { background: var(--bg-raised); color: var(--accent-amber); border: 1px solid rgba(255,171,0,0.3); }
 
+    /* Issue #68: top-level Tracker | Overview tab strip (shared with overview page). */
+    .mtt-toplevel-tabs { display: flex; gap: 4px; padding: 0 24px; margin: 0;
+        border-bottom: 1px solid var(--border); background: var(--bg-base); }
+    #mic-tracker-root a.mtt-toplevel-tab,
+    #mic-tracker-root a.mtt-toplevel-tab:link,
+    #mic-tracker-root a.mtt-toplevel-tab:visited {
+        display: inline-block; padding: 10px 22px; text-decoration: none;
+        font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--text-secondary); border: 1px solid transparent; border-bottom: none;
+        border-radius: 6px 6px 0 0;
+    }
+    #mic-tracker-root a.mtt-toplevel-tab:hover { color: var(--text-primary); background: var(--bg-raised); }
+    #mic-tracker-root a.mtt-toplevel-tab.active,
+    #mic-tracker-root a.mtt-toplevel-tab.active:link,
+    #mic-tracker-root a.mtt-toplevel-tab.active:visited {
+        color: var(--accent-blue); background: var(--bg-card);
+        border-color: var(--border); border-bottom: 2px solid var(--bg-card);
+        margin-bottom: -1px;
+    }
+
     /* Issue #34: bigger, brighter session-action icons (Duplicate / Settings /
        Delete) so the gear in particular is easier to spot. */
     .btn-icon-sm {
@@ -508,10 +528,14 @@
         <div class="mtt-header-actions">
             {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
             <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:#ffffff !important;">👤 Presenters</a>
-            <a href="{% url 'planner:mic_tracker_overview' %}" class="btn-mtt btn-mtt-export">👁 Overview</a>
             <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
         </div>
+    </div>
+
+    <div class="mtt-toplevel-tabs">
+        <a class="mtt-toplevel-tab active" href="{% url 'planner:mic_tracker' %}">Tracker</a>
+        <a class="mtt-toplevel-tab" href="{% url 'planner:mic_tracker_overview' %}">Overview</a>
     </div>
 
     <!-- Days -->
