@@ -36,8 +36,13 @@ Sensitivity + Output Level are intentionally excluded.
     {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
 
-{# ── Presenter (read-only display, emphasized) ── #}
+{# ── Presenter (editable name, emphasized) ── #}
 <td class="mto-pres-cell">
-    {% if edit_slot.presenter %}<span class="mto-presenter">{{ edit_slot.presenter.name }}</span>
+    {% if edit_slot.id and not is_viewer %}
+    <input type="text" class="mto-pres-input"
+           value="{% if edit_slot.presenter %}{{ edit_slot.presenter.name }}{% endif %}"
+           placeholder="— Unassigned —" autocomplete="off"
+           onchange="mtoSaveSlotField({{ edit_slot.id }}, 'presenter_name', this.value, this)">
+    {% elif edit_slot.presenter %}<span class="mto-presenter">{{ edit_slot.presenter.name }}</span>
     {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
 </td>

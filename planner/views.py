@@ -1680,6 +1680,23 @@ def update_slot_field(request):
         slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
         field = data['field']
         value = data['value']
+        # Editable presenter name on a specific slot (Overview edit). Resolve/create
+        # the Presenter within this slot's project, or clear it. Mirrors the A2
+        # card's name path and keeps the slot headshot in sync (Issue #10).
+        if field == 'presenter_name':
+            name = (value or '').strip()
+            if name:
+                project_id = slot.assignment.session.day.project_id
+                presenter, _ = Presenter.objects.get_or_create(name=name, project_id=project_id)
+                slot.presenter = presenter
+            else:
+                slot.presenter = None
+            slot.photo_data = _presenter_photo_data_url(slot.presenter)
+            slot.save()
+            return JsonResponse({
+                'success': True,
+                'presenter_name': slot.presenter.name if slot.presenter else '',
+            })
         if field in ('notes', 'mic_type', 'headset_color', 'placement', 'sensitivity', 'output_level'):
             setattr(slot, field, value)
             slot.save()
