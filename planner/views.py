@@ -683,8 +683,6 @@ def mic_tracker_overview_view(request):
             'sessions__mic_assignments',
             queryset=MicAssignment.objects.prefetch_related(
                 'presenter_slots__presenter',
-                'presenter_slots__groups',
-                'groups',
             ),
         ),
     )

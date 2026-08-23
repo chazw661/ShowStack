@@ -126,14 +126,13 @@
         white-space: nowrap;
     }
     /* Fixed px widths (card is a fixed 740px, table-layout: fixed) so field
-       text stays readable and never compresses. Sum ≈ 736 ≤ card inner width. */
+       text stays readable and never compresses. Sum ≈ 735 ≤ card inner width. */
     .mto-th-rf { width: 42px; text-align: center !important; }
-    .mto-th-grp { width: 40px; text-align: center !important; }
     .mto-th-type { width: 100px; }
     .mto-th-hc { width: 96px; }
     .mto-th-pl { width: 108px; }
-    .mto-th-pres { width: 135px; }
-    .mto-th-notes { width: 155px; }
+    .mto-th-pres { width: 154px; }
+    .mto-th-notes { width: 175px; }
     .mto-th-micd { width: 60px; text-align: center !important; }
 
     /* Issue #68: inline editable controls in the overview table. */
@@ -154,23 +153,9 @@
     .mto-row td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle;
         overflow-wrap: break-word; }
     .mto-row:last-child td { border-bottom: 0; }
-    .mto-row.mto-tint-blue   { border-left: 4px solid #4a9eff; }
-    .mto-row.mto-tint-amber  { border-left: 4px solid #ffab00; }
-    .mto-row.mto-tint-red    { border-left: 4px solid #ff5252; }
-    .mto-row.mto-tint-purple { border-left: 4px solid #b464ff; }
-    .mto-row.mto-tint-teal   { border-left: 4px solid #00bcd4; }
     .mto-row-micd { background: transparent; }
 
-    .mto-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid transparent; }
-    .mto-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .mto-dot.color-blue   { background: #4a9eff; }
-    .mto-dot.color-amber  { background: #ffab00; }
-    .mto-dot.color-red    { background: #ff5252; }
-    .mto-dot.color-purple { background: #b464ff; }
-    .mto-dot.color-teal   { background: #00bcd4; }
-
     .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); white-space: nowrap; }
-    .mto-grp { text-align: center; }
     .mto-presenter { color: var(--text-primary); }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
     .mto-dash { color: var(--text-dim); }
@@ -266,7 +251,6 @@
                 <thead>
                     <tr>
                         <th class="mto-th-rf">RF</th>
-                        <th class="mto-th-grp">Grp</th>
                         <th class="mto-th-type">Type</th>
                         <th class="mto-th-hc">Headset</th>
                         <th class="mto-th-pl">Placement</th>
@@ -280,15 +264,8 @@
                 {% with slots=assignment.presenter_slots.all slot_count=assignment.presenter_slots.count %}
                 {% if slot_count > 1 %}
                 {% for slot in slots %}
-                {% with slot_groups=slot.groups.all fallback_group=assignment.groups.first %}
-                {% with first_slot_group=slot_groups.0 %}
-                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %} {% if first_slot_group %}mto-tint-{{ first_slot_group.color }}{% elif fallback_group %}mto-tint-{{ fallback_group.color }}{% endif %}">
+                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %}">
                     <td class="mto-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
-                    <td class="mto-grp">
-                        {% if first_slot_group %}<span class="mto-dot color-{{ first_slot_group.color }}" title="{{ first_slot_group.name }}"></span>
-                        {% elif fallback_group %}<span class="mto-dot color-{{ fallback_group.color }}" title="{{ fallback_group.name }}"></span>
-                        {% else %}<span class="mto-dot empty"></span>{% endif %}
-                    </td>
                     {% include "planner/_mto_row_fields.html" with edit_slot=slot %}
                     <td class="mto-micd">
                         <button type="button" class="mto-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
@@ -297,18 +274,11 @@
                                 {% if is_viewer %}disabled{% endif %}>{% if slot.is_micd %}MIC'D{% else %}—{% endif %}</button>
                     </td>
                 </tr>
-                {% endwith %}{% endwith %}
                 {% endfor %}
                 {% else %}
-                {% with assn_groups=assignment.groups.all %}
-                {% with first_assn_group=assn_groups.0 %}
                 {% with active_slot=assignment.active_slot %}
-                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %} {% if first_assn_group %}mto-tint-{{ first_assn_group.color }}{% endif %}">
+                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %}">
                     <td class="mto-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
-                    <td class="mto-grp">
-                        {% if first_assn_group %}<span class="mto-dot color-{{ first_assn_group.color }}" title="{{ first_assn_group.name }}"></span>
-                        {% else %}<span class="mto-dot empty"></span>{% endif %}
-                    </td>
                     {% include "planner/_mto_row_fields.html" with edit_slot=active_slot %}
                     <td class="mto-micd">
                         <button type="button" class="mto-micd-btn {% if assignment.is_micd %}on{% else %}off{% endif %}"
@@ -317,11 +287,11 @@
                                 {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}MIC'D{% else %}—{% endif %}</button>
                     </td>
                 </tr>
-                {% endwith %}{% endwith %}{% endwith %}
+                {% endwith %}
                 {% endif %}
                 {% endwith %}
                 {% empty %}
-                <tr><td colspan="8" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
+                <tr><td colspan="7" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
