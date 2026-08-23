@@ -98,8 +98,8 @@
         overflow-x: auto;
     }
     .mto-session {
-        flex: 0 0 740px;
-        width: 740px;
+        flex: 0 0 630px;
+        width: 630px;
         border: 1px solid var(--border);
         border-left: 4px solid var(--accent-blue);
         border-radius: 5px;
@@ -125,15 +125,14 @@
         background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
         white-space: nowrap;
     }
-    /* Fixed px widths (card is a fixed 740px, table-layout: fixed) so field
-       text stays readable and never compresses. Sum ≈ 735 ≤ card inner width. */
+    /* Fixed px widths (card is a fixed width, table-layout: fixed) so field
+       text stays readable and never compresses. Sum ≈ 625 ≤ card inner width. */
     .mto-th-rf { width: 42px; text-align: center !important; }
-    .mto-th-type { width: 100px; }
-    .mto-th-hc { width: 96px; }
-    .mto-th-pl { width: 108px; }
-    .mto-th-pres { width: 154px; }
-    .mto-th-notes { width: 175px; }
-    .mto-th-micd { width: 60px; text-align: center !important; }
+    .mto-th-type { width: 105px; }
+    .mto-th-hc { width: 95px; }
+    .mto-th-pl { width: 110px; }
+    .mto-th-pres { width: 210px; }
+    .mto-th-micd { width: 62px; text-align: center !important; }
 
     /* Issue #68: inline editable controls in the overview table. */
     .mto-edit-select, .mto-edit-input {
@@ -156,7 +155,8 @@
     .mto-row-micd { background: transparent; }
 
     .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); white-space: nowrap; }
-    .mto-presenter { color: var(--text-primary); }
+    .mto-pres-cell { border-left: 1px solid var(--border); }
+    .mto-presenter { color: #fff; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
     .mto-dash { color: var(--text-dim); }
     .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
@@ -213,7 +213,7 @@
     <div class="mto-header">
         <div>
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
-            <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement, Notes and Mic'd are editable here.</div>
+            <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement and Mic'd are editable here.</div>
         </div>
     </div>
 
@@ -255,7 +255,6 @@
                         <th class="mto-th-hc">Headset</th>
                         <th class="mto-th-pl">Placement</th>
                         <th class="mto-th-pres">Presenter</th>
-                        <th class="mto-th-notes">Notes</th>
                         <th class="mto-th-micd">Mic'd</th>
                     </tr>
                 </thead>
@@ -291,7 +290,7 @@
                 {% endif %}
                 {% endwith %}
                 {% empty %}
-                <tr><td colspan="7" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
+                <tr><td colspan="6" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -411,7 +410,7 @@
         setBtn(btn, turningOn);
     };
 
-    // Issue #68: save an editable A2 field (Type/Headset/Placement/Notes) on a
+    // Issue #68: save an editable A2 field (Type/Headset/Placement) on a
     // specific presenter slot. Always targets the explicit slot_id so multi-
     // presenter rows edit the right slot (not just the active one).
     window.mtoSaveSlotField = async function(slotId, field, value, el) {

@@ -1,9 +1,9 @@
 {% comment %}
 Issue #68: shared editable cells for the Mic Tracker Overview table.
-Renders Type / Headset / Placement / Presenter / Notes for one presenter slot.
+Renders Type / Headset / Placement / Presenter for one presenter slot.
 Expects in context: edit_slot, is_viewer, mic_types, headset_colors, placements.
-Presenter stays a read-only display (edited on the A2 card). Photo + Sensitivity
-+ Output Level are intentionally excluded per the issue.
+Presenter stays a read-only display (edited on the A2 card). Photo, Notes,
+Sensitivity + Output Level are intentionally excluded.
 {% endcomment %}
 
 {# ── Type ── #}
@@ -36,18 +36,8 @@ Presenter stays a read-only display (edited on the A2 card). Photo + Sensitivity
     {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
 
-{# ── Presenter (read-only display) ── #}
-<td>
+{# ── Presenter (read-only display, emphasized) ── #}
+<td class="mto-pres-cell">
     {% if edit_slot.presenter %}<span class="mto-presenter">{{ edit_slot.presenter.name }}</span>
     {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
-</td>
-
-{# ── Notes ── #}
-<td class="mto-notes-cell">
-    {% if edit_slot.id and not is_viewer %}
-    <input type="text" class="mto-edit-input" value="{{ edit_slot.notes|default:'' }}"
-           placeholder="allergies, notes…"
-           onchange="mtoSaveSlotField({{ edit_slot.id }}, 'notes', this.value, this)">
-    {% elif edit_slot.notes %}<span class="mto-dim">{{ edit_slot.notes }}</span>
-    {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
