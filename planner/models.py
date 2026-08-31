@@ -2379,6 +2379,7 @@ class PACableSchedule(models.Model):
         ('NL8_Y', 'NL8 Y'),
         ('NL4_TO_NL8', 'NL8 to 2XNL4'),
         ('NL8_TO_4XNL2', 'NL8 to 4XNL2'),
+        ('NL4_TO_2XNL2', 'NL4 to 2XNL2'),
     ]
     
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
