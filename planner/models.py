@@ -2374,12 +2374,12 @@ class PACableSchedule(models.Model):
     FAN_OUT_CHOICES = [
         ('', 'None'),
         ('NL4_Y', 'NL4 Y'),
-        ('DOFILL', 'DOFill'),
-        ('DOSUB', 'DOSub'),
+        ('NL4_TO_2XNL2', 'NL4 to 2XNL2'),
         ('NL8_Y', 'NL8 Y'),
         ('NL4_TO_NL8', 'NL8 to 2XNL4'),
         ('NL8_TO_4XNL2', 'NL8 to 4XNL2'),
-        ('NL4_TO_2XNL2', 'NL4 to 2XNL2'),
+        ('DOFILL', 'DOFill'),
+        ('DOSUB', 'DOSub'),
     ]
     
     project = models.ForeignKey('Project', on_delete=models.CASCADE)
