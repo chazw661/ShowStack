@@ -183,6 +183,57 @@ NUMERIC_HEADERS = {
 }
 
 
+# Minimum data rows that may land on either side of a table page break, so a
+# split never strands a single line before the next heading.
+MIN_SPLIT_ROWS = 2
+
+
+class MinRowsTable(Table):
+    """A Table that refuses to split off fewer than MIN_SPLIT_ROWS data rows.
+
+    ReportLab's default split places as many rows as fit, which can leave a
+    lone row on the next page. We post-process the split: if too few rows
+    would sit before the break we push the whole table to the next frame; if
+    too few would carry over we re-split a row earlier so the tail keeps at
+    least MIN_SPLIT_ROWS.
+    """
+
+    def _header_rows(self):
+        rr = self.repeatRows
+        if isinstance(rr, int):
+            return rr
+        return (max(rr) + 1) if rr else 0
+
+    def split(self, availWidth, availHeight):
+        parts = Table.split(self, availWidth, availHeight)
+        if len(parts) < 2:
+            return parts
+
+        m = MIN_SPLIT_ROWS
+        n_head = self._header_rows()
+        total_data = self._nrows - n_head
+        if total_data <= m:
+            return []  # too small to split sensibly - move the whole table down
+
+        first_data = parts[0]._nrows - n_head
+        tail_data = parts[1]._nrows - n_head
+
+        if first_data < m:
+            return []  # would orphan the top - move the whole table to next frame
+
+        if tail_data < m:
+            k = m - tail_data                       # rows to pull down into the tail
+            if first_data - k < m:
+                return []                           # can't satisfy both sides here
+            boundary = n_head + first_data          # original row index of the break
+            row_heights = self._rowHeights or []
+            trim = sum(row_heights[boundary - k:boundary])
+            retry = Table.split(self, availWidth, availHeight - trim)
+            return retry if len(retry) >= 2 else []
+
+        return parts
+
+
 def _data_table(headers, data, col_widths):
     """Build a styled data table. Returns None when there is nothing to show.
 
@@ -192,7 +243,7 @@ def _data_table(headers, data, col_widths):
     if not data:
         return None
     table_data = [headers] + data
-    table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign='LEFT')
+    table = MinRowsTable(table_data, colWidths=col_widths, repeatRows=1, hAlign='LEFT')
     style = [
         # Header row
         ('BACKGROUND', (0, 0), (-1, 0), NAVY),
