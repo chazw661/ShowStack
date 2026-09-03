@@ -1,323 +1,154 @@
 # planner/utils/pdf_exports/device_pdf.py
 """
-Device I/O PDF Export - Clean version that relies on populated input_number/output_number fields
+Device I/O PDF Export.
+
+Restyled onto the shared report_kit toolkit so it matches the professional
+navy/blue look used across all ShowStack module exports (title header, navy
+table headers, zebra striping, "Page X of Y" footer, orphan-safe page breaks).
+
+Relies on populated input_number/output_number fields. Physical ports are
+numbered 1-based by position in that ordering (NOT the stored *_number, which
+can hold legacy/global values) via enumerate(...) -- matching the edit grid.
 """
 
-from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer, PageBreak
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
 from io import BytesIO
+from reportlab.lib.units import inch
+from reportlab.platypus import Spacer, Paragraph
 from django.http import HttpResponse
 
-from .pdf_styles import PDFStyles, LANDSCAPE_PAGE, MARGIN, BRAND_BLUE
+from planner.utils.pdf_exports import report_kit as kit
+
+
+def _device_blocks(device, S):
+    """Return the flowables for a single device: a subheading + its Inputs and
+    Outputs subtables. Empty devices get a short 'no signals' note instead."""
+    story = []
+    header_blocks = [Paragraph(f"Device: {device.name}", S['sub'])]
+    if device.location:
+        header_blocks.append(Paragraph(f"Location: {device.location.name}", S['meta']))
+    emitted = False
+
+    # INPUTS -----------------------------------------------------------------
+    # Physical port = 1-based position in input_number order (matches the edit
+    # grid), NOT the stored input_number (which can be legacy/global). Rows with
+    # no signal or console source are dropped, but numbering keeps counting.
+    inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
+    rows = []
+    for port, inp in enumerate(inputs, 1):
+        label = (inp.signal_name or '').strip()
+        console_source = ''
+        if inp.console_input:
+            if not label:
+                label = inp.console_input.source or ''
+            if inp.console_input.console:
+                console_source = (
+                    f"{inp.console_input.console.name} - Input {inp.console_input.input_ch}"
+                )
+        if not (label or console_source):
+            continue
+        rows.append([str(port), label, console_source])
+    if rows:
+        headers = ['Input #', 'Signal', 'Console Source']
+        widths = [w * inch for w in (0.9, 2.6, 3.6)]
+        headers, data, widths = kit.prune_empty_columns(headers, rows, widths, keep=(0, 1))
+        story += kit.emit_subtable(header_blocks, "Inputs", headers, data, widths, S)
+        header_blocks = []
+        emitted = True
+
+    # OUTPUTS ----------------------------------------------------------------
+    outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
+    rows = [[str(port), (o.signal_name or '').strip()]
+            for port, o in enumerate(outputs, 1) if (o.signal_name or '').strip()]
+    if rows:
+        headers = ['Output #', 'Signal Name']
+        widths = [w * inch for w in (0.9, 6.2)]
+        story += kit.emit_subtable(header_blocks, "Outputs", headers, rows, widths, S)
+        header_blocks = []
+        emitted = True
+
+    if not emitted:
+        header_blocks.append(Paragraph("No input/output signals configured.", S['empty']))
+        story.append(kit.keep(header_blocks))
+
+    return story
 
 
 def export_device_pdf(device):
     """
-    Generate PDF export for a single Device
-    
+    Generate PDF export for a single Device.
+
     Args:
         device: Device model instance
-        
+
     Returns:
         HttpResponse with PDF content
     """
     buffer = BytesIO()
-    
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=LANDSCAPE_PAGE,
-        rightMargin=MARGIN,
-        leftMargin=MARGIN,
-        topMargin=MARGIN,
-        bottomMargin=MARGIN,
-        title=f"{device.name} - Device I/O"
-    )
-    
-    story = []
-    styles = PDFStyles()
-    
-    # Header
-    story.append(Paragraph(f"<b>Device I/O - {device.name}</b>", styles.get_header_style()))
-    if device.location:
-        story.append(Paragraph(f"Location: {device.location.name}", styles.get_subsection_style()))
-    story.append(Spacer(1, 0.3 * inch))
-    
-    # INPUTS Section
-    story.append(Paragraph("<b>INPUTS</b>", styles.get_section_style()))
-    story.append(Spacer(1, 0.1 * inch))
-    
-    # CRITICAL: Order by input_number (now that they're populated!)
-    device_inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
-    
-    if device_inputs.exists():
-        input_data = [['#', 'Input', 'Console Source']]
-        
-        # Physical port = 1-based position in input_number order (matches the
-        # edit grid's "In N" labels), NOT the stored input_number, which can
-        # hold legacy/global values. Blank ports that exist as rows are shown.
-        for port, inp in enumerate(device_inputs, 1):
-            # Prefer the engineer-authored signal_name; fall back to the
-            # linked console_input.source for legacy rows that only set the FK.
-            input_label = (inp.signal_name or '').strip()
-            console_source = ''
-            if inp.console_input:
-                if not input_label:
-                    input_label = inp.console_input.source or ''
-                if inp.console_input.console:
-                    console_input_num = inp.console_input.input_ch
-                    console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
+    S = kit.styles()
+    pagesize = kit.LANDSCAPE_PAGE
 
-            input_data.append([
-                str(port),
-                input_label,
-                console_source
-            ])
+    story = kit.title_header("Device I/O", device.name, pagesize, S)
+    story += _device_blocks(device, S)
 
-        col_widths = [0.5*inch, 2*inch, 6.5*inch]
-        input_table = Table(input_data, colWidths=col_widths)
-        input_table.setStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ])
-        story.append(input_table)
-    else:
-        story.append(Paragraph("No inputs configured", styles.get_subsection_style()))
-    
-    story.append(Spacer(1, 0.3 * inch))
-    
-    # OUTPUTS Section
-    story.append(Paragraph("<b>OUTPUTS</b>", styles.get_section_style()))
-    story.append(Spacer(1, 0.1 * inch))
-    
-    # CRITICAL: Order by output_number (now that they're populated!)
-    device_outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
-    
-    if device_outputs.exists():
-        output_data = [['#', 'Output', 'Console Destination']]
-        
-        # Physical port = 1-based position in output_number order (see inputs).
-        for port, out in enumerate(device_outputs, 1):
-            # For outputs, use signal_name ("FB", "Lobby", "Left", "Right", etc.)
-            output_label = out.signal_name or ''
-            console_dest = ''
+    project_name = device.project.name if getattr(device, 'project', None) else ''
+    kit.build_pdf(buffer, story, pagesize=pagesize, project_name=project_name,
+                  title=f"{device.name} - Device I/O")
 
-            # Build destination from console_output
-            if out.console_output and out.console_output.console:
-                output_type = 'Output'
-                if hasattr(out.console_output, 'aux_number'):
-                    output_type = f"Aux {out.console_output.aux_number}"
-                elif hasattr(out.console_output, 'matrix_number'):
-                    output_type = f"Matrix {out.console_output.matrix_number}"
-
-                console_dest = f"{out.console_output.console.name} - {output_type}"
-
-            output_data.append([
-                str(port),
-                output_label,
-                console_dest
-            ])
-        
-        col_widths = [0.5*inch, 2*inch, 6.5*inch]
-        output_table = Table(output_data, colWidths=col_widths)
-        output_table.setStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ])
-        story.append(output_table)
-    else:
-        story.append(Paragraph("No outputs configured", styles.get_subsection_style()))
-    
-    # Build PDF
-    doc.build(story, onFirstPage=styles.add_page_number, onLaterPages=styles.add_page_number)
-    
     buffer.seek(0)
     response = HttpResponse(buffer.read(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="Device_{device.name}.pdf"'
-    
     return response
 
 
 def export_all_devices_pdf(current_project):
     """
-    Generate PDF export for ALL devices in current project
-    
+    Generate PDF export for ALL devices in current project.
+
     Args:
         current_project: The project to filter by (REQUIRED for multi-tenancy)
-        
+
     Returns:
         HttpResponse with PDF content
     """
     from planner.models import Device
-    
+
+    buffer = BytesIO()
+    S = kit.styles()
+    pagesize = kit.LANDSCAPE_PAGE
+
     # Safety check
     if not current_project:
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=LANDSCAPE_PAGE)
-        story = [Paragraph("ERROR: No project selected", PDFStyles().get_header_style())]
-        doc.build(story)
+        story = kit.title_header("Device I/O", "No project selected", pagesize, S)
+        story.append(Paragraph("ERROR: No project selected", S['empty']))
+        kit.build_pdf(buffer, story, pagesize=pagesize, title="Device I/O")
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')
         response['Content-Disposition'] = 'attachment; filename="Error.pdf"'
         return response
-    
-    buffer = BytesIO()
-    
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=LANDSCAPE_PAGE,
-        rightMargin=MARGIN,
-        leftMargin=MARGIN,
-        topMargin=MARGIN,
-        bottomMargin=MARGIN,
-        title=f"All Devices - {current_project.name}"
-    )
-    
-    story = []
-    styles = PDFStyles()
-    
-    # Header
-    story.append(Paragraph(f"<b>All I/O Devices - {current_project.name}</b>", styles.get_header_style()))
-    story.append(Spacer(1, 0.3 * inch))
-    
-    # CRITICAL: Filter by current project AND order by name
+
+    story = kit.title_header("Device I/O", current_project.name, pagesize, S)
+
+    # CRITICAL: Filter by current project AND order by name.
     devices = Device.objects.filter(
         project=current_project
     ).select_related('location').prefetch_related(
         'inputs__console_input__console',
-        'outputs__console_output'
+        'outputs__console_output',
     ).order_by('name')
-    
+
     if not devices.exists():
-        story.append(Paragraph("No devices found in this project", styles.get_subsection_style()))
+        story.append(Paragraph("No devices found in this project.", S['empty']))
     else:
-        first_device = True
+        # Each device is its own subheading block; emit_subtable handles page
+        # breaks so there is no forced full-page break between devices.
         for device in devices:
-            # Page break between devices (except first)
-            if not first_device:
-                story.append(PageBreak())
-            first_device = False
-            
-            # Device name
-            story.append(Paragraph(f"<b>{device.name}</b>", styles.get_section_style()))
-            if device.location:
-                story.append(Paragraph(f"Location: {device.location.name}", styles.get_subsection_style()))
+            story += _device_blocks(device, S)
             story.append(Spacer(1, 0.2 * inch))
-            
-            # INPUTS
-            device_inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
-            
-            if device_inputs.exists():
-                story.append(Paragraph("<b>INPUTS</b>", styles.get_subsection_style()))
-                story.append(Spacer(1, 0.1 * inch))
-                
-                input_data = [['#', 'Input', 'Console Source']]
-                
-                # Physical port = 1-based position in input_number order (matches
-                # the edit grid), NOT the stored input_number (legacy/global).
-                for port, inp in enumerate(device_inputs, 1):
-                    input_label = (inp.signal_name or '').strip()
-                    console_source = ''
-                    if inp.console_input:
-                        if not input_label:
-                            input_label = inp.console_input.source or ''
-                        if inp.console_input.console:
-                            console_source = f"{inp.console_input.console.name} - In {inp.console_input.input_ch}"
 
-                    input_data.append([
-                        str(port),
-                        input_label,
-                        console_source
-                    ])
-                
-                col_widths = [0.5*inch, 2*inch, 6.5*inch]
-                input_table = Table(input_data, colWidths=col_widths)
-                input_table.setStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 9),
-                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 8),
-                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-                    ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-                ])
-                story.append(input_table)
-                story.append(Spacer(1, 0.2 * inch))
-            
-            # OUTPUTS
-            device_outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
-            
-            if device_outputs.exists():
-                story.append(Paragraph("<b>OUTPUTS</b>", styles.get_subsection_style()))
-                story.append(Spacer(1, 0.1 * inch))
-                
-                output_data = [['#', 'Output', 'Console Destination']]
-                
-                # Physical port = 1-based position in output_number order.
-                for port, out in enumerate(device_outputs, 1):
-                    output_label = out.signal_name or ''
-                    console_dest = ''
+    kit.build_pdf(buffer, story, pagesize=pagesize, project_name=current_project.name,
+                  title=f"All Devices - {current_project.name}")
 
-                    if out.console_output and out.console_output.console:
-                        output_type = 'Output'
-                        if hasattr(out.console_output, 'aux_number'):
-                            output_type = f"Aux {out.console_output.aux_number}"
-                        elif hasattr(out.console_output, 'matrix_number'):
-                            output_type = f"Matrix {out.console_output.matrix_number}"
-
-                        console_dest = f"{out.console_output.console.name} - {output_type}"
-
-                    output_data.append([
-                        str(port),
-                        output_label,
-                        console_dest
-                    ])
-                
-                col_widths = [0.5*inch, 2*inch, 6.5*inch]
-                output_table = Table(output_data, colWidths=col_widths)
-                output_table.setStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 9),
-                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 8),
-                    ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-                    ('ALIGN', (1, 0), (-1, -1), 'LEFT'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-                ])
-                story.append(output_table)
-    
-    # Build PDF
-    doc.build(story, onFirstPage=styles.add_page_number, onLaterPages=styles.add_page_number)
-    
     buffer.seek(0)
     response = HttpResponse(buffer.read(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="All_Devices_{current_project.name}.pdf"'
-    
     return response

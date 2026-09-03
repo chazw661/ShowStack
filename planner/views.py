@@ -3756,11 +3756,12 @@ def all_pa_cables_pdf_export(request):
 #--------Comm Beltpack PDF-----
 
 def all_comm_beltpacks_pdf_export(request):
-    """Export all Comm Belt Packs to PDF."""
+    """Export the current project's Comm Belt Packs to PDF."""
     from .utils.pdf_exports.comm_pdf import generate_comm_beltpacks_pdf
-    
-    pdf = generate_comm_beltpacks_pdf()
-    
+
+    project = getattr(request, 'current_project', None)
+    pdf = generate_comm_beltpacks_pdf(project=project)
+
     response = HttpResponse(pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="comm_beltpacks.pdf"'
     return response
