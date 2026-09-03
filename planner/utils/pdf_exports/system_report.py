@@ -435,21 +435,39 @@ def _section_consoles(project, styles, Console):
     return story
 
 
-def _emit_subtable(pending_blocks, caption, headers, data, widths, styles):
-    """Emit a captioned table that starts cleanly and splits naturally.
+# Rough flowable heights (pt) for deciding keep-whole vs. split.
+_ROW_H, _HEADER_H, _CAPTION_H, _HEADING_H = 22, 24, 18, 30
+# A block estimated at or under this height is kept whole (never split, so it
+# can't leave a one-row widow). Kept below "page height minus banner" so a
+# kept block always still fits under a section banner - preserving the
+# no-blank-gap behaviour. Taller blocks must span pages, so they split.
+MAX_KEEP_HEIGHT = 470
 
-    A CondPageBreak guarantees enough room for the heading + caption + first
-    rows before starting, so nothing orphans at a page bottom - but unlike
-    KeepTogether it does NOT push a whole large table onto the next page
-    (which would leave the section banner alone above a blank gap). Big tables
-    flow onto the current page and split across the boundary with a repeating
-    header row.
+
+def _table_block(flowables, n_rows, n_headings=0):
+    """Lay out a heading/caption/table group.
+
+    Short enough to fit a page -> KeepTogether so it moves as one unit and
+    never splits off a lone widow row. Taller than a page -> CondPageBreak
+    (guarantees room to start, no orphaned heading) then let it split with a
+    repeating header row.
     """
+    flowables = [f for f in flowables if f is not None]
+    est = _HEADER_H + _CAPTION_H + n_rows * _ROW_H + _HEADING_H * n_headings
+    if est <= MAX_KEEP_HEIGHT:
+        return [_keep(flowables)]
+    return [CondPageBreak(SUBTABLE_MIN_ROOM)] + flowables
+
+
+def _emit_subtable(pending_blocks, caption, headers, data, widths, styles):
+    """Emit a captioned table, kept whole when it fits a page and split
+    (without orphaning its heading) when it doesn't. See _table_block."""
     table = _data_table(headers, data, widths)
     if table is None:
         return []
     caption_para = Paragraph(caption, styles['caption'])
-    return [CondPageBreak(SUBTABLE_MIN_ROOM)] + list(pending_blocks) + [caption_para, table]
+    return _table_block(list(pending_blocks) + [caption_para, table],
+                        len(data), n_headings=len(pending_blocks))
 
 
 # ===========================================================================
@@ -617,7 +635,7 @@ def _section_comm(project, styles, CommBeltPack):
         widths = [w * inch for w in (0.5, 1.4, 1.5, 1.1, 0.8, 0.6, 0.6, 0.6, 0.6, 1.1)]
         heading = Paragraph(type_name, styles['sub'])
         table = _data_table(headers, rows, widths)
-        story.append(_keep([heading, table]))
+        story += _table_block([heading, table], len(rows), n_headings=1)
         story.append(Spacer(1, 0.2 * inch))
 
     if not any_packs:
@@ -656,7 +674,7 @@ def _section_power(project, styles, PowerDistributionPlan):
         widths = [w * inch for w in (0.9, 0.9, 3.2, 0.7, 1.3, 1.3)]
         table = _data_table(headers, rows, widths)
         if table:
-            story.append(_keep([heading, table]))
+            story += _table_block([heading, table], len(rows), n_headings=1)
         else:
             story.append(_keep([heading, Paragraph("No amplifier assignments.", styles['empty'])]))
         story.append(Spacer(1, 0.2 * inch))
