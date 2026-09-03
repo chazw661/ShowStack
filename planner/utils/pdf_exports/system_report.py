@@ -457,9 +457,12 @@ def _section_devices(project, styles, Device):
             header_blocks.append(Paragraph(f"Location: {device.location.name}", styles['meta']))
         emitted = False
 
+        # Physical port = 1-based position (ordered like the edit grid), NOT the
+        # stored input_number, which can hold legacy/global values. Blank ports
+        # are counted so the numbering lines up with the device's own labels.
         inputs = device.inputs.filter(input_number__isnull=False).order_by('input_number')
         rows = []
-        for inp in inputs:
+        for port, inp in enumerate(inputs, 1):
             label = (inp.signal_name or '').strip()
             console_source = ''
             if inp.console_input:
@@ -469,7 +472,7 @@ def _section_devices(project, styles, Device):
                     console_source = f"{inp.console_input.console.name} - Input {inp.console_input.input_ch}"
             if not (label or console_source):
                 continue
-            rows.append([str(inp.input_number or ''), label, console_source])
+            rows.append([str(port), label, console_source])
         if rows:
             headers = ['Input #', 'Signal', 'Console Source']
             widths = [w * inch for w in (0.9, 2.6, 3.6)]
@@ -478,8 +481,8 @@ def _section_devices(project, styles, Device):
             emitted = True
 
         outputs = device.outputs.filter(output_number__isnull=False).order_by('output_number')
-        rows = [[str(o.output_number or ''), o.signal_name or '']
-                for o in outputs if (o.signal_name or '').strip()]
+        rows = [[str(port), o.signal_name or '']
+                for port, o in enumerate(outputs, 1) if (o.signal_name or '').strip()]
         if rows:
             headers = ['Output #', 'Signal Name']
             widths = [w * inch for w in (0.9, 6.2)]
