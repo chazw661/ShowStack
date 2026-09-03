@@ -178,7 +178,7 @@ def _prune_empty_columns(headers, data, col_widths, keep=()):
 # Column headers whose values are short codes/numbers and read better centered.
 NUMERIC_HEADERS = {
     'Dante #', 'Input Ch', 'Aux', 'Matrix', 'BP #', '#', 'Qty', 'Count',
-    'Length', 'Current/Unit', 'Total Current', 'Input #', 'Output #',
+    'Length', 'Current/Unit', 'Total Current', 'Input #', 'Output #', 'Ch',
     'CH 1', 'CH 2', 'CH 3', 'CH 4',
 }
 
@@ -585,26 +585,87 @@ def _section_devices(project, styles, Device):
 # ===========================================================================
 # Section 3 - System Processors
 # ===========================================================================
+# Present processor I/O grouped Analog -> AES -> AVB, then by channel.
+_PROC_TYPE_ORDER = {'ANALOG': 0, 'AES': 1, 'AVB': 2}
+
+
+def _proc_channel_sort(chan, type_attr):
+    return (_PROC_TYPE_ORDER.get(getattr(chan, type_attr, ''), 9), chan.channel_number)
+
+
 def _section_processors(project, styles, SystemProcessor):
     story = [_section_banner("3", "System Processors", styles), Spacer(1, 0.12 * inch)]
     procs = SystemProcessor.objects.filter(project=project).order_by('name')
 
-    if procs.exists():
-        rows = []
-        for p in procs:
-            rows.append([
-                p.name,
-                p.get_device_type_display() if hasattr(p, 'get_device_type_display') else p.device_type,
-                p.location.name if p.location else '',
-                p.ip_address or '',
-            ])
-        headers = ['Name', 'Type', 'Location', 'IP Address']
-        widths = [w * inch for w in (2.8, 2.4, 2.4, 2.0)]
-        table = _data_table(headers, rows, widths)
-        if table:
-            story.append(table)
-    else:
+    if not procs.exists():
         story.append(Paragraph("No system processors configured.", styles['empty']))
+        story.append(PageBreak())
+        return story
+
+    for proc in procs:
+        type_disp = (proc.get_device_type_display()
+                     if hasattr(proc, 'get_device_type_display') else proc.device_type)
+        head = [Paragraph(f"Processor: {proc.name}", styles['sub'])]
+        meta_bits = [f"Type: {type_disp}"]
+        if proc.location:
+            meta_bits.append(f"Location: {proc.location.name}")
+        if proc.ip_address:
+            meta_bits.append(f"IP: {proc.ip_address}")
+        head.append(Paragraph("  •  ".join(meta_bits), styles['meta']))
+        if getattr(proc, 'notes', None):
+            head.append(Paragraph(f"Notes: {proc.notes}", styles['meta']))
+
+        in_rows, out_rows, out_headers, out_widths = [], [], None, None
+        p1 = getattr(proc, 'p1_config', None)
+        gal = getattr(proc, 'galaxy_config', None)
+
+        if p1:
+            for c in sorted(p1.inputs.all(), key=lambda c: _proc_channel_sort(c, 'input_type')):
+                if (c.label or '').strip():
+                    in_rows.append([c.get_input_type_display(), str(c.channel_number), c.label])
+            for c in sorted(p1.outputs.all(), key=lambda c: _proc_channel_sort(c, 'output_type')):
+                if (c.label or '').strip() or c.assigned_bus:
+                    out_rows.append([
+                        c.get_output_type_display(), str(c.channel_number), c.label or '',
+                        f"Bus {c.assigned_bus}" if c.assigned_bus else '',
+                    ])
+            out_headers = ['Type', 'Ch', 'Label', 'Bus']
+            out_widths = [w * inch for w in (1.5, 0.8, 4.2, 1.2)]
+        elif gal:
+            for c in sorted(gal.inputs.all(), key=lambda c: _proc_channel_sort(c, 'input_type')):
+                if (c.label or '').strip():
+                    in_rows.append([c.get_input_type_display(), str(c.channel_number), c.label])
+            for c in sorted(gal.outputs.all(), key=lambda c: _proc_channel_sort(c, 'output_type')):
+                if (c.label or '').strip() or c.assigned_bus or (c.destination or '').strip():
+                    out_rows.append([
+                        c.get_output_type_display(), str(c.channel_number), c.label or '',
+                        f"Bus {c.assigned_bus}" if c.assigned_bus else '', c.destination or '',
+                    ])
+            out_headers = ['Type', 'Ch', 'Label', 'Bus', 'Destination']
+            out_widths = [w * inch for w in (1.3, 0.7, 2.9, 1.0, 2.6)]
+
+        emitted = False
+        if in_rows:
+            in_headers = ['Type', 'Ch', 'Label']
+            in_widths = [w * inch for w in (1.7, 0.8, 5.0)]
+            story += _emit_subtable(head, "Inputs", in_headers, in_rows, in_widths, styles)
+            head = []
+            emitted = True
+        if out_rows:
+            # Drop Bus / Destination columns when nothing populates them.
+            out_headers, out_rows, out_widths = _prune_empty_columns(
+                out_headers, out_rows, out_widths, keep={0, 1, 2})
+            story += _emit_subtable(head, "Outputs", out_headers, out_rows, out_widths, styles)
+            head = []
+            emitted = True
+
+        if not emitted:
+            note = ("No channels labeled." if (p1 or gal)
+                    else "No channel configuration for this processor.")
+            head.append(Paragraph(note, styles['empty']))
+            story.append(_keep(head))
+
+        story.append(Spacer(1, 0.2 * inch))
 
     story.append(PageBreak())
     return story
