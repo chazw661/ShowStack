@@ -37,6 +37,14 @@ MUTED = colors.HexColor('#66727f')         # secondary / captions
 HAIRLINE = colors.HexColor('#d5dbe1')      # grid lines
 ROW_ALT = colors.HexColor('#f3f6f9')       # zebra striping
 
+# Amp rack-view card accents (echo the ShowStack Amp Assignment module)
+AMP_NAME = colors.HexColor('#ffe066')      # amp name on the navy header
+AMP_ANALOG_BG = colors.HexColor('#ffe066')  # "Analogue Input Label" header
+AMP_AES_BG = colors.HexColor('#9ed87a')    # "AES Input Label" header
+AMP_OUT_BG = colors.HexColor('#c03a3a')    # output block titles
+AMP_PILL_BG = colors.HexColor('#fff2b8')   # IP / Preset pills
+AMP_DARK_INK = colors.HexColor('#222222')  # text on the yellow/green fills
+
 USABLE_WIDTH = LANDSCAPE_PAGE[0] - 2 * MARGIN
 
 # Minimum space a subsection needs to *start* on the current page (heading +
@@ -675,6 +683,176 @@ def _section_processors(project, styles, SystemProcessor):
 # ===========================================================================
 # Section 4 - Amplifiers (Amp Assignments)
 # ===========================================================================
+# Card geometry (echoes the module's 3-column front-panel: inputs | mid | outs)
+_AMP_COLS = [3.4 * inch, 2.5 * inch, 4.1 * inch]
+
+# Small paragraph styles used inside amp cards.
+_AMP_P = {
+    'name': ParagraphStyle('AmpName', fontSize=12, leading=14, textColor=AMP_NAME,
+                           fontName='Helvetica-Bold'),
+    'val': ParagraphStyle('AmpVal', fontSize=7, leading=8.5, textColor=INK),
+    'hdr': ParagraphStyle('AmpHdr', fontSize=6.5, leading=8, textColor=colors.white,
+                          fontName='Helvetica-Bold'),
+    'hdrc': ParagraphStyle('AmpHdrC', fontSize=6.5, leading=8, textColor=colors.white,
+                           fontName='Helvetica-Bold', alignment=TA_CENTER),
+    'dark': ParagraphStyle('AmpDark', fontSize=6.5, leading=8, textColor=AMP_DARK_INK,
+                           fontName='Helvetica-Bold', alignment=TA_CENTER),
+    'pill': ParagraphStyle('AmpPill', fontSize=10, leading=11, textColor=AMP_DARK_INK,
+                           alignment=TA_CENTER),
+    'outc': ParagraphStyle('AmpOut', fontSize=7.5, leading=9, textColor=colors.white,
+                           fontName='Helvetica-Bold', alignment=TA_CENTER),
+}
+
+
+def _amp_inputs_table(channels):
+    """Left panel: one row per channel - XLR / AVB Stream / Analogue / AES.
+
+    The module stacks the analogue and AES blocks vertically; on a fixed page
+    that doubles the height, so we place them side by side while keeping the
+    module's colour cues (navy XLR/AVB, yellow Analogue header, green AES).
+    """
+    P = _AMP_P
+    data = [[Paragraph('XLR', P['hdrc']), Paragraph('AVB Stream', P['hdr']),
+             Paragraph('Analogue Input', P['dark']), Paragraph('AES Input', P['dark'])]]
+    for c in channels:
+        data.append([str(c.channel_number),
+                     Paragraph(c.avb_stream or '', P['val']),
+                     Paragraph(c.analog_input or '', P['val']),
+                     Paragraph(c.aes_input or '', P['val'])])
+
+    t = Table(data, colWidths=[0.35 * inch, 1.0 * inch, 1.05 * inch, 1.0 * inch],
+              hAlign='LEFT')
+    t.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.4, HAIRLINE),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3), ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('BACKGROUND', (0, 0), (1, 0), NAVY),           # XLR + AVB headers
+        ('BACKGROUND', (2, 0), (2, 0), AMP_ANALOG_BG),  # Analogue header (yellow)
+        ('BACKGROUND', (3, 0), (3, 0), AMP_AES_BG),     # AES header (green)
+        ('BACKGROUND', (0, 0), (0, -1), NAVY),          # XLR / channel-number column
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.white),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+    ]))
+    return t
+
+
+def _amp_pill(label, value):
+    P = _AMP_P
+    p = Paragraph(
+        f'<font size="6" color="#8a7400"><b>{label}</b></font><br/>'
+        f'<b>{value or "&mdash;"}</b>', P['pill'])
+    t = Table([[p]], colWidths=[2.2 * inch], hAlign='LEFT')
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), AMP_PILL_BG),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#c0a020')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    return t
+
+
+def _amp_middle(amp, channels):
+    """Middle panel: IP + Preset pills, then per-channel settings."""
+    P = _AMP_P
+    flow = [_amp_pill('IP ADDRESS', amp.ip_address or ''), Spacer(1, 4),
+            _amp_pill('PRESET', (amp.preset or '').strip())]
+    setting_rows = [[str(c.channel_number),
+                     c.get_channel_setting_display() if c.channel_setting else '']
+                    for c in channels if c.channel_setting]
+    if setting_rows:
+        data = [[Paragraph('Ch', P['hdrc']), Paragraph('Setting', P['hdr'])]] + setting_rows
+        t = Table(data, colWidths=[0.4 * inch, 1.8 * inch], hAlign='LEFT')
+        t.setStyle(TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.4, HAIRLINE),
+            ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('TEXTCOLOR', (0, 1), (-1, -1), INK),
+            ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4), ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        flow += [Spacer(1, 6), t]
+    return flow
+
+
+def _amp_output_block(title, rows):
+    """One red-titled output block: [label | value] rows."""
+    P = _AMP_P
+    title_tbl = Table([[Paragraph(title, P['outc'])]], colWidths=[3.9 * inch], hAlign='LEFT')
+    title_tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), AMP_OUT_BG),
+        ('TOPPADDING', (0, 0), (-1, -1), 3), ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    body = [[str(lbl), Paragraph(str(val or ''), P['val'])] for lbl, val in rows]
+    body_tbl = Table(body, colWidths=[0.5 * inch, 3.4 * inch], hAlign='LEFT')
+    body_tbl.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.4, HAIRLINE),
+        ('BACKGROUND', (0, 0), (0, -1), NAVY),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.white),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4), ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return [title_tbl, body_tbl, Spacer(1, 6)]
+
+
+def _amp_outputs(amp):
+    """Right panel: NL4 / CaCom / SC32 output blocks per the amp model."""
+    model = amp.amp_model
+    flow = []
+    if model and model.nl4_connector_count:
+        flow += _amp_output_block('NL4 Out', [
+            (n, getattr(amp, f'output_{n}', '')) for n in (1, 2, 3, 4)])
+    if model and model.cacom_output_count:
+        rows = []
+        for ci in range(1, min(model.cacom_output_count + 1, 5)):
+            base = (ci - 1) * 4
+            for n in range(1, 5):
+                rows.append((base + n, getattr(amp, f'cacom_{ci}_ch{n}', '')))
+        flow += _amp_output_block('CaCom Out', rows)
+    if model and getattr(model, 'sc32_connector_count', 0):
+        flow += _amp_output_block('SC32 Out', [
+            (n, getattr(amp, f'sc32_ch{n}', '')) for n in range(1, 17)])
+    if not flow:
+        # No model connector info - fall back to the generic four outputs.
+        generic = [(n, getattr(amp, f'output_{n}', '')) for n in (1, 2, 3, 4)]
+        if any((v or '').strip() for _, v in generic):
+            flow += _amp_output_block('Outputs', generic)
+    return flow or [Paragraph('No outputs', _AMP_P['val'])]
+
+
+def _amp_card(amp):
+    """Assemble one amp front-panel card matching the rack-view module."""
+    channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
+    model = amp.amp_model
+    model_str = f"{model.manufacturer} {model.model_name}" if model else ""
+    header = Paragraph(
+        f'<font color="#ffe066"><b>{amp.name}</b></font>'
+        + (f'&nbsp;&nbsp;<font color="#c9d6e3" size="8">{model_str}</font>' if model_str else ''),
+        _AMP_P['name'])
+
+    card = Table(
+        [[header, '', ''],
+         [_amp_inputs_table(channels), _amp_middle(amp, channels), _amp_outputs(amp)]],
+        colWidths=_AMP_COLS, hAlign='LEFT')
+    card.setStyle(TableStyle([
+        ('SPAN', (0, 0), (2, 0)),
+        ('BACKGROUND', (0, 0), (2, 0), NAVY),
+        ('TOPPADDING', (0, 0), (2, 0), 6), ('BOTTOMPADDING', (0, 0), (2, 0), 6),
+        ('LEFTPADDING', (0, 0), (2, 0), 10),
+        ('VALIGN', (0, 1), (-1, 1), 'TOP'),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#8a97a6')),
+        ('LINEAFTER', (0, 1), (1, 1), 0.5, colors.HexColor('#c9d2db')),
+        ('TOPPADDING', (0, 1), (-1, 1), 6), ('BOTTOMPADDING', (0, 1), (-1, 1), 6),
+        ('LEFTPADDING', (0, 1), (-1, 1), 6), ('RIGHTPADDING', (0, 1), (-1, 1), 6),
+    ]))
+    return card
+
+
 def _section_amplifiers(project, styles, Amp):
     story = [_section_banner("4", "Amplifiers", styles), Spacer(1, 0.12 * inch)]
     amps = (Amp.objects.filter(project=project)
@@ -687,62 +865,17 @@ def _section_amplifiers(project, styles, Amp):
         story.append(PageBreak())
         return story
 
-    current_location = object()  # sentinel so the first amp always prints its rack
+    current_location = object()  # sentinel so the first rack always prints
     for amp in amps:
         loc_name = amp.location.name if amp.location else 'Unassigned'
         if loc_name != current_location:
             current_location = loc_name
-            # Start each rack group with enough room so its heading + first amp
-            # don't strand at a page bottom.
             story.append(CondPageBreak(SUBTABLE_MIN_ROOM))
             story.append(Paragraph(loc_name, styles['sub']))
-
-        head = [Paragraph(f"Amp: {amp.name}", styles['caption'])]
-        meta_bits = []
-        if amp.amp_model:
-            meta_bits.append(f"{amp.amp_model.manufacturer} {amp.amp_model.model_name}")
-        if amp.ip_address:
-            meta_bits.append(f"IP: {amp.ip_address}")
-        if (amp.preset or '').strip():
-            meta_bits.append(f"Preset: {amp.preset}")
-        if meta_bits:
-            head.append(Paragraph("  •  ".join(meta_bits), styles['meta']))
-
-        # Channel assignments - skip channels with nothing on them.
-        rows = []
-        for c in amp.channels.all().order_by('channel_number'):
-            setting = c.get_channel_setting_display() if c.channel_setting else ''
-            avb = (c.avb_stream or '').strip()
-            aes = (c.aes_input or '').strip()
-            analog = (c.analog_input or '').strip()
-            if not ((c.channel_name or '').strip() or setting or avb or aes or analog):
-                continue
-            rows.append([str(c.channel_number), c.channel_name or '', setting, avb, aes, analog])
-
-        emitted = False
-        if rows:
-            headers = ['Ch', 'Name', 'Setting', 'AVB Stream', 'AES Input', 'Analog Input']
-            widths = [w * inch for w in (0.6, 2.0, 1.3, 2.0, 1.4, 1.4)]
-            headers, data, widths = _prune_empty_columns(headers, rows, widths, keep={0, 1})
-            story += _emit_subtable(head, "Channels", headers, data, widths, styles)
-            head = []
-            emitted = True
-
-        # Physical outputs surfaced on the rack card (1-4).
-        out_rows = [[str(i), val] for i, val in enumerate(
-            (amp.output_1, amp.output_2, amp.output_3, amp.output_4), 1)
-            if (val or '').strip()]
-        if out_rows:
-            story += _emit_subtable(head, "Outputs", ['Output', 'Assignment'],
-                                    out_rows, [0.9 * inch, 6.0 * inch], styles)
-            head = []
-            emitted = True
-
-        if not emitted:
-            head.append(Paragraph("No channel assignments.", styles['empty']))
-            story.append(_keep(head))
-
-        story.append(Spacer(1, 0.15 * inch))
+        # Keep the whole card together so its header never splits from the body;
+        # the combined input layout keeps every card well under a page tall.
+        story.append(_keep([_amp_card(amp)]))
+        story.append(Spacer(1, 0.14 * inch))
 
     story.append(PageBreak())
     return story
