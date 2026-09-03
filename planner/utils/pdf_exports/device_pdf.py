@@ -54,31 +54,23 @@ def export_device_pdf(device):
     if device_inputs.exists():
         input_data = [['#', 'Input', 'Console Source']]
         
-        # Build a dict for quick lookup by input_number
-        inputs_by_number = {inp.input_number: inp for inp in device_inputs}
-        max_input = max(inputs_by_number.keys())
-        min_input = min(inputs_by_number.keys())
-        
-        # Iterate through ALL numbers to include blanks
-        for num in range(min_input, max_input + 1):
-            inp = inputs_by_number.get(num)
-            input_label = ''
+        # Physical port = 1-based position in input_number order (matches the
+        # edit grid's "In N" labels), NOT the stored input_number, which can
+        # hold legacy/global values. Blank ports that exist as rows are shown.
+        for port, inp in enumerate(device_inputs, 1):
+            # Prefer the engineer-authored signal_name; fall back to the
+            # linked console_input.source for legacy rows that only set the FK.
+            input_label = (inp.signal_name or '').strip()
             console_source = ''
-            
-            if inp:
-                # Prefer the engineer-authored signal_name; fall back to the
-                # linked console_input.source for legacy rows that only set
-                # the FK.
-                input_label = (inp.signal_name or '').strip()
-                if inp.console_input:
-                    if not input_label:
-                        input_label = inp.console_input.source or ''
-                    if inp.console_input.console:
-                        console_input_num = inp.console_input.input_ch
-                        console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
+            if inp.console_input:
+                if not input_label:
+                    input_label = inp.console_input.source or ''
+                if inp.console_input.console:
+                    console_input_num = inp.console_input.input_ch
+                    console_source = f"{inp.console_input.console.name} - Input {console_input_num}"
 
             input_data.append([
-                str(num),
+                str(port),
                 input_label,
                 console_source
             ])
@@ -114,33 +106,24 @@ def export_device_pdf(device):
     if device_outputs.exists():
         output_data = [['#', 'Output', 'Console Destination']]
         
-        # Build a dict for quick lookup by output_number
-        outputs_by_number = {out.output_number: out for out in device_outputs}
-        max_output = max(outputs_by_number.keys())
-        min_output = min(outputs_by_number.keys())
-        
-        # Iterate through ALL numbers to include blanks
-        for num in range(min_output, max_output + 1):
-            out = outputs_by_number.get(num)
-            output_label = ''
+        # Physical port = 1-based position in output_number order (see inputs).
+        for port, out in enumerate(device_outputs, 1):
+            # For outputs, use signal_name ("FB", "Lobby", "Left", "Right", etc.)
+            output_label = out.signal_name or ''
             console_dest = ''
-            
-            if out:
-                # For outputs, use signal_name (contains "FB", "Lobby", "Left", "Right", etc.)
-                output_label = out.signal_name or ''
-                
-                # Build destination from console_output
-                if out.console_output and out.console_output.console:
-                    output_type = 'Output'
-                    if hasattr(out.console_output, 'aux_number'):
-                        output_type = f"Aux {out.console_output.aux_number}"
-                    elif hasattr(out.console_output, 'matrix_number'):
-                        output_type = f"Matrix {out.console_output.matrix_number}"
-                    
-                    console_dest = f"{out.console_output.console.name} - {output_type}"
-            
+
+            # Build destination from console_output
+            if out.console_output and out.console_output.console:
+                output_type = 'Output'
+                if hasattr(out.console_output, 'aux_number'):
+                    output_type = f"Aux {out.console_output.aux_number}"
+                elif hasattr(out.console_output, 'matrix_number'):
+                    output_type = f"Matrix {out.console_output.matrix_number}"
+
+                console_dest = f"{out.console_output.console.name} - {output_type}"
+
             output_data.append([
-                str(num),
+                str(port),
                 output_label,
                 console_dest
             ])
@@ -249,27 +232,19 @@ def export_all_devices_pdf(current_project):
                 
                 input_data = [['#', 'Input', 'Console Source']]
                 
-                # Build a dict for quick lookup by input_number
-                inputs_by_number = {inp.input_number: inp for inp in device_inputs}
-                max_input = max(inputs_by_number.keys())
-                min_input = min(inputs_by_number.keys())
-                
-                # Iterate through ALL numbers to include blanks
-                for num in range(min_input, max_input + 1):
-                    inp = inputs_by_number.get(num)
-                    input_label = ''
+                # Physical port = 1-based position in input_number order (matches
+                # the edit grid), NOT the stored input_number (legacy/global).
+                for port, inp in enumerate(device_inputs, 1):
+                    input_label = (inp.signal_name or '').strip()
                     console_source = ''
-                    
-                    if inp:
-                        input_label = (inp.signal_name or '').strip()
-                        if inp.console_input:
-                            if not input_label:
-                                input_label = inp.console_input.source or ''
-                            if inp.console_input.console:
-                                console_source = f"{inp.console_input.console.name} - In {inp.console_input.input_ch}"
-                    
+                    if inp.console_input:
+                        if not input_label:
+                            input_label = inp.console_input.source or ''
+                        if inp.console_input.console:
+                            console_source = f"{inp.console_input.console.name} - In {inp.console_input.input_ch}"
+
                     input_data.append([
-                        str(num),
+                        str(port),
                         input_label,
                         console_source
                     ])
@@ -301,31 +276,22 @@ def export_all_devices_pdf(current_project):
                 
                 output_data = [['#', 'Output', 'Console Destination']]
                 
-                # Build a dict for quick lookup by output_number
-                outputs_by_number = {out.output_number: out for out in device_outputs}
-                max_output = max(outputs_by_number.keys())
-                min_output = min(outputs_by_number.keys())
-                
-                # Iterate through ALL numbers to include blanks
-                for num in range(min_output, max_output + 1):
-                    out = outputs_by_number.get(num)
-                    output_label = ''
+                # Physical port = 1-based position in output_number order.
+                for port, out in enumerate(device_outputs, 1):
+                    output_label = out.signal_name or ''
                     console_dest = ''
-                    
-                    if out:
-                        output_label = out.signal_name or ''
-                        
-                        if out.console_output and out.console_output.console:
-                            output_type = 'Output'
-                            if hasattr(out.console_output, 'aux_number'):
-                                output_type = f"Aux {out.console_output.aux_number}"
-                            elif hasattr(out.console_output, 'matrix_number'):
-                                output_type = f"Matrix {out.console_output.matrix_number}"
-                            
-                            console_dest = f"{out.console_output.console.name} - {output_type}"
-                    
+
+                    if out.console_output and out.console_output.console:
+                        output_type = 'Output'
+                        if hasattr(out.console_output, 'aux_number'):
+                            output_type = f"Aux {out.console_output.aux_number}"
+                        elif hasattr(out.console_output, 'matrix_number'):
+                            output_type = f"Matrix {out.console_output.matrix_number}"
+
+                        console_dest = f"{out.console_output.console.name} - {output_type}"
+
                     output_data.append([
-                        str(num),
+                        str(port),
                         output_label,
                         console_dest
                     ])
