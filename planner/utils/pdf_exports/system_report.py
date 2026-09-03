@@ -179,7 +179,7 @@ def _prune_empty_columns(headers, data, col_widths, keep=()):
 NUMERIC_HEADERS = {
     'Dante #', 'Input Ch', 'Aux', 'Matrix', 'BP #', '#', 'Qty', 'Count',
     'Length', 'Current/Unit', 'Total Current', 'Input #', 'Output #', 'Ch',
-    'CH 1', 'CH 2', 'CH 3', 'CH 4',
+    'Output', 'CH 1', 'CH 2', 'CH 3', 'CH 4',
 }
 
 
@@ -293,7 +293,7 @@ def _keep(flowables):
 def export_system_report(request):
     """Generate the comprehensive system report PDF for the active project."""
     from planner.models import (
-        Console, Device, SystemProcessor,
+        Console, Device, SystemProcessor, Amp,
         PACableSchedule, CommBeltPack,
         PowerDistributionPlan, SoundvisionPrediction,
     )
@@ -323,6 +323,7 @@ def export_system_report(request):
     story += _section_consoles(project, styles, Console)
     story += _section_devices(project, styles, Device)
     story += _section_processors(project, styles, SystemProcessor)
+    story += _section_amplifiers(project, styles, Amp)
     story += _section_pa_cable(project, styles, PACableSchedule)
     story += _section_comm(project, styles, CommBeltPack)
     story += _section_power(project, styles, PowerDistributionPlan)
@@ -672,10 +673,86 @@ def _section_processors(project, styles, SystemProcessor):
 
 
 # ===========================================================================
-# Section 4 - PA Cable Schedule
+# Section 4 - Amplifiers (Amp Assignments)
+# ===========================================================================
+def _section_amplifiers(project, styles, Amp):
+    story = [_section_banner("4", "Amplifiers", styles), Spacer(1, 0.12 * inch)]
+    amps = (Amp.objects.filter(project=project)
+            .select_related('location', 'amp_model')
+            .prefetch_related('channels')
+            .order_by('location__sort_order', 'location__name', 'sort_order', 'name'))
+
+    if not amps.exists():
+        story.append(Paragraph("No amplifiers configured.", styles['empty']))
+        story.append(PageBreak())
+        return story
+
+    current_location = object()  # sentinel so the first amp always prints its rack
+    for amp in amps:
+        loc_name = amp.location.name if amp.location else 'Unassigned'
+        if loc_name != current_location:
+            current_location = loc_name
+            # Start each rack group with enough room so its heading + first amp
+            # don't strand at a page bottom.
+            story.append(CondPageBreak(SUBTABLE_MIN_ROOM))
+            story.append(Paragraph(loc_name, styles['sub']))
+
+        head = [Paragraph(f"Amp: {amp.name}", styles['caption'])]
+        meta_bits = []
+        if amp.amp_model:
+            meta_bits.append(f"{amp.amp_model.manufacturer} {amp.amp_model.model_name}")
+        if amp.ip_address:
+            meta_bits.append(f"IP: {amp.ip_address}")
+        if (amp.preset or '').strip():
+            meta_bits.append(f"Preset: {amp.preset}")
+        if meta_bits:
+            head.append(Paragraph("  •  ".join(meta_bits), styles['meta']))
+
+        # Channel assignments - skip channels with nothing on them.
+        rows = []
+        for c in amp.channels.all().order_by('channel_number'):
+            setting = c.get_channel_setting_display() if c.channel_setting else ''
+            avb = (c.avb_stream or '').strip()
+            aes = (c.aes_input or '').strip()
+            analog = (c.analog_input or '').strip()
+            if not ((c.channel_name or '').strip() or setting or avb or aes or analog):
+                continue
+            rows.append([str(c.channel_number), c.channel_name or '', setting, avb, aes, analog])
+
+        emitted = False
+        if rows:
+            headers = ['Ch', 'Name', 'Setting', 'AVB Stream', 'AES Input', 'Analog Input']
+            widths = [w * inch for w in (0.6, 2.0, 1.3, 2.0, 1.4, 1.4)]
+            headers, data, widths = _prune_empty_columns(headers, rows, widths, keep={0, 1})
+            story += _emit_subtable(head, "Channels", headers, data, widths, styles)
+            head = []
+            emitted = True
+
+        # Physical outputs surfaced on the rack card (1-4).
+        out_rows = [[str(i), val] for i, val in enumerate(
+            (amp.output_1, amp.output_2, amp.output_3, amp.output_4), 1)
+            if (val or '').strip()]
+        if out_rows:
+            story += _emit_subtable(head, "Outputs", ['Output', 'Assignment'],
+                                    out_rows, [0.9 * inch, 6.0 * inch], styles)
+            head = []
+            emitted = True
+
+        if not emitted:
+            head.append(Paragraph("No channel assignments.", styles['empty']))
+            story.append(_keep(head))
+
+        story.append(Spacer(1, 0.15 * inch))
+
+    story.append(PageBreak())
+    return story
+
+
+# ===========================================================================
+# Section 5 - PA Cable Schedule
 # ===========================================================================
 def _section_pa_cable(project, styles, PACableSchedule):
-    story = [_section_banner("4", "PA Cable Schedule", styles), Spacer(1, 0.12 * inch)]
+    story = [_section_banner("5", "PA Cable Schedule", styles), Spacer(1, 0.12 * inch)]
     cables = PACableSchedule.objects.filter(project=project).order_by('label')
 
     if not cables.exists():
@@ -710,7 +787,7 @@ def _section_pa_cable(project, styles, PACableSchedule):
 # Section 5 - COMM System
 # ===========================================================================
 def _section_comm(project, styles, CommBeltPack):
-    story = [_section_banner("5", "COMM System", styles), Spacer(1, 0.12 * inch)]
+    story = [_section_banner("6", "COMM System", styles), Spacer(1, 0.12 * inch)]
     any_packs = False
 
     for system_type, type_name in [('WIRELESS', 'Wireless System'),
@@ -761,7 +838,7 @@ def _section_comm(project, styles, CommBeltPack):
 # Section 6 - Power Distribution
 # ===========================================================================
 def _section_power(project, styles, PowerDistributionPlan):
-    story = [_section_banner("6", "Power Distribution", styles), Spacer(1, 0.12 * inch)]
+    story = [_section_banner("7", "Power Distribution", styles), Spacer(1, 0.12 * inch)]
     plans = PowerDistributionPlan.objects.filter(project=project)
 
     if not plans.exists():
@@ -799,7 +876,7 @@ def _section_power(project, styles, PowerDistributionPlan):
 # Section 7 - Soundvision Predictions
 # ===========================================================================
 def _section_soundvision(project, styles, SoundvisionPrediction):
-    story = [_section_banner("7", "Soundvision Predictions", styles), Spacer(1, 0.12 * inch)]
+    story = [_section_banner("8", "Soundvision Predictions", styles), Spacer(1, 0.12 * inch)]
     predictions = SoundvisionPrediction.objects.filter(project=project)
 
     if not predictions.exists():
