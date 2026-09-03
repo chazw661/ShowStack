@@ -15,7 +15,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph,
-    Spacer, PageBreak, KeepTogether, HRFlowable,
+    Spacer, PageBreak, KeepTogether, HRFlowable, CondPageBreak,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
 from reportlab.pdfgen import canvas as pdfcanvas
@@ -38,6 +38,12 @@ HAIRLINE = colors.HexColor('#d5dbe1')      # grid lines
 ROW_ALT = colors.HexColor('#f3f6f9')       # zebra striping
 
 USABLE_WIDTH = LANDSCAPE_PAGE[0] - 2 * MARGIN
+
+# Minimum space a subsection needs to *start* on the current page (heading +
+# caption + table header + a couple of rows). If less remains, break first so
+# the heading never orphans; if more remains, the table starts here and splits
+# naturally across the page boundary.
+SUBTABLE_MIN_ROOM = 1.5 * inch
 
 
 # ===========================================================================
@@ -430,13 +436,20 @@ def _section_consoles(project, styles, Console):
 
 
 def _emit_subtable(pending_blocks, caption, headers, data, widths, styles):
-    """Emit a captioned table, keeping the caption (and any pending section
-    heading) with the table's start so nothing orphans at a page break."""
+    """Emit a captioned table that starts cleanly and splits naturally.
+
+    A CondPageBreak guarantees enough room for the heading + caption + first
+    rows before starting, so nothing orphans at a page bottom - but unlike
+    KeepTogether it does NOT push a whole large table onto the next page
+    (which would leave the section banner alone above a blank gap). Big tables
+    flow onto the current page and split across the boundary with a repeating
+    header row.
+    """
     table = _data_table(headers, data, widths)
     if table is None:
         return []
     caption_para = Paragraph(caption, styles['caption'])
-    return [_keep(list(pending_blocks) + [caption_para, table])]
+    return [CondPageBreak(SUBTABLE_MIN_ROOM)] + list(pending_blocks) + [caption_para, table]
 
 
 # ===========================================================================
