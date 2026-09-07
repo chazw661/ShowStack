@@ -4479,8 +4479,17 @@ class AudioChecklistTask(models.Model):
 
 
 class AudioChecklistTemplate(models.Model):
-    """A saved checklist template that can be loaded into any project."""
-    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='checklist_templates')
+    """A saved checklist template that can be loaded into any project.
+
+    Templates are scoped to the user who created them (``created_by``), not to
+    a single project, so an engineer can save a template on one show and load
+    it into any of their other shows. ``project`` records where the template
+    was first saved and is retained for reference only.
+    """
+    project = models.ForeignKey(
+        'Project', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='checklist_templates'
+    )
     name = models.CharField(max_length=100)
     created_by = models.ForeignKey(
         'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
@@ -4493,7 +4502,6 @@ class AudioChecklistTemplate(models.Model):
         verbose_name = "Checklist Template"
         verbose_name_plural = "Checklist Templates"
         ordering = ['name']
-        unique_together = ['project', 'name']
 
     def __str__(self):
         return self.name

@@ -5924,8 +5924,10 @@ def audio_checklist_save_template(request):
         if not name or not current_project:
             return JsonResponse({'error': 'Missing name or project'}, status=400)
 
-        # Delete existing template with same name in this project
-        AudioChecklistTemplate.objects.filter(project=current_project, name=name).delete()
+        # Delete existing template with the same name owned by this user
+        # (templates are user-scoped, not project-scoped, so they can be
+        # loaded into any of the user's shows).
+        AudioChecklistTemplate.objects.filter(created_by=request.user, name=name).delete()
 
         # Create new template
         template = AudioChecklistTemplate.objects.create(
@@ -5960,13 +5962,12 @@ def audio_checklist_save_template(request):
 
 @require_GET
 def audio_checklist_list_templates(request):
-    """List all templates for the current project."""
+    """List all templates owned by the current user."""
     try:
-        current_project = getattr(request, 'current_project', None)
-        if not current_project:
+        if not request.user.is_authenticated:
             return JsonResponse({'templates': []})
         templates = AudioChecklistTemplate.objects.filter(
-            project=current_project
+            created_by=request.user
         ).order_by('name').values('id', 'name', 'created_at')
         return JsonResponse({'templates': list(templates)})
     except Exception as e:
@@ -5983,7 +5984,7 @@ def audio_checklist_load_template(request):
         if not current_project:
             return JsonResponse({'error': 'No project'}, status=400)
 
-        template = AudioChecklistTemplate.objects.get(id=template_id, project=current_project)
+        template = AudioChecklistTemplate.objects.get(id=template_id, created_by=request.user)
 
         from .models import AudioChecklist
         # Delete all existing tasks
@@ -6028,9 +6029,8 @@ def audio_checklist_delete_template(request):
     """Delete a saved template."""
     try:
         data = _json.loads(request.body)
-        current_project = getattr(request, 'current_project', None)
         template = AudioChecklistTemplate.objects.get(
-            id=data['template_id'], project=current_project
+            id=data['template_id'], created_by=request.user
         )
         template.delete()
         return JsonResponse({'ok': True})
