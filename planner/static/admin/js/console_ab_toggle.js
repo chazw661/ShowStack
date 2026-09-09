@@ -1,15 +1,16 @@
 // Console Module — A/B input source toggle.
 //
 // Modern consoles offer an A and B input source per channel. The console
-// input inline carries two Source Hardware dropdowns per row: `source_hardware`
-// (the primary "A" source) and `source_hardware_b` (the alternate "B" source).
-// Showing both columns at once makes an already-wide table wider, so instead we
-// render a small "A Inputs / B Inputs" tab toggle above the table that flips
-// which of the two Source Hardware columns is visible. Every other column
-// (channel, name, Dante, group, …) is shared and stays visible in both views.
+// input inline carries an A and a B variant of both the Source column
+// (`source` / `source_b`) and the Source Hardware column (`source_hardware` /
+// `source_hardware_b`). Showing all four at once makes an already-wide table
+// wider, so instead we render a small "A Inputs / B Inputs" tab toggle above
+// the table that flips which set of Source / Source Hardware columns is
+// visible. Every other column (channel, Dante, group, …) is shared and stays
+// visible in both views.
 //
-// Default view is A. Only the Source Hardware column is toggled — the B input
-// is "hardware only" (no separate patch), so nothing else differs between tabs.
+// Default view is A. The B input is "hardware only" (no separate Dante/Omni
+// patch), so only the Source and Source Hardware columns differ between tabs.
 (function () {
     'use strict';
 
@@ -78,8 +79,12 @@
 
     function injectStyles() {
         const css =
+            '#consoleinput_set-group.ab-show-a th.column-source_b,' +
+            '#consoleinput_set-group.ab-show-a td.field-source_b,' +
             '#consoleinput_set-group.ab-show-a th.column-source_hardware_b,' +
             '#consoleinput_set-group.ab-show-a td.field-source_hardware_b{display:none;}' +
+            '#consoleinput_set-group.ab-show-b th.column-source,' +
+            '#consoleinput_set-group.ab-show-b td.field-source,' +
             '#consoleinput_set-group.ab-show-b th.column-source_hardware,' +
             '#consoleinput_set-group.ab-show-b td.field-source_hardware{display:none;}' +
             '.ab-input-toggle{display:flex;align-items:center;gap:6px;margin:8px 0;}' +

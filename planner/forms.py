@@ -64,6 +64,7 @@ class ConsoleInputForm(forms.ModelForm):
             'dante_number',
             'input_ch',
             'source',
+            'source_b',
             'source_hardware',
             'source_hardware_b',
             'group',
@@ -87,6 +88,10 @@ class ConsoleInputForm(forms.ModelForm):
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['source'].widget.attrs.update({
+            'style': 'width: 150px; text-align: center;',
+            'class': 'bg-white text-black rounded-sm',
+        })
+        self.fields['source_b'].widget.attrs.update({
             'style': 'width: 150px; text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })

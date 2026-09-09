@@ -906,8 +906,12 @@ class ConsoleInput(models.Model):
     dante_number = models.CharField(max_length=3, blank=True, null=True)
     input_ch = models.CharField(max_length=10, blank=True, null=True)
     source = models.CharField(max_length=100, blank=True, null=True)
-    source = models.CharField(max_length=100, blank=True, null=True)
-    
+    source_b = models.CharField(
+        max_length=100, blank=True, null=True,
+        verbose_name="Source (B)",
+        help_text="Alternate 'B' input source name for this channel, independent of the A source.",
+    )
+
     SOURCE_HARDWARE_CHOICES = [
         ('', '---------'),
         ('Shure AD1', 'Shure AD1'),
