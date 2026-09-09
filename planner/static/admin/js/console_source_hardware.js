@@ -128,7 +128,9 @@
     }
 
     function appendOptionToAllSelects(label) {
-        const selects = document.querySelectorAll('select[name$="-source_hardware"]');
+        const selects = document.querySelectorAll(
+            'select[name$="-source_hardware"], select[name$="-source_hardware_b"]'
+        );
         selects.forEach(function (s) {
             if (Array.from(s.options).some(function (o) { return o.value === label; })) {
                 return;
@@ -150,7 +152,8 @@
     function isSourceHardwareSelect(el) {
         if (!(el instanceof HTMLSelectElement)) return false;
         const name = el.getAttribute('name') || '';
-        return name.endsWith('-source_hardware');
+        // Covers both the primary (A) column and the alternate (B) column.
+        return name.endsWith('-source_hardware') || name.endsWith('-source_hardware_b');
     }
 
     function getCsrf() {

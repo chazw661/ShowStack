@@ -951,6 +951,13 @@ class ConsoleInput(models.Model):
         verbose_name="Source Hardware",
         help_text="Pick from the shared Source Hardware list. Manage entries via the Source Hardware Options admin page.",
     )
+    source_hardware_b = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name="Source Hardware (B)",
+        help_text="Alternate 'B' input source for this channel (e.g. a wireless backup). Modern consoles offer an A and B input per channel; A is the primary. Pick from the same shared Source Hardware list.",
+    )
 
     color = models.CharField(max_length=20, choices=YAMAHA_COLOR_CHOICES, default='Blue', blank=True)
     default_record = models.BooleanField(

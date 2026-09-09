@@ -53,6 +53,10 @@ class ConsoleInputForm(forms.ModelForm):
         required=False,
         choices=[('', '---------')],
     )
+    source_hardware_b = forms.ChoiceField(
+        required=False,
+        choices=[('', '---------')],
+    )
 
     class Meta:
         model = ConsoleInput
@@ -61,6 +65,7 @@ class ConsoleInputForm(forms.ModelForm):
             'input_ch',
             'source',
             'source_hardware',
+            'source_hardware_b',
             'group',
             'dca',
             'mute',
@@ -87,6 +92,10 @@ class ConsoleInputForm(forms.ModelForm):
         })
 
         self.fields['source_hardware'].widget.attrs.update({
+            'style': 'width: 120px;',
+            'class': 'bg-white text-black rounded-sm',
+        })
+        self.fields['source_hardware_b'].widget.attrs.update({
             'style': 'width: 120px;',
             'class': 'bg-white text-black rounded-sm',
         })

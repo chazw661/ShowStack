@@ -627,12 +627,14 @@ class ConsoleInputInline(admin.TabularInline):
                     for field in form.fields.values():
                         field.required = False
 
-                    if 'source_hardware' in form.fields:
-                        current = form.instance.source_hardware if form.instance.pk else None
+                    for hw_field in ('source_hardware', 'source_hardware_b'):
+                        if hw_field not in form.fields:
+                            continue
+                        current = getattr(form.instance, hw_field) if form.instance.pk else None
                         choices = list(base_choices)
                         if current and current not in source_hardware_options:
                             choices.append((current, current))
-                        form.fields['source_hardware'].choices = (
+                        form.fields[hw_field].choices = (
                             [('', '---------')]
                             + choices
                             + [('__add_new__', '+ Add new…')]
@@ -1111,7 +1113,8 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         js = ['planner/js/mono_stereo_handler.js',
             'planner/js/global_nav.js',
             'admin/js/console_autofill.js',
-            'admin/js/console_source_hardware.js',]
+            'admin/js/console_source_hardware.js',
+            'admin/js/console_ab_toggle.js',]
         css = {
             'all': ['admin/css/dark_mode.css',
                     'planner/css/custom_admin.css',
