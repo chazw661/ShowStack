@@ -3556,6 +3556,27 @@ def mic_assignment_delete(request, mic_id):
     return JsonResponse({'success': True})
 
 
+@require_GET
+@login_required
+def pa_cable_array_speakers(request, array_id):
+    """Issue #73 (Phase 2): list the speakers in a Soundvision speaker array for
+    the PA cable edit page's vertical reference panel. Read-only, so any member
+    of the array's project (owner, editor, or viewer) may fetch it."""
+    array = get_object_or_404(SpeakerArray, id=array_id)
+    project = array.prediction.project
+    allowed = (
+        request.user.is_superuser
+        or project.owner_id == request.user.id
+        or ProjectMember.objects.filter(user=request.user, project=project).exists()
+    )
+    if not allowed:
+        return JsonResponse({'error': 'Not allowed'}, status=403)
+    return JsonResponse({
+        'array_name': array.display_name,
+        'speakers': array.cabinet_list,
+    })
+
+
 @require_POST
 @login_required
 def comm_beltpack_channel_delete(request, channel_id):

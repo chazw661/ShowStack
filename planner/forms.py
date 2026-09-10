@@ -982,12 +982,38 @@ class PACableInlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
         # Customize field widgets for inline display
         self.fields['destination'].widget.attrs['style'] = 'width: 120px;'
         self.fields['count'].widget.attrs['style'] = 'width: 60px;'
         self.fields['notes'].widget.attrs['style'] = 'width: 150px;'
         self.fields['drawing_ref'].widget.attrs['style'] = 'width: 80px;'
+
+        # Issue #73: destination is only required in free-text mode. In linked
+        # mode it's hidden and supplied by the Amp, so don't hard-require it at
+        # the field level (that produced an invisible "please correct the error"
+        # on hidden fields). Per-mode requirements are enforced in clean().
+        if 'destination' in self.fields:
+            self.fields['destination'].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        mode = cleaned.get('entry_mode')
+        if mode == 'linked':
+            # A linked cable must point at a Speaker Array / single Speaker.
+            if not cleaned.get('speaker_array'):
+                self.add_error(
+                    'speaker_array',
+                    'Pick a Speaker Array or single Speaker, or switch Entry mode to Free text.',
+                )
+        else:
+            # Free-text mode keeps the original requirement: a typed destination.
+            if not cleaned.get('destination'):
+                self.add_error(
+                    'destination',
+                    'Enter a destination, or switch Entry mode to From Soundvision / Amps.',
+                )
+        return cleaned
 
 
 # Formset for bulk entry (like spreadsheet rows)

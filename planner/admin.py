@@ -7,8 +7,8 @@ from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
 from django.utils import timezone
-from django.utils.html import format_html
-from django.utils.safestring import mark_safe  
+from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
 from django.shortcuts import render, redirect  
 from django.contrib.admin.views.decorators import staff_member_required  
 from django.views.decorators.http import require_POST  
@@ -3185,8 +3185,8 @@ class PACableAdmin(BaseEquipmentAdmin):
         )
         return HttpResponseRedirect(url + '?saved=1')
     list_display = [
-    'label','destination', 'count', 'length',
-    'cable_display', 'fan_out_summary_display',  # Changed from 'fan_out'
+    'array_speaker_col', 'destination_col', 'count', 'length',
+    'cable_display', 'fan_outs_col', 'couplers_col', 'extensions_col',  # issue #73: broken out
     'notes', 'drawing_ref','color_display'
 ]
     list_filter = ['cable']
@@ -3195,12 +3195,22 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     change_list_template = 'admin/planner/pacableschedule/change_list.html'
     
+    readonly_fields = ('array_speaker_reference',)
+
     fieldsets = (
-        ('Cable Configuration', {
-            'fields': ('label','destination', 'count', 'length' , 'cable','color')
+        ('Array / Speaker & Destination', {
+            'fields': ('entry_mode', 'speaker_array', 'amp', 'label', 'destination',
+                       'array_speaker_reference'),
+            'description': (
+                "Choose <strong>From Soundvision / Amps</strong> to pick a Speaker "
+                "Array (or single Speaker) and an Amp from the imported report, or "
+                "<strong>Free text</strong> to type the Array/Speaker and Destination "
+                "by hand. Existing cables stay on Free text."
+            ),
         }),
-      
-        
+        ('Cable Configuration', {
+            'fields': ('count', 'length', 'cable', 'color')
+        }),
         ('Documentation', {
             'fields': ('notes', 'drawing_ref')
         })
@@ -3265,21 +3275,106 @@ class PACableAdmin(BaseEquipmentAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Filter dropdown options based on current project"""
+        current_project = getattr(request, 'current_project', None)
         if db_field.name == "label":
-            if hasattr(request, 'current_project') and request.current_project:
-                kwargs["queryset"] = PAZone.objects.filter(project=request.current_project)
-            else:
-                kwargs["queryset"] = PAZone.objects.none()
+            kwargs["queryset"] = (
+                PAZone.objects.filter(project=current_project)
+                if current_project else PAZone.objects.none()
+            )
+        elif db_field.name == "speaker_array":
+            # Issue #73: linked Array/Speaker dropdown = every speaker array and
+            # single speaker in the project's imported Soundvision report(s).
+            from planner.models import SpeakerArray
+            kwargs["queryset"] = (
+                SpeakerArray.objects.filter(prediction__project=current_project)
+                if current_project else SpeakerArray.objects.none()
+            )
+        elif db_field.name == "amp":
+            # Issue #73: linked Destination dropdown = every amp in the project's
+            # Amplifier Reference module.
+            from planner.models import Amp
+            kwargs["queryset"] = (
+                Amp.objects.filter(project=current_project)
+                if current_project else Amp.objects.none()
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
    
     
     
+    def array_speaker_col(self, obj):
+        """Issue #73: unified Array/Speaker column (linked array/speaker or text label)."""
+        return obj.array_speaker_display or "-"
+    array_speaker_col.short_description = 'Array/Speaker'
+
+    def destination_col(self, obj):
+        """Issue #73: unified Destination column (linked amp or free text)."""
+        return obj.destination_display or "-"
+    destination_col.short_description = 'Destination'
+
+    def array_speaker_reference(self, obj):
+        """Issue #73 (Phase 2): a container the JS fills with the selected
+        array's speakers (vertical list) and the cable assigned to it. Rendered
+        for both add and change; populated live from the speaker_array dropdown.
+
+        Data attributes seed the JS: the endpoint base (mount-path aware), the
+        currently-saved array id, and the saved cable summary shown on the right."""
+        from django.urls import reverse
+        sample = reverse('planner:pa_cable_array_speakers', args=[999999])
+        base = sample.rsplit('999999/speakers/', 1)[0]  # '.../pa-cables/array/'
+        array_id = obj.speaker_array_id if (obj and obj.entry_mode == 'linked') else ''
+        cable_label = obj.get_cable_display() if (obj and obj.cable) else ''
+        count = obj.count if obj else ''
+        fanout = (obj.fan_out_summary if obj else '') or ''
+        return format_html(
+            '<div id="pa-array-ref" class="pa-array-ref" '
+            'data-endpoint-base="{}" data-array-id="{}" '
+            'data-cable="{}" data-count="{}" data-fanout="{}">'
+            '<em class="pa-array-ref__hint">Select an Array/Speaker in linked mode '
+            'to list its speakers here.</em>'
+            '</div>',
+            base, array_id, cable_label, count, fanout,
+        )
+    array_speaker_reference.short_description = 'Array speakers & assigned cable'
+
     def cable_display(self, obj):
         return obj.get_cable_display()
     cable_display.short_description = 'Cable'
     cable_display.admin_order_field = 'cable'
+
+    # Issue #73: fan-outs / couplers / extensions shown as chips directly in the
+    # editable list (Count/Length stay editable), so there's one combined table
+    # instead of a separate breakdown section.
+    def _chips(self, items, css_class):
+        if not items:
+            return format_html('<span style="color:#777;">—</span>')
+        html = format_html_join(
+            '', '<span class="cb-chip {}">{}</span>',
+            ((css_class, text) for text in items),
+        )
+        return html
+
+    def fan_outs_col(self, obj):
+        items = [f"{fo.get_fan_out_type_display()} × {fo.quantity}"
+                 for fo in obj.fan_outs.all() if fo.fan_out_type]
+        return self._chips(items, 'cb-fanout')
+    fan_outs_col.short_description = 'Fan-outs'
+
+    def couplers_col(self, obj):
+        items = [f"{c.get_coupler_type_display()} × {c.quantity}"
+                 for c in obj.couplers.all()]
+        return self._chips(items, 'cb-coupler')
+    couplers_col.short_description = 'Couplers'
+
+    def extensions_col(self, obj):
+        items = []
+        for fo in obj.fan_outs.all():
+            for ext in fo.extensions.all():
+                items.append(f"{ext.get_extension_cable_display()} "
+                             f"{ext.get_extension_length_display()} × {ext.quantity}")
+        return self._chips(items, 'cb-ext')
+    extensions_col.short_description = 'Extensions'
 
     def fan_out_summary_display(self, obj):
         """Display summary of all fan outs"""
@@ -3474,7 +3569,7 @@ class PACableAdmin(BaseEquipmentAdmin):
         response.context_data['fan_out_summary'] = fan_out_summary
         response.context_data['coupler_summary'] = coupler_summary
         response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
-        
+
         return response
     
     def export_cable_schedule(self, request, queryset):
@@ -3692,16 +3787,21 @@ class PACableAdmin(BaseEquipmentAdmin):
         js = (
             'planner/js/pa_cable_calculations.js',
             'admin/js/pa_cable_inlines.js',
+            'admin/js/pa_cable_entry_mode.js',
+            'admin/js/pa_cable_array_speakers.js',
         )
 
 
     def get_queryset(self, request):
         """Filter by current project"""
         qs = super().get_queryset(request)
+        # Issue #73: the list now renders fan-outs / couplers / extensions per
+        # row, so prefetch them to avoid N+1 queries in the changelist.
+        qs = qs.prefetch_related('fan_outs__extensions', 'couplers')
         if hasattr(request, 'current_project') and request.current_project:
             return qs.filter(project=request.current_project)
         return qs.none()
-    
+
     def save_model(self, request, obj, form, change):
         """Auto-assign current project"""
         if not change and hasattr(request, 'current_project') and request.current_project:

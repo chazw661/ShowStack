@@ -2411,9 +2411,48 @@ class PACableSchedule(models.Model):
         help_text="e.g., 'KIVA - 1', 'K2 - Top'",
         null=True,  # Add this temporarily
         default="",  # Add this
-        
+
     )
-    
+
+    # Issue #73: interactive entry driven by the imported Soundvision report
+    # and the Amplifier Reference module. A cable can either be typed by hand
+    # ('text', the original behaviour — existing cables stay on this) or linked
+    # to a Speaker Array / single Speaker and an Amp ('linked'). The Array/Speaker
+    # and Destination values shown throughout the app come from
+    # ``array_speaker_display`` / ``destination_display`` below, which resolve
+    # the right source based on this mode.
+    ENTRY_MODE_CHOICES = [
+        ('text', 'Free text'),
+        ('linked', 'From Soundvision / Amps'),
+    ]
+    entry_mode = models.CharField(
+        max_length=10,
+        choices=ENTRY_MODE_CHOICES,
+        default='text',
+        verbose_name="Entry mode",
+        help_text="'From Soundvision / Amps' links this cable to a Speaker Array "
+                  "and an Amp; 'Free text' uses the plain Array/Speaker and "
+                  "Destination fields.",
+    )
+    speaker_array = models.ForeignKey(
+        'SpeakerArray',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pa_cables',
+        verbose_name="Array / Speaker (linked)",
+        help_text="Speaker array or single speaker from the imported Soundvision report.",
+    )
+    amp = models.ForeignKey(
+        'Amp',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pa_cables',
+        verbose_name="Destination amp (linked)",
+        help_text="Amplifier from the Amplifier Reference module.",
+    )
+
     count = models.PositiveIntegerField(
         default=1, 
         verbose_name="Count",
@@ -2474,13 +2513,36 @@ class PACableSchedule(models.Model):
         verbose_name_plural = "PA Cable Entries"  # PARENT
         ordering = ['id']
     
+    @property
+    def array_speaker_display(self):
+        """Unified 'Array/Speaker' value (issue #73).
+
+        Linked mode -> the Soundvision Speaker Array / single Speaker name.
+        Free-text mode -> the PAZone label (original behaviour).
+        """
+        if self.entry_mode == 'linked' and self.speaker_array_id:
+            return self.speaker_array.display_name
+        return self.label.name if self.label else ""
+
+    @property
+    def destination_display(self):
+        """Unified 'Destination' value (issue #73).
+
+        Linked mode -> the Amplifier name from the Amplifier Reference module.
+        Free-text mode -> the typed destination (original behaviour).
+        """
+        if self.entry_mode == 'linked' and self.amp_id:
+            return self.amp.name
+        return self.destination or ""
+
     def save(self, *args, **kwargs):
-        # Auto-populate hidden fields for compatibility
-        if self.label:
-            self.zone = self.label.name
+        # Auto-populate hidden fields for compatibility. Reflect the *effective*
+        # Array/Speaker and Destination (linked or free text) so downstream
+        # readers of the legacy zone/to_location fields stay correct (issue #73).
+        self.zone = self.array_speaker_display or (self.label.name if self.label else '')
         self.cable_type = self.cable
         self.quantity = self.count
-        self.to_location = self.destination
+        self.to_location = self.destination_display or (self.destination or '')
         
         # Extract length from cable choice if it's a standard length
         if self.cable:
@@ -2508,8 +2570,8 @@ class PACableSchedule(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        label_str = self.label.name if self.label else "No Zone"
-        return f"{label_str} - {self.destination} - {self.get_cable_display()}"
+        label_str = self.array_speaker_display or "No Zone"
+        return f"{label_str} - {self.destination_display} - {self.get_cable_display()}"
         
     @property
     def total_length_per_run(self):
@@ -4066,6 +4128,33 @@ class SpeakerArray(models.Model):
             position = "L" if self.position_x and self.position_x < 0 else "R"
             return f"{self.array_base_name} - {position}"
         return self.array_base_name
+
+    @property
+    def cabinet_list(self):
+        """Ordered speakers in this array for the PA cable reference panel.
+
+        Issue #73 (Phase 2): a linked PA cable lists each speaker in its array
+        (e.g. KARA II 1 / KARA II 2 / KARA II 3, top to bottom) next to the
+        cable assigned to the array.
+
+        A single speaker (``is_single_point``) has no child cabinet rows — the
+        array itself *is* the speaker — so fall back to listing it once.
+        """
+        cabinets = list(self.cabinets.order_by('position_number', 'id'))
+        if cabinets:
+            return [
+                {
+                    'position': c.position_number,
+                    'model': c.speaker_model,
+                    'label': f"{c.speaker_model} {c.position_number}",
+                }
+                for c in cabinets
+            ]
+        return [{
+            'position': 1,
+            'model': self.array_base_name,
+            'label': self.array_base_name,
+        }]
     
     @property
     def trim_height(self):

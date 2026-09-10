@@ -258,6 +258,8 @@ urlpatterns = [
     # Issue #38: drag-and-drop reorder of presenters in the mic tracker.
     path('api/mic-assignment/reorder/', views.mic_assignment_reorder, name='mic_assignment_reorder'),
     path('pa-cables/all/pdf/', views.all_pa_cables_pdf_export, name='all_pa_cables_pdf_export'),
+    # Issue #73 (Phase 2): speakers in a Soundvision array, for the PA cable edit-page reference panel.
+    path('pa-cables/array/<int:array_id>/speakers/', views.pa_cable_array_speakers, name='pa_cable_array_speakers'),
     # Issue #51: CSV import for PA Cable entries (with fan-outs, extensions, couplers).
     path('pa-cables/import-csv/', views.import_pa_cables_csv, name='import_pa_cables_csv'),
     path('comm-beltpacks/all/pdf/', views.all_comm_beltpacks_pdf_export, name='all_comm_beltpacks_pdf_export'),
