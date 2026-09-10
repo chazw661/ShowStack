@@ -44,6 +44,23 @@
             background-color: #5b8ba6 !important;
             transform: translateY(-1px) !important;
         }
+
+        /* Issue #73: fan-out / coupler / extension chips in the combined PA
+           cable list. Kept inline (not in the cached static CSS) so a redeploy
+           can't leave browsers serving a stale copy without the chip styling. */
+        #result_list td .cb-chip {
+            display: block !important;
+            margin: 2px 0 !important;
+            padding: 2px 6px !important;
+            border-radius: 3px !important;
+            background: #333 !important;
+            color: #f0f0f0 !important;
+            font-size: 12px !important;
+            white-space: nowrap !important;
+        }
+        #result_list td .cb-chip.cb-fanout { background: #2a3a2a !important; color: #b8e0b8 !important; }
+        #result_list td .cb-chip.cb-coupler { background: #3a2a2a !important; color: #e0c0a0 !important; }
+        #result_list td .cb-chip.cb-ext { background: #2a2a3a !important; color: #c0c0e0 !important; }
     </style>
     <script>
     django.jQuery(document).ready(function($) {
