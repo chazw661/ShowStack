@@ -6759,7 +6759,7 @@ def multitrack_dashboard(request):
     )
     can_import_console_csv = (
         request.user.is_authenticated
-        and not request.user.groups.filter(name='Viewer').exists()
+        and _can_edit_current_project(request)
     )
     return render(request, 'planner/multitrack/dashboard.html', {
         'sessions': sessions,
@@ -7245,17 +7245,37 @@ _multitrack_logger = logging.getLogger(__name__)
 _HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
 
 
-def _multitrack_viewer_block(request):
-    """Return a JsonResponse 403 iff the user is in the 'Viewer' group; else None.
+def _can_edit_current_project(request):
+    """True iff the user may edit request.current_project.
 
-    Mirrors the read-only role contract enforced by BaseEquipmentAdmin and the
-    `request.user.groups.filter(name='Viewer').exists()` pattern used throughout
-    `planner/admin.py`. Centralised so every mutate endpoint applies the same
-    check (CR-01 / CR-02).
+    Per-project role: superuser, the project's owner, or an 'editor' member.
+    This deliberately does NOT consult the global 'Viewer' Django group — a
+    global-group check wrongly treats an owner/editor as read-only just because
+    they're a viewer on some *other* project (the recurring
+    global-Viewer-vs-per-project-role trap). Use this for every mutate gate.
     """
-    if request.user.groups.filter(name='Viewer').exists():
-        return JsonResponse({'error': 'Read-only access.'}, status=403)
-    return None
+    if request.user.is_superuser:
+        return True
+    project = getattr(request, 'current_project', None)
+    if project is None:
+        return False
+    if project.owner_id == request.user.id:
+        return True
+    return ProjectMember.objects.filter(
+        user=request.user, project=project, role='editor'
+    ).exists()
+
+
+def _multitrack_viewer_block(request):
+    """Return a JsonResponse 403 iff the user may not edit the CURRENT project.
+
+    The old check used the global 'Viewer' group, which made "+ Add tracks" fail
+    with "Read-only access." for the session owner whenever they were a viewer on
+    some other project. Now uses the per-project role via _can_edit_current_project.
+    """
+    if _can_edit_current_project(request):
+        return None
+    return JsonResponse({'error': 'Read-only access.'}, status=403)
 
 
 def _get_track_for_request(request, track_id):
@@ -8090,10 +8110,14 @@ def multitrack_export_nlpr(request, session_id):
 # -------------------------------------------------------------------------
 
 def _console_import_viewer_block(request):
-    """Viewers are blocked from the upload surface (D-09)."""
-    if request.user.groups.filter(name='Viewer').exists():
-        return HttpResponseForbidden('Read-only access.')
-    return None
+    """Viewers are blocked from the upload surface (D-09).
+
+    Per-project role (not the global 'Viewer' group), so an owner/editor of the
+    current project isn't blocked just for being a viewer elsewhere.
+    """
+    if _can_edit_current_project(request):
+        return None
+    return HttpResponseForbidden('Read-only access.')
 
 
 def _stereo_type_for_row(section, family, row):
@@ -8284,14 +8308,14 @@ _signal_flow_logger = logging.getLogger(__name__)
 
 
 def _signal_flow_viewer_block(request):
-    """Return JsonResponse 403 iff user is in Viewer group; else None.
+    """Return JsonResponse 403 iff the user may not edit the CURRENT project.
 
-    Mirrors _multitrack_viewer_block (views.py:6315). Centralised so every
-    signal-flow mutate endpoint applies the same check.
+    Per-project role via _can_edit_current_project (not the global 'Viewer'
+    group), so an owner/editor isn't blocked for being a viewer elsewhere.
     """
-    if request.user.groups.filter(name='Viewer').exists():
-        return JsonResponse({'error': 'Read-only access.'}, status=403)
-    return None
+    if _can_edit_current_project(request):
+        return None
+    return JsonResponse({'error': 'Read-only access.'}, status=403)
 
 
 def _get_diagram_for_request(request, diagram_id):
