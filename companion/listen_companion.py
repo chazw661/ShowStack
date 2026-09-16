@@ -10,8 +10,7 @@ the slot -> channel mapping and authenticates it to a show.
 Flow:
     1.  Start with the show's pairing token:
             python listen_companion.py --token <UUID> \\
-                --device "Dante Virtual Soundcard" \\
-                --api https://showstack.io
+                --api https://showstack.io          # add --device "<name>" to skip the picker
     2.  The app validates the token against ShowStack, pulls the channel map,
         opens the audio device, and serves an HTTPS page on the LAN. It prints
         (and renders as a QR code) the URL to hand to the A2's phone.

@@ -1064,13 +1064,13 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="a2-setting-label" style="margin-bottom:6px;">2 · Launch command (run on the rack Mac)</div>
             <pre id="listen-launch-cmd" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;color:var(--text-primary);overflow-x:auto;white-space:pre-wrap;word-break:break-all;">python listen_companion.py \
   --token {{ listen_token }} \
-  --device "Dante Virtual Soundcard" \
   --api {{ request.scheme }}://{{ request.get_host }}</pre>
             <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
-                Pairing token is per-show. Not using DVS? Change <code>--device</code> to your
-                interface's name (<code>--list-devices</code> shows them), or leave it off to pick
-                from a list. See <code>companion/README.md</code> for the one-time HTTPS setup
-                (mkcert) needed for iPhone/iPad.
+                Pairing token is per-show. On start it uses Dante Virtual Soundcard if that's the
+                only Dante input; otherwise it lists your audio inputs (USB preamp, MADI, etc.) to
+                pick from. To skip the question, add <code>--device "&lt;name&gt;"</code>.
+                See <code>companion/README.md</code> for the one-time HTTPS setup (mkcert)
+                needed for iPhone/iPad.
             </div>
         </div>
     </div>

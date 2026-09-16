@@ -96,9 +96,12 @@ Get the **pairing token** and the ready‑made launch command from ShowStack:
 ```bash
 python listen_companion.py \
     --token <SHOW_LISTEN_TOKEN> \
-    --device "Dante Virtual Soundcard" \
     --api https://showstack.io
 ```
+
+With DVS as the only Dante input it's selected automatically; otherwise you're
+asked to pick. Add `--device "<name>"` to skip the question (required when the
+companion runs unattended, e.g. from a launch agent).
 
 On start it authenticates to the show, opens the audio device, and
 prints a **QR code + URL** (e.g. `https://192.168.1.42:8443/listen`). Hand that
