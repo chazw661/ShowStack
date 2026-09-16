@@ -56,7 +56,7 @@ except Exception as exc:  # pragma: no cover - dependency guidance
 try:
     import av
     from aiohttp import web
-    from aiortc import RTCPeerConnection, RTCSessionDescription
+    from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
     from aiortc.mediastreams import MediaStreamTrack
 except Exception as exc:  # pragma: no cover - dependency guidance
     sys.stderr.write(
@@ -600,7 +600,10 @@ class Companion:
         channel = params.get("channel", 1)
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-        pc = RTCPeerConnection()
+        # LAN only: no STUN. aiortc's default Google STUN server makes every
+        # answer wait ~5 s for gathering to time out on isolated show networks
+        # (and pushes the phone's play() outside iOS's tap window).
+        pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
         self.pcs.add(pc)
         track = ChannelTrack(self.hub, channel)
         pc.addTrack(track)
@@ -685,6 +688,8 @@ LISTEN_HTML = r"""<!doctype html>
   button:disabled { opacity:.5; }
   .status { font-size:13px; color:#8a8ab0; text-align:center; min-height:18px; }
   .big-btn { position:sticky; bottom:0; }
+  .tap { background:#00c853; }
+  [hidden] { display:none !important; }
   .src { color:#6a6a90; font-size:12px; margin-top:6px; min-height:16px; }
   .src.lost { color:#ffab00; }
 </style></head>
@@ -705,6 +710,7 @@ LISTEN_HTML = r"""<!doctype html>
     <div class="meter-wrap"><div class="meter" id="meter"></div></div>
   </div>
   <div class="status" id="status">Tap Listen to start.</div>
+  <button id="tap" class="big-btn tap" hidden>🔊 Tap for sound</button>
   <button id="go" class="big-btn">▶︎ Listen</button>
   <audio id="audio" autoplay playsinline></audio>
 </main>
@@ -757,12 +763,36 @@ $('chan').addEventListener('change', e => {
   if (dc && dc.readyState === 'open') dc.send(JSON.stringify({channel}));
 });
 
+// iOS Safari only lets audio start from inside the tap. The WebRTC answer comes
+// back after the tap, so start the <audio> element NOW on an empty stream and add
+// the remote track to that same stream when it arrives.
+let remote = null;
+function unlockAudio() {
+  const audio = $('audio');
+  remote = new MediaStream();
+  audio.srcObject = remote;
+  audio.muted = false;
+  audio.play().catch(() => {});
+}
+function needTap() {
+  // Still blocked (or paused by iOS): one more direct tap always works.
+  $('tap').hidden = false;
+}
+$('tap').addEventListener('click', () => {
+  $('audio').play().then(() => { $('tap').hidden = true; }).catch(() => {});
+});
+
 async function start() {
+  unlockAudio();                       // must stay before the first await
   $('go').disabled = true;
+  $('tap').hidden = true;
   $('status').textContent = 'Connecting…';
   pc = new RTCPeerConnection();
   pc.addTransceiver('audio', {direction: 'recvonly'});
-  pc.ontrack = e => { $('audio').srcObject = e.streams[0]; };
+  pc.ontrack = e => {
+    remote.addTrack(e.track);
+    $('audio').play().catch(needTap);
+  };
   pc.onconnectionstatechange = () => {
     $('status').textContent = pc.connectionState;
     if (['failed','disconnected','closed'].includes(pc.connectionState)) {
@@ -795,13 +825,15 @@ async function start() {
   if (!r.ok) { $('status').textContent = 'Rejected (' + r.status + ')'; $('go').disabled = false; return; }
   const ans = await r.json();
   await pc.setRemoteDescription(ans);
-  try { await $('audio').play(); } catch (e) {}
+  try { await $('audio').play(); } catch (e) { needTap(); }
+  setTimeout(() => { if (pc && $('audio').paused) needTap(); }, 1500);
   $('status').textContent = 'Live';
   $('go').textContent = '⏸ Stop';
 }
 
 function stop() {
   if (pc) { pc.close(); pc = null; }
+  $('tap').hidden = true;
   $('meter').style.width = '0%';
   $('status').textContent = 'Stopped.';
   $('go').textContent = '▶︎ Listen'; $('go').disabled = false;
