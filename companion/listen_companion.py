@@ -545,6 +545,20 @@ class Companion:
             content_type="text/plain",
         )
 
+    async def status(self, request):
+        """What the companion is doing — polled by ShowStack's Listen Setup."""
+        if not self._check_token(request):
+            return web.json_response({"error": "bad token"}, status=403)
+        hub = self.hub
+        return web.json_response({
+            "show": self.show_name,
+            "device": hub.device_name or "Test tone",
+            "source": hub.source_label,          # null while the device is lost
+            "channels": hub.channels,
+            "sample_rate": hub.rate,
+            "listeners": len(self.pcs),
+        })
+
     async def channels(self, request):
         if not self._check_token(request):
             return web.json_response({"error": "bad token"}, status=403)
@@ -994,10 +1008,28 @@ def main():
     hub = AudioHub(device_name=device_name, channels=args.channels, test_tone=args.test_tone)
     companion = Companion(token=args.token, hub=hub, mapping=mapping, show_name=show)
 
-    app = web.Application()
+    @web.middleware
+    async def cors(request, handler):
+        # ShowStack's Listen Setup (another origin) polls /api/status from the
+        # browser. Every /api route still requires the show token. Chrome's
+        # Private Network Access preflight (showstack.io -> LAN/localhost) also
+        # needs Allow-Private-Network.
+        if request.method == "OPTIONS":
+            response = web.Response()
+        else:
+            response = await handler(request)
+        if request.path.startswith("/api/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "Authorization"
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
+    app = web.Application(middlewares=[cors])
     app.router.add_get("/", companion.index)
     app.router.add_get("/listen", companion.listen_page)
     app.router.add_get("/api/channels", companion.channels)
+    app.router.add_get("/api/status", companion.status)
+    app.router.add_route("OPTIONS", "/api/{tail:.*}", lambda r: web.Response())
     app.router.add_post("/offer", companion.offer)
 
     async def on_startup(_app):

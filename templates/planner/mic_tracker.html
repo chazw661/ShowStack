@@ -1038,6 +1038,16 @@ silently 403-ing background saves and stopping updates from reaching others.
 {# ── Issue #74 — A2 Listen companion setup modal ─────────────────── #}
 <style>
     .listen-setup-hint code { font-size: 11px; white-space: nowrap; color: var(--text-secondary); }
+    .listen-setup-hint li { color: var(--text-dim) !important; font-size: 11px !important;
+        line-height: 1.6 !important; padding: 0 !important; list-style-type: disc !important; }
+    .listen-live-status { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px;
+        background: var(--bg-raised); border: 1px solid var(--border); border-radius: 5px;
+        font-size: 12px; color: var(--text-secondary); }
+    .listen-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+    .listen-live-status.ok .listen-live-dot { background: var(--accent-green); }
+    .listen-live-status.warn .listen-live-dot { background: #ffab00; }
+    .listen-live-status.warn { color: #ffab00; }
+    .listen-live-status.err .listen-live-dot { background: #ff5252; }
 </style>
 <div class="group-manage-modal hidden" id="listen-setup-modal">
     <div class="group-manage-box" style="max-width:560px;">
@@ -1061,6 +1071,10 @@ silently 403-ing background saves and stopping updates from reaching others.
                 with your camera, then paste). Stored on this device only.
                 <span id="listen-companion-status"></span>
             </div>
+            <div class="listen-live-status" id="listen-live-status">
+                <span class="listen-live-dot"></span>
+                <span id="listen-live-text">No companion address saved yet.</span>
+            </div>
         </div>
 
         <div style="margin-bottom:8px;">
@@ -1069,12 +1083,24 @@ silently 403-ing background saves and stopping updates from reaching others.
   --token {{ listen_token }} \
   --api {{ request.scheme }}://{{ request.get_host }}</pre>
             <div class="listen-setup-hint" style="color:var(--text-dim);font-size:11px;margin-top:5px;">
-                Pairing token is per-show. On start it uses Dante Virtual Soundcard if that's the
-                only Dante input; otherwise it lists your audio inputs (USB preamp, MADI, etc.) to
-                pick from. To skip the question, add <code>--device "&lt;name&gt;"</code>.
-                See <code>companion/README.md</code> for the one-time HTTPS setup (mkcert)
-                needed for iPhone/iPad.
+                Pairing token is per-show. See <code>companion/README.md</code> for the
+                one-time HTTPS setup (mkcert) needed for iPhone/iPad.
             </div>
+        </div>
+
+        <div style="margin-bottom:8px;margin-top:16px;">
+            <div class="a2-setting-label" style="margin-bottom:6px;">3 · Audio input</div>
+            <div style="color:var(--text-secondary);font-size:12px;line-height:1.5;">
+                The companion captures one audio input on the rack Mac — Dante Virtual Soundcard,
+                or any interface (USB preamp, MADI, AVB). Channel numbers are that input's numbers;
+                use <strong>Audio Ch</strong> on a card when a pack isn't patched 1:1.
+            </div>
+            <ul class="listen-setup-hint" style="color:var(--text-dim);font-size:11px;line-height:1.6;margin:6px 0 0;padding-left:18px;">
+                <li>Only one Dante input → it's used automatically.</li>
+                <li>Otherwise it lists the inputs at startup and you pick one.</li>
+                <li>To choose up front, add <code>--device "Scarlett"</code> (any part of the name) —
+                    <code>--list-devices</code> shows them all.</li>
+            </ul>
         </div>
     </div>
 </div>
@@ -1121,6 +1147,7 @@ function saveCompanionUrl() {
     var val = (input.value || '').trim().replace(/\/+$/, '');
     if (val && !/^https?:\/\//i.test(val)) { val = 'https://' + val; }
     try { localStorage.setItem(_companionKey(), val); } catch (e) {}
+    checkCompanionStatus();
     if (status) {
         status.textContent = val ? '  ✓ Saved.' : '  Cleared.';
         status.style.color = val ? 'var(--accent-green)' : 'var(--text-dim)';
@@ -1132,9 +1159,49 @@ function openListenSetup() {
     var status = document.getElementById('listen-companion-status');
     if (status) status.textContent = '';
     document.getElementById('listen-setup-modal').classList.remove('hidden');
+    checkCompanionStatus();
+    clearInterval(_listenStatusTimer);
+    _listenStatusTimer = setInterval(checkCompanionStatus, 3000);
 }
 function closeListenSetup() {
     document.getElementById('listen-setup-modal').classList.add('hidden');
+    clearInterval(_listenStatusTimer);
+}
+// Live status: ask the companion (from this browser) what it's capturing.
+var _listenStatusTimer = null;
+function _setListenStatus(kind, text) {
+    var box = document.getElementById('listen-live-status');
+    var label = document.getElementById('listen-live-text');
+    if (!box || !label) return;
+    box.classList.remove('ok', 'warn', 'err');
+    if (kind) box.classList.add(kind);
+    label.textContent = text;
+}
+async function checkCompanionStatus() {
+    var base = getCompanionUrl();
+    if (!base) { _setListenStatus('', 'No companion address saved yet.'); return; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 2500);
+    try {
+        var r = await fetch(base + '/api/status?token=' + encodeURIComponent(_listenToken()),
+                            {signal: ctrl.signal, cache: 'no-store'});
+        if (r.status === 403) {
+            _setListenStatus('err', 'Companion is running for a different show — restart it with this show\'s token.');
+            return;
+        }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var d = await r.json();
+        var who = d.listeners === 1 ? '1 listener' : d.listeners + ' listeners';
+        if (d.source) {
+            _setListenStatus('ok', 'Connected · ' + d.source + ' · ' + who);
+        } else {
+            _setListenStatus('warn', 'Connected, but audio input "' + d.device + '" is missing — waiting for it.');
+        }
+    } catch (e) {
+        _setListenStatus('err', 'Can\'t reach the companion at ' + base + ' — is it running, and is this device on the same network?');
+    } finally {
+        clearTimeout(timer);
+    }
 }
 function openListen(assignmentId) {
     var base = getCompanionUrl();
