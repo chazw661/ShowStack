@@ -1094,12 +1094,20 @@ class CompanionServer:
     def setup_html(self):
         """'Set up a phone' page: install-certificate QR + Listen QR."""
         import html as _html
-        from urllib.parse import quote
+        from urllib.parse import quote, urlparse
         ip = lan_ip()
         cert_url = ("http://%s:%d/ca.mobileconfig" % (ip, self.local_port)) \
             if self.local_port and self.ca_profile else None
         lan = self._urls()["lan_url"]
         listen_url = ("%s/listen?token=%s" % (lan, quote(self.token))) if lan else None
+        # Opening ShowStack with the address in the URL fragment (never sent to
+        # the server) makes the phone remember this Mac for the show, so the
+        # normal Listen buttons on A2 cards work. Pointless for a loopback api.
+        api_host = (urlparse(self.api).hostname or "").lower()
+        showstack_url = None
+        if lan and api_host not in ("127.0.0.1", "localhost", "::1"):
+            showstack_url = "%s/audiopatch/mic-tracker/#listen=%s&show=%s" % (
+                self.api.rstrip("/"), quote(lan, safe=""), self.token[:8])
         show = self.companion.show_name if self.companion else ""
 
         def qr_svg(data):
@@ -1123,9 +1131,16 @@ class CompanionServer:
             "step2": block(2, "Trust it",
                            "<b>Settings → General → About → Certificate Trust Settings</b> → turn on "
                            "<b>ShowStack Listen</b>.", None).replace("<code>HTTPS is not enabled.</code>", ""),
-            "step3": block(3, "Open Listen",
+            "step3": (block(3, "Open ShowStack on the phone",
+                            "Scan, sign in if asked, and make sure this show is the current project. "
+                            "The phone remembers this Mac — then just tap <b>🎧 Listen</b> on any A2 card.",
+                            showstack_url)
+                      + block(4, "Or listen without ShowStack",
+                              "Opens the Listen page directly with a channel picker.", listen_url))
+                     if showstack_url else
+                     block(3, "Open Listen",
                            "Scan to open the Listen page directly, or paste the address below into "
-                           "ShowStack → Mic Tracker → 🎧 Listen Setup on the phone.", listen_url),
+                           "ShowStack → Mic Tracker → 🎧 Listen Setup → Advanced on the phone.", listen_url),
             "lan": _html.escape(lan or ""),
         }
 

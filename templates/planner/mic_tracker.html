@@ -1079,6 +1079,9 @@ silently 403-ing background saves and stopping updates from reaching others.
             <span class="listen-live-dot"></span>
             <span id="listen-live-text">Not connected yet.</span>
         </div>
+        <div id="listen-phones-row" hidden style="margin-top:10px;">
+            <button class="btn-mtt btn-mtt-export" onclick="openPhoneSetup()">📱 Set up phones (QR codes)</button>
+        </div>
 
         <div style="margin-top:16px;">
             <div class="a2-setting-label" style="margin-bottom:6px;">2 · Audio input &amp; phones</div>
@@ -1088,8 +1091,8 @@ silently 403-ing background saves and stopping updates from reaching others.
                     automatically.</li>
                 <li>Channel numbers are that input's numbers; use <strong>Audio Ch</strong> on a card when a
                     pack isn't patched 1:1.</li>
-                <li>Phones: <strong>🎧 menu → Set up a phone…</strong> shows QR codes to install the
-                    certificate (once) and open Listen.</li>
+                <li>Phones: <strong>📱 Set up phones</strong> (above, once the app is running) shows QR
+                    codes to install the certificate once per phone and open this show on it.</li>
                 <li id="listen-lan-row" hidden>Phone Listen address: <code id="listen-lan-url"></code></li>
             </ul>
         </div>
@@ -1197,6 +1200,30 @@ function closeListenSetup() {
     document.getElementById('listen-setup-modal').classList.add('hidden');
     clearInterval(_listenStatusTimer);
 }
+function openPhoneSetup() {
+    window.open(LISTEN_APP_LOCAL_URL + '/setup', '_blank', 'noopener');
+}
+// A phone that scanned the app's "Open ShowStack on the phone" QR arrives with
+// #listen=<https LAN address>&show=<token prefix>. Remember that address for this
+// show on this device, then drop the fragment.
+(function adoptListenAddressFromLink() {
+    var hash = window.location.hash || '';
+    if (hash.indexOf('listen=') === -1) return;
+    var params = new URLSearchParams(hash.slice(1));
+    var url = (params.get('listen') || '').replace(/\/+$/, '');
+    var show = params.get('show') || '';
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    var privateHttps = /^https:\/\/((10|127)\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+|[a-z0-9-]+\.local):\d{1,5}$/i;
+    if (!privateHttps.test(url)) return;
+    var token = _listenToken();
+    if (!token) return;
+    if (token.slice(0, 8) !== show) {
+        alert('This Listen link is for a different show.\n\nSwitch to that show\'s project in ShowStack, then scan the QR code again.');
+        return;
+    }
+    try { localStorage.setItem(_companionKey(), url); } catch (e) {}
+    openListenSetup();
+})();
 async function _fetchStatus(base, timeoutMs) {
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, timeoutMs || 2500);
@@ -1285,6 +1312,8 @@ async function checkCompanionStatus() {
         } else {
             _setListenStatus('warn', 'Connected, but audio input "' + d.device + '" is missing — waiting for it.');
         }
+        var phonesRow = document.getElementById('listen-phones-row');
+        if (phonesRow) phonesRow.hidden = !(base === LISTEN_APP_LOCAL_URL && _isDesktopMac());
         if (lanRow) {
             lanRow.hidden = !d.lan_url;
             document.getElementById('listen-lan-url').textContent = d.lan_url || '';
