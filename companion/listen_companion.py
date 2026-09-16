@@ -1227,10 +1227,23 @@ class CompanionServer:
 
     HEARTBEAT_SECONDS = 5
 
+    def _client_ssl(self):
+        if not self.verify_tls:
+            return False
+        # A packaged app's Python has no system CA store; use certifi's bundle
+        # (the same one `requests` uses for pairing).
+        try:
+            import certifi
+            return ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            return ssl.create_default_context()
+
     async def _post_heartbeat(self, session, payload):
         from aiohttp import ClientTimeout
         url = self.api.rstrip("/") + "/audiopatch/api/listen/heartbeat/"
-        async with session.post(url, json=payload, ssl=None if self.verify_tls else False,
+        if not hasattr(self, "_ssl_ctx"):
+            self._ssl_ctx = self._client_ssl()
+        async with session.post(url, json=payload, ssl=self._ssl_ctx,
                                 headers={"Authorization": "Bearer %s" % self.token},
                                 timeout=ClientTimeout(total=8)) as resp:
             return resp.status

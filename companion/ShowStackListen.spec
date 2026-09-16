@@ -8,7 +8,7 @@ import listen_companion
 datas, binaries, hiddenimports = [], [], []
 # Packages with native libraries / data PyInstaller can miss on its own.
 for package in ("aiortc", "aioice", "av", "pylibsrtp", "sounddevice", "_sounddevice_data",
-                "rumps", "qrcode", "cryptography", "google_crc32c", "pyee"):
+                "rumps", "qrcode", "cryptography", "google_crc32c", "pyee", "certifi"):
     try:
         pkg_datas, pkg_binaries, pkg_hidden = collect_all(package)
     except Exception:
