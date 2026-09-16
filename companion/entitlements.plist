@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements for ShowStack Listen.app (Issue #74). -->
+<plist version="1.0">
+<dict>
+    <!-- Capture audio inputs (DVS, interfaces). Without it the hardened runtime
+         hands the app silence even when the user allows microphone access. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+    <!-- sounddevice's PortAudio callback and other cffi/ctypes callbacks write
+         executable trampolines. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+</dict>
+</plist>
