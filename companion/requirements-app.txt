@@ -1,0 +1,5 @@
+# Extra dependencies for the "ShowStack Listen" menu bar app (Issue #74).
+#     pip install -r requirements.txt -r requirements-app.txt
+rumps>=0.4                     # menu bar UI
+pyobjc-framework-Cocoa>=10     # URL-scheme handler, clipboard, activation
+pyinstaller>=6.16              # build_app.sh -> "ShowStack Listen.app"

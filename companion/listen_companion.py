@@ -823,6 +823,37 @@ document.addEventListener('visibilitychange', () => {
 """
 
 
+SETUP_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up a phone — ShowStack Listen</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:#0d0d1a; color:#eee; }
+  main { max-width:760px; margin:0 auto; padding:28px 20px 48px; }
+  h1 { font-size:20px; margin:0 0 4px; } .show { color:#8a8ab0; font-size:13px; margin-bottom:24px; }
+  section { display:flex; gap:16px; padding:18px; margin-bottom:14px; background:#16162a;
+            border:1px solid #2a2a45; border-radius:10px; }
+  .n { flex:0 0 30px; height:30px; border-radius:50%%; background:#4a9eff; color:#fff; font-weight:700;
+       display:flex; align-items:center; justify-content:center; }
+  h2 { font-size:15px; margin:3px 0 6px; } p { color:#aaa; font-size:13px; line-height:1.5; margin:0 0 10px; }
+  b { color:#eee; } .qr { background:#fff; border-radius:8px; padding:6px; width:184px; max-width:100%%; }
+  .qr svg { width:100%%; height:auto; display:block; }
+  code { display:block; margin-top:8px; font-size:12px; color:#8a8ab0; word-break:break-all; }
+  .note { color:#6a6a90; font-size:12px; line-height:1.5; }
+</style></head><body><main>
+<h1>🎧 Set up a phone</h1>
+<div class="show">Show: %(show)s · phone must be on the same Wi-Fi as this Mac</div>
+%(step1)s
+%(step2)s
+%(step3)s
+<p class="note">The certificate only works for local network addresses — it can't be used for
+any website. If this Mac's IP address changes, the phone's Listen address changes too
+(the certificate stays valid).</p>
+</main></body></html>
+"""
+
+
 # ──────────────────────────────────────────────────────────────────
 # Startup helpers
 # ──────────────────────────────────────────────────────────────────
@@ -1028,6 +1059,44 @@ class CompanionServer:
             urls["local_url"] = "http://localhost:%d" % self.local_port
         return urls
 
+    def setup_html(self):
+        """'Set up a phone' page: install-certificate QR + Listen QR."""
+        import html as _html
+        from urllib.parse import quote
+        ip = lan_ip()
+        cert_url = ("http://%s:%d/ca.mobileconfig" % (ip, self.local_port)) \
+            if self.local_port and self.ca_profile else None
+        lan = self._urls()["lan_url"]
+        listen_url = ("%s/listen?token=%s" % (lan, quote(self.token))) if lan else None
+        show = self.companion.show_name if self.companion else ""
+
+        def qr_svg(data):
+            if qrcode is None:
+                return ""
+            from qrcode.image.svg import SvgPathFillImage
+            img = qrcode.make(data, image_factory=SvgPathFillImage, box_size=8, border=2)
+            return img.to_string(encoding="unicode")
+
+        def block(n, title, body, url):
+            return ('<section><div class="n">%s</div><div><h2>%s</h2><p>%s</p>%s'
+                    '<code>%s</code></div></section>') % (
+                n, title, body, ('<div class="qr">%s</div>' % qr_svg(url)) if url else "",
+                _html.escape(url or "HTTPS is not enabled."))
+
+        return SETUP_HTML % {
+            "show": _html.escape(show or "—"),
+            "step1": block(1, "Install the certificate (once per phone)",
+                           "Scan with the phone camera and open it. Tap <b>Allow</b>, then go to "
+                           "<b>Settings → Profile Downloaded → Install</b>.", cert_url),
+            "step2": block(2, "Trust it",
+                           "<b>Settings → General → About → Certificate Trust Settings</b> → turn on "
+                           "<b>ShowStack Listen</b>.", None).replace("<code>HTTPS is not enabled.</code>", ""),
+            "step3": block(3, "Open Listen",
+                           "Scan to open the Listen page directly, or paste the address below into "
+                           "ShowStack → Mic Tracker → 🎧 Listen Setup on the phone.", listen_url),
+            "lan": _html.escape(lan or ""),
+        }
+
     def status(self):
         if self.companion is None:
             return None
@@ -1074,6 +1143,10 @@ class CompanionServer:
         async def options(_request):
             return web.Response()
 
+        async def setup_page(request):
+            # Loopback-only (see guard): it embeds the show token.
+            return web.Response(text=self.setup_html(), content_type="text/html")
+
         app = web.Application(middlewares=[guard_and_cors])
         app.router.add_get("/", companion.index)
         app.router.add_get("/listen", companion.listen_page)
@@ -1082,6 +1155,7 @@ class CompanionServer:
         app.router.add_route("OPTIONS", "/api/{tail:.*}", options)
         app.router.add_post("/offer", companion.offer)
         app.router.add_get("/ca.mobileconfig", ca_profile)
+        app.router.add_get("/setup", setup_page)
         return app
 
     async def _serve(self):
