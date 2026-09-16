@@ -250,6 +250,13 @@
     .a2-card.group-teal   { border-left: 4px solid #00bcd4; }
     .a2-card-meta { flex: 1; }
     .a2-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #14142a; border-bottom: 1px solid var(--border); justify-content: space-between; }
+    .a2-header-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    /* Issue #74 — Listen button */
+    .a2-listen-btn { padding: 8px 12px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; border: 1px solid var(--border-bright); background: var(--bg-raised); color: var(--text-secondary); transition: all 0.15s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+    .a2-listen-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+    .a2-listen-btn.listen-active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); box-shadow: 0 0 14px rgba(74,158,255,0.4); }
+    .a2-listen-icon { font-size: 13px; line-height: 1; }
+    .a2-listen-ch { width: 100%; }
     .a2-micd-toggle { padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none; transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit; }
     .a2-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
     .a2-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 16px rgba(0,230,118,0.45); }
@@ -532,8 +539,11 @@ silently 403-ing background saves and stopping updates from reaching others.
             <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:#ffffff !important;">👤 Presenters</a>
             <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
+            {# Issue #74 — A2 Listen companion setup #}
+            <button class="btn-mtt btn-mtt-export" onclick="openListenSetup()" title="Pair this device with the Listen companion app">🎧 Listen Setup</button>
         </div>
     </div>
+    <span id="listen-token" data-token="{{ listen_token }}" style="display:none"></span>
 
     <div class="mtt-toplevel-tabs">
         <a class="mtt-toplevel-tab active" href="{% url 'planner:mic_tracker' %}">Tracker</a>
@@ -770,15 +780,27 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     {% endwith %}
                                     {% endif %}
                                 </div>
-                                {# Single-presenter cards keep MIC'D in header; multi-presenter use per-chip buttons #}
-                                {% if assignment.presenter_slots.count <= 1 %}
-                                <button class="a2-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
-                                        id="a2-micd-btn-{{ assignment.id }}"
-                                        onclick="toggleMicd({{ assignment.id }}, this)"
-                                        {% if is_viewer %}disabled style="cursor:default"{% endif %}>
-                                    <span class="a2-micd-dot"></span>MIC'D
-                                </button>
-                                {% endif %}
+                                <div class="a2-header-controls">
+                                    {# Issue #74 — Listen: stream this slot's audio to the phone via the companion app #}
+                                    <button class="a2-listen-btn"
+                                            id="a2-listen-btn-{{ assignment.id }}"
+                                            data-channel="{{ assignment.effective_input_channel }}"
+                                            data-presenter="{{ assignment.presenter.name|default:'' }}"
+                                            data-rf="{{ assignment.rf_number }}"
+                                            onclick="openListen({{ assignment.id }})"
+                                            title="Listen to this beltpack on your phone (via the Listen companion app)">
+                                        <span class="a2-listen-icon">🎧</span>Listen
+                                    </button>
+                                    {# Single-presenter cards keep MIC'D in header; multi-presenter use per-chip buttons #}
+                                    {% if assignment.presenter_slots.count <= 1 %}
+                                    <button class="a2-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
+                                            id="a2-micd-btn-{{ assignment.id }}"
+                                            onclick="toggleMicd({{ assignment.id }}, this)"
+                                            {% if is_viewer %}disabled style="cursor:default"{% endif %}>
+                                        <span class="a2-micd-dot"></span>MIC'D
+                                    </button>
+                                    {% endif %}
+                                </div>
                             </div>
 
                             {% with active_slot=assignment.active_slot %}
@@ -875,6 +897,17 @@ silently 403-ing background saves and stopping updates from reaching others.
                                                 <option value="">— select —</option>
                                                 {% for val, label in assignment.OUTPUT_LEVEL_CHOICES %}{% if val %}<option value="{{ val }}" {% if active_slot.output_level == val %}selected{% endif %}>{{ label }}</option>{% endif %}{% endfor %}
                                             </select>
+                                        </div>
+                                        <div class="a2-setting">
+                                            <span class="a2-setting-label">Audio Ch <span style="opacity:.6;font-weight:400;text-transform:none;letter-spacing:0;">(Listen)</span></span>
+                                            <input type="number" min="1" step="1"
+                                                   class="a2-select a2-listen-ch"
+                                                   id="listen-ch-{{ assignment.id }}"
+                                                   value="{% if assignment.input_channel %}{{ assignment.input_channel }}{% endif %}"
+                                                   placeholder="{{ assignment.rf_number }} (default)"
+                                                   title="Companion input channel. Blank = same as RF/slot number ({{ assignment.rf_number }})."
+                                                   onchange="updateListenChannel({{ assignment.id }}, this.value)"
+                                                   {% if is_viewer %}readonly{% endif %}>
                                         </div>
                                         <div class="a2-setting a2-setting-notes">
                                             <span class="a2-setting-label">A2 Notes</span>
@@ -1002,6 +1035,45 @@ silently 403-ing background saves and stopping updates from reaching others.
 
 <datalist id="presenters-datalist"></datalist>
 
+{# ── Issue #74 — A2 Listen companion setup modal ─────────────────── #}
+<div class="group-manage-modal hidden" id="listen-setup-modal">
+    <div class="group-manage-box" style="max-width:560px;">
+        <button class="group-modal-close" onclick="closeListenSetup()">×</button>
+        <div class="group-manage-title">🎧 Listen — companion setup</div>
+        <p style="color:var(--text-secondary);font-size:13px;line-height:1.5;margin:6px 0 14px;">
+            The Listen companion app runs on the wired Mac at your rack and streams
+            beltpack audio to this device over the show Wi-Fi. Audio never passes
+            through ShowStack.
+        </p>
+
+        <div style="margin-bottom:16px;">
+            <div class="a2-setting-label" style="margin-bottom:6px;">1 · Companion address</div>
+            <div style="display:flex;gap:8px;">
+                <input type="text" class="group-add-input" id="listen-companion-url"
+                       placeholder="https://192.168.1.42:8443" style="flex:1;">
+                <button class="group-add-btn" onclick="saveCompanionUrl()">Save</button>
+            </div>
+            <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
+                Paste the address the companion prints at startup (or scan its QR code
+                with your camera, then paste). Stored on this device only.
+                <span id="listen-companion-status"></span>
+            </div>
+        </div>
+
+        <div style="margin-bottom:8px;">
+            <div class="a2-setting-label" style="margin-bottom:6px;">2 · Launch command (run on the rack Mac)</div>
+            <pre id="listen-launch-cmd" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;color:var(--text-primary);overflow-x:auto;white-space:pre-wrap;word-break:break-all;">python listen_companion.py \
+  --token {{ listen_token }} \
+  --device "Dante Virtual Soundcard" \
+  --api {{ request.scheme }}://{{ request.get_host }}</pre>
+            <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
+                Pairing token is per-show. See <code>companion/README.md</code> for the
+                one-time HTTPS setup (mkcert) needed for iPhone/iPad.
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // Restore the saved A1/A2 tab immediately — BEFORE the render-blocking
 // scripts below — so the page never flashes A1 before switching to A2.
@@ -1026,6 +1098,69 @@ silently 403-ing background saves and stopping updates from reaching others.
 <script src="{% static 'admin/js/mic_tracker_v5.js' %}"></script>
 
 <script>
+// ── Issue #74 — A2 Listen companion ────────────────────────────
+function _listenToken() {
+    var el = document.getElementById('listen-token');
+    return (el && el.dataset.token) || '';
+}
+// Companion URL is stored per-show (keyed by the pairing token) so switching
+// projects on the same device doesn't cross-wire to the wrong rack.
+function _companionKey() { return 'listenCompanionUrl:' + _listenToken(); }
+function getCompanionUrl() {
+    try { return (localStorage.getItem(_companionKey()) || '').replace(/\/+$/, ''); }
+    catch (e) { return ''; }
+}
+function saveCompanionUrl() {
+    var input = document.getElementById('listen-companion-url');
+    var status = document.getElementById('listen-companion-status');
+    var val = (input.value || '').trim().replace(/\/+$/, '');
+    if (val && !/^https?:\/\//i.test(val)) { val = 'https://' + val; }
+    try { localStorage.setItem(_companionKey(), val); } catch (e) {}
+    if (status) {
+        status.textContent = val ? '  ✓ Saved.' : '  Cleared.';
+        status.style.color = val ? 'var(--accent-green)' : 'var(--text-dim)';
+    }
+}
+function openListenSetup() {
+    var input = document.getElementById('listen-companion-url');
+    if (input) input.value = getCompanionUrl();
+    var status = document.getElementById('listen-companion-status');
+    if (status) status.textContent = '';
+    document.getElementById('listen-setup-modal').classList.remove('hidden');
+}
+function closeListenSetup() {
+    document.getElementById('listen-setup-modal').classList.add('hidden');
+}
+function openListen(assignmentId) {
+    var base = getCompanionUrl();
+    if (!base) {
+        alert('No Listen companion set for this show yet.\n\nTap "🎧 Listen Setup" and paste the companion address first.');
+        openListenSetup();
+        return;
+    }
+    var btn = document.getElementById('a2-listen-btn-' + assignmentId);
+    if (!btn) return;
+    var ch = btn.dataset.channel || '';
+    var params = new URLSearchParams({
+        token: _listenToken(),
+        ch: ch,
+        name: btn.dataset.presenter || '',
+        rf: btn.dataset.rf || ''
+    });
+    window.open(base + '/listen?' + params.toString(), '_blank', 'noopener');
+}
+// Wraps updateField so the Listen button's channel stays in sync after an
+// input_channel override (updateField lives in the cached static JS bundle).
+async function updateListenChannel(assignmentId, value) {
+    var data = await updateField(assignmentId, 'input_channel', value);
+    if (data && data.success) {
+        var btn = document.getElementById('a2-listen-btn-' + assignmentId);
+        if (btn && typeof data.effective_input_channel !== 'undefined') {
+            btn.dataset.channel = data.effective_input_channel;
+        }
+    }
+}
+
 // ── Session tab switching ──────────────────────────────────────
 function switchSessionTab(sessionId, tabId, btn) {
     const session = document.querySelector('[data-session-id="' + sessionId + '"]');

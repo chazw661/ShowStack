@@ -1,0 +1,10 @@
+# ShowStack A2 Listen — companion app dependencies (Issue #74)
+# Python 3.9+ on the wired rack Mac. Install into a venv:
+#     python3 -m venv venv && source venv/bin/activate
+#     pip install -r requirements.txt
+aiortc>=1.6          # WebRTC/Opus (pulls in av / PyAV)
+aiohttp>=3.9         # LAN HTTPS server + signaling
+sounddevice>=0.4.6   # Core Audio multichannel capture (PortAudio)
+numpy>=1.24
+requests>=2.31       # authenticate + pull channel map from ShowStack
+qrcode>=7.4          # render the Listen URL as a scannable QR at startup

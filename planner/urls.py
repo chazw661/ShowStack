@@ -7,6 +7,7 @@ from planner.utils.pdf_exports.location_pdf import export_location_pdf, export_a
 from planner.utils.pdf_exports.system_report import export_system_report
 from .views import populate_amp_models_view
 from . import views_monitor
+from . import views_listen
 
 from .views import (
      audio_checklist_view,
@@ -296,6 +297,9 @@ urlpatterns = [
     #------Auto Refresh for Mic Trackser---
 
     path('api/mic-tracker-checksum/', views.mic_tracker_checksum, name='mic_tracker_checksum'),
+
+    #------A2 Listen companion API (Issue #74)------
+    path('api/listen/session/', views_listen.listen_session, name='listen_session'),
 
 
     path('debug-device-ordering/', views.debug_device_ordering, name='debug_device_ordering'),

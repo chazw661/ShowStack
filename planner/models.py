@@ -39,6 +39,8 @@ class Project(models.Model):
     invite_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     agent_api_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False,
                                      help_text="API key for the local network monitor agent")
+    listen_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False,
+                                    help_text="Pairing token for the A2 Listen companion app (Issue #74)")
     
     class Meta:
         ordering = ['-updated_at']
@@ -3463,6 +3465,16 @@ class MicAssignment(models.Model):
         max_length=10, choices=OUTPUT_LEVEL_CHOICES, blank=True,
         help_text="Transmitter RF output level"
     )
+
+    # Issue #74 — A2 Listen: which audio channel on the companion app's input
+    # device carries this slot. Null means "same as the RF/slot number" so the
+    # common 1:1 rack patch needs no data entry; override when the patch differs.
+    input_channel = models.PositiveIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1)],
+        help_text="Audio input channel on the Listen companion device. "
+                  "Defaults to the RF/slot number when blank."
+    )
     
     
     
@@ -3495,6 +3507,12 @@ class MicAssignment(models.Model):
             return f"RF{self.rf_number:02d} - {self.presenter.name}"
         return f"RF{self.rf_number:02d}"
     
+    @property
+    def effective_input_channel(self):
+        """Issue #74 — audio channel the Listen companion streams for this slot.
+        Falls back to the RF/slot number when no explicit override is set."""
+        return self.input_channel if self.input_channel else self.rf_number
+
     def get_all_presenters(self):
         """Return list of all presenters including shared ones"""
         presenters = []

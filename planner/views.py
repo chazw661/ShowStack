@@ -662,6 +662,9 @@ def mic_tracker_view(request):
         'mic_types': MicAssignment.MIC_TYPES,
         'session_types': MicSession.SESSION_TYPES,
         'is_viewer': is_viewer,  # ADD THIS LINE
+        # Issue #74 — A2 Listen: pairing token for the companion app so the
+        # A2 view can build companion URLs and show the launch command.
+        'listen_token': request.current_project.listen_token if request.current_project else '',
     }  # ← This closing brace needs to be indented with 4 spaces, not at column 0
     
     return render(request, 'planner/mic_tracker.html', context)
@@ -1282,6 +1285,20 @@ def update_mic_assignment(request):
         if field in ('is_micd', 'is_d_mic'):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
             assignment.save()
+        elif field == 'input_channel':
+            # Issue #74 — audio channel for the Listen companion. Blank clears
+            # the override so it falls back to the RF/slot number.
+            if value in (None, '', 'null'):
+                assignment.input_channel = None
+            else:
+                try:
+                    ch = int(value)
+                except (TypeError, ValueError):
+                    return JsonResponse({'success': False, 'error': 'Invalid channel'}, status=400)
+                if ch < 1:
+                    return JsonResponse({'success': False, 'error': 'Channel must be 1 or greater'}, status=400)
+                assignment.input_channel = ch
+            assignment.save(update_fields=['input_channel', 'last_modified'])
         elif field in ('presenter', 'presenter_name', 'presenter_id', 'mic_type',
                     'headset_color', 'placement', 'sensitivity', 'output_level', 'notes'):
             slot = assignment.presenter_slots.filter(is_active=True).first()
@@ -1344,6 +1361,7 @@ def update_mic_assignment(request):
             'presenter_count': slot_count,
             'slot_photo_data': active_slot.photo_data if active_slot else '',
             'active_slot_id': active_slot.id if active_slot else None,
+            'effective_input_channel': assignment.effective_input_channel,
         })
         
     except Exception as e:
