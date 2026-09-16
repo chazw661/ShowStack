@@ -41,6 +41,11 @@ class Project(models.Model):
                                      help_text="API key for the local network monitor agent")
     listen_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False,
                                     help_text="Pairing token for the A2 Listen companion app (Issue #74)")
+    # Last heartbeat from the Listen app (source, listeners, phone address…).
+    # Lets the Mic Tracker show app status in any browser without the page
+    # having to reach the rack Mac directly (Safari blocks https -> http://localhost).
+    listen_status = models.JSONField(null=True, blank=True, editable=False)
+    listen_status_at = models.DateTimeField(null=True, blank=True, editable=False)
     
     class Meta:
         ordering = ['-updated_at']

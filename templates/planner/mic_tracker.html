@@ -1224,12 +1224,17 @@ function openPhoneSetup() {
     try { localStorage.setItem(_companionKey(), url); } catch (e) {}
     openListenSetup();
 })();
-async function _fetchStatus(base, timeoutMs) {
+// App status comes from ShowStack (the app posts a heartbeat), not from the
+// browser calling the Mac: Safari blocks https://showstack.io -> http://localhost,
+// and Chrome now asks for local-network permission.
+var LISTEN_STATUS_URL = '{% url "planner:listen_app_status" %}';
+async function _fetchAppStatus() {
     var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, timeoutMs || 2500);
+    var timer = setTimeout(function() { ctrl.abort(); }, 4000);
     try {
-        return await fetch(base + '/api/status?token=' + encodeURIComponent(_listenToken()),
-                           {signal: ctrl.signal, cache: 'no-store'});
+        var r = await fetch(LISTEN_STATUS_URL, {signal: ctrl.signal, cache: 'no-store', credentials: 'same-origin'});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
     } finally {
         clearTimeout(timer);
     }
@@ -1240,34 +1245,35 @@ async function startListenOnThisMac() {
     document.getElementById('listen-download').hidden = true;
     btn.disabled = true;
     note.textContent = 'If your browser asks, allow it to open ShowStack Listen, then confirm in the app.';
+    // The user said "this Mac": its Listen buttons open the app's local page.
+    try { localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL); } catch (e) {}
+    var input = document.getElementById('listen-companion-url');
+    if (input) input.value = LISTEN_APP_LOCAL_URL;
+    var startedAt = Date.now();
     window.location.href = 'showstack-listen://start?token=' + encodeURIComponent(_listenToken()) +
         '&api=' + encodeURIComponent(window.location.origin);
-    // The app may show a confirmation first, so give it a while to come up.
-    var deadline = Date.now() + 30000, sawApp = false;
-    while (Date.now() < deadline && !document.getElementById('listen-setup-modal').classList.contains('hidden')) {
+    // The app may show a confirmation first; its first heartbeat follows.
+    while (Date.now() - startedAt < 45000 &&
+           !document.getElementById('listen-setup-modal').classList.contains('hidden')) {
+        await new Promise(function(res) { setTimeout(res, 1500); });
         try {
-            var r = await _fetchStatus(LISTEN_APP_LOCAL_URL, 1200);
-            sawApp = true;
-            if (r.ok) {
-                try { localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL); } catch (e) {}
-                var input = document.getElementById('listen-companion-url');
-                if (input) input.value = LISTEN_APP_LOCAL_URL;
+            var d = await _fetchAppStatus();
+            if (d.running && d.age !== null && d.age * 1000 < Date.now() - startedAt + 1500) {
                 note.textContent = '✓ Running.';
                 btn.disabled = false;
                 checkCompanionStatus();
                 return;
             }
         } catch (e) {}
-        if (!sawApp && Date.now() > deadline - 22000) {
-            document.getElementById('listen-download').hidden = false;   // nothing answered in ~8 s
+        if (Date.now() - startedAt > 15000) {
+            document.getElementById('listen-download').hidden = false;
         }
-        await new Promise(function(res) { setTimeout(res, 800); });
     }
     note.textContent = '';
     btn.disabled = false;
-    if (!sawApp) document.getElementById('listen-download').hidden = false;
+    document.getElementById('listen-download').hidden = false;
 }
-// Live status: ask the companion (from this browser) what it's capturing.
+// Live status line.
 var _listenStatusTimer = null;
 function _setListenStatus(kind, text) {
     var box = document.getElementById('listen-live-status');
@@ -1280,48 +1286,38 @@ function _setListenStatus(kind, text) {
 async function checkCompanionStatus() {
     var base = getCompanionUrl();
     var lanRow = document.getElementById('listen-lan-row');
-    if (!base && _isDesktopMac()) {
-        // Already running from an earlier Start? Adopt it quietly.
-        try {
-            var probe = await _fetchStatus(LISTEN_APP_LOCAL_URL, 800);
-            if (probe.ok) {
-                try { localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL); } catch (e) {}
-                base = LISTEN_APP_LOCAL_URL;
-            }
-        } catch (e) {}
-    }
-    if (!base) {
-        _setListenStatus('', _isDesktopMac()
-            ? 'Not running — click Start on this Mac.'
-            : 'No Listen address saved on this device — see Advanced.');
+    var phonesRow = document.getElementById('listen-phones-row');
+    var d;
+    try {
+        d = await _fetchAppStatus();
+    } catch (e) {
+        _setListenStatus('err', 'Can\'t check Listen status right now — retrying…');
         return;
     }
-    try {
-        var r = await _fetchStatus(base, 2500);
-        if (r.status === 403) {
-            _setListenStatus('err', _isDesktopMac()
-                ? 'ShowStack Listen is running for a different show — click Start on this Mac to switch.'
-                : 'The Listen app is running for a different show.');
-            return;
-        }
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        var d = await r.json();
-        var who = d.listeners === 1 ? '1 listener' : d.listeners + ' listeners';
-        if (d.source) {
-            _setListenStatus('ok', 'Connected · ' + d.source + ' · ' + who);
-        } else {
-            _setListenStatus('warn', 'Connected, but audio input "' + d.device + '" is missing — waiting for it.');
-        }
-        var phonesRow = document.getElementById('listen-phones-row');
-        if (phonesRow) phonesRow.hidden = !(base === LISTEN_APP_LOCAL_URL && _isDesktopMac());
-        if (lanRow) {
-            lanRow.hidden = !d.lan_url;
-            document.getElementById('listen-lan-url').textContent = d.lan_url || '';
-        }
-    } catch (e) {
-        _setListenStatus('err', base === LISTEN_APP_LOCAL_URL
-            ? 'ShowStack Listen isn\'t running on this Mac — click Start on this Mac.'
-            : 'Can\'t reach the Listen app at ' + base + ' — is it running, and is this device on the same network?');
+    if (!d.running) {
+        _setListenStatus('', _isDesktopMac()
+            ? 'ShowStack Listen isn\'t running for this show — click Start on this Mac.'
+            : 'ShowStack Listen isn\'t running for this show on the rack Mac yet.');
+        if (phonesRow) phonesRow.hidden = true;
+        if (lanRow) lanRow.hidden = true;
+        return;
+    }
+    var who = d.listeners === 1 ? '1 listener' : (d.listeners || 0) + ' listeners';
+    if (d.source) {
+        _setListenStatus('ok', 'Running · ' + d.source + ' · ' + who);
+    } else {
+        _setListenStatus('warn', 'Running, but audio input "' + (d.device || '?') + '" is missing — waiting for it.');
+    }
+    if (phonesRow) phonesRow.hidden = !(base === LISTEN_APP_LOCAL_URL && _isDesktopMac());
+    if (lanRow) {
+        lanRow.hidden = !d.lan_url;
+        document.getElementById('listen-lan-url').textContent = d.lan_url || '';
+    }
+    // A phone/tablet with nothing saved yet: use the app's LAN address.
+    if (!base && !_isDesktopMac() && d.lan_url) {
+        try { localStorage.setItem(_companionKey(), d.lan_url); } catch (e) {}
+        var input = document.getElementById('listen-companion-url');
+        if (input) input.value = d.lan_url;
     }
 }
 function openListen(assignmentId) {

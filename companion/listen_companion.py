@@ -1071,6 +1071,7 @@ class CompanionServer:
         self._thread = None
         self._ready = threading.Event()
         self._error = None
+        self._heartbeat_task = None
 
     # ── pairing / urls ────────────────────────────────────────────
 
@@ -1220,8 +1221,59 @@ class CompanionServer:
         # Open audio on this loop so the PortAudio callback can hand blocks to
         # it thread-safely.
         self.hub.start(asyncio.get_running_loop())
+        self._heartbeat_task = asyncio.get_running_loop().create_task(self._heartbeat_loop())
+
+    # ── heartbeat to ShowStack ────────────────────────────────────
+
+    HEARTBEAT_SECONDS = 5
+
+    async def _post_heartbeat(self, session, payload):
+        from aiohttp import ClientTimeout
+        url = self.api.rstrip("/") + "/audiopatch/api/listen/heartbeat/"
+        async with session.post(url, json=payload, ssl=None if self.verify_tls else False,
+                                headers={"Authorization": "Bearer %s" % self.token},
+                                timeout=ClientTimeout(total=8)) as resp:
+            return resp.status
+
+    async def _heartbeat_loop(self):
+        """Tell ShowStack what this app is doing, so the Mic Tracker can show it
+        in any browser (the page can't reliably reach the Mac directly)."""
+        from aiohttp import ClientSession
+        warned = False
+        async with ClientSession() as session:
+            try:
+                while True:
+                    try:
+                        status = await self._post_heartbeat(
+                            session, dict(self.status() or {}, running=True))
+                        if status >= 400 and not warned:
+                            log.warning("ShowStack heartbeat rejected (HTTP %d).", status)
+                            warned = True
+                        elif status < 400:
+                            warned = False
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        if not warned:
+                            log.warning("Can't reach ShowStack for status (%s) — audio "
+                                        "keeps working; retrying.", exc)
+                            warned = True
+                    await asyncio.sleep(self.HEARTBEAT_SECONDS)
+            except asyncio.CancelledError:
+                try:
+                    await asyncio.wait_for(self._post_heartbeat(
+                        session, dict(self.status() or {}, running=False, listeners=0)), 3)
+                except Exception:
+                    pass
 
     async def _shutdown(self):
+        if self._heartbeat_task is not None:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except BaseException:
+                pass
+            self._heartbeat_task = None
         if self.companion is not None:
             for pc in list(self.companion.pcs):
                 await pc.close()

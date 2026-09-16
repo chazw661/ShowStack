@@ -18,10 +18,14 @@
 #     in the Authorization header or as a ?token= query param, since the
 #     companion also embeds it in the browser Listen URL.
 
+import ipaddress
 import json
+from urllib.parse import urlparse
 
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -108,3 +112,82 @@ def listen_session(request):
 
     channels = [by_channel[ch] for ch in sorted(by_channel)]
     return JsonResponse({'show': project.name, 'channels': channels})
+
+
+# A heartbeat older than this means the app isn't running (it sends every ~5 s).
+LISTEN_STATUS_STALE_SECONDS = 20
+
+
+def _private_https_url(value):
+    """Keep only https://<private IPv4 or .local>:<port> addresses."""
+    try:
+        u = urlparse(str(value or ''))
+        if u.scheme != 'https' or not u.hostname or u.path not in ('', '/') or u.query:
+            return None
+        host = u.hostname
+        if not host.endswith('.local'):
+            if not ipaddress.ip_address(host).is_private:
+                return None
+        return 'https://%s:%d' % (host, u.port or 443)
+    except ValueError:
+        return None
+
+
+def _clean_status(data):
+    def text(key, limit=120):
+        v = data.get(key)
+        return str(v)[:limit] if v is not None else None
+
+    def number(key):
+        try:
+            return max(0, int(data.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return {
+        'running': bool(data.get('running', True)),
+        'version': text('version', 20),
+        'device': text('device'),
+        'source': text('source', 160),
+        'channels': number('channels'),
+        'sample_rate': number('sample_rate'),
+        'listeners': number('listeners'),
+        'lan_url': _private_https_url(data.get('lan_url')),
+    }
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def listen_heartbeat(request):
+    """The Listen app reports what it's doing (every few seconds, and on stop)."""
+    project, error = _authenticate_listen(request)
+    if error:
+        return error
+    try:
+        data = json.loads(request.body or b'{}')
+        if not isinstance(data, dict):
+            raise ValueError
+    except ValueError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    # queryset.update() so the project's updated_at / signals aren't touched.
+    Project.objects.filter(pk=project.pk).update(
+        listen_status=_clean_status(data), listen_status_at=timezone.now())
+    return JsonResponse({'ok': True, 'show': project.name})
+
+
+@login_required
+@require_http_methods(["GET"])
+def listen_app_status(request):
+    """Listen app status for the current project, for the Mic Tracker page."""
+    project = getattr(request, 'current_project', None)
+    if project is None:
+        return JsonResponse({'running': False, 'reason': 'no_project'})
+    project = Project.objects.only('listen_status', 'listen_status_at').get(pk=project.pk)
+    status = project.listen_status or {}
+    age = None
+    if project.listen_status_at:
+        age = (timezone.now() - project.listen_status_at).total_seconds()
+    running = bool(status.get('running')) and age is not None and age <= LISTEN_STATUS_STALE_SECONDS
+    response = JsonResponse({**status, 'running': running, 'age': age})
+    response['Cache-Control'] = 'no-store'
+    return response

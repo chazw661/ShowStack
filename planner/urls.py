@@ -300,6 +300,8 @@ urlpatterns = [
 
     #------A2 Listen companion API (Issue #74)------
     path('api/listen/session/', views_listen.listen_session, name='listen_session'),
+    path('api/listen/heartbeat/', views_listen.listen_heartbeat, name='listen_heartbeat'),
+    path('api/listen/status/', views_listen.listen_app_status, name='listen_app_status'),
 
 
     path('debug-device-ordering/', views.debug_device_ordering, name='debug_device_ordering'),
