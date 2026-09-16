@@ -26,8 +26,8 @@ Design notes:
     * The input device is tracked by name, opened at its native sample rate
       (resampled to 48 kHz per listener) and reopened automatically when it
       changes, disappears, or comes back — see AudioHub / CoreAudioProbe.
-    * HTTPS is mandatory for WebRTC playback in iOS Safari. See README.md for
-      the one-time mkcert setup.
+    * HTTPS is mandatory for WebRTC playback in iOS Safari; certificates are
+      automatic (certs.py) and phones trust them once — see README.md.
 """
 
 import argparse
