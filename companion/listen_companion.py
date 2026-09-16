@@ -1177,8 +1177,9 @@ def main():
                          "ignored with --http)")
     ap.add_argument("--channels", type=int, default=None,
                     help="Capture only the first N inputs (default: all the device has)")
-    ap.add_argument("--cert", default="cert.pem", help="TLS cert (mkcert) path")
-    ap.add_argument("--key", default="key.pem", help="TLS key (mkcert) path")
+    ap.add_argument("--cert", default=None,
+                    help="TLS cert path (default: automatic local certificate)")
+    ap.add_argument("--key", default=None, help="TLS key path (with --cert)")
     ap.add_argument("--no-verify-tls", action="store_true",
                     help="Skip TLS verification when calling ShowStack")
     ap.add_argument("--test-tone", action="store_true",
@@ -1204,19 +1205,26 @@ def main():
         device_name = pick_device(args.device)
         log.info("Using input device: %s", device_name)
 
+    ca_profile = None
     if args.http:
         ssl_ctx = None
         log.warning("Serving plain HTTP — localhost testing only (phones need HTTPS).")
-    else:
+    elif args.cert and args.key:
         ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         try:
             ssl_ctx.load_cert_chain(args.cert, args.key)
         except (FileNotFoundError, ssl.SSLError) as exc:
-            raise SystemExit(
-                "Could not load TLS cert/key (%s).\n"
-                "iOS Safari requires HTTPS. Create a local cert with mkcert (see "
-                "companion/README.md), or pass --http for a same-Mac localhost test.\n"
-                % exc)
+            raise SystemExit("Could not load TLS cert/key (%s)." % exc)
+    else:
+        # Automatic local CA + server cert (see certs.py). Phones install the
+        # CA once from http://<this-mac>:<local-port>/ca.mobileconfig.
+        import certs
+        ssl_ctx, sans = certs.server_ssl_context()
+        ca_profile = certs.ca_mobileconfig
+        log.info("HTTPS certificate covers: %s", ", ".join(sans["ips"] + sans["dns"]))
+        if args.local_port:
+            log.info("Phone certificate (install once): http://%s:%d/ca.mobileconfig",
+                     lan_ip(), args.local_port)
 
     server = CompanionServer(
         token=args.token, api=args.api, device_name=device_name,
@@ -1225,6 +1233,7 @@ def main():
         https_port=None if args.http else args.port, ssl_context=ssl_ctx,
         local_port=args.port if args.http else args.local_port,
         local_lan_ok=args.http,
+        ca_profile=ca_profile,
         verify_tls=not args.no_verify_tls,
     )
     try:
