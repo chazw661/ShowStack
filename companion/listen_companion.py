@@ -732,9 +732,17 @@ function label() {
 }
 label();
 
+const STALE_MSG = 'This Listen link is for a different show. Open 🎧 Listen from ShowStack again, ' +
+                  'or rescan the QR code from 📱 Set up phones.';
+function staleLink() {
+  $('status').textContent = STALE_MSG;
+  $('status').style.color = '#ffab00';
+  $('go').disabled = true;
+}
 async function loadChannels() {
   try {
     const r = await fetch('/api/channels?token=' + encodeURIComponent(token));
+    if (r.status === 403) { staleLink(); return; }
     if (!r.ok) return;
     const d = await r.json();
     mapping = d.channels || [];
@@ -822,6 +830,7 @@ async function start() {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({sdp: pc.localDescription.sdp, type: pc.localDescription.type, channel, token})
   });
+  if (r.status === 403) { stop(); staleLink(); return; }
   if (!r.ok) { $('status').textContent = 'Rejected (' + r.status + ')'; $('go').disabled = false; return; }
   const ans = await r.json();
   await pc.setRemoteDescription(ans);
@@ -882,7 +891,18 @@ SETUP_HTML = """<!doctype html>
 <p class="note">The certificate only works for local network addresses — it can't be used for
 any website. If this Mac's IP address changes, the phone's Listen address changes too
 (the certificate stays valid).</p>
-</main></body></html>
+</main>
+<script>
+  // QR codes embed this show's token: refresh when the app switches shows.
+  const token = %(token_js)s;
+  setInterval(async () => {
+    try {
+      const r = await fetch('/api/status?token=' + encodeURIComponent(token), {cache: 'no-store'});
+      if (r.status === 403) location.reload();
+    } catch (e) {}
+  }, 5000);
+</script>
+</body></html>
 """
 
 
@@ -1143,6 +1163,7 @@ class CompanionServer:
                            "Scan to open the Listen page directly, or paste the address below into "
                            "ShowStack → Mic Tracker → 🎧 Listen Setup → Advanced on the phone.", listen_url),
             "lan": _html.escape(lan or ""),
+            "token_js": json.dumps(self.token),
         }
 
     def status(self):
@@ -1193,7 +1214,8 @@ class CompanionServer:
 
         async def setup_page(request):
             # Loopback-only (see guard): it embeds the show token.
-            return web.Response(text=self.setup_html(), content_type="text/html")
+            return web.Response(text=self.setup_html(), content_type="text/html",
+                                headers={"Cache-Control": "no-store"})
 
         app = web.Application(middlewares=[guard_and_cors])
         app.router.add_get("/", companion.index)
