@@ -1048,60 +1048,77 @@ silently 403-ing background saves and stopping updates from reaching others.
     .listen-live-status.warn .listen-live-dot { background: #ffab00; }
     .listen-live-status.warn { color: #ffab00; }
     .listen-live-status.err .listen-live-dot { background: #ff5252; }
+    .listen-advanced summary { cursor: pointer; color: var(--text-dim); font-size: 12px; }
+    .listen-advanced[open] summary { color: var(--text-secondary); }
 </style>
 <div class="group-manage-modal hidden" id="listen-setup-modal">
     <div class="group-manage-box" style="max-width:560px;">
         <button class="group-modal-close" onclick="closeListenSetup()">×</button>
-        <div class="group-manage-title">🎧 Listen — companion setup</div>
+        <div class="group-manage-title">🎧 Listen — setup</div>
         <p style="color:var(--text-secondary);font-size:13px;line-height:1.5;margin:6px 0 14px;">
-            The Listen companion app runs on the wired Mac at your rack and streams
-            beltpack audio to this device over the show Wi-Fi. Audio never passes
-            through ShowStack.
+            The <strong>ShowStack Listen</strong> app runs on the wired Mac at your rack and streams
+            beltpack audio to A2 phones over the show Wi-Fi. Audio never passes through ShowStack.
         </p>
 
-        <div style="margin-bottom:16px;">
-            <div class="a2-setting-label" style="margin-bottom:6px;">1 · Companion address</div>
-            <div style="display:flex;gap:8px;">
-                <input type="text" class="group-add-input" id="listen-companion-url"
-                       placeholder="https://192.168.1.42:8443" style="flex:1;">
-                <button class="group-add-btn" onclick="saveCompanionUrl()">Save</button>
+        <div id="listen-start-block" style="margin-bottom:16px;">
+            <div class="a2-setting-label" style="margin-bottom:6px;">1 · Start on the rack Mac</div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <button class="btn-mtt btn-mtt-primary" id="listen-start-btn" onclick="startListenOnThisMac()"
+                        style="color:#ffffff !important;">▶ Start on this Mac</button>
+                <span id="listen-start-note" style="color:var(--text-dim);font-size:11px;"></span>
             </div>
-            <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
-                Paste the address the companion prints at startup (or scan its QR code
-                with your camera, then paste). Stored on this device only.
-                <span id="listen-companion-status"></span>
-            </div>
-            <div class="listen-live-status" id="listen-live-status">
-                <span class="listen-live-dot"></span>
-                <span id="listen-live-text">No companion address saved yet.</span>
+            <div id="listen-download" class="listen-setup-hint" hidden
+                 style="color:var(--text-secondary);font-size:12px;margin-top:8px;line-height:1.5;">
+                Didn't open? Install <strong>ShowStack Listen</strong> for Mac first
+                <span id="listen-download-link"></span>, open it once (right-click → Open), then click
+                Start again.
             </div>
         </div>
 
-        <div style="margin-bottom:8px;">
-            <div class="a2-setting-label" style="margin-bottom:6px;">2 · Launch command (run on the rack Mac)</div>
-            <pre id="listen-launch-cmd" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;color:var(--text-primary);overflow-x:auto;white-space:pre-wrap;word-break:break-all;">python listen_companion.py \
-  --token {{ listen_token }} \
-  --api {{ request.scheme }}://{{ request.get_host }}</pre>
-            <div class="listen-setup-hint" style="color:var(--text-dim);font-size:11px;margin-top:5px;">
-                Pairing token is per-show. See <code>companion/README.md</code> for the
-                one-time HTTPS setup (mkcert) needed for iPhone/iPad.
-            </div>
+        <div class="listen-live-status" id="listen-live-status">
+            <span class="listen-live-dot"></span>
+            <span id="listen-live-text">Not connected yet.</span>
         </div>
 
-        <div style="margin-bottom:8px;margin-top:16px;">
-            <div class="a2-setting-label" style="margin-bottom:6px;">3 · Audio input</div>
-            <div style="color:var(--text-secondary);font-size:12px;line-height:1.5;">
-                The companion captures one audio input on the rack Mac — Dante Virtual Soundcard,
-                or any interface (USB preamp, MADI, AVB). Channel numbers are that input's numbers;
-                use <strong>Audio Ch</strong> on a card when a pack isn't patched 1:1.
-            </div>
-            <ul class="listen-setup-hint" style="color:var(--text-dim);font-size:11px;line-height:1.6;margin:6px 0 0;padding-left:18px;">
-                <li>Only one Dante input → it's used automatically.</li>
-                <li>Otherwise it lists the inputs at startup and you pick one.</li>
-                <li>To choose up front, add <code>--device "Scarlett"</code> (any part of the name) —
-                    <code>--list-devices</code> shows them all.</li>
+        <div style="margin-top:16px;">
+            <div class="a2-setting-label" style="margin-bottom:6px;">2 · Audio input &amp; phones</div>
+            <ul class="listen-setup-hint" style="margin:0;padding-left:18px;">
+                <li>Pick the input from the <strong>🎧 menu bar icon → Audio Input</strong> — Dante Virtual
+                    Soundcard or any interface (USB preamp, MADI, AVB). A lone Dante input is picked
+                    automatically.</li>
+                <li>Channel numbers are that input's numbers; use <strong>Audio Ch</strong> on a card when a
+                    pack isn't patched 1:1.</li>
+                <li>Phones: <strong>🎧 menu → Set up a phone…</strong> shows QR codes to install the
+                    certificate (once) and open Listen.</li>
+                <li id="listen-lan-row" hidden>Phone Listen address: <code id="listen-lan-url"></code></li>
             </ul>
         </div>
+
+        <details class="listen-advanced" style="margin-top:16px;">
+            <summary>Advanced — phone address or terminal launch</summary>
+            <div style="margin-top:10px;">
+                <div class="a2-setting-label" style="margin-bottom:6px;">Companion address (this device)</div>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" class="group-add-input" id="listen-companion-url"
+                           placeholder="https://192.168.1.42:8443" style="flex:1;">
+                    <button class="group-add-btn" onclick="saveCompanionUrl()">Save</button>
+                </div>
+                <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
+                    On a phone, paste the phone Listen address shown above. Stored on this device only.
+                    <span id="listen-companion-status"></span>
+                </div>
+            </div>
+            <div style="margin-top:14px;">
+                <div class="a2-setting-label" style="margin-bottom:6px;">Terminal alternative</div>
+                <pre id="listen-launch-cmd" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;color:var(--text-primary);overflow-x:auto;white-space:pre-wrap;word-break:break-all;">python listen_companion.py \
+  --token {{ listen_token }} \
+  --api {{ request.scheme }}://{{ request.get_host }}</pre>
+                <div class="listen-setup-hint" style="color:var(--text-dim);font-size:11px;margin-top:5px;">
+                    Add <code>--device "&lt;name&gt;"</code> to choose the input. See
+                    <code>companion/README.md</code>.
+                </div>
+            </div>
+        </details>
     </div>
 </div>
 
@@ -1153,11 +1170,24 @@ function saveCompanionUrl() {
         status.style.color = val ? 'var(--accent-green)' : 'var(--text-dim)';
     }
 }
+// "ShowStack Listen" Mac app — started by link, found on its loopback port.
+var LISTEN_APP_LOCAL_URL = 'http://localhost:8480';
+var LISTEN_APP_DOWNLOAD_URL = '';   // set once the signed download is hosted
+function _isDesktopMac() {
+    return /Macintosh|Mac OS X/.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1);
+}
 function openListenSetup() {
     var input = document.getElementById('listen-companion-url');
     if (input) input.value = getCompanionUrl();
     var status = document.getElementById('listen-companion-status');
     if (status) status.textContent = '';
+    document.getElementById('listen-start-block').hidden = !_isDesktopMac();
+    document.getElementById('listen-download').hidden = true;
+    document.getElementById('listen-start-note').textContent = '';
+    var link = document.getElementById('listen-download-link');
+    link.innerHTML = LISTEN_APP_DOWNLOAD_URL
+        ? '(<a href="' + LISTEN_APP_DOWNLOAD_URL + '">download</a>)'
+        : '(download link coming soon)';
     document.getElementById('listen-setup-modal').classList.remove('hidden');
     checkCompanionStatus();
     clearInterval(_listenStatusTimer);
@@ -1166,6 +1196,49 @@ function openListenSetup() {
 function closeListenSetup() {
     document.getElementById('listen-setup-modal').classList.add('hidden');
     clearInterval(_listenStatusTimer);
+}
+async function _fetchStatus(base, timeoutMs) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, timeoutMs || 2500);
+    try {
+        return await fetch(base + '/api/status?token=' + encodeURIComponent(_listenToken()),
+                           {signal: ctrl.signal, cache: 'no-store'});
+    } finally {
+        clearTimeout(timer);
+    }
+}
+async function startListenOnThisMac() {
+    var btn = document.getElementById('listen-start-btn');
+    var note = document.getElementById('listen-start-note');
+    document.getElementById('listen-download').hidden = true;
+    btn.disabled = true;
+    note.textContent = 'If your browser asks, allow it to open ShowStack Listen, then confirm in the app.';
+    window.location.href = 'showstack-listen://start?token=' + encodeURIComponent(_listenToken()) +
+        '&api=' + encodeURIComponent(window.location.origin);
+    // The app may show a confirmation first, so give it a while to come up.
+    var deadline = Date.now() + 30000, sawApp = false;
+    while (Date.now() < deadline && !document.getElementById('listen-setup-modal').classList.contains('hidden')) {
+        try {
+            var r = await _fetchStatus(LISTEN_APP_LOCAL_URL, 1200);
+            sawApp = true;
+            if (r.ok) {
+                try { localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL); } catch (e) {}
+                var input = document.getElementById('listen-companion-url');
+                if (input) input.value = LISTEN_APP_LOCAL_URL;
+                note.textContent = '✓ Running.';
+                btn.disabled = false;
+                checkCompanionStatus();
+                return;
+            }
+        } catch (e) {}
+        if (!sawApp && Date.now() > deadline - 22000) {
+            document.getElementById('listen-download').hidden = false;   // nothing answered in ~8 s
+        }
+        await new Promise(function(res) { setTimeout(res, 800); });
+    }
+    note.textContent = '';
+    btn.disabled = false;
+    if (!sawApp) document.getElementById('listen-download').hidden = false;
 }
 // Live status: ask the companion (from this browser) what it's capturing.
 var _listenStatusTimer = null;
@@ -1179,14 +1252,29 @@ function _setListenStatus(kind, text) {
 }
 async function checkCompanionStatus() {
     var base = getCompanionUrl();
-    if (!base) { _setListenStatus('', 'No companion address saved yet.'); return; }
-    var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, 2500);
+    var lanRow = document.getElementById('listen-lan-row');
+    if (!base && _isDesktopMac()) {
+        // Already running from an earlier Start? Adopt it quietly.
+        try {
+            var probe = await _fetchStatus(LISTEN_APP_LOCAL_URL, 800);
+            if (probe.ok) {
+                try { localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL); } catch (e) {}
+                base = LISTEN_APP_LOCAL_URL;
+            }
+        } catch (e) {}
+    }
+    if (!base) {
+        _setListenStatus('', _isDesktopMac()
+            ? 'Not running — click Start on this Mac.'
+            : 'No Listen address saved on this device — see Advanced.');
+        return;
+    }
     try {
-        var r = await fetch(base + '/api/status?token=' + encodeURIComponent(_listenToken()),
-                            {signal: ctrl.signal, cache: 'no-store'});
+        var r = await _fetchStatus(base, 2500);
         if (r.status === 403) {
-            _setListenStatus('err', 'Companion is running for a different show — restart it with this show\'s token.');
+            _setListenStatus('err', _isDesktopMac()
+                ? 'ShowStack Listen is running for a different show — click Start on this Mac to switch.'
+                : 'The Listen app is running for a different show.');
             return;
         }
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1197,16 +1285,20 @@ async function checkCompanionStatus() {
         } else {
             _setListenStatus('warn', 'Connected, but audio input "' + d.device + '" is missing — waiting for it.');
         }
+        if (lanRow) {
+            lanRow.hidden = !d.lan_url;
+            document.getElementById('listen-lan-url').textContent = d.lan_url || '';
+        }
     } catch (e) {
-        _setListenStatus('err', 'Can\'t reach the companion at ' + base + ' — is it running, and is this device on the same network?');
-    } finally {
-        clearTimeout(timer);
+        _setListenStatus('err', base === LISTEN_APP_LOCAL_URL
+            ? 'ShowStack Listen isn\'t running on this Mac — click Start on this Mac.'
+            : 'Can\'t reach the Listen app at ' + base + ' — is it running, and is this device on the same network?');
     }
 }
 function openListen(assignmentId) {
     var base = getCompanionUrl();
     if (!base) {
-        alert('No Listen companion set for this show yet.\n\nTap "🎧 Listen Setup" and paste the companion address first.');
+        alert('Listen isn\'t set up on this device yet.\n\nOpen "🎧 Listen Setup" first.');
         openListenSetup();
         return;
     }
