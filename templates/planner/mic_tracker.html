@@ -1067,8 +1067,10 @@ silently 403-ing background saves and stopping updates from reaching others.
   --device "Dante Virtual Soundcard" \
   --api {{ request.scheme }}://{{ request.get_host }}</pre>
             <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
-                Pairing token is per-show. See <code>companion/README.md</code> for the
-                one-time HTTPS setup (mkcert) needed for iPhone/iPad.
+                Pairing token is per-show. Not using DVS? Change <code>--device</code> to your
+                interface's name (<code>--list-devices</code> shows them), or leave it off to pick
+                from a list. See <code>companion/README.md</code> for the one-time HTTPS setup
+                (mkcert) needed for iPhone/iPad.
             </div>
         </div>
     </div>

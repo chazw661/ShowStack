@@ -64,13 +64,27 @@ This is a one‑time step per device.
 
 ---
 
-## 2. Find your audio device
+## 2. Choose your audio input
+
+Any Core Audio input works — not just Dante:
+
+* **Dante Virtual Soundcard** (receiver Dante outputs routed to DVS in Dante Controller)
+* **USB / Thunderbolt interface** fed from receiver analog or AES outs (RME, MOTU, Focusrite, UAD…)
+* **MADI** (e.g. RME MADIface), **AVB**, **SoundGrid**
+* An **Aggregate Device** from Audio MIDI Setup if packs are spread across several interfaces
 
 ```bash
 python listen_companion.py --list-devices
 ```
 
-Note the name (or index) of the Dante Virtual Soundcard / Axient Dante input.
+Pass the name (or a unique part of it) as `--device`. If you leave `--device`
+off, the companion uses the only Dante input if there is exactly one; otherwise
+it lists the inputs and asks you to pick. It never silently falls back to the
+built‑in mic, and when run unattended (no terminal) it refuses to guess.
+
+**Channel numbers are the device's input numbers.** "Audio ch 12" means input 12
+on that device — use the Mic Tracker **Audio Ch** override when an RF slot isn't
+patched to the matching input.
 
 ---
 
@@ -86,7 +100,7 @@ python listen_companion.py \
     --api https://showstack.io
 ```
 
-On start it authenticates to the show, opens the audio device at 48 kHz, and
+On start it authenticates to the show, opens the audio device, and
 prints a **QR code + URL** (e.g. `https://192.168.1.42:8443/listen`). Hand that
 to the A2.
 
@@ -100,6 +114,22 @@ to the A2.
    plays the beltpack on tap.
 3. Switch channels from the dropdown — it changes instantly over a data channel
    with no reconnect, and never touches the console signal path.
+
+### Device changes, dropouts & sample rate
+
+* **Any sample rate.** The device is opened at whatever rate it's already set to
+  (44.1 / 48 / 96 kHz…) and each listener's channel is resampled to 48 kHz for
+  Opus. The companion never changes a device's rate — on DVS that would retime
+  the Dante network.
+* **Reconfigure live.** Change DVS channel count or sample rate, restart DVS, or
+  unplug/replug an interface: the companion notices within ~1 s (it watches the
+  Core Audio device directly), reopens it, and logs what changed. Listeners stay
+  connected — they hear silence while the device is gone and the Listen page
+  shows *"Audio source lost — waiting for the device…"* until it's back.
+* **Started before the device?** If `--device` names something that isn't
+  present yet (DVS still starting), the companion starts anyway and waits for it.
+* The Listen page shows the live source, e.g. *Source: Dante Virtual Soundcard ·
+  16 ch · 48 kHz*, and warns if the chosen channel is above the device's count.
 
 ---
 
@@ -130,11 +160,11 @@ should hear a tone, see the meter move, and be able to switch channels live.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--token` | *(required)* | Show pairing token (`Project.listen_token`) |
-| `--device` | first input device | Input device name substring or index |
+| `--device` | only Dante input, else ask | Input device name (or unique part) or index |
 | `--api` | `https://showstack.io` | ShowStack base URL |
 | `--host` | `0.0.0.0` | Bind host |
 | `--port` | `8443` | Bind port |
-| `--channels` | device max inputs | Override input channel count |
+| `--channels` | all device inputs | Capture only the first N inputs |
 | `--cert` / `--key` | `cert.pem` / `key.pem` | mkcert TLS files |
 | `--no-verify-tls` | off | Skip TLS verify when calling ShowStack |
 | `--test-tone` | off | Synthesize a tone per channel (no audio device needed) |
@@ -170,3 +200,6 @@ briefly unreachable the app still serves audio with generic channel labels.
   from 🎧 Listen Setup.
 * **No audio / wrong pack** — check the "Audio Ch" override for that slot and
   confirm the Dante patch into the capture device with `--list-devices`.
+* **"Audio source lost" on the Listen page** — the input device disappeared
+  (DVS stopped/restarting, interface unplugged). It reconnects on its own once
+  the device is back; check the companion log for what changed.

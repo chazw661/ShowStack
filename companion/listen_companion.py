@@ -2,7 +2,7 @@
 """ShowStack A2 Listen — local companion app (Issue #74).
 
 Runs on a wired Mac at the A2 rack. Captures a Core Audio multichannel input
-device (Dante Virtual Soundcard, Axient Digital Dante outputs, etc.) and streams
+device (Dante Virtual Soundcard, a USB/MADI/AVB interface, etc.) and streams
 a single selected channel to a phone/tablet browser on the same LAN over
 WebRTC/Opus. ShowStack never receives or relays audio — it only hands this app
 the slot -> channel mapping and authenticates it to a show.
@@ -24,6 +24,9 @@ Design notes:
     * Each listener picks ONE channel at a time; switching is done over a
       WebRTC data channel (no renegotiation) so it takes well under a second
       and never touches the console signal path.
+    * The input device is tracked by name, opened at its native sample rate
+      (resampled to 48 kHz per listener) and reopened automatically when it
+      changes, disappears, or comes back — see AudioHub / CoreAudioProbe.
     * HTTPS is mandatory for WebRTC playback in iOS Safari. See README.md for
       the one-time mkcert setup.
 """
@@ -34,6 +37,7 @@ import json
 import logging
 import socket
 import ssl
+import struct
 import sys
 import time
 from fractions import Fraction
@@ -76,8 +80,121 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("listen")
 
-SAMPLE_RATE = 48000        # DVS / Dante standard; Opus-native
-BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame per block
+SAMPLE_RATE = 48000        # WebRTC/Opus output rate
+BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame
+WATCH_INTERVAL = 1.0       # seconds between device health checks
+STALL_SECONDS = 2.0        # no audio callbacks for this long -> reopen
+
+
+# ──────────────────────────────────────────────────────────────────
+# Core Audio probe — live device state straight from the HAL (macOS)
+# ──────────────────────────────────────────────────────────────────
+
+def _fourcc(code):
+    return int.from_bytes(code.encode("ascii"), "big")
+
+
+class CoreAudioProbe:
+    """Reads live input-device state from the Core Audio HAL via ctypes.
+
+    PortAudio caches its device list at init, so it never learns that DVS
+    changed channel count, changed sample rate, or restarted. Worse, when the
+    device an input stream is bound to goes away, Core Audio's AUHAL quietly
+    follows the system default input (the laptop mic) — callbacks keep coming,
+    so a stall check alone can't notice. Polling the HAL catches all of it.
+    """
+
+    def __init__(self):
+        import ctypes
+        self._ct = ctypes
+        self._ca = ctypes.CDLL("/System/Library/Frameworks/CoreAudio.framework/CoreAudio")
+        self._cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+
+        class Address(ctypes.Structure):
+            _fields_ = [("selector", ctypes.c_uint32),
+                        ("scope", ctypes.c_uint32),
+                        ("element", ctypes.c_uint32)]
+        self._Address = Address
+
+        u32p = ctypes.POINTER(ctypes.c_uint32)
+        addrp = ctypes.POINTER(Address)
+        self._ca.AudioObjectGetPropertyDataSize.argtypes = [
+            ctypes.c_uint32, addrp, ctypes.c_uint32, ctypes.c_void_p, u32p]
+        self._ca.AudioObjectGetPropertyDataSize.restype = ctypes.c_int32
+        self._ca.AudioObjectGetPropertyData.argtypes = [
+            ctypes.c_uint32, addrp, ctypes.c_uint32, ctypes.c_void_p, u32p, ctypes.c_void_p]
+        self._ca.AudioObjectGetPropertyData.restype = ctypes.c_int32
+        self._cf.CFStringGetCString.argtypes = [
+            ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32]
+        self._cf.CFStringGetCString.restype = ctypes.c_bool
+        self._cf.CFRelease.argtypes = [ctypes.c_void_p]
+
+    def _get(self, obj, selector, scope="glob"):
+        ct = self._ct
+        addr = self._Address(_fourcc(selector), _fourcc(scope), 0)
+        size = ct.c_uint32(0)
+        if self._ca.AudioObjectGetPropertyDataSize(obj, ct.byref(addr), 0, None, ct.byref(size)):
+            return None
+        buf = ct.create_string_buffer(size.value)
+        if self._ca.AudioObjectGetPropertyData(obj, ct.byref(addr), 0, None, ct.byref(size), buf):
+            return None
+        return buf.raw[:size.value]
+
+    def _name(self, obj):
+        raw = self._get(obj, "lnam")                     # CFStringRef (+1 retained)
+        if not raw or len(raw) != 8:
+            return ""
+        ref = struct.unpack("Q", raw)[0]
+        if not ref:
+            return ""
+        out = self._ct.create_string_buffer(512)
+        ok = self._cf.CFStringGetCString(ref, out, 512, 0x08000100)  # UTF-8
+        self._cf.CFRelease(ref)
+        return out.value.decode("utf-8", "replace") if ok else ""
+
+    def input_devices(self):
+        """{name: (object_id, input_channels, sample_rate)}, or None on error."""
+        raw = self._get(1, "dev#")                        # kAudioObjectSystemObject
+        if raw is None:
+            return None
+        devices = {}
+        for (obj,) in struct.iter_unpack("I", raw):
+            # AudioBufferList: UInt32 count, pad, then 16-byte AudioBuffers
+            # whose first field is mNumberChannels.
+            cfg = self._get(obj, "slay", "inpt")
+            channels = 0
+            if cfg and len(cfg) >= 4:
+                (count,) = struct.unpack_from("I", cfg, 0)
+                for i in range(count):
+                    off = 8 + 16 * i
+                    if off + 4 <= len(cfg):
+                        channels += struct.unpack_from("I", cfg, off)[0]
+            if not channels:
+                continue
+            rate_raw = self._get(obj, "nsrt")
+            rate = struct.unpack("d", rate_raw)[0] if rate_raw and len(rate_raw) == 8 else 0.0
+            devices[self._name(obj)] = (obj, channels, int(round(rate)))
+        return devices
+
+    def fingerprint(self, name):
+        devices = self.input_devices()
+        if devices is None:
+            return None
+        return devices.get(name, "missing")
+
+
+def make_probe():
+    if sys.platform != "darwin":
+        return None
+    try:
+        probe = CoreAudioProbe()
+        if probe.input_devices() is None:
+            return None
+        return probe
+    except Exception as exc:
+        log.warning("Core Audio probe unavailable (%s) — device-change detection "
+                    "limited to stall checks.", exc)
+        return None
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -85,23 +202,46 @@ BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame per block
 # ──────────────────────────────────────────────────────────────────
 
 class AudioHub:
-    """Owns the Core Audio input stream and fans blocks out to listeners.
+    """Owns the input stream and fans blocks out to listeners.
+
+    The device is tracked by NAME and opened at its own native sample rate
+    (the companion never changes a device's rate — on DVS that would retime
+    the Dante network). A watchdog reopens the stream whenever the device's
+    channel count / sample rate / identity changes, it disappears and comes
+    back, or its callbacks stall. While the device is gone, listeners get
+    silence so their WebRTC connections stay up.
 
     The PortAudio callback runs on its own thread, so it hands blocks to the
     asyncio world via loop.call_soon_threadsafe. Each listener gets its own
     bounded queue; if a listener falls behind, its oldest block is dropped
-    (audio stays live rather than drifting).
+    (audio stays live rather than drifting). Blocks are (ndarray, rate) pairs.
     """
 
-    def __init__(self, device, channels, test_tone=False):
-        self.device = device
-        self.channels = channels
+    def __init__(self, device_name, channels=None, test_tone=False):
+        self.device_name = device_name
+        self.channels_override = channels
         self.test_tone = test_tone
+        self.channels = channels or 8 if test_tone else 0
+        self.rate = SAMPLE_RATE
         self.loop = None
         self._subscribers = set()          # set[asyncio.Queue]
         self._stream = None
-        self._tone_task = None
-        self.levels = np.zeros(channels, dtype=np.float32)  # 0..1 RMS per channel
+        self._tasks = []
+        self._probe = None
+        self._fingerprint = None
+        self._last_callback = 0.0
+        self._waiting_logged = False
+        self.levels = np.zeros(self.channels, dtype=np.float32)  # 0..1 RMS per channel
+
+    @property
+    def source_label(self):
+        """Human-readable source for the Listen page, or None while lost."""
+        if self.test_tone:
+            return "Test tone · %d ch · 48 kHz" % self.channels
+        if self._stream is None:
+            return None
+        return "%s · %d ch · %s kHz" % (
+            self.device_name, self.channels, ("%g" % (self.rate / 1000.0)))
 
     def start(self, loop):
         self.loop = loop
@@ -109,21 +249,124 @@ class AudioHub:
             # No audio device: synthesize a distinct tone per channel so the
             # whole path (WebRTC, channel switch, level meter) can be tested on
             # one machine with no mic / DVS / Dante. Channel N ~= 220*N Hz.
-            self._tone_task = loop.create_task(self._tone_loop())
+            self._tasks.append(loop.create_task(self._tone_loop()))
             log.info("TEST TONE mode: %d synthetic channels @ %d Hz (no audio device)",
                      self.channels, SAMPLE_RATE)
             return
-        self._stream = sd.InputStream(
-            device=self.device,
-            channels=self.channels,
-            samplerate=SAMPLE_RATE,
-            blocksize=BLOCK,
-            dtype="float32",
-            callback=self._on_audio,
-        )
-        self._stream.start()
-        log.info("Audio stream open: device=%s channels=%d @ %d Hz",
-                 self.device, self.channels, SAMPLE_RATE)
+        self._probe = make_probe()
+        self._open(refresh=False)
+        self._tasks.append(loop.create_task(self._watch()))
+        self._tasks.append(loop.create_task(self._silence_loop()))
+
+    # ── device open / close ──────────────────────────────────────
+
+    def _open(self, refresh=True):
+        """Open the named device at its native rate. Returns True on success."""
+        if refresh:
+            # PortAudio only enumerates devices at init; re-init to see changes.
+            sd._terminate()
+            sd._initialize()
+        index = find_device_index(self.device_name)
+        if index is None:
+            if not self._waiting_logged:
+                log.warning("Input device %r not available — sending silence and "
+                            "waiting for it to come back…", self.device_name)
+                self._waiting_logged = True
+            return False
+
+        info = sd.query_devices(index)
+        rate = int(round(info.get("default_samplerate") or SAMPLE_RATE))
+        max_in = int(info.get("max_input_channels", 0))
+        channels = max_in
+        if self.channels_override:
+            if self.channels_override > max_in:
+                log.warning("--channels %d is more than %r has (%d); using %d.",
+                            self.channels_override, self.device_name, max_in, max_in)
+            channels = min(self.channels_override, max_in)
+        if channels < 1:
+            return False
+
+        # Fingerprint BEFORE opening, so a change during open still reads as new.
+        self._fingerprint = self._probe.fingerprint(self.device_name) if self._probe else None
+        try:
+            stream = sd.InputStream(
+                device=index,
+                channels=channels,
+                samplerate=rate,
+                blocksize=max(1, rate // 50),   # 20 ms at any rate
+                dtype="float32",
+                callback=self._on_audio,
+            )
+            stream.start()
+        except Exception as exc:
+            log.warning("Could not open %r (%s) — retrying.", self.device_name, exc)
+            return False
+
+        self.channels = channels
+        self.rate = rate
+        self.levels = np.zeros(channels, dtype=np.float32)
+        self._last_callback = time.monotonic()
+        self._stream = stream
+        self._waiting_logged = False
+        log.info("Audio stream open: %s  channels=%d @ %d Hz%s",
+                 self.device_name, channels, rate,
+                 "" if rate == SAMPLE_RATE else "  (resampling to 48 kHz for listeners)")
+        return True
+
+    def _close(self):
+        stream, self._stream = self._stream, None
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                pass
+        self.levels = np.zeros(self.channels, dtype=np.float32)
+
+    def _reopen(self):
+        self._close()
+        return self._open(refresh=True)
+
+    async def _watch(self):
+        """Reopen the stream whenever the device changes, vanishes, or stalls."""
+        try:
+            while True:
+                await asyncio.sleep(WATCH_INTERVAL)
+                reason = None
+                if self._stream is None:
+                    reason = "retry"
+                else:
+                    if self._probe is not None:
+                        fp = self._probe.fingerprint(self.device_name)
+                        if fp is not None and fp != self._fingerprint:
+                            reason = "changed %s -> %s" % (
+                                _describe_fp(self._fingerprint), _describe_fp(fp))
+                    if reason is None and time.monotonic() - self._last_callback > STALL_SECONDS:
+                        reason = "no audio for %.0fs" % STALL_SECONDS
+                    if reason is None and not self._stream.active:
+                        reason = "stream stopped"
+                if reason is None:
+                    continue
+                if reason != "retry":
+                    log.warning("Input device %r %s — reopening.", self.device_name, reason)
+                elif self._probe is not None and \
+                        self._probe.fingerprint(self.device_name) == "missing":
+                    continue    # still gone; don't churn PortAudio every second
+                await self.loop.run_in_executor(None, self._reopen)
+        except asyncio.CancelledError:
+            pass
+
+    async def _silence_loop(self):
+        """Keep listeners fed with silence while the device is unavailable."""
+        try:
+            while True:
+                await asyncio.sleep(BLOCK / SAMPLE_RATE)
+                if self._stream is None and self._subscribers:
+                    block = np.zeros((BLOCK, max(1, self.channels)), dtype=np.float32)
+                    for q in list(self._subscribers):
+                        self._push(q, (block, SAMPLE_RATE))
+        except asyncio.CancelledError:
+            pass
 
     async def _tone_loop(self):
         base = np.arange(BLOCK, dtype=np.float32)
@@ -138,41 +381,40 @@ class AudioHub:
                 n += BLOCK
                 self.levels = np.clip(np.sqrt(np.mean(np.square(block), axis=0)), 0.0, 1.0)
                 for q in list(self._subscribers):
-                    self._push(q, block)
+                    self._push(q, (block, SAMPLE_RATE))
                 await asyncio.sleep(BLOCK / SAMPLE_RATE)
         except asyncio.CancelledError:
             pass
 
     def stop(self):
-        if self._tone_task is not None:
-            self._tone_task.cancel()
-            self._tone_task = None
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
+        for task in self._tasks:
+            task.cancel()
+        self._tasks = []
+        self._close()
 
     def _on_audio(self, indata, frames, time_info, status):
         if status:
             log.debug("audio status: %s", status)
+        self._last_callback = time.monotonic()
         block = np.copy(indata)  # (frames, channels) float32
         # Per-channel RMS for the level meter (cheap, done once for everyone).
         rms = np.sqrt(np.mean(np.square(block), axis=0))
         self.levels = np.clip(rms, 0.0, 1.0)
         if self.loop is None:
             return
+        item = (block, self.rate)
         for q in list(self._subscribers):
-            self.loop.call_soon_threadsafe(self._push, q, block)
+            self.loop.call_soon_threadsafe(self._push, q, item)
 
     @staticmethod
-    def _push(q, block):
+    def _push(q, item):
         if q.full():
             try:
                 q.get_nowait()
             except asyncio.QueueEmpty:
                 pass
         try:
-            q.put_nowait(block)
+            q.put_nowait(item)
         except asyncio.QueueFull:
             pass
 
@@ -185,17 +427,31 @@ class AudioHub:
         self._subscribers.discard(q)
 
 
+def _describe_fp(fp):
+    if fp == "missing":
+        return "gone"
+    if not fp:
+        return "unknown"
+    _obj, channels, rate = fp
+    return "%d ch @ %d Hz (id %d)" % (channels, rate, _obj)
+
+
 # ──────────────────────────────────────────────────────────────────
 # Per-listener audio track — extracts one channel from the hub
 # ──────────────────────────────────────────────────────────────────
 
-class ChannelTrack(MediaStreamTrack):
-    """A mono WebRTC audio track that emits the listener's selected channel.
+MAX_CHANNEL = 512
 
-    Real-time pacing comes for free from the hub queue: PortAudio delivers one
-    block every 20 ms, so awaiting the queue paces recv() at wall-clock rate.
-    Switching `self.channel` (1-based) changes which column is emitted on the
-    very next block — no renegotiation.
+
+class ChannelTrack(MediaStreamTrack):
+    """A mono 48 kHz WebRTC audio track that emits the listener's channel.
+
+    Real-time pacing comes for free from the hub queue: the device delivers
+    one 20 ms block at a time, so awaiting the queue paces recv() at wall-clock
+    rate. Switching `self.channel` (1-based) changes which column is emitted on
+    the very next block — no renegotiation. Blocks from a non-48 kHz device are
+    resampled here (per listener, one channel only); the resampler is rebuilt
+    if the device's rate changes mid-stream.
     """
 
     kind = "audio"
@@ -203,34 +459,60 @@ class ChannelTrack(MediaStreamTrack):
     def __init__(self, hub, channel):
         super().__init__()
         self.hub = hub
-        self.channel = channel               # 1-based
+        self.channel = 1
+        self.set_channel(channel)
         self._queue = hub.subscribe()
         self._pts = 0
+        self._resampler = None
+        self._resampler_rate = None
+        self._in_pts = 0
+        self._pending = []                   # resampled (1, BLOCK) int16 arrays
 
     def set_channel(self, channel):
+        # Not bounded by the device's current channel count: the device may be
+        # mid-reopen. Channels it doesn't have simply play silence.
         try:
             channel = int(channel)
         except (TypeError, ValueError):
             return
-        if 1 <= channel <= self.hub.channels:
+        if 1 <= channel <= MAX_CHANNEL:
             self.channel = channel
 
+    def _to_48k(self, pcm16, rate):
+        if rate == SAMPLE_RATE:
+            self._resampler = None
+            self._resampler_rate = None
+            return [pcm16]
+        if self._resampler_rate != rate:
+            self._resampler = av.AudioResampler(
+                format="s16", layout="mono", rate=SAMPLE_RATE, frame_size=BLOCK)
+            self._resampler_rate = rate
+            self._in_pts = 0
+        frame = av.AudioFrame.from_ndarray(pcm16, format="s16", layout="mono")
+        frame.sample_rate = rate
+        frame.pts = self._in_pts
+        frame.time_base = Fraction(1, rate)
+        self._in_pts += pcm16.shape[1]
+        return [f.to_ndarray().reshape(1, -1) for f in self._resampler.resample(frame)]
+
     async def recv(self):
-        block = await self._queue.get()      # (frames, channels) float32
-        idx = self.channel - 1
-        if 0 <= idx < block.shape[1]:
-            mono = block[:, idx]
-        else:
-            mono = np.zeros(block.shape[0], dtype=np.float32)
+        while not self._pending:
+            block, rate = await self._queue.get()      # (frames, channels) float32
+            idx = self.channel - 1
+            if 0 <= idx < block.shape[1]:
+                mono = block[:, idx]
+            else:
+                mono = np.zeros(block.shape[0], dtype=np.float32)
+            pcm = np.clip(mono, -1.0, 1.0)
+            pcm16 = (pcm * 32767.0).astype(np.int16).reshape(1, -1)  # (1, samples)
+            self._pending.extend(self._to_48k(pcm16, rate))
 
-        pcm = np.clip(mono, -1.0, 1.0)
-        pcm16 = (pcm * 32767.0).astype(np.int16).reshape(1, -1)  # (1, samples)
-
+        pcm16 = self._pending.pop(0)
         frame = av.AudioFrame.from_ndarray(pcm16, format="s16", layout="mono")
         frame.sample_rate = SAMPLE_RATE
         frame.pts = self._pts
         frame.time_base = Fraction(1, SAMPLE_RATE)
-        self._pts += mono.shape[0]
+        self._pts += pcm16.shape[1]
         return frame
 
     def stop(self):
@@ -289,7 +571,8 @@ class Companion:
         @pc.on("datachannel")
         def on_datachannel(dc):
             # Browser opens a "control" channel: it sends {"channel": n} to
-            # switch; we push {"level": x, "channel": n} back ~10x/sec.
+            # switch; we push {"level": x, "channel": n, "src": label|null}
+            # back ~10x/sec (src is null while the input device is gone).
             @dc.on("message")
             def on_message(msg):
                 try:
@@ -303,9 +586,12 @@ class Companion:
                 try:
                     while True:
                         idx = track.channel - 1
-                        level = float(self.hub.levels[idx]) if 0 <= idx < self.hub.channels else 0.0
+                        levels = self.hub.levels
+                        level = float(levels[idx]) if 0 <= idx < len(levels) else 0.0
                         if dc.readyState == "open":
-                            dc.send(json.dumps({"level": level, "channel": track.channel}))
+                            dc.send(json.dumps({"level": level, "channel": track.channel,
+                                                "src": self.hub.source_label,
+                                                "channels": self.hub.channels}))
                         await asyncio.sleep(0.1)
                 except Exception:
                     pass
@@ -362,6 +648,8 @@ LISTEN_HTML = r"""<!doctype html>
   button:disabled { opacity:.5; }
   .status { font-size:13px; color:#8a8ab0; text-align:center; min-height:18px; }
   .big-btn { position:sticky; bottom:0; }
+  .src { color:#6a6a90; font-size:12px; margin-top:6px; min-height:16px; }
+  .src.lost { color:#ffab00; }
 </style></head>
 <body>
 <header><h1>🎧 A2 Listen</h1></header>
@@ -369,6 +657,7 @@ LISTEN_HTML = r"""<!doctype html>
   <div>
     <div class="who" id="who">Channel —</div>
     <div class="sub" id="sub"></div>
+    <div class="src" id="src"></div>
   </div>
   <div>
     <label for="chan">Channel</label>
@@ -448,6 +737,14 @@ async function start() {
     try {
       const d = JSON.parse(ev.data);
       if (typeof d.level === 'number') $('meter').style.width = Math.min(100, d.level*140).toFixed(1) + '%';
+      if ('src' in d) {
+        const lost = !d.src;
+        const over = !lost && d.channels && channel > d.channels;
+        $('src').textContent = lost ? '⚠︎ Audio source lost — waiting for the device…'
+          : over ? '⚠︎ ' + d.src + ' has no channel ' + channel
+          : 'Source: ' + d.src;
+        $('src').classList.toggle('lost', lost || over);
+      }
     } catch (e) {}
   };
   dc.onopen = () => dc.send(JSON.stringify({channel}));
@@ -505,20 +802,90 @@ def lan_ip():
         s.close()
 
 
-def resolve_device(name_or_index):
-    """Accept a device index, exact name, or case-insensitive substring."""
-    if name_or_index is None:
-        return None
-    try:
-        return int(name_or_index)
-    except (TypeError, ValueError):
-        pass
-    needle = str(name_or_index).lower()
-    for i, dev in enumerate(sd.query_devices()):
-        if dev.get("max_input_channels", 0) > 0 and needle in dev["name"].lower():
+def input_devices():
+    """[(index, info)] for every input-capable device PortAudio can see."""
+    return [(i, dev) for i, dev in enumerate(sd.query_devices())
+            if dev.get("max_input_channels", 0) > 0]
+
+
+def find_device_index(name):
+    """Current PortAudio index for a device name (exact, else substring)."""
+    inputs = input_devices()
+    for i, dev in inputs:
+        if dev["name"] == name:
             return i
-    raise SystemExit("No input device matches %r. Use --list-devices to see options."
-                     % name_or_index)
+    needle = name.lower()
+    for i, dev in inputs:
+        if needle in dev["name"].lower():
+            return i
+    return None
+
+
+def _print_inputs(inputs, suggested=None):
+    for n, (_i, dev) in enumerate(inputs, 1):
+        print("  %2d) %s  (%d in @ %g kHz)%s" % (
+            n, dev["name"], dev["max_input_channels"],
+            dev.get("default_samplerate", 0) / 1000.0,
+            "   <- suggested" if suggested is not None and n == suggested else ""))
+
+
+def pick_device(requested):
+    """Resolve --device to a device NAME (the hub reopens by name).
+
+    * --device given: index or name/substring. A name that isn't present yet
+      is kept — the companion waits for it (e.g. DVS still starting).
+    * No --device: auto-pick when exactly one Dante device exists; otherwise
+      ask interactively. Never silently falls back to the built-in mic.
+    """
+    inputs = input_devices()
+
+    if requested is not None:
+        try:
+            index = int(requested)
+        except (TypeError, ValueError):
+            index = None
+        if index is not None:
+            match = [dev for i, dev in inputs if i == index]
+            if not match:
+                raise SystemExit("No input device at index %d. Use --list-devices." % index)
+            return match[0]["name"]
+        found = find_device_index(requested)
+        if found is not None:
+            return sd.query_devices(found)["name"]
+        log.warning("Input device %r isn't available right now — will wait for it. "
+                    "Inputs currently present:", requested)
+        _print_inputs(inputs)
+        return requested
+
+    dante = [dev for _i, dev in inputs if "dante" in dev["name"].lower()]
+    if len(dante) == 1:
+        log.info("No --device given; using the only Dante input: %s", dante[0]["name"])
+        return dante[0]["name"]
+
+    if not inputs:
+        raise SystemExit("No audio input devices found. Connect/start your interface "
+                         "(or DVS) and try again, or pass --device to wait for it.")
+    if not sys.stdin.isatty():
+        print("Audio inputs:")
+        _print_inputs(inputs)
+        raise SystemExit('No --device given. Re-run with --device "<name>" '
+                         "(the companion won't guess when unattended).")
+
+    suggested = max(range(len(inputs)),
+                    key=lambda n: inputs[n][1]["max_input_channels"]) + 1
+    print("\nWhich audio input carries the beltpack channels?")
+    _print_inputs(inputs, suggested)
+    while True:
+        try:
+            answer = input("Choose 1-%d [%d]: " % (len(inputs), suggested)).strip()
+        except EOFError:
+            raise SystemExit("No device chosen.")
+        choice = suggested if not answer else (int(answer) if answer.isdigit() else 0)
+        if 1 <= choice <= len(inputs):
+            name = inputs[choice - 1][1]["name"]
+            print('Tip: next time pass  --device "%s"  to skip this question.\n' % name)
+            return name
+        print("Please enter a number from the list.")
 
 
 def list_devices():
@@ -570,14 +937,15 @@ def print_qr(url):
 def main():
     ap = argparse.ArgumentParser(description="ShowStack A2 Listen companion app")
     ap.add_argument("--token", help="Show pairing token (Project.listen_token)")
-    ap.add_argument("--device", help="Input device name (substring) or index, "
-                                      "e.g. \"Dante Virtual Soundcard\"")
+    ap.add_argument("--device", help="Input device name (substring) or index, e.g. "
+                                      "\"Dante Virtual Soundcard\" or \"MADIface\". "
+                                      "Omit to choose from a list")
     ap.add_argument("--api", default="https://showstack.io",
                     help="ShowStack base URL (default: https://showstack.io)")
     ap.add_argument("--host", default="0.0.0.0", help="Bind host (default 0.0.0.0)")
     ap.add_argument("--port", type=int, default=8443, help="Bind port (default 8443)")
     ap.add_argument("--channels", type=int, default=None,
-                    help="Input channel count (default: device max)")
+                    help="Capture only the first N inputs (default: all the device has)")
     ap.add_argument("--cert", default="cert.pem", help="TLS cert (mkcert) path")
     ap.add_argument("--key", default="key.pem", help="TLS key (mkcert) path")
     ap.add_argument("--no-verify-tls", action="store_true",
@@ -598,14 +966,12 @@ def main():
         ap.error("--token is required (get it from Mic Tracker → 🎧 Listen Setup)")
 
     if args.test_tone:
-        device = None
-        channels = args.channels or 8
-        log.info("TEST TONE mode — no audio device (%d synthetic channels)", channels)
+        device_name = None
+        log.info("TEST TONE mode — no audio device (%d synthetic channels)",
+                 args.channels or 8)
     else:
-        device = resolve_device(args.device)
-        dev_info = sd.query_devices(device) if device is not None else sd.query_devices(kind="input")
-        channels = args.channels or int(dev_info.get("max_input_channels", 0)) or 1
-        log.info("Using input device: %s (%d channels)", dev_info["name"], channels)
+        device_name = pick_device(args.device)
+        log.info("Using input device: %s", device_name)
 
     show, mapping = fetch_mapping(args.api, args.token, verify_tls=not args.no_verify_tls)
     if show:
@@ -626,7 +992,7 @@ def main():
                 "companion/README.md), or pass --http for a same-Mac localhost test.\n"
                 % exc)
 
-    hub = AudioHub(device=device, channels=channels, test_tone=args.test_tone)
+    hub = AudioHub(device_name=device_name, channels=args.channels, test_tone=args.test_tone)
     companion = Companion(token=args.token, hub=hub, mapping=mapping, show_name=show)
 
     app = web.Application()
