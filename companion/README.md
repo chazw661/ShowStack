@@ -23,8 +23,8 @@ slot → channel → presenter mapping.
 
 1. Unzip `ShowStack-Listen-mac-arm64.zip` and drag **ShowStack Listen.app** to
    **Applications**.
-2. The current build isn't notarized yet, so open it the first time with
-   **right-click → Open → Open**.
+2. Double-click to open it (the release zip is signed with ShowStack's Developer ID
+   and notarized by Apple, so macOS opens it normally).
 3. When macOS asks, **allow microphone access** — that's how macOS labels access
    to every audio input, including DVS. Without it the app receives silence.
    (Changed your mind? System Settings → Privacy & Security → Microphone.)
@@ -119,9 +119,19 @@ pip install -r requirements.txt -r requirements-app.txt
 ```
 
 PyAV (pulled in by `aiortc`) needs FFmpeg libraries: `brew install ffmpeg`.
-The build is ad‑hoc signed for this Mac's architecture. Distributing to other
-users needs an Apple Developer ID (sign + notarize) — not done yet. Each rebuild
-has a new signature, so macOS asks for microphone permission again.
+Plain `./build_app.sh` is ad‑hoc signed (this Mac only). **Release build** —
+signed with the Developer ID, notarized and stapled:
+
+```bash
+SIGN_IDENTITY="Developer ID Application: charles lawson (D7ZDF3V7MU)" \
+NOTARY_PROFILE=showstack-notary ./build_app.sh
+```
+
+Needs the Developer ID certificate + private key in the login keychain and the
+`showstack-notary` notarytool profile (`xcrun notarytool store-credentials
+showstack-notary --apple-id <apple id> --team-id D7ZDF3V7MU`). Builds are for
+this Mac's architecture (arm64). A differently-signed build is a new app to
+macOS, so it asks for microphone permission again.
 
 Run the menu bar app without building: `python menubar_app.py`.
 
