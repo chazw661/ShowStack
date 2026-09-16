@@ -38,6 +38,7 @@ import socket
 import ssl
 import struct
 import sys
+import threading
 import time
 from fractions import Fraction
 
@@ -78,6 +79,8 @@ except Exception:  # pragma: no cover
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("listen")
+
+__version__ = "0.2.0"
 
 SAMPLE_RATE = 48000        # WebRTC/Opus output rate
 BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame
@@ -230,6 +233,7 @@ class AudioHub:
         self._fingerprint = None
         self._last_callback = 0.0
         self._waiting_logged = False
+        self._reopen_lock = threading.Lock()
         self.levels = np.zeros(self.channels, dtype=np.float32)  # 0..1 RMS per channel
 
     @property
@@ -253,7 +257,8 @@ class AudioHub:
                      self.channels, SAMPLE_RATE)
             return
         self._probe = make_probe()
-        self._open(refresh=False)
+        with self._reopen_lock:
+            self._open(refresh=True)
         self._tasks.append(loop.create_task(self._watch()))
         self._tasks.append(loop.create_task(self._silence_loop()))
 
@@ -323,8 +328,19 @@ class AudioHub:
         self.levels = np.zeros(self.channels, dtype=np.float32)
 
     def _reopen(self):
-        self._close()
-        return self._open(refresh=True)
+        # Serialised: the watchdog and a user device switch can race.
+        with self._reopen_lock:
+            self._close()
+            return self._open(refresh=True)
+
+    async def switch_device(self, name):
+        """Capture from a different input device, keeping every listener connected."""
+        if self.test_tone or name == self.device_name:
+            return
+        log.info("Switching input device: %r -> %r", self.device_name, name)
+        self.device_name = name
+        self._waiting_logged = False
+        await self.loop.run_in_executor(None, self._reopen)
 
     async def _watch(self):
         """Reopen the stream whenever the device changes, vanishes, or stalls."""
@@ -524,11 +540,12 @@ class ChannelTrack(MediaStreamTrack):
 # ──────────────────────────────────────────────────────────────────
 
 class Companion:
-    def __init__(self, token, hub, mapping, show_name):
+    def __init__(self, token, hub, mapping, show_name, extra_status=None):
         self.token = token
         self.hub = hub
         self.mapping = mapping            # list[dict] from ShowStack (may be empty)
         self.show_name = show_name
+        self.extra_status = extra_status  # callable -> dict merged into /api/status
         self.pcs = set()
 
     def _check_token(self, request, body=None):
@@ -549,15 +566,22 @@ class Companion:
         """What the companion is doing — polled by ShowStack's Listen Setup."""
         if not self._check_token(request):
             return web.json_response({"error": "bad token"}, status=403)
+        return web.json_response(self.status_dict())
+
+    def status_dict(self):
         hub = self.hub
-        return web.json_response({
+        data = {
+            "version": __version__,
             "show": self.show_name,
             "device": hub.device_name or "Test tone",
             "source": hub.source_label,          # null while the device is lost
             "channels": hub.channels,
             "sample_rate": hub.rate,
             "listeners": len(self.pcs),
-        })
+        }
+        if self.extra_status:
+            data.update(self.extra_status())
+        return data
 
     async def channels(self, request):
         if not self._check_token(request):
@@ -910,11 +934,16 @@ def list_devices():
             dev.get("max_output_channels", 0)))
 
 
+class PairingError(Exception):
+    """ShowStack rejected the pairing token."""
+
+
 def fetch_mapping(api, token, verify_tls=True):
     """Authenticate to the show and pull the channel map. Returns (show, list).
 
-    On a bad token this exits; on a network error it warns and returns generic
-    labels so the rack still works if ShowStack is briefly unreachable.
+    On a bad token this raises PairingError; on a network error it warns and
+    returns generic labels so the rack still works if ShowStack is briefly
+    unreachable.
     """
     if requests is None:
         log.warning("'requests' not installed — skipping ShowStack sync.")
@@ -926,8 +955,7 @@ def fetch_mapping(api, token, verify_tls=True):
         log.warning("Could not reach ShowStack (%s) — serving with generic labels.", exc)
         return "", []
     if r.status_code in (401, 403):
-        raise SystemExit("ShowStack rejected the pairing token (HTTP %d). Check --token."
-                         % r.status_code)
+        raise PairingError("ShowStack rejected the pairing token (HTTP %d)." % r.status_code)
     if r.status_code != 200:
         log.warning("ShowStack returned HTTP %d — serving with generic labels.", r.status_code)
         return "", []
@@ -947,6 +975,193 @@ def print_qr(url):
     print()
 
 
+class CompanionServer:
+    """The whole companion — audio hub + web app — runnable from a CLI or an app.
+
+    Runs on its own asyncio loop. `run()` blocks (CLI); `start()` runs it on a
+    background thread and returns once the ports are bound (menu bar app, whose
+    main thread belongs to Cocoa). Serves up to two sites from one app:
+
+    * HTTPS on `https_port` (all interfaces) for phones on the show Wi-Fi.
+    * Plain HTTP on `local_port` for this Mac — WebRTC treats localhost as a
+      secure context, and it's what ShowStack's "Start on this Mac" button
+      polls. From other machines only `/ca.*` (the phone certificate profile)
+      is reachable on this port.
+    """
+
+    def __init__(self, token, api, device_name, channels=None, test_tone=False,
+                 host="0.0.0.0", https_port=8443, ssl_context=None,
+                 local_port=8480, local_lan_ok=False, ca_profile=None, verify_tls=True):
+        self.token = token
+        self.api = api
+        self.host = host
+        self.https_port = https_port if ssl_context is not None else None
+        self.ssl_context = ssl_context
+        self.local_port = local_port or None
+        self.local_lan_ok = local_lan_ok        # CLI --http: whole app on the plain port
+        self.ca_profile = ca_profile            # callable -> (bytes, content_type, filename)
+        self.verify_tls = verify_tls
+        self.hub = AudioHub(device_name=device_name, channels=channels, test_tone=test_tone)
+        self.companion = None
+        self.loop = None
+        self._runner = None
+        self._thread = None
+        self._ready = threading.Event()
+        self._error = None
+
+    # ── pairing / urls ────────────────────────────────────────────
+
+    def pair(self):
+        """Validate the token and pull the channel map (raises PairingError)."""
+        show, mapping = fetch_mapping(self.api, self.token, verify_tls=self.verify_tls)
+        self.companion = Companion(token=self.token, hub=self.hub, mapping=mapping,
+                                   show_name=show, extra_status=self._urls)
+        if show:
+            log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))
+        return show
+
+    def _urls(self):
+        urls = {"lan_url": None, "local_url": None}
+        if self.https_port:
+            urls["lan_url"] = "https://%s:%d" % (lan_ip(), self.https_port)
+        if self.local_port:
+            urls["local_url"] = "http://localhost:%d" % self.local_port
+        return urls
+
+    def status(self):
+        if self.companion is None:
+            return None
+        return self.companion.status_dict()
+
+    # ── app ───────────────────────────────────────────────────────
+
+    def _build_app(self):
+        companion = self.companion
+        local_port = self.local_port
+        local_lan_ok = self.local_lan_ok
+
+        @web.middleware
+        async def guard_and_cors(request, handler):
+            # The plain-HTTP port is for this Mac only; other machines may
+            # fetch the phone certificate profile from it and nothing else.
+            if local_port and not local_lan_ok and not request.path.startswith("/ca."):
+                sock = request.transport.get_extra_info("sockname") if request.transport else None
+                peer = request.transport.get_extra_info("peername") if request.transport else None
+                if sock and sock[1] == local_port and peer and \
+                        peer[0] not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+                    return web.Response(status=403, text="Local access only.\n")
+            # ShowStack's Listen Setup (another origin) polls /api/status from
+            # the browser. Every /api route still requires the show token.
+            # Chrome's Private Network Access preflight (showstack.io ->
+            # LAN/localhost) also needs Allow-Private-Network.
+            if request.method == "OPTIONS":
+                response = web.Response()
+            else:
+                response = await handler(request)
+            if request.path.startswith("/api/"):
+                response.headers["Access-Control-Allow-Origin"] = "*"
+                response.headers["Access-Control-Allow-Headers"] = "Authorization"
+                response.headers["Access-Control-Allow-Private-Network"] = "true"
+            return response
+
+        async def ca_profile(request):
+            if self.ca_profile is None:
+                raise web.HTTPNotFound()
+            body, content_type, filename = self.ca_profile()
+            return web.Response(body=body, content_type=content_type, headers={
+                "Content-Disposition": 'attachment; filename="%s"' % filename})
+
+        async def options(_request):
+            return web.Response()
+
+        app = web.Application(middlewares=[guard_and_cors])
+        app.router.add_get("/", companion.index)
+        app.router.add_get("/listen", companion.listen_page)
+        app.router.add_get("/api/channels", companion.channels)
+        app.router.add_get("/api/status", companion.status)
+        app.router.add_route("OPTIONS", "/api/{tail:.*}", options)
+        app.router.add_post("/offer", companion.offer)
+        app.router.add_get("/ca.mobileconfig", ca_profile)
+        return app
+
+    async def _serve(self):
+        if self.companion is None:
+            self.pair()
+        self._runner = web.AppRunner(self._build_app())
+        await self._runner.setup()
+        if self.https_port:
+            await web.TCPSite(self._runner, self.host, self.https_port,
+                              ssl_context=self.ssl_context).start()
+            log.info("Phones:    https://%s:%d/listen", lan_ip(), self.https_port)
+        if self.local_port:
+            await web.TCPSite(self._runner, self.host, self.local_port).start()
+            log.info("This Mac:  http://localhost:%d/listen", self.local_port)
+        # Open audio on this loop so the PortAudio callback can hand blocks to
+        # it thread-safely.
+        self.hub.start(asyncio.get_running_loop())
+
+    async def _shutdown(self):
+        if self.companion is not None:
+            for pc in list(self.companion.pcs):
+                await pc.close()
+            self.companion.pcs.clear()
+        self.hub.stop()
+        if self._runner is not None:
+            await self._runner.cleanup()
+            self._runner = None
+
+    def run(self):
+        """Serve in the foreground until Ctrl-C."""
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        try:
+            self.loop.run_until_complete(self._serve())
+            self.loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.loop.run_until_complete(self._shutdown())
+            self.loop.close()
+
+    def start(self, timeout=15):
+        """Serve on a background thread; returns once listening (or raises)."""
+        def target():
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            try:
+                self.loop.run_until_complete(self._serve())
+            except BaseException as exc:          # port in use, PairingError, …
+                self._error = exc
+                self._ready.set()
+                self.loop.run_until_complete(self._shutdown())
+                self.loop.close()
+                return
+            self._ready.set()
+            self.loop.run_forever()
+            self.loop.run_until_complete(self._shutdown())
+            self.loop.close()
+
+        self._thread = threading.Thread(target=target, name="listen-companion", daemon=True)
+        self._thread.start()
+        if not self._ready.wait(timeout):
+            raise RuntimeError("Companion did not start within %ds." % timeout)
+        if self._error is not None:
+            raise self._error
+
+    def stop(self, timeout=10):
+        if self.loop is None or self._thread is None:
+            return
+        if self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        self._thread.join(timeout)
+        self._thread = None
+
+    def set_device(self, name):
+        """Switch the capture device live (thread-safe)."""
+        if self.loop is not None and self.loop.is_running():
+            asyncio.run_coroutine_threadsafe(self.hub.switch_device(name), self.loop)
+
+
 def main():
     ap = argparse.ArgumentParser(description="ShowStack A2 Listen companion app")
     ap.add_argument("--token", help="Show pairing token (Project.listen_token)")
@@ -957,6 +1172,9 @@ def main():
                     help="ShowStack base URL (default: https://showstack.io)")
     ap.add_argument("--host", default="0.0.0.0", help="Bind host (default 0.0.0.0)")
     ap.add_argument("--port", type=int, default=8443, help="Bind port (default 8443)")
+    ap.add_argument("--local-port", type=int, default=8480,
+                    help="Also serve plain HTTP for this Mac on this port (0 = off; "
+                         "ignored with --http)")
     ap.add_argument("--channels", type=int, default=None,
                     help="Capture only the first N inputs (default: all the device has)")
     ap.add_argument("--cert", default="cert.pem", help="TLS cert (mkcert) path")
@@ -986,11 +1204,6 @@ def main():
         device_name = pick_device(args.device)
         log.info("Using input device: %s", device_name)
 
-    show, mapping = fetch_mapping(args.api, args.token, verify_tls=not args.no_verify_tls)
-    if show:
-        log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))
-
-    scheme = "http" if args.http else "https"
     if args.http:
         ssl_ctx = None
         log.warning("Serving plain HTTP — localhost testing only (phones need HTTPS).")
@@ -1005,49 +1218,27 @@ def main():
                 "companion/README.md), or pass --http for a same-Mac localhost test.\n"
                 % exc)
 
-    hub = AudioHub(device_name=device_name, channels=args.channels, test_tone=args.test_tone)
-    companion = Companion(token=args.token, hub=hub, mapping=mapping, show_name=show)
-
-    @web.middleware
-    async def cors(request, handler):
-        # ShowStack's Listen Setup (another origin) polls /api/status from the
-        # browser. Every /api route still requires the show token. Chrome's
-        # Private Network Access preflight (showstack.io -> LAN/localhost) also
-        # needs Allow-Private-Network.
-        if request.method == "OPTIONS":
-            response = web.Response()
-        else:
-            response = await handler(request)
-        if request.path.startswith("/api/"):
-            response.headers["Access-Control-Allow-Origin"] = "*"
-            response.headers["Access-Control-Allow-Headers"] = "Authorization"
-            response.headers["Access-Control-Allow-Private-Network"] = "true"
-        return response
-
-    app = web.Application(middlewares=[cors])
-    app.router.add_get("/", companion.index)
-    app.router.add_get("/listen", companion.listen_page)
-    app.router.add_get("/api/channels", companion.channels)
-    app.router.add_get("/api/status", companion.status)
-    app.router.add_route("OPTIONS", "/api/{tail:.*}", lambda r: web.Response())
-    app.router.add_post("/offer", companion.offer)
-
-    async def on_startup(_app):
-        # Open the audio stream on the running server loop so the PortAudio
-        # callback can hand blocks to it thread-safely.
-        hub.start(asyncio.get_event_loop())
-
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(companion.on_shutdown)
+    server = CompanionServer(
+        token=args.token, api=args.api, device_name=device_name,
+        channels=args.channels, test_tone=args.test_tone, host=args.host,
+        # --http keeps the old single-port behaviour on --port.
+        https_port=None if args.http else args.port, ssl_context=ssl_ctx,
+        local_port=args.port if args.http else args.local_port,
+        local_lan_ok=args.http,
+        verify_tls=not args.no_verify_tls,
+    )
+    try:
+        server.pair()
+    except PairingError as exc:
+        raise SystemExit("%s Check --token." % exc)
 
     # For --http/localhost testing point at localhost (a secure context for
     # WebRTC); otherwise advertise the LAN IP for phones on the show Wi-Fi.
-    host_for_url = "localhost" if args.http else lan_ip()
-    url = "%s://%s:%d" % (scheme, host_for_url, args.port)
+    url = ("http://localhost:%d" % args.port) if args.http else \
+        ("https://%s:%d" % (lan_ip(), args.port))
     print_qr(url + "/listen")
     log.info("Serving on %s  —  paste this into Mic Tracker → 🎧 Listen Setup.", url)
-
-    web.run_app(app, host=args.host, port=args.port, ssl_context=ssl_ctx, print=None)
+    server.run()
 
 
 if __name__ == "__main__":
