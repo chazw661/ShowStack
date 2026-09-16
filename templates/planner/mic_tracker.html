@@ -1036,6 +1036,9 @@ silently 403-ing background saves and stopping updates from reaching others.
 <datalist id="presenters-datalist"></datalist>
 
 {# ── Issue #74 — A2 Listen companion setup modal ─────────────────── #}
+<style>
+    .listen-setup-hint code { font-size: 11px; white-space: nowrap; color: var(--text-secondary); }
+</style>
 <div class="group-manage-modal hidden" id="listen-setup-modal">
     <div class="group-manage-box" style="max-width:560px;">
         <button class="group-modal-close" onclick="closeListenSetup()">×</button>
@@ -1065,7 +1068,7 @@ silently 403-ing background saves and stopping updates from reaching others.
             <pre id="listen-launch-cmd" style="background:var(--bg-raised);border:1px solid var(--border);border-radius:5px;padding:10px;font-size:11px;color:var(--text-primary);overflow-x:auto;white-space:pre-wrap;word-break:break-all;">python listen_companion.py \
   --token {{ listen_token }} \
   --api {{ request.scheme }}://{{ request.get_host }}</pre>
-            <div style="color:var(--text-dim);font-size:11px;margin-top:5px;">
+            <div class="listen-setup-hint" style="color:var(--text-dim);font-size:11px;margin-top:5px;">
                 Pairing token is per-show. On start it uses Dante Virtual Soundcard if that's the
                 only Dante input; otherwise it lists your audio inputs (USB preamp, MADI, etc.) to
                 pick from. To skip the question, add <code>--device "&lt;name&gt;"</code>.
