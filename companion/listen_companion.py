@@ -257,10 +257,24 @@ class AudioHub:
                      self.channels, SAMPLE_RATE)
             return
         self._probe = make_probe()
-        with self._reopen_lock:
-            self._open(refresh=True)
+        # Opening a Core Audio device can block for a long time when the HAL or
+        # the driver is wedged (a half-dead DVS blocks in Pa_OpenStream ->
+        # mach_msg for minutes). On the event loop that freezes the whole web
+        # server — the Listen page, /setup and the status polls all hang — so
+        # the first open goes to a worker thread like every reopen does.
+        # Listeners get silence until it succeeds.
+        self._tasks.append(loop.create_task(self._open_initial()))
         self._tasks.append(loop.create_task(self._watch()))
         self._tasks.append(loop.create_task(self._silence_loop()))
+
+    async def _open_initial(self):
+        try:
+            await self.loop.run_in_executor(None, self._reopen)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            log.warning("Could not open %r (%s) — the watchdog keeps retrying.",
+                        self.device_name, exc)
 
     # ── device open / close ──────────────────────────────────────
 
@@ -347,6 +361,8 @@ class AudioHub:
         try:
             while True:
                 await asyncio.sleep(WATCH_INTERVAL)
+                if self._reopen_lock.locked():
+                    continue        # an open is already in flight (maybe stuck)
                 reason = None
                 if self._stream is None:
                     reason = "retry"
@@ -704,6 +720,7 @@ LISTEN_HTML = r"""<!doctype html>
   <div>
     <label for="chan">Channel</label>
     <select id="chan"></select>
+    <div class="src" id="chan-note" hidden>Waiting for the channel list from ShowStack…</div>
   </div>
   <div>
     <label>Level</label>
@@ -718,15 +735,15 @@ LISTEN_HTML = r"""<!doctype html>
 const qs = new URLSearchParams(location.search);
 const token = qs.get('token') || '';
 let channel = parseInt(qs.get('ch') || '1', 10) || 1;
-const name = qs.get('name') || '';
-const rf = qs.get('rf') || '';
+let name = qs.get('name') || '';
+let rf = qs.get('rf') || '';
 let pc = null, dc = null, mapping = [];
 
 const $ = id => document.getElementById(id);
 function label() {
   $('who').textContent = name ? name : ('Channel ' + channel);
   const bits = [];
-  if (rf) bits.push('RF ' + rf.padStart(2,'0'));
+  if (rf) bits.push('RF ' + String(rf).padStart(2,'0'));
   bits.push('Audio ch ' + channel);
   $('sub').textContent = bits.join('  ·  ');
 }
@@ -739,34 +756,51 @@ function staleLink() {
   $('status').style.color = '#ffab00';
   $('go').disabled = true;
 }
+function optionText(c) {
+  return 'Ch ' + c.channel + (c.presenter ? ' — ' + c.presenter
+    : (c.rf_number ? ' — RF ' + String(c.rf_number).padStart(2,'0') : ''));
+}
+function renderChannels() {
+  const sel = $('chan');
+  const rows = mapping.slice();
+  if (!rows.some(c => +c.channel === channel)) rows.push({channel: channel});
+  rows.sort((a, b) => a.channel - b.channel);
+  const signature = rows.map(optionText).join('|');
+  if (sel.dataset.signature !== signature) {
+    sel.innerHTML = '';
+    rows.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.channel;
+      o.textContent = optionText(c);
+      sel.appendChild(o);
+    });
+    sel.dataset.signature = signature;
+  }
+  sel.value = channel;
+  $('chan-note').hidden = mapping.length > 0;
+}
+// The map can be empty at launch (ShowStack unreachable on a show network) and
+// names change during the day, so keep polling rather than loading it once.
 async function loadChannels() {
   try {
-    const r = await fetch('/api/channels?token=' + encodeURIComponent(token));
+    const r = await fetch('/api/channels?token=' + encodeURIComponent(token), {cache: 'no-store'});
     if (r.status === 403) { staleLink(); return; }
     if (!r.ok) return;
     const d = await r.json();
-    mapping = d.channels || [];
-    const sel = $('chan');
-    sel.innerHTML = '';
-    mapping.forEach(c => {
-      const o = document.createElement('option');
-      o.value = c.channel;
-      o.textContent = 'Ch ' + c.channel + (c.presenter ? ' — ' + c.presenter : (c.rf_number ? ' — RF ' + String(c.rf_number).padStart(2,'0') : ''));
-      sel.appendChild(o);
-    });
-    if (![...sel.options].some(o => +o.value === channel)) {
-      const o = document.createElement('option');
-      o.value = channel; o.textContent = 'Ch ' + channel; sel.appendChild(o);
-    }
-    sel.value = channel;
+    mapping = (d.channels || []).filter(c => c && c.channel);
   } catch (e) {}
+  renderChannels();
 }
 loadChannels();
+setInterval(loadChannels, 15000);
 
 $('chan').addEventListener('change', e => {
   channel = parseInt(e.target.value, 10) || channel;
-  const m = mapping.find(c => c.channel === channel);
-  if (m && m.presenter) { $('who').textContent = m.presenter; }
+  // The name/RF in the URL describe the card that was tapped; once the A2
+  // switches channels here, the map is what's on air.
+  const m = mapping.find(c => +c.channel === channel);
+  name = m ? (m.presenter || '') : '';
+  rf = m && m.rf_number ? m.rf_number : '';
   label();
   if (dc && dc.readyState === 'open') dc.send(JSON.stringify({channel}));
 });
@@ -802,8 +836,11 @@ async function start() {
     $('audio').play().catch(needTap);
   };
   pc.onconnectionstatechange = () => {
+    if (!pc) return;                   // already torn down by stop()
     $('status').textContent = pc.connectionState;
     if (['failed','disconnected','closed'].includes(pc.connectionState)) {
+      pc = null; dc = null;
+      $('meter').style.width = '0%';
       $('go').disabled = false; $('go').textContent = '▶︎ Reconnect';
     }
   };
@@ -838,10 +875,13 @@ async function start() {
   setTimeout(() => { if (pc && $('audio').paused) needTap(); }, 1500);
   $('status').textContent = 'Live';
   $('go').textContent = '⏸ Stop';
+  $('go').disabled = false;            // it's the Stop button now — must stay live
 }
 
 function stop() {
-  if (pc) { pc.close(); pc = null; }
+  const old = pc;
+  pc = null; dc = null;                // before close(), so the state handler no-ops
+  if (old) { try { old.close(); } catch (e) {} }
   $('tap').hidden = true;
   $('meter').style.width = '0%';
   $('status').textContent = 'Stopped.';
@@ -849,14 +889,21 @@ function stop() {
 }
 
 $('go').addEventListener('click', () => {
-  if (pc && pc.connectionState === 'connected') stop(); else start();
+  // Any live peer means the button is Stop, whatever the ICE state is: waiting
+  // for 'connected' left it dead while connecting, and a second click used to
+  // open a second peer.
+  if (pc) { stop(); return; }
+  start().catch(e => {
+    $('status').textContent = 'Could not start (' + (e && e.message ? e.message : e) + ')';
+    stop();
+  });
 });
 // Screen lock / tab backgrounding tears down WebRTC; prompt to reconnect.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && pc &&
-      ['failed','disconnected','closed'].includes(pc.connectionState)) {
+  // The teardown already reset the button; just say why it stopped.
+  if (document.visibilityState === 'visible' && !pc &&
+      $('go').textContent.indexOf('Reconnect') !== -1) {
     $('status').textContent = 'Reconnect to resume.';
-    $('go').disabled = false; $('go').textContent = '▶︎ Reconnect';
   }
 });
 </script>
@@ -1152,12 +1199,16 @@ class CompanionServer:
             "step2": block(2, "Trust it",
                            "<b>Settings → General → About → Certificate Trust Settings</b> → turn on "
                            "<b>ShowStack Listen</b>.", None).replace("<code>HTTPS is not enabled.</code>", ""),
-            "step3": (block(3, "Open ShowStack on the phone",
-                            "Scan, sign in if asked, and make sure this show is the current project. "
-                            "The phone remembers this Mac — then just tap <b>🎧 Listen</b> on any A2 card.",
-                            showstack_url)
-                      + block(4, "Or listen without ShowStack",
-                              "Opens the Listen page directly with a channel picker.", listen_url))
+            # Listen first: it needs no ShowStack sign-in and is what an A2
+            # scanning the next QR after the certificate expects to get.
+            "step3": (block(3, "Open Listen on the phone",
+                            "Scan to open the Listen page — no ShowStack sign-in needed. Pick the "
+                            "channel from the picker at the top.", listen_url)
+                      + block(4, "Optional — open ShowStack too",
+                              "Only if this A2 wants the Mic Tracker cards: scan, sign in, and make "
+                              "sure this show is the current project. The phone then remembers this "
+                              "Mac, so <b>🎧 Listen</b> on any A2 card opens the page above.",
+                              showstack_url))
                      if showstack_url else
                      block(3, "Open Listen",
                            "Scan to open the Listen page directly, or paste the address below into "
@@ -1248,6 +1299,12 @@ class CompanionServer:
     # ── heartbeat to ShowStack ────────────────────────────────────
 
     HEARTBEAT_SECONDS = 5
+    # The channel map is pulled again on this cadence: ShowStack is often
+    # unreachable at launch on a show network (and the names change during the
+    # day), and a map that stayed empty leaves the phone's channel picker with
+    # nothing to pick.
+    MAPPING_SECONDS = 60
+    MAPPING_RETRY_SECONDS = 10
 
     def _client_ssl(self):
         if not self.verify_tls:
@@ -1270,14 +1327,51 @@ class CompanionServer:
                                 timeout=ClientTimeout(total=8)) as resp:
             return resp.status
 
+    async def _refresh_mapping(self):
+        """Pull the channel map again; returns True once we have labels.
+
+        `fetch_mapping` is blocking (requests), so it runs in a worker thread.
+        A failure keeps the map we already have — audio never depends on it.
+        """
+        if self.companion is None:
+            return False
+        loop = asyncio.get_running_loop()
+        try:
+            show, mapping = await loop.run_in_executor(
+                None, lambda: fetch_mapping(self.api, self.token, verify_tls=self.verify_tls))
+        except PairingError as exc:
+            log.warning("%s — keeping the channel labels we have.", exc)
+            return bool(self.companion.mapping)
+        except Exception as exc:
+            log.warning("Channel map refresh failed (%s) — keeping the labels we have.", exc)
+            return bool(self.companion.mapping)
+        if not mapping and not show:
+            return bool(self.companion.mapping)
+        had = len(self.companion.mapping)
+        self.companion.mapping = mapping
+        self.companion.show_name = show or self.companion.show_name
+        if not had and mapping:
+            log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))
+        return bool(mapping)
+
     async def _heartbeat_loop(self):
         """Tell ShowStack what this app is doing, so the Mic Tracker can show it
         in any browser (the page can't reliably reach the Mac directly)."""
         from aiohttp import ClientSession
         warned = False
+        next_mapping = time.monotonic() + self.MAPPING_RETRY_SECONDS
         async with ClientSession() as session:
             try:
                 while True:
+                    if time.monotonic() >= next_mapping:
+                        try:
+                            have = await self._refresh_mapping()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
+                            have = False
+                        next_mapping = time.monotonic() + (
+                            self.MAPPING_SECONDS if have else self.MAPPING_RETRY_SECONDS)
                     try:
                         status = await self._post_heartbeat(
                             session, dict(self.status() or {}, running=True))

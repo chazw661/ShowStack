@@ -1081,6 +1081,8 @@ silently 403-ing background saves and stopping updates from reaching others.
         </div>
         <div id="listen-phones-row" hidden style="margin-top:10px;">
             <button class="btn-mtt btn-mtt-export" onclick="openPhoneSetup()">📱 Set up phones (QR codes)</button>
+            <span style="color:var(--text-dim);font-size:11px;margin-left:8px;">Opens on this Mac,
+                while the app is running.</span>
         </div>
 
         <div style="margin-top:16px;">
@@ -1185,6 +1187,10 @@ function openListenSetup() {
     var status = document.getElementById('listen-companion-status');
     if (status) status.textContent = '';
     document.getElementById('listen-start-block').hidden = !_isDesktopMac();
+    // The QR page is served by the app on this Mac's loopback port, so it only
+    // depends on being on a Mac — never on the ShowStack heartbeat, which is
+    // exactly what's down when the rack has no internet.
+    document.getElementById('listen-phones-row').hidden = !_isDesktopMac();
     document.getElementById('listen-download').hidden = true;
     document.getElementById('listen-start-note').textContent = '';
     var link = document.getElementById('listen-download-link');
@@ -1286,7 +1292,6 @@ function _setListenStatus(kind, text) {
 async function checkCompanionStatus() {
     var base = getCompanionUrl();
     var lanRow = document.getElementById('listen-lan-row');
-    var phonesRow = document.getElementById('listen-phones-row');
     var d;
     try {
         d = await _fetchAppStatus();
@@ -1298,7 +1303,6 @@ async function checkCompanionStatus() {
         _setListenStatus('', _isDesktopMac()
             ? 'ShowStack Listen isn\'t running for this show — click Start on this Mac.'
             : 'ShowStack Listen isn\'t running for this show on the rack Mac yet.');
-        if (phonesRow) phonesRow.hidden = true;
         if (lanRow) lanRow.hidden = true;
         return;
     }
@@ -1308,7 +1312,6 @@ async function checkCompanionStatus() {
     } else {
         _setListenStatus('warn', 'Running, but audio input "' + (d.device || '?') + '" is missing — waiting for it.');
     }
-    if (phonesRow) phonesRow.hidden = !(base === LISTEN_APP_LOCAL_URL && _isDesktopMac());
     if (lanRow) {
         lanRow.hidden = !d.lan_url;
         document.getElementById('listen-lan-url').textContent = d.lan_url || '';
@@ -1336,7 +1339,12 @@ function openListen(assignmentId) {
         name: btn.dataset.presenter || '',
         rf: btn.dataset.rf || ''
     });
-    window.open(base + '/listen?' + params.toString(), '_blank', 'noopener');
+    // One named window per show: tapping Listen on another card re-points the
+    // window that's already open instead of leaving a stack of them behind.
+    // (A name is only honoured without 'noopener'; the target is our own app.)
+    var w = window.open(base + '/listen?' + params.toString(),
+                        'showstackListen-' + _listenToken().slice(0, 8));
+    if (w) { try { w.focus(); } catch (e) {} }
 }
 // Wraps updateField so the Listen button's channel stays in sync after an
 // input_channel override (updateField lives in the cached static JS bundle).
