@@ -318,7 +318,7 @@ class ListenApp(rumps.App):
             return
 
         try:
-            show, _mapping = lc.fetch_mapping(api, token)
+            show, _mapping, _sessions = lc.fetch_mapping(api, token)
         except lc.PairingError:
             alert("ShowStack rejected this show's pairing token.")
             return

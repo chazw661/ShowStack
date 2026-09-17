@@ -29,7 +29,9 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Project, MicAssignment
+from django.db.models import Prefetch
+
+from .models import Project, MicAssignment, MicSession
 
 
 def _authenticate_listen(request):
@@ -72,10 +74,20 @@ def listen_session(request):
           ]
         }
 
-    Channels are ordered by effective audio channel. Where more than one
-    assignment maps to the same channel (e.g. the same RF reused across
-    sessions), the most recently modified assignment wins the label so the
-    companion shows whoever is currently on that channel.
+    The same RF slot carries a different presenter in each session, so a flat
+    channel list can only ever be right for one of them. `sessions` is the real
+    answer — every session with its own channel labels, in show order:
+
+        "sessions": [
+          {"id": 12, "name": "AM Keynote", "day": "2026-09-16",
+           "channels": [{"channel": 1, "rf_number": 1, "presenter": "David Wong",
+                         "mic_type": "LAV", "is_micd": true}, ...]},
+          ...
+        ]
+
+    `channels` stays for companion builds that predate the sessions key: it is
+    one entry per channel, the most recently modified assignment winning the
+    label.
     """
     project, error = _authenticate_listen(request)
     if error:
@@ -111,7 +123,47 @@ def listen_session(request):
         }
 
     channels = [by_channel[ch] for ch in sorted(by_channel)]
-    return JsonResponse({'show': project.name, 'channels': channels})
+
+    # Per-session lists: what the Listen page's pickers actually use.
+    sessions = (
+        MicSession.objects
+        .filter(day__project=project)
+        .select_related('day')
+        .prefetch_related(Prefetch(
+            'mic_assignments',
+            queryset=MicAssignment.objects.order_by('rf_number')
+                     .prefetch_related('presenter_slots__presenter')))
+        .order_by('day__date', 'order', 'id')
+    )
+
+    session_rows = []
+    for s in sessions:
+        rows, seen = [], set()
+        for a in s.mic_assignments.all():
+            ch = a.effective_input_channel
+            if ch in seen:
+                # Two slots overriding onto one channel: lowest RF labels it.
+                continue
+            seen.add(ch)
+            rows.append({
+                'channel': ch,
+                'rf_number': a.rf_number,
+                'presenter': a.presenter.name if a.presenter else '',
+                'mic_type': a.mic_type or '',
+                'is_micd': a.is_micd,
+            })
+        if not rows:
+            continue
+        day = getattr(s, 'day', None)
+        session_rows.append({
+            'id': s.id,
+            'name': s.name or '',
+            'day': day.date.isoformat() if day and getattr(day, 'date', None) else '',
+            'channels': sorted(rows, key=lambda r: r['channel']),
+        })
+
+    return JsonResponse({'show': project.name, 'channels': channels,
+                         'sessions': session_rows})
 
 
 # A heartbeat older than this means the app isn't running (it sends every ~5 s).

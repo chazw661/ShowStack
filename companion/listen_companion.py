@@ -556,9 +556,10 @@ class ChannelTrack(MediaStreamTrack):
 # ──────────────────────────────────────────────────────────────────
 
 class Companion:
-    def __init__(self, token, hub, mapping, show_name, extra_status=None):
+    def __init__(self, token, hub, mapping, show_name, sessions=None, extra_status=None):
         self.token = token
         self.hub = hub
+        self.sessions = sessions or []    # [{id, name, day, channels: [...]}]
         self.mapping = mapping            # list[dict] from ShowStack (may be empty)
         self.show_name = show_name
         self.extra_status = extra_status  # callable -> dict merged into /api/status
@@ -602,7 +603,8 @@ class Companion:
     async def channels(self, request):
         if not self._check_token(request):
             return web.json_response({"error": "bad token"}, status=403)
-        return web.json_response({"show": self.show_name, "channels": self.mapping})
+        return web.json_response({"show": self.show_name, "channels": self.mapping,
+                                  "sessions": self.sessions})
 
     async def listen_page(self, request):
         # Served regardless of token; the WebRTC /offer below enforces the token.
@@ -717,6 +719,10 @@ LISTEN_HTML = r"""<!doctype html>
     <div class="sub" id="sub"></div>
     <div class="src" id="src"></div>
   </div>
+  <div id="sess-row" hidden>
+    <label for="sess">Session</label>
+    <select id="sess"></select>
+  </div>
   <div>
     <label for="chan">Channel</label>
     <select id="chan"></select>
@@ -737,7 +743,8 @@ const token = qs.get('token') || '';
 let channel = parseInt(qs.get('ch') || '1', 10) || 1;
 let name = qs.get('name') || '';
 let rf = qs.get('rf') || '';
-let pc = null, dc = null, mapping = [];
+let sessionId = qs.get('session') || '';
+let pc = null, dc = null, mapping = [], sessions = [];
 
 const $ = id => document.getElementById(id);
 function label() {
@@ -760,9 +767,39 @@ function optionText(c) {
   return 'Ch ' + c.channel + (c.presenter ? ' — ' + c.presenter
     : (c.rf_number ? ' — RF ' + String(c.rf_number).padStart(2,'0') : ''));
 }
+function sessionText(s) {
+  const day = s.day ? s.day.slice(5).replace('-', '/') + ' · ' : '';
+  return day + (s.name || 'Session');
+}
+function currentSession() {
+  return sessions.find(s => String(s.id) === String(sessionId)) || sessions[0] || null;
+}
+// One RF slot is a different presenter in each session, so the channel list is
+// always a single session's — never a merge of all of them.
+function currentRows() {
+  const s = currentSession();
+  return s ? s.channels : mapping;
+}
+function renderSessions() {
+  const row = $('sess-row'), sel = $('sess');
+  row.hidden = sessions.length < 2;
+  if (row.hidden) return;
+  const signature = sessions.map(s => s.id + ':' + sessionText(s)).join('|');
+  if (sel.dataset.signature !== signature) {
+    sel.innerHTML = '';
+    sessions.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id; o.textContent = sessionText(s);
+      sel.appendChild(o);
+    });
+    sel.dataset.signature = signature;
+  }
+  const s = currentSession();
+  if (s) { sessionId = s.id; sel.value = s.id; }
+}
 function renderChannels() {
   const sel = $('chan');
-  const rows = mapping.slice();
+  const rows = currentRows().slice();
   if (!rows.some(c => +c.channel === channel)) rows.push({channel: channel});
   rows.sort((a, b) => a.channel - b.channel);
   const signature = rows.map(optionText).join('|');
@@ -777,7 +814,13 @@ function renderChannels() {
     sel.dataset.signature = signature;
   }
   sel.value = channel;
-  $('chan-note').hidden = mapping.length > 0;
+  $('chan-note').hidden = currentRows().length > 0;
+}
+function applyChannelLabel() {
+  const m = currentRows().find(c => +c.channel === channel);
+  name = m ? (m.presenter || '') : '';
+  rf = m && m.rf_number ? m.rf_number : '';
+  label();
 }
 // The map can be empty at launch (ShowStack unreachable on a show network) and
 // names change during the day, so keep polling rather than loading it once.
@@ -788,7 +831,9 @@ async function loadChannels() {
     if (!r.ok) return;
     const d = await r.json();
     mapping = (d.channels || []).filter(c => c && c.channel);
+    sessions = (d.sessions || []).filter(s => s && s.channels && s.channels.length);
   } catch (e) {}
+  renderSessions();
   renderChannels();
 }
 loadChannels();
@@ -797,11 +842,21 @@ setInterval(loadChannels, 15000);
 $('chan').addEventListener('change', e => {
   channel = parseInt(e.target.value, 10) || channel;
   // The name/RF in the URL describe the card that was tapped; once the A2
-  // switches channels here, the map is what's on air.
-  const m = mapping.find(c => +c.channel === channel);
-  name = m ? (m.presenter || '') : '';
-  rf = m && m.rf_number ? m.rf_number : '';
-  label();
+  // switches channels here, the session's map is what's on air.
+  applyChannelLabel();
+  if (dc && dc.readyState === 'open') dc.send(JSON.stringify({channel}));
+});
+
+$('sess').addEventListener('change', e => {
+  sessionId = e.target.value;
+  // Stay on the same RF slot across the switch when that session has it —
+  // that's the same beltpack, just a different presenter on it.
+  const rows = currentRows();
+  const sameRf = rf && rows.find(c => String(c.rf_number) === String(rf));
+  if (sameRf) channel = sameRf.channel;
+  else if (!rows.some(c => +c.channel === channel) && rows.length) channel = rows[0].channel;
+  renderChannels();
+  applyChannelLabel();
   if (dc && dc.readyState === 'open') dc.send(JSON.stringify({channel}));
 });
 
@@ -1069,7 +1124,11 @@ class PairingError(Exception):
 
 
 def fetch_mapping(api, token, verify_tls=True):
-    """Authenticate to the show and pull the channel map. Returns (show, list).
+    """Authenticate to the show and pull the channel map.
+
+    Returns (show, channels, sessions): `channels` is one entry per audio
+    channel, `sessions` is every session with its own labels (the same RF slot
+    is a different presenter in each session, so the picker needs both).
 
     On a bad token this raises PairingError; on a network error it warns and
     returns generic labels so the rack still works if ShowStack is briefly
@@ -1077,20 +1136,21 @@ def fetch_mapping(api, token, verify_tls=True):
     """
     if requests is None:
         log.warning("'requests' not installed — skipping ShowStack sync.")
-        return "", []
+        return "", [], []
     url = api.rstrip("/") + "/audiopatch/api/listen/session/"
     try:
         r = requests.get(url, params={"token": token}, timeout=8, verify=verify_tls)
     except Exception as exc:
         log.warning("Could not reach ShowStack (%s) — serving with generic labels.", exc)
-        return "", []
+        return "", [], []
     if r.status_code in (401, 403):
         raise PairingError("ShowStack rejected the pairing token (HTTP %d)." % r.status_code)
     if r.status_code != 200:
         log.warning("ShowStack returned HTTP %d — serving with generic labels.", r.status_code)
-        return "", []
+        return "", [], []
     data = r.json()
-    return data.get("show", ""), data.get("channels", [])
+    return (data.get("show", ""), data.get("channels", []),
+            data.get("sessions", []))
 
 
 def print_qr(url):
@@ -1144,9 +1204,11 @@ class CompanionServer:
 
     def pair(self):
         """Validate the token and pull the channel map (raises PairingError)."""
-        show, mapping = fetch_mapping(self.api, self.token, verify_tls=self.verify_tls)
+        show, mapping, sessions = fetch_mapping(self.api, self.token,
+                                                verify_tls=self.verify_tls)
         self.companion = Companion(token=self.token, hub=self.hub, mapping=mapping,
-                                   show_name=show, extra_status=self._urls)
+                                   show_name=show, sessions=sessions,
+                                   extra_status=self._urls)
         if show:
             log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))
         return show
@@ -1337,7 +1399,7 @@ class CompanionServer:
             return False
         loop = asyncio.get_running_loop()
         try:
-            show, mapping = await loop.run_in_executor(
+            show, mapping, sessions = await loop.run_in_executor(
                 None, lambda: fetch_mapping(self.api, self.token, verify_tls=self.verify_tls))
         except PairingError as exc:
             log.warning("%s — keeping the channel labels we have.", exc)
@@ -1349,6 +1411,7 @@ class CompanionServer:
             return bool(self.companion.mapping)
         had = len(self.companion.mapping)
         self.companion.mapping = mapping
+        self.companion.sessions = sessions
         self.companion.show_name = show or self.companion.show_name
         if not had and mapping:
             log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))

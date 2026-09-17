@@ -787,6 +787,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                             data-channel="{{ assignment.effective_input_channel }}"
                                             data-presenter="{{ assignment.presenter.name|default:'' }}"
                                             data-rf="{{ assignment.rf_number }}"
+                                            data-session="{{ session.id }}"
                                             onclick="openListen({{ assignment.id }})"
                                             title="Listen to this beltpack on your phone (via the Listen companion app)">
                                         <span class="a2-listen-icon">🎧</span>Listen
@@ -1333,11 +1334,15 @@ function openListen(assignmentId) {
     var btn = document.getElementById('a2-listen-btn-' + assignmentId);
     if (!btn) return;
     var ch = btn.dataset.channel || '';
+    // The session travels with the link: the same RF slot is a different
+    // presenter in every session, so the channel picker needs to know which
+    // session's labels to show.
     var params = new URLSearchParams({
         token: _listenToken(),
         ch: ch,
         name: btn.dataset.presenter || '',
-        rf: btn.dataset.rf || ''
+        rf: btn.dataset.rf || '',
+        session: btn.dataset.session || ''
     });
     // One named window per show: tapping Listen on another card re-points the
     // window that's already open instead of leaving a stack of them behind.
