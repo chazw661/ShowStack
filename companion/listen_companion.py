@@ -752,6 +752,11 @@ function label() {
   const bits = [];
   if (rf) bits.push('RF ' + String(rf).padStart(2,'0'));
   bits.push('Audio ch ' + channel);
+  // Name the session on a multi-session show: several slots carry the same
+  // person in every session, so without this a switch can look like nothing
+  // happened at all.
+  const s = sessions.length > 1 ? currentSession() : null;
+  if (s && s.name) bits.push(s.name);
   $('sub').textContent = bits.join('  ·  ');
 }
 label();
@@ -835,6 +840,7 @@ async function loadChannels() {
   } catch (e) {}
   renderSessions();
   renderChannels();
+  label();          // the session name may only now be known
 }
 loadChannels();
 setInterval(loadChannels, 15000);
