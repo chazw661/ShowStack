@@ -317,8 +317,13 @@ def listen_app_status(request):
     mine = None
     if client:
         mine = next((a for a in fresh if a.get('client_id') == client), None)
-    # One rack and no client id yet (a page from before this field existed, or a
-    # phone) — there is nothing to confuse it with, so treat it as ours.
+    if mine is None:
+        # An app launched from Finder or the Dock never learned a client id.
+        # If exactly one such rack is running there is nothing to confuse it
+        # with, so treat it as this device's.
+        unclaimed = [a for a in fresh if not a.get('client_id')]
+        if len(unclaimed) == 1:
+            mine = unclaimed[0]
     if mine is None and not client and len(fresh) == 1:
         mine = fresh[0]
 

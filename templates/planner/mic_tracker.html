@@ -1271,6 +1271,7 @@ function openPhoneSetup() {
 var LISTEN_STATUS_URL = '{% url "planner:listen_app_status" %}';
 var _listenMine = null;     // last known status of the app on THIS device
 var _listenStatusChecked = false;   // have we ever heard back from ShowStack?
+var _listenAppCount = 0;            // racks running Listen for this show
 async function _fetchAppStatus() {
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, 4000);
@@ -1280,6 +1281,7 @@ async function _fetchAppStatus() {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         var d = await r.json();
         _listenMine = d.mine || null;
+        _listenAppCount = (d.apps || []).length;
         _listenStatusChecked = true;
         return d;
     } finally {
@@ -1316,7 +1318,7 @@ async function startListenOnThisMac() {
             var d = await _fetchAppStatus();
             // Must be OUR app: another Mac already running Listen for this show
             // would otherwise read as success here.
-            if (d.mine && d.mine.age !== null &&
+            if (d.mine && d.mine.client_id === _clientId() && d.mine.age !== null &&
                 d.mine.age * 1000 < Date.now() - startedAt + 1500) {
                 note.textContent = '✓ Running.';
                 btn.disabled = false;
@@ -1392,8 +1394,8 @@ function openListen(assignmentId) {
     }
     // Only when we positively know this Mac's app is down: opening the tab
     // anyway would just show a browser error page.
-    if (_isDesktopMac() && !_isManualCompanionUrl() && _listenMine === null &&
-        _listenStatusChecked) {
+    if (_isDesktopMac() && !_isManualCompanionUrl() && _listenStatusChecked &&
+        _listenAppCount === 0) {
         alert('ShowStack Listen isn\'t running on this Mac yet.\n\nClick "Start on this Mac" '
               + 'in Listen Setup first.');
         openListenSetup();
