@@ -1160,16 +1160,50 @@ function _listenToken() {
 // Companion URL is stored per-show (keyed by the pairing token) so switching
 // projects on the same device doesn't cross-wire to the wrong rack.
 function _companionKey() { return 'listenCompanionUrl:' + _listenToken(); }
+// Set only when the address was typed in Advanced by hand. Anything else is
+// ours to correct.
+function _manualKey() { return 'listenCompanionManual:' + _listenToken(); }
+function _isManualCompanionUrl() {
+    try { return localStorage.getItem(_manualKey()) === '1'; } catch (e) { return false; }
+}
+// Identifies THIS browser to the heartbeat, so a show with two rack Macs can
+// tell our own app apart from someone else's.
+function _clientKey() { return 'listenClientId:' + _listenToken(); }
+function _clientId() {
+    try {
+        var v = localStorage.getItem(_clientKey());
+        if (!v) {
+            v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+                : 'c' + Date.now() + Math.random().toString(16).slice(2);
+            localStorage.setItem(_clientKey(), v);
+        }
+        return v;
+    } catch (e) { return ''; }
+}
 function getCompanionUrl() {
-    try { return (localStorage.getItem(_companionKey()) || '').replace(/\/+$/, ''); }
-    catch (e) { return ''; }
+    var saved = '';
+    try { saved = (localStorage.getItem(_companionKey()) || '').replace(/\/+$/, ''); }
+    catch (e) {}
+    // On a Mac the app runs on THIS machine and always answers on its loopback
+    // port. A LAN address saved here points at somebody else's rack — nearly
+    // always a leftover from another network, which the browser can't even
+    // resolve ("can't find address"). Correct it unless it was typed by hand.
+    if (_isDesktopMac() && !_isManualCompanionUrl() && saved !== LISTEN_APP_LOCAL_URL) {
+        return LISTEN_APP_LOCAL_URL;
+    }
+    return saved;
 }
 function saveCompanionUrl() {
     var input = document.getElementById('listen-companion-url');
     var status = document.getElementById('listen-companion-status');
     var val = (input.value || '').trim().replace(/\/+$/, '');
     if (val && !/^https?:\/\//i.test(val)) { val = 'https://' + val; }
-    try { localStorage.setItem(_companionKey(), val); } catch (e) {}
+    try {
+        localStorage.setItem(_companionKey(), val);
+        // Typing it by hand is a deliberate override; clearing it hands control back.
+        if (val) { localStorage.setItem(_manualKey(), '1'); }
+        else { localStorage.removeItem(_manualKey()); }
+    } catch (e) {}
     checkCompanionStatus();
     if (status) {
         status.textContent = val ? '  ✓ Saved.' : '  Cleared.';
@@ -1235,17 +1269,26 @@ function openPhoneSetup() {
 // browser calling the Mac: Safari blocks https://showstack.io -> http://localhost,
 // and Chrome now asks for local-network permission.
 var LISTEN_STATUS_URL = '{% url "planner:listen_app_status" %}';
+var _listenMine = null;     // last known status of the app on THIS device
+var _listenStatusChecked = false;   // have we ever heard back from ShowStack?
 async function _fetchAppStatus() {
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, 4000);
     try {
-        var r = await fetch(LISTEN_STATUS_URL, {signal: ctrl.signal, cache: 'no-store', credentials: 'same-origin'});
+        var r = await fetch(LISTEN_STATUS_URL + '?client=' + encodeURIComponent(_clientId()),
+                            {signal: ctrl.signal, cache: 'no-store', credentials: 'same-origin'});
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        return await r.json();
+        var d = await r.json();
+        _listenMine = d.mine || null;
+        _listenStatusChecked = true;
+        return d;
     } finally {
         clearTimeout(timer);
     }
 }
+// One check on load, so the Listen buttons know whether this Mac's app is up
+// before anyone taps one.
+if (_isDesktopMac()) { _fetchAppStatus().catch(function() {}); }
 async function startListenOnThisMac() {
     var btn = document.getElementById('listen-start-btn');
     var note = document.getElementById('listen-start-note');
@@ -1253,19 +1296,28 @@ async function startListenOnThisMac() {
     btn.disabled = true;
     note.textContent = 'If your browser asks, allow it to open ShowStack Listen, then confirm in the app.';
     // The user said "this Mac": its Listen buttons open the app's local page.
-    try { localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL); } catch (e) {}
+    try {
+        localStorage.setItem(_companionKey(), LISTEN_APP_LOCAL_URL);
+        localStorage.removeItem(_manualKey());
+    } catch (e) {}
     var input = document.getElementById('listen-companion-url');
     if (input) input.value = LISTEN_APP_LOCAL_URL;
     var startedAt = Date.now();
+    // The client id travels with the link and comes back in the app's
+    // heartbeat, so a show with two rack Macs can tell whose app started.
     window.location.href = 'showstack-listen://start?token=' + encodeURIComponent(_listenToken()) +
-        '&api=' + encodeURIComponent(window.location.origin);
+        '&api=' + encodeURIComponent(window.location.origin) +
+        '&client=' + encodeURIComponent(_clientId());
     // The app may show a confirmation first; its first heartbeat follows.
     while (Date.now() - startedAt < 45000 &&
            !document.getElementById('listen-setup-modal').classList.contains('hidden')) {
         await new Promise(function(res) { setTimeout(res, 1500); });
         try {
             var d = await _fetchAppStatus();
-            if (d.running && d.age !== null && d.age * 1000 < Date.now() - startedAt + 1500) {
+            // Must be OUR app: another Mac already running Listen for this show
+            // would otherwise read as success here.
+            if (d.mine && d.mine.age !== null &&
+                d.mine.age * 1000 < Date.now() - startedAt + 1500) {
                 note.textContent = '✓ Running.';
                 btn.disabled = false;
                 checkCompanionStatus();
@@ -1300,18 +1352,25 @@ async function checkCompanionStatus() {
         _setListenStatus('err', 'Can\'t check Listen status right now — retrying…');
         return;
     }
+    var elsewhere = (d.others || []).map(function(o) { return o.host || 'another Mac'; });
     if (!d.running) {
-        _setListenStatus('', _isDesktopMac()
-            ? 'ShowStack Listen isn\'t running for this show — click Start on this Mac.'
-            : 'ShowStack Listen isn\'t running for this show on the rack Mac yet.');
+        var msg = _isDesktopMac()
+            ? 'ShowStack Listen isn\'t running on this Mac — click Start on this Mac.'
+            : 'ShowStack Listen isn\'t running for this show on the rack Mac yet.';
+        if (elsewhere.length) {
+            msg += ' (Running on ' + elsewhere.join(', ') + '.)';
+        }
+        _setListenStatus('', msg);
         if (lanRow) lanRow.hidden = true;
         return;
     }
     var who = d.listeners === 1 ? '1 listener' : (d.listeners || 0) + ' listeners';
+    var also = elsewhere.length ? ' · also on ' + elsewhere.join(', ') : '';
     if (d.source) {
-        _setListenStatus('ok', 'Running · ' + d.source + ' · ' + who);
+        _setListenStatus('ok', 'Running · ' + d.source + ' · ' + who + also);
     } else {
-        _setListenStatus('warn', 'Running, but audio input "' + (d.device || '?') + '" is missing — waiting for it.');
+        _setListenStatus('warn', 'Running, but audio input "' + (d.device || '?') +
+                                 '" is missing — waiting for it.' + also);
     }
     if (lanRow) {
         lanRow.hidden = !d.lan_url;
@@ -1328,6 +1387,15 @@ function openListen(assignmentId) {
     var base = getCompanionUrl();
     if (!base) {
         alert('Listen isn\'t set up on this device yet.\n\nOpen "🎧 Listen Setup" first.');
+        openListenSetup();
+        return;
+    }
+    // Only when we positively know this Mac's app is down: opening the tab
+    // anyway would just show a browser error page.
+    if (_isDesktopMac() && !_isManualCompanionUrl() && _listenMine === null &&
+        _listenStatusChecked) {
+        alert('ShowStack Listen isn\'t running on this Mac yet.\n\nClick "Start on this Mac" '
+              + 'in Listen Setup first.');
         openListenSetup();
         return;
     }

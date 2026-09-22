@@ -225,6 +225,15 @@ class ListenApp(rumps.App):
             return dante[0]
         return None
 
+    def instance_id(self):
+        """Stable id for this Mac, so ShowStack keeps racks apart across restarts."""
+        inst = self.config.get("instance")
+        if not inst:
+            inst = uuid.uuid4().hex
+            self.config["instance"] = inst
+            save_config(self.config)
+        return inst
+
     def start_server(self):
         if not self.config.get("token"):
             alert("Not paired with a show yet.\n\nIn ShowStack open Mic Tracker → "
@@ -257,6 +266,7 @@ class ListenApp(rumps.App):
                 token=cfg["token"], api=cfg["api"], device_name=cfg["device"],
                 https_port=HTTPS_PORT, ssl_context=ssl_ctx, local_port=LOCAL_PORT,
                 ca_profile=certs.ca_mobileconfig,
+                instance=self.instance_id(), client_id=cfg.get("client_id", ""),
             )
             try:
                 server.start()
@@ -304,12 +314,22 @@ class ListenApp(rumps.App):
         if u.scheme != "showstack-listen" or action != "start":
             return
         token, api = params.get("token", ""), params.get("api", "").rstrip("/")
+        # Which browser asked. Echoed in the heartbeat so ShowStack can tell
+        # this Mac's app from another Mac's at the same show.
+        client_id = re.sub(r"[^A-Za-z0-9_-]", "", params.get("client", ""))[:64]
         if not valid_token(token) or not api_allowed(api):
             alert("This start link isn't from ShowStack, so it was ignored.\n\n%s"
                         % (api or "(no server)"))
             return
 
         if token == self.config.get("token") and api == self.config.get("api"):
+            # A different browser (or a re-opened one) may be driving now.
+            if client_id and client_id != self.config.get("client_id"):
+                self.config["client_id"] = client_id
+                save_config(self.config)
+                self.stop_server()
+                self.start_server()
+                return
             if self.server is None:
                 self.start_server()
             else:
@@ -330,7 +350,8 @@ class ListenApp(rumps.App):
             message += "\n\nThis stops Listen for “%s”." % self.config.get("show")
         if alert(message, ok="Start", cancel="Cancel") != 1:
             return
-        self.config.update({"token": token, "api": api, "show": show, "autostart": True})
+        self.config.update({"token": token, "api": api, "show": show, "autostart": True,
+                            "client_id": client_id})
         save_config(self.config)
         self.start_server()
 

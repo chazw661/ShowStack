@@ -24,8 +24,10 @@ from urllib.parse import urlparse
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -168,6 +170,9 @@ def listen_session(request):
 
 # A heartbeat older than this means the app isn't running (it sends every ~5 s).
 LISTEN_STATUS_STALE_SECONDS = 20
+# Apps that stopped reporting are kept in the blob this long before being
+# dropped, so a brief network stall doesn't erase a rack from the list.
+LISTEN_STATUS_KEEP_SECONDS = 600
 
 
 def _private_https_url(value):
@@ -205,13 +210,54 @@ def _clean_status(data):
         'sample_rate': number('sample_rate'),
         'listeners': number('listeners'),
         'lan_url': _private_https_url(data.get('lan_url')),
+        # Which Mac this is. `instance` is stable per Mac; `client_id` is the
+        # browser that pressed "Start on this Mac", so a page can tell its own
+        # rack apart from someone else's at the same show.
+        'instance': text('instance', 64),
+        'host': text('host', 60),
+        'client_id': text('client_id', 64),
     }
+
+
+def _apps_from_blob(blob, fallback_at):
+    """Normalise stored status into {instance: status-with-'at'}.
+
+    Older apps posted a single flat status with no instance; it is carried
+    forward under the 'legacy' key so one old rack still shows up.
+    """
+    if not isinstance(blob, dict):
+        return {}
+    apps = blob.get('apps')
+    if isinstance(apps, dict):
+        return {k: v for k, v in apps.items() if isinstance(v, dict)}
+    if blob:
+        legacy = dict(blob)
+        legacy.setdefault('at', fallback_at.isoformat() if fallback_at else None)
+        return {'legacy': legacy}
+    return {}
+
+
+def _app_age(app, now):
+    at = app.get('at')
+    if not at:
+        return None
+    parsed = parse_datetime(at) if isinstance(at, str) else None
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.utc)
+    return (now - parsed).total_seconds()
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def listen_heartbeat(request):
-    """The Listen app reports what it's doing (every few seconds, and on stop)."""
+    """The Listen app reports what it's doing (every few seconds, and on stop).
+
+    Several Macs can run Listen for one show — a rack Mac plus an A2's laptop —
+    so each app's status is stored under its own instance id rather than
+    overwriting a single field.
+    """
     project, error = _authenticate_listen(request)
     if error:
         return error
@@ -221,25 +267,71 @@ def listen_heartbeat(request):
             raise ValueError
     except ValueError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    # queryset.update() so the project's updated_at / signals aren't touched.
-    Project.objects.filter(pk=project.pk).update(
-        listen_status=_clean_status(data), listen_status_at=timezone.now())
+
+    status = _clean_status(data)
+    instance = status.get('instance') or 'legacy'
+    now = timezone.now()
+
+    with transaction.atomic():
+        row = (Project.objects.select_for_update()
+               .only('listen_status', 'listen_status_at').get(pk=project.pk))
+        apps = _apps_from_blob(row.listen_status, row.listen_status_at)
+        if status['running']:
+            apps[instance] = dict(status, at=now.isoformat())
+        else:
+            apps.pop(instance, None)
+        # Drop racks that have been silent for a long time.
+        apps = {k: v for k, v in apps.items()
+                if (_app_age(v, now) or 0) <= LISTEN_STATUS_KEEP_SECONDS}
+        # queryset.update() so the project's updated_at / signals aren't touched.
+        Project.objects.filter(pk=project.pk).update(
+            listen_status={'apps': apps}, listen_status_at=now)
     return JsonResponse({'ok': True, 'show': project.name})
 
 
 @login_required
 @require_http_methods(["GET"])
 def listen_app_status(request):
-    """Listen app status for the current project, for the Mic Tracker page."""
+    """Listen app status for the current project, for the Mic Tracker page.
+
+    `?client=<id>` identifies the browser that started an app, so the page can
+    be told about its OWN Mac ("mine") rather than any rack at the show.
+    """
     project = getattr(request, 'current_project', None)
     if project is None:
         return JsonResponse({'running': False, 'reason': 'no_project'})
     project = Project.objects.only('listen_status', 'listen_status_at').get(pk=project.pk)
-    status = project.listen_status or {}
-    age = None
-    if project.listen_status_at:
-        age = (timezone.now() - project.listen_status_at).total_seconds()
-    running = bool(status.get('running')) and age is not None and age <= LISTEN_STATUS_STALE_SECONDS
-    response = JsonResponse({**status, 'running': running, 'age': age})
+    now = timezone.now()
+    client = (request.GET.get('client') or '').strip()[:64]
+
+    fresh = []
+    for app in _apps_from_blob(project.listen_status, project.listen_status_at).values():
+        age = _app_age(app, now)
+        if age is None or age > LISTEN_STATUS_STALE_SECONDS:
+            continue
+        if not app.get('running', True):
+            continue
+        fresh.append(dict(app, age=age))
+    fresh.sort(key=lambda a: a.get('age') or 0)
+
+    mine = None
+    if client:
+        mine = next((a for a in fresh if a.get('client_id') == client), None)
+    # One rack and no client id yet (a page from before this field existed, or a
+    # phone) — there is nothing to confuse it with, so treat it as ours.
+    if mine is None and not client and len(fresh) == 1:
+        mine = fresh[0]
+
+    primary = mine or (fresh[0] if fresh else {})
+    others = [a for a in fresh if a is not mine]
+    response = JsonResponse({
+        **primary,
+        'running': bool(mine) if client else bool(fresh),
+        'age': primary.get('age'),
+        'mine': mine,
+        'apps': fresh,
+        'others': [{'host': a.get('host'), 'source': a.get('source'),
+                    'listeners': a.get('listeners')} for a in others],
+    })
     response['Cache-Control'] = 'no-store'
     return response

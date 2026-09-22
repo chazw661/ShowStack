@@ -40,6 +40,7 @@ import struct
 import sys
 import threading
 import time
+import uuid
 from fractions import Fraction
 
 import numpy as np
@@ -1018,6 +1019,22 @@ any website. If this Mac's IP address changes, the phone's Listen address change
 # Startup helpers
 # ──────────────────────────────────────────────────────────────────
 
+def computer_name():
+    """The Mac's friendly name, for telling racks apart in ShowStack."""
+    try:
+        import subprocess
+        name = subprocess.run(["scutil", "--get", "ComputerName"],
+                              capture_output=True, text=True, timeout=2).stdout.strip()
+        if name:
+            return name[:60]
+    except Exception:
+        pass
+    try:
+        return socket.gethostname().replace(".local", "")[:60]
+    except Exception:
+        return ""
+
+
 def lan_ip():
     """Best-effort primary LAN IPv4 (no packets actually sent)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -1187,9 +1204,15 @@ class CompanionServer:
 
     def __init__(self, token, api, device_name, channels=None, test_tone=False,
                  host="0.0.0.0", https_port=8443, ssl_context=None,
-                 local_port=8480, local_lan_ok=False, ca_profile=None, verify_tls=True):
+                 local_port=8480, local_lan_ok=False, ca_profile=None, verify_tls=True,
+                 instance=None, client_id=None):
         self.token = token
         self.api = api
+        # Who this rack is. `instance` is stable for this Mac; `client_id` is
+        # the browser that pressed "Start on this Mac" — several Macs can run
+        # Listen for one show, and ShowStack keeps their statuses apart.
+        self.instance = instance or uuid.uuid4().hex
+        self.client_id = client_id or ""
         self.host = host
         self.https_port = https_port if ssl_context is not None else None
         self.ssl_context = ssl_context
@@ -1443,7 +1466,10 @@ class CompanionServer:
                             self.MAPPING_SECONDS if have else self.MAPPING_RETRY_SECONDS)
                     try:
                         status = await self._post_heartbeat(
-                            session, dict(self.status() or {}, running=True))
+                            session, dict(self.status() or {}, running=True,
+                                          instance=self.instance,
+                                          client_id=self.client_id,
+                                          host=computer_name()))
                         if status >= 400 and not warned:
                             log.warning("ShowStack heartbeat rejected (HTTP %d).", status)
                             warned = True
@@ -1460,7 +1486,10 @@ class CompanionServer:
             except asyncio.CancelledError:
                 try:
                     await asyncio.wait_for(self._post_heartbeat(
-                        session, dict(self.status() or {}, running=False, listeners=0)), 3)
+                        session, dict(self.status() or {}, running=False, listeners=0,
+                                      instance=self.instance,
+                                      client_id=self.client_id,
+                                      host=computer_name())), 3)
                 except Exception:
                     pass
 
