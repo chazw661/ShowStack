@@ -1068,11 +1068,14 @@ silently 403-ing background saves and stopping updates from reaching others.
                         style="color:#ffffff !important;">▶ Start on this Mac</button>
                 <span id="listen-start-note" style="color:var(--text-dim);font-size:11px;"></span>
             </div>
+            <div id="listen-get-app" class="listen-setup-hint"
+                 style="color:var(--text-dim);font-size:11px;margin-top:6px;"></div>
             <div id="listen-download" class="listen-setup-hint" hidden
                  style="color:var(--text-secondary);font-size:12px;margin-top:8px;line-height:1.5;">
-                Didn't open? Install <strong>ShowStack Listen</strong> for Mac first
-                <span id="listen-download-link"></span>, open it once (right-click → Open), then click
-                Start again.
+                Didn't open? <strong>ShowStack Listen</strong> isn't installed on this Mac yet
+                <span id="listen-download-link"></span>. Unzip it, drag it to
+                <strong>Applications</strong>, and <strong>open it once</strong> — that's what lets
+                this button launch it. Then click Start again.
             </div>
         </div>
 
@@ -1212,7 +1215,10 @@ function saveCompanionUrl() {
 }
 // "ShowStack Listen" Mac app — started by link, found on its loopback port.
 var LISTEN_APP_LOCAL_URL = 'http://localhost:8480';
-var LISTEN_APP_DOWNLOAD_URL = '';   // set once the signed download is hosted
+// Signed + notarized build, published on GitHub Releases. '/latest/' always
+// resolves to the newest release asset, so this never needs bumping.
+var LISTEN_APP_DOWNLOAD_URL =
+    'https://github.com/chazw661/ShowStack/releases/latest/download/ShowStack-Listen-mac-arm64.zip';
 function _isDesktopMac() {
     return /Macintosh|Mac OS X/.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1);
 }
@@ -1230,8 +1236,18 @@ function openListenSetup() {
     document.getElementById('listen-start-note').textContent = '';
     var link = document.getElementById('listen-download-link');
     link.innerHTML = LISTEN_APP_DOWNLOAD_URL
-        ? '(<a href="' + LISTEN_APP_DOWNLOAD_URL + '">download</a>)'
+        ? '(<a href="' + LISTEN_APP_DOWNLOAD_URL + '">download it</a>)'
         : '(download link coming soon)';
+    // Offer the download before anything fails: "Start on this Mac" can only
+    // work once the app is installed, and Safari's error for a missing app
+    // ("the address is invalid") explains nothing.
+    var get = document.getElementById('listen-get-app');
+    if (get) {
+        get.innerHTML = LISTEN_APP_DOWNLOAD_URL
+            ? 'Don\'t have the app on this Mac yet? <a href="' + LISTEN_APP_DOWNLOAD_URL +
+              '">Download ShowStack Listen</a> — drag it to Applications and open it once.'
+            : '';
+    }
     document.getElementById('listen-setup-modal').classList.remove('hidden');
     checkCompanionStatus();
     clearInterval(_listenStatusTimer);
