@@ -81,7 +81,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("listen")
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 SAMPLE_RATE = 48000        # WebRTC/Opus output rate
 BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame
@@ -236,6 +236,10 @@ class AudioHub:
         self._waiting_logged = False
         self._reopen_lock = threading.Lock()
         self.levels = np.zeros(self.channels, dtype=np.float32)  # 0..1 RMS per channel
+        # Peak per channel with a decay, which is what a receiver's meter shows.
+        # RMS alone reads 12-20 dB low on speech and made the page look quiet
+        # next to the Shure unit.
+        self.peaks = np.zeros(self.channels, dtype=np.float32)
 
     @property
     def source_label(self):
@@ -324,6 +328,7 @@ class AudioHub:
         self.channels = channels
         self.rate = rate
         self.levels = np.zeros(channels, dtype=np.float32)
+        self.peaks = np.zeros(channels, dtype=np.float32)
         self._last_callback = time.monotonic()
         self._stream = stream
         self._waiting_logged = False
@@ -341,6 +346,7 @@ class AudioHub:
             except Exception:
                 pass
         self.levels = np.zeros(self.channels, dtype=np.float32)
+        self.peaks = np.zeros(self.channels, dtype=np.float32)
 
     def _reopen(self):
         # Serialised: the watchdog and a user device switch can race.
@@ -412,6 +418,7 @@ class AudioHub:
                     block[:, c] = 0.2 * np.sin(phase)
                 n += BLOCK
                 self.levels = np.clip(np.sqrt(np.mean(np.square(block), axis=0)), 0.0, 1.0)
+                self.peaks = np.clip(np.max(np.abs(block), axis=0), 0.0, 1.0)
                 for q in list(self._subscribers):
                     self._push(q, (block, SAMPLE_RATE))
                 await asyncio.sleep(BLOCK / SAMPLE_RATE)
@@ -432,6 +439,10 @@ class AudioHub:
         # Per-channel RMS for the level meter (cheap, done once for everyone).
         rms = np.sqrt(np.mean(np.square(block), axis=0))
         self.levels = np.clip(rms, 0.0, 1.0)
+        peak = np.max(np.abs(block), axis=0)
+        if self.peaks.shape != peak.shape:
+            self.peaks = np.zeros_like(peak)
+        self.peaks = np.clip(np.maximum(peak, self.peaks * 0.85), 0.0, 1.0)
         if self.loop is None:
             return
         item = (block, self.rate)
@@ -646,9 +657,12 @@ class Companion:
                     while True:
                         idx = track.channel - 1
                         levels = self.hub.levels
+                        peaks = self.hub.peaks
                         level = float(levels[idx]) if 0 <= idx < len(levels) else 0.0
+                        peak = float(peaks[idx]) if 0 <= idx < len(peaks) else 0.0
                         if dc.readyState == "open":
-                            dc.send(json.dumps({"level": level, "channel": track.channel,
+                            dc.send(json.dumps({"level": level, "peak": peak,
+                                                "channel": track.channel,
                                                 "src": self.hub.source_label,
                                                 "channels": self.hub.channels}))
                         await asyncio.sleep(0.1)
@@ -711,6 +725,10 @@ LISTEN_HTML = r"""<!doctype html>
   [hidden] { display:none !important; }
   .src { color:#6a6a90; font-size:12px; margin-top:6px; min-height:16px; }
   .src.lost { color:#ffab00; }
+  .meter-db { float:right; color:#8a8ab0; font-variant-numeric:tabular-nums; }
+  .scale { display:flex; justify-content:space-between; color:#5a5a78; font-size:10px; margin-top:3px; }
+  /* Big enough to grab with a thumb in the dark at FOH. */
+  input[type=range] { width:100%; height:38px; accent-color:#4a9eff; }
 </style></head>
 <body>
 <header><h1>🎧 A2 Listen</h1></header>
@@ -730,8 +748,14 @@ LISTEN_HTML = r"""<!doctype html>
     <div class="src" id="chan-note" hidden>Waiting for the channel list from ShowStack…</div>
   </div>
   <div>
-    <label>Level</label>
+    <label>Level <span id="meter-db" class="meter-db">--</span></label>
     <div class="meter-wrap"><div class="meter" id="meter"></div></div>
+    <div class="scale"><span>-60</span><span>-40</span><span>-20</span><span>-6</span><span>0</span></div>
+  </div>
+  <div>
+    <label for="gain">Boost <span id="gain-val">+12 dB</span></label>
+    <input type="range" id="gain" min="0" max="36" step="3" value="12">
+    <div class="src" id="gain-note"></div>
   </div>
   <div class="status" id="status">Tap Listen to start.</div>
   <button id="tap" class="big-btn tap" hidden>🔊 Tap for sound</button>
@@ -761,6 +785,14 @@ function label() {
   $('sub').textContent = bits.join('  ·  ');
 }
 label();
+
+var METER_FLOOR_DB = -60;
+function meterPercent(lin) {
+  if (!(lin > 0)) return 0;
+  var db = 20 * Math.log10(lin);
+  if (db <= METER_FLOOR_DB) return 0;
+  return Math.min(100, (db - METER_FLOOR_DB) / (0 - METER_FLOOR_DB) * 100);
+}
 
 const STALE_MSG = 'This Listen link is for a different show. Open 🎧 Listen from ShowStack again, ' +
                   'or rescan the QR code from 📱 Set up phones.';
@@ -871,19 +903,93 @@ $('sess').addEventListener('change', e => {
 // back after the tap, so start the <audio> element NOW on an empty stream and add
 // the remote track to that same stream when it arrives.
 let remote = null;
+// Boost lives in Web Audio: an <audio> element can only attenuate (and on iOS
+// its volume is read-only), but hunting a rubbing mic or a loose pack needs
+// gain well above unity. A limiter after it keeps a sudden shout from hurting.
+const GAIN_KEY = 'a2listen.gainDb';
+let gainDb = 12;
+try {
+  const saved = parseInt(localStorage.getItem(GAIN_KEY), 10);
+  if (!isNaN(saved) && saved >= 0 && saved <= 36) gainDb = saved;
+} catch (e) {}
+let actx = null, gainNode = null, srcNode = null, limiter = null, graphOk = false;
+function dbToLin(db) { return Math.pow(10, db / 20); }
+
 function unlockAudio() {
   const audio = $('audio');
   remote = new MediaStream();
   audio.srcObject = remote;
   audio.muted = false;
   audio.play().catch(() => {});
+  // iOS only allows an AudioContext to start inside the tap, so make it here
+  // even though the track arrives later.
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC && !actx) actx = new AC();
+    if (actx && actx.state === 'suspended') actx.resume();
+  } catch (e) { actx = null; }
 }
+
+function buildAudioGraph() {
+  if (!actx || graphOk || !remote) return;
+  try {
+    srcNode = actx.createMediaStreamSource(remote);
+    gainNode = actx.createGain();
+    gainNode.gain.value = dbToLin(gainDb);
+    limiter = actx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.15;
+    srcNode.connect(gainNode);
+    gainNode.connect(limiter);
+    limiter.connect(actx.destination);
+    // Web Audio is doing the playback now; leaving the element audible as well
+    // would play everything twice.
+    $('audio').muted = true;
+    graphOk = true;
+    $('gain-note').textContent = '';
+  } catch (e) {
+    // Fall back to plain playback — quieter, but never silent.
+    graphOk = false;
+    $('audio').muted = false;
+    $('gain-note').textContent = 'Boost unavailable on this browser — use the device volume.';
+  }
+}
+
+function teardownAudioGraph() {
+  [srcNode, gainNode, limiter].forEach(function(n) { if (n) { try { n.disconnect(); } catch (e) {} } });
+  srcNode = gainNode = limiter = null;
+  graphOk = false;
+}
+
+function applyGain() {
+  $('gain-val').textContent = (gainDb > 0 ? '+' : '') + gainDb + ' dB';
+  if (gainNode && actx) {
+    // Ramp rather than jump, so changing it mid-show isn't a click in the ear.
+    try { gainNode.gain.setTargetAtTime(dbToLin(gainDb), actx.currentTime, 0.02); }
+    catch (e) { gainNode.gain.value = dbToLin(gainDb); }
+  }
+}
+$('gain').value = gainDb;
+applyGain();
+$('gain').addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10);
+  if (isNaN(v)) return;
+  gainDb = v;
+  applyGain();
+  try { localStorage.setItem(GAIN_KEY, String(gainDb)); } catch (e) {}
+});
 function needTap() {
   // Still blocked (or paused by iOS): one more direct tap always works.
   $('tap').hidden = false;
 }
 $('tap').addEventListener('click', () => {
+  if (actx && actx.state === 'suspended') { actx.resume().catch(() => {}); }
+  buildAudioGraph();
   $('audio').play().then(() => { $('tap').hidden = true; }).catch(() => {});
+  if (graphOk && actx && actx.state === 'running') $('tap').hidden = true;
 });
 
 async function start() {
@@ -895,7 +1001,9 @@ async function start() {
   pc.addTransceiver('audio', {direction: 'recvonly'});
   pc.ontrack = e => {
     remote.addTrack(e.track);
-    $('audio').play().catch(needTap);
+    buildAudioGraph();
+    $('audio').play().catch(function() { if (!graphOk) needTap(); });
+    if (actx && actx.state === 'suspended') needTap();
   };
   pc.onconnectionstatechange = () => {
     if (!pc) return;                   // already torn down by stop()
@@ -910,7 +1018,14 @@ async function start() {
   dc.onmessage = ev => {
     try {
       const d = JSON.parse(ev.data);
-      if (typeof d.level === 'number') $('meter').style.width = Math.min(100, d.level*140).toFixed(1) + '%';
+      // Peak on a dBFS scale. The old bar was linear RMS, which read ~20 dB
+      // low against the Shure unit on speech.
+      var lin = (typeof d.peak === 'number') ? d.peak : d.level;
+      if (typeof lin === 'number') {
+        $('meter').style.width = meterPercent(lin).toFixed(1) + '%';
+        $('meter-db').textContent = lin > 0.0005
+          ? (20 * Math.log10(lin)).toFixed(0) + ' dB' : '-inf';
+      }
       if ('src' in d) {
         const lost = !d.src;
         const over = !lost && d.channels && channel > d.channels;
@@ -944,8 +1059,10 @@ function stop() {
   const old = pc;
   pc = null; dc = null;                // before close(), so the state handler no-ops
   if (old) { try { old.close(); } catch (e) {} }
+  teardownAudioGraph();
   $('tap').hidden = true;
   $('meter').style.width = '0%';
+  $('meter-db').textContent = '--';
   $('status').textContent = 'Stopped.';
   $('go').textContent = '▶︎ Listen'; $('go').disabled = false;
 }
