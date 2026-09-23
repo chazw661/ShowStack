@@ -81,7 +81,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("listen")
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 SAMPLE_RATE = 48000        # WebRTC/Opus output rate
 BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame
@@ -956,7 +956,22 @@ try {
   if (!isNaN(saved) && saved >= 0 && saved <= 36) gainDb = saved;
 } catch (e) {}
 let actx = null, gainNode = null, srcNode = null, limiter = null, graphOk = false;
+let analyser = null, analyserBuf = null, deadSince = 0;
 function dbToLin(db) { return Math.pow(10, db / 20); }
+// Safari reports a non-standard 'interrupted' state after the device sleeps or
+// another app takes audio — treat anything but 'running' as needing recovery.
+function ctxRunning() { return !!actx && actx.state === 'running'; }
+// Peak of what actually reached this device, measured before the boost.
+function localPeak() {
+  if (!analyser || !analyserBuf) return null;
+  try { analyser.getFloatTimeDomainData(analyserBuf); } catch (e) { return null; }
+  let p = 0;
+  for (let i = 0; i < analyserBuf.length; i++) {
+    const v = Math.abs(analyserBuf[i]);
+    if (v > p) p = v;
+  }
+  return p;
+}
 
 function unlockAudio() {
   const audio = $('audio');
@@ -968,8 +983,15 @@ function unlockAudio() {
   // even though the track arrives later.
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC && !actx) actx = new AC();
-    if (actx && actx.state === 'suspended') actx.resume();
+    if (AC && !actx) {
+      actx = new AC();
+      actx.onstatechange = () => {
+        // 'interrupted' (Safari) or 'suspended' means nothing is being heard,
+        // however healthy the WebRTC track looks.
+        if (pc && !ctxRunning()) recoverAudio();
+      };
+    }
+    if (actx && actx.state !== 'running') actx.resume().catch(() => {});
   } catch (e) { actx = null; }
 }
 
@@ -985,7 +1007,11 @@ function buildAudioGraph() {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.15;
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 256;
+    analyserBuf = new Float32Array(analyser.fftSize);
     srcNode.connect(gainNode);
+    srcNode.connect(analyser);          // pre-boost: what arrived, not what we made of it
     gainNode.connect(limiter);
     limiter.connect(actx.destination);
     // Web Audio is doing the playback now; leaving the element audible as well
@@ -1002,9 +1028,75 @@ function buildAudioGraph() {
 }
 
 function teardownAudioGraph() {
-  [srcNode, gainNode, limiter].forEach(function(n) { if (n) { try { n.disconnect(); } catch (e) {} } });
-  srcNode = gainNode = limiter = null;
+  [srcNode, gainNode, limiter, analyser].forEach(function(n) { if (n) { try { n.disconnect(); } catch (e) {} } });
+  srcNode = gainNode = limiter = analyser = null;
+  analyserBuf = null;
   graphOk = false;
+}
+
+// After an interruption Safari can leave a MediaStreamSource permanently
+// silent even once the context is running again, so rebuilding the graph — and
+// the context itself if that isn't enough — is part of the cure.
+function rebuildAudioGraph() {
+  teardownAudioGraph();
+  buildAudioGraph();
+  return graphOk && ctxRunning();
+}
+
+function recreateAudioContext() {
+  teardownAudioGraph();
+  const old = actx;
+  actx = null;
+  try { if (old) old.close(); } catch (e) {}
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) actx = new AC();
+  } catch (e) { actx = null; }
+  if (actx && actx.state !== 'running') {
+    try { const r = actx.resume(); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+  }
+  buildAudioGraph();
+  return graphOk && ctxRunning();
+}
+
+// The audio track and the data channel are independent: the meter is fed by
+// the data channel, so it keeps moving even when nothing is being heard. This
+// is what a phone coming back from sleep looks like.
+function audioIsDead(serverPeak) {
+  if (!pc) return false;
+  if (!graphOk) return $('audio').paused;
+  if (!ctxRunning()) return true;
+  const lp = localPeak();
+  return lp !== null && serverPeak > 0.003 && lp < 0.0005;
+}
+
+async function recoverAudio() {
+  try { if (actx && actx.state !== 'running') await actx.resume(); } catch (e) {}
+  if (!graphOk) {
+    $('audio').muted = false;
+    try { await $('audio').play(); return true; } catch (e) { needTap(); return false; }
+  }
+  if (ctxRunning() && rebuildAudioGraph()) return true;
+  if (recreateAudioContext()) return true;
+  // iOS only reliably resumes audio from inside a gesture — ask for one.
+  needTap();
+  return false;
+}
+
+function watchPlayback(serverPeak) {
+  if (!pc) { deadSince = 0; return; }
+  if (audioIsDead(serverPeak)) {
+    if (!deadSince) { deadSince = Date.now(); return; }
+    if (Date.now() - deadSince > 1500) {
+      deadSince = 0;
+      $('src').textContent = 'Audio stopped — restoring…';
+      $('src').classList.add('lost');
+      recoverAudio();
+    }
+  } else {
+    deadSince = 0;
+    if (ctxRunning() || !graphOk) $('tap').hidden = true;
+  }
 }
 
 function applyGain() {
@@ -1028,11 +1120,16 @@ function needTap() {
   // Still blocked (or paused by iOS): one more direct tap always works.
   $('tap').hidden = false;
 }
-$('tap').addEventListener('click', () => {
-  if (actx && actx.state === 'suspended') { actx.resume().catch(() => {}); }
-  buildAudioGraph();
-  $('audio').play().then(() => { $('tap').hidden = true; }).catch(() => {});
-  if (graphOk && actx && actx.state === 'running') $('tap').hidden = true;
+$('tap').addEventListener('click', async () => {
+  // A real gesture: the one moment iOS will always let audio start again.
+  try { if (actx && actx.state !== 'running') await actx.resume(); } catch (e) {}
+  if (graphOk && !rebuildAudioGraph()) recreateAudioContext();
+  else if (!graphOk) buildAudioGraph();
+  $('audio').play().then(() => { if (!graphOk) $('tap').hidden = true; }).catch(() => {});
+  if (graphOk && ctxRunning()) {
+    $('tap').hidden = true;
+    $('src').classList.remove('lost');
+  }
 });
 
 async function start() {
@@ -1046,7 +1143,7 @@ async function start() {
     remote.addTrack(e.track);
     buildAudioGraph();
     $('audio').play().catch(function() { if (!graphOk) needTap(); });
-    if (actx && actx.state === 'suspended') needTap();
+    if (actx && !ctxRunning()) needTap();
   };
   pc.onconnectionstatechange = () => {
     if (!pc) return;                   // already torn down by stop()
@@ -1068,6 +1165,7 @@ async function start() {
         $('meter').style.width = meterPercent(lin).toFixed(1) + '%';
         $('meter-db').textContent = lin > 0.0005
           ? (20 * Math.log10(lin)).toFixed(0) + ' dB' : '-inf';
+        watchPlayback(lin);
       }
       if ('src' in d) {
         const lost = !d.src;
@@ -1122,12 +1220,19 @@ $('go').addEventListener('click', () => {
 });
 // Screen lock / tab backgrounding tears down WebRTC; prompt to reconnect.
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
   // The teardown already reset the button; just say why it stopped.
-  if (document.visibilityState === 'visible' && !pc &&
-      $('go').textContent.indexOf('Reconnect') !== -1) {
+  if (!pc && $('go').textContent.indexOf('Reconnect') !== -1) {
     $('status').textContent = 'Reconnect to resume.';
+    return;
   }
+  // Back from sleep or another app: the track survives but iOS has stopped
+  // our audio, and the meter alone would keep saying everything is fine.
+  if (pc && !ctxRunning()) recoverAudio();
 });
+// Waking the screen doesn't always fire visibilitychange on iOS.
+window.addEventListener('focus', () => { if (pc && !ctxRunning()) recoverAudio(); });
+window.addEventListener('pageshow', () => { if (pc && !ctxRunning()) recoverAudio(); });
 </script>
 </body></html>
 """
