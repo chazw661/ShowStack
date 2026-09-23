@@ -209,6 +209,8 @@ def _clean_status(data):
         'channels': number('channels'),
         'sample_rate': number('sample_rate'),
         'listeners': number('listeners'),
+        # Seconds the app has been stuck opening its audio device (0 = healthy).
+        'device_stuck': number('device_stuck'),
         'lan_url': _private_https_url(data.get('lan_url')),
         # Which Mac this is. `instance` is stable per Mac; `client_id` is the
         # browser that pressed "Start on this Mac", so a page can tell its own

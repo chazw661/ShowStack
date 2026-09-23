@@ -1384,7 +1384,13 @@ async function checkCompanionStatus() {
     }
     var who = d.listeners === 1 ? '1 listener' : (d.listeners || 0) + ' listeners';
     var also = elsewhere.length ? ' · also on ' + elsewhere.join(', ') : '';
-    if (d.source) {
+    if (d.device_stuck) {
+        // Core Audio never returned from the open — the driver needs a restart,
+        // and nothing the app does will clear it.
+        _setListenStatus('err', 'Audio input "' + (d.device || '?') + '" has not responded for ' +
+                                d.device_stuck + 's — quit and relaunch it (Dante Virtual ' +
+                                'Soundcard). Listeners hear silence until then.' + also);
+    } else if (d.source) {
         _setListenStatus('ok', 'Running · ' + d.source + ' · ' + who + also);
     } else {
         _setListenStatus('warn', 'Running, but audio input "' + (d.device || '?') +

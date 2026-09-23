@@ -81,12 +81,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("listen")
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 SAMPLE_RATE = 48000        # WebRTC/Opus output rate
 BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame
 WATCH_INTERVAL = 1.0       # seconds between device health checks
 STALL_SECONDS = 2.0        # no audio callbacks for this long -> reopen
+# Opening a Core Audio device can block indefinitely when the driver is wedged
+# (a half-dead DVS sits in Pa_OpenStream -> mach_msg). That used to be silent:
+# no audio, nothing in the log, and the only way to see it was `sample <pid>`.
+STUCK_WARN_SECONDS = 10.0
+STUCK_REPEAT_SECONDS = 30.0
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -234,6 +239,8 @@ class AudioHub:
         self._fingerprint = None
         self._last_callback = 0.0
         self._waiting_logged = False
+        self._open_started = None     # monotonic time the current open began
+        self._stuck_logged = 0.0
         self._reopen_lock = threading.Lock()
         self.levels = np.zeros(self.channels, dtype=np.float32)  # 0..1 RMS per channel
         # Peak per channel with a decay, which is what a receiver's meter shows.
@@ -284,6 +291,29 @@ class AudioHub:
     # ── device open / close ──────────────────────────────────────
 
     def _open(self, refresh=True):
+        """Open the device, recording when the attempt began.
+
+        Every call here can block for an unbounded time inside Core Audio, so
+        `_open_started` is what lets the watchdog (which runs on the event
+        loop, not this thread) notice and say so.
+        """
+        self._open_started = time.monotonic()
+        try:
+            return self._open_inner(refresh)
+        finally:
+            self._open_started = None
+            self._stuck_logged = 0.0
+
+    @property
+    def stuck_seconds(self):
+        """How long the current open has been blocked, 0 when healthy."""
+        started = self._open_started
+        if started is None:
+            return 0.0
+        waited = time.monotonic() - started
+        return waited if waited > STUCK_WARN_SECONDS else 0.0
+
+    def _open_inner(self, refresh=True):
         """Open the named device at its native rate. Returns True on success."""
         if refresh:
             # PortAudio only enumerates devices at init; re-init to see changes.
@@ -369,7 +399,19 @@ class AudioHub:
             while True:
                 await asyncio.sleep(WATCH_INTERVAL)
                 if self._reopen_lock.locked():
-                    continue        # an open is already in flight (maybe stuck)
+                    # An open is in flight. If it has stopped coming back, say
+                    # so — repeatedly — rather than waiting in silence.
+                    stuck = self.stuck_seconds
+                    now = time.monotonic()
+                    if stuck and now - self._stuck_logged > STUCK_REPEAT_SECONDS:
+                        self._stuck_logged = now
+                        log.warning(
+                            "Audio device %r has not responded for %.0fs — Core Audio is "
+                            "not returning from the open. Listeners are getting silence. "
+                            "Restart the device (Dante Virtual Soundcard: quit and "
+                            "relaunch it); the app reconnects on its own.",
+                            self.device_name, stuck)
+                    continue
                 reason = None
                 if self._stream is None:
                     reason = "retry"
@@ -607,6 +649,7 @@ class Companion:
             "channels": hub.channels,
             "sample_rate": hub.rate,
             "listeners": len(self.pcs),
+            "device_stuck": round(hub.stuck_seconds),
         }
         if self.extra_status:
             data.update(self.extra_status())
