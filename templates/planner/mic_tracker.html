@@ -224,13 +224,17 @@
     /* An unassigned slot still carries every field -- it is where the next
        presenter gets typed -- but it is not something to read past on the
        way to a name, so it sits back. Hover and focus bring it fully
-       forward, so nothing being read or edited is ever dimmed. */
-    .a1-row:has(.a1-unassigned),
-    .a1-slot-row:has(.a1-unassigned) { opacity: 0.6; transition: opacity 0.12s; }
-    .a1-row:has(.a1-unassigned):hover,
-    .a1-slot-row:has(.a1-unassigned):hover,
-    .a1-row:has(.a1-unassigned):focus-within,
-    .a1-slot-row:has(.a1-unassigned):focus-within { opacity: 1; }
+       forward, so nothing being read or edited is ever dimmed.
+     *
+     * Keyed to .is-unassigned, which admin/js/mic_tracker_render.js owns.
+     * This was `:has(.a2-presenter-input[value=""])`, which read the value
+     * ATTRIBUTE -- so typing a name (which only changes the .value PROPERTY)
+     * never cleared the dimming, and clearing a name never restored it. A
+     * class the renderer sets alongside every other piece of slot state
+     * cannot drift from the rest of the row. */
+    .a1-row.is-unassigned { opacity: 0.6; transition: opacity 0.12s; }
+    .a1-row.is-unassigned:hover,
+    .a1-row.is-unassigned:focus-within { opacity: 1; }
     .a1-shared-tag {
         display: inline-block; margin-left: 8px; font-size: 9px;
         background: var(--bg-raised); color: var(--accent-blue);
@@ -354,9 +358,9 @@
 
     /* Same treatment as an unassigned A1 row: every field is still there,
        it just sits back until you touch it. */
-    .a2-card:has(.a2-presenter-input[value=""]) { opacity: 0.6; transition: opacity 0.12s; }
-    .a2-card:has(.a2-presenter-input[value=""]):hover,
-    .a2-card:has(.a2-presenter-input[value=""]):focus-within { opacity: 1; }
+    .a2-card.is-unassigned { opacity: 0.6; transition: opacity 0.12s; }
+    .a2-card.is-unassigned:hover,
+    .a2-card.is-unassigned:focus-within { opacity: 1; }
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
     .a2-setting-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mtt-text-label); margin-bottom: 1px; }
@@ -711,10 +715,26 @@ silently 403-ing background saves and stopping updates from reaching others.
                             {% for slot in slots %}
                             {% with slot_groups=slot.groups.all fallback_group=assignment.groups.first %}
                             {% with first_slot_group=slot_groups.0 %}
-                            <tr class="a1-row {% if slot.is_micd %}row-micd{% endif %} {% if first_slot_group %}group-{{ first_slot_group.color }}{% elif fallback_group %}group-{{ fallback_group.color }}{% endif %}"
+                            {% comment %}
+                            data-* carries this slot's facts for
+                            admin/js/mic_tracker_render.js, which re-renders
+                            the row from them on load and after every edit.
+                            They are the only copy of the truth on the client,
+                            so a change path can't disagree with the server.
+                            .a1-slot-row is required: three CSS rules and two
+                            JS selectors key off it, and it had never been
+                            emitted, so all five silently did nothing.
+                            {% endcomment %}
+                            <tr class="a1-row a1-slot-row {% if slot.is_micd %}row-micd{% endif %} {% if not slot.presenter %}is-unassigned{% endif %} {% if first_slot_group %}group-{{ first_slot_group.color }}{% elif fallback_group %}group-{{ fallback_group.color }}{% endif %}"
                                 id="a1-slot-row-{{ slot.id }}"
                                 data-assignment-id="{{ assignment.id }}"
-                                data-slot-id="{{ slot.id }}">
+                                data-slot-id="{{ slot.id }}"
+                                data-slot-count="{{ slot_count }}"
+                                data-presenter="{% if slot.presenter %}{{ slot.presenter.name }}{% endif %}"
+                                data-micd="{% if slot.is_micd %}1{% else %}0{% endif %}"
+                                data-mic-type="{{ slot.mic_type|default:assignment.mic_type|default:'' }}"
+                                data-group="{% if first_slot_group %}{{ first_slot_group.color }}{% elif fallback_group %}{{ fallback_group.color }}{% endif %}"
+                                data-active="{% if slot.is_active %}1{% else %}0{% endif %}">
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
                                     <span class="group-dot-stack"
@@ -768,8 +788,16 @@ silently 403-ing background saves and stopping updates from reaching others.
                             {# ── SINGLE PRESENTER row ── #}
                             {% with assn_groups=assignment.groups.all %}
                             {% with first_assn_group=assn_groups.0 %}
-                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if first_assn_group %}group-{{ first_assn_group.color }}{% endif %}"
+                            {% with single_slot=assignment.active_slot %}
+                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if not single_slot.presenter %}is-unassigned{% endif %} {% if first_assn_group %}group-{{ first_assn_group.color }}{% endif %}"
                                 id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}"
+                                data-slot-id="{% if single_slot %}{{ single_slot.id }}{% endif %}"
+                                data-slot-count="1"
+                                data-presenter="{% if single_slot.presenter %}{{ single_slot.presenter.name }}{% endif %}"
+                                data-micd="{% if assignment.is_micd %}1{% else %}0{% endif %}"
+                                data-mic-type="{{ single_slot.mic_type|default:'' }}"
+                                data-group="{% if first_assn_group %}{{ first_assn_group.color }}{% endif %}"
+                                data-active="1"
                                 {% if not is_viewer %}draggable="true"{% endif %}>
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
@@ -819,7 +847,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                            {% if is_viewer %}readonly{% endif %}>
                                 </td>
                             </tr>
-                            {% endwith %}{% endwith %}
+                            {% endwith %}{% endwith %}{% endwith %}
                             {% endif %}
 
                             {% endwith %}
@@ -840,7 +868,15 @@ silently 403-ing background saves and stopping updates from reaching others.
                         {% endif %}
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
-                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %}"
+                        {% comment %}
+                        The group stripe and the unassigned dimming are both
+                        emitted here as well as applied by the renderer. The
+                        group class in particular used to be added only by the
+                        JS group picker, so a card showed no stripe until you
+                        changed its group and then lost it again on reload.
+                        {% endcomment %}
+                        {% with card_slot=assignment.active_slot card_group=assignment.groups.first %}
+                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %} {% if not card_slot.presenter %}is-unassigned{% endif %} {% if card_group %}group-{{ card_group.color }}{% endif %}"
                              id="a2-card-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
 
                             <div class="a2-card-header">
@@ -1048,6 +1084,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                             {% endwith %}
 
                         </div>
+                        {% endwith %}
                         {% endfor %}
                         </div>
                     </div>
@@ -1241,6 +1278,9 @@ silently 403-ing background saves and stopping updates from reaching others.
 })();
 </script>
 
+{# The single slot renderer. Loaded before mic_tracker_v5.js and the inline
+   script below, both of which delegate every slot-state write to it. #}
+<script src="{% static 'admin/js/mic_tracker_render.js' %}"></script>
 <script src="{% static 'admin/js/mic_tracker_v5.js' %}"></script>
 
 <script>
@@ -1626,118 +1666,49 @@ function toggleDay(dayId, headerEl) {
 }
 
 // ── MIC'D toggles ─────────────────────────────────────────────
+// Every one of these used to hand-write classes and labels across the A1 row,
+// the A2 card and the chip list, and each one drifted from what the template
+// renders. They now do one thing: work out the new DATA and hand it to the
+// renderer, which is also what runs on page load.
+
 function toggleMicd(assignmentId, btn) {
     markLocalChange();
-    const isOn = btn.classList.contains('on');
-    const newState = !isOn;
-    btn.classList.toggle('on', newState);
-    btn.classList.toggle('off', !newState);
-    // Preserve inner dot span, just update the text node
-    const dot = btn.querySelector('.a2-micd-dot');
-    if (dot) {
-        Array.from(btn.childNodes).forEach(n => { if (n.nodeType === 3) n.remove(); });
-        btn.appendChild(document.createTextNode(newState ? ' ON' : " MIC'D"));
-    } else {
-        btn.textContent = newState ? 'ON' : '—';
-    }
-    // Sync A1 row
-    const a1Row = document.getElementById('a1-row-' + assignmentId);
-    if (a1Row) {
-        a1Row.classList.toggle('row-micd', newState);
-        const a1Btn = a1Row.querySelector('.a1-micd-toggle');
-        if (a1Btn) { a1Btn.classList.toggle('on', newState); a1Btn.classList.toggle('off', !newState); a1Btn.textContent = newState ? 'ON' : '—'; }
-    }
-    // Sync A2 card border
-    const card = document.getElementById('a2-card-' + assignmentId);
-    if (card) {
-        card.classList.toggle('card-micd', newState);
-        const a2btn = document.getElementById('a2-micd-btn-' + assignmentId);
-        if (a2btn && a2btn !== btn) { a2btn.classList.toggle('on', newState); a2btn.classList.toggle('off', !newState); }
-    }
+    const newState = !btn.classList.contains('on');
+    MTTSlots.setMicd(assignmentId, null, newState);
     updateField(assignmentId, 'is_micd', newState);
 }
 
 function updateMicType(assignmentId, value) {
     updateField(assignmentId, 'mic_type', value);
-    const card = document.getElementById('a2-card-' + assignmentId);
-    if (!card) return;
-    const meta = card.querySelector('.a2-card-meta');
-    if (!meta) return;
-    const labels = { 'HH':'HH','LAV':'LAV','HEADSET':'HEADSET','PODIUM':'PODIUM','BOOM':'BOOM','INSTRUMENT':'INSTRUMENT' };
-    if (value && labels[value]) {
-        meta.innerHTML = '<span class="mic-type-badge type-' + value + '" style="font-size:9px;padding:2px 7px;"><span class="type-dot"></span>' + labels[value] + '</span>';
-    } else { meta.innerHTML = ''; }
-    const a1td = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
-    if (a1td) { a1td.className = 'mic-type-badge type-' + (value || 'empty'); a1td.innerHTML = '<span class="type-dot"></span>' + (labels[value] || '—'); }
+    // The A2 selects always edit the card's ACTIVE slot, so that is the slot
+    // whose type changed. Previously only the single-presenter A1 row was
+    // updated, so a multi-presenter row kept its old badge until a reload.
+    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+    MTTSlots.patch(assignmentId, active ? active.slotId : null, { micType: value || '' });
 }
 
-// toggleMicdSlot: radio behavior — called from per-chip MIC'D buttons
-// Signature: toggleMicdSlot(assignmentId, slotId, btn)
+// toggleMicdSlot: radio behaviour — called from the per-chip MIC'D buttons.
+// The server clears every sibling slot, so the renderer does the same. This
+// function no longer writes a single class or label itself; the 50 lines it
+// used to spend doing that by hand are exactly where the A1 rows, the chips
+// and the card drifted apart from each other and from a fresh reload.
 async function toggleMicdSlot(assignmentId, slotId, btn) {
     markLocalChange();
-    const isOn = btn.classList.contains('on');
-    const newState = !isOn;
+    const newState = !btn.classList.contains('on');
 
+    let data;
     try {
         const resp = await fetch('/audiopatch/api/mic/slot/toggle-micd/', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
             body: JSON.stringify({slot_id: slotId, is_micd: newState})
         });
-        const data = await resp.json();
+        data = await resp.json();
         if (!data.success) return;
-    } catch(e) { return; }
+    } catch (e) { return; }
 
-    // Clear ALL chip MIC'D buttons/dots/highlights for this assignment
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-micd-btn').forEach(b => {
-        b.classList.remove('on'); b.classList.add('off'); b.textContent = "MIC'D";
-    });
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-micd-dot').forEach(d => d.classList.remove('on'));
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach(c => c.classList.remove('micd'));
-
-    // Clear all A1 slot rows for this assignment
-    document.querySelectorAll('.a1-row[data-assignment-id="' + assignmentId + '"]').forEach(row => {
-        row.classList.remove('row-micd');
-        const b = row.querySelector('.a1-micd-toggle');
-        if (b) { b.classList.remove('on'); b.classList.add('off'); b.textContent = '—'; }
-    });
-
-    // Also clear single-presenter A1 row if present
-    const a1SingleRow = document.getElementById('a1-row-' + assignmentId);
-    if (a1SingleRow) {
-        a1SingleRow.classList.remove('row-micd');
-        const b = a1SingleRow.querySelector('.a1-micd-toggle');
-        if (b) { b.classList.remove('on'); b.classList.add('off'); b.textContent = '—'; }
-    }
-
-    // Light up only the toggled slot if turning ON
-    if (newState) {
-        // A2 chip
-        btn.classList.add('on'); btn.classList.remove('off'); btn.textContent = 'ON';
-        const chip = btn.closest('.a2-slot-chip');
-        if (chip) {
-            chip.classList.add('micd');
-            const dot = chip.querySelector('.a2-slot-micd-dot');
-            if (dot) dot.classList.add('on');
-        }
-        // A1 slot row
-        const a1Row = document.getElementById('a1-slot-row-' + slotId);
-        if (a1Row) {
-            a1Row.classList.add('row-micd');
-            const a1Btn = document.getElementById('a1-micd-slot-' + slotId);
-            if (a1Btn) { a1Btn.classList.add('on'); a1Btn.classList.remove('off'); a1Btn.textContent = 'ON'; }
-        }
-        // Single-presenter A1 row (slot_count==1)
-        const a1Btn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
-        if (a1Btn) { a1Btn.classList.add('on'); a1Btn.classList.remove('off'); a1Btn.textContent = 'ON'; if (a1SingleRow) a1SingleRow.classList.add('row-micd'); }
-
-        // Card border
-        const card = document.getElementById('a2-card-' + assignmentId);
-        if (card) card.classList.add('card-micd');
-    } else {
-        const card = document.getElementById('a2-card-' + assignmentId);
-        if (card) card.classList.remove('card-micd');
-    }
+    MTTSlots.setMicd(assignmentId, slotId, newState);
+    MTTSlots.applyStats(assignmentId, data.session_stats, data.day_stats);
 }
 
 // ── Expand/collapse slot rows ──────────────────────────────────
@@ -1804,15 +1775,16 @@ function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl) {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
         body: JSON.stringify({slot_id: slotId, group_id: groupId})
     }).then(r => r.json()).then(function(data) {
-        if (data.success) {
-            dotEl.className = 'group-dot ' + (groupColor ? 'color-' + groupColor : 'empty');
-            dotEl.title = groupName || 'Assign group';
-            const row = document.getElementById('a1-slot-row-' + slotId);
-            if (row) {
-                row.classList.remove('group-blue','group-amber','group-red','group-purple','group-teal');
-                if (groupColor) row.classList.add('group-' + groupColor);
-            }
-        }
+        if (!data.success) return;
+        // dotEl is the .group-dot-stack CONTAINER, not a dot. The old line
+        // here was `dotEl.className = 'group-dot …'`, which overwrote the
+        // container's own class and left the real dots orphaned inside it —
+        // a shape no reload could ever produce. renderDotStack is the same
+        // function the assignment-level picker uses.
+        renderDotStack(dotEl, groupId ? [{id: groupId, name: groupName, color: groupColor}] : [], 'group-dot');
+        const row = document.getElementById('a1-slot-row-' + slotId);
+        const aid = row ? row.dataset.assignmentId : null;
+        if (aid) MTTSlots.patch(aid, slotId, { group: groupColor || '' });
     });
 }
 
@@ -2011,58 +1983,15 @@ function debounce(fn, wait) {
 })();
 
 // ── Presenter search dropdown ──────────────────────────────────
-// ── Sync a presenter name change into the A1 table immediately ──
-// Works for both single-presenter (a1-row-{assignmentId}) and
-// multi-presenter stacked rows (a1-slot-row-{slotId}).
-// slotId is optional — if omitted we look up the active chip's data-slot-id.
-function syncPresenterToA1(assignmentId, name, slotId) {
-    // Resolve slotId from the active chip if not provided
-    if (!slotId) {
-        const activeChip = document.querySelector('#slot-queue-' + assignmentId + ' .a2-slot-chip.active');
-        if (activeChip) slotId = activeChip.dataset.slotId;
-    }
 
-    // Helper: set text on a cell, replacing unassigned placeholder if needed
-    function setName(cell, text) {
-        if (!cell) return;
-        const existing = cell.querySelector('.a1-presenter-primary');
-        if (existing) {
-            existing.textContent = text;
-        } else {
-            const unassigned = cell.querySelector('.a1-unassigned');
-            if (unassigned) {
-                // Preserve active-slot class if present on the old element
-                const wasActive = unassigned.classList.contains('a1-slot-active');
-                unassigned.outerHTML = '<span class="a1-presenter-primary' + (wasActive ? ' a1-slot-active' : '') + '">' + text + '</span>';
-            }
-        }
-    }
-
-    // Try multi-presenter slot row first
-    if (slotId) {
-        const slotRow = document.getElementById('a1-slot-row-' + slotId);
-        if (slotRow) {
-            setName(slotRow.querySelector('td:nth-child(4)'), name);
-            // Also update the active chip label in A2 (text node before the ✕ and MIC'D btn)
-            const activeChip = document.querySelector('#slot-queue-' + assignmentId + ' .a2-slot-chip.active');
-            if (activeChip) {
-                // Update just the text node (first child text node)
-                for (const node of activeChip.childNodes) {
-                    if (node.nodeType === 3 && node.textContent.trim()) {
-                        node.textContent = name;
-                        break;
-                    }
-                }
-            }
-            return;
-        }
-    }
-
-    // Fall back to single-presenter row
-    const singleRow = document.getElementById('a1-row-' + assignmentId);
-    if (singleRow) {
-        setName(singleRow.querySelector('td:nth-child(4)'), name);
-    }
+// Set the presenter on the card's active slot. Replaces syncPresenterToA1,
+// which walked the A1 cell by hand (and swapped .a1-unassigned for
+// .a1-presenter-primary but never back again). The optimistic patch here is
+// confirmed a moment later when updateField re-patches with the server's own
+// presenter_display — same function, so the two can't disagree.
+function mttSetPresenter(assignmentId, name) {
+    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+    MTTSlots.patch(assignmentId, active ? active.slotId : null, { presenter: (name || '').trim() });
 }
 
 // Debounced dispatcher — avoid firing a lookup on every keystroke.
@@ -2089,7 +2018,7 @@ function _searchPresentersNow(assignmentId, query) {
                     document.getElementById('presenter-input-' + assignmentId).value = p.name;
                     dd.classList.remove('open');
                     updateField(assignmentId, 'presenter_id', p.id);
-                    syncPresenterToA1(assignmentId, p.name);
+                    mttSetPresenter(assignmentId, p.name);
                 };
                 dd.appendChild(item);
             });
@@ -2120,7 +2049,7 @@ function _searchPresentersNow(assignmentId, query) {
                             document.getElementById('presenter-input-' + assignmentId).value = query;
                             dd.classList.remove('open');
                             updateField(assignmentId, 'presenter_id', data.presenter_id);
-                            syncPresenterToA1(assignmentId, query);
+                            mttSetPresenter(assignmentId, query);
                         }
                     });
                 };
@@ -2132,8 +2061,13 @@ function _searchPresentersNow(assignmentId, query) {
 function assignPresenter(assignmentId, value) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     dd.classList.remove('open');
-    if (value) syncPresenterToA1(assignmentId, value);
-    updateField(assignmentId, 'presenter_id', value || '');
+    // Note the absent `if (value)`. That guard is why clearing a name left it
+    // showing on the A1 row and left the card styled as assigned: the only
+    // sync happened when a name was being SET, never when it was removed.
+    const name = (value || '').trim();
+    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+    MTTSlots.patch(assignmentId, active ? active.slotId : null, { presenter: name });
+    updateField(assignmentId, 'presenter_id', name);
 }
 
 async function nextSlot(assignmentId) {
@@ -2214,31 +2148,29 @@ function applySlotData(assignmentId, data) {
         groupDot.title = data.a2_group_name || 'Assign group';
     }
 
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach((chip, i) => {
-        chip.classList.toggle('active', i === data.slot_index);
-    });
-
-    // Update A1 primary row
-    const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
-    if (a1primary) a1primary.textContent = data.presenter_name || '— Unassigned —';
-
-    // Re-wire A1 primary row MIC'D button id to new active slot
-    // Also update A2 MIC'D button's active slot reference
+    // Everything that is slot STATE — which chip is active, the presenter
+    // name on the A1 row, the type badge, the Mic'd state, the unassigned
+    // dimming — goes through the renderer. This block used to do it by hand
+    // and got three things wrong: it wrote "— Unassigned —" into the ASSIGNED
+    // span (so the row read unassigned but stayed styled assigned), it never
+    // applied is_micd at all (so switching slots showed the previous slot's
+    // Mic'd state), and it cleared the active highlight via `.a1-slot-row`,
+    // a class the template had never emitted.
     if (data.slot_id) {
+        MTTSlots.patch(assignmentId, data.slot_id, {
+            presenter: data.presenter_name || '',
+            micType:   data.mic_type || '',
+            isMicd:    !!data.is_micd
+        });
+        MTTSlots.setActive(assignmentId, data.slot_id);
+
+        // Ids the renderer does not own: the A1 toggle is addressed by the
+        // active slot's id elsewhere, and the A2 toggle carries it for the
+        // Listen panel.
         const a2MicdBtn = document.getElementById('a2-micd-btn-' + assignmentId);
         if (a2MicdBtn) a2MicdBtn.dataset.activeSlotId = data.slot_id;
         const a1MicdBtn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
         if (a1MicdBtn) a1MicdBtn.id = 'a1-micd-slot-' + data.slot_id;
-        // Update type badge on primary row
-        const a1TypeBadge = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
-        if (a1TypeBadge) {
-            a1TypeBadge.className = 'mic-type-badge type-' + (data.mic_type || 'empty');
-            a1TypeBadge.innerHTML = '<span class="type-dot"></span>' + (data.mic_type || '—');
-        }
-        // Highlight active slot in expanded rows
-        document.querySelectorAll('.a1-slot-row[data-assignment-id="' + assignmentId + '"] .a1-presenter-primary').forEach(el => el.classList.remove('a1-slot-active'));
-        const activeSlotName = document.querySelector('#a1-slot-row-' + data.slot_id + ' .a1-presenter-primary');
-        if (activeSlotName) activeSlotName.classList.add('a1-slot-active');
     }
 
     // Update photo zone

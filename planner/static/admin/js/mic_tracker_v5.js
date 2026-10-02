@@ -43,30 +43,23 @@ async function updateField(assignmentId, field, value) {
         const data = await response.json();
         
         if (data.success) {
-            // Update UI with new stats
-            updateSessionStats(assignmentId, data.session_stats);
-            updateDayStats(data.day_stats);
+            // The server is the authority on the counters, so they are applied
+            // from its payload rather than recounted here.
+            if (window.MTTSlots) MTTSlots.applyStats(assignmentId, data.session_stats, data.day_stats);
 
             // Update presenter display if needed
             if (field === 'presenter_name' || field === 'presenter_id' || field === 'shared_presenters') {
                 updatePresenterDisplay(assignmentId, data.presenter_display, data.presenter_count);
-                // Update the active slot chip's LABEL only — update just the
-                // text node so its ✕ (remove) and MIC'D child buttons survive.
-                // (activeChip.textContent = ... would delete those children, which
-                // is why a freshly-added/renamed presenter lost its ✕ button.)
-                const activeChip = document.querySelector(`#slot-queue-${assignmentId} .a2-slot-chip.active`);
-                if (activeChip) {
-                    const label = data.presenter_display || 'Unassigned';
-                    let labelNode = null;
-                    for (const n of activeChip.childNodes) {
-                        if (n.nodeType === 3 && n.textContent.trim()) { labelNode = n; break; }
-                    }
-                    if (labelNode) {
-                        labelNode.textContent = ' ' + label + ' ';
-                    } else {
-                        activeChip.insertBefore(document.createTextNode(' ' + label + ' '),
-                                                activeChip.querySelector('.a2-slot-remove'));
-                    }
+                // The chip label, the A1 row and the card's unassigned state
+                // all follow from one fact — the presenter's display name —
+                // so it is pushed through the renderer rather than written
+                // here. This block used to update the chip text only, which
+                // is why a name change left the A1 row and the dimming stale.
+                if (window.MTTSlots) {
+                    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+                    MTTSlots.patch(assignmentId, active ? active.slotId : null, {
+                        presenter: data.presenter_display || ''
+                    });
                 }
                 // Issue #10: sync photo zone with the newly-assigned presenter's headshot
                 if (typeof syncAssignmentPhoto === 'function') {
@@ -595,25 +588,17 @@ async function resetPresenterRotation(assignmentId) {
 
 // ============ UI UPDATE FUNCTIONS ============
 
+// Kept as thin aliases: both targeted .session-column / .session-footer, which
+// this template has not had in a long time, so every call silently updated
+// nothing and the counters were only ever right on a reload. The real work is
+// in MTTSlots.applyStats, next to the rest of the slot rendering.
 function updateSessionStats(assignmentId, stats) {
-    const row = document.querySelector(`[data-assignment-id="${assignmentId}"]`);
-    if (!row) return;
-    
-    const sessionColumn = row.closest('.session-column');
-    if (!sessionColumn) return;
-    
-    const footer = sessionColumn.querySelector('.session-footer');
-    if (!footer) return;
-    
-    footer.innerHTML = `
-        <span class="session-stat">MIC'D: ${stats.micd}/${stats.total}</span>
-        <span class="session-stat">Available: ${stats.total - stats.micd}</span>
-        ${stats.shared > 0 ? `<span class="session-stat">Shared: ${stats.shared}</span>` : ''}
-    `;
+    if (window.MTTSlots) MTTSlots.applyStats(assignmentId, stats, null);
 }
 
 function updateDayStats(stats) {
-    console.log('Day stats updated:', stats);
+    // Day counters need an assignment to locate their .mtt-day, so they are
+    // applied by the same call that handles the session stats.
 }
 
 function updatePresenterDisplay(assignmentId, displayText, presenterCount) {
@@ -1099,14 +1084,16 @@ function openGroupPicker(assignmentId, sessionId, stackEl) {
                 var selectedGroups = selectedIds.map(function(id) { return groupsById[id]; }).filter(Boolean);
                 renderDotStack(stackEl, selectedGroups, 'group-dot');
                 var firstColor = selectedGroups[0] ? selectedGroups[0].color : null;
-                var tintEls = [
-                    document.getElementById('a1-row-' + assignmentId),
-                    document.getElementById('a2-card-' + assignmentId)
-                ];
-                document.querySelectorAll('tr[data-assignment-id="' + assignmentId + '"]').forEach(function(el) {
-                    tintEls.push(el);
-                });
-                applyRowTint(tintEls, firstColor);
+                // Push the colour through the renderer so the A1 rows and the
+                // A2 card are tinted by the same code that tints them on load.
+                // applyRowTint stays for the A2 card, which has no slot of its
+                // own in the store.
+                if (window.MTTSlots) {
+                    MTTSlots.slotsOf(assignmentId).forEach(function (s) {
+                        MTTSlots.patch(s.assignmentId, s.slotId, { group: firstColor || '' });
+                    });
+                }
+                applyRowTint([document.getElementById('a2-card-' + assignmentId)], firstColor);
             });
         }
 

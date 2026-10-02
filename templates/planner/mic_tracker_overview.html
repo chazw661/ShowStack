@@ -218,13 +218,15 @@
     }
 
     /* Unassigned rows sit back but keep every field, and come forward on
-       hover or focus so nothing being read or edited is ever dimmed. */
-    .mto-row:has(.mto-unassigned),
-    .mto-row:has(.mto-pres-input[value=""]) { opacity: 0.6; transition: opacity 0.12s; }
-    .mto-row:has(.mto-unassigned):hover,
-    .mto-row:has(.mto-pres-input[value=""]):hover,
-    .mto-row:has(.mto-unassigned):focus-within,
-    .mto-row:has(.mto-pres-input[value=""]):focus-within { opacity: 1; }
+       hover or focus so nothing being read or edited is ever dimmed.
+     *
+     * Keyed to a class, not to `[value=""]`: typing into the input changes
+     * the .value PROPERTY and never the attribute, so the attribute form
+     * dimmed a row you had just named and left a row you had just cleared
+     * bright. mtoSetAssigned() below keeps the class in step. */
+    .mto-row.is-unassigned { opacity: 0.6; transition: opacity 0.12s; }
+    .mto-row.is-unassigned:hover,
+    .mto-row.is-unassigned:focus-within { opacity: 1; }
     </style>
 {% endblock %}
 
@@ -295,7 +297,7 @@
                 {% with slots=assignment.presenter_slots.all slot_count=assignment.presenter_slots.count %}
                 {% if slot_count > 1 %}
                 {% for slot in slots %}
-                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %}">
+                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %} {% if not slot.presenter %}is-unassigned{% endif %}">
                     <td class="mto-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
                     {% include "planner/_mto_row_fields.html" with edit_slot=slot %}
                     <td class="mto-micd">
@@ -308,7 +310,7 @@
                 {% endfor %}
                 {% else %}
                 {% with active_slot=assignment.active_slot %}
-                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %}">
+                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %} {% if not active_slot.presenter %}is-unassigned{% endif %}">
                     <td class="mto-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
                     {% include "planner/_mto_row_fields.html" with edit_slot=active_slot %}
                     <td class="mto-micd">
@@ -445,10 +447,22 @@
     // Issue #68: save an editable A2 field (Type/Headset/Placement) on a
     // specific presenter slot. Always targets the explicit slot_id so multi-
     // presenter rows edit the right slot (not just the active one).
+    // Keep the row's assigned/unassigned state in step with the field, and
+    // keep the value ATTRIBUTE in step with the property — a form reset or an
+    // attribute selector reads the attribute, and only the property changes
+    // when someone types.
+    function mtoSetAssigned(el, name) {
+        if (!el) return;
+        el.setAttribute('value', name || '');
+        var row = el.closest('.mto-row');
+        if (row) row.classList.toggle('is-unassigned', !name);
+    }
+
     window.mtoSaveSlotField = async function(slotId, field, value, el) {
         try { await post('/audiopatch/api/mic/slot/update/', {slot_id: slotId, field: field, value: value}); }
         catch (e) { alert('Could not save — ' + e.message + '. Refresh and try again.'); return; }
         if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
+        if (field === 'presenter_name') mtoSetAssigned(el, (value || '').trim());
         if (el) { el.classList.add('mto-saved-flash'); setTimeout(function() { el.classList.remove('mto-saved-flash'); }, 700); }
     };
 })();
