@@ -4,11 +4,12 @@
 {% block title %}System Dashboard | Audio Patch{% endblock %}
 
 {% block extrastyle %}
+<link rel="stylesheet" href="{% static 'css/surfaces.css' %}">
 <style>
     /* Dashboard Container */
     .dashboard-container {
         padding: 20px;
-        background: #0a0a0a;
+        background: var(--ss-bg);
         min-height: calc(100vh - 100px);
     }
 
@@ -37,8 +38,8 @@
     }
 
     .stat-card {
-        background: linear-gradient(135deg, #1a1a1a 0%, #242424 100%);
-        border: 1px solid #333;
+        background: var(--ss-surface);
+        border: 1px solid var(--ss-border);
         border-radius: 8px;
         padding: 20px;
         transition: all 0.3s ease;
@@ -94,8 +95,8 @@
 
     /* Recent Activity Section */
     .activity-section {
-        background: #1a1a1a;
-        border: 1px solid #333;
+        background: var(--ss-surface);
+        border: 1px solid var(--ss-border);
         border-radius: 8px;
         padding: 20px;
         margin-bottom: 20px;
@@ -107,7 +108,7 @@
         font-weight: 600;
         margin-bottom: 15px;
         padding-bottom: 10px;
-        border-bottom: 2px solid #333;
+        border-bottom: 2px solid var(--ss-border);
     }
 
     .activity-list {
@@ -118,12 +119,12 @@
 
     .activity-item {
         padding: 12px;
-        border-bottom: 1px solid #2a2a2a;
+        border-bottom: 1px solid var(--ss-border);
         transition: background 0.2s;
     }
 
     .activity-item:hover {
-        background: #242424;
+        background: var(--ss-surface-alt);
     }
 
     .activity-item:last-child {
@@ -150,8 +151,8 @@
     }
 
     .quick-action {
-        background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-        border: 2px solid #333;
+        background: var(--ss-raised);
+        border: 2px solid var(--ss-border);
         border-radius: 6px;
         padding: 15px;
         text-align: center;
@@ -184,8 +185,8 @@
     }
 
     .status-item {
-        background: #1a1a1a;
-        border: 1px solid #333;
+        background: var(--ss-surface);
+        border: 1px solid var(--ss-border);
         border-radius: 6px;
         padding: 12px;
         display: flex;

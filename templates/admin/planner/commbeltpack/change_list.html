@@ -20,12 +20,12 @@
     font-weight: 500;
     text-decoration: none;
     color: #e0e0e0;
-    border: 1px solid #3a5068;
-    background: linear-gradient(135deg, #1a2a3a, #243447);
+    border: 1px solid var(--ss-border);
+    background: var(--ss-surface);
     transition: background 0.2s, border-color 0.2s;
 }
 .comm-nav-btn:hover {
-    background: linear-gradient(135deg, #243447, #2e4460);
+    background: var(--ss-raised);
     border-color: #4a7090;
     color: #fff;
 }
@@ -34,13 +34,13 @@
     display: flex;
     gap: 16px;
     padding: 12px 16px;
-    background: #1a1a2e;
-    border-bottom: 1px solid #2a3a4a;
+    background: var(--ss-bg);
+    border-bottom: 1px solid var(--ss-border);
     flex-wrap: wrap;
 }
 .comm-summary-card {
-    background: #1e2d3d;
-    border: 1px solid #2a4060;
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 6px;
     padding: 10px 16px;
     min-width: 180px;
@@ -68,22 +68,22 @@
     flex-wrap: wrap;
 }
 .comm-group-pill {
-    background: #243447;
-    border: 1px solid #3a5068;
+    background: var(--ss-raised);
+    border: 1px solid var(--ss-border);
     border-radius: 10px;
     padding: 1px 8px;
     font-size: 11px;
     color: #8ab4cc;
 }
 .system-group-header {
-    background: linear-gradient(135deg, #1e2d3d 0%, #243447 100%);
+    background: var(--ss-surface);
     color: #e0e0e0;
     padding: 10px 16px;
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
     border-left: 4px solid #3498db;
-    border-top: 2px solid #2a3a4a;
+    border-top: 2px solid var(--ss-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -91,7 +91,7 @@
     transition: background 0.2s;
 }
 .system-group-header.hardwired { border-left-color: #e67e22; }
-.system-group-header:hover { background: linear-gradient(135deg, #243447 0%, #2e4460 100%); }
+.system-group-header:hover { background: var(--ss-raised); }
 .system-group-header .toggle-icon {
     font-size: 11px;
     transition: transform 0.25s;
@@ -112,7 +112,7 @@
 .group-hidden { display: none !important; }
 /* Issue #66: whole beltpack row is clickable, not just the tiny number. */
 #result_list tbody tr.bp-clickable-row { cursor: pointer; }
-#result_list tbody tr.bp-clickable-row:hover > * { background-color: #1e2d3d !important; }
+#result_list tbody tr.bp-clickable-row:hover > * { background-color: var(--ss-surface) !important; }
 </style>
 {% endblock %}
 
@@ -253,8 +253,8 @@
             modal.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;';
             modal.innerHTML =
                 '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);" id="ch-modal-backdrop"></div>' +
-                '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e2d3d;border:1px solid #3a5068;border-radius:8px;min-width:320px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">' +
-                '<div style="padding:16px 20px;border-bottom:1px solid #2a3a4a;display:flex;justify-content:space-between;align-items:center;">' +
+                '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background: var(--ss-surface);border: 1px solid var(--ss-border);border-radius:8px;min-width:320px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">' +
+                '<div style="padding:16px 20px;border-bottom: 1px solid var(--ss-border);display:flex;justify-content:space-between;align-items:center;">' +
                 '<span id="ch-modal-title" style="font-weight:600;color:#e0e8f0;font-size:14px;"></span>' +
                 '<span id="ch-modal-close" style="cursor:pointer;color:#8ab4cc;font-size:18px;line-height:1;">&#x2715;</span>' +
                 '</div>' +
@@ -289,7 +289,7 @@
                     list.appendChild(item);
                 });
                 var unassign = document.createElement('div');
-                unassign.style.cssText = 'padding:10px 14px;cursor:pointer;border-radius:4px;color:#ff6b6b;font-size:13px;margin-top:6px;border-top:1px solid #2a3a4a;';
+                unassign.style.cssText = 'padding:10px 14px;cursor:pointer;border-radius:4px;color:#ff6b6b;font-size:13px;margin-top:6px;border-top: 1px solid var(--ss-border);';
                 unassign.textContent = '\u2715 Unassign Channel';
                 unassign.addEventListener('mouseover', function() { unassign.style.background = '#3a1a1a'; });
                 unassign.addEventListener('mouseout', function() { unassign.style.background = ''; });

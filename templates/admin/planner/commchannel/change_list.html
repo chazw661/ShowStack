@@ -21,12 +21,12 @@
     font-weight: 500;
     text-decoration: none;
     color: #e0e0e0;
-    border: 1px solid #3a5068;
-    background: linear-gradient(135deg, #1a2a3a, #243447);
+    border: 1px solid var(--ss-border);
+    background: var(--ss-surface);
     transition: background 0.2s, border-color 0.2s;
 }
 .comm-nav-btn:hover {
-    background: linear-gradient(135deg, #243447, #2e4460);
+    background: var(--ss-raised);
     border-color: #4a7090;
     color: #fff;
 }
@@ -37,13 +37,13 @@
     display: flex;
     gap: 16px;
     padding: 12px 16px;
-    background: #1a1a2e;
-    border-bottom: 1px solid #2a3a4a;
+    background: var(--ss-bg);
+    border-bottom: 1px solid var(--ss-border);
     flex-wrap: wrap;
 }
 .comm-summary-card {
-    background: #1e2d3d;
-    border: 1px solid #2a4060;
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
     border-radius: 6px;
     padding: 10px 16px;
     min-width: 180px;
@@ -71,8 +71,8 @@
     flex-wrap: wrap;
 }
 .comm-group-pill {
-    background: #243447;
-    border: 1px solid #3a5068;
+    background: var(--ss-raised);
+    border: 1px solid var(--ss-border);
     border-radius: 10px;
     padding: 1px 8px;
     font-size: 11px;
@@ -81,14 +81,14 @@
 
 /* ── Collapsible group headers ───────────────────────────────── */
 .system-group-header {
-    background: linear-gradient(135deg, #1e2d3d 0%, #243447 100%);
+    background: var(--ss-surface);
     color: #e0e0e0;
     padding: 10px 16px;
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
     border-left: 4px solid #3498db;
-    border-top: 2px solid #2a3a4a;
+    border-top: 2px solid var(--ss-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -96,7 +96,7 @@
     transition: background 0.2s;
 }
 .system-group-header.hardwired { border-left-color: #e67e22; }
-.system-group-header:hover { background: linear-gradient(135deg, #243447 0%, #2e4460 100%); }
+.system-group-header:hover { background: var(--ss-raised); }
 .system-group-header .toggle-icon {
     font-size: 11px;
     transition: transform 0.25s;

@@ -4,7 +4,7 @@
 <style>
   .device-output-cell {
     padding: 5px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--ss-border);   /* was #ddd: a light-theme leftover */
     text-align: center;
     width: 12.5%;  /* Force consistent width for 8 columns */
   }
@@ -16,8 +16,8 @@
   .device-output-cell input[type="text"] {
     width: 100%;
     font-size: 12px;
-    padding: 2px;
     box-sizing: border-box;
+    text-align: left;   /* a signal name, not a number */
   }
 </style>
 

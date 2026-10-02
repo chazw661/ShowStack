@@ -1,11 +1,11 @@
 <div id="help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:none;align-items:center;justify-content:center;">
-  <div id="help-modal" style="background:#1e1e2e;border:1px solid #2e2e4e;border-radius:10px;width:780px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+  <div id="help-modal" style="background: var(--ss-surface);border:1px solid #2e2e4e;border-radius:10px;width:780px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
 
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #2e2e4e;">
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-size:12px;color:#888;">You are on:</span>
         <select id="help-module-select" onchange="helpSwitchModule(this.value)"
-          style="background:#2a2a3e;border:1px solid #3e3e5e;border-radius:6px;color:#ccc;font-size:13px;padding:4px 8px;cursor:pointer;">
+          style="background: var(--ss-raised);border:1px solid #3e3e5e;border-radius:6px;color:#ccc;font-size:13px;padding:4px 8px;cursor:pointer;">
           <option value="mic">Mic Tracker</option>
           <option value="comm-config">COMM Config</option>
           <option value="comm-belt">COMM Belt Pack</option>
@@ -22,7 +22,7 @@
 
     <div style="display:flex;flex:1;min-height:0;">
 
-      <div id="help-fn-list" style="width:200px;flex-shrink:0;border-right:1px solid #2e2e4e;padding:10px 0;overflow-y:auto;background:#181828;"></div>
+      <div id="help-fn-list" style="width:200px;flex-shrink:0;border-right:1px solid #2e2e4e;padding:10px 0;overflow-y:auto;background: var(--ss-bg);"></div>
 
       <div id="help-steps-pane" style="flex:1;padding:20px 24px;overflow-y:auto;"></div>
 
@@ -39,8 +39,8 @@
   border-left: 2px solid transparent;
   transition: background 0.1s;
 }
-.help-fn-item:hover { background: #1e1e2e; color: #ccc; }
-.help-fn-item.active { background: #1e1e2e; color: #4a9eff; font-weight: 500; border-left-color: #4a9eff; }
+.help-fn-item:hover { background: var(--ss-surface); color: #ccc; }
+.help-fn-item.active { background: var(--ss-surface); color: #4a9eff; font-weight: 500; border-left-color: #4a9eff; }
 .help-step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
 .help-step-num {
   width: 22px; height: 22px; border-radius: 50%;
@@ -53,7 +53,7 @@
 .help-step-text em { font-style: normal; font-weight: 500; color: #e0e0e0; }
 .help-tip {
   margin-top: 14px; padding: 10px 12px;
-  background: #1a1a2e; border-radius: 6px;
+  background: var(--ss-bg); border-radius: 6px;
   border: 1px solid #2e2e4e;
   font-size: 11px; color: #888; line-height: 1.5;
 }

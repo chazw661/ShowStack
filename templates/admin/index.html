@@ -3,23 +3,45 @@
 
 {% block title %}ShowStack — System Overview{% endblock %}
 
+{% comment %}
+Django fills the <h1> and the breadcrumb from {{ title }}, which for the index
+view is AdminSite.index_title ("Equipment Management" in planner/admin_site.py).
+This page is the system overview, so name it that -- or name it after the
+project being looked at, which is what the dashboard below is actually scoped
+to. current_project comes from planner.context_processors.user_projects.
+{% endcomment %}
+{% comment %}
+No page <h1> here: the System Overview card below carries its own heading and
+project name, so Django's default (AdminSite.index_title, "Equipment
+Management") would just be a second title stacked above it. The breadcrumb
+below still names the project.
+{% endcomment %}
+{% block content_title %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; {% if current_project %}{{ current_project.name }}{% else %}System Overview{% endif %}
+</div>
+{% endblock %}
+
 {% block extrahead %}
 {{ block.super }}
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
   :root {
-    --bg: #0f0d28;
-    --bg-grad-1: rgba(139,92,246,0.18);
-    --bg-grad-2: rgba(79,214,208,0.10);
-    --surface: linear-gradient(155deg, rgba(44,39,90,0.80), rgba(24,21,52,0.82));
-    --surface-solid: #1b1840;
-    --surface2: rgba(50,45,100,0.55);
-    --border: rgba(255,255,255,0.09);
+    --bg: var(--ss-bg);
+    --bg-grad-1: transparent;
+    --bg-grad-2: transparent;
+    --surface: var(--ss-surface);
+    --surface-solid: var(--ss-surface);
+    --surface2: var(--ss-raised);
+    --border: var(--ss-border);
     --border-bright: rgba(167,139,250,0.55);
     --text: #ecebff;
     --text-dim: #aba8d6;
-    --text-muted: #8481b0;
+    --text-muted: #8b8f98;   /* kept in step with css/surfaces.css */
     --accent: #8ba4ff;
     --accent-glow: rgba(139,92,246,0.18);
     --green: #43e08f;
@@ -28,7 +50,7 @@
     --purple: #b79bff;
     --teal: #4fd6d0;
     --magenta: #e879c9;
-    --shadow-card: 0 10px 30px rgba(5,3,22,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+    --shadow-card: 0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
     --shadow-hover: 0 22px 50px rgba(5,3,22,0.62), 0 8px 32px rgba(139,92,246,0.30);
   }
 
@@ -41,7 +63,7 @@
     background:
       radial-gradient(1100px 560px at 12% -12%, var(--bg-grad-1), transparent 55%),
       radial-gradient(900px 460px at 92% 0%, var(--bg-grad-2), transparent 52%),
-      linear-gradient(165deg, #1a1642 0%, #100d2c 55%, #0b0920 100%);
+      var(--ss-bg);
     min-height: 100vh; padding: 32px 40px; color: var(--text); }
   .ss-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 40px; gap: 20px; }
   .ss-project-name { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; font-family: 'DM Mono', monospace; }
@@ -52,11 +74,11 @@
   .ss-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
   .ss-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px; margin-bottom: 32px; position: relative; overflow: hidden; box-shadow: var(--shadow-card); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
-  .ss-diagram::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% -20%, rgba(139,92,246,0.10) 0%, transparent 60%); pointer-events: none; }
+  .ss-diagram::before { content: ''; position: absolute; inset: 0; background: none; pointer-events: none; }
   .ss-diagram-title { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: #b0b0dd; font-family: 'DM Mono', monospace; margin-bottom: 28px; }
   .ss-flow { display: grid; grid-template-columns: repeat(6, 1fr); column-gap: 16px; row-gap: 16px; align-items: stretch; position: relative; }
 
-  .ss-node { background: linear-gradient(158deg, rgba(52,46,104,0.72), rgba(28,24,58,0.74)); border: 1px solid var(--border); border-radius: 14px; padding: 20px 16px; position: relative; transition: transform .28s cubic-bezier(.2,.7,.25,1), box-shadow .28s, border-color .28s; text-decoration: none; cursor: pointer; display: block; min-width: 0; box-shadow: var(--shadow-card); animation: ss-rise .5s cubic-bezier(.2,.7,.25,1) backwards; }
+  .ss-node { background: var(--ss-surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 16px; position: relative; transition: transform .28s cubic-bezier(.2,.7,.25,1), box-shadow .28s, border-color .28s; text-decoration: none; cursor: pointer; display: block; min-width: 0; box-shadow: var(--shadow-card); animation: ss-rise .5s cubic-bezier(.2,.7,.25,1) backwards; }
   .ss-node:hover { border-color: var(--border-bright); transform: translateY(-4px); box-shadow: var(--shadow-hover); }
   .ss-node-icon { font-size: 1.4rem; margin-bottom: 10px; display: block; }
   .ss-node-label { display: none; }
@@ -144,7 +166,7 @@
 
       <!-- QR Modal -->
       <div id="qr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
-        <div style="background:#0e0e1e;border:1px solid rgba(74,158,255,0.3);border-radius:16px;padding:32px;text-align:center;min-width:260px;">
+        <div style="background:var(--ss-surface);border:1px solid rgba(74,158,255,0.3);border-radius:16px;padding:32px;text-align:center;min-width:260px;">
           <div style="font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:#9090b0;font-family:'DM Mono',monospace;margin-bottom:16px;">Mobile Site</div>
           <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://showstack.io/m/&bgcolor=0e0e1e&color=4a9eff&margin=10" style="border-radius:8px;width:180px;height:180px;" alt="QR Code">
           <div style="margin-top:16px;font-size:0.85rem;color:#e2e2f0;font-family:'DM Mono',monospace;">showstack.io/m</div>
@@ -253,8 +275,8 @@
         <div class="ss-metric"><span class="ss-metric-val" id="m-checked">—</span><span class="ss-metric-label">Checked Out</span></div>
       </div>
       <div style="display:flex;gap:8px;">
-        <a href="/admin/planner/commbeltpack/" style="flex:1;padding:7px 10px;background:rgba(50,45,100,0.42);border:1px solid rgba(255,255,255,0.10);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg> Belt Packs</a>
-        <a href="/audiopatch/comm-config/" style="flex:1;padding:7px 10px;background:rgba(50,45,100,0.42);border:1px solid rgba(255,255,255,0.10);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> Config</a>
+        <a href="/admin/planner/commbeltpack/" style="flex:1;padding:7px 10px;background:var(--ss-raised);border:1px solid var(--ss-border);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg> Belt Packs</a>
+        <a href="/audiopatch/comm-config/" style="flex:1;padding:7px 10px;background:var(--ss-raised);border:1px solid var(--ss-border);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> Config</a>
       </div>
     </div>
     <a class="ss-card mic" href="/audiopatch/mic-tracker/">

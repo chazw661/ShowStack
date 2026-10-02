@@ -1,21 +1,15 @@
-/* Override Django's light theme with dark theme */
+/* Dark theme surface values used to be redefined here as `!important` on
+ * :root, which silently beat the shared palette in css/surfaces.css -- it was
+ * the reason inline-grid rows still striped #1a1a1a / #2a2a2a. The palette now
+ * owns --body-bg / --darkened-bg / --selected-bg / --border-color /
+ * --hairline-color; only the text color, which the palette does not define,
+ * is kept here. */
 :root {
-    --body-bg: #1a1a1a !important;
-    --body-fg: #f0f0f0 !important;
-    --darkened-bg: #2a2a2a !important;
-    --selected-bg: #333333 !important;
-    --border-color: #444 !important;
-    --hairline-color: #333 !important;
+    --body-fg: #f0f0f0;
 }
 
-/* Force dark backgrounds on specific elements */
 body, #content-main, .module, #result_list tbody tr {
-    background-color: var(--body-bg) !important;
     color: var(--body-fg) !important;
-}
-
-#result_list tbody tr:nth-child(even) {
-    background-color: var(--darkened-bg) !important;
 }
 
 
@@ -34,18 +28,15 @@ select.variable-select {
     max-width: 120px !important;
 }
 
-/* Override Tailwind w-16 on aux/matrix/omni inputs */
-.form-row input#id_consoleauxoutput_set-0-aux_number,
-.form-row input#id_consolematrixoutput_set-0-matrix_number,
-.form-row input#id_consoleauxoutput_set-0-omni_out {
-    width: 3ch !important;
-    max-width: 48px !important;
-    min-width: 30px !important;
-    padding: 2px 4px !important;
-    font-size: 13px !important;
-    text-align: center !important;
-}
-
+/* Override Tailwind w-16 on aux/matrix/omni inputs.
+ *
+ * There used to be a near-identical copy of this block above, selecting the
+ * `-0-` inputs by id. Because an id raises specificity above
+ * `.inline-group table input` (which sets padding: 8px 10px !important), only
+ * form index 0 won the padding fight -- which is why row 1 of the Aux and
+ * Matrix grids rendered shorter and narrower than every row below it.
+ * Widths are shared by all rows here; height/padding belong to the inline-grid
+ * rules in css/surfaces.css. */
 input[id*="-aux_number"],
 input[id*="-matrix_number"],
 input[id*="-omni_out"] {

@@ -4,10 +4,11 @@
 {% block title %}IP Address Manager - {{ site_title }}{% endblock %}
 
 {% block extrastyle %}
+<link rel="stylesheet" href="{% static 'css/surfaces.css' %}">
 <style>
     .ip-management-container {
         padding: 20px;
-        background: #1a1a1a;
+        background: var(--ss-surface);
         color: #fff;
     }
     
@@ -31,7 +32,7 @@
     
     .module-section {
         margin-bottom: 40px;
-        background: #2a2a2a;
+        background: var(--ss-raised);
         border-radius: 8px;
         overflow: hidden;
     }
@@ -50,7 +51,7 @@
     }
     
     .module-table thead {
-        background: #333;
+        background: var(--ss-raised);
     }
     
     .module-table th {
@@ -62,11 +63,11 @@
     }
     
     .module-table tbody tr {
-        border-bottom: 1px solid #3a3a3a;
+        border-bottom: 1px solid var(--ss-border);
     }
     
     .module-table tbody tr:hover {
-        background: #353535;
+        background: var(--ss-raised);
     }
     
     .module-table td {
@@ -111,7 +112,7 @@
         padding: 6px 10px;
         border: 2px solid #4a9eff;
         border-radius: 4px;
-        background: #1a1a1a;
+        background: var(--ss-surface);
         color: #fff;
         font-family: monospace;
         font-size: 14px;

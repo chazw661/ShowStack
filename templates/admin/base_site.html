@@ -3,6 +3,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
+<link rel="stylesheet" href="{% static 'css/surfaces.css' %}">
 <style>
 /* Override Django's link colors - loaded AFTER Django's CSS */
 :root,
@@ -37,33 +38,48 @@ html[data-theme="auto"] {
     </a>
 </h1>
     <div class="dashboard-nav" style="display: flex; gap: 10px; align-items: center;">
-        <a href="{% url 'dashboard' %}" class="dashboard-button" style="
-            background: linear-gradient(135deg, #1a7a6f 0%, #0d5c54 100%);
-            color: #fff !important;
-            padding: 10px 20px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(26, 122, 111, 0.4);
-        ">
+        <a href="{% url 'dashboard' %}" class="dashboard-button">
             📊 Project Dashboard
         </a>
 </div>
 
 <style>
-.dashboard-button {
+/* Flat, same shape as the primary buttons elsewhere in the admin. */
+.dashboard-button,
+.dashboard-button:link,
+.dashboard-button:visited {
+    background: var(--ss-accent) !important;
+    background-image: none !important;
+    box-shadow: none !important;
     color: #fff !important;
+    padding: 8px 16px;
+    border: 1px solid var(--ss-accent);
+    border-radius: var(--ss-field-radius);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .dashboard-button:hover {
-    background: linear-gradient(135deg, #2a9d8f 0%, #1a7a6f 100%) !important;
-    box-shadow: 0 4px 12px rgba(42, 157, 143, 0.6) !important;
-    transform: translateY(-2px);
+    filter: brightness(1.12);
+    box-shadow: none !important;
     color: #fff !important;
+}
+
+/* Role chip: informational, not an alert. */
+.ss-role-badge {
+    background: var(--ss-raised);
+    color: var(--text-muted);
+    border: 1px solid var(--ss-border);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .dashboard-button:link,
@@ -94,13 +110,13 @@ html[data-theme="auto"] {
         <span style="display: inline-block; margin-right: 15px;">
             <span style="color: #fff; margin-right: 8px;">{{ user.username }}</span>
             {% if user.is_superuser %}
-                <span style="background: #e74c3c; color: white; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold;">SUPERUSER</span>
+                <span class="ss-role-badge">SUPERUSER</span>
             {% elif user_role == 'owner' %}
-                <span style="background: #3498db; color: white; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold;">OWNER</span>
+                <span class="ss-role-badge">OWNER</span>
             {% elif user_role == 'editor' %}
-                <span style="background: #f39c12; color: white; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold;">EDITOR</span>
+                <span class="ss-role-badge">EDITOR</span>
             {% elif user_role == 'viewer' %}
-                <span style="background: #95a5a6; color: white; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold;">VIEWER</span>
+                <span class="ss-role-badge">VIEWER</span>
             {% endif %}
         </span>
     {% endif %}
@@ -109,7 +125,7 @@ html[data-theme="auto"] {
     {% if show_project_dropdown %}
         <div style="display: inline-block; margin-right: 20px;">
             <label for="project-switcher" style="color: #fff; margin-right: 10px;">🔧 Project:</label>
-            <select id="project-switcher" style="padding: 5px 10px; background: #2a2a2a; color: #fff; border: 1px solid #4a9eff; border-radius: 4px; font-size: 14px;">
+            <select id="project-switcher" style="padding: 5px 10px; background: var(--ss-raised); color: #fff; border: 1px solid #4a9eff; border-radius: 4px; font-size: 14px;">
                 <option value="">-- Select Project --</option>
                 {% for project in user_projects %}
                     <option value="{{ project.id }}" {% if current_project and project.id == current_project.id %}selected{% endif %}>
@@ -120,7 +136,7 @@ html[data-theme="auto"] {
         </div>
     {% elif current_project %}
         <!-- Static project display for editors/viewers -->
-        <div style="display: inline-block; margin-right: 20px; padding: 5px 15px; background: #0f3460; border: 1px solid #4ecca3; border-radius: 4px;">
+        <div style="display: inline-block; margin-right: 20px; padding: 5px 15px; background: var(--ss-raised); border: 1px solid #4ecca3; border-radius: 4px;">
             <span style="color: #95a5a6; font-size: 13px; margin-right: 8px;">🔧 Project:</span>
             <span style="color: #4ecca3; font-weight: 600; font-size: 14px;">{{ current_project.name }}</span>
         </div>
@@ -141,10 +157,32 @@ html[data-theme="auto"] {
 
 
 {% block extrahead %}
+{% comment %}
+Django builds breadcrumbs per-template (change_form.html, change_list.html,
+delete_confirmation.html, object_history.html ...), each hardcoding the
+app-label link. Rather than fork all of them to drop one segment, strip it
+here: the app index it points at is already reachable from the sidebar, and
+"Home > Planner > Consoles" reads as a level that does not exist in this UI.
+{% endcomment %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.breadcrumbs').forEach(function (bc) {
+        bc.querySelectorAll('a').forEach(function (a) {
+            // app index only: /admin/<app_label>/ -- not /admin/<app>/<model>/
+            if (!/^\/admin\/[^\/]+\/$/.test(new URL(a.href, location.origin).pathname)) return;
+            var sep = a.previousSibling;
+            if (sep && sep.nodeType === Node.TEXT_NODE && sep.nodeValue.indexOf('\u203a') !== -1) {
+                sep.remove();
+            }
+            a.remove();
+        });
+    });
+});
+</script>
 
 <!-- Help Modal -->
 <div id="help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center;">
-  <div style="background:#1a1a1a;border:1px solid #333;border-radius:10px;width:780px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+  <div style="background:var(--ss-surface);border:1px solid var(--ss-border);border-radius:10px;width:780px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
 
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #2e2e2e;">
       <div style="display:flex;align-items:center;gap:10px;">
@@ -170,8 +208,8 @@ html[data-theme="auto"] {
     </div>
 
     <div style="display:flex;flex:1;min-height:0;overflow:hidden;">
-      <div id="help-fn-list" style="width:200px;flex-shrink:0;border-right:1px solid #2e2e2e;padding:10px 0;overflow-y:auto;background:#111;"></div>
-      <div id="help-steps-pane" style="flex:1;padding:20px 24px;overflow-y:auto;background:#1a1a1a;"></div>
+      <div id="help-fn-list" style="width:200px;flex-shrink:0;border-right:1px solid var(--ss-border);padding:10px 0;overflow-y:auto;background:var(--ss-bg);"></div>
+      <div id="help-steps-pane" style="flex:1;padding:20px 24px;overflow-y:auto;background:var(--ss-surface);"></div>
     </div>
 
   </div>
@@ -179,13 +217,13 @@ html[data-theme="auto"] {
 
 <style>
 .help-fn-item{padding:8px 14px;font-size:12px;color:#999;cursor:pointer;border-left:2px solid transparent;}
-.help-fn-item:hover{background:#1a1a1a;color:#ccc;}
-.help-fn-item.active{background:#1a1a1a;color:#4a9eff;font-weight:500;border-left-color:#4a9eff;}
+.help-fn-item:hover{background:var(--ss-surface);color:#ccc;}
+.help-fn-item.active{background:var(--ss-surface);color:#4a9eff;font-weight:500;border-left-color:#4a9eff;}
 .help-step{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px;}
 .help-step-num{width:22px;height:22px;border-radius:50%;background:#1a3a5e;color:#4a9eff;font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
 .help-step-text{font-size:13px;color:#ccc;line-height:1.55;}
 .help-step-text em{font-style:normal;font-weight:500;color:#e0e0e0;}
-.help-tip{margin-top:14px;padding:10px 12px;background:#111;border-radius:6px;border:1px solid #2e2e2e;font-size:11px;color:#888;line-height:1.5;}
+.help-tip{margin-top:14px;padding:10px 12px;background:var(--ss-bg);border-radius:6px;border:1px solid var(--ss-border);font-size:11px;color:#888;line-height:1.5;}
 .help-tip strong{color:#aaa;}
 .help-fn-label{font-size:10px;font-weight:bold;color:#555;text-transform:uppercase;letter-spacing:0.06em;padding:0 14px 8px;}
 </style>
@@ -812,17 +850,17 @@ body.app-planner.model-commbeltpack #changelist .related-widget-wrapper .add-rel
 
 /* Inline dark theme with maximum specificity */
 html, body {
-    background: #0a0a0a !important;
+    background: var(--ss-bg) !important;
 }
 
 body, #container, #content, #content-main, .main, .content, .colMS, .colM {
-    background-color: #0a0a0a !important;
+    background-color: var(--ss-bg) !important;
     color: #e0e0e0 !important;
 }
 
 /* Header */
 #header {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
     color: #e0e0e0 !important;
 }
 
@@ -836,12 +874,12 @@ body, #container, #content, #content-main, .main, .content, .colMS, .colM {
    flow means it scrolls away with the header (Django admin default). */
 #user-tools a {
     color: #e0e0e0 !important;
-    border-bottom-color: #333 !important;
+    border-bottom-color: var(--ss-border) !important;
 }
 
 /* Breadcrumbs */
 div.breadcrumbs {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
     color: #e0e0e0 !important;
 }
 
@@ -851,63 +889,50 @@ div.breadcrumbs a {
 
 /* Modules and fieldsets */
 .module, fieldset, .inline-group {
-    background: #1a1a1a !important;
-    border: 1px solid #333 !important;
+    background: var(--ss-surface) !important;
+    border: 1px solid var(--ss-border) !important;
 }
 
 .module h2, .module caption, fieldset h2 {
-    background: #252525 !important;
+    background: var(--ss-raised) !important;
     color: #e0e0e0 !important;
 }
 
-/* Form inputs */
-input[type="text"], input[type="password"], input[type="email"], 
-input[type="url"], input[type="number"], input[type="tel"],
-select, textarea {
-    background-color: #000 !important;
-    color: #fff !important;
-    border: 1px solid #444 !important;
-}
-
-input:focus, select:focus, textarea:focus {
-    border-color: #00ff88 !important;
-    outline: 2px solid #00ff88 !important;
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3) !important;
-}
+/* Form inputs: see planner/static/css/surfaces.css */
 
 /* Tables */
 #changelist, #result_list {
-    background: #0f0f0f !important;
+    background: var(--ss-surface) !important;
 }
 
 #result_list thead th {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
     color: #e0e0e0 !important;
-    border-bottom: 1px solid #333 !important;
+    border-bottom: 1px solid var(--ss-border) !important;
 }
 
 #result_list tbody tr {
-    background: #0f0f0f !important;
-    border-bottom: 1px solid #222 !important;
+    background: var(--ss-surface) !important;
+    border-bottom: 1px solid var(--ss-border) !important;
 }
 
 #result_list tbody tr:nth-child(even) {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
 }
 
 #result_list tbody tr:hover {
-    background: #252525 !important;
+    background: var(--ss-raised) !important;
 }
 
 #result_list tbody td, #result_list tbody th {
     color: #e0e0e0 !important;
-    border-bottom: 1px solid #222 !important;
+    border-bottom: 1px solid var(--ss-border) !important;
 }
 
 /* Sidebar */
 #changelist-filter {
-    background: #0f0f0f !important;
-    border-left: 1px solid #333 !important;
+    background: var(--ss-surface) !important;
+    border-left: 1px solid var(--ss-border) !important;
 }
 
 #changelist-filter h2, #changelist-filter h3 {
@@ -979,7 +1004,7 @@ table.app-list th a:hover {
 /* Section titles on index page */
 .app-list .section h2,
 .module caption {
-    background: #252525 !important;
+    background: var(--ss-raised) !important;
     color: #f0f0f0 !important;
 }
 
@@ -989,13 +1014,13 @@ table.app-list th a:hover {
 
 /* Sidebar container */
 #nav-sidebar {
-    background: #0f0f0f !important;
+    background: var(--ss-surface) !important;
 }
 
 /* Current app/model highlighting */
 #nav-sidebar .current-app,
 #nav-sidebar .current-model {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
 }
 
 /* ALL sidebar links - white text */
@@ -1031,7 +1056,7 @@ table.app-list th a:hover {
 #nav-sidebar .module caption,
 #nav-sidebar h2,
 #nav-sidebar h3 {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
     color: #f0f0f0 !important;
 }
 
@@ -1070,7 +1095,7 @@ table.app-list th a:hover {
 
 /* Messages */
 .messagelist li {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
     color: #e0e0e0 !important;
 }
 
@@ -1121,18 +1146,18 @@ input[type="checkbox"], input[type="radio"] {
 
 /* Calendar widget */
 .calendarbox, .clockbox {
-    background: #1a1a1a !important;
-    border: 1px solid #333 !important;
+    background: var(--ss-surface) !important;
+    border: 1px solid var(--ss-border) !important;
 }
 
 .calendar caption, .calendarbox h2 {
-    background: #252525 !important;
+    background: var(--ss-raised) !important;
     color: #e0e0e0 !important;
 }
 
 .calendar td, .calendar th {
-    background: #0f0f0f !important;
-    border: 1px solid #333 !important;
+    background: var(--ss-surface) !important;
+    border: 1px solid var(--ss-border) !important;
 }
 
 .calendar td a {
@@ -1158,22 +1183,7 @@ input[type="checkbox"], input[type="radio"] {
     color: #e0e0e0 !important;
 }
 
-/* History button */
-.historylink, 
-a.historylink,
-input[name="_history"],
-.submit-row .historylink,
-.object-tools .historylink {
-    background: #444 !important;
-    color: #fff !important;
-    border: 1px solid #666 !important;
-}
-
-.historylink:hover,
-a.historylink:hover {
-    background: #666 !important;
-    color: #fff !important;
-}
+/* History button: see planner/static/css/surfaces.css */
 
 .historylink::before,
 .historylink::after {
@@ -1205,18 +1215,7 @@ input[name*="dante_number"] {
 }
 
 /* Make inputs taller to fill rows */
-.inline-group table input,
-.inline-group table select {
-    padding: 8px 10px !important;
-    height: auto !important;
-}
-
-/* Make inputs taller to fill rows */
-.inline-group table input,
-.inline-group table select {
-    padding: 8px 10px !important;
-    height: auto !important;
-}
+/* Inline grid control sizing: see planner/static/css/surfaces.css */
 
 /* Hide original object labels in tabular inlines */
 .inline-group .tabular td.original,
@@ -1291,8 +1290,7 @@ a.skip-to-content-link:active,
 
 /* Page background — deep indigo gradient (fixed so it fills tall pages) */
 html, body {
-    background: linear-gradient(165deg, #171338 0%, #100d2c 55%, #0b0920 100%) !important;
-    background-attachment: fixed !important;
+    background: var(--ss-bg) !important;
 }
 body, #container, .main, #content, #content-main, .content, .colMS, .colM {
     background-color: transparent !important;
@@ -1303,10 +1301,10 @@ body, #container, .main, #content, #content-main, .content, .colMS, .colM {
 /* Top bar / header */
 #header {
     position: relative !important;
-    background: linear-gradient(180deg, rgba(26,22,66,0.96) 0%, rgba(18,15,46,0.96) 100%) !important;
+    background: var(--ss-surface) !important;
     color: #ecebff !important;
-    border-bottom: 1px solid rgba(167,139,250,0.28) !important;
-    box-shadow: 0 6px 26px rgba(5,3,22,0.5) !important;
+    border-bottom: 1px solid var(--ss-border) !important;
+    box-shadow: 0 6px 26px rgba(0,0,0,0.5) !important;
 }
 #header::before {
     content: '';
@@ -1319,42 +1317,32 @@ body, #container, .main, #content, #content-main, .content, .colMS, .colM {
 
 /* Project switcher dropdown */
 #project-switcher {
-    background: #241f4a !important;
-    color: #ecebff !important;
-    border: 1px solid rgba(167,139,250,0.45) !important;
-    border-radius: 6px !important;
+    background: var(--ss-field-bg) !important;
+    color: var(--ss-field-text) !important;
+    border: 1px solid var(--ss-field-border) !important;
+    border-radius: var(--ss-field-radius) !important;
 }
+#project-switcher:hover { border-color: var(--ss-field-border-hover) !important; }
 
-/* "Project Dashboard" button → violet gradient */
-.dashboard-button,
-.dashboard-button:link,
-.dashboard-button:visited {
-    background: linear-gradient(135deg, #7c5cff 0%, #5b3fd6 100%) !important;
-    box-shadow: 0 4px 14px rgba(124,92,255,0.40) !important;
-    color: #fff !important;
-}
-.dashboard-button:hover {
-    background: linear-gradient(135deg, #8b6bff 0%, #6b4fe6 100%) !important;
-    box-shadow: 0 6px 22px rgba(124,92,255,0.58) !important;
-}
+/* Project Dashboard button: flat, styled in the branding block above. */
 
 /* Breadcrumbs */
 div.breadcrumbs {
-    background: rgba(18,15,46,0.92) !important;
+    background: var(--ss-surface) !important;
     color: #aba8d6 !important;
-    border-bottom: 1px solid rgba(167,139,250,0.14) !important;
+    border-bottom: 1px solid var(--ss-border) !important;
 }
 div.breadcrumbs a { color: #a78bfa !important; }
 div.breadcrumbs a:hover { color: #c4b5fd !important; }
 
 /* Left navigation sidebar */
 #nav-sidebar {
-    background: linear-gradient(180deg, rgba(26,22,62,0.92) 0%, rgba(15,12,40,0.94) 100%) !important;
-    border-right: 1px solid rgba(167,139,250,0.16) !important;
+    background: var(--ss-surface) !important;
+    border-right: 1px solid var(--ss-border) !important;
 }
 #nav-sidebar a, #nav-sidebar a:link, #nav-sidebar a:visited { color: #d9d6f5 !important; }
-#nav-sidebar a:hover, #nav-sidebar a:focus { color: #c4b5fd !important; background: rgba(139,92,246,0.10) !important; }
-#nav-sidebar .current-app, #nav-sidebar .current-model { background: rgba(139,92,246,0.14) !important; }
+#nav-sidebar a:hover, #nav-sidebar a:focus { color: #c4b5fd !important; background: var(--ss-raised) !important; }
+#nav-sidebar .current-app, #nav-sidebar .current-model { background: var(--ss-raised) !important; }
 #nav-sidebar .current a, #nav-sidebar .current a:link, #nav-sidebar .current a:visited { color: #b79bff !important; }
 #nav-sidebar .module th, #nav-sidebar .module caption, #nav-sidebar h2, #nav-sidebar h3 {
     background: transparent !important;
@@ -1363,35 +1351,40 @@ div.breadcrumbs a:hover { color: #c4b5fd !important; }
 }
 #nav-sidebar .app-label, #nav-sidebar .model-label, #nav-sidebar span, #nav-sidebar .caption { color: #d9d6f5 !important; }
 #nav-filter, input#nav-filter {
-    background: #1c1840 !important;
-    color: #d9d6f5 !important;
-    border: 1px solid rgba(167,139,250,0.22) !important;
-    border-radius: 6px !important;
+    background: var(--ss-field-bg) !important;
+    color: var(--ss-field-text) !important;
+    border: 1px solid var(--ss-field-border) !important;
+    border-radius: var(--ss-field-radius) !important;
 }
-#nav-filter:focus { border-color: rgba(167,139,250,0.55) !important; outline: none !important; }
+#nav-filter:hover { border-color: var(--ss-field-border-hover) !important; }
+#nav-filter:focus {
+    border-color: var(--ss-accent) !important;
+    box-shadow: 0 0 0 2px var(--ss-accent-ring) !important;
+    outline: none !important;
+}
 
 /* Content panels / modules & fieldsets */
 .module, fieldset, .inline-group {
-    background: linear-gradient(155deg, rgba(40,35,82,0.62), rgba(22,19,48,0.66)) !important;
-    border: 1px solid rgba(255,255,255,0.07) !important;
+    background: var(--ss-surface) !important;
+    border: 1px solid var(--ss-border) !important;
     border-radius: 14px !important;
-    box-shadow: 0 8px 26px rgba(5,3,22,0.35) !important;
+    box-shadow: 0 8px 26px rgba(0,0,0,0.35) !important;
 }
 .module h2, .module caption, fieldset h2 {
-    background: rgba(139,92,246,0.12) !important;
+    background: var(--ss-raised) !important;
     color: #ecebff !important;
 }
 
 /* Result tables */
 #changelist, #result_list { background: transparent !important; }
-#result_list thead th { background: rgba(32,27,66,0.92) !important; color: #d9d6f5 !important; border-bottom: 1px solid rgba(167,139,250,0.2) !important; }
-#result_list tbody tr { background: rgba(22,18,48,0.55) !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
-#result_list tbody tr:nth-child(even) { background: rgba(34,29,72,0.5) !important; }
-#result_list tbody tr:hover { background: rgba(139,92,246,0.12) !important; }
-#result_list tbody td, #result_list tbody th { color: #d9d6f5 !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+#result_list thead th { background: var(--ss-raised) !important; color: #d9d6f5 !important; border-bottom: 1px solid var(--ss-border) !important; }
+#result_list tbody tr { background: var(--ss-surface) !important; border-bottom: 1px solid var(--ss-border) !important; }
+#result_list tbody tr:nth-child(even) { background: var(--ss-surface-alt) !important; }
+#result_list tbody tr:hover { background: var(--ss-raised) !important; }
+#result_list tbody td, #result_list tbody th { color: #d9d6f5 !important; border-bottom: 1px solid var(--ss-border) !important; }
 
 /* Changelist filter sidebar */
-#changelist-filter { background: rgba(18,15,46,0.9) !important; border-left: 1px solid rgba(167,139,250,0.14) !important; }
+#changelist-filter { background: var(--ss-surface) !important; border-left: 1px solid var(--ss-border) !important; }
 #changelist-filter a { color: #8ba4ff !important; }
 #changelist-filter a:hover { color: #c4b5fd !important; }
 
@@ -1409,19 +1402,7 @@ div.breadcrumbs a:hover { color: #c4b5fd !important; }
 .default, input[type="submit"].default { background: linear-gradient(135deg, #43e08f 0%, #2bb673 100%) !important; color: #06210f !important; }
 .default:hover, input[type="submit"].default:hover { background: linear-gradient(135deg, #55e89c 0%, #34c47f 100%) !important; }
 
-/* Form inputs — neutral gray by default (no indigo) across all admin pages */
-input[type="text"], input[type="password"], input[type="email"],
-input[type="url"], input[type="number"], input[type="tel"],
-select, textarea {
-    background-color: #262626 !important;
-    color: #e0e0e0 !important;
-    border: 1px solid #3d3d3d !important;
-}
-input:focus, select:focus, textarea:focus {
-    border-color: #4a9eff !important;
-    outline: none !important;
-    box-shadow: 0 0 0 2px rgba(74,158,255,0.20) !important;
-}
+/* Form inputs: see planner/static/css/surfaces.css */
 
 /* Generic links */
 a, a:link, a:visited { color: #8ba4ff !important; }
@@ -1461,7 +1442,7 @@ a:hover, a:focus, a:active { color: #c4b5fd !important; }
 #nav-sidebar tr:hover th a,
 #nav-sidebar th a:hover,
 #nav-sidebar td a:hover {
-    background: rgba(139,92,246,0.16) !important;
+    background: var(--ss-raised) !important;
     color: #c4b5fd !important;
 }
 #nav-sidebar .current-model th a,
@@ -1469,17 +1450,17 @@ a:hover, a:focus, a:active { color: #c4b5fd !important; }
 #nav-sidebar .current a,
 #nav-sidebar .current a:link,
 #nav-sidebar .current a:visited {
-    background: rgba(139,92,246,0.22) !important;
+    background: var(--ss-raised) !important;
     color: #c4b5fd !important;
 }
 
 /* Changelist action bar & paginator (were near-black) — theme to match table */
 #changelist .actions,
 .actions {
-    background: rgba(38,32,78,0.78) !important;
+    background: var(--ss-raised) !important;
     color: #d9d6f5 !important;
     border: none !important;
-    border-bottom: 1px solid rgba(167,139,250,0.16) !important;
+    border-bottom: 1px solid var(--ss-border) !important;
 }
 #changelist .actions label,
 #changelist .actions .action-counter,
@@ -1489,10 +1470,10 @@ a:hover, a:focus, a:active { color: #c4b5fd !important; }
 .actions label, .actions .action-counter { color: #aba8d6 !important; }
 
 .paginator {
-    background: rgba(38,32,78,0.62) !important;
+    background: var(--ss-raised) !important;
     color: #aba8d6 !important;
     border: none !important;
-    border-top: 1px solid rgba(167,139,250,0.14) !important;
+    border-top: 1px solid var(--ss-border) !important;
 }
 .paginator a, .paginator a:link, .paginator a:visited { color: #8ba4ff !important; }
 .paginator .this-page { color: #ecebff !important; }
@@ -1501,10 +1482,10 @@ a:hover, a:focus, a:active { color: #c4b5fd !important; }
 #toolbar,
 #changelist #toolbar,
 form#changelist-search {
-    background: rgba(38,32,78,0.78) !important;
+    background: var(--ss-raised) !important;
     color: #d9d6f5 !important;
     border: none !important;
-    border-bottom: 1px solid rgba(167,139,250,0.16) !important;
+    border-bottom: 1px solid var(--ss-border) !important;
 }
 #toolbar label, #toolbar #searchbar { color: #ecebff !important; }
 #toolbar svg, #changelist-search svg { fill: #aba8d6 !important; color: #aba8d6 !important; }
@@ -1515,15 +1496,16 @@ form#changelist-search {
 body.model-console .module,
 body.model-console fieldset,
 body.model-console .inline-group {
-    background: #1a1a1a !important;
+    background: var(--ss-surface) !important;
     box-shadow: none !important;
 }
 /* Console Information header: drop the violet tint (the odd-colored row).
    fieldset.aligned = the main form fieldset, so this won't touch the blue
    collapsible inline headers. */
 body.model-console fieldset.aligned > h2 {
-    background: #2a2a2a !important;
+    background: var(--ss-raised) !important;
     color: #f0f0f0 !important;
+    border: 1px solid var(--ss-border) !important;
 }
 /* Revert the input/output dropdowns to their original native format
    (native chevron + dark box) instead of the flat themed select.
@@ -1535,29 +1517,10 @@ body.model-console #content .inline-group td select.variable-select {
     -moz-appearance: menulist !important;
     appearance: menulist !important;
     background-image: none !important;
-    background: #000 !important;
-    background-color: #000 !important;
-    color: #fff !important;
-    border: 1px solid #555 !important;
-    border-radius: 4px !important;
-    height: auto !important;
-    min-height: 0 !important;
-    padding: 2px 4px !important;
     box-sizing: border-box !important;
 }
-/* Console data fields: black fill (matching the row) with rounded edges,
-   like the original layout — not the global neutral-gray. */
-body.model-console #content input[type="text"],
-body.model-console #content input[type="number"],
-body.model-console #content input[type="url"],
-body.model-console #content input[type="email"],
-body.model-console #content input[type="tel"] {
-    background: #000 !important;
-    background-color: #000 !important;
-    color: #fff !important;
-    border: 1px solid #3a3a3a !important;
-    border-radius: 6px !important;
-}
+/* Console data fields used to get their own fill here. They now use the
+   shared form-control styles in surfaces.css like every other form. */
 </style>
 
 <!-- Spreadsheet Navigation -->

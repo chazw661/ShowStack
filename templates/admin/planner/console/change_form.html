@@ -6,8 +6,19 @@
 {{ block.super }}
 <style>
 
+    /* Django pulls .object-tools up by -48px to sit beside the page title.
+       The removed "First Field / Save" row used to absorb that pull; without
+       it, HISTORY landed on top of the keyboard-shortcut hints. Let it sit in
+       its own flow instead. */
+    #content-main > .object-tools {
+        float: none !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        margin: 0 0 8px 0 !important;
+        padding: 0 !important;
+    }
     .historylink {
-    margin-top: 20px !important;
+        margin-top: 0 !important;
     }
     /* Quick override styles for this page */
     .submit-row {
@@ -102,16 +113,6 @@
             <kbd>Esc</kbd> Clear Field
         </div>
     </div>
-</div>
-
-<!-- Quick Navigation Buttons -->
-<div class="spreadsheet-nav-buttons">
-    <button type="button" onclick="document.querySelector('[name=name]').focus();" title="Jump to Name">
-        ↖ First Field
-    </button>
-    <button type="button" onclick="document.querySelector('[name=_save]').focus();" title="Jump to Save">
-        💾 Save
-    </button>
 </div>
 
 {{ block.super }}

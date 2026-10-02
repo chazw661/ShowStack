@@ -11,12 +11,18 @@ document.addEventListener("DOMContentLoaded", function () {
     const rowNumber = index + 1;  // The actual aux/matrix number
     const isEvenRow = rowNumber % 2 === 0;
 
-    // REMOVE stereo dropdown from even-numbered rows
+    // Even rows have no Mono/Stereo control of their own: the odd row above
+    // owns the setting for the stereo pair. Replace the dropdown with a note
+    // so the cell reads as "covered by the row above" rather than as blank.
     if (isEvenRow) {
       const td = select.closest('td');
       if (td) {
-        td.innerHTML = ''; // Remove the dropdown completely
-        console.log(`Removed stereo dropdown from even row ${rowNumber}`);
+        td.textContent = '';
+        const note = document.createElement('span');
+        note.className = 'stereo-linked-note';
+        note.textContent = '\u21b3 linked';
+        note.title = `Paired with row ${rowNumber - 1} above`;
+        td.appendChild(note);
       }
       return; // Skip attaching event listener
     }
