@@ -2406,7 +2406,7 @@ class PACableSchedule(models.Model):
         PAZone,
         on_delete=models.SET_NULL,
         verbose_name="Label",
-        help_text="Zone label",
+        help_text="PA Zone label",
         related_name='cables',
         null=True,  # Add this temporarily
         blank=True,  # Add this temporarily
@@ -2415,7 +2415,7 @@ class PACableSchedule(models.Model):
     destination = models.CharField(
         max_length=50,
         verbose_name="Destination",
-        help_text="e.g., 'KIVA - 1', 'K2 - Top'",
+        help_text="e.g., 'SL Amp Rack', 'SL Amp Rack 1', 'FOH Amp Rack'",
         null=True,  # Add this temporarily
         default="",  # Add this
 

@@ -931,7 +931,7 @@ class PACableForm(forms.ModelForm):
             'destination': forms.TextInput(attrs={
                 'class': 'form-control',
                 'style': 'width: 120px;',
-                'placeholder': 'KIVA - 1'
+                'placeholder': 'SL Amp Rack'
             }),
             'count': forms.NumberInput(attrs={
                 'class': 'form-control',
