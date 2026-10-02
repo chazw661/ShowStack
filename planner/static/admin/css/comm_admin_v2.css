@@ -140,37 +140,46 @@
     align-items: center !important;
 }
 
-/* Make ADD COMM BELT PACK button bigger and more prominent */
-.object-tools li.addlink a {
-    font-size: 16px !important;
-    font-weight: 600 !important;
-    padding: 12px 24px !important;
-    background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
-    color: white !important;
-    border-radius: 6px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-    box-shadow: 0 4px 12px rgba(0, 153, 255, 0.3) !important;
-    transition: all 0.3s ease !important;
-}
-
-/* Hover effect for ADD button */
-.object-tools li.addlink a:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 6px 16px rgba(0, 153, 255, 0.4) !important;
-    background: linear-gradient(135deg, #00e4ff 0%, #00aaff 100%) !important;
-}
-
-/* Make EXPORT PDF button smaller and less prominent */
-.object-tools li:not(.addlink) a {
+/* Item 10: "Add Comm Belt Pack" is the primary action.
+ *
+ * It was rendering steel blue, not the cyan gradient the old rule here
+ * described, because `addlink` is a class on the <a>, not on the <li>:
+ * `.object-tools li.addlink a` matched nothing and `.object-tools
+ * li:not(.addlink) a` -- the "less prominent" rule -- caught the Add button
+ * instead. Both selectors now key off the anchor. */
+.object-tools a.addlink {
     font-size: 13px !important;
+    font-weight: 600 !important;
     padding: 8px 16px !important;
-    background: #417690 !important;
-    color: white !important;
-    border-radius: 4px !important;
+    background: var(--ss-accent) !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    border: 1px solid var(--ss-accent) !important;
+    border-radius: var(--ss-field-radius) !important;
+    box-shadow: none !important;
 }
 
-/* Hover effect for EXPORT PDF */
-.object-tools li:not(.addlink) a:hover {
-    background: #5b8ba6 !important;
+.object-tools a.addlink:hover {
+    filter: brightness(1.12);
+    color: #ffffff !important;
+}
+
+/* Everything else in the toolbar is a secondary: outlined, no fill. */
+.object-tools li:not(.addlink) a:not(.addlink),
+.object-tools a:not(.addlink) {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 8px 16px !important;
+    background: transparent !important;
+    background-image: none !important;
+    color: var(--ss-field-text) !important;
+    border: 1px solid var(--ss-field-border) !important;
+    border-radius: var(--ss-field-radius) !important;
+}
+
+.object-tools li:not(.addlink) a:not(.addlink):hover,
+.object-tools a:not(.addlink):hover {
+    background: var(--ss-accent-ring) !important;
+    border-color: var(--ss-accent) !important;
+    color: #ffffff !important;
 }

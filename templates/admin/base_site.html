@@ -1231,9 +1231,11 @@ label, p, li, dt, dd, th, td, h1, h2, h3, h4, h5 {
 
 
 
-/* Fixed/Variable bus type: the select is neutral, like every other select
-   in a grid. See planner/static/css/surfaces.css. The old green/red fills
-   made a perfectly valid Variable bus read as a validation error. */
+/* Fixed/Variable bus type: tinted teal for Fixed, amber for Variable, from
+   the --bus-* tokens in planner/static/css/surfaces.css. A tint, not the old
+   solid green/red fills -- those made a perfectly valid Variable bus read as
+   a validation error. The state class is applied by the script at the bottom
+   of this file. */
 
 /* ============================================================
    ShowStack chrome — indigo/violet "glass" theme (Issue #62)
@@ -1386,8 +1388,22 @@ div.breadcrumbs a:hover { color: #c4b5fd !important; }
     background: linear-gradient(135deg, #7d6cff 0%, #6250d9 100%) !important;
     box-shadow: 0 4px 16px rgba(109,92,255,0.48) !important;
 }
-.default, input[type="submit"].default { background: linear-gradient(135deg, #43e08f 0%, #2bb673 100%) !important; color: #06210f !important; }
-.default:hover, input[type="submit"].default:hover { background: linear-gradient(135deg, #55e89c 0%, #34c47f 100%) !important; }
+/* Item 10: the primary action is the accent, not green.
+   This is the Save under a list_editable changelist (Belt Packs, and any
+   other grid-edit list). The Save in a change form's .submit-row was already
+   var(--ss-accent) via surfaces.css, so the same button was green in one
+   place and violet in the other; green also read as "success/done" on a
+   control that has not done anything yet. Flat, to match the save bar. */
+.default, input[type="submit"].default {
+    background: var(--ss-accent) !important;
+    background-image: none !important;
+    color: #ffffff !important;
+}
+.default:hover, input[type="submit"].default:hover {
+    background: var(--ss-accent) !important;
+    background-image: none !important;
+    filter: brightness(1.12);
+}
 
 /* Form inputs: see planner/static/css/surfaces.css */
 
@@ -1585,9 +1601,51 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<!-- The Fixed/Variable bus type select is styled like every other select;
-     see planner/static/css/surfaces.css. The script that used to colour it
-     green/red (and later wrote a badge beside it) is gone -- the select's
-     own value is the label. -->
+<!-- Item 11: Fixed/Variable bus type tinting.
+     Colours live in planner/static/css/surfaces.css as --bus-fixed /
+     --bus-variable; this only keeps the state class in step with the value. -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Two earlier attempts are worth not repeating: solid green/red fills,
+    // which made a perfectly valid Variable bus read as a validation error,
+    // and a text badge beside the select, which just repeated the value the
+    // select already showed. This is a tint on the select itself.
+    //
+    // Nothing here names a colour. The class picks up --bus-fixed /
+    // --bus-variable from surfaces.css, so the palette stays in the
+    // stylesheet and the same two classes can tint Mono/Stereo later.
+    var STATES = { 'Fixed': 'is-fixed', 'Variable': 'is-variable' };
+
+    function paint(select) {
+        select.classList.add('type-select');
+        select.classList.remove('is-fixed', 'is-variable');
+        // No class for an unset value, so the shared neutral field style
+        // (including the greyed "---------" label) applies untouched.
+        var state = STATES[select.value];
+        if (state) select.classList.add(state);
+    }
+
+    function bind() {
+        document.querySelectorAll('select[name*="bus_type"]').forEach(function(select) {
+            paint(select);
+            if (!select.dataset.typeSelectBound) {
+                select.dataset.typeSelectBound = '1';
+                // 'change' is what makes this live rather than load-only.
+                select.addEventListener('change', function() { paint(this); });
+            }
+        });
+    }
+
+    bind();
+
+    // Rows added by the inline formset's "Add another" are cloned from the
+    // empty form, so they arrive after this runs and need painting too.
+    if (typeof django !== 'undefined' && django.jQuery) {
+        django.jQuery(document).on('formset:added', function() {
+            setTimeout(bind, 100);
+        });
+    }
+});
+</script>
 
 {% endblock %}

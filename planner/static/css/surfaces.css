@@ -35,10 +35,26 @@
 
     /* inline grid column sizing */
     --ss-col-num: 72px;        /* Dante #, Input Ch, Aux #, Matrix # */
-    --ss-col-num-sm: 56px;     /* Group, DCA, Mute, Direct Out, Omni In/Out */
+    --ss-col-num-sm: 56px;     /* Group, DCA, Mute, Omni Out */
+    --ss-col-port: 46px;       /* Direct Out, Omni In -- one port number */
     --ss-col-flex-max: 360px;  /* ceiling for the flexible Source / Name column */
     --ss-grid-max: 1400px;     /* ceiling for an inline grid table overall */
     --ss-col-check: 64px;      /* Multitrack, Delete? */
+
+    /* Bus / signal type tints.
+     *
+     * Tokens rather than literals because the same two states turn up on
+     * other type selects -- Mono/Stereo is the obvious next one -- and a
+     * select wanting this treatment should need the class, not a new colour.
+     * Deliberately low-luminance: these sit in a grid of 40-odd rows, and
+     * the console page gets read at a dark FOH. */
+    --bus-fixed: #5fd4c4;
+    --bus-fixed-border: #2f6f68;
+    --bus-fixed-bg: rgba(95, 212, 196, 0.08);
+
+    --bus-variable: #e8b04a;
+    --bus-variable-border: #7a5a22;
+    --bus-variable-bg: rgba(232, 176, 74, 0.08);
 }
 
 /* Django admin's own surface variables.
@@ -411,8 +427,15 @@ input[type="radio"]:disabled {
 /* Each grid's own ceiling: the sum of its pinned columns plus the cap on
  * the flexible one. Kept per grid because the pinned set differs. */
 #consoleinput_set-group table {
-    /* dante + input_ch + source_hardware + 5 narrow + multitrack + delete */
-    max-width: calc((var(--ss-col-num) * 2) + 150px + (var(--ss-col-num-sm) * 5)
+    /* dante + input_ch + source_hardware + 3 narrow (group, DCA, mute)
+     * + 2 port (direct out, omni in) + multitrack + delete.
+     *
+     * Item 4 moved Direct Out and Omni In off --ss-col-num-sm, so this sum
+     * had to follow them. Left at "5 narrow" the ceiling would stay 16px
+     * wider than the columns beneath it and Source would reach 376px at
+     * 1920 instead of the 360px the cap is for. */
+    max-width: calc((var(--ss-col-num) * 2) + 150px + (var(--ss-col-num-sm) * 3)
+                    + (var(--ss-col-port) * 2)
                     + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
 }
 #consoleauxoutput_set-group table {
@@ -573,10 +596,6 @@ input[type="radio"]:disabled {
 .inline-group table td.field-dca,
 .inline-group table th.column-mute,
 .inline-group table td.field-mute,
-.inline-group table th.column-direct_out,
-.inline-group table td.field-direct_out,
-.inline-group table th.column-omni_in,
-.inline-group table td.field-omni_in,
 .inline-group table th.column-omni_out,
 .inline-group table td.field-omni_out {
     width: var(--ss-col-num-sm) !important;
@@ -585,6 +604,56 @@ input[type="radio"]:disabled {
     box-sizing: border-box !important;
     padding-left: 4px !important;
     padding-right: 4px !important;
+}
+
+/* Item 4: Direct Out and Omni In are a single port number, so they take a
+ * third and narrower size and hand the difference to Source, which is the
+ * greedy column and collects all of it.
+ *
+ * Measured with the viewport at 1280 and the nav sidebar open, which leaves
+ * the inline container 900px. Source is 294px minus these two columns, so at
+ * 46px each it is 202px, up from 182px at the old 56px. (PR #78's note said
+ * 198px at 1280 with the 56px columns; that figure must have been taken with
+ * different chrome -- measured here it is 182px.)
+ *
+ * 46px is squeezed from both sides and there is no room to move: 47px would
+ * drop Source to exactly 200.0px with nothing in hand, and 45px would not fit
+ * the header (see the next rule for why Safari, not Chrome, sets that floor).
+ * Verified in Chrome and Safari at both container widths. */
+.inline-group table th.column-direct_out,
+.inline-group table td.field-direct_out,
+.inline-group table th.column-omni_in,
+.inline-group table td.field-omni_in {
+    width: var(--ss-col-port) !important;
+    min-width: var(--ss-col-port) !important;
+    max-width: var(--ss-col-port) !important;
+    box-sizing: border-box !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+}
+
+/* "Direct out" wraps to DIRECT / OUT and DIRECT cannot be broken, so the
+ * header has to fit the column or it slides under its neighbour the way
+ * MULTITRACK once did -- th overflow is visible.
+ *
+ * Safari sets the floor here, not Chrome, and not by rendering wider: asked
+ * for a 9, 10 or 11px font it renders 12px (6px and 8px it honours, so this
+ * is not a plain minimum-font-size clamp). DIRECT is therefore 45.0px in
+ * Safari against 37.1px in Chrome, and dropping the header another point --
+ * the trick the Multitrack column uses -- buys exactly nothing there.
+ *
+ * So the column is sized for the 12px Safari actually paints: 46px with no
+ * horizontal padding leaves 46px of text room against DIRECT's 45.0px, and
+ * the slight negative tracking keeps a couple of pixels in hand on a machine
+ * whose fallback font runs wider. All measured in both browsers, not
+ * estimated. Centred because the inputs beneath them are centred. */
+.inline-group table thead th.column-direct_out,
+.inline-group table thead th.column-omni_in {
+    font-size: 10px !important;
+    letter-spacing: -0.2px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    text-align: center !important;
 }
 
 /* The widths these inputs carry from forms.py / custom_admin.css (40px,
@@ -784,4 +853,51 @@ input[type="radio"]:disabled {
     min-width: 0 !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
+}
+
+
+/* ============================================================
+ * Type selects: Fixed / Variable tinting  (item 11)
+ *
+ * History worth keeping: this select was once filled solid green for Fixed
+ * and solid red for Variable, which made an ordinary Variable bus look like
+ * a failed field. PR #78 dropped the fills, then dropped the muted badge
+ * that briefly replaced them. What was wanted all along is a tint -- enough
+ * to scan a column of 40 buses at a glance, not enough to read as an error.
+ *
+ * The `.is-fixed` / `.is-variable` class is set by the script in
+ * base_site.html on load, on every `change`, and on `formset:added`, so the
+ * colour tracks the select's value live rather than only at page load.
+ *
+ * Any other type select gets this by taking `.type-select` plus the same two
+ * state classes -- no new colours. Mono/Stereo is the obvious next one.
+ * ============================================================ */
+
+.inline-group table td select.type-select.is-fixed,
+select.type-select.is-fixed {
+    color: var(--bus-fixed) !important;
+    border-color: var(--bus-fixed-border) !important;
+    background-color: var(--bus-fixed-bg) !important;
+}
+
+.inline-group table td select.type-select.is-variable,
+select.type-select.is-variable {
+    color: var(--bus-variable) !important;
+    border-color: var(--bus-variable-border) !important;
+    background-color: var(--bus-variable-bg) !important;
+}
+
+/* Unset keeps the shared neutral field style: the script applies no state
+ * class, so nothing above matches and the plain `select` rules at the top of
+ * this file win -- including the greyed "---------" empty label.
+ *
+ * The open dropdown stays neutral in both states. Tinting the options too
+ * made the menu harder to read, and the tint is there to label the *current*
+ * value, not the choices. */
+.inline-group table td select.type-select.is-fixed option,
+.inline-group table td select.type-select.is-variable option,
+select.type-select.is-fixed option,
+select.type-select.is-variable option {
+    color: var(--ss-field-text) !important;
+    background-color: var(--ss-field-bg) !important;
 }

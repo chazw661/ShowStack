@@ -70,12 +70,14 @@ from .models import DanteConsoleConfig, DanteDeviceConfig, DanteSubscription
 
 
 class BaseAdmin(admin.ModelAdmin):
-    """Base admin class that provides dark theme CSS"""
-    
-    class Media:
-        css = {
-            'all': ('css/dark-admin.css',)
-        }
+    """Common base for ShowStack ModelAdmins.
+
+    This used to pull in `css/dark-admin.css` on every admin page. That file
+    was committed empty in March 2026 as a placeholder to silence a 404 and
+    never held a rule; the dark theme lives in planner/static/css/surfaces.css
+    and templates/admin/base_site.html. With hashed static files an empty
+    stylesheet is still a request per page, so the reference is gone.
+    """
 
 
 class BaseEquipmentAdmin(BaseAdmin):
@@ -1840,6 +1842,23 @@ class AmpAdmin(BaseEquipmentAdmin):
                 for amp in amps:
                     channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
                     model = amp.amp_model
+                    # An LA12X renders 16 AVB rows whether 1 or 16 are patched,
+                    # so an 18-amp location scrolled for pages of "None". Flag
+                    # the empty ones and let the template fold them behind a
+                    # "+ N unused" toggle.
+                    #
+                    # A row carries both the AVB stream and the Analogue Input
+                    # Label, so "unused" has to mean both are empty -- keying
+                    # off avb_stream alone would hide analogue labels that are
+                    # filled in.
+                    avb_unused_count = 0
+                    for ch in channels:
+                        ch.avb_unused = not (
+                            (ch.avb_stream or '').strip()
+                            or (ch.analog_input or '').strip()
+                        )
+                        if ch.avb_unused:
+                            avb_unused_count += 1
                     # Issue #31: NL4 Out block now renders as four generic
                     # numbered rows from Amp.output_1..output_4 (matches the
                     # original spreadsheet). CaCom Out keeps its model-driven
@@ -1878,6 +1897,7 @@ class AmpAdmin(BaseEquipmentAdmin):
                         'cacom_rows': cacom_rows,
                         'sc32_rows': sc32_rows,
                         'has_nl4': has_nl4,
+                        'avb_unused_count': avb_unused_count,
                     })
                 # Items list — for divider rendering anchored to amp index.
                 items_order = []

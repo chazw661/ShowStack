@@ -4,45 +4,53 @@
 {% block extrahead %}
     {{ block.super }}
     <style>
-        /* Style the ADD PA CABLE ENTRY button */
+        /* Item 9: three steel-blue (#417690) fills of three different sizes
+           became one filled primary (Add) and two outlined secondaries
+           (Import CSV, Export to PDF), on the same accent and radius the
+           console save bar and the amp toolbar use. */
         .object-tools li .addlink,
         .object-tools a[href*="add"] {
-            background-color: #417690 !important;
-            color: white !important;
-            padding: 12px 24px !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-            border: none !important;
-            border-radius: 6px !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
-            text-decoration: none !important;
-            transition: all 0.2s !important;
-        }
-        
-        .object-tools li .addlink:hover,
-        .object-tools a[href*="add"]:hover {
-            background-color: #5b8ba6 !important;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
-            transform: translateY(-1px) !important;
-        }
-        
-        /* Style the Export PDF button - smaller */
-        .export-pdf-btn {
-            background-color: #417690 !important;
-            color: white !important;
+            background-color: var(--ss-accent) !important;
+            color: #ffffff !important;
             padding: 8px 16px !important;
             font-size: 13px !important;
-            font-weight: 500 !important;
-            border: none !important;
-            border-radius: 4px !important;
+            font-weight: 600 !important;
+            border: 1px solid var(--ss-accent) !important;
+            border-radius: var(--ss-field-radius) !important;
+            box-shadow: none !important;
+            text-decoration: none !important;
+        }
+
+        .object-tools li .addlink:hover,
+        .object-tools a[href*="add"]:hover {
+            filter: brightness(1.12);
+            color: #ffffff !important;
+        }
+
+        /* Secondary: outlined. The selector carries the same weight as the
+           `.object-tools li:not(.addlink) a` rule the shared *_buttons.css
+           files set at #417690 !important, which would otherwise win. */
+        .object-tools li a.export-pdf-btn,
+        .object-tools li:not(.addlink) a.export-pdf-btn,
+        .export-pdf-btn {
+            background-color: transparent !important;
+            background-image: none !important;
+            color: var(--ss-field-text) !important;
+            padding: 8px 16px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            border: 1px solid var(--ss-field-border) !important;
+            border-radius: var(--ss-field-radius) !important;
             text-decoration: none !important;
             display: inline-block !important;
-            transition: all 0.2s !important;
         }
-        
+
+        .object-tools li a.export-pdf-btn:hover,
+        .object-tools li:not(.addlink) a.export-pdf-btn:hover,
         .export-pdf-btn:hover {
-            background-color: #5b8ba6 !important;
-            transform: translateY(-1px) !important;
+            background-color: var(--ss-accent-ring) !important;
+            border-color: var(--ss-accent) !important;
+            color: #ffffff !important;
         }
 
         /* Issue #73: fan-out / coupler / extension chips in the combined PA
@@ -78,17 +86,15 @@
     {{ block.super }}
     <li>
         <a href="{% url 'planner:import_pa_cables_csv' %}"
-           class="export-pdf-btn"
-           style="background-color: #417690 !important; color: white !important; padding: 10px 20px !important;">
-            IMPORT CSV
+           class="export-pdf-btn">
+            Import CSV
         </a>
     </li>
     <li>
         <a href="{% url 'planner:all_pa_cables_pdf_export' %}"
            class="export-pdf-btn"
-           target="_blank"
-           style="background-color: #417690 !important; color: white !important; padding: 10px 20px !important;">
-            EXPORT PA CABLES TO PDF
+           target="_blank">
+            Export to PDF
         </a>
     </li>
 {% endblock %}
@@ -105,8 +111,8 @@
     margin-top: 20px;
     padding: 15px;
     background: var(--ss-raised);
-    border: 1px solid #417690;
-    border-radius: 4px;
+    border: 1px solid var(--ss-border);
+    border-radius: var(--ss-field-radius);
 }
 
 .cable-summary-section h2 {
@@ -121,15 +127,19 @@
     background: var(--ss-surface);
 }
 
+/* Item 9: the header rows of all three summary tables (Cable Summary, Fan
+   Out, Quick Order List) were solid #417690 steel blue -- the last of the
+   Django-admin default header colour on this page. Same raised-fill,
+   light-text, hairline section header the console inline grids use. */
 .cable-summary-section thead tr {
-    background: #417690 !important;
+    background: var(--ss-raised) !important;
 }
 
 .cable-summary-section thead th {
     padding: 8px;
     text-align: center;
     border: 1px solid var(--ss-border);
-    color: white !important;
+    color: #f0f0f0 !important;
     background: transparent;
 }
 
@@ -153,10 +163,87 @@
     font-weight: bold;
 }
 
-.cable-summary-section .safety-cells {
-    background: #2a4a2a !important;
-    color: #90ee90 !important;
+/* Item 9: order quantities stay green -- that is the number you actually
+   read off this table -- but #90ee90 on #2a4a2a was a block of neon per row.
+   Toned to a low-luminance tint with the same hue. */
+.cable-summary-section .safety-cells,
+.cable-summary-section .order-qty {
+    background: rgba(127, 191, 143, 0.10) !important;
+    color: #7fbf8f !important;
     font-weight: bold;
+}
+
+/* Quick Order List: was a table of inline styles, which is why its header
+   could not follow the two above. Now it reuses this section's classes. */
+.cable-summary-section .quick-order-panel {
+    margin-top: 20px;
+    padding: 15px;
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
+    border-radius: var(--ss-field-radius);
+}
+
+.cable-summary-section .quick-order-panel h3 {
+    font-size: 18px;
+    font-weight: bold;
+    color: #f0f0f0;
+    margin: 0 0 15px 0;
+    border-bottom: 1px solid var(--ss-border);
+    padding-bottom: 10px;
+}
+
+.cable-summary-section .quick-order-panel table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.cable-summary-section .quick-order-panel tbody tr {
+    background: var(--ss-raised);
+}
+
+.cable-summary-section .quick-order-panel tbody td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid var(--ss-border);
+    color: #f0f0f0;
+}
+
+/* Item type was #79aec8 -- Django's link blue, and not a link. */
+.cable-summary-section .quick-order-panel td.item-type {
+    text-align: left;
+    font-weight: bold;
+    color: #f0f0f0;
+}
+
+/* Category tints: which kind of thing the row is. Solid #2a3a2a / #3a2a2a /
+   #2a2a3a were fine against the old steel-blue table, but once everything
+   around them went neutral they became the heaviest thing in the panel --
+   heavier than the order quantity, which is the number you actually read.
+   Same hues at the 0.10 alpha the order-qty cells use, so a category reads
+   as a wash and the quantity still sits on top of it.
+
+   The item type also dropped its amber and orange. The row already says
+   "Coupler" or "Extension" in the Length column and tints the row, so
+   colouring the name as well was the third copy of one fact -- the thing the
+   audit calls out on the Mic Tracker, where the mic'd state is the row tint
+   and the button and the presenter name all at once. */
+.cable-summary-section .quick-order-panel tr.row-fanout {
+    background: rgba(127, 191, 143, 0.10);
+}
+.cable-summary-section .quick-order-panel tr.row-coupler {
+    background: rgba(212, 164, 90, 0.10);
+}
+.cable-summary-section .quick-order-panel tr.row-ext {
+    background: rgba(140, 150, 230, 0.10);
+}
+
+.cable-summary-section .quick-order-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 10px 0 0 0;
+    padding: 8px;
+    background: var(--ss-raised);
+    border-left: 3px solid var(--ss-border);
 }
 </style>
 
@@ -236,89 +323,89 @@
     
     <!-- Quick Order List -->
     {% if cable_summary %}
-    <div style="margin-top: 20px; padding: 15px; background: var(--ss-surface); border: 1px solid #417690; border-radius: 4px;">
-        <h3 style="font-size: 18px; font-weight: bold; color: #f0f0f0; margin: 0 0 15px 0; border-bottom: 1px solid #417690; padding-bottom: 10px;">Quick Order List</h3>
-        
-        <table style="width: 100%; border-collapse: collapse;">
+    <div class="quick-order-panel">
+        <h3>Quick Order List</h3>
+
+        <table>
             <thead>
-                <tr style="background: #417690;">
-                    <th style="padding: 8px; text-align: left; color: white; border: 1px solid var(--ss-border);">Item Type</th>
-                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid var(--ss-border);">Length</th>
-                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid var(--ss-border);">Order Qty</th>
+                <tr>
+                    <th style="text-align: left;">Item Type</th>
+                    <th>Length</th>
+                    <th>Order Qty</th>
                 </tr>
             </thead>
             <tbody>
                 {% for cable_type, data in cable_summary.items %}
                     {% if data.hundreds_with_safety > 0 %}
-                    <tr style="background: var(--ss-raised);">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">100'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.hundreds_with_safety }}</td>
+                    <tr>
+                        <td class="item-type">{{ cable_type }}</td>
+                        <td>100'</td>
+                        <td class="order-qty">{{ data.hundreds_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.fifties_with_safety > 0 %}
-                    <tr style="background: var(--ss-raised);">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">50'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.fifties_with_safety }}</td>
+                    <tr>
+                        <td class="item-type">{{ cable_type }}</td>
+                        <td>50'</td>
+                        <td class="order-qty">{{ data.fifties_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.twenty_fives_with_safety > 0 %}
-                    <tr style="background: var(--ss-raised);">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">25'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.twenty_fives_with_safety }}</td>
+                    <tr>
+                        <td class="item-type">{{ cable_type }}</td>
+                        <td>25'</td>
+                        <td class="order-qty">{{ data.twenty_fives_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.tens_with_safety > 0 %}
-                    <tr style="background: var(--ss-raised);">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">10'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.tens_with_safety }}</td>
+                    <tr>
+                        <td class="item-type">{{ cable_type }}</td>
+                        <td>10'</td>
+                        <td class="order-qty">{{ data.tens_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.fives_with_safety > 0 %}
-                    <tr style="background: var(--ss-raised);">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">5'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.fives_with_safety }}</td>
+                    <tr>
+                        <td class="item-type">{{ cable_type }}</td>
+                        <td>5'</td>
+                        <td class="order-qty">{{ data.fives_with_safety }}</td>
                     </tr>
                     {% endif %}
                 {% endfor %}
                 
                 {% if fan_out_summary %}
                     {% for fan_out_type, data in fan_out_summary.items %}
-                    <tr style="background: #2a3a2a;">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ fan_out_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">Fan Out</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                    <tr class="row-fanout">
+                        <td class="item-type">{{ fan_out_type }}</td>
+                        <td>Fan Out</td>
+                        <td class="order-qty">{{ data.with_overage }}</td>
                     </tr>
                     {% endfor %}
                 {% endif %}
 
                 {% if coupler_summary %}
                     {% for coupler_type, data in coupler_summary.items %}
-                    <tr style="background: #3a2a2a;">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #d4a45a; font-weight: bold;">{{ coupler_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">Coupler</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                    <tr class="row-coupler">
+                        <td class="item-type">{{ coupler_type }}</td>
+                        <td>Coupler</td>
+                        <td class="order-qty">{{ data.with_overage }}</td>
                     </tr>
                     {% endfor %}
                 {% endif %}
 
                 {% if extension_summary %}
                     {% for ext_type, data in extension_summary.items %}
-                    <tr style="background: #2a2a3a;">
-                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #e0a040; font-weight: bold;">{{ ext_type }} (Extension)</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">Extension</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                    <tr class="row-ext">
+                        <td class="item-type">{{ ext_type }} (Extension)</td>
+                        <td>Extension</td>
+                        <td class="order-qty">{{ data.with_overage }}</td>
                     </tr>
                     {% endfor %}
                 {% endif %}
             </tbody>
         </table>
         
-        <p style="font-size: 12px; color: #90ee90; margin: 10px 0 0 0; padding: 8px; background: #2a3a2a; border-left: 3px solid #417690;">
+        <p class="quick-order-note">
             <strong>Note:</strong> All quantities include 20% safety margin.
         </p>
     </div>
