@@ -36,6 +36,8 @@
     /* inline grid column sizing */
     --ss-col-num: 72px;        /* Dante #, Input Ch, Aux #, Matrix # */
     --ss-col-num-sm: 56px;     /* Group, DCA, Mute, Direct Out, Omni In/Out */
+    --ss-col-flex-max: 360px;  /* ceiling for the flexible Source / Name column */
+    --ss-grid-max: 1400px;     /* ceiling for an inline grid table overall */
     --ss-col-check: 64px;      /* Multitrack, Delete? */
 }
 
@@ -228,8 +230,9 @@ a.historylink:hover,
 
 .inline-group table input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
 .inline-group table select {
-    height: 32px !important;
-    min-height: 32px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    font-size: 14px !important;
     padding: 4px 8px !important;
     box-sizing: border-box !important;
     line-height: normal !important;
@@ -377,6 +380,55 @@ input[type="radio"]:disabled {
 .inline-group table.dynamic-deviceinput_set,
 .inline-group table.dynamic-deviceoutput_set {
     table-layout: fixed !important;
+}
+
+/* ============================================================
+ * Table and flexible-column caps
+ *
+ * Without a ceiling these grids stretch to the full content area, and
+ * on a 1920 display Source / Name ran to 800-1100px -- far more than a
+ * channel label needs, and a long drag of the eye from the name to the
+ * checkboxes at the right.
+ *
+ * `max-width` on a *cell* is ignored under table-layout: fixed (the
+ * algorithm reads `width` from the first row and nothing else), so the
+ * flexible column cannot be capped directly. Capping the table does it
+ * instead: every other column has a declared width, so the flexible one
+ * is whatever is left, and bounding the table bounds it to exactly
+ * --ss-col-flex-max. It keeps `width: 100%`, so on a narrow window it
+ * still gives way rather than forcing a scrollbar.
+ * ============================================================ */
+
+#consoleinput_set-group table,
+#consoleauxoutput_set-group table,
+#consolematrixoutput_set-group table,
+#consolestereooutput_set-group table,
+.inline-group table.dynamic-deviceinput_set,
+.inline-group table.dynamic-deviceoutput_set {
+    max-width: var(--ss-grid-max) !important;
+}
+
+/* Each grid's own ceiling: the sum of its pinned columns plus the cap on
+ * the flexible one. Kept per grid because the pinned set differs. */
+#consoleinput_set-group table {
+    /* dante + input_ch + source_hardware + 5 narrow + multitrack + delete */
+    max-width: calc((var(--ss-col-num) * 2) + 150px + (var(--ss-col-num-sm) * 5)
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+}
+#consoleauxoutput_set-group table {
+    /* dante + aux + mono_stereo + bus_type + omni_out + multitrack + delete */
+    max-width: calc((var(--ss-col-num) * 2) + 150px + 150px + var(--ss-col-num-sm)
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+}
+#consolematrixoutput_set-group table {
+    /* dante + matrix + mono_stereo + omni_out + multitrack + delete */
+    max-width: calc((var(--ss-col-num) * 2) + 150px + var(--ss-col-num-sm)
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+}
+#consolestereooutput_set-group table {
+    /* dante + stereo_type + omni_out + multitrack + delete */
+    max-width: calc(var(--ss-col-num) + 150px + var(--ss-col-num-sm)
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
 }
 
 /* Safety net only. With the widths below the grids fit their container at
