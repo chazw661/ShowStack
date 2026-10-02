@@ -1,15 +1,16 @@
 /* planner/static/admin/js/mic_tracker_show_mode.js
  *
- * Mic Tracker "Show Mode" -- a red-light night-vision theme for running a live
- * show from a dark FOH position. Shared by the Tracker and Overview pages.
+ * Mic Tracker "Show Mode" -- a stripped-back, low-light layout for running a
+ * live show from a dark FOH position. Shared by the Tracker and Overview
+ * pages.
  *
  * Loaded from {% block extrahead %}, i.e. inside <head> and NOT deferred, so
  * the first statement below runs before <body> is parsed. That ordering is the
  * whole point: the tracker reloads itself whenever the 5-second checksum poll
  * sees someone else's edit, and a class applied on DOMContentLoaded would let
- * the normal dark-blue theme paint for a frame first. Mid-show, that frame is
- * a flash of blue light at the console. Setting it on <html> pre-paint means
- * the page only ever renders in one theme.
+ * the normal theme paint for a frame first. Mid-show, that frame is a flash of
+ * saturated green and violet at the console. Setting it on <html> pre-paint
+ * means the page only ever renders in one theme.
  *
  * The class lives on <html> (not <body>) for the same reason -- it exists
  * before any body content does.
@@ -75,7 +76,7 @@
             btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
             btns[i].title = on
                 ? 'Show Mode is on — tap to return to the normal theme'
-                : 'Show Mode: red-light theme for a dark FOH position';
+                : 'Show Mode: stripped-back low-light layout for a dark FOH position';
         }
     }
 

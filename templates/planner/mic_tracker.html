@@ -533,7 +533,7 @@ silently 403-ing background saves and stopping updates from reaching others.
             {% endcomment %}
             <button type="button" class="mtt-show-mode-btn"
                     onclick="toggleShowMode()" aria-pressed="false"
-                    title="Show Mode: red-light theme for a dark FOH position">◉ Show Mode</button>
+                    title="Show Mode: stripped-back low-light layout for a dark FOH position">◉ Show Mode</button>
             {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary mtt-edit-only" onclick="addNewDay()">+ Add Day</button>{% endif %}
             <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary mtt-edit-only" style="color:var(--mtt-text-inverse) !important;">👤 Presenters</a>
             <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export mtt-edit-only" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
@@ -613,7 +613,8 @@ silently 403-ing background saves and stopping updates from reaching others.
                                         {% endif %}
                                     </th>
                                     <th style="width:56px;">RF#</th>
-                                    <th style="width:110px;">Type</th>
+                                    {# .a1-type-cell: hidden in Show Mode -- mic type is a setup-time fact. #}
+                                    <th class="a1-type-cell" style="width:110px;">Type</th>
                                     <th>Presenter</th>
                                     <th class="th-center a1-micd-cell">MIC'D</th>
                                     <th class="a1-notes-cell">A1 Notes</th>
@@ -647,7 +648,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     {% endif %}
                                 </td>
                                 <td class="a1-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
-                                <td>
+                                <td class="a1-type-cell">
                                     {% if slot.mic_type %}
                                     <span class="mic-type-badge type-{{ slot.mic_type }}"><span class="type-dot"></span>{{ slot.mic_type }}</span>
                                     {% elif assignment.mic_type %}
@@ -703,7 +704,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     {% endif %}
                                 </td>
                                 <td class="a1-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
-                                <td>
+                                <td class="a1-type-cell">
                                     {% with active_slot=assignment.active_slot %}
                                     {% if active_slot.mic_type %}
                                     <span class="mic-type-badge type-{{ active_slot.mic_type }}"><span class="type-dot"></span>{{ active_slot.mic_type }}</span>
