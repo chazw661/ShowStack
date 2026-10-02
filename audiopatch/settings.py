@@ -195,7 +195,14 @@ STORAGES = {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+        # Manifest storage hashes every filename (style.css -> style.a1b2c3.css)
+        # so a deploy can never be served a browser's cached copy of the old
+        # file. Whitenoise then serves the hashed names with a long max-age.
+        #
+        # The trade-off: a {% static %} / Media reference to a file that does
+        # not exist is a hard error instead of a 404, and so is a url() inside
+        # a stylesheet that points at a missing asset. Keep them resolvable.
+        'BACKEND': 'audiopatch.storage.ForgivingManifestStaticFilesStorage',
     },
 }
 
