@@ -1231,10 +1231,9 @@ label, p, li, dt, dd, th, td, h1, h2, h3, h4, h5 {
 
 
 
-/* Fixed/Variable bus type: the select stays neutral and the value is
-   repeated as a muted badge. See the .bus-type-badge rules in
-   planner/static/css/surfaces.css. The old green/red fills made a
-   perfectly valid Variable bus read as a validation error. */
+/* Fixed/Variable bus type: the select is neutral, like every other select
+   in a grid. See planner/static/css/surfaces.css. The old green/red fills
+   made a perfectly valid Variable bus read as a validation error. */
 
 /* ============================================================
    ShowStack chrome — indigo/violet "glass" theme (Issue #62)
@@ -1586,44 +1585,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<!-- Bus type: neutral select + muted text badge (styles in surfaces.css) -->
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // The select used to be filled green for Fixed and red for Variable.
-    // Variable is an ordinary valid bus type, so a red field read as an
-    // error; the value is repeated as a muted badge instead.
-    function renderBadge(select) {
-        var badge = select.parentNode.querySelector('.bus-type-badge');
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'bus-type-badge';
-            select.parentNode.insertBefore(badge, select.nextSibling);
-        }
-        var value = select.value;
-        badge.textContent = value || '';
-        badge.hidden = !value;
-        badge.classList.toggle('is-variable', value === 'Variable');
-    }
-
-    function bindBusTypeSelects() {
-        document.querySelectorAll('select[name*="bus_type"]').forEach(function(select) {
-            renderBadge(select);
-            // guard against re-binding on every formset:added
-            if (!select.dataset.busTypeBound) {
-                select.dataset.busTypeBound = '1';
-                select.addEventListener('change', function() { renderBadge(this); });
-            }
-        });
-    }
-
-    bindBusTypeSelects();
-
-    if (typeof django !== 'undefined' && django.jQuery) {
-        django.jQuery(document).on('formset:added', function() {
-            setTimeout(bindBusTypeSelects, 100);
-        });
-    }
-});
-</script>
+<!-- The Fixed/Variable bus type select is styled like every other select;
+     see planner/static/css/surfaces.css. The script that used to colour it
+     green/red (and later wrote a badge beside it) is gone -- the select's
+     own value is the label. -->
 
 {% endblock %}
