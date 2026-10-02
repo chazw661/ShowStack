@@ -215,13 +215,27 @@
     color: #f0f0f0;
 }
 
-/* Category tints, kept: these say which kind of thing a row is. They were
-   already low-luminance and match the .cb-chip colours in the list above. */
-.cable-summary-section .quick-order-panel tr.row-fanout { background: #2a3a2a; }
-.cable-summary-section .quick-order-panel tr.row-coupler { background: #3a2a2a; }
-.cable-summary-section .quick-order-panel tr.row-ext { background: #2a2a3a; }
-.cable-summary-section .quick-order-panel tr.row-coupler td.item-type { color: #d4a45a; }
-.cable-summary-section .quick-order-panel tr.row-ext td.item-type { color: #e0a040; }
+/* Category tints: which kind of thing the row is. Solid #2a3a2a / #3a2a2a /
+   #2a2a3a were fine against the old steel-blue table, but once everything
+   around them went neutral they became the heaviest thing in the panel --
+   heavier than the order quantity, which is the number you actually read.
+   Same hues at the 0.10 alpha the order-qty cells use, so a category reads
+   as a wash and the quantity still sits on top of it.
+
+   The item type also dropped its amber and orange. The row already says
+   "Coupler" or "Extension" in the Length column and tints the row, so
+   colouring the name as well was the third copy of one fact -- the thing the
+   audit calls out on the Mic Tracker, where the mic'd state is the row tint
+   and the button and the presenter name all at once. */
+.cable-summary-section .quick-order-panel tr.row-fanout {
+    background: rgba(127, 191, 143, 0.10);
+}
+.cable-summary-section .quick-order-panel tr.row-coupler {
+    background: rgba(212, 164, 90, 0.10);
+}
+.cable-summary-section .quick-order-panel tr.row-ext {
+    background: rgba(140, 150, 230, 0.10);
+}
 
 .cable-summary-section .quick-order-note {
     font-size: 12px;
