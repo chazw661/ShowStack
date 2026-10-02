@@ -29,6 +29,13 @@
 
     /* divider between inline-grid rows (replaces zebra striping) */
     --ss-row-divider: var(--ss-field-bg);
+
+    /* muted foreground for secondary text and widget icons */
+    --text-muted: #8b8f98;
+
+    /* inline grid column sizing */
+    --ss-col-num: 72px;        /* Dante #, Input Ch, Aux #, Group, DCA, ... */
+    --ss-col-check: 56px;      /* Include in multitrack, Delete? */
 }
 
 /* Django admin's own surface variables.
@@ -289,4 +296,201 @@ a.historylink:hover,
 .submit-row a.deletelink,
 .submit-row .deletelink-box {
     margin-left: auto !important;
+}
+
+/* ============================================================
+ * Inline grid column widths
+ *
+ * Django sizes inline columns from their header text, so "Dante
+ * number Autofill" claimed ~280px to hold a 60px box while Name got
+ * squeezed. Pin the numeric and checkbox columns, let the text
+ * columns take the slack.
+ * ============================================================ */
+
+.inline-group table {
+    width: 100% !important;
+    table-layout: auto;
+}
+
+/* --- numeric columns: fixed, input fills the cell --- */
+.inline-group table th.column-dante_number,
+.inline-group table td.field-dante_number,
+.inline-group table th.column-input_ch,
+.inline-group table td.field-input_ch,
+.inline-group table th.column-aux_number,
+.inline-group table td.field-aux_number,
+.inline-group table th.column-matrix_number,
+.inline-group table td.field-matrix_number,
+.inline-group table th.column-group,
+.inline-group table td.field-group,
+.inline-group table th.column-dca,
+.inline-group table td.field-dca,
+.inline-group table th.column-mute,
+.inline-group table td.field-mute,
+.inline-group table th.column-direct_out,
+.inline-group table td.field-direct_out,
+.inline-group table th.column-omni_in,
+.inline-group table td.field-omni_in,
+.inline-group table th.column-omni_out,
+.inline-group table td.field-omni_out {
+    width: var(--ss-col-num) !important;
+    min-width: var(--ss-col-num) !important;
+    max-width: var(--ss-col-num) !important;
+    box-sizing: border-box !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+}
+
+/* The widths these inputs carry from forms.py / custom_admin.css (40px,
+ * 100px, 3ch, max-width 48px) left them floating in an oversized cell. */
+.inline-group table td.field-dante_number input,
+.inline-group table td.field-input_ch input,
+.inline-group table td.field-aux_number input,
+.inline-group table td.field-matrix_number input,
+.inline-group table td.field-group input,
+.inline-group table td.field-dca input,
+.inline-group table td.field-mute input,
+.inline-group table td.field-direct_out input,
+.inline-group table td.field-omni_in input,
+.inline-group table td.field-omni_out input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    text-align: center !important;
+}
+
+/* --- text / select columns: flexible, Name and Source widest --- */
+.inline-group table th.column-name,
+.inline-group table td.field-name,
+.inline-group table th.column-source,
+.inline-group table td.field-source,
+.inline-group table th.column-source_b,
+.inline-group table td.field-source_b {
+    width: auto !important;
+    min-width: 180px;
+}
+.inline-group table th.column-source_hardware,
+.inline-group table td.field-source_hardware,
+.inline-group table th.column-source_hardware_b,
+.inline-group table td.field-source_hardware_b,
+.inline-group table th.column-mono_stereo,
+.inline-group table td.field-mono_stereo,
+.inline-group table th.column-bus_type,
+.inline-group table td.field-bus_type,
+.inline-group table th.column-stereo_type,
+.inline-group table td.field-stereo_type {
+    width: 150px !important;
+}
+.inline-group table td.field-name input,
+.inline-group table td.field-source input,
+.inline-group table td.field-source_b input,
+.inline-group table td.field-source_hardware select,
+.inline-group table td.field-source_hardware_b select,
+.inline-group table td.field-mono_stereo select,
+.inline-group table td.field-bus_type select,
+.inline-group table td.field-stereo_type select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+/* Name and Source read as labels, not numbers */
+.inline-group table td.field-name input,
+.inline-group table td.field-source input,
+.inline-group table td.field-source_b input {
+    text-align: left !important;
+}
+
+/* --- checkbox columns: narrow, header and box both centered --- */
+.inline-group table th.column-default_record,
+.inline-group table td.field-default_record,
+.inline-group table th.column-include_in_multitrack,
+.inline-group table td.field-include_in_multitrack,
+.inline-group table th.delete,
+.inline-group table td.delete {
+    width: var(--ss-col-check) !important;
+    min-width: var(--ss-col-check) !important;
+    max-width: var(--ss-col-check) !important;
+    box-sizing: border-box !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    text-align: center !important;
+}
+.inline-group table th.column-default_record,
+.inline-group table th.column-include_in_multitrack,
+.inline-group table th.delete {
+    white-space: normal !important;
+    word-break: break-word;
+}
+
+/* Django's delete header is a bare <th> with no class, so it cannot be
+ * selected by name; :has() scopes this to tables that actually have a
+ * delete column, leaving can_delete=False inlines alone. */
+.inline-group table:has(td.delete) thead th:last-child {
+    width: var(--ss-col-check) !important;
+    min-width: var(--ss-col-check) !important;
+    max-width: var(--ss-col-check) !important;
+    box-sizing: border-box !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    text-align: center !important;
+    white-space: normal !important;
+}
+
+/* The "original" spacer column Django emits for each row adds a gap we
+ * do not use -- these grids show no object link. */
+.inline-group table th.original,
+.inline-group table td.original {
+    width: 0 !important;
+    padding: 0 !important;
+}
+
+/* ============================================================
+ * Related-field widget icons (edit / add / delete / view)
+ *
+ * Django ships these as <img> SVGs with fill colors baked in
+ * (amber, green, red, blue), which reads as four unrelated
+ * controls. Mask the shape and paint it from a token instead, so
+ * they are monochrome at rest and accent only on hover.
+ * ============================================================ */
+
+.related-widget-wrapper-link {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    background-color: var(--text-muted);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: 14px 14px;
+    mask-size: 14px 14px;
+    transition: background-color .15s ease;
+    opacity: 1;
+}
+.related-widget-wrapper-link > img {
+    visibility: hidden;   /* keep it in the a11y tree, hide the colored art */
+    width: 14px;
+    height: 14px;
+}
+.related-widget-wrapper-link:hover,
+.related-widget-wrapper-link:focus-visible {
+    background-color: var(--ss-accent);
+}
+.related-widget-wrapper-link.change-related {
+    -webkit-mask-image: url("../admin/img/icon-changelink.svg");
+    mask-image: url("../admin/img/icon-changelink.svg");
+}
+.related-widget-wrapper-link.add-related {
+    -webkit-mask-image: url("../admin/img/icon-addlink.svg");
+    mask-image: url("../admin/img/icon-addlink.svg");
+}
+.related-widget-wrapper-link.delete-related {
+    -webkit-mask-image: url("../admin/img/icon-deletelink.svg");
+    mask-image: url("../admin/img/icon-deletelink.svg");
+}
+.related-widget-wrapper-link.view-related {
+    -webkit-mask-image: url("../admin/img/icon-viewlink.svg");
+    mask-image: url("../admin/img/icon-viewlink.svg");
 }
