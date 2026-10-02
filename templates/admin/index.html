@@ -3,6 +3,22 @@
 
 {% block title %}ShowStack — System Overview{% endblock %}
 
+{% comment %}
+Django fills the <h1> and the breadcrumb from {{ title }}, which for the index
+view is AdminSite.index_title ("Equipment Management" in planner/admin_site.py).
+This page is the system overview, so name it that -- or name it after the
+project being looked at, which is what the dashboard below is actually scoped
+to. current_project comes from planner.context_processors.user_projects.
+{% endcomment %}
+{% block content_title %}<h1>{% if current_project %}{{ current_project.name }}{% else %}System Overview{% endif %}</h1>{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; {% if current_project %}{{ current_project.name }}{% else %}System Overview{% endif %}
+</div>
+{% endblock %}
+
 {% block extrahead %}
 {{ block.super }}
 <style>

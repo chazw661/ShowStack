@@ -861,20 +861,7 @@ div.breadcrumbs a {
     color: #e0e0e0 !important;
 }
 
-/* Form inputs */
-input[type="text"], input[type="password"], input[type="email"], 
-input[type="url"], input[type="number"], input[type="tel"],
-select, textarea {
-    background-color: var(--ss-raised) !important;
-    color: #fff !important;
-    border: 1px solid var(--ss-border) !important;
-}
-
-input:focus, select:focus, textarea:focus {
-    border-color: #00ff88 !important;
-    outline: 2px solid #00ff88 !important;
-    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3) !important;
-}
+/* Form inputs: see planner/static/css/surfaces.css */
 
 /* Tables */
 #changelist, #result_list {
@@ -1159,22 +1146,7 @@ input[type="checkbox"], input[type="radio"] {
     color: #e0e0e0 !important;
 }
 
-/* History button */
-.historylink, 
-a.historylink,
-input[name="_history"],
-.submit-row .historylink,
-.object-tools .historylink {
-    background: #444 !important;
-    color: #fff !important;
-    border: 1px solid #666 !important;
-}
-
-.historylink:hover,
-a.historylink:hover {
-    background: #666 !important;
-    color: #fff !important;
-}
+/* History button: see planner/static/css/surfaces.css */
 
 .historylink::before,
 .historylink::after {
@@ -1319,11 +1291,12 @@ body, #container, .main, #content, #content-main, .content, .colMS, .colM {
 
 /* Project switcher dropdown */
 #project-switcher {
-    background: var(--ss-raised) !important;
-    color: #ecebff !important;
-    border: 1px solid var(--ss-border) !important;
-    border-radius: 6px !important;
+    background: var(--ss-field-bg) !important;
+    color: var(--ss-field-text) !important;
+    border: 1px solid var(--ss-field-border) !important;
+    border-radius: var(--ss-field-radius) !important;
 }
+#project-switcher:hover { border-color: var(--ss-field-border-hover) !important; }
 
 /* "Project Dashboard" button → violet gradient */
 .dashboard-button,
@@ -1363,12 +1336,17 @@ div.breadcrumbs a:hover { color: #c4b5fd !important; }
 }
 #nav-sidebar .app-label, #nav-sidebar .model-label, #nav-sidebar span, #nav-sidebar .caption { color: #d9d6f5 !important; }
 #nav-filter, input#nav-filter {
-    background: var(--ss-raised) !important;
-    color: #d9d6f5 !important;
-    border: 1px solid var(--ss-border) !important;
-    border-radius: 6px !important;
+    background: var(--ss-field-bg) !important;
+    color: var(--ss-field-text) !important;
+    border: 1px solid var(--ss-field-border) !important;
+    border-radius: var(--ss-field-radius) !important;
 }
-#nav-filter:focus { border-color: rgba(167,139,250,0.55) !important; outline: none !important; }
+#nav-filter:hover { border-color: var(--ss-field-border-hover) !important; }
+#nav-filter:focus {
+    border-color: var(--ss-accent) !important;
+    box-shadow: 0 0 0 2px var(--ss-accent-ring) !important;
+    outline: none !important;
+}
 
 /* Content panels / modules & fieldsets */
 .module, fieldset, .inline-group {
@@ -1409,19 +1387,7 @@ div.breadcrumbs a:hover { color: #c4b5fd !important; }
 .default, input[type="submit"].default { background: linear-gradient(135deg, #43e08f 0%, #2bb673 100%) !important; color: #06210f !important; }
 .default:hover, input[type="submit"].default:hover { background: linear-gradient(135deg, #55e89c 0%, #34c47f 100%) !important; }
 
-/* Form inputs — neutral gray by default (no indigo) across all admin pages */
-input[type="text"], input[type="password"], input[type="email"],
-input[type="url"], input[type="number"], input[type="tel"],
-select, textarea {
-    background-color: var(--ss-raised) !important;
-    color: #e0e0e0 !important;
-    border: 1px solid var(--ss-border) !important;
-}
-input:focus, select:focus, textarea:focus {
-    border-color: #4a9eff !important;
-    outline: none !important;
-    box-shadow: 0 0 0 2px rgba(74,158,255,0.20) !important;
-}
+/* Form inputs: see planner/static/css/surfaces.css */
 
 /* Generic links */
 a, a:link, a:visited { color: #8ba4ff !important; }
@@ -1524,6 +1490,7 @@ body.model-console .inline-group {
 body.model-console fieldset.aligned > h2 {
     background: var(--ss-raised) !important;
     color: #f0f0f0 !important;
+    border: 1px solid var(--ss-border) !important;
 }
 /* Revert the input/output dropdowns to their original native format
    (native chevron + dark box) instead of the flat themed select.
@@ -1535,29 +1502,13 @@ body.model-console #content .inline-group td select.variable-select {
     -moz-appearance: menulist !important;
     appearance: menulist !important;
     background-image: none !important;
-    background: var(--ss-raised) !important;
-    background-color: var(--ss-raised) !important;
-    color: #fff !important;
-    border: 1px solid var(--ss-border) !important;
-    border-radius: 4px !important;
     height: auto !important;
     min-height: 0 !important;
     padding: 2px 4px !important;
     box-sizing: border-box !important;
 }
-/* Console data fields: black fill (matching the row) with rounded edges,
-   like the original layout — not the global neutral-gray. */
-body.model-console #content input[type="text"],
-body.model-console #content input[type="number"],
-body.model-console #content input[type="url"],
-body.model-console #content input[type="email"],
-body.model-console #content input[type="tel"] {
-    background: var(--ss-raised) !important;
-    background-color: var(--ss-raised) !important;
-    color: #fff !important;
-    border: 1px solid var(--ss-border) !important;
-    border-radius: 6px !important;
-}
+/* Console data fields used to get their own fill here. They now use the
+   shared form-control styles in surfaces.css like every other form. */
 </style>
 
 <!-- Spreadsheet Navigation -->

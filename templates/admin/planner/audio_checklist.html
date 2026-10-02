@@ -182,10 +182,10 @@
     .task-input {
         width: 100%;
         padding: 6px;
-        background-color: var(--ss-raised);
-        color: #e0e0e0;
-        border: 1px solid var(--ss-border);
-        border-radius: 4px;
+        background-color: var(--ss-field-bg);
+        color: var(--ss-field-text);
+        border: 1px solid var(--ss-field-border);
+        border-radius: var(--ss-field-radius);
         transition: background-color 0.3s;
     }
 
@@ -223,10 +223,10 @@
     .stage-select, .status-select {
         width: 100%;
         padding: 6px;
-        background-color: var(--ss-raised);
-        color: #e0e0e0;
-        border: 1px solid var(--ss-border);
-        border-radius: 4px;
+        background-color: var(--ss-field-bg);
+        color: var(--ss-field-text);
+        border: 1px solid var(--ss-field-border);
+        border-radius: var(--ss-field-radius);
         cursor: pointer;
     }
 
@@ -357,24 +357,29 @@
     /* Restore the checklist's own input styling (global admin theme was
        overriding these to indigo and flattening the status colors) */
     #content .task-input {
-        background-color: var(--ss-raised) !important;
-        color: #e0e0e0 !important;
-        border: 1px solid var(--ss-border) !important;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+        border: 1px solid var(--ss-field-border) !important;
     }
+    /* the .status-* variants below keep their own status fills on purpose */
     #content .task-input.status-not-started { background-color: rgba(33,150,243,0.3) !important; border-color: #2196F3 !important; color: #e0e0e0 !important; }
     #content .task-input.status-in-progress { background-color: rgba(255,193,7,0.3) !important; border-color: #FFC107 !important; color: #e0e0e0 !important; }
     #content .task-input.status-trouble-shooting { background-color: rgba(244,67,54,0.3) !important; border-color: #f44336 !important; color: #e0e0e0 !important; }
     #content .task-input.status-complete { background-color: rgba(76,175,80,0.85) !important; border-color: #4CAF50 !important; color: #fff !important; }
     #content .task-input.status-na { background-color: rgba(117,117,117,0.3) !important; border-color: #757575 !important; color: #e0e0e0 !important; }
     #content .stage-select, #content .status-select {
-        background-color: var(--ss-raised) !important;
-        color: #e0e0e0 !important;
-        border: 1px solid var(--ss-border) !important;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+        border: 1px solid var(--ss-field-border) !important;
+    }
+    #content .task-input:hover:not(:disabled),
+    #content .stage-select:hover, #content .status-select:hover {
+        border-color: var(--ss-field-border-hover) !important;
     }
     #content .task-input:focus, #content .stage-select:focus, #content .status-select:focus {
+        border-color: var(--ss-accent) !important;
+        box-shadow: 0 0 0 2px var(--ss-accent-ring) !important;
         outline: none !important;
-        box-shadow: none !important;
-        border-color: #4a9eff !important;
     }
 
     /* Pivot: row "open space" gets the indigo gradient; text boxes stay gray.

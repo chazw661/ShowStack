@@ -1,21 +1,15 @@
-/* Override Django's light theme with dark theme */
+/* Dark theme surface values used to be redefined here as `!important` on
+ * :root, which silently beat the shared palette in css/surfaces.css -- it was
+ * the reason inline-grid rows still striped #1a1a1a / #2a2a2a. The palette now
+ * owns --body-bg / --darkened-bg / --selected-bg / --border-color /
+ * --hairline-color; only the text color, which the palette does not define,
+ * is kept here. */
 :root {
-    --body-bg: #1a1a1a !important;
-    --body-fg: #f0f0f0 !important;
-    --darkened-bg: #2a2a2a !important;
-    --selected-bg: #333333 !important;
-    --border-color: #444 !important;
-    --hairline-color: #333 !important;
+    --body-fg: #f0f0f0;
 }
 
-/* Force dark backgrounds on specific elements */
 body, #content-main, .module, #result_list tbody tr {
-    background-color: var(--body-bg) !important;
     color: var(--body-fg) !important;
-}
-
-#result_list tbody tr:nth-child(even) {
-    background-color: var(--darkened-bg) !important;
 }
 
 
