@@ -60,6 +60,10 @@ class ConsoleInputForm(forms.ModelForm):
 
     class Meta:
         model = ConsoleInput
+        # Column header for `default_record`. The model keeps its
+        # verbose_name ("Include in multitrack") and help_text, so the
+        # tooltip is unchanged and no migration is needed.
+        labels = {"default_record": "Multitrack"}
         fields = [
             'dante_number',
             'input_ch',
@@ -80,48 +84,46 @@ class ConsoleInputForm(forms.ModelForm):
 
         # Use inline styles - these WILL work
         self.fields['dante_number'].widget.attrs.update({
-            'style': 'width: 40px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['input_ch'].widget.attrs.update({
-            'style': 'width: 100px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['source'].widget.attrs.update({
-            'style': 'width: 150px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['source_b'].widget.attrs.update({
-            'style': 'width: 150px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
 
         self.fields['source_hardware'].widget.attrs.update({
-            'style': 'width: 120px;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['source_hardware_b'].widget.attrs.update({
-            'style': 'width: 120px;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['group'].widget.attrs.update({
-            'style': 'width: 40px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['dca'].widget.attrs.update({
-            'style': 'width: 40px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['mute'].widget.attrs.update({
-            'style': 'width: 40px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['direct_out'].widget.attrs.update({
-            'style': 'width: 50px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
         self.fields['omni_in'].widget.attrs.update({
-            'style': 'width: 50px; text-align: center;',
+            'style': 'text-align: center;',
             'class': 'bg-white text-black rounded-sm',
         })
 
@@ -138,6 +140,10 @@ InputFormSet = modelformset_factory(
 class ConsoleAuxOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleAuxOutput
+        # Column header for `default_record`. The model keeps its
+        # verbose_name ("Include in multitrack") and help_text, so the
+        # tooltip is unchanged and no migration is needed.
+        labels = {"default_record": "Multitrack"}
         fields = [
             'dante_number',
             'aux_number',
@@ -185,6 +191,10 @@ OutputFormSet = modelformset_factory(
 class ConsoleMatrixOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleMatrixOutput
+        # Column header for `default_record`. The model keeps its
+        # verbose_name ("Include in multitrack") and help_text, so the
+        # tooltip is unchanged and no migration is needed.
+        labels = {"default_record": "Multitrack"}
         fields = [
             'dante_number',
             'matrix_number',
@@ -230,10 +240,14 @@ MatrixOutputFormSet = modelformset_factory(
 class ConsoleStereoOutputForm(forms.ModelForm):
     class Meta:
         model = ConsoleStereoOutput
+        # Column header for `default_record`. The model keeps its
+        # verbose_name ("Include in multitrack") and help_text, so the
+        # tooltip is unchanged and no migration is needed.
+        labels = {"default_record": "Multitrack"}
         fields = ['dante_number', 'stereo_type', 'name', 'omni_out', 'default_record']
         widgets = {
             'dante_number': forms.NumberInput(attrs={
-                'style': 'width: 20px !important; text-align: center;',
+                'style': 'text-align: center;',
             }),
         }
 

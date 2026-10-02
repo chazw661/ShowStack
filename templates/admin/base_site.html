@@ -1139,10 +1139,10 @@ label, p, li, dt, dd, th, td, h1, h2, h3, h4, h5 {
     cursor: pointer !important;
 }
 
-/* Checkboxes and radio buttons */
-input[type="checkbox"], input[type="radio"] {
-    filter: invert(1) hue-rotate(180deg) !important;
-}
+/* Checkboxes and radio buttons: see planner/static/css/surfaces.css.
+   They used to be painted here with filter: invert(1) hue-rotate(180deg),
+   which Safari applies to the native control's checked glyph as well --
+   the boxes came out washed out and misaligned there but fine in Chrome. */
 
 /* Calendar widget */
 .calendarbox, .clockbox {
@@ -1191,12 +1191,8 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 
-/* Smaller Dante Number fields */
-input[name*="dante_number"] {
-    width: 60px !important;
-    max-width: 60px !important;
-    text-align: center !important;
-}
+/* Dante Number field widths: see planner/static/css/surfaces.css, which
+   sizes the column and lets the input fill it. */
 
 /*FIX FOR MAKING CELLS LARGER TO FIT IN ROWS
 
@@ -1235,18 +1231,10 @@ input[name*="dante_number"] {
 
 
 
-/* Color-coded Fixed/Variable dropdowns */
-select.bus-type-fixed {
-    background-color: #2a4a2a !important;
-    color: #90ee90 !important;
-    border-color: #90ee90 !important;
-}
-
-select.bus-type-variable {
-    background-color: #4a2a2a !important;
-    color: #ff9090 !important;
-    border-color: #ff9090 !important;
-}
+/* Fixed/Variable bus type: the select stays neutral and the value is
+   repeated as a muted badge. See the .bus-type-badge rules in
+   planner/static/css/surfaces.css. The old green/red fills made a
+   perfectly valid Variable bus read as a validation error. */
 
 /* ============================================================
    ShowStack chrome — indigo/violet "glass" theme (Issue #62)
@@ -1598,33 +1586,41 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<!-- Color-coded Fixed/Variable dropdowns -->
+<!-- Bus type: neutral select + muted text badge (styles in surfaces.css) -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    function colorBusTypeDropdowns() {
+    // The select used to be filled green for Fixed and red for Variable.
+    // Variable is an ordinary valid bus type, so a red field read as an
+    // error; the value is repeated as a muted badge instead.
+    function renderBadge(select) {
+        var badge = select.parentNode.querySelector('.bus-type-badge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'bus-type-badge';
+            select.parentNode.insertBefore(badge, select.nextSibling);
+        }
+        var value = select.value;
+        badge.textContent = value || '';
+        badge.hidden = !value;
+        badge.classList.toggle('is-variable', value === 'Variable');
+    }
+
+    function bindBusTypeSelects() {
         document.querySelectorAll('select[name*="bus_type"]').forEach(function(select) {
-            updateSelectColor(select);
-            
-            select.addEventListener('change', function() {
-                updateSelectColor(this);
-            });
+            renderBadge(select);
+            // guard against re-binding on every formset:added
+            if (!select.dataset.busTypeBound) {
+                select.dataset.busTypeBound = '1';
+                select.addEventListener('change', function() { renderBadge(this); });
+            }
         });
     }
-    
-    function updateSelectColor(select) {
-        select.classList.remove('bus-type-fixed', 'bus-type-variable');
-        if (select.value === 'Fixed') {
-            select.classList.add('bus-type-fixed');
-        } else if (select.value === 'Variable') {
-            select.classList.add('bus-type-variable');
-        }
-    }
-    
-    colorBusTypeDropdowns();
-    
+
+    bindBusTypeSelects();
+
     if (typeof django !== 'undefined' && django.jQuery) {
         django.jQuery(document).on('formset:added', function() {
-            setTimeout(colorBusTypeDropdowns, 100);
+            setTimeout(bindBusTypeSelects, 100);
         });
     }
 });

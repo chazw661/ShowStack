@@ -1,42 +1,35 @@
-/* Stereo Output dante_number field - holds 3 digits */
+/* Per-grid input widths used to be pinned here in pixels (70px / 50px /
+ * 150px) with id-scoped `!important` selectors. An id outranks the
+ * class-based column rules in css/surfaces.css no matter the load order,
+ * so these won every time: a 70px input inside a 72px cell with 4px of
+ * padding each side overflowed its own column, and Safari and Chrome
+ * resolved that overflow differently.
+ *
+ * Column widths now live in one place -- css/surfaces.css -- and the
+ * controls simply fill the cell they are given. */
 #consolestereooutput_set-group .field-dante_number input[type="number"],
-.inline-group#consolestereooutput_set-group .field-dante_number input {
-    width: 70px !important;
-    max-width: 70px !important;
-    min-width: 70px !important;
-    text-align: center !important;
-}
-
-/* Stereo Output omni_out field - holds single digit */
+.inline-group#consolestereooutput_set-group .field-dante_number input,
 #consolestereooutput_set-group .field-omni_out input[type="text"],
 #consolestereooutput_set-group .field-omni_out input,
-.inline-group#consolestereooutput_set-group .field-omni_out input {
-    width: 50px !important;
-    max-width: 50px !important;
-    min-width: 50px !important;
-    text-align: center !important;
-}
-
-
-/* Console Input dante_number field - holds 3 digits */
+.inline-group#consolestereooutput_set-group .field-omni_out input,
 #consoleinput_set-group .field-dante_number input[type="number"],
 .inline-group#consoleinput_set-group .field-dante_number input {
-    width: 70px !important;
-    max-width: 70px !important;
-    min-width: 70px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
     text-align: center !important;
 }
 
+#consoleinput_set-group .field-source_hardware select,
+.inline-group#consoleinput_set-group .field-source_hardware select,
+#consoleinput_set-group .field-source_hardware_b select,
+.inline-group#consoleinput_set-group .field-source_hardware_b select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
 
 /* Completely hide all Add buttons in sidebar */
 #nav-sidebar .addlink {
     display: none !important;
-}
-
-/* Console Input source_hardware dropdown - narrower width */
-#consoleinput_set-group .field-source_hardware select,
-.inline-group#consoleinput_set-group .field-source_hardware select {
-    width: 150px !important;
-    max-width: 150px !important;
-    min-width: 150px !important;
 }
