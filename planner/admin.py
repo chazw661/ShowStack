@@ -2405,9 +2405,6 @@ class P1InputInline(admin.TabularInline):
         qs = super().get_queryset(request)
         return qs.order_by('input_type', 'channel_number')
     
-    class Media:
-        js = ('admin/js/p1_input_admin.js',)
-
 
 class P1OutputInline(admin.TabularInline):
     model = P1Output
@@ -2676,11 +2673,6 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
             return True
         return super().has_delete_permission(request, obj)    
     
-    class Media:
-        css = {
-            'all': ('admin/css/p1_processor_admin.css',)
-        }
-        js = ('admin/js/p1_input_admin.js',)
 
 
         # ========== GALAXY Processor Admin ==========
@@ -2701,9 +2693,6 @@ class GalaxyInputInline(admin.TabularInline):
         qs = super().get_queryset(request)
         return qs.order_by('input_type', 'channel_number')
     
-    class Media:
-        js = ('admin/js/galaxy_input_admin.js',)
-
 
 class GalaxyOutputInline(admin.TabularInline):
     model = GalaxyOutput
@@ -2967,11 +2956,6 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
             return True
         return super().has_delete_permission(request, obj)    
     
-    class Media:
-        css = {
-            'all': ('admin/css/galaxy_processor_admin.css',)
-        }
-        js = ('admin/js/galaxy_input_admin.js',)
 
 
 
@@ -6401,20 +6385,10 @@ class SpeakerCabinetAdmin(BaseEquipmentAdmin):
 
 
 
-#-----Dark Theme-----
-
-class DarkThemeAdminMixin:
-    class Media:
-        css = {
-            'all': (
-                'admin/css/custom.css',  # Your existing custom CSS
-                'audiopatch/css/dark_theme.css',  # The new dark theme
-            )
-        }
-        js = (
-            'audiopatch/js/dark_theme.js',
-            
-        )
+# The DarkThemeAdminMixin that used to sit here was never applied to any
+# ModelAdmin, and all three files it declared (admin/css/custom.css,
+# audiopatch/css/dark_theme.css, audiopatch/js/dark_theme.js) are absent.
+# Admin theming lives in planner/static/css/surfaces.css.
 
 
 
