@@ -1,0 +1,142 @@
+{% extends "admin/delete_confirmation.html" %}
+{% comment %}
+Typed-name confirmation for deleting a Mic Session.
+
+Deleting a session takes every mic assignment, presenter slot, note and photo
+under it. It used to be a trash icon in the session header on the tracker, 40px
+from the A1/A2 tabs, on a row that gets tapped all day to collapse and expand
+sessions -- one mis-tap from losing a day's work, behind a browser confirm()
+that is dismissed reflexively.
+
+The delete now lives only here, in the session's Settings, and this page makes
+you type the session's name before the button will submit. Django's own summary
+of what is about to be deleted is left exactly as it is above the gate.
+
+This is a guard against a mis-tap, not an access control -- who may delete is
+decided by BaseEquipmentAdmin.has_delete_permission, server side. Hence a
+JavaScript gate: it is applied on load, so a browser without JS simply gets
+Django's normal confirmation page rather than an unusable one.
+{% endcomment %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+    #mtt-delete-gate {
+        margin: 18px 0;
+        padding: 14px 16px;
+        border: 1px solid var(--ss-field-border, #42454d);
+        border-left: 3px solid #ff6b6b;
+        border-radius: 5px;
+        background: var(--ss-surface, #1e1f23);
+        max-width: 560px;
+    }
+    #mtt-delete-gate label {
+        display: block;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ss-field-text, #e8e8ea);
+        margin-bottom: 9px;
+    }
+    #mtt-delete-gate code {
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--ss-raised, #26282d);
+    }
+    #mtt-delete-name {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        font-size: 14px;
+        font-family: inherit;
+        border-radius: 4px;
+        background: var(--ss-field-bg, #2a2c31);
+        border: 1px solid var(--ss-field-border, #42454d);
+        color: var(--ss-field-text, #e8e8ea);
+    }
+    #mtt-delete-hint { font-size: 12px; margin-top: 8px; color: #8b8f98; }
+    #mtt-delete-hint.ready { color: #4fae6a; }
+    /* The disabled state has to read as "not yet", not as "broken". */
+    .mtt-delete-blocked { opacity: 0.45; cursor: not-allowed !important; }
+</style>
+{% endblock %}
+
+{% block content %}{{ block.super }}
+<script>
+(function () {
+    'use strict';
+
+    var EXPECTED = "{{ object.name|escapejs }}";
+
+    // The confirmation form is the one carrying the hidden `post=yes` input;
+    // the admin page also has a logout form, so don't just take the first.
+    var marker = document.querySelector('input[name="post"][value="yes"]');
+    if (!marker) return;
+    var form = marker.form;
+    if (!form) return;
+
+    var submit = form.querySelector('input[type="submit"], button[type="submit"]');
+    if (!submit) return;
+
+    var gate = document.createElement('div');
+    gate.id = 'mtt-delete-gate';
+
+    var label = document.createElement('label');
+    label.setAttribute('for', 'mtt-delete-name');
+    label.appendChild(document.createTextNode('This removes the session and every mic assignment, presenter and note under it. Type the session name '));
+    var code = document.createElement('code');
+    code.textContent = EXPECTED;
+    label.appendChild(code);
+    label.appendChild(document.createTextNode(' to confirm.'));
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'mtt-delete-name';
+    input.autocomplete = 'off';
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('spellcheck', 'false');
+    input.placeholder = 'Session name';
+
+    var hint = document.createElement('div');
+    hint.id = 'mtt-delete-hint';
+    hint.textContent = 'Delete stays locked until the name matches.';
+
+    gate.appendChild(label);
+    gate.appendChild(input);
+    gate.appendChild(hint);
+    submit.parentNode.insertBefore(gate, submit);
+
+    function matches() {
+        // Trimmed, but case-sensitive: the point is to make you read the name,
+        // and session names differ by case more often than they differ at all
+        // ("GS 1" / "gs 1" are two sessions on the same day).
+        return input.value.trim() === EXPECTED.trim();
+    }
+
+    function sync() {
+        var ok = matches();
+        submit.disabled = !ok;
+        submit.classList.toggle('mtt-delete-blocked', !ok);
+        hint.classList.toggle('ready', ok);
+        hint.textContent = ok
+            ? 'Name matches — Delete is now enabled.'
+            : 'Delete stays locked until the name matches.';
+    }
+
+    input.addEventListener('input', sync);
+
+    // Enter in the field must not submit the form around the gate.
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); sync(); }
+    });
+
+    // Belt and braces: if anything else submits the form while the typed name
+    // is wrong, stop it here rather than relying on the disabled attribute.
+    form.addEventListener('submit', function (e) {
+        if (!matches()) { e.preventDefault(); input.focus(); }
+    });
+
+    sync();
+    input.focus();
+})();
+</script>
+{% endblock %}

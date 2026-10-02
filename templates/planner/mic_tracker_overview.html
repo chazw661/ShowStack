@@ -11,19 +11,9 @@
 </div>
 {% endblock %}
 
-{% block extrahead %}
-    {{ block.super }}
-    {% comment %}
-    Same pre-paint reasoning as the Tracker page, and the same localStorage
-    key, so Show Mode carries across the Tracker/Overview tabs rather than
-    being set twice.
-    {% endcomment %}
-    <script src="{% static 'admin/js/mic_tracker_show_mode.js' %}"></script>
-{% endblock %}
-
 {% block extrastyle %}
     {{ block.super }}
-    {# Colour tokens for both Mic Tracker pages (palette + Show Mode). #}
+    {# Colour tokens shared by both Mic Tracker pages. #}
     <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
     <style>
     body { background: var(--bg-base); color: var(--text-primary); }
@@ -146,7 +136,7 @@
     .mto-edit-select { cursor: pointer; }
     .mto-edit-select option { background: var(--bg-raised); color: var(--text-primary); }
     .mto-edit-input::placeholder { color: var(--text-dim); }
-    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: var(--mtt-micd-badge); }
+    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: var(--text-primary); }
     .mto-dim { color: var(--text-secondary); }
 
     .mto-row td { padding: 6px 5px; border-bottom: 1px solid var(--border); vertical-align: middle;
@@ -154,57 +144,87 @@
     .mto-row:last-child td { border-bottom: 0; }
     .mto-row-micd { background: transparent; }
 
-    .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); white-space: nowrap; }
+    /* RF# and presenter name +20%, matching the Tracker page. */
+    /* !important throughout: these are <td>s, and base_site.html paints every
+       th/td #e0e0e0 !important across the admin. */
+    .mto-rf { font-family: monospace; font-size: 15px; font-weight: 700; text-align: center; color: var(--text-primary) !important; white-space: nowrap; }
+    /* The one exact green, in the same two places as on the Tracker. */
+    .mto-row-micd .mto-rf { color: var(--accent-green) !important; }
     .mto-pres-cell { border-left: 1px solid var(--border); }
-    .mto-presenter { color: var(--mtt-text-strong); font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+    .mto-presenter { color: var(--mtt-text-strong); font-size: 17px; font-weight: 700; letter-spacing: 0.01em; }
     .mto-pres-input {
         width: 100%; box-sizing: border-box;
         background: var(--bg-raised); color: var(--mtt-text-strong);
         border: 1px solid var(--border); border-radius: 4px;
-        font-size: 14px; font-weight: 700; font-family: inherit;
+        font-size: 17px; font-weight: 700; font-family: inherit;
         padding: 5px 8px; letter-spacing: 0.01em;
         transition: border-color 0.12s;
     }
     .mto-pres-input:focus { border-color: var(--accent-blue); outline: none; }
     .mto-pres-input::placeholder { color: var(--text-dim); font-weight: 400; font-style: italic; }
-    .mto-pres-input.mto-saved-flash { border-color: var(--mtt-micd-badge); }
+    .mto-pres-input.mto-saved-flash { border-color: var(--text-primary); }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
     .mto-dash { color: var(--text-dim); }
     .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
+    /* Mic'd ON: the same solid fill as the Tracker's toggles, not a tinted
+       badge. Read-only rows (viewers) show the identical appearance -- the
+       state must look the same whoever is looking at it. */
     .mto-micd-on {
         display: inline-block; white-space: nowrap;
-        background: rgba(var(--mtt-rgb-micd-badge), 0.16); color: var(--mtt-micd-badge);
-        border: 1px solid rgba(var(--mtt-rgb-micd-badge), 0.5);
-        font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
-        padding: 2px 7px; border-radius: 4px;
+        background: var(--accent-green); color: var(--mtt-micd-fg);
+        border: 1px solid var(--accent-green);
+        font-weight: 800; font-size: 10px; letter-spacing: 0.04em;
+        padding: 3px 8px; border-radius: 4px;
     }
     .mto-micd-off { color: var(--text-dim); }
-    /* Interactive Mic'd toggle — mirrors the A2 button, styled like the badge. */
+    /* Interactive Mic'd toggle — mirrors the A2 button exactly, including
+       the fact that hover, focus and active change nothing. */
     .mto-micd-btn {
         font-family: inherit; cursor: pointer; white-space: nowrap;
         background: transparent; border: 1px solid var(--border-bright);
-        font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
-        padding: 3px 6px; border-radius: 4px; color: var(--text-dim);
-        transition: background 0.12s, border-color 0.12s, color 0.12s;
+        font-weight: 800; font-size: 10px; letter-spacing: 0.04em;
+        padding: 4px 8px; min-height: 28px; border-radius: 4px; color: var(--text-dim);
+        transition: none; -webkit-appearance: none; appearance: none;
     }
-    .mto-micd-btn.on { background: rgba(var(--mtt-rgb-micd-badge), 0.16); color: var(--mtt-micd-badge); border-color: rgba(var(--mtt-rgb-micd-badge), 0.5); }
-    .mto-micd-btn.off:hover { color: var(--mtt-micd-badge); border-color: rgba(var(--mtt-rgb-micd-badge), 0.5); background: rgba(var(--mtt-rgb-micd-badge), 0.08); }
-    .mto-micd-btn.on:hover { background: rgba(var(--mtt-rgb-micd-badge), 0.28); }
-    .mto-micd-btn:disabled { cursor: default; border-color: transparent; }
-    .mto-micd-btn:disabled.off { color: var(--text-dim); }
-    .mto-micd-btn:disabled:hover { background: transparent; border-color: transparent; }
-    .mto-micd-btn:disabled.on:hover { background: rgba(var(--mtt-rgb-micd-badge), 0.16); border-color: rgba(var(--mtt-rgb-micd-badge), 0.5); }
+    .mto-micd-btn.off,
+    .mto-micd-btn.off:hover,
+    .mto-micd-btn.off:focus,
+    .mto-micd-btn.off:active,
+    .mto-micd-btn:disabled.off,
+    .mto-micd-btn:disabled.off:hover {
+        background: transparent; color: var(--text-dim);
+        border-color: var(--border-bright); box-shadow: none;
+    }
+    .mto-micd-btn.on,
+    .mto-micd-btn.on:hover,
+    .mto-micd-btn.on:focus,
+    .mto-micd-btn.on:active,
+    .mto-micd-btn:disabled.on,
+    .mto-micd-btn:disabled.on:hover {
+        background: var(--accent-green); color: var(--mtt-micd-fg);
+        border-color: var(--accent-green); box-shadow: none;
+    }
+    .mto-micd-btn:disabled { cursor: default; }
     .mto-empty-large { padding: 48px 24px; text-align: center; margin: 24px; border: 1px dashed var(--border-bright); border-radius: 6px; }
     .mto-empty-large-title { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; }
     .mto-empty-large-sub { font-size: 12px; color: var(--text-dim); }
 
-    /* Mic type badge (reused visually from the A1 tab). */
+    /* Mic type: a neutral label, matching the A1 tab. */
     .mto-type-badge {
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 700;
-        background: rgba(var(--mtt-rgb-white), 0.06); color: var(--text-secondary);
+        padding: 2px 0; font-size: 11px; font-weight: 600;
+        background: transparent; color: var(--text-secondary);
         white-space: nowrap; max-width: 100%;
     }
+
+    /* Unassigned rows sit back but keep every field, and come forward on
+       hover or focus so nothing being read or edited is ever dimmed. */
+    .mto-row:has(.mto-unassigned),
+    .mto-row:has(.mto-pres-input[value=""]) { opacity: 0.6; transition: opacity 0.12s; }
+    .mto-row:has(.mto-unassigned):hover,
+    .mto-row:has(.mto-pres-input[value=""]):hover,
+    .mto-row:has(.mto-unassigned):focus-within,
+    .mto-row:has(.mto-pres-input[value=""]):focus-within { opacity: 1; }
     </style>
 {% endblock %}
 
@@ -226,15 +246,7 @@
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
             <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement and Mic'd are editable here.</div>
         </div>
-        <div class="mto-header-actions">
-            {% comment %}
-            .btn-mtt lives in the Tracker page's own <style>; this button is
-            styled from mic_tracker.css so both pages get one appearance.
-            {% endcomment %}
-            <button type="button" class="mtt-show-mode-btn"
-                    onclick="toggleShowMode()" aria-pressed="false"
-                    title="Show Mode: stripped-back low-light layout for a dark FOH position">◉ Show Mode</button>
-        </div>
+        <div class="mto-header-actions"></div>
     </div>
 
     <div class="mtt-toplevel-tabs">

@@ -13,7 +13,7 @@
 
 {% block extrastyle %}
     {{ block.super }}
-    {# Colour tokens for both Mic Tracker pages (palette + Show Mode). #}
+    {# Colour tokens shared by both Mic Tracker pages. #}
     <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
     <style>
     #mic-tracker-root * { box-sizing: border-box; }
@@ -34,11 +34,16 @@
         font-size: 16px; font-weight: 700; letter-spacing: 0.12em;
         text-transform: uppercase; color: var(--accent-blue); white-space: nowrap;
     }
-    .mtt-show-meta { display: flex; gap: 24px; flex: 1; flex-wrap: wrap; }
+    .mtt-show-meta { display: flex; gap: 24px; flex: 1 1 320px; flex-wrap: wrap; min-width: 0; }
     .mtt-meta-item { display: flex; flex-direction: column; gap: 2px; }
-    .mtt-meta-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+    .mtt-meta-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
     .mtt-meta-value { font-size: 13px; color: var(--text-secondary); }
-    .mtt-header-actions { display: flex; gap: 8px; align-items: center; }
+    /* The action strip is six buttons wide. Without wrapping it simply ran
+       off the right edge below ~1200px -- and with the admin sidebar eating
+       ~220px, an iPad landscape content column is ~800px, so Export and
+       Listen Setup were unreachable. It now wraps within itself, and the
+       strip as a whole drops to its own line before it has to. */
+    .mtt-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 
     .btn-mtt {
         padding: 7px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
@@ -133,8 +138,9 @@
     .session-actions { display: flex; gap: 8px; align-items: center; padding-left: 12px; border-left: 1px solid var(--border); height: 44px; margin-left: auto; }
     .session-panel { display: none; }
     .session-panel.active { display: block; }
-    .mtt-session-stats { font-size: 10px; color: var(--text-dim); padding: 6px 14px; background: var(--bg-base); border-top: 1px solid var(--border); display: flex; gap: 16px; }
-    .mtt-session-stats strong { color: var(--accent-green); }
+    .mtt-session-stats { font-size: 11px; color: var(--text-dim); padding: 6px 14px; background: var(--bg-base); border-top: 1px solid var(--border); display: flex; gap: 16px; }
+    /* A count, not a cue. Green belongs to the Mic'd control alone. */
+    .mtt-session-stats strong { color: var(--text-primary); }
 
     .mtt-dropdown { position: relative; display: inline-block; }
     .mtt-dropdown-menu { display: none; position: absolute; right: 0; top: 100%; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 185px; z-index: 200; box-shadow: 0 8px 24px rgba(var(--mtt-rgb-black), 0.4); overflow: hidden; }
@@ -152,43 +158,79 @@
     }
     .a1-table thead th.th-center { text-align: center; }
 
-    /* Primary rows */
+    /* Primary rows.
+     *
+     * No row tint for mic'd. A tint on every mic'd row is most of the table
+     * glowing at once, and it said "mic'd" a third time on a row that
+     * already says it with the button and the RF#. Hover is the same
+     * neutral wash whatever the state, so hovering a mic'd row no longer
+     * flashes green.
+     */
     .a1-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-    .a1-row:hover { background: rgba(var(--mtt-rgb-white), 0.02); }
+    .a1-row:hover,
+    .a1-row.row-micd:hover { background: rgba(var(--mtt-rgb-white), 0.03); }
     .a1-row.row-micd { background: var(--micd-bg); }
-    .a1-row.row-micd:hover { background: rgba(var(--mtt-rgb-green), 0.11); }
     .a1-row td { padding: 9px 12px; vertical-align: middle; }
 
     /* Expanded slot sub-rows */
     .a1-slot-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-    .a1-slot-row:hover { background: rgba(var(--mtt-rgb-white), 0.02); }
+    .a1-slot-row:hover,
+    .a1-slot-row.row-micd:hover { background: rgba(var(--mtt-rgb-white), 0.03); }
     .a1-slot-row.row-micd { background: var(--micd-bg); }
-    .a1-slot-row.row-micd:hover { background: rgba(var(--mtt-rgb-green), 0.11); }
     .a1-slot-row td { padding: 9px 12px; vertical-align: middle; }
-    .a1-slot-row .a1-rf { color: var(--text-dim) !important; font-size: 14px !important; }
+    .a1-slot-active { color: var(--text-primary) !important; font-weight: 700; }
+
+    /* RF# +20% (20 -> 24, sub-rows 14 -> 17). With the presenter name, the
+       two things read from a step back.
+     *
+     * Every colour here is !important because base_site.html paints
+     * `th, td { color: #e0e0e0 !important }` across the whole admin. RF# is a
+     * <td>, so without this the mic'd green silently loses to it -- which is
+     * exactly what happened the first time round: the fill went green, the
+     * number stayed grey, and nothing in the stylesheet looked wrong.
+     */
+    .a1-rf { width: 62px; font-size: 24px; font-weight: 800; color: var(--text-primary) !important; }
+    .a1-slot-row .a1-rf { color: var(--text-dim) !important; font-size: 17px !important; }
+
+    /* Mic'd RF#: the one exact green, and the only place besides the button
+       that it appears. */
+    .a1-row.row-micd .a1-rf,
     .a1-slot-row.row-micd .a1-rf { color: var(--accent-green) !important; }
-    .a1-slot-active { color: var(--accent-blue) !important; }
 
-    .a1-rf { width: 56px; font-size: 20px; font-weight: 800; color: var(--text-primary); }
-    .a1-row.row-micd .a1-rf { color: var(--accent-green); }
+    /* Column headers are labels; the same blanket rule was pulling them up to
+       #e0e0e0, brighter than the data underneath them. */
+    .a1-table thead th { color: var(--text-dim) !important; }
 
-    .mic-type-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
-    .mic-type-badge .type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .type-HH        { background: rgba(var(--mtt-rgb-blue), 0.12);  color: var(--accent-blue); }  .type-HH       .type-dot { background: var(--accent-blue); }
-    .type-LAV       { background: rgba(var(--mtt-rgb-amber), 0.12);   color: var(--accent-amber); }  .type-LAV      .type-dot { background: var(--accent-amber); }
-    .type-HEADSET   { background: rgba(var(--mtt-rgb-purple), 0.12); color: rgb(var(--mtt-rgb-purple)); }  .type-HEADSET  .type-dot { background: rgb(var(--mtt-rgb-purple)); }
-    .type-PODIUM    { background: rgba(var(--mtt-rgb-green), 0.12);   color: var(--accent-green); }  .type-PODIUM   .type-dot { background: var(--accent-green); }
-    .type-BOOM      { background: rgba(var(--mtt-rgb-red), 0.12);   color: var(--accent-red); }  .type-BOOM     .type-dot { background: var(--accent-red); }
-    .type-BOUNDARY  { background: rgba(var(--mtt-rgb-teal), 0.12);   color: rgb(var(--mtt-rgb-teal)); }  .type-BOUNDARY .type-dot { background: rgb(var(--mtt-rgb-teal)); }
-    .type-GOOSENECK { background: rgba(var(--mtt-rgb-orange), 0.12);   color: rgb(var(--mtt-rgb-orange)); }  .type-GOOSENECK .type-dot { background: rgb(var(--mtt-rgb-orange)); }
-    .type-COMBO     { background: rgba(var(--mtt-rgb-pink), 0.12);   color: rgb(var(--mtt-rgb-pink)); }  .type-COMBO    .type-dot { background: rgb(var(--mtt-rgb-pink)); }
-    .type-empty     { background: var(--bg-raised);       color: var(--text-dim); }  .type-empty .type-dot { background: var(--text-dim); }
-    .type-INSTRUMENT { background: rgba(var(--mtt-rgb-green), 0.12); color: var(--accent-green); } .type-INSTRUMENT .type-dot { background: var(--accent-green); }
+    /* Mic type is reference data, not a status.
+     *
+     * It used to be nine hue-coded chips -- blue HH, amber LAV, purple
+     * HEADSET, and two of them (PODIUM, INSTRUMENT) in the same green as
+     * Mic'd, so a column of mic types read as a column of states. One
+     * neutral label for all nine: still legible, no longer competing with
+     * the one colour on the page that means something.
+     *
+     * The dot carried no information once the chips lost their hues, so it
+     * goes rather than becoming nine identical grey dots.
+     */
+    .mic-type-badge { display: inline-flex; align-items: center; padding: 3px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: var(--text-secondary); background: transparent; }
+    .mic-type-badge .type-dot { display: none; }
+    .type-empty { color: var(--text-dim); }
 
-    .a1-presenter-primary { font-size: 15px; font-weight: 600; color: var(--text-primary); }
-    .a1-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
-    .a1-slot-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
-    .a1-unassigned { font-size: 12px; color: var(--text-dim); font-style: italic; }
+    /* Presenter name +20% (15 -> 18). It reads the same whatever the mic'd
+       state: the name is who, not whether. */
+    .a1-presenter-primary { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+    .a1-unassigned { font-size: 14px; color: var(--mtt-text-placeholder); font-style: italic; }
+
+    /* An unassigned slot still carries every field -- it is where the next
+       presenter gets typed -- but it is not something to read past on the
+       way to a name, so it sits back. Hover and focus bring it fully
+       forward, so nothing being read or edited is ever dimmed. */
+    .a1-row:has(.a1-unassigned),
+    .a1-slot-row:has(.a1-unassigned) { opacity: 0.6; transition: opacity 0.12s; }
+    .a1-row:has(.a1-unassigned):hover,
+    .a1-slot-row:has(.a1-unassigned):hover,
+    .a1-row:has(.a1-unassigned):focus-within,
+    .a1-slot-row:has(.a1-unassigned):focus-within { opacity: 1; }
     .a1-shared-tag {
         display: inline-block; margin-left: 8px; font-size: 9px;
         background: var(--bg-raised); color: var(--accent-blue);
@@ -198,16 +240,45 @@
     }
     .a1-shared-tag:hover { background: rgba(var(--mtt-rgb-blue), 0.15); }
 
-    .a1-micd-cell { width: 80px; text-align: center; }
+    /* ── Mic'd toggle ───────────────────────────────────────────────────
+     * ON  = a solid #4fae6a fill with a near-black label.
+     * OFF = a grey outline with no fill at all.
+     *
+     * Fill-vs-outline is the primary cue and brightness the second, so the
+     * state survives a glance from a step back, a dim screen, or a colour
+     * vision deficiency -- none of which green-vs-grey alone would.
+     *
+     * Every state is pinned to the same two appearances. Previously hover
+     * inherited a generic opacity fade and Safari's clicked-button styling
+     * shifted the fill, so the green an A1 sees mid-show depended on where
+     * the pointer happened to be. The glow is gone with it: a shadow the
+     * colour of the fill just makes the edge of the one important control
+     * mushy.
+     */
+    .a1-micd-cell { width: 92px; text-align: center; }
     .a1-micd-toggle {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 58px; height: 28px; border-radius: 4px; font-size: 11px;
-        font-weight: 800; letter-spacing: 0.1em; cursor: pointer; border: none;
-        transition: all 0.15s; text-transform: uppercase; font-family: inherit;
+        min-width: 72px; min-height: 34px; border-radius: 4px; font-size: 12px;
+        font-weight: 800; letter-spacing: 0.1em; cursor: pointer;
+        transition: none; text-transform: uppercase; font-family: inherit;
+        box-shadow: none; -webkit-appearance: none; appearance: none;
     }
-    .a1-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
-    .a1-micd-toggle.on  { background: var(--accent-green); color: var(--mtt-text-on-accent); box-shadow: 0 0 12px rgba(var(--mtt-rgb-green), 0.4); }
+    .a1-micd-toggle.off,
+    .a1-micd-toggle.off:hover,
+    .a1-micd-toggle.off:focus,
+    .a1-micd-toggle.off:active {
+        background: transparent; color: var(--text-dim);
+        border: 1px solid var(--border-bright); box-shadow: none;
+    }
+    .a1-micd-toggle.on,
+    .a1-micd-toggle.on:hover,
+    .a1-micd-toggle.on:focus,
+    .a1-micd-toggle.on:active {
+        background: var(--accent-green); color: var(--mtt-micd-fg);
+        border: 1px solid var(--accent-green); box-shadow: none;
+    }
 
+    .a1-type-cell { width: 120px; }
     .a1-notes-cell { width: 200px; }
     .a1-notes-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary); font-size: 11px; font-family: inherit; padding: 2px 4px; outline: none; transition: border-color 0.15s; }
     .a1-notes-input:focus { border-bottom-color: var(--border-bright); }
@@ -222,16 +293,19 @@
        on wider desktops. */
     .a2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; padding: 14px; }
     .a2-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
-    .a2-card.card-micd { border-color: var(--micd-border); box-shadow: 0 0 0 1px rgba(var(--mtt-rgb-green), 0.1) inset; }
+    /* A mic'd card is not also an outlined card and not also a tinted card.
+       Only the badge digits and the Mic'd button change. */
+    .a2-card.card-micd { border-color: var(--micd-border); box-shadow: none; }
     .a2-presenter-details { flex: 1; min-width: 0; overflow: visible; }
-    .a2-card.card-micd .a2-card-header { background: rgba(var(--mtt-rgb-green), 0.06); border-bottom-color: var(--micd-border); }
-    .a2-rf-badge { width: 40px; height: 40px; border-radius: 5px; background: var(--bg-raised); border: 1px solid var(--border-bright); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
-    .a2-card.card-micd .a2-rf-badge { background: rgba(var(--mtt-rgb-green), 0.15); border-color: var(--accent-green); color: var(--accent-green); }
-    .a2-card.group-blue   { border-left: 4px solid var(--accent-blue); }
-    .a2-card.group-amber  { border-left: 4px solid var(--accent-amber); }
-    .a2-card.group-red    { border-left: 4px solid var(--accent-red); }
-    .a2-card.group-purple { border-left: 4px solid rgb(var(--mtt-rgb-purple)); }
-    .a2-card.group-teal   { border-left: 4px solid rgb(var(--mtt-rgb-teal)); }
+    .a2-card.card-micd .a2-card-header { background: var(--mtt-bg-session-header); border-bottom-color: var(--border); }
+    /* RF# +20% (17 -> 20), box grown to match. */
+    .a2-rf-badge { width: 46px; height: 46px; border-radius: 5px; background: var(--bg-raised); border: 1px solid var(--border-bright); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
+    .a2-card.card-micd .a2-rf-badge { background: var(--bg-raised); border-color: var(--border-bright); color: var(--accent-green); }
+    .a2-card.group-blue   { border-left: 4px solid var(--mtt-group-blue); }
+    .a2-card.group-amber  { border-left: 4px solid var(--mtt-group-amber); }
+    .a2-card.group-red    { border-left: 4px solid var(--mtt-group-red); }
+    .a2-card.group-purple { border-left: 4px solid var(--mtt-group-purple); }
+    .a2-card.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
     .a2-card-meta { flex: 1; }
     .a2-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--mtt-bg-session-header); border-bottom: 1px solid var(--border); justify-content: space-between; }
     .a2-header-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -241,12 +315,20 @@
     .a2-listen-btn.listen-active { background: var(--accent-blue); color: var(--mtt-text-inverse); border-color: var(--accent-blue); box-shadow: 0 0 14px rgba(var(--mtt-rgb-blue), 0.4); }
     .a2-listen-icon { font-size: 13px; line-height: 1; }
     .a2-listen-ch { width: 100%; }
-    .a2-micd-toggle { padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none; transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit; }
-    .a2-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
-    .a2-micd-toggle.on  { background: var(--accent-green); color: var(--mtt-text-on-accent); box-shadow: 0 0 16px rgba(var(--mtt-rgb-green), 0.45); }
+    /* Same two appearances as the A1 toggle, pinned across every state. */
+    .a2-micd-toggle { padding: 9px 18px; min-height: 38px; border-radius: 5px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: none; display: flex; align-items: center; gap: 7px; font-family: inherit; -webkit-appearance: none; appearance: none; }
+    .a2-micd-toggle.off,
+    .a2-micd-toggle.off:hover,
+    .a2-micd-toggle.off:focus,
+    .a2-micd-toggle.off:active { background: transparent; color: var(--text-dim); border: 1px solid var(--border-bright); box-shadow: none; }
+    .a2-micd-toggle.on,
+    .a2-micd-toggle.on:hover,
+    .a2-micd-toggle.on:focus,
+    .a2-micd-toggle.on:active { background: var(--accent-green); color: var(--mtt-micd-fg); border: 1px solid var(--accent-green); box-shadow: none; }
     .a2-micd-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-    .a2-micd-toggle.on .a2-micd-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
-    @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.6} }
+    /* The pulse made the one element that must read instantly also the only
+       moving thing on the page. The fill already says it. */
+    .a2-micd-toggle.on .a2-micd-dot { animation: none; }
 
     .a2-presenter-block { display: flex; padding: 14px; border-bottom: 1px solid var(--border); }
     .a2-presenter-block:last-of-type { border-bottom: none; }
@@ -266,8 +348,15 @@
     .a2-presenter-details { flex: 1; min-width: 0; }
     .a2-presenter-name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; position: relative; }
     .a2-presenter-role { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
-    .a2-presenter-name { font-size: 15px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .a2-unassigned { color: var(--mtt-text-placeholder); font-style: italic; font-size: 13px; }
+    /* Presenter name +20% (15 -> 18), matching the A1 table. */
+    .a2-presenter-name { font-size: 18px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .a2-unassigned { color: var(--mtt-text-placeholder); font-style: italic; font-size: 15px; }
+
+    /* Same treatment as an unassigned A1 row: every field is still there,
+       it just sits back until you touch it. */
+    .a2-card:has(.a2-presenter-input[value=""]) { opacity: 0.6; transition: opacity 0.12s; }
+    .a2-card:has(.a2-presenter-input[value=""]):hover,
+    .a2-card:has(.a2-presenter-input[value=""]):focus-within { opacity: 1; }
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
     .a2-setting-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mtt-text-label); margin-bottom: 1px; }
@@ -338,9 +427,9 @@
         #mic-tracker-update-banner, #mtt-banner-refresh { animation: none; }
     }
 
-    .a2-presenter-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-primary); font-size: 15px; font-weight: 600; font-family: inherit; width: 100%; outline: none; padding: 2px 0; transition: border-color 0.15s; }
+    .a2-presenter-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-primary); font-size: 18px; font-weight: 600; font-family: inherit; width: 100%; outline: none; padding: 2px 0; transition: border-color 0.15s; }
     .a2-presenter-input:focus { border-bottom-color: var(--border-bright); }
-    .a2-presenter-input::placeholder { color: var(--mtt-text-placeholder); font-style: italic; font-weight: 400; font-size: 13px; }
+    .a2-presenter-input::placeholder { color: var(--mtt-text-placeholder); font-style: italic; font-weight: 400; font-size: 15px; }
 
     .presenter-dropdown { position: absolute; top: auto; bottom: auto; left: 0; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 220px; z-index: 1000; display: none; max-height: 160px; overflow-y: auto; padding-top: 4px; }
     .presenter-dropdown.open { display: block; }
@@ -349,25 +438,25 @@
     .presenter-dd-add { color: var(--accent-blue); border-top: 1px solid var(--border); }
 
     /* ── Group colors ── */
-    .a1-row.group-blue   { border-left: 4px solid var(--accent-blue); }
-    .a1-row.group-amber  { border-left: 4px solid var(--accent-amber); }
-    .a1-row.group-red    { border-left: 4px solid var(--accent-red); }
-    .a1-row.group-purple { border-left: 4px solid rgb(var(--mtt-rgb-purple)); }
-    .a1-row.group-teal   { border-left: 4px solid rgb(var(--mtt-rgb-teal)); }
-    .a1-slot-row.group-blue   { border-left: 4px solid var(--accent-blue); }
-    .a1-slot-row.group-amber  { border-left: 4px solid var(--accent-amber); }
-    .a1-slot-row.group-red    { border-left: 4px solid var(--accent-red); }
-    .a1-slot-row.group-purple { border-left: 4px solid rgb(var(--mtt-rgb-purple)); }
-    .a1-slot-row.group-teal   { border-left: 4px solid rgb(var(--mtt-rgb-teal)); }
+    .a1-row.group-blue   { border-left: 4px solid var(--mtt-group-blue); }
+    .a1-row.group-amber  { border-left: 4px solid var(--mtt-group-amber); }
+    .a1-row.group-red    { border-left: 4px solid var(--mtt-group-red); }
+    .a1-row.group-purple { border-left: 4px solid var(--mtt-group-purple); }
+    .a1-row.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
+    .a1-slot-row.group-blue   { border-left: 4px solid var(--mtt-group-blue); }
+    .a1-slot-row.group-amber  { border-left: 4px solid var(--mtt-group-amber); }
+    .a1-slot-row.group-red    { border-left: 4px solid var(--mtt-group-red); }
+    .a1-slot-row.group-purple { border-left: 4px solid var(--mtt-group-purple); }
+    .a1-slot-row.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
 
     .group-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; }
     .group-dot:hover { transform: scale(1.2); }
     .group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .group-dot.color-blue   { background: var(--accent-blue); }
-    .group-dot.color-amber  { background: var(--accent-amber); }
-    .group-dot.color-red    { background: var(--accent-red); }
-    .group-dot.color-purple { background: rgb(var(--mtt-rgb-purple)); }
-    .group-dot.color-teal   { background: rgb(var(--mtt-rgb-teal)); }
+    .group-dot.color-blue   { background: var(--mtt-group-blue); }
+    .group-dot.color-amber  { background: var(--mtt-group-amber); }
+    .group-dot.color-red    { background: var(--mtt-group-red); }
+    .group-dot.color-purple { background: var(--mtt-group-purple); }
+    .group-dot.color-teal   { background: var(--mtt-group-teal); }
 
     /* Multi-group dot stack containers (A1 and A2). The stack itself is the
        click target for the picker; individual dots inside don't react to hover.
@@ -400,32 +489,32 @@
     .a2-group-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; margin-left: 6px; vertical-align: middle; }
     .a2-group-dot:hover { transform: scale(1.2); }
     .a2-group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .a2-group-dot.color-blue   { background: var(--accent-blue); }
-    .a2-group-dot.color-amber  { background: var(--accent-amber); }
-    .a2-group-dot.color-red    { background: var(--accent-red); }
-    .a2-group-dot.color-purple { background: rgb(var(--mtt-rgb-purple)); }
-    .a2-group-dot.color-teal   { background: rgb(var(--mtt-rgb-teal)); }
+    .a2-group-dot.color-blue   { background: var(--mtt-group-blue); }
+    .a2-group-dot.color-amber  { background: var(--mtt-group-amber); }
+    .a2-group-dot.color-red    { background: var(--mtt-group-red); }
+    .a2-group-dot.color-purple { background: var(--mtt-group-purple); }
+    .a2-group-dot.color-teal   { background: var(--mtt-group-teal); }
     .a2-group-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 6px; }
-    .a2-group-pill.color-blue   { background: rgba(var(--mtt-rgb-blue), 0.15); color: var(--accent-blue); border: 1px solid rgba(var(--mtt-rgb-blue), 0.3); }
-    .a2-group-pill.color-amber  { background: rgba(var(--mtt-rgb-amber), 0.15);  color: var(--accent-amber); border: 1px solid rgba(var(--mtt-rgb-amber), 0.3); }
-    .a2-group-pill.color-red    { background: rgba(var(--mtt-rgb-red), 0.15);  color: var(--accent-red); border: 1px solid rgba(var(--mtt-rgb-red), 0.3); }
-    .a2-group-pill.color-purple { background: rgba(var(--mtt-rgb-purple), 0.15);color: rgb(var(--mtt-rgb-purple)); border: 1px solid rgba(var(--mtt-rgb-purple), 0.3); }
-    .a2-group-pill.color-teal   { background: rgba(var(--mtt-rgb-teal), 0.15);  color: rgb(var(--mtt-rgb-teal)); border: 1px solid rgba(var(--mtt-rgb-teal), 0.3); }
+    .a2-group-pill.color-blue   { background: rgba(var(--mtt-rgb-group-blue), 0.15); color: var(--mtt-group-blue); border: 1px solid rgba(var(--mtt-rgb-group-blue), 0.3); }
+    .a2-group-pill.color-amber  { background: rgba(var(--mtt-rgb-group-amber), 0.15);  color: var(--mtt-group-amber); border: 1px solid rgba(var(--mtt-rgb-group-amber), 0.3); }
+    .a2-group-pill.color-red    { background: rgba(var(--mtt-rgb-group-red), 0.15);  color: var(--mtt-group-red); border: 1px solid rgba(var(--mtt-rgb-group-red), 0.3); }
+    .a2-group-pill.color-purple { background: rgba(var(--mtt-rgb-group-purple), 0.15);color: var(--mtt-group-purple); border: 1px solid rgba(var(--mtt-rgb-group-purple), 0.3); }
+    .a2-group-pill.color-teal   { background: rgba(var(--mtt-rgb-group-teal), 0.15);  color: var(--mtt-group-teal); border: 1px solid rgba(var(--mtt-rgb-group-teal), 0.3); }
     .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
     .a2-group-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; margin-left: 6px; vertical-align: middle; }
     .a2-group-dot:hover { transform: scale(1.2); }
     .a2-group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .a2-group-dot.color-blue   { background: var(--accent-blue); }
-    .a2-group-dot.color-amber  { background: var(--accent-amber); }
-    .a2-group-dot.color-red    { background: var(--accent-red); }
-    .a2-group-dot.color-purple { background: rgb(var(--mtt-rgb-purple)); }
-    .a2-group-dot.color-teal   { background: rgb(var(--mtt-rgb-teal)); }
+    .a2-group-dot.color-blue   { background: var(--mtt-group-blue); }
+    .a2-group-dot.color-amber  { background: var(--mtt-group-amber); }
+    .a2-group-dot.color-red    { background: var(--mtt-group-red); }
+    .a2-group-dot.color-purple { background: var(--mtt-group-purple); }
+    .a2-group-dot.color-teal   { background: var(--mtt-group-teal); }
     .a2-group-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 6px; }
-    .a2-group-pill.color-blue   { background: rgba(var(--mtt-rgb-blue), 0.15); color: var(--accent-blue); border: 1px solid rgba(var(--mtt-rgb-blue), 0.3); }
-    .a2-group-pill.color-amber  { background: rgba(var(--mtt-rgb-amber), 0.15);  color: var(--accent-amber); border: 1px solid rgba(var(--mtt-rgb-amber), 0.3); }
-    .a2-group-pill.color-red    { background: rgba(var(--mtt-rgb-red), 0.15);  color: var(--accent-red); border: 1px solid rgba(var(--mtt-rgb-red), 0.3); }
-    .a2-group-pill.color-purple { background: rgba(var(--mtt-rgb-purple), 0.15);color: rgb(var(--mtt-rgb-purple)); border: 1px solid rgba(var(--mtt-rgb-purple), 0.3); }
-    .a2-group-pill.color-teal   { background: rgba(var(--mtt-rgb-teal), 0.15);  color: rgb(var(--mtt-rgb-teal)); border: 1px solid rgba(var(--mtt-rgb-teal), 0.3); }
+    .a2-group-pill.color-blue   { background: rgba(var(--mtt-rgb-group-blue), 0.15); color: var(--mtt-group-blue); border: 1px solid rgba(var(--mtt-rgb-group-blue), 0.3); }
+    .a2-group-pill.color-amber  { background: rgba(var(--mtt-rgb-group-amber), 0.15);  color: var(--mtt-group-amber); border: 1px solid rgba(var(--mtt-rgb-group-amber), 0.3); }
+    .a2-group-pill.color-red    { background: rgba(var(--mtt-rgb-group-red), 0.15);  color: var(--mtt-group-red); border: 1px solid rgba(var(--mtt-rgb-group-red), 0.3); }
+    .a2-group-pill.color-purple { background: rgba(var(--mtt-rgb-group-purple), 0.15);color: var(--mtt-group-purple); border: 1px solid rgba(var(--mtt-rgb-group-purple), 0.3); }
+    .a2-group-pill.color-teal   { background: rgba(var(--mtt-rgb-group-teal), 0.15);  color: var(--mtt-group-teal); border: 1px solid rgba(var(--mtt-rgb-group-teal), 0.3); }
     .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
 
     /* Add Day / Add Session modals — centered overlay (Issue #64) */
@@ -464,17 +553,25 @@
         background: var(--border-bright); flex-shrink: 0; display: inline-block;
         transition: background 0.2s, box-shadow 0.2s;
     }
-    .a2-slot-micd-dot.on { background: var(--accent-green); box-shadow: 0 0 6px rgba(var(--mtt-rgb-green), 0.7); }
-    .a2-slot-chip.micd { background: rgba(var(--mtt-rgb-green), 0.12); border-color: rgba(var(--mtt-rgb-green), 0.4); color: var(--accent-green); font-weight: 600; }
+    .a2-slot-micd-dot.on { background: var(--accent-green); box-shadow: none; }
+    /* The chip itself stays neutral -- its button and dot already carry the
+       state, and a tinted chip made the whole queue read as mic'd. */
+    .a2-slot-chip.micd { background: var(--bg-raised); border-color: var(--border-bright); color: var(--text-primary); font-weight: 600; }
     .a2-slot-micd-btn {
-        font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
-        padding: 2px 7px; border-radius: 3px; cursor: pointer;
+        font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+        padding: 3px 9px; border-radius: 3px; cursor: pointer;
         border: 1px solid var(--border-bright); font-family: inherit;
-        transition: all 0.15s; line-height: 1.5; white-space: nowrap;
+        transition: none; line-height: 1.5; white-space: nowrap;
+        -webkit-appearance: none; appearance: none;
     }
-    .a2-slot-micd-btn.off { background: var(--bg-input); color: var(--text-dim); }
-    .a2-slot-micd-btn.on  { background: var(--accent-green); color: var(--mtt-text-on-accent); border-color: var(--accent-green); box-shadow: 0 0 8px rgba(var(--mtt-rgb-green), 0.35); }
-    .a2-slot-micd-btn:hover { opacity: 0.85; }
+    .a2-slot-micd-btn.off,
+    .a2-slot-micd-btn.off:hover,
+    .a2-slot-micd-btn.off:focus,
+    .a2-slot-micd-btn.off:active { background: transparent; color: var(--text-dim); border-color: var(--border-bright); box-shadow: none; opacity: 1; }
+    .a2-slot-micd-btn.on,
+    .a2-slot-micd-btn.on:hover,
+    .a2-slot-micd-btn.on:focus,
+    .a2-slot-micd-btn.on:active { background: var(--accent-green); color: var(--mtt-micd-fg); border-color: var(--accent-green); box-shadow: none; opacity: 1; }
 
     /* ── Issue #38: drag-and-drop presenter reorder ── */
     .a1-row-draggable { cursor: grab; }
@@ -490,14 +587,6 @@
 
 {% block extrahead %}
     {{ block.super }}
-    {% comment %}
-    Show Mode must be applied before the first paint, not on DOMContentLoaded:
-    this page reloads itself whenever the 5s checksum poll sees someone else's
-    edit, and a class set after parsing lets the normal dark-blue theme paint
-    for a frame first -- a flash of blue light at a dark FOH position. Hence a
-    plain <script src> here in <head>, deliberately not deferred.
-    {% endcomment %}
-    <script src="{% static 'admin/js/mic_tracker_show_mode.js' %}"></script>
     <script src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
     <script src="{% static 'admin/js/jquery.init.js' %}"></script>
 {% endblock %}
@@ -527,18 +616,11 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span></div>
         </div>
         <div class="mtt-header-actions">
-            {% comment %}
-            Stays visible in Show Mode -- it is the way back out of it.
-            Styled from mic_tracker.css, shared with the Overview page.
-            {% endcomment %}
-            <button type="button" class="mtt-show-mode-btn"
-                    onclick="toggleShowMode()" aria-pressed="false"
-                    title="Show Mode: stripped-back low-light layout for a dark FOH position">◉ Show Mode</button>
-            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary mtt-edit-only" onclick="addNewDay()">+ Add Day</button>{% endif %}
-            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary mtt-edit-only" style="color:var(--mtt-text-inverse) !important;">👤 Presenters</a>
-            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export mtt-edit-only" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
-            <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export mtt-edit-only">↓ Export CSV</a>
-            {# Issue #74 — A2 Listen companion setup. Kept in Show Mode. #}
+            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
+            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:var(--mtt-text-inverse) !important;">👤 Presenters</a>
+            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-amber) !important;">↓ Export PDF</a>
+            <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
+            {# Issue #74 — A2 Listen companion setup. #}
             <button class="btn-mtt btn-mtt-export" onclick="openListenSetup()" title="Pair this device with the Listen companion app">🎧 Listen Setup</button>
         </div>
     </div>
@@ -581,14 +663,16 @@ silently 403-ing background saves and stopping updates from reaching others.
                     {% if session.start_time %}<span class="mtt-session-time">· {{ session.start_time|time:"g:i A" }}{% if session.end_time %} – {{ session.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}
                     {% if not is_viewer %}
                     {% comment %}
-                    Hidden as a block in Show Mode rather than per button: with
-                    Settings and Delete gone, Duplicate would be left alone in a
-                    bordered strip, still one tap from restructuring the show.
+                    Delete is deliberately NOT here. A trash icon 40px from the
+                    A1/A2 tabs, on a row that is tapped all day to collapse and
+                    expand sessions, is one mis-tap from destroying a session
+                    and every mic assignment under it. It now lives inside
+                    Settings, behind a confirmation that makes you type the
+                    session's name. Duplicate and Settings are unchanged.
                     {% endcomment %}
-                    <div class="session-actions mtt-edit-only">
+                    <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
-                        <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
-                        <button class="btn-icon-sm" title="Delete Session" onclick="deleteSession({{ session.id }})" style="color:var(--mtt-danger);">🗑</button>
+                        <button class="btn-icon-sm" title="Settings (includes Delete)" onclick="editSession({{ session.id }})">⚙</button>
                     </div>
                     {% endif %}
                 </div>
@@ -597,8 +681,7 @@ silently 403-ing background saves and stopping updates from reaching others.
 
                     <!-- ════════════════ A1 PANEL ════════════════ -->
                     <div class="session-panel active" id="session-{{ session.id }}-a1">
-                        {# Bar hidden with its only button, so no empty strip is left. #}
-                        <div class="a1-actions-bar mtt-edit-only">
+                        <div class="a1-actions-bar">
                             <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="window.print()">🖨 Print</button>
                         </div>
                         <table class="a1-table">
@@ -613,8 +696,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                         {% endif %}
                                     </th>
                                     <th style="width:56px;">RF#</th>
-                                    {# .a1-type-cell: hidden in Show Mode -- mic type is a setup-time fact. #}
-                                    <th class="a1-type-cell" style="width:110px;">Type</th>
+                                    <th class="a1-type-cell">Type</th>
                                     <th>Presenter</th>
                                     <th class="th-center a1-micd-cell">MIC'D</th>
                                     <th class="a1-notes-cell">A1 Notes</th>
@@ -984,7 +1066,7 @@ silently 403-ing background saves and stopping updates from reaching others.
 
             {% if not is_viewer %}
             {# Same class of structural edit as "+ Add Day", so it goes with it. #}
-            <div class="mtt-add-session-bar mtt-edit-only">
+            <div class="mtt-add-session-bar">
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
             </div>
             {% endif %}
@@ -1052,7 +1134,7 @@ silently 403-ing background saves and stopping updates from reaching others.
         background: var(--bg-raised); border: 1px solid var(--border); border-radius: 5px;
         font-size: 12px; color: var(--text-secondary); }
     .listen-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
-    .listen-live-status.ok .listen-live-dot { background: var(--accent-green); }
+    .listen-live-status.ok .listen-live-dot { background: var(--text-primary); }
     .listen-live-status.warn .listen-live-dot { background: var(--accent-amber); }
     .listen-live-status.warn { color: var(--accent-amber); }
     .listen-live-status.err .listen-live-dot { background: var(--accent-red); }
@@ -1217,7 +1299,7 @@ function saveCompanionUrl() {
     checkCompanionStatus();
     if (status) {
         status.textContent = val ? '  ✓ Saved.' : '  Cleared.';
-        status.style.color = val ? 'var(--accent-green)' : 'var(--text-dim)';
+        status.style.color = val ? 'var(--text-primary)' : 'var(--text-dim)';
     }
 }
 // "ShowStack Listen" Mac app — started by link, found on its loopback port.
