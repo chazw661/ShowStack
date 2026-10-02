@@ -13,19 +13,9 @@
 
 {% block extrastyle %}
     {{ block.super }}
+    {# Colour tokens for both Mic Tracker pages (palette + Show Mode). #}
+    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
     <style>
-    :root {
-        --bg-base:       #0f0f1a;
-        --bg-card:       #181828;
-        --bg-raised:     #1e1e32;
-        --border:        #2a2a45;
-        --border-bright: #3a3a60;
-        --accent-blue:   #4a9eff;
-        --text-primary:  #e8e8f0;
-        --text-secondary:#9090b0;
-        --text-dim:      #505070;
-    }
-
     body { background: var(--bg-base); color: var(--text-primary); }
 
     #mto-root { padding: 0 0 48px; }
@@ -42,11 +32,11 @@
     #mto-root a.mto-back-btn:link,
     #mto-root a.mto-back-btn:visited {
         display: inline-block; padding: 8px 14px;
-        background: var(--accent-blue); color: #ffffff !important;
+        background: var(--accent-blue); color: var(--mtt-text-inverse) !important;
         font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
         border: none; border-radius: 4px; text-decoration: none;
     }
-    #mto-root a.mto-back-btn:hover { background: #6cb0ff; color: #ffffff !important; text-decoration: none; }
+    #mto-root a.mto-back-btn:hover { background: var(--mtt-accent-blue-hover); color: var(--mtt-text-inverse) !important; text-decoration: none; }
 
     /* Issue #68: top-level Tracker | Overview tab strip (shared with main page). */
     .mtt-toplevel-tabs { display: flex; gap: 4px; padding: 0 24px; margin: 14px 0 0;
@@ -76,12 +66,12 @@
     }
     .mto-anchor-label { color: var(--text-dim); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
     .mto-day-anchors a { color: var(--accent-blue); text-decoration: none; padding: 2px 6px; border-radius: 3px; }
-    .mto-day-anchors a:hover { background: rgba(74,158,255,0.15); }
+    .mto-day-anchors a:hover { background: rgba(var(--mtt-rgb-blue), 0.15); }
 
     .mto-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
     .mto-day-header {
         padding: 10px 14px;
-        background: #1a1a30; border-bottom: 1px solid var(--border);
+        background: var(--mtt-bg-day-header); border-bottom: 1px solid var(--border);
         display: flex; align-items: center; gap: 12px;
     }
     .mto-day-name { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
@@ -110,7 +100,7 @@
     }
     .mto-session-header {
         padding: 8px 12px;
-        background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border);
+        background: rgba(var(--mtt-rgb-white), 0.03); border-bottom: 1px solid var(--border);
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         font-size: 12px;
     }
@@ -122,7 +112,7 @@
     .mto-table thead th {
         text-align: left; padding: 6px 8px; font-size: 10px; font-weight: 700;
         letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim);
-        background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
+        background: rgba(var(--mtt-rgb-white), 0.02); border-bottom: 1px solid var(--border);
         white-space: nowrap;
     }
     /* Fixed px widths (card is a fixed width, table-layout: fixed) so field
@@ -144,9 +134,9 @@
     }
     .mto-edit-select:focus, .mto-edit-input:focus { border-color: var(--accent-blue); outline: none; }
     .mto-edit-select { cursor: pointer; }
-    .mto-edit-select option { background: #1e1e32; color: var(--text-primary); }
+    .mto-edit-select option { background: var(--bg-raised); color: var(--text-primary); }
     .mto-edit-input::placeholder { color: var(--text-dim); }
-    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: #2fe06a; }
+    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: var(--mtt-micd-badge); }
     .mto-dim { color: var(--text-secondary); }
 
     .mto-row td { padding: 6px 5px; border-bottom: 1px solid var(--border); vertical-align: middle;
@@ -156,10 +146,10 @@
 
     .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); white-space: nowrap; }
     .mto-pres-cell { border-left: 1px solid var(--border); }
-    .mto-presenter { color: #fff; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+    .mto-presenter { color: var(--mtt-text-strong); font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
     .mto-pres-input {
         width: 100%; box-sizing: border-box;
-        background: var(--bg-raised); color: #fff;
+        background: var(--bg-raised); color: var(--mtt-text-strong);
         border: 1px solid var(--border); border-radius: 4px;
         font-size: 14px; font-weight: 700; font-family: inherit;
         padding: 5px 8px; letter-spacing: 0.01em;
@@ -167,14 +157,14 @@
     }
     .mto-pres-input:focus { border-color: var(--accent-blue); outline: none; }
     .mto-pres-input::placeholder { color: var(--text-dim); font-weight: 400; font-style: italic; }
-    .mto-pres-input.mto-saved-flash { border-color: #2fe06a; }
+    .mto-pres-input.mto-saved-flash { border-color: var(--mtt-micd-badge); }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
     .mto-dash { color: var(--text-dim); }
     .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
     .mto-micd-on {
         display: inline-block; white-space: nowrap;
-        background: rgba(47,224,106,0.16); color: #2fe06a;
-        border: 1px solid rgba(47,224,106,0.5);
+        background: rgba(var(--mtt-rgb-micd-badge), 0.16); color: var(--mtt-micd-badge);
+        border: 1px solid rgba(var(--mtt-rgb-micd-badge), 0.5);
         font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
         padding: 2px 7px; border-radius: 4px;
     }
@@ -187,13 +177,13 @@
         padding: 3px 6px; border-radius: 4px; color: var(--text-dim);
         transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
-    .mto-micd-btn.on { background: rgba(47,224,106,0.16); color: #2fe06a; border-color: rgba(47,224,106,0.5); }
-    .mto-micd-btn.off:hover { color: #2fe06a; border-color: rgba(47,224,106,0.5); background: rgba(47,224,106,0.08); }
-    .mto-micd-btn.on:hover { background: rgba(47,224,106,0.28); }
+    .mto-micd-btn.on { background: rgba(var(--mtt-rgb-micd-badge), 0.16); color: var(--mtt-micd-badge); border-color: rgba(var(--mtt-rgb-micd-badge), 0.5); }
+    .mto-micd-btn.off:hover { color: var(--mtt-micd-badge); border-color: rgba(var(--mtt-rgb-micd-badge), 0.5); background: rgba(var(--mtt-rgb-micd-badge), 0.08); }
+    .mto-micd-btn.on:hover { background: rgba(var(--mtt-rgb-micd-badge), 0.28); }
     .mto-micd-btn:disabled { cursor: default; border-color: transparent; }
     .mto-micd-btn:disabled.off { color: var(--text-dim); }
     .mto-micd-btn:disabled:hover { background: transparent; border-color: transparent; }
-    .mto-micd-btn:disabled.on:hover { background: rgba(47,224,106,0.16); border-color: rgba(47,224,106,0.5); }
+    .mto-micd-btn:disabled.on:hover { background: rgba(var(--mtt-rgb-micd-badge), 0.16); border-color: rgba(var(--mtt-rgb-micd-badge), 0.5); }
     .mto-empty-large { padding: 48px 24px; text-align: center; margin: 24px; border: 1px dashed var(--border-bright); border-radius: 6px; }
     .mto-empty-large-title { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; }
     .mto-empty-large-sub { font-size: 12px; color: var(--text-dim); }
@@ -202,7 +192,7 @@
     .mto-type-badge {
         display: inline-flex; align-items: center; gap: 4px;
         padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 700;
-        background: rgba(255,255,255,0.06); color: var(--text-secondary);
+        background: rgba(var(--mtt-rgb-white), 0.06); color: var(--text-secondary);
         white-space: nowrap; max-width: 100%;
     }
     </style>
@@ -211,14 +201,14 @@
 {% block content %}
 {% csrf_token %}
 <div id="mto-update-banner" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999;
-     background:linear-gradient(90deg,#ff8a00,#ff3d54); color:#fff; padding:14px 20px; text-align:center;
-     font-size:16px; font-weight:800; letter-spacing:0.01em; box-shadow:0 6px 28px rgba(255,61,84,0.55);
-     border-bottom:2px solid rgba(255,255,255,0.4);">
+     background:linear-gradient(90deg,var(--mtt-banner-start),var(--mtt-banner-end)); color:var(--mtt-banner-text); padding:14px 20px; text-align:center;
+     font-size:16px; font-weight:800; letter-spacing:0.01em; box-shadow:0 6px 28px rgba(var(--mtt-rgb-banner-end), 0.55);
+     border-bottom:2px solid rgba(var(--mtt-rgb-white), 0.4);">
     ⚠️ The show was updated — refresh to see the latest
-    <button onclick="location.reload()" style="margin-left:14px; background:#fff; color:#c0102f; border:none;
+    <button onclick="location.reload()" style="margin-left:14px; background:var(--mtt-banner-btn-bg); color:var(--mtt-banner-btn-fg); border:none;
         padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:800; font-size:15px;">🔄 Refresh Now</button>
-    <button id="mto-banner-dismiss" style="margin-left:8px; background:transparent; border:1px solid rgba(255,255,255,0.6);
-        color:#fff; padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
+    <button id="mto-banner-dismiss" style="margin-left:8px; background:transparent; border:1px solid rgba(var(--mtt-rgb-white), 0.6);
+        color:var(--mtt-banner-text); padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
 </div>
 <div id="mto-root">
     <div class="mto-header">
