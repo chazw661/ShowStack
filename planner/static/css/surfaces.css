@@ -36,7 +36,7 @@
     /* inline grid column sizing */
     --ss-col-num: 72px;        /* Dante #, Input Ch, Aux #, Matrix # */
     --ss-col-num-sm: 56px;     /* Group, DCA, Mute, Omni Out */
-    --ss-col-port: 44px;       /* Direct Out, Omni In -- one port number */
+    --ss-col-port: 46px;       /* Direct Out, Omni In -- one port number */
     --ss-col-flex-max: 360px;  /* ceiling for the flexible Source / Name column */
     --ss-grid-max: 1400px;     /* ceiling for an inline grid table overall */
     --ss-col-check: 64px;      /* Multitrack, Delete? */
@@ -610,16 +610,16 @@ input[type="radio"]:disabled {
  * third and narrower size and hand the difference to Source, which is the
  * greedy column and collects all of it.
  *
- * Measured in Chrome with the viewport at 1280 and the nav sidebar open,
- * which leaves the inline container 900px: Source was 197.8px and is 205.8px
- * at 44px per port column. (PR #78's note said 198px at 1280 with the old
- * 56px columns; that figure must have been taken with different chrome --
- * the measurement here is 182px for 56px columns, 197.8px for 48px.)
+ * Measured with the viewport at 1280 and the nav sidebar open, which leaves
+ * the inline container 900px. Source is 294px minus these two columns, so at
+ * 46px each it is 202px, up from 182px at the old 56px. (PR #78's note said
+ * 198px at 1280 with the 56px columns; that figure must have been taken with
+ * different chrome -- measured here it is 182px.)
  *
- * 44px is also the floor. The header "Direct out" wraps to DIRECT / OUT and
- * DIRECT cannot break, so at the 10px header size set below it needs 37.1px
- * against the 40px of content a 44px column leaves; at 40px per column it
- * overflows into its neighbour. */
+ * 46px is squeezed from both sides and there is no room to move: 47px would
+ * drop Source to exactly 200.0px with nothing in hand, and 45px would not fit
+ * the header (see the next rule for why Safari, not Chrome, sets that floor).
+ * Verified in Chrome and Safari at both container widths. */
 .inline-group table th.column-direct_out,
 .inline-group table td.field-direct_out,
 .inline-group table th.column-omni_in,
@@ -632,13 +632,28 @@ input[type="radio"]:disabled {
     padding-right: 2px !important;
 }
 
-/* "DIRECT" at the admin's 11px uppercase header size is wider than the 44px
- * of content a 48px column leaves, and th overflow is visible, so it would
- * slide under its neighbour the way MULTITRACK once did. A point smaller
- * fits, and matches what that column already does. */
+/* "Direct out" wraps to DIRECT / OUT and DIRECT cannot be broken, so the
+ * header has to fit the column or it slides under its neighbour the way
+ * MULTITRACK once did -- th overflow is visible.
+ *
+ * Safari sets the floor here, not Chrome, and not by rendering wider: asked
+ * for a 9, 10 or 11px font it renders 12px (6px and 8px it honours, so this
+ * is not a plain minimum-font-size clamp). DIRECT is therefore 45.0px in
+ * Safari against 37.1px in Chrome, and dropping the header another point --
+ * the trick the Multitrack column uses -- buys exactly nothing there.
+ *
+ * So the column is sized for the 12px Safari actually paints: 46px with no
+ * horizontal padding leaves 46px of text room against DIRECT's 45.0px, and
+ * the slight negative tracking keeps a couple of pixels in hand on a machine
+ * whose fallback font runs wider. All measured in both browsers, not
+ * estimated. Centred because the inputs beneath them are centred. */
 .inline-group table thead th.column-direct_out,
 .inline-group table thead th.column-omni_in {
     font-size: 10px !important;
+    letter-spacing: -0.2px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    text-align: center !important;
 }
 
 /* The widths these inputs carry from forms.py / custom_admin.css (40px,
