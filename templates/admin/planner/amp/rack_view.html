@@ -25,29 +25,48 @@
     }
     .rack-toolbar h1 { margin: 0; font-size: 22px; color: #e0e0e0; }
     .rack-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    /* Secondary (the default): outlined, no fill. Locations and
+       Collapse / Expand All are both secondary, so the toolbar has exactly
+       one filled button -- see .rack-btn.primary below. */
     .rack-btn,
     a.rack-btn:link,
     a.rack-btn:visited,
-    a.rack-btn:hover,
-    a.rack-btn:focus,
     a.rack-btn:active {
-        background-color: #4a9eff;
-        color: #ffffff !important;
+        background-color: transparent;
+        color: var(--ss-field-text) !important;
         padding: 8px 14px;
         text-decoration: none;
-        border-radius: 4px;
+        border-radius: var(--ss-field-radius);
         font-size: 13px;
         font-weight: 600;
-        border: none;
+        border: 1px solid var(--ss-field-border);
         cursor: pointer;
     }
-    .rack-btn:hover { filter: brightness(1.1); }
-    .rack-btn.purple,
-    a.rack-btn.purple:link,
-    a.rack-btn.purple:visited { background-color: #6a5acd; }
-    .rack-btn.amber,
-    a.rack-btn.amber:link,
-    a.rack-btn.amber:visited { background-color: #d4a373; }
+    .rack-btn:hover,
+    a.rack-btn:hover,
+    a.rack-btn:focus {
+        background-color: var(--ss-accent-ring);
+        border-color: var(--ss-accent);
+        color: #ffffff !important;
+    }
+
+    /* Primary: the page's one filled action (Export to PDF), in the same
+       accent the console save bar uses. */
+    .rack-btn.primary,
+    a.rack-btn.primary:link,
+    a.rack-btn.primary:visited,
+    a.rack-btn.primary:active {
+        background-color: var(--ss-accent);
+        border-color: var(--ss-accent);
+        color: #ffffff !important;
+    }
+    .rack-btn.primary:hover,
+    a.rack-btn.primary:hover,
+    a.rack-btn.primary:focus {
+        background-color: var(--ss-accent);
+        filter: brightness(1.12);
+        color: #ffffff !important;
+    }
 
     /* ── Filter row (search + location chips) ─────────────────── */
     .rack-filter-row {
@@ -76,7 +95,11 @@
         font-size: 12px;
         cursor: pointer;
     }
-    .rack-chip.active { background: #2a3f5f; color: #fff; border-color: #4a9eff; }
+    .rack-chip.active {
+        background: var(--ss-accent-ring);
+        color: #fff;
+        border-color: var(--ss-accent);
+    }
 
     /* ── Location group ───────────────────────────────────────── */
     .rack-location { margin-bottom: 28px; }
@@ -147,7 +170,7 @@
     }
     .amp-card-header .amp-name-input {
         background: transparent !important;
-        color: #ffe066 !important;
+        color: #f0f0f0 !important;
         border: 1px solid transparent !important;
         font-weight: bold !important;
         font-size: 14px !important;
@@ -203,19 +226,19 @@
         font-weight: normal;
         padding: 3px 6px;
     }
-    .amp-input-table .input-header-analog {
-        background: #ffe066 !important;
-        color: #222 !important;
-        font-weight: bold;
-        text-align: center;
-        padding: 3px 6px;
-    }
+    .amp-input-table .input-header-analog,
     .amp-input-table .input-header-aes {
-        background: #9ed87a !important;
-        color: #222 !important;
+        background: var(--ss-raised) !important;
+        color: #f0f0f0 !important;
+        border: 1px solid var(--ss-border) !important;
         font-weight: bold;
         text-align: center;
         padding: 3px 6px;
+        /* The Analogue header is a thead cell and picks up the admin's
+           uppercase header transform; the AES one sits in tbody and did not,
+           so the two read as different kinds of heading once they shared a
+           fill. */
+        text-transform: uppercase;
     }
     .amp-input-table .ch-num {
         background: var(--ss-surface);
@@ -224,6 +247,32 @@
         width: 28px;
         padding: 3px 6px;
     }
+    /* Item 8: AVB rows with neither an AVB stream nor an analogue label are
+       folded away. `display: none` on a <tr> rather than a wrapper, so the
+       table keeps one column model for the rows that stay. */
+    .amp-input-table tr.amp-avb-unused { display: none; }
+    .amp-input-table tr.amp-avb-unused.revealed { display: table-row; }
+
+    .amp-avb-toggle-cell {
+        padding: 0 !important;
+        border: 1px solid var(--ss-border) !important;
+        background: var(--ss-surface);
+    }
+    .amp-avb-toggle {
+        width: 100%;
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        font-size: 10px;
+        font-family: inherit;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 4px 6px;
+        cursor: pointer;
+        text-align: left;
+    }
+    .amp-avb-toggle:hover { color: #f0f0f0; background: var(--ss-raised); }
+
     .amp-input-table .stream-col {
         background: var(--ss-surface);
         color: #9ab;
@@ -235,8 +284,8 @@
     /* Generic editable input style */
     .amp-cell-input {
         width: 100%;
-        background: #ffffff !important;
-        color: #222 !important;
+        background: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
         border: none !important;
         padding: 3px 6px !important;
         font-size: 11px !important;
@@ -245,18 +294,43 @@
         margin: 0 !important;
         border-radius: 0 !important;
     }
+    .amp-cell-input::placeholder { color: var(--ss-placeholder) !important; }
+    .amp-cell-input:hover:not(:disabled):not([readonly]) {
+        background: var(--ss-raised) !important;
+    }
     .amp-cell-input:focus {
-        outline: 2px solid #4a9eff !important;
+        outline: 2px solid var(--ss-accent) !important;
         outline-offset: -2px;
     }
-    .amp-cell-input.saving { background: #fff7d0 !important; }
-    .amp-cell-input.saved  { background: #e0fbe0 !important; }
-    .amp-cell-input.error  { background: #ffd0d0 !important; }
+
+    /* Save state is the one thing on this page that still earns colour. The
+       old tints (#fff7d0 / #e0fbe0 / #ffd0d0) were pale washes for a white
+       field and would be the brightest blocks on the card now, so each is a
+       low-luminance tint plus a matching inset border instead. */
+    .amp-cell-input.saving {
+        background: rgba(232, 176, 74, 0.16) !important;
+        box-shadow: inset 0 0 0 1px #7a5a22 !important;
+    }
+    .amp-cell-input.saved {
+        background: rgba(95, 212, 196, 0.16) !important;
+        box-shadow: inset 0 0 0 1px #2f6f68 !important;
+    }
+    .amp-cell-input.error {
+        background: rgba(255, 82, 82, 0.16) !important;
+        box-shadow: inset 0 0 0 1px #8c3a3a !important;
+    }
 
     select.amp-cell-input {
-        background-color: #ffffff !important;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
         -webkit-appearance: menulist !important;
         appearance: menulist !important;
+    }
+    /* Safari paints <option> from the system palette unless told otherwise,
+       so an open dropdown was white-on-white without these. */
+    select.amp-cell-input option {
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
     }
 
     /* ── Middle: IP + PRESET pills ────────────────────────────── */
@@ -266,17 +340,20 @@
         gap: 8px;
         padding: 10px;
     }
+    /* Were pastel-yellow blocks with a mustard border -- the brightest thing
+       on the page, and IP and Preset are plain data, not status. Now the
+       standard panel: surface fill, hairline border, muted caption. */
     .amp-card-middle .pill {
-        background: #ffe066 !important;
-        color: #222 !important;
+        background: var(--ss-surface) !important;
+        color: var(--ss-field-text) !important;
         padding: 6px 10px;
-        border: 1px solid #c0a020;
-        border-radius: 3px;
+        border: 1px solid var(--ss-border);
+        border-radius: var(--ss-field-radius);
         text-align: center;
     }
     .amp-card-middle .pill .label {
         font-size: 10px;
-        color: #555 !important;
+        color: var(--text-muted) !important;
         display: block;
         margin-bottom: 2px;
         text-transform: uppercase;
@@ -287,7 +364,7 @@
     .amp-card-middle .pill select {
         width: 100% !important;
         background: transparent !important;
-        color: #222 !important;
+        color: var(--ss-field-text) !important;
         border: none !important;
         text-align: center !important;
         font-weight: bold !important;
@@ -299,13 +376,22 @@
     }
     .amp-card-middle .pill input:focus,
     .amp-card-middle .pill select:focus {
-        outline: 2px solid #4a9eff !important;
+        outline: 2px solid var(--ss-accent) !important;
         outline-offset: -2px;
-        background: rgba(255,255,255,0.4) !important;
+        background: var(--ss-field-bg) !important;
     }
-    .amp-card-middle .pill.saving { background: #fff7d0 !important; }
-    .amp-card-middle .pill.saved  { background: #e0fbe0 !important; }
-    .amp-card-middle .pill.error  { background: #ffd0d0 !important; }
+    .amp-card-middle .pill.saving {
+        background: rgba(232, 176, 74, 0.16) !important;
+        border-color: #7a5a22;
+    }
+    .amp-card-middle .pill.saved {
+        background: rgba(95, 212, 196, 0.16) !important;
+        border-color: #2f6f68;
+    }
+    .amp-card-middle .pill.error {
+        background: rgba(255, 82, 82, 0.16) !important;
+        border-color: #8c3a3a;
+    }
 
     /* Issue #30 v2: per-channel setting dropdowns in a single horizontal
        row under Preset. Each cell stacks its 'CH N' label above the select. */
@@ -331,24 +417,39 @@
         font-weight: bold;
         text-align: center;
     }
+    /* These carried background-color: #ffffff over the shared .amp-cell-input
+       rule, so the four CH selects stayed bright white after everything around
+       them went dark. They use the same field tokens as every other select
+       now; only the centring is specific to them. */
     select.amp-channel-setting-select {
         width: 100% !important;
         padding: 2px 4px !important;
         font-size: 11px !important;
-        border: 1px solid var(--ss-border) !important;
-        border-radius: 3px !important;
-        background-color: #ffffff !important;
-        color: #222 !important;
+        border: 1px solid var(--ss-field-border) !important;
+        border-radius: var(--ss-field-radius) !important;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
         text-align: center !important;
         text-align-last: center !important;
     }
-    select.amp-channel-setting-select option { text-align: center; }
+    select.amp-channel-setting-select:hover {
+        border-color: var(--ss-field-border-hover) !important;
+    }
+    select.amp-channel-setting-select option {
+        text-align: center;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+    }
 
     /* ── Right: outputs ──────────────────────────────────────── */
     .amp-output-block { margin-bottom: 8px; }
+    /* CaCom Out / SC32 Out / NL4 Out were solid #c03a3a -- red reads as an
+       error or a warning, and these are just block labels. Same
+       section-header style as the input headers above. */
     .amp-output-title {
-        background: #c03a3a;
-        color: #fff;
+        background: var(--ss-raised);
+        color: #f0f0f0;
+        border: 1px solid var(--ss-border);
         padding: 3px 6px;
         font-weight: bold;
         font-size: 11px;
@@ -386,8 +487,8 @@
         position: relative;
         margin: 32px 0;
         padding: 22px 6px;
-        border-top: 2px solid #4a9eff88;
-        border-bottom: 2px solid #4a9eff88;
+        border-top: 2px solid var(--ss-accent);
+        border-bottom: 2px solid var(--ss-accent);
         display: flex;
         align-items: center;
         gap: 10px;
@@ -396,7 +497,7 @@
         flex: 1;
         background: transparent !important;
         border: 1px dashed transparent !important;
-        color: #4a9eff !important;
+        color: var(--ss-accent) !important;
         font-size: 22px !important;
         font-weight: 700 !important;
         letter-spacing: 0.12em !important;
@@ -409,9 +510,9 @@
     }
     .rack-divider-label:hover,
     .rack-divider-label:focus {
-        border-color: #4a9eff66 !important;
+        border-color: var(--ss-accent) !important;
         outline: none !important;
-        background: rgba(74, 158, 255, 0.06) !important;
+        background: var(--ss-accent-ring) !important;
     }
     .rack-divider-actions { display: flex; gap: 4px; }
     .rack-divider-btn {
@@ -432,15 +533,15 @@
     .rack-divider-btn.delete:hover { background: rgba(255,82,82,0.15); }
     .add-divider-btn {
         background: transparent;
-        border: 1px dashed #4a9eff66;
-        color: #4a9eff !important;
+        border: 1px dashed var(--ss-accent);
+        color: var(--ss-accent) !important;
         padding: 6px 14px;
         border-radius: 3px;
         cursor: pointer;
         font-size: 12px;
         margin-left: 8px;
     }
-    .add-divider-btn:hover { background: rgba(74,158,255,0.1); border-color: #4a9eff; }
+    .add-divider-btn:hover { background: var(--ss-accent-ring); border-color: var(--ss-accent); }
 
     /* ── Add Amp form per location group ──────────────────────── */
     .add-amp-row {
@@ -448,8 +549,8 @@
         gap: 8px;
         align-items: center;
         padding: 10px 6px;
-        background: rgba(74, 158, 255, 0.05);
-        border: 1px dashed #4a9eff55;
+        background: var(--ss-surface);
+        border: 1px dashed var(--ss-border);
         border-radius: 4px;
         margin-bottom: 14px;
     }
@@ -463,7 +564,7 @@
         font-size: 12px;
     }
     .add-amp-row .add-amp-btn {
-        background: #4a9eff;
+        background: var(--ss-accent);
         color: #fff !important;
         border: none;
         padding: 5px 14px;
@@ -507,7 +608,7 @@
     .rack-modal-panel h2 {
         margin: 0 0 16px;
         font-size: 16px;
-        color: #ffe066;
+        color: #f0f0f0;
     }
     .rack-modal-close {
         float: right;
@@ -553,7 +654,7 @@
         border-radius: 3px;
     }
     .add-loc-row button {
-        background: #4a9eff;
+        background: var(--ss-accent);
         color: #fff;
         border: none;
         padding: 6px 14px;
@@ -568,9 +669,9 @@
     <h1>Amplifier Assignments{% if request.current_project %} &mdash; {{ request.current_project.name }}{% endif %}</h1>
     {% if request.current_project %}
     <div class="rack-actions">
-        <button type="button" class="rack-btn purple" onclick="openLocationsModal()">Locations</button>
-        <a class="rack-btn" href="{% url 'planner:all_amps_pdf_export' %}">Export to PDF</a>
-        <button type="button" class="rack-btn amber" onclick="collapseAll()">Collapse / Expand All</button>
+        <a class="rack-btn primary" href="{% url 'planner:all_amps_pdf_export' %}">Export to PDF</a>
+        <button type="button" class="rack-btn" onclick="openLocationsModal()">Locations</button>
+        <button type="button" class="rack-btn" onclick="collapseAll()">Collapse / Expand All</button>
     </div>
     {% endif %}
 </div>
@@ -593,7 +694,7 @@
 
 {% if not grouped_amps %}
     <div class="no-amps">
-        No amplifiers yet. Add a location from <button type="button" class="rack-btn purple" onclick="openLocationsModal()">Locations</button>, then add amps below it.
+        No amplifiers yet. Add a location from <button type="button" class="rack-btn" onclick="openLocationsModal()">Locations</button>, then add amps below it.
     </div>
 {% endif %}
 
@@ -663,7 +764,7 @@
                         </thead>
                         <tbody>
                             {% for ch in card.channels %}
-                            <tr>
+                            <tr{% if ch.avb_unused %} class="amp-avb-unused"{% endif %}>
                                 <td class="stream-col">
                                     {# Issue #43: text+datalist so processor output labels can suggest "AVB N - Name". #}
                                     <input type="text" class="amp-cell-input"
@@ -682,6 +783,17 @@
                                 </td>
                             </tr>
                             {% endfor %}
+                            {% if card.avb_unused_count %}
+                            <tr class="amp-avb-toggle-row">
+                                <td class="amp-avb-toggle-cell" colspan="3">
+                                    <button type="button" class="amp-avb-toggle"
+                                            data-shown="0"
+                                            data-count="{{ card.avb_unused_count }}">
+                                        + {{ card.avb_unused_count }} unused
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endif %}
                             <tr><th colspan="2"></th><th class="input-header-aes">AES Input Label</th></tr>
                             {% for ch in card.channels %}
                             <tr>
@@ -1145,9 +1257,31 @@
         });
     }
 
+    // ── Item 8: "+ N unused" AVB rows ───────────────────────────────
+    // The empty rows are hidden by CSS from the first paint (the server marks
+    // them), so there is no flash of 16 rows collapsing. This only flips the
+    // reveal class on the rows of the clicked card's own table.
+    function bindAvbToggles() {
+        document.querySelectorAll('.amp-avb-toggle').forEach(function (btn) {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', function () {
+                var table = btn.closest('table');
+                if (!table) return;
+                var shown = btn.dataset.shown === '1';
+                table.querySelectorAll('tr.amp-avb-unused').forEach(function (tr) {
+                    tr.classList.toggle('revealed', !shown);
+                });
+                btn.dataset.shown = shown ? '0' : '1';
+                btn.textContent = (shown ? '+ ' : '− ') + btn.dataset.count + ' unused';
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         bindAutosave();
         bindDividerLabelAutosave();
+        bindAvbToggles();
         var search = document.getElementById('rack-search');
         if (search) search.addEventListener('input', applyFilter);
         document.querySelectorAll('.rack-chip').forEach(function (chip) {
