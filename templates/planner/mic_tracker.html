@@ -490,6 +490,14 @@
 
 {% block extrahead %}
     {{ block.super }}
+    {% comment %}
+    Show Mode must be applied before the first paint, not on DOMContentLoaded:
+    this page reloads itself whenever the 5s checksum poll sees someone else's
+    edit, and a class set after parsing lets the normal dark-blue theme paint
+    for a frame first -- a flash of blue light at a dark FOH position. Hence a
+    plain <script src> here in <head>, deliberately not deferred.
+    {% endcomment %}
+    <script src="{% static 'admin/js/mic_tracker_show_mode.js' %}"></script>
     <script src="{% static 'admin/js/vendor/jquery/jquery.js' %}"></script>
     <script src="{% static 'admin/js/jquery.init.js' %}"></script>
 {% endblock %}
@@ -519,11 +527,18 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span></div>
         </div>
         <div class="mtt-header-actions">
-            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
-            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:var(--mtt-text-inverse) !important;">👤 Presenters</a>
-            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
-            <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
-            {# Issue #74 — A2 Listen companion setup #}
+            {% comment %}
+            Stays visible in Show Mode -- it is the way back out of it.
+            Styled from mic_tracker.css, shared with the Overview page.
+            {% endcomment %}
+            <button type="button" class="mtt-show-mode-btn"
+                    onclick="toggleShowMode()" aria-pressed="false"
+                    title="Show Mode: red-light theme for a dark FOH position">◉ Show Mode</button>
+            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary mtt-edit-only" onclick="addNewDay()">+ Add Day</button>{% endif %}
+            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary mtt-edit-only" style="color:var(--mtt-text-inverse) !important;">👤 Presenters</a>
+            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export mtt-edit-only" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
+            <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export mtt-edit-only">↓ Export CSV</a>
+            {# Issue #74 — A2 Listen companion setup. Kept in Show Mode. #}
             <button class="btn-mtt btn-mtt-export" onclick="openListenSetup()" title="Pair this device with the Listen companion app">🎧 Listen Setup</button>
         </div>
     </div>
@@ -565,7 +580,12 @@ silently 403-ing background saves and stopping updates from reaching others.
                     {% if session.location %}<span class="mtt-session-loc">· {{ session.location }}</span>{% endif %}
                     {% if session.start_time %}<span class="mtt-session-time">· {{ session.start_time|time:"g:i A" }}{% if session.end_time %} – {{ session.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}
                     {% if not is_viewer %}
-                    <div class="session-actions">
+                    {% comment %}
+                    Hidden as a block in Show Mode rather than per button: with
+                    Settings and Delete gone, Duplicate would be left alone in a
+                    bordered strip, still one tap from restructuring the show.
+                    {% endcomment %}
+                    <div class="session-actions mtt-edit-only">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
                         <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
                         <button class="btn-icon-sm" title="Delete Session" onclick="deleteSession({{ session.id }})" style="color:var(--mtt-danger);">🗑</button>
@@ -577,7 +597,8 @@ silently 403-ing background saves and stopping updates from reaching others.
 
                     <!-- ════════════════ A1 PANEL ════════════════ -->
                     <div class="session-panel active" id="session-{{ session.id }}-a1">
-                        <div class="a1-actions-bar">
+                        {# Bar hidden with its only button, so no empty strip is left. #}
+                        <div class="a1-actions-bar mtt-edit-only">
                             <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="window.print()">🖨 Print</button>
                         </div>
                         <table class="a1-table">
@@ -961,7 +982,8 @@ silently 403-ing background saves and stopping updates from reaching others.
             {% endfor %}
 
             {% if not is_viewer %}
-            <div class="mtt-add-session-bar">
+            {# Same class of structural edit as "+ Add Day", so it goes with it. #}
+            <div class="mtt-add-session-bar mtt-edit-only">
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
             </div>
             {% endif %}

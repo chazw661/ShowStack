@@ -1,12 +1,16 @@
 /* planner/static/admin/css/mic_tracker.css
  *
- * Mic Tracker colour tokens. Loaded by templates/planner/mic_tracker.html and
- * templates/planner/mic_tracker_overview.html, which previously carried ~150
- * literal hex/rgba values inside their own <style> blocks -- so re-theming the
- * page meant finding every one of them in two 2400-line templates.
+ * Mic Tracker colour tokens + the Show Mode theme. Loaded by
+ * templates/planner/mic_tracker.html and mic_tracker_overview.html, which
+ * previously carried ~150 literal hex/rgba values inside their own <style>
+ * blocks -- so re-theming the page meant finding every one of them in two
+ * 2400-line templates.
  *
- * Same idea as css/surfaces.css (loaded for the whole admin): colours only, no
- * layout. Everything structural stays in the templates.
+ * Same idea as css/surfaces.css (loaded for the whole admin). The token block
+ * is colours only; each page's layout stays in its own <style>. The Show Mode
+ * section at the bottom is the one exception -- a night-vision theme has to
+ * change a few sizes and hide a few controls, not just re-point colours -- so
+ * it carries the sizing those rules need, and nothing else.
  *
  * ── How hues are declared ────────────────────────────────────────────────
  * Each hue is stored ONCE, as an "r, g, b" channel list:
@@ -112,4 +116,546 @@
     --mtt-print-row-rule:  #ddd;
     --mtt-print-border:    #ccc;
     --mtt-print-header-bg: #f5f5f5;
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * SHOW MODE -- red-light night-vision theme
+ *
+ * For running a live show from a dark FOH position. The page previously put
+ * ~10 saturated green MIC'D blocks and green presenter names on screen at
+ * once, which destroys dark adaptation and is visible from the audience.
+ * Deep red is the one hue that leaves night vision largely intact, so in
+ * Show Mode every colour on the page collapses onto it.
+ *
+ * Toggled by admin/js/mic_tracker_show_mode.js, which puts .mtt-show-mode on
+ * <html> before first paint. Scoped to html.mtt-show-mode so the normal theme
+ * is untouched when it is off.
+ *
+ * ── Why this is mostly token overrides ──────────────────────────────────
+ * Because the tokens above route every colour on the page, re-theming is
+ * largely a matter of re-pointing the hue channels: each --mtt-rgb-* carries
+ * its own solids, tints, borders and glows with it. The rules after the token
+ * block are only for what a colour swap cannot express -- what to hide, what
+ * to enlarge, and turning Mic'd from a colour cue into a shape cue.
+ *
+ * ── Reading the state without hue ───────────────────────────────────────
+ * A dark-adapted eye in a red-only palette has very little hue
+ * discrimination left, so Mic'd must not be encoded as "a different
+ * colour". It is encoded twice instead: a FILLED marker vs a dim OUTLINE
+ * marker (shape), and --mtt-sm-on vs --mtt-sm-dim (brightness). Either one
+ * alone is enough to read the row.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+html.mtt-show-mode {
+    /* ── Every hue collapses to red ─────────────────────────────────────
+     * One line per hue re-points its solids AND its tints, so group dots,
+     * mic-type badges, focus rings, glows and row stripes all follow
+     * without being restated. Mic'd (green) keeps the highest value of the
+     * set -- it is the one thing that must read first.
+     */
+    --mtt-rgb-blue:   176, 32, 32;
+    --mtt-rgb-green:  212, 38, 38;   /* Mic'd — brightest on the page */
+    --mtt-rgb-amber:  150, 28, 28;
+    --mtt-rgb-red:    176, 32, 32;
+    --mtt-rgb-purple: 150, 28, 28;
+    --mtt-rgb-teal:   150, 28, 28;
+    --mtt-rgb-orange: 150, 28, 28;
+    --mtt-rgb-pink:   150, 28, 28;
+    /* White drove the subtle hover/stripe washes (rgba(255,255,255,0.02)).
+       Pointed at red, those stay as faint as before but stop adding white
+       light to the screen. */
+    --mtt-rgb-white:  176, 32, 32;
+    --mtt-rgb-micd-badge:  212, 38, 38;
+    --mtt-rgb-slot-remove: 150, 28, 28;
+
+    /* ── Surfaces: near-black, warmed very slightly red ───────────────── */
+    --bg-base:                #080000;
+    --bg-card:                #0a0000;
+    --bg-raised:              #120303;
+    --bg-input:               #170404;
+    --mtt-bg-sunken:          #060000;
+    --mtt-bg-session-header:  #0e0101;
+    --mtt-bg-day-header:      #0e0101;
+    --mtt-bg-day-hover:       #1a0505;
+    --mtt-bg-icon-hover:      #1a0505;
+    --border:                 #2a0808;
+    --border-bright:          #3d0c0c;
+
+    /* ── Text: three steps of red, nothing else ───────────────────────── */
+    --text-primary:         #b02020;   /* headings, RF#, presenter names */
+    --text-secondary:       #7a1a1a;   /* body text, notes, field values */
+    --text-dim:             #4a1010;   /* unassigned, placeholders, meta */
+    --mtt-text-strong:      #b02020;
+    --mtt-text-label:       #6a1616;
+    --mtt-text-placeholder: #3f0e0e;
+    /* Text sitting on a red fill goes dark rather than white. */
+    --mtt-text-inverse:     #190000;
+    --mtt-text-on-accent:   #190000;
+
+    /* Row tints are removed outright -- the marker carries the state, and a
+       tint on every mic'd row is most of the page glowing at once. */
+    --micd-bg:     transparent;
+    --micd-border: rgba(var(--mtt-rgb-green), 0.55);
+
+    --mtt-danger:            #961c1c;
+    --mtt-slot-remove-hover: #b02020;
+    --mtt-accent-blue-hover: #c02626;
+
+    /* ── "Show was updated" banner ────────────────────────────────────── */
+    --mtt-rgb-banner-start:  60, 10, 10;
+    --mtt-rgb-banner-end:    96, 18, 18;
+    --mtt-banner-text:       #c02626;
+    --mtt-banner-btn-bg:     #2a0606;
+    --mtt-banner-btn-fg:     #c02626;
+    --mtt-banner-btn-hover:  #3a0808;
+
+    /* ── Save-state pill: a failure is the only one allowed to be bright ─ */
+    --mtt-save-pending: #160303;
+    --mtt-save-ok:      #160303;
+    --mtt-save-failed:  #3a0808;
+    --mtt-save-text:    #c02626;
+
+    /* ── Show-Mode-only values ────────────────────────────────────────── */
+    --mtt-sm-on:   #d42626;   /* mic'd: filled marker, bold RF#, "ON" */
+    --mtt-sm-dim:  #5a1414;   /* not mic'd: outline marker */
+}
+
+/* Print stays ink-on-paper: the print palette above is deliberately not
+   re-pointed, so a page printed while Show Mode is on looks like any other. */
+
+/* ── 1 · Hide edit/export tooling ───────────────────────────────────────
+ * Marked in the templates with .mtt-edit-only. During a show the page is a
+ * read-and-toggle instrument: exports, structural edits and session delete
+ * are setup-time actions, and a mis-tap on one of them mid-cue is exactly
+ * the liability Show Mode exists to remove.
+ *
+ * Deliberately kept: Listen / Listen Setup, every Mic'd toggle, the notes
+ * fields, the A1/A2 tabs, and day/session collapse.
+ */
+html.mtt-show-mode .mtt-edit-only { display: none !important; }
+
+/* ── 2 · The Show Mode button itself ─────────────────────────────────────
+ * Defined here rather than in either page's <style>: .btn-mtt exists only on
+ * the Tracker page, and the toggle has to look and behave identically on the
+ * Overview tab. Matches .btn-mtt-ghost in the normal theme.
+ */
+#mic-tracker-root .mtt-show-mode-btn,
+#mto-root .mtt-show-mode-btn {
+    padding: 7px 14px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--bg-raised);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-bright);
+    transition: opacity 0.15s, transform 0.1s;
+}
+#mic-tracker-root .mtt-show-mode-btn:hover,
+#mto-root .mtt-show-mode-btn:hover { opacity: 0.85; }
+#mic-tracker-root .mtt-show-mode-btn:active,
+#mto-root .mtt-show-mode-btn:active { transform: scale(0.97); }
+
+/* On: reads as engaged, and is the brightest control in the header because it
+   is the only one left. */
+html.mtt-show-mode #mic-tracker-root .mtt-show-mode-btn,
+html.mtt-show-mode #mto-root .mtt-show-mode-btn {
+    background: transparent;
+    border: 1px solid var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+}
+
+/* ── 3 · Mic'd state: shape first, brightness second ────────────────────
+ * Not mic'd = hollow ring, dim. Mic'd = filled disc, bright, bold "ON".
+ */
+
+/* A1 table toggle. 44px minimum so it stays a reliable target on an iPad in
+   the dark. */
+html.mtt-show-mode #mic-tracker-root .a1-micd-toggle {
+    width: 100%;
+    min-height: 44px;
+    gap: 8px;
+    font-size: 13px;
+    border-radius: 5px;
+    background: transparent;
+    box-shadow: none;
+}
+html.mtt-show-mode #mic-tracker-root .a1-micd-toggle::before {
+    content: '';
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    flex: 0 0 auto;
+}
+html.mtt-show-mode #mic-tracker-root .a1-micd-toggle.off {
+    border: 2px solid var(--mtt-sm-dim);
+    color: var(--mtt-sm-dim);
+}
+html.mtt-show-mode #mic-tracker-root .a1-micd-toggle.on {
+    border: 2px solid var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+    font-weight: 900;
+}
+html.mtt-show-mode #mic-tracker-root .a1-micd-toggle.on::before {
+    background: currentColor;   /* filled = mic'd */
+}
+html.mtt-show-mode #mic-tracker-root .a1-micd-cell { width: 104px; }
+
+/* A2 card toggle -- same two states, using the existing dot element. */
+html.mtt-show-mode #mic-tracker-root .a2-micd-toggle {
+    min-height: 44px;
+    padding: 8px 18px;
+    border-radius: 5px;
+    background: transparent;
+    box-shadow: none;
+}
+html.mtt-show-mode #mic-tracker-root .a2-micd-toggle.off {
+    border: 2px solid var(--mtt-sm-dim);
+    color: var(--mtt-sm-dim);
+}
+html.mtt-show-mode #mic-tracker-root .a2-micd-toggle.on {
+    border: 2px solid var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+    font-weight: 900;
+}
+html.mtt-show-mode #mic-tracker-root .a2-micd-toggle .a2-micd-dot {
+    width: 13px;
+    height: 13px;
+    border: 2px solid currentColor;
+    background: transparent;
+    box-sizing: border-box;
+}
+html.mtt-show-mode #mic-tracker-root .a2-micd-toggle.on .a2-micd-dot {
+    background: currentColor;
+    /* The pulse made the brightest thing on screen also the only moving
+       thing -- distracting at FOH, and the fill already reads as on. */
+    animation: none;
+}
+
+/* Per-presenter chip toggle. Not taken to 44px: these sit inside the slot
+   chips, and a row of 44px buttons would push the card past a screen. 32px
+   is still a comfortable target without restructuring the chip list. */
+html.mtt-show-mode #mic-tracker-root .a2-slot-micd-btn {
+    min-height: 32px;
+    padding: 2px 10px;
+    background: transparent;
+    box-shadow: none;
+}
+html.mtt-show-mode #mic-tracker-root .a2-slot-micd-btn.off {
+    border: 1px solid var(--mtt-sm-dim);
+    color: var(--mtt-sm-dim);
+}
+html.mtt-show-mode #mic-tracker-root .a2-slot-micd-btn.on {
+    border: 1px solid var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+    font-weight: 900;
+}
+html.mtt-show-mode #mic-tracker-root .a2-slot-micd-dot { background: var(--mtt-sm-dim); }
+html.mtt-show-mode #mic-tracker-root .a2-slot-micd-dot.on {
+    background: var(--mtt-sm-on);
+    box-shadow: none;
+}
+html.mtt-show-mode #mic-tracker-root .a2-slot-chip.micd {
+    background: transparent;
+    border-color: var(--mtt-sm-dim);
+    color: var(--mtt-sm-on);
+}
+
+/* RF# -- bright and heavy on a mic'd row, normal otherwise. The template
+   marks the slot-row variant !important, so this has to match it. */
+html.mtt-show-mode #mic-tracker-root .a1-row.row-micd .a1-rf,
+html.mtt-show-mode #mic-tracker-root .a1-slot-row.row-micd .a1-rf {
+    color: var(--mtt-sm-on) !important;
+    font-weight: 900;
+}
+
+/* A2 card: signal mic'd on the RF badge, not with a header wash. */
+html.mtt-show-mode #mic-tracker-root .a2-card.card-micd { box-shadow: none; }
+html.mtt-show-mode #mic-tracker-root .a2-card.card-micd .a2-card-header {
+    background: var(--mtt-bg-session-header);
+}
+html.mtt-show-mode #mic-tracker-root .a2-card.card-micd .a2-rf-badge {
+    background: transparent;
+    border: 2px solid var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+}
+
+/* Overview Mic'd cell. */
+html.mtt-show-mode #mto-root .mto-micd-btn {
+    min-height: 44px;
+    min-width: 58px;   /* without this the taller button is a narrow sliver */
+    background: transparent;
+    border: 2px solid var(--mtt-sm-dim);
+    color: var(--mtt-sm-dim);
+}
+/* The session card's full-height 4px left edge is decoration, not state. */
+html.mtt-show-mode #mto-root .mto-session { border-left-color: var(--mtt-sm-dim); }
+html.mtt-show-mode #mto-root .mto-micd-btn.on {
+    background: transparent;
+    border-color: var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+    font-weight: 900;
+}
+html.mtt-show-mode #mto-root .mto-micd-btn.on:hover,
+html.mtt-show-mode #mto-root .mto-micd-btn:disabled.on:hover { background: transparent; }
+html.mtt-show-mode #mto-root .mto-micd-btn.off:hover {
+    background: transparent;
+    color: var(--mtt-sm-on);
+    border-color: var(--mtt-sm-on);
+}
+html.mtt-show-mode #mto-root .mto-micd-on {
+    background: transparent;
+    border: 2px solid var(--mtt-sm-on);
+    color: var(--mtt-sm-on);
+}
+html.mtt-show-mode #mto-root .mto-row-micd { background: transparent; }
+
+/* ── 4 · Nothing but the Mic'd marker may carry state ───────────────────
+ * The presenter name sat at --accent-green on a mic'd row, so the row said
+ * "mic'd" three times (name, button, tint) in the brightest colour on the
+ * page. The name now reads the same whatever the state.
+ */
+html.mtt-show-mode #mic-tracker-root .a1-row.row-micd .a1-presenter-primary,
+html.mtt-show-mode #mic-tracker-root .a1-slot-row.row-micd .a1-presenter-primary {
+    color: var(--text-primary);
+}
+html.mtt-show-mode #mic-tracker-root .a1-row:hover,
+html.mtt-show-mode #mic-tracker-root .a1-slot-row:hover,
+html.mtt-show-mode #mic-tracker-root .a1-row.row-micd:hover,
+html.mtt-show-mode #mic-tracker-root .a1-slot-row.row-micd:hover { background: transparent; }
+
+/* Group stripes stay a quiet left edge rather than five competing hues. */
+html.mtt-show-mode #mic-tracker-root .a1-row[class*="group-"],
+html.mtt-show-mode #mic-tracker-root .a1-slot-row[class*="group-"],
+html.mtt-show-mode #mic-tracker-root .a2-card[class*="group-"] {
+    border-left-color: var(--mtt-sm-dim);
+}
+html.mtt-show-mode #mic-tracker-root .group-dot,
+html.mtt-show-mode #mic-tracker-root .a2-group-dot { background: var(--mtt-sm-dim); }
+html.mtt-show-mode #mic-tracker-root .a2-group-pill {
+    background: transparent;
+    border-color: var(--mtt-sm-dim);
+    color: var(--text-secondary);
+}
+
+/* ── 5 · Mic type becomes a dim text label ──────────────────────────────
+ * Nine hue-coded badges (blue HH, amber LAV, purple HEADSET ...) are
+ * unreadable as hues once dark-adapted, and were nine tinted blocks per
+ * screen. The type is still there, just as quiet text.
+ */
+html.mtt-show-mode #mic-tracker-root .mic-type-badge {
+    background: transparent;
+    color: var(--text-secondary);
+    padding-left: 0;
+    padding-right: 0;
+    letter-spacing: 0.06em;
+}
+html.mtt-show-mode #mic-tracker-root .mic-type-badge .type-dot { display: none; }
+html.mtt-show-mode #mto-root .mto-type-badge {
+    background: transparent;
+    color: var(--text-secondary);
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* ── 6 · Larger targets (+20% on the two fields read at a distance) ───── */
+html.mtt-show-mode #mic-tracker-root .a1-rf { font-size: 24px; }                         /* 20 */
+html.mtt-show-mode #mic-tracker-root .a1-slot-row .a1-rf { font-size: 17px !important; } /* 14 */
+html.mtt-show-mode #mic-tracker-root .a1-presenter-primary { font-size: 18px; }          /* 15 */
+html.mtt-show-mode #mic-tracker-root .a1-unassigned { font-size: 14px; }                 /* 12 */
+html.mtt-show-mode #mic-tracker-root .a2-rf-badge {
+    font-size: 20px;                                                                     /* 17 */
+    width: 46px;
+    height: 46px;
+}
+html.mtt-show-mode #mic-tracker-root .a2-presenter-name,
+html.mtt-show-mode #mic-tracker-root .a2-presenter-input { font-size: 18px; }            /* 15 */
+html.mtt-show-mode #mic-tracker-root .a2-unassigned { font-size: 15px; }                 /* 13 */
+html.mtt-show-mode #mto-root .mto-rf { font-size: 15px; }                                /* 12 */
+html.mtt-show-mode #mto-root .mto-presenter,
+html.mtt-show-mode #mto-root .mto-pres-input { font-size: 17px; }                        /* 14 */
+
+/* ── 7 · Unassigned rows sit furthest back ─────────────────────────────
+ * :has() is a progressive enhancement here: without it these rows simply
+ * keep their normal (already dim) text instead of being pushed back more.
+ */
+html.mtt-show-mode #mic-tracker-root .a1-row:has(.a1-unassigned),
+html.mtt-show-mode #mic-tracker-root .a1-slot-row:has(.a1-unassigned) { opacity: 0.5; }
+html.mtt-show-mode #mic-tracker-root .a2-card:has(.a2-presenter-input[value=""]) { opacity: 0.55; }
+html.mtt-show-mode #mto-root .mto-row:has(.mto-unassigned),
+html.mtt-show-mode #mto-root .mto-row:has(.mto-pres-input[value=""]) { opacity: 0.5; }
+
+/* ── 8 · Colours the page sets from JS or from show data ────────────────
+ * These arrive as inline style attributes, so a token cannot reach them and
+ * !important is the only lever:
+ *   · session name chips carry a user-picked colour from the database
+ *   · .notification sets a flat green/red/amber/blue background in
+ *     mic_tracker_v5.js
+ *   · group swatches in the picker and manager are painted from
+ *     GROUP_COLORS in the same file
+ */
+html.mtt-show-mode #mic-tracker-root .mtt-session-name[style],
+html.mtt-show-mode #mto-root .mto-session-name[style] {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+}
+html.mtt-show-mode #mto-root .mto-session[style] {
+    border-left-color: var(--mtt-sm-dim) !important;
+}
+html.mtt-show-mode .notification {
+    background-color: #2a0606 !important;
+    color: var(--mtt-sm-on) !important;
+}
+html.mtt-show-mode .group-picker-item > span,
+html.mtt-show-mode .group-manage-item > span[style] {
+    background: var(--mtt-sm-dim) !important;
+}
+
+/* Presenter photos are full-colour content on an otherwise red page. Kept
+   legible (an A2 still has to recognise a face) but taken down to the same
+   palette as everything else. */
+html.mtt-show-mode #mic-tracker-root .a2-photo-zone > img,
+html.mtt-show-mode #mic-tracker-root .a2-photo-expand img {
+    filter: grayscale(1) sepia(1) hue-rotate(-42deg) saturate(3.4) brightness(0.5);
+}
+
+/* ── 9 · Nothing pulses or glows ───────────────────────────────────────
+ * The update banner is a full-width gradient with a pulsing shadow. It still
+ * needs to be seen, but a throbbing bar at FOH reads as a fault indicator.
+ */
+html.mtt-show-mode #mic-tracker-update-banner,
+html.mtt-show-mode #mtt-banner-refresh {
+    animation: none;
+    box-shadow: none;
+}
+html.mtt-show-mode #mic-tracker-root .a2-listen-btn.listen-active { box-shadow: none; }
+html.mtt-show-mode #mic-tracker-root .btn-mtt-primary,
+html.mtt-show-mode #mic-tracker-root .btn-mtt-export { box-shadow: none; }
+
+/* ── 10 · Answering the admin's own !important rules ────────────────────
+ * Three admin-wide stylesheets paint over this page and all three use
+ * !important, so a token cannot reach them (the CLAUDE.md note about admin
+ * CSS and !important applies here in full):
+ *
+ *   base_site.html  label, p, li, dt, dd, th, td, h1..h5  -> #e0e0e0
+ *   base_site.html  a, a:link, a:visited                  -> #8ba4ff
+ *   surfaces.css    every text input / select / textarea  -> --ss-field-bg
+ *
+ * The normal theme is built around them and they are correct there. In Show
+ * Mode they are the last sources of white, blue and grey light on the page,
+ * so they have to be answered in kind rather than merely out-specified.
+ */
+html.mtt-show-mode #mic-tracker-root th,
+html.mtt-show-mode #mic-tracker-root td,
+html.mtt-show-mode #mto-root th,
+html.mtt-show-mode #mto-root td { color: var(--text-secondary) !important; }
+
+/* RF# is a <td>, so it has to be re-asserted above the blanket rule. The
+   mic'd variant in section 3 is more specific again and still wins. */
+html.mtt-show-mode #mic-tracker-root .a1-rf,
+html.mtt-show-mode #mto-root .mto-rf { color: var(--text-primary) !important; }
+
+html.mtt-show-mode #mic-tracker-root a,
+html.mtt-show-mode #mic-tracker-root a:link,
+html.mtt-show-mode #mic-tracker-root a:visited,
+html.mtt-show-mode #mto-root a,
+html.mtt-show-mode #mto-root a:link,
+html.mtt-show-mode #mto-root a:visited { color: var(--text-secondary) !important; }
+
+html.mtt-show-mode #mic-tracker-root a.mtt-toplevel-tab.active,
+html.mtt-show-mode #mic-tracker-root a.mtt-toplevel-tab.active:link,
+html.mtt-show-mode #mic-tracker-root a.mtt-toplevel-tab.active:visited,
+html.mtt-show-mode #mto-root a.mtt-toplevel-tab.active,
+html.mtt-show-mode #mto-root a.mtt-toplevel-tab.active:link,
+html.mtt-show-mode #mto-root a.mtt-toplevel-tab.active:visited {
+    color: var(--text-primary) !important;
+}
+
+html.mtt-show-mode #mic-tracker-root input,
+html.mtt-show-mode #mic-tracker-root textarea,
+html.mtt-show-mode #mic-tracker-root select,
+html.mtt-show-mode #mto-root input,
+html.mtt-show-mode #mto-root textarea,
+html.mtt-show-mode #mto-root select {
+    background: var(--bg-input) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border) !important;
+}
+
+/* ── 11 · The admin chrome around the page ──────────────────────────────
+ * Show Mode is about what the room can see, and the header sits on the same
+ * screen as the tracker: a violet-to-orange gradient rule, a solid violet
+ * "Project Dashboard" button and lavender breadcrumbs. Toned down with the
+ * rest rather than left as the brightest thing in the window.
+ */
+html.mtt-show-mode body { background: var(--bg-base) !important; }
+html.mtt-show-mode #header,
+html.mtt-show-mode .breadcrumbs {
+    background: var(--bg-card) !important;
+    color: var(--text-secondary) !important;
+}
+html.mtt-show-mode #header::before { background: var(--border) !important; }
+html.mtt-show-mode #header a,
+html.mtt-show-mode #header a:link,
+html.mtt-show-mode #header a:visited,
+html.mtt-show-mode .breadcrumbs a,
+html.mtt-show-mode .breadcrumbs a:link,
+html.mtt-show-mode .breadcrumbs a:visited { color: var(--text-secondary) !important; }
+html.mtt-show-mode #header .dashboard-button {
+    background: transparent !important;
+    border: 1px solid var(--border-bright) !important;
+    color: var(--text-secondary) !important;
+}
+/* base_site.html sets the wordmark to #00ff88 -- bright green, and with the
+   header toned down it was comfortably the brightest thing on the screen. */
+html.mtt-show-mode #header #site-name,
+html.mtt-show-mode #header #site-name a,
+html.mtt-show-mode #header #site-name span { color: var(--text-secondary) !important; }
+
+/* Emoji ignore `color`: they are drawn from the font's own colour bitmaps, so
+   a filter on the containing element is the only lever. Only applied where an
+   emoji or image is actually bright -- the logo tile and the 📊 on the
+   dashboard button. The page's own 🎤 and 🎧 glyphs are already dark. */
+html.mtt-show-mode #header img,
+html.mtt-show-mode #header .dashboard-button {
+    filter: grayscale(1) sepia(1) hue-rotate(-42deg) saturate(3) brightness(0.55);
+}
+
+/* Modals reachable while Show Mode is on (Listen Setup is kept). */
+html.mtt-show-mode .group-manage-box,
+html.mtt-show-mode .mtt-modal-box {
+    background: var(--bg-card) !important;
+    border-color: var(--border-bright) !important;
+}
+html.mtt-show-mode .group-manage-box label,
+html.mtt-show-mode .group-manage-box p,
+html.mtt-show-mode .group-manage-box li,
+html.mtt-show-mode .group-manage-box dt,
+html.mtt-show-mode .group-manage-box dd,
+html.mtt-show-mode .group-manage-box h1,
+html.mtt-show-mode .group-manage-box h2,
+html.mtt-show-mode .group-manage-box h3,
+html.mtt-show-mode .group-manage-box h4,
+html.mtt-show-mode .group-manage-box h5,
+html.mtt-show-mode .group-manage-box pre,
+html.mtt-show-mode .group-manage-box code,
+html.mtt-show-mode .mtt-modal-box label,
+html.mtt-show-mode .mtt-modal-box p,
+html.mtt-show-mode .mtt-modal-box h1,
+html.mtt-show-mode .mtt-modal-box h2,
+html.mtt-show-mode .mtt-modal-box h3 { color: var(--text-secondary) !important; }
+html.mtt-show-mode .group-manage-box input,
+html.mtt-show-mode .group-manage-box select,
+html.mtt-show-mode .group-manage-box textarea,
+html.mtt-show-mode .mtt-modal-box input,
+html.mtt-show-mode .mtt-modal-box select {
+    background: var(--bg-input) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border) !important;
 }

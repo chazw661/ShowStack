@@ -11,6 +11,16 @@
 </div>
 {% endblock %}
 
+{% block extrahead %}
+    {{ block.super }}
+    {% comment %}
+    Same pre-paint reasoning as the Tracker page, and the same localStorage
+    key, so Show Mode carries across the Tracker/Overview tabs rather than
+    being set twice.
+    {% endcomment %}
+    <script src="{% static 'admin/js/mic_tracker_show_mode.js' %}"></script>
+{% endblock %}
+
 {% block extrastyle %}
     {{ block.super }}
     {# Colour tokens for both Mic Tracker pages (palette + Show Mode). #}
@@ -215,6 +225,15 @@
         <div>
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
             <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement and Mic'd are editable here.</div>
+        </div>
+        <div class="mto-header-actions">
+            {% comment %}
+            .btn-mtt lives in the Tracker page's own <style>; this button is
+            styled from mic_tracker.css so both pages get one appearance.
+            {% endcomment %}
+            <button type="button" class="mtt-show-mode-btn"
+                    onclick="toggleShowMode()" aria-pressed="false"
+                    title="Show Mode: red-light theme for a dark FOH position">◉ Show Mode</button>
         </div>
     </div>
 
