@@ -39,7 +39,7 @@ psql "$DATABASE_PUBLIC_URL"              # turntable.proxy.rlwy.net:34865
 
 - **Backend:** Django 5.x, PostgreSQL (Railway-managed), `dj_database_url` (SQLite fallback for local dev)
 - **Config:** `python-decouple` — secrets via `.env` locally, Railway env vars in prod
-- **Static files:** Whitenoise (`collectstatic` runs in Procfile on every deploy)
+- **Static files:** Whitenoise with hashed filenames (`collectstatic` runs in `railway.json`'s `startCommand` on every deploy)
 - **Email:** Resend for transactional mail (API key in Railway env vars, not committed)
 - **Hosting:** Railway — push to `main` triggers automatic redeploy
 - **Admin UI theming:** `django-admin-interface` + `colorfield`
@@ -105,7 +105,7 @@ Implemented via Django groups and `BaseEquipmentAdmin`:
 ### Deployment
 - Pushing to `main` on GitHub triggers automatic Railway redeploy.
 - Solo development typically goes straight to `main`; use feature branches only when the work is risky or spans multiple sessions.
-- **Railway uses `railway.json`'s `startCommand`, NOT the `Procfile`.** Editing the Procfile alone will have no effect in production. The active startCommand runs: `collectstatic --noinput && migrate && create_initial_superuser && setup_user_groups && load_amp_profiles && gunicorn`. Update `railway.json` (and keep the Procfile in sync) when changing deploy steps.
+- **Railway deploy steps live in `railway.json`'s `startCommand`.** It runs: `collectstatic --noinput && migrate && create_initial_superuser && setup_user_groups && load_amp_profiles && gunicorn`. There is no longer a `Procfile` -- it was deleted because Railway never read it and keeping a second, silently-ignored copy of the deploy command invited editing the wrong one.
 
 ---
 
@@ -178,7 +178,7 @@ element.style.setProperty('color', 'red', 'important');
 ```
 
 ### `collectstatic`
-Runs in `Procfile` on every Railway deploy. If static files are missing in prod, check `STATICFILES_DIRS` and `STATIC_ROOT` before assuming a deploy failure.
+Runs in `railway.json`'s `startCommand` on every Railway deploy. If static files are missing in prod, check `STATICFILES_DIRS` and `STATIC_ROOT` before assuming a deploy failure. `ForgivingManifestStaticFilesStorage` logs a warning naming any asset it could not find in the manifest, so grep the Railway logs for `static asset missing from manifest`.
 
 ---
 

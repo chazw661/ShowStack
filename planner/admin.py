@@ -70,12 +70,14 @@ from .models import DanteConsoleConfig, DanteDeviceConfig, DanteSubscription
 
 
 class BaseAdmin(admin.ModelAdmin):
-    """Base admin class that provides dark theme CSS"""
-    
-    class Media:
-        css = {
-            'all': ('css/dark-admin.css',)
-        }
+    """Common base for ShowStack ModelAdmins.
+
+    This used to pull in `css/dark-admin.css` on every admin page. That file
+    was committed empty in March 2026 as a placeholder to silence a 404 and
+    never held a rule; the dark theme lives in planner/static/css/surfaces.css
+    and templates/admin/base_site.html. With hashed static files an empty
+    stylesheet is still a request per page, so the reference is gone.
+    """
 
 
 class BaseEquipmentAdmin(BaseAdmin):
