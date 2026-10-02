@@ -6,7 +6,7 @@
 <style>
     /* Dark theme styling matching your system */
     #content {
-        background-color: #1a1a1a;
+        background-color: var(--ss-surface);
         padding: 0;
     }
 
@@ -15,14 +15,14 @@
         display: flex;
         gap: 4px;
         margin-bottom: 20px;
-        border-bottom: 2px solid #333;
+        border-bottom: 2px solid var(--ss-border);
         padding-bottom: 0;
     }
     .checklist-tab {
         padding: 10px 24px;
         background: #222;
         color: #aaa;
-        border: 1px solid #333;
+        border: 1px solid var(--ss-border);
         border-bottom: none;
         border-radius: 6px 6px 0 0;
         cursor: pointer;
@@ -33,14 +33,14 @@
     }
     .checklist-tab:hover { background: #2a2a2a; color: #ddd; }
     .checklist-tab.active {
-        background: #1a1a1a;
+        background: var(--ss-surface);
         color: #4a9eff;
-        border-color: #444;
+        border-color: var(--ss-border);
         border-bottom-color: #1a1a1a;
         margin-bottom: -2px;
     }
     .checklist-container {
-        background-color: #1a1a1a;
+        background-color: var(--ss-surface);
         color: #e0e0e0;
         padding: 20px;
         min-height: calc(100vh - 100px);
@@ -52,7 +52,7 @@
         align-items: center;
         margin-bottom: 30px;
         padding-bottom: 15px;
-        border-bottom: 2px solid #444;
+        border-bottom: 2px solid var(--ss-border);
     }
 
     .checklist-header h1 {
@@ -68,7 +68,7 @@
     }
 
     .back-link {
-        background-color: #333;
+        background-color: var(--ss-raised);
         color: #4a9eff;
         padding: 8px 16px;
         text-decoration: none;
@@ -120,9 +120,9 @@
     }
 
     select {
-        background-color: #333;
+        background-color: var(--ss-raised);
         color: #e0e0e0;
-        border: 1px solid #444;
+        border: 1px solid var(--ss-border);
         padding: 8px 12px;
         border-radius: 4px;
         font-size: 14px;
@@ -137,7 +137,7 @@
     }
 
     .section-header {
-        background-color: #333;
+        background-color: var(--ss-raised);
         padding: 15px;
         margin: -20px -20px 20px -20px;
         border-radius: 8px 8px 0 0;
@@ -159,12 +159,12 @@
     }
 
     .checklist-table th {
-        background-color: #333;
+        background-color: var(--ss-raised);
         color: #e0e0e0;
         padding: 12px;
         text-align: left;
         font-weight: 600;
-        border: 1px solid #444;
+        border: 1px solid var(--ss-border);
     }
 
     .checklist-table th[style*="ffc107"] {
@@ -175,16 +175,16 @@
 
     .checklist-table td {
         padding: 10px;
-        border: 1px solid #444;
+        border: 1px solid var(--ss-border);
         vertical-align: middle;
     }
 
     .task-input {
         width: 100%;
         padding: 6px;
-        background-color: #333;
+        background-color: var(--ss-raised);
         color: #e0e0e0;
-        border: 1px solid #444;
+        border: 1px solid var(--ss-border);
         border-radius: 4px;
         transition: background-color 0.3s;
     }
@@ -223,9 +223,9 @@
     .stage-select, .status-select {
         width: 100%;
         padding: 6px;
-        background-color: #333;
+        background-color: var(--ss-raised);
         color: #e0e0e0;
-        border: 1px solid #444;
+        border: 1px solid var(--ss-border);
         border-radius: 4px;
         cursor: pointer;
     }
@@ -357,9 +357,9 @@
     /* Restore the checklist's own input styling (global admin theme was
        overriding these to indigo and flattening the status colors) */
     #content .task-input {
-        background-color: #333 !important;
+        background-color: var(--ss-raised) !important;
         color: #e0e0e0 !important;
-        border: 1px solid #444 !important;
+        border: 1px solid var(--ss-border) !important;
     }
     #content .task-input.status-not-started { background-color: rgba(33,150,243,0.3) !important; border-color: #2196F3 !important; color: #e0e0e0 !important; }
     #content .task-input.status-in-progress { background-color: rgba(255,193,7,0.3) !important; border-color: #FFC107 !important; color: #e0e0e0 !important; }
@@ -367,9 +367,9 @@
     #content .task-input.status-complete { background-color: rgba(76,175,80,0.85) !important; border-color: #4CAF50 !important; color: #fff !important; }
     #content .task-input.status-na { background-color: rgba(117,117,117,0.3) !important; border-color: #757575 !important; color: #e0e0e0 !important; }
     #content .stage-select, #content .status-select {
-        background-color: #333 !important;
+        background-color: var(--ss-raised) !important;
         color: #e0e0e0 !important;
-        border: 1px solid #444 !important;
+        border: 1px solid var(--ss-border) !important;
     }
     #content .task-input:focus, #content .stage-select:focus, #content .status-select:focus {
         outline: none !important;
@@ -944,11 +944,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- ── Save Template Modal ── -->
 <div id="saveTemplateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:360px;max-width:440px;width:90%;">
+  <div style="background: var(--ss-bg);border: 1px solid var(--ss-border);border-radius:12px;padding:28px;min-width:360px;max-width:440px;width:90%;">
     <h3 style="color:#e0e0e0;margin:0 0 20px;font-size:1.1rem;">💾 Save as Template</h3>
     <div style="margin-bottom:20px;">
       <label style="font-size:0.8rem;color:#8888aa;display:block;margin-bottom:4px;">Template Name</label>
-      <input id="templateNameInput" style="width:100%;box-sizing:border-box;background:#1e1e3a;border:1px solid #3a3a5a;border-radius:6px;color:#e0e0e0;padding:8px 10px;font-size:0.875rem;outline:none;"
+      <input id="templateNameInput" style="width:100%;box-sizing:border-box;background:#1e1e3a;border: 1px solid var(--ss-border);border-radius:6px;color:#e0e0e0;padding:8px 10px;font-size:0.875rem;outline:none;"
              placeholder="e.g. GJS Corporate Standard"
              onkeydown="if(event.key==='Enter')submitSaveTemplate()">
     </div>
@@ -961,7 +961,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- ── Load Template Modal ── -->
 <div id="loadTemplateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:#12122a;border:1px solid #3a3a5a;border-radius:12px;padding:28px;min-width:380px;max-width:480px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
+  <div style="background: var(--ss-bg);border: 1px solid var(--ss-border);border-radius:12px;padding:28px;min-width:380px;max-width:480px;width:90%;max-height:80vh;display:flex;flex-direction:column;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h3 style="color:#e0e0e0;margin:0;font-size:1.1rem;">📂 Load Template</h3>
       <button class="btn" style="padding:4px 10px;" onclick="document.getElementById('loadTemplateModal').style.display='none'">✕</button>
@@ -1007,7 +1007,7 @@ async function loadTemplateList() {
       return;
     }
     container.innerHTML = data.templates.map(t => `
-      <div style="display:flex;align-items:center;background:#12122a;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;margin-bottom:6px;gap:10px;">
+      <div style="display:flex;align-items:center;background: var(--ss-bg);border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;margin-bottom:6px;gap:10px;">
         <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">${t.name}</span>
         <button class="btn" style="padding:4px 12px;font-size:0.8rem;background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;"
                 onclick="confirmLoadTemplate(${t.id}, '${t.name.replace(/'/g, "\'")}')">Load</button>

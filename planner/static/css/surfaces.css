@@ -1,0 +1,37 @@
+/* ShowStack neutral surface palette — `neutral-bg-test` experiment.
+ *
+ * Backgrounds and borders ONLY. Buttons, accent colors, status colors and
+ * link colors are deliberately not defined here; they stay where they were.
+ *
+ * Loaded once from templates/admin/base_site.html so every admin page can
+ * reach these without redefining hexes per file.
+ */
+:root {
+    --ss-bg: #16171a;           /* page background */
+    --ss-surface: #1e1f23;      /* panels, cards, table body */
+    --ss-surface-alt: #212227;  /* zebra stripe (even table rows) */
+    --ss-raised: #26282d;       /* inputs, table headers, hover rows */
+    --ss-border: #33353b;       /* borders, dividers */
+}
+
+/* Django admin's own surface variables.
+ *
+ * Django ships these in base.css / dark_mode.css and a lot of admin chrome
+ * (.submit-row, .inline-related headers, selected cells, hairlines) reads them
+ * directly, so repointing them here is cheaper and more complete than chasing
+ * each rule. Accent, button, message and status variables are deliberately
+ * left alone.
+ *
+ * The selector list matches dark_mode.css's own specificity (0,1,1) and loads
+ * after it, so it wins without !important.
+ */
+:root,
+html[data-theme="dark"],
+html[data-theme="light"],
+html[data-theme="auto"] {
+    --body-bg: var(--ss-bg);
+    --darkened-bg: var(--ss-surface);
+    --selected-bg: var(--ss-raised);
+    --border-color: var(--ss-border);
+    --hairline-color: var(--ss-border);
+}

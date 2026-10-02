@@ -53,7 +53,7 @@
             margin: 2px 0 !important;
             padding: 2px 6px !important;
             border-radius: 3px !important;
-            background: #333 !important;
+            background: var(--ss-raised) !important;
             color: #f0f0f0 !important;
             font-size: 12px !important;
             white-space: nowrap !important;
@@ -104,7 +104,7 @@
 .cable-summary-section {
     margin-top: 20px;
     padding: 15px;
-    background: #2a2a2a;
+    background: var(--ss-raised);
     border: 1px solid #417690;
     border-radius: 4px;
 }
@@ -118,7 +118,7 @@
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
-    background: #1e1e1e;
+    background: var(--ss-surface);
 }
 
 .cable-summary-section thead tr {
@@ -128,7 +128,7 @@
 .cable-summary-section thead th {
     padding: 8px;
     text-align: center;
-    border: 1px solid #356683;
+    border: 1px solid var(--ss-border);
     color: white !important;
     background: transparent;
 }
@@ -138,13 +138,13 @@
 }
 
 .cable-summary-section tbody tr {
-    background: #1e1e1e;
+    background: var(--ss-surface);
 }
 
 .cable-summary-section tbody td {
     padding: 8px;
     text-align: center;
-    border: 1px solid #333;
+    border: 1px solid var(--ss-border);
     color: #f0f0f0;
 }
 
@@ -236,52 +236,52 @@
     
     <!-- Quick Order List -->
     {% if cable_summary %}
-    <div style="margin-top: 20px; padding: 15px; background: #1e1e1e; border: 1px solid #417690; border-radius: 4px;">
+    <div style="margin-top: 20px; padding: 15px; background: var(--ss-surface); border: 1px solid #417690; border-radius: 4px;">
         <h3 style="font-size: 18px; font-weight: bold; color: #f0f0f0; margin: 0 0 15px 0; border-bottom: 1px solid #417690; padding-bottom: 10px;">Quick Order List</h3>
         
         <table style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="background: #417690;">
-                    <th style="padding: 8px; text-align: left; color: white; border: 1px solid #356683;">Item Type</th>
-                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid #356683;">Length</th>
-                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid #356683;">Order Qty</th>
+                    <th style="padding: 8px; text-align: left; color: white; border: 1px solid var(--ss-border);">Item Type</th>
+                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid var(--ss-border);">Length</th>
+                    <th style="padding: 8px; text-align: center; color: white; border: 1px solid var(--ss-border);">Order Qty</th>
                 </tr>
             </thead>
             <tbody>
                 {% for cable_type, data in cable_summary.items %}
                     {% if data.hundreds_with_safety > 0 %}
-                    <tr style="background: #2a2a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">100'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.hundreds_with_safety }}</td>
+                    <tr style="background: var(--ss-raised);">
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">100'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.hundreds_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.fifties_with_safety > 0 %}
-                    <tr style="background: #2a2a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">50'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.fifties_with_safety }}</td>
+                    <tr style="background: var(--ss-raised);">
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">50'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.fifties_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.twenty_fives_with_safety > 0 %}
-                    <tr style="background: #2a2a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">25'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.twenty_fives_with_safety }}</td>
+                    <tr style="background: var(--ss-raised);">
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">25'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.twenty_fives_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.tens_with_safety > 0 %}
-                    <tr style="background: #2a2a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">10'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.tens_with_safety }}</td>
+                    <tr style="background: var(--ss-raised);">
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">10'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.tens_with_safety }}</td>
                     </tr>
                     {% endif %}
                     {% if data.fives_with_safety > 0 %}
-                    <tr style="background: #2a2a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">5'</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.fives_with_safety }}</td>
+                    <tr style="background: var(--ss-raised);">
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ cable_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">5'</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.fives_with_safety }}</td>
                     </tr>
                     {% endif %}
                 {% endfor %}
@@ -289,9 +289,9 @@
                 {% if fan_out_summary %}
                     {% for fan_out_type, data in fan_out_summary.items %}
                     <tr style="background: #2a3a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #79aec8; font-weight: bold;">{{ fan_out_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">Fan Out</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #79aec8; font-weight: bold;">{{ fan_out_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">Fan Out</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
                     </tr>
                     {% endfor %}
                 {% endif %}
@@ -299,9 +299,9 @@
                 {% if coupler_summary %}
                     {% for coupler_type, data in coupler_summary.items %}
                     <tr style="background: #3a2a2a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #d4a45a; font-weight: bold;">{{ coupler_type }}</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">Coupler</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #d4a45a; font-weight: bold;">{{ coupler_type }}</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">Coupler</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
                     </tr>
                     {% endfor %}
                 {% endif %}
@@ -309,9 +309,9 @@
                 {% if extension_summary %}
                     {% for ext_type, data in extension_summary.items %}
                     <tr style="background: #2a2a3a;">
-                        <td style="padding: 8px; border: 1px solid #333; color: #e0a040; font-weight: bold;">{{ ext_type }} (Extension)</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #f0f0f0;">Extension</td>
-                        <td style="padding: 8px; text-align: center; border: 1px solid #333; color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
+                        <td style="padding: 8px; border: 1px solid var(--ss-border); color: #e0a040; font-weight: bold;">{{ ext_type }} (Extension)</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #f0f0f0;">Extension</td>
+                        <td style="padding: 8px; text-align: center; border: 1px solid var(--ss-border); color: #90ee90; font-weight: bold;">{{ data.with_overage }}</td>
                     </tr>
                     {% endfor %}
                 {% endif %}
