@@ -199,3 +199,94 @@ a.historylink:hover,
     border-color: var(--ss-field-border-hover) !important;
     color: #ffffff !important;
 }
+
+/* ============================================================
+ * Inline grid controls (console inputs / aux / matrix / stereo)
+ *
+ * One height for every control in a grid row, so text inputs,
+ * number inputs and selects line up. Previously these came from
+ * three competing sources at 2px/4px, 8px/10px and 26px.
+ * ============================================================ */
+
+.inline-group table td,
+.inline-group table th {
+    vertical-align: middle !important;
+}
+
+.inline-group table input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.inline-group table select {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 4px 8px !important;
+    box-sizing: border-box !important;
+    line-height: normal !important;
+    vertical-align: middle !important;
+}
+
+/* Checkboxes (Include in multitrack, Delete?) centered in their cell */
+.inline-group table td input[type="checkbox"] {
+    display: block !important;
+    margin: 0 auto !important;
+    vertical-align: middle !important;
+    float: none !important;
+}
+
+/* Spinners on Dante / channel number fields steal width and only show on
+ * hover-focus, which made otherwise identical rows look different. */
+.inline-group table input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.inline-group table input[type="number"]::-webkit-outer-spin-button,
+.inline-group table input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+}
+
+/* Even rows of the Aux / Matrix grids have no Mono/Stereo control: the odd row
+ * above owns the setting for the stereo pair. Label the gap instead of
+ * leaving an unexplained blank cell (see js/mono_stereo_handler.js). */
+.inline-group table td .stereo-linked-note {
+    color: var(--ss-placeholder);
+    font-size: 12px;
+    font-style: italic;
+    white-space: nowrap;
+}
+
+/* ============================================================
+ * Submit row: one filled action, the rest outlined
+ * ============================================================ */
+
+.submit-row input[type="submit"].default,
+.submit-row input[type="submit"].default:hover {
+    background: var(--ss-accent) !important;
+    background-image: none !important;
+    color: #ffffff !important;
+    border: 1px solid var(--ss-accent) !important;
+    box-shadow: none !important;
+}
+.submit-row input[type="submit"].default:hover {
+    filter: brightness(1.12);
+}
+
+.submit-row input[type="submit"]:not(.default),
+.submit-row a.button:not(.deletelink) {
+    background: transparent !important;
+    background-image: none !important;
+    color: var(--ss-field-text) !important;
+    border: 1px solid var(--ss-field-border) !important;
+    box-shadow: none !important;
+}
+.submit-row input[type="submit"]:not(.default):hover,
+.submit-row a.button:not(.deletelink):hover {
+    border-color: var(--ss-accent) !important;
+    color: #ffffff !important;
+    background: var(--ss-accent-ring) !important;
+}
+
+/* Delete stays red, pushed to the right edge */
+.submit-row a.deletelink,
+.submit-row .deletelink-box {
+    margin-left: auto !important;
+}

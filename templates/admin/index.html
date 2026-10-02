@@ -10,7 +10,13 @@ This page is the system overview, so name it that -- or name it after the
 project being looked at, which is what the dashboard below is actually scoped
 to. current_project comes from planner.context_processors.user_projects.
 {% endcomment %}
-{% block content_title %}<h1>{% if current_project %}{{ current_project.name }}{% else %}System Overview{% endif %}</h1>{% endblock %}
+{% comment %}
+No page <h1> here: the System Overview card below carries its own heading and
+project name, so Django's default (AdminSite.index_title, "Equipment
+Management") would just be a second title stacked above it. The breadcrumb
+below still names the project.
+{% endcomment %}
+{% block content_title %}{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">

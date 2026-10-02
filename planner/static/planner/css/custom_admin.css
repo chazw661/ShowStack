@@ -28,18 +28,15 @@ select.variable-select {
     max-width: 120px !important;
 }
 
-/* Override Tailwind w-16 on aux/matrix/omni inputs */
-.form-row input#id_consoleauxoutput_set-0-aux_number,
-.form-row input#id_consolematrixoutput_set-0-matrix_number,
-.form-row input#id_consoleauxoutput_set-0-omni_out {
-    width: 3ch !important;
-    max-width: 48px !important;
-    min-width: 30px !important;
-    padding: 2px 4px !important;
-    font-size: 13px !important;
-    text-align: center !important;
-}
-
+/* Override Tailwind w-16 on aux/matrix/omni inputs.
+ *
+ * There used to be a near-identical copy of this block above, selecting the
+ * `-0-` inputs by id. Because an id raises specificity above
+ * `.inline-group table input` (which sets padding: 8px 10px !important), only
+ * form index 0 won the padding fight -- which is why row 1 of the Aux and
+ * Matrix grids rendered shorter and narrower than every row below it.
+ * Widths are shared by all rows here; height/padding belong to the inline-grid
+ * rules in css/surfaces.css. */
 input[id*="-aux_number"],
 input[id*="-matrix_number"],
 input[id*="-omni_out"] {
