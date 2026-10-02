@@ -408,6 +408,91 @@ input[type="radio"]:disabled {
     white-space: normal !important;
     vertical-align: bottom !important;
     line-height: 1.25 !important;
+    /* Room under the label for whatever hangs below it (see next rule),
+     * reserved on every header so they all share one text baseline --
+     * 8px of original padding, a 16px control and a 2px gap. */
+    position: relative;
+    padding-bottom: 26px !important;
+}
+
+/* Header labels all sit on one line, with the Autofill button, the
+ * "Manage list" link and the help icon hanging beneath it.
+ *
+ * These are in the markup after the label text, so in normal flow they
+ * take the bottom line of the cell and push the label up: bottom-aligning
+ * the cell then lined up the *badges* with the plain headers' text, one
+ * line below those headers' labels. Taking them out of flow leaves the
+ * label as the cell's only in-flow content, so vertical-align: bottom
+ * puts every label -- plain or badged -- on the same line. Each one keeps
+ * its own column's horizontal alignment. */
+#consoleinput_set-group table thead th > .autofill-btn,
+#consoleauxoutput_set-group table thead th > .autofill-btn,
+#consolematrixoutput_set-group table thead th > .autofill-btn,
+#consolestereooutput_set-group table thead th > .autofill-btn,
+#consoleinput_set-group table thead th > .source-hw-manage-link,
+#consoleauxoutput_set-group table thead th > .source-hw-manage-link,
+#consolematrixoutput_set-group table thead th > .source-hw-manage-link,
+#consolestereooutput_set-group table thead th > .source-hw-manage-link,
+#consoleinput_set-group table thead th > img.help,
+#consoleauxoutput_set-group table thead th > img.help,
+#consolematrixoutput_set-group table thead th > img.help,
+#consolestereooutput_set-group table thead th > img.help {
+    position: absolute;
+    bottom: 8px;
+    margin: 0 !important;
+}
+
+/* left-aligned columns: sit on the cell's own text edge */
+#consoleinput_set-group table thead th > .autofill-btn,
+#consoleauxoutput_set-group table thead th > .autofill-btn,
+#consolematrixoutput_set-group table thead th > .autofill-btn,
+#consolestereooutput_set-group table thead th > .autofill-btn {
+    left: 4px;
+}
+#consoleinput_set-group table thead th > .source-hw-manage-link,
+#consoleauxoutput_set-group table thead th > .source-hw-manage-link,
+#consolematrixoutput_set-group table thead th > .source-hw-manage-link,
+#consolestereooutput_set-group table thead th > .source-hw-manage-link {
+    left: 10px;
+}
+
+/* "MULTITRACK" is ten characters with no space to wrap at, so it cannot
+ * be broken without breaking mid-word. At the admin's 11px uppercase
+ * header font it is 71px wide -- 15px more than a 64px column leaves --
+ * and th overflow is visible, so it slid under the Delete? cell, which
+ * paints over it and swallowed the final K. Safari renders it wider than
+ * Chrome, so trimming the font alone left no usable margin: give this one
+ * column the width it needs and drop its header a point. Delete? still
+ * fits a 64px column at the normal header size. */
+#consoleinput_set-group table th.column-default_record,
+#consoleinput_set-group table td.field-default_record,
+#consoleauxoutput_set-group table th.column-default_record,
+#consoleauxoutput_set-group table td.field-default_record,
+#consolematrixoutput_set-group table th.column-default_record,
+#consolematrixoutput_set-group table td.field-default_record,
+#consolestereooutput_set-group table th.column-default_record,
+#consolestereooutput_set-group table td.field-default_record {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+}
+
+#consoleinput_set-group table thead th.column-default_record,
+#consoleauxoutput_set-group table thead th.column-default_record,
+#consolematrixoutput_set-group table thead th.column-default_record,
+#consolestereooutput_set-group table thead th.column-default_record {
+    font-size: 10px !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+}
+
+/* the help icon belongs to the centred checkbox columns */
+#consoleinput_set-group table thead th > img.help,
+#consoleauxoutput_set-group table thead th > img.help,
+#consolematrixoutput_set-group table thead th > img.help,
+#consolestereooutput_set-group table thead th > img.help {
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 /* --- numeric columns: fixed, input fills the cell --- */
