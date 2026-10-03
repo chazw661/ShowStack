@@ -3820,7 +3820,8 @@ class PACableAdmin(BaseEquipmentAdmin):
 
 
 
-from .models import CommChannel, CommPosition, CommCrewName, CommBeltPack, CommConfig
+from .models import (CommChannel, CommPosition, CommCrewName, CommBeltPack,
+                     CommConfig, CommDeviceModel)
 from django.http import HttpResponseRedirect
 
 # Comm Channel Admin
@@ -4438,7 +4439,10 @@ class CommBeltPackChannelInline(admin.TabularInline):
 
 class CommBeltPackAdminForm(forms.ModelForm):
     """Custom form to handle dynamic field display based on system type"""
-    
+
+    device_model = None   # replaced in __init__; see comm_device_model_field
+
+        
     class Meta:
         model = CommBeltPack
         fields = '__all__'
@@ -4448,7 +4452,17 @@ class CommBeltPackAdminForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
+        # The Model dropdown, grouped by manufacturer. System Type is not on
+        # this form any more: it follows from the chosen model's device type
+        # (CommBeltPack.save), and each option carries a data-system-type for
+        # the conditional rows below.
+        if 'device_model' in self.fields:
+            self.fields['device_model'] = comm_device_model_field(
+                label='Model',
+                help_text='System Type follows from the device type.')
+            _keep_current_model(self.fields['device_model'], self.instance)
+
         # checked_out is NOT swapped for a HiddenInput on a hardwired pack
         # any more: it has to stay a normal row so the bp-sys-* CSS can
         # show it again the moment System Type is switched back to
@@ -4493,7 +4507,9 @@ class CommBeltPackAdminForm(forms.ModelForm):
         save.
         """
         cleaned = super().clean()
-        if cleaned.get('system_type') == 'HARDWIRED':
+        model = cleaned.get('device_model')
+        system_type = model.system_type if model else cleaned.get('system_type')
+        if system_type == 'HARDWIRED':
             cleaned['checked_out'] = False
         return cleaned
 
@@ -4542,6 +4558,154 @@ class ProjectFilteredLocationFilter(admin.SimpleListFilter):
         return queryset
 
 
+class _DeviceModelSelect(forms.Select):
+    """A model dropdown whose options say which System Type they imply.
+
+    The conditional IP Address / "Checked out" rows used to watch the System
+    Type select. There is no System Type select any more -- it follows from the
+    device type -- so each option carries the answer and the JS reads it off
+    the chosen one.
+    """
+
+    def create_option(self, name, value, label, selected, index,
+                      subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index,
+                                       subindex=subindex, attrs=attrs)
+        instance = getattr(value, 'instance', None)
+        if instance is not None:
+            option['attrs']['data-system-type'] = instance.system_type
+        return option
+
+
+class _GroupedModelChoiceIterator(forms.models.ModelChoiceIterator):
+    """Yields (group label, [choices]) so Django renders <optgroup>s.
+
+    ModelChoiceField has no grouping of its own, and a flat list of every
+    device across every manufacturer is the thing this was meant to replace.
+    """
+
+    def __iter__(self):
+        if self.field.empty_label is not None:
+            yield ('', self.field.empty_label)
+        groups = {}
+        order = []
+        for obj in self.queryset:
+            key = self.field.group_by(obj)
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(self.choice(obj))
+        for key in order:
+            yield (key, groups[key])
+
+
+class GroupedModelChoiceField(forms.ModelChoiceField):
+    # A CLASS attribute, not something assigned after super().__init__():
+    # ModelChoiceField's queryset setter runs during __init__ and hands
+    # `self.choices` to the widget there and then, so an iterator assigned
+    # afterwards is never the one the widget renders. Setting it here renders
+    # flat options with no <optgroup> at all -- which is what happened.
+    iterator = _GroupedModelChoiceIterator
+
+    def __init__(self, *args, group_by=None, label_for=None, **kwargs):
+        # Both of these are read by the iterator, so they have to exist before
+        # super().__init__() gets as far as building choices.
+        self.group_by = group_by or (lambda obj: '')
+        self._label_for = label_for
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        if self._label_for is not None:
+            return self._label_for(obj)
+        return super().label_from_instance(obj)
+
+
+def comm_device_model_field(**kwargs):
+    """The Model dropdown, grouped by manufacturer, used by both forms.
+
+    Only active rows are offered, but the queryset deliberately does not filter
+    out the row a device already points at -- see `_keep_current_model`.
+    """
+    kwargs.setdefault('queryset', CommDeviceModel.objects.filter(is_active=True))
+    kwargs.setdefault('required', False)
+    kwargs.setdefault('empty_label', '---------')
+    kwargs.setdefault('widget', _DeviceModelSelect)
+    kwargs.setdefault('group_by', lambda obj: obj.manufacturer)
+    # The manufacturer is already the optgroup heading, so repeating it on
+    # every option just makes the list harder to scan.
+    kwargs.setdefault(
+        'label_for',
+        lambda obj: f"{obj.name} ({obj.get_device_type_display()})")
+    return GroupedModelChoiceField(**kwargs)
+
+
+def _keep_current_model(field, instance):
+    """Make sure a device still lists the model it already has.
+
+    A model that has been retired (is_active False) is out of the dropdown, so
+    a device pointing at one would otherwise silently re-save as "no model" --
+    editing a crew name would quietly erase the hardware.
+    """
+    current = getattr(instance, 'device_model_id', None)
+    if current and not field.queryset.filter(pk=current).exists():
+        field.queryset = CommDeviceModel.objects.filter(
+            models.Q(is_active=True) | models.Q(pk=current))
+
+
+class CommDeviceModelAdmin(BaseAdmin):
+    """The hardware catalogue.
+
+    Superuser-only to edit: the table is shared by every tenant, so an owner
+    adding "our FSII" to it would be editing everyone's dropdown. Everyone
+    still picks from it on a device.
+    """
+
+    plain_title_plural = "Comm Device Models"
+    plain_title = "Comm Device Model"
+
+    list_display = ['name', 'manufacturer', 'device_type',
+                    'system_type_display', 'default_channel_count',
+                    'is_active', 'devices_using']
+    list_filter = ['manufacturer', 'device_type', 'is_active']
+    list_editable = ['default_channel_count', 'is_active']
+    search_fields = ['manufacturer', 'name']
+    ordering = ['manufacturer', 'name']
+
+    fieldsets = (
+        (None, {
+            'fields': ('manufacturer', 'name', 'device_type',
+                       'default_channel_count', 'is_active'),
+        }),
+    )
+
+    @admin.display(description='System Type')
+    def system_type_display(self, obj):
+        return obj.system_type
+
+    @admin.display(description='In use')
+    def devices_using(self, obj):
+        """How many devices point here -- what a delete would be taking out."""
+        return obj.devices.count()
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
+showstack_admin_site.register(CommDeviceModel, CommDeviceModelAdmin)
+
+
 class CommBeltPackBulkRowForm(forms.ModelForm):
     """One row of the "Add multiple" grid.
 
@@ -4558,14 +4722,14 @@ class CommBeltPackBulkRowForm(forms.ModelForm):
 
     # What makes a row real. BP # is excluded on purpose: every row arrives
     # with one prefilled, so counting it would turn twenty untouched rows into
-    # twenty numbered empty belt packs on the first save. System is excluded
-    # for the same reason -- it has a default and so always posts a value --
-    # and is picked up separately below when the user actually changes it.
-    CONTENT_FIELDS = ('position', 'name', 'headset', 'group')
+    # twenty numbered empty devices on the first save. Model can be counted
+    # plainly now -- it has no default, so a row only has one because somebody
+    # chose it.
+    CONTENT_FIELDS = ('device_model', 'position', 'name', 'headset', 'group')
 
     class Meta:
         model = CommBeltPack
-        fields = ('bp_number', 'manufacturer', 'position', 'name', 'headset',
+        fields = ('bp_number', 'device_model', 'position', 'name', 'headset',
                   'group')
 
     def __init__(self, *args, **kwargs):
@@ -4586,10 +4750,12 @@ class CommBeltPackBulkRowForm(forms.ModelForm):
         self.fields['position'].empty_label = '---'
         self.fields['name'].empty_label = '---'
 
-        # Blank is the normal state of most of this grid. `manufacturer` is
-        # left required: it has a model default, so its select renders with a
-        # real system already chosen rather than an empty option, and no row
-        # can be saved with no system on it.
+        # Same grouped Model dropdown as the single-device form.
+        self.fields['device_model'] = comm_device_model_field(
+            label='Model', empty_label='---')
+        _keep_current_model(self.fields['device_model'], self.instance)
+
+        # Blank is the normal state of most of this grid.
         for field_name in ('bp_number',) + self.CONTENT_FIELDS:
             self.fields[field_name].required = False
 
@@ -4600,12 +4766,7 @@ class CommBeltPackBulkRowForm(forms.ModelForm):
         cleaned_data and is simply not a row.
         """
         cleaned = getattr(self, 'cleaned_data', None) or {}
-        if any(cleaned.get(f) for f in self.CONTENT_FIELDS):
-            return True
-        # Picking a different system is content too -- it is how you add ten
-        # Arcadia packs that have no crew assigned yet.
-        return 'manufacturer' in self.changed_data and bool(
-            cleaned.get('manufacturer'))
+        return any(cleaned.get(f) for f in self.CONTENT_FIELDS)
 
     def clean(self):
         cleaned = super().clean()
@@ -4619,8 +4780,8 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
     # Page headings only -- the sidebar keeps reading Meta.verbose_name_plural,
     # so this needs no model change.
-    plain_title_plural = "Belt Packs"
-    plain_title = "Belt Pack"
+    plain_title_plural = "Comm Devices"
+    plain_title = "Comm Device"
     
     # Add autocomplete for better UX (optional but recommended)
     #autocomplete_fields = ['position', 'name', 'channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']
@@ -4629,7 +4790,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     list_display = [
         'bp_number',
         'system_type_icon',  # Custom method
-        'manufacturer_display',  # Custom method  
+        'device_model',  
         'position',  # Keep as field for inline editing
         'name',
         'unit_location',  # Location column
@@ -4657,8 +4818,8 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         
     
     list_filter = [
-        'system_type', 
-        'manufacturer', 
+        'system_type',
+        'device_model',
         ProjectFilteredLocationFilter,
         ProjectFilteredPositionFilter,
         'headset',
@@ -4677,7 +4838,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         return formfield
 
     inlines = [CommBeltPackChannelInline]
-    search_fields = ['bp_number', 'name__name', 'position__name', 'notes', 'unit_location__name', 'ip_address']
+    search_fields = ['bp_number', 'name__name', 'position__name', 'notes',
+                     'unit_location__name', 'ip_address',
+                     'device_model__manufacturer', 'device_model__name']
     ordering = ['system_type', 'bp_number']
     
     def get_changelist_formset(self, request, **kwargs):
@@ -4721,11 +4884,8 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         return '🔌'
     system_type_icon.short_description = 'Type'
 
-    def manufacturer_display(self, obj):
-        """Display manufacturer name"""
-        return obj.get_manufacturer_display()
-    manufacturer_display.short_description = 'System'
-    manufacturer_display.admin_order_field = 'manufacturer'
+    # manufacturer_display is gone with the legacy column: the list shows
+    # device_model, which is a FK and sorts on its own Meta ordering.
 
     def channel_summary(self, obj):
         """Display summary of assigned channels with clickable badges"""
@@ -4897,7 +5057,10 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
         return [
             ('System Configuration', {
-                'fields': ('system_type', 'manufacturer', 'bp_number',
+                # No system_type: it is derived from the model's device type,
+                # so offering it as a second control would only let the two
+                # disagree until the next save.
+                'fields': ('device_model', 'bp_number',
                            'unit_location', 'ip_address'),
                 'classes': (system_class,),
             }),
@@ -4960,17 +5123,12 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     def _bulk_initial(self, project):
         """Sequential BP #s continuing from the project's highest.
 
-        Passed on POST as well as on GET, so `changed_data` means what it says
-        -- a row's System only counts as filled in when it differs from the
-        value the grid handed the user.
+        BP # is the only prefilled column, which is what lets `is_filled` treat
+        every other column as evidence that somebody typed in this row.
         """
         start = (CommBeltPack.objects.filter(project=project).aggregate(
             models.Max('bp_number'))['bp_number__max'] or 0) + 1
-        default_system = CommBeltPack._meta.get_field('manufacturer').default
-        return [
-            {'bp_number': start + i, 'manufacturer': default_system}
-            for i in range(self.BULK_ROWS)
-        ]
+        return [{'bp_number': start + i} for i in range(self.BULK_ROWS)]
 
     def add_multiple_view(self, request):
         """Create a screenful of belt packs in one save."""
@@ -4979,7 +5137,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         project = getattr(request, 'current_project', None)
         if not project:
             self.message_user(
-                request, 'Select a project before adding belt packs.',
+                request, 'Select a project before adding comm devices.',
                 messages.ERROR)
             return redirect('admin:planner_commbeltpack_changelist')
 
@@ -4988,11 +5146,6 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
         FormSet = self._bulk_formset_class()
         queryset = CommBeltPack.objects.none()
-        system_type = request.POST.get('system_type') or 'WIRELESS'
-        valid_types = dict(CommBeltPack.SYSTEM_TYPE_CHOICES)
-        if system_type not in valid_types:
-            system_type = 'WIRELESS'
-
         initial = self._bulk_initial(project)
 
         if request.method == 'POST':
@@ -5011,18 +5164,17 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                         continue
                     pack = form.save(commit=False)
                     pack.project = project
-                    pack.system_type = system_type
-                    # Model.save() already forces checked_out False for a
-                    # hardwired pack; nothing here needs to repeat that.
+                    # No system_type to set: Model.save() derives it from the
+                    # chosen model's device type, and forces checked_out False
+                    # for anything hardwired.
                     pack.save()
                     packs.append(pack)
 
                 if packs:
                     self.message_user(
                         request,
-                        'Added %d %s belt pack%s.' % (
-                            len(packs), valid_types[system_type].lower(),
-                            '' if len(packs) == 1 else 's'),
+                        'Added %d comm device%s.' % (
+                            len(packs), '' if len(packs) == 1 else 's'),
                         messages.SUCCESS)
                     return redirect('admin:planner_commbeltpack_changelist')
 
@@ -5039,10 +5191,8 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            'title': 'Add multiple belt packs',
+            'title': 'Add multiple comm devices',
             'formset': formset,
-            'system_type': system_type,
-            'system_type_choices': CommBeltPack.SYSTEM_TYPE_CHOICES,
             'opts': self.model._meta,
             'current_project': project,
             'has_view_permission': True,

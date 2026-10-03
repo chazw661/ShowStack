@@ -28,14 +28,17 @@
 })();
 
 /* ----------------------------------------------------------------------
- * Belt pack form: show IP Address only for Hardwired, "Checked out" only
- * for Wireless, and switch the moment System Type changes.
+ * Comm device form: show IP Address only for Hardwired, "Checked out" only
+ * for Wireless, and switch the moment the Model changes.
  *
- * All the hiding is done by CSS (comm_admin_v2.css); the server already
- * put bp-sys-WIRELESS / bp-sys-HARDWIRED on the fieldsets from the saved
- * value, so this only keeps that class in step with the select. Doing it
- * this way means the correct field is hidden on first paint even if this
- * file never loads.
+ * There is no System Type select any more -- it follows from the chosen
+ * model's device type -- so this reads data-system-type off the selected
+ * option, which the server put there (see _DeviceModelSelect in admin.py).
+ *
+ * All the hiding is done by CSS (comm_admin_v2.css); the server already put
+ * bp-sys-WIRELESS / bp-sys-HARDWIRED on the fieldsets from the saved value,
+ * so this only keeps that class in step with the dropdown. The correct field
+ * is therefore hidden on first paint even if this file never loads.
  *
  * Plain DOM rather than django.jQuery: Media can load this before
  * jquery.init.js, and there is nothing here that needs jQuery.
@@ -53,14 +56,26 @@
         });
     }
 
+    function systemTypeOf(select) {
+        var option = select.options[select.selectedIndex];
+        /* No model chosen yet: leave the server's class alone rather than
+           flipping the form to Wireless under the user. */
+        if (!option || !option.value) return null;
+        return option.getAttribute('data-system-type');
+    }
+
     function init() {
-        var select = document.getElementById('id_system_type');
-        if (!select) return;   /* not the belt pack add/change form */
-        select.addEventListener('change', function () { apply(this.value); });
+        var select = document.getElementById('id_device_model');
+        if (!select) return;   /* not the single-device add/change form */
+        select.addEventListener('change', function () {
+            var type = systemTypeOf(this);
+            if (type) apply(type);
+        });
         /* Browsers restore the previously selected value on a back/forward
            navigation after the server has already rendered the class, so sync
            once on load rather than trusting the two to agree. */
-        apply(select.value);
+        var current = systemTypeOf(select);
+        if (current) apply(current);
     }
 
     if (document.readyState === 'loading') {

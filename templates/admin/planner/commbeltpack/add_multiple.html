@@ -2,8 +2,8 @@
 {% load static %}
 
 {% comment %}
-Bulk entry for belt packs. One pack per form page meant 20 packs cost 20 page
-loads; this is the same six fields, twenty rows, one save.
+Bulk entry for comm devices. One device per form page meant 20 devices cost 20
+page loads; this is the same six fields, twenty rows, one save.
 
 The grid is wrapped in .inline-group so it inherits the console input grid's
 control sizing and row dividers from surfaces.css rather than restating them.
@@ -26,7 +26,7 @@ grid it is modelled on.
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">Home</a>
-    &rsaquo; <a href="{% url 'admin:planner_commbeltpack_changelist' %}">Belt Packs</a>
+    &rsaquo; <a href="{% url 'admin:planner_commbeltpack_changelist' %}">Comm Devices</a>
     &rsaquo; Add multiple
 </div>
 {% endblock %}
@@ -36,19 +36,16 @@ grid it is modelled on.
     {% csrf_token %}
     {{ formset.management_form }}
 
+    {% comment %}
+    There is no System Type control any more: it follows from each row's
+    Model, so a wireless beltpack cannot be filed as hardwired.
+    {% endcomment %}
     <div class="bp-bulk-toolbar">
-        <div>
-            <label for="bp-system-type">System Type:</label>
-            <select name="system_type" id="bp-system-type">
-                {% for value, label in system_type_choices %}
-                <option value="{{ value }}" {% if value == system_type %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
         <p class="bp-bulk-hint">
-            Applies to every pack created here &mdash; a batch is normally all
-            one or all the other. BP&nbsp;#s continue from the highest already
-            in this project; a row you do not type in is ignored.
+            Pick a <strong>Model</strong> and the rest follows &mdash; Wireless
+            or Hardwired comes from the device type. BP&nbsp;#s continue from
+            the highest already in this project; a row you do not type in is
+            ignored.
         </p>
     </div>
 
@@ -64,7 +61,7 @@ grid it is modelled on.
                 <thead>
                     <tr>
                         <th class="bp-col-num">BP #</th>
-                        <th class="bp-col-sys">System</th>
+                        <th class="bp-col-sys">Model</th>
                         <th class="bp-col-pos">Position</th>
                         <th class="bp-col-name">Name</th>
                         <th class="bp-col-head">Headset</th>
@@ -80,8 +77,8 @@ grid it is modelled on.
                             {% for error in form.bp_number.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
                         </td>
                         <td class="bp-col-sys">
-                            {{ form.manufacturer }}
-                            {% for error in form.manufacturer.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                            {{ form.device_model }}
+                            {% for error in form.device_model.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
                         </td>
                         <td class="bp-col-pos">
                             {{ form.position }}
@@ -107,7 +104,7 @@ grid it is modelled on.
     </div>
 
     <div class="submit-row">
-        <input type="submit" value="Create belt packs" class="default">
+        <input type="submit" value="Create devices" class="default">
         <a href="{% url 'admin:planner_commbeltpack_changelist' %}" class="closelink">Cancel</a>
     </div>
 </form>

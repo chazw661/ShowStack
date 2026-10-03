@@ -47,9 +47,10 @@ def ordered_get_app_list(request, app_label=None):
     # Define child models that should be hidden from viewers
     child_models = {
         'pafanout',           # Child of PA Cable Entries
-        'commposition',       # Child of Comm Belt Packs
-        'commcrewname',       # Child of Comm Belt Packs
-        'commchannel',        # Child of Comm Belt Packs
+        'commposition',       # Child of Comm Devices
+        'commcrewname',       # Child of Comm Devices
+        'commchannel',        # Child of Comm Devices
+        'commdevicemodel',    # Hardware catalogue; superuser-only anyway
         'micsession',         # Child of Show Mic Tracker
         'micassignment',      # Child of Show Mic Tracker
         'presenter',          # Child of Show Mic Tracker
@@ -134,6 +135,7 @@ def ordered_get_app_list(request, app_label=None):
         'commposition': 13,
         'commcrewname': 14,
         'commchannel': 15,
+        'commdevicemodel': 15.5,   # hardware catalogue behind the Model dropdown
 
         # Show Mic Tracker (16-20)
         'showday': 16,
