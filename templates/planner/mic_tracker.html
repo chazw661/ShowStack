@@ -1,13 +1,15 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}Mic Tracker - {{ show_info.show_name|default:"Audio Patch" }}{% endblock %}
+{# Same "Page — Project — ShowStack" shape every admin page uses. #}
+{% block title %}Mic Tracker{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% block breadcrumbs %}
+{# Trail ended on a bare "›" with nothing after it. Named last segment instead. #}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">Home</a>
-    &rsaquo; <a href="/admin/planner/showday/">Show Days</a>
-    &rsaquo;
+    &rsaquo; <a href="{% url 'admin:planner_showday_changelist' %}">Show Days</a>
+    &rsaquo; Mic Tracker
 </div>
 {% endblock %}
 
