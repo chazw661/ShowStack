@@ -47,6 +47,8 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 from .models import AudioChecklist, AudioChecklistTask, Project, ProjectMember
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo
+# count_micd: the one definition of "mic'd" (see planner/models.py).
+from .models import count_micd
 import json as _json
 from django.http import JsonResponse
 
@@ -1278,9 +1280,13 @@ def update_mic_assignment(request):
         value = data.get('value')
 
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
-        current_project_id = request.session.get('current_project')
-        if not current_project_id and hasattr(request, 'current_project') and request.current_project:
-            current_project_id = request.current_project.id
+        # Take the project from the row being edited, not from the session.
+        # This used to read the legacy 'current_project' session alias, which
+        # is written only by mic_tracker_view — so an edit arriving with that
+        # key stale or unset resolved the presenter against the wrong project
+        # (or against project None) and minted a duplicate: the name existed,
+        # just not where we looked.
+        current_project_id = assignment.session.day.project_id
 
         if field in ('is_micd', 'is_d_mic'):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
@@ -1310,25 +1316,16 @@ def update_mic_assignment(request):
                 )
             presenter_changed = False
             if field in ('presenter', 'presenter_name'):
-                if value:
-                    presenter, _ = Presenter.objects.get_or_create(
-                        name=value.strip(), project_id=current_project_id
-                    )
-                    slot.presenter = presenter
-                else:
-                    slot.presenter = None
+                slot.presenter = Presenter.resolve(value, current_project_id)
                 presenter_changed = True
             elif field == 'presenter_id':
+                # assignPresenter() sends a NAME through this field, so the
+                # non-numeric path is the common one, not the exception.
                 if value:
                     try:
                         slot.presenter = Presenter.objects.get(id=int(value))
                     except (ValueError, Presenter.DoesNotExist):
-                        # Value is a name string, use get_or_create
-                        presenter, _ = Presenter.objects.get_or_create(
-                            name=value.strip(),
-                            project_id=current_project_id
-                        )
-                        slot.presenter = presenter
+                        slot.presenter = Presenter.resolve(value, current_project_id)
                 else:
                     slot.presenter = None
                 presenter_changed = True
@@ -1395,19 +1392,15 @@ def add_shared_presenter(request):
             })
         
         assignment = MicAssignment.objects.get(id=assignment_id)
-        
-        # Get or create the presenter WITH PROJECT
-        current_project_id = request.session.get('current_project')
-        if not current_project_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'No project selected'
-            })
 
-        presenter, created = Presenter.objects.get_or_create(
-            name=presenter_name,
-            project_id=current_project_id
-)
+        # The assignment knows its own project, so take it from there rather
+        # than from a session key that may be stale or unset — a shared
+        # presenter must never land in a different project's roster.
+        current_project_id = assignment.session.day.project_id
+
+        presenter = Presenter.resolve(presenter_name, current_project_id)
+        if not presenter:
+            return JsonResponse({'success': False, 'error': 'Name required'})
         
         # Check if presenter is already the main presenter
         if assignment.presenter and assignment.presenter.id == presenter.id:
@@ -1706,12 +1699,8 @@ def update_slot_field(request):
         # card's name path and keeps the slot headshot in sync (Issue #10).
         if field == 'presenter_name':
             name = (value or '').strip()
-            if name:
-                project_id = slot.assignment.session.day.project_id
-                presenter, _ = Presenter.objects.get_or_create(name=name, project_id=project_id)
-                slot.presenter = presenter
-            else:
-                slot.presenter = None
+            project_id = slot.assignment.session.day.project_id
+            slot.presenter = Presenter.resolve(name, project_id)
             slot.photo_data = _presenter_photo_data_url(slot.presenter)
             slot.save()
             return JsonResponse({
@@ -1824,7 +1813,12 @@ def create_presenter(request):
     if not name:
         return JsonResponse({'success': False})
     project = getattr(request, 'current_project', None)
-    presenter, created = Presenter.objects.get_or_create(name=name, project=project)
+    if not project:
+        return JsonResponse({'success': False, 'error': 'No project selected'})
+    # The dropdown only offers "+ Add" when no case-insensitive match was
+    # listed, but two A2 cards racing on the same new name both reach here —
+    # resolve() makes the second one reuse the first's row.
+    presenter = Presenter.resolve(name, project.id)
     return JsonResponse({'success': True, 'presenter_id': presenter.id})
 
 
@@ -3013,9 +3007,9 @@ def dashboard(request):
 
     mic_stats = {
         'total': MicAssignment.objects.count(),
-        'micd': MicAssignment.objects.filter(is_micd=True).count(),
+        'micd': count_micd(MicAssignment.objects.all()),
         'd_mic': MicAssignment.objects.filter(is_d_mic=True).count(),
-        'available': MicAssignment.objects.filter(is_micd=False).count(),
+        'available': MicAssignment.objects.count() - count_micd(MicAssignment.objects.all()),
         'shared': MicAssignment.objects.annotate(
             presenter_count=Count('shared_presenters')
         ).filter(presenter_count__gt=0).count(),
@@ -4239,16 +4233,17 @@ def import_presenters_csv(request):
                     if name.lower() in ['name', 'presenter', 'names', 'presenters']:
                         continue
                     
-                    # Get or create presenter with project
-                    presenter, created = Presenter.objects.get_or_create(
-                        name=name,
-                        project=project  # ✅ Add project
-                    )
-                    
-                    if created:
-                        imported_count += 1
-                    else:
+                    # Reuse an existing roster entry whose name differs only
+                    # in case/spacing rather than importing a second copy.
+                    existed = Presenter.objects.filter(
+                        project=project, name__iexact=' '.join(name.split())
+                    ).exists()
+                    Presenter.resolve(name, project.id)
+
+                    if existed:
                         skipped_count += 1
+                    else:
+                        imported_count += 1
             
             messages.success(
                 request,
@@ -4535,7 +4530,13 @@ def _no_cache(response):
 @require_http_methods(["GET"])
 def mic_tracker_checksum(request):
     """Return a checksum of mic tracker data to detect changes."""
+    # Fall back to the middleware-resolved project. Returning checksum=None
+    # makes the poll a no-op, so a session without the key written — and the
+    # middleware only writes it when it has to auto-select — meant that
+    # machine never saw an update banner and, now, never auto-refreshes.
     project_id = request.session.get('current_project_id')
+    if not project_id and getattr(request, 'current_project', None):
+        project_id = request.current_project.id
     if not project_id:
         return _no_cache(JsonResponse({'checksum': None}))
 
@@ -6327,7 +6328,7 @@ def dashboard_stats(request):
             'comm_packs': CommBeltPack.objects.filter(**p).count(),
             'comm_checked': CommBeltPack.objects.filter(**{**p, 'checked_out': True}).count(),
             'mic_total': sum(d['mic_count'] for d in show_days),
-            'mic_micd': MicAssignment.objects.filter(session__day__project=cp, is_micd=True).count() if cp else 0,
+            'mic_micd': count_micd(MicAssignment.objects.filter(session__day__project=cp)) if cp else 0,
             'power_plans': PowerDistributionPlan.objects.filter(**p).count(),
             'power_amps': 0,
             'show_days': show_days,

@@ -1935,20 +1935,56 @@ function debounce(fn, wait) {
     };
 }
 
-// ── Passive update banner (never yanks the page out from under you) ──
-// Polls the project checksum; when another user changes something we
-// surface a dismissible "Updates available" banner with a manual Refresh
-// button — but ONLY while this user isn't mid-edit, and we NEVER auto-reload.
+// ── Update banner, with an idle auto-refresh ─────────────────────────
+// Polls the project checksum every 5s. When another user changes something:
+//
+//   · idle for IDLE_REFRESH_MS with nothing focused → reload automatically,
+//     so a tracker left open at FOH is showing live data without anyone
+//     having to notice a banner and click it
+//   · otherwise → the dismissible "Updates available" banner, exactly as
+//     before, and the reload waits until the user stops working
+//
+// History: this page DID auto-reload until afd7f2a (2026-08-15), but on a
+// 5s countdown fired on any change regardless of what the user was doing —
+// it interrupted edits and lost scroll and focus, so it was removed wholesale
+// rather than gated. This is that gate: the auto-reload is back, but only for
+// a page nobody is touching.
 (function() {
+    const IDLE_REFRESH_MS = 30000;
+
     let lastChecksum = null;
     let pendingUpdate = false;
+    let lastActivity = Date.now();
+
+    // Deliberate interaction only. Mouse MOVEMENT is excluded on purpose: a
+    // laptop jostled on a crowded FOH table would otherwise keep the page
+    // "active" all show and the auto-refresh would never fire.
+    ['keydown', 'pointerdown', 'touchstart', 'wheel', 'input', 'focusin']
+        .forEach(function(evt) {
+            document.addEventListener(evt, function() { lastActivity = Date.now(); },
+                                      { capture: true, passive: true });
+        });
+    window.addEventListener('scroll', function() { lastActivity = Date.now(); },
+                            { passive: true });
 
     function isEditing() {
         const ae = document.activeElement;
         if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return true;
         // an open presenter/group dropdown means the user is actively working
         if (document.querySelector('.presenter-dd.open, .presenter-dropdown.open, .group-picker.open')) return true;
+        // An open modal holds typed-but-unsaved data (Add Day, Add Session,
+        // group manager, Listen setup) and nothing in it need be focused for
+        // that to be true, so reloading over one would silently discard work.
+        if (document.querySelector('.mtt-modal:not(.hidden), .group-manage-modal:not(.hidden)')) return true;
         return false;
+    }
+
+    // Idle means: no interaction for IDLE_REFRESH_MS, nothing focused or open,
+    // and no save of our own still settling (a save counts as activity, and
+    // markLocalChange() is called by every edit path).
+    function isIdle() {
+        const quietFor = Date.now() - Math.max(lastActivity, lastLocalChange);
+        return quietFor >= IDLE_REFRESH_MS && !isEditing();
     }
 
     function showBanner() {
@@ -1960,8 +1996,18 @@ function debounce(fn, wait) {
         banner.style.setProperty('display', 'block', 'important');
         dismiss.onclick = function() {
             banner.style.setProperty('display', 'none', 'important');
+            // Dismiss means "not this one" — it cancels the pending auto-
+            // refresh too. The next change from another user re-arms both.
             pendingUpdate = false;
         };
+    }
+
+    function autoRefresh() {
+        // Keep scroll position and collapsed sections across the reload. An
+        // unprompted jump back to the top of a 12-session show is most of
+        // what made the old auto-reload hostile.
+        try { saveMicTrackerState(); } catch (e) {}
+        location.reload();
     }
 
     async function check() {
@@ -1980,9 +2026,11 @@ function debounce(fn, wait) {
                 if (Date.now() - lastLocalChange < 10000) return;
                 pendingUpdate = true;
             }
-            // Surface a pending update only when the user is idle, so we never
-            // interrupt typing or steal focus. No countdown, no auto-reload.
-            if (pendingUpdate && !isEditing()) showBanner();
+            if (!pendingUpdate) return;
+            // Idle: take the update now. Busy: show the banner and re-check
+            // on the next poll, so the reload lands as soon as they stop.
+            if (isIdle()) autoRefresh();
+            else if (!isEditing()) showBanner();
         } catch(e) {}
     }
     setInterval(check, 5000);
