@@ -1346,17 +1346,20 @@ def update_mic_assignment(request):
             return JsonResponse({'success': False, 'error': f'Unknown field: {field}'}, status=400)
 
         session = assignment.session
-        session_stats = {
-            'micd': session.mic_assignments.filter(is_micd=True).count(),
-            'total': session.mic_assignments.count(),
-        }
+        # Was a hand-rolled {micd, total} dict — a third definition of the
+        # session counters alongside MicSession.get_mic_usage_stats() (which
+        # the page itself renders from) and the one in toggle_slot_micd. The
+        # tracker rebuilds that strip from this payload, so a short dict here
+        # meant a live edit silently dropped the D-MIC and Shared counts that
+        # a reload showed. One definition, used by all three.
         active_slot = assignment.presenter_slots.filter(is_active=True).first()
         presenter_display = active_slot.presenter.name if active_slot and active_slot.presenter else ''
 
         slot_count = assignment.presenter_slots.count()
         return JsonResponse({
             'success': True,
-            'session_stats': session_stats,
+            'session_stats': session.get_mic_usage_stats(),
+            'day_stats': session.day.get_all_mics_status(),
             'presenter_display': presenter_display,
             'presenter_count': slot_count,
             'slot_photo_data': active_slot.photo_data if active_slot else '',
@@ -1783,11 +1786,18 @@ def toggle_slot_micd(request):
         if new_state:
             slot.is_micd = True
             slot.save()
+        # Return the same stats shape as update_mic_field. The tracker's
+        # session and day "n/total mic'd" counters are rendered from these on
+        # page load, so without them a per-slot toggle left the counters
+        # showing a number that only a reload would correct.
+        session = slot.assignment.session
         return JsonResponse({
             'success': True,
             'assignment_id': slot.assignment.id,
             'active_slot_id': slot_id if new_state else None,
-            'is_micd': new_state
+            'is_micd': new_state,
+            'session_stats': session.get_mic_usage_stats(),
+            'day_stats': session.day.get_all_mics_status(),
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})    

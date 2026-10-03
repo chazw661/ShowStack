@@ -13,19 +13,9 @@
 
 {% block extrastyle %}
     {{ block.super }}
+    {# Colour tokens shared by both Mic Tracker pages. #}
+    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
     <style>
-    :root {
-        --bg-base:       #0f0f1a;
-        --bg-card:       #181828;
-        --bg-raised:     #1e1e32;
-        --border:        #2a2a45;
-        --border-bright: #3a3a60;
-        --accent-blue:   #4a9eff;
-        --text-primary:  #e8e8f0;
-        --text-secondary:#9090b0;
-        --text-dim:      #505070;
-    }
-
     body { background: var(--bg-base); color: var(--text-primary); }
 
     #mto-root { padding: 0 0 48px; }
@@ -42,11 +32,11 @@
     #mto-root a.mto-back-btn:link,
     #mto-root a.mto-back-btn:visited {
         display: inline-block; padding: 8px 14px;
-        background: var(--accent-blue); color: #ffffff !important;
+        background: var(--accent-blue); color: var(--mtt-text-inverse) !important;
         font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
         border: none; border-radius: 4px; text-decoration: none;
     }
-    #mto-root a.mto-back-btn:hover { background: #6cb0ff; color: #ffffff !important; text-decoration: none; }
+    #mto-root a.mto-back-btn:hover { background: var(--mtt-accent-blue-hover); color: var(--mtt-text-inverse) !important; text-decoration: none; }
 
     /* Issue #68: top-level Tracker | Overview tab strip (shared with main page). */
     .mtt-toplevel-tabs { display: flex; gap: 4px; padding: 0 24px; margin: 14px 0 0;
@@ -76,12 +66,12 @@
     }
     .mto-anchor-label { color: var(--text-dim); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
     .mto-day-anchors a { color: var(--accent-blue); text-decoration: none; padding: 2px 6px; border-radius: 3px; }
-    .mto-day-anchors a:hover { background: rgba(74,158,255,0.15); }
+    .mto-day-anchors a:hover { background: rgba(var(--mtt-rgb-blue), 0.15); }
 
     .mto-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
     .mto-day-header {
         padding: 10px 14px;
-        background: #1a1a30; border-bottom: 1px solid var(--border);
+        background: var(--mtt-bg-day-header); border-bottom: 1px solid var(--border);
         display: flex; align-items: center; gap: 12px;
     }
     .mto-day-name { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
@@ -110,7 +100,7 @@
     }
     .mto-session-header {
         padding: 8px 12px;
-        background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border);
+        background: rgba(var(--mtt-rgb-white), 0.03); border-bottom: 1px solid var(--border);
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         font-size: 12px;
     }
@@ -122,7 +112,7 @@
     .mto-table thead th {
         text-align: left; padding: 6px 8px; font-size: 10px; font-weight: 700;
         letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim);
-        background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border);
+        background: rgba(var(--mtt-rgb-white), 0.02); border-bottom: 1px solid var(--border);
         white-space: nowrap;
     }
     /* Fixed px widths (card is a fixed width, table-layout: fixed) so field
@@ -144,9 +134,9 @@
     }
     .mto-edit-select:focus, .mto-edit-input:focus { border-color: var(--accent-blue); outline: none; }
     .mto-edit-select { cursor: pointer; }
-    .mto-edit-select option { background: #1e1e32; color: var(--text-primary); }
+    .mto-edit-select option { background: var(--bg-raised); color: var(--text-primary); }
     .mto-edit-input::placeholder { color: var(--text-dim); }
-    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: #2fe06a; }
+    .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: var(--text-primary); }
     .mto-dim { color: var(--text-secondary); }
 
     .mto-row td { padding: 6px 5px; border-bottom: 1px solid var(--border); vertical-align: middle;
@@ -154,71 +144,99 @@
     .mto-row:last-child td { border-bottom: 0; }
     .mto-row-micd { background: transparent; }
 
-    .mto-rf { font-family: monospace; font-weight: 700; text-align: center; color: var(--text-primary); white-space: nowrap; }
+    /* RF# and presenter name +20%, matching the Tracker page. */
+    /* !important throughout: these are <td>s, and base_site.html paints every
+       th/td #e0e0e0 !important across the admin. */
+    .mto-rf { font-family: monospace; font-size: 15px; font-weight: 700; text-align: center; color: var(--text-primary) !important; white-space: nowrap; }
+    /* The one exact green, in the same two places as on the Tracker. */
+    .mto-row-micd .mto-rf { color: var(--accent-green) !important; }
     .mto-pres-cell { border-left: 1px solid var(--border); }
-    .mto-presenter { color: #fff; font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
+    .mto-presenter { color: var(--mtt-text-strong); font-size: 17px; font-weight: 700; letter-spacing: 0.01em; }
     .mto-pres-input {
         width: 100%; box-sizing: border-box;
-        background: var(--bg-raised); color: #fff;
+        background: var(--bg-raised); color: var(--mtt-text-strong);
         border: 1px solid var(--border); border-radius: 4px;
-        font-size: 14px; font-weight: 700; font-family: inherit;
+        font-size: 17px; font-weight: 700; font-family: inherit;
         padding: 5px 8px; letter-spacing: 0.01em;
         transition: border-color 0.12s;
     }
     .mto-pres-input:focus { border-color: var(--accent-blue); outline: none; }
     .mto-pres-input::placeholder { color: var(--text-dim); font-weight: 400; font-style: italic; }
-    .mto-pres-input.mto-saved-flash { border-color: #2fe06a; }
+    .mto-pres-input.mto-saved-flash { border-color: var(--text-primary); }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
     .mto-dash { color: var(--text-dim); }
     .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
+    /* Mic'd ON: the same solid fill as the Tracker's toggles, not a tinted
+       badge. Read-only rows (viewers) show the identical appearance -- the
+       state must look the same whoever is looking at it. */
     .mto-micd-on {
         display: inline-block; white-space: nowrap;
-        background: rgba(47,224,106,0.16); color: #2fe06a;
-        border: 1px solid rgba(47,224,106,0.5);
-        font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
-        padding: 2px 7px; border-radius: 4px;
+        background: var(--accent-green); color: var(--mtt-micd-fg);
+        border: 1px solid var(--accent-green);
+        font-weight: 800; font-size: 10px; letter-spacing: 0.04em;
+        padding: 3px 8px; border-radius: 4px;
     }
     .mto-micd-off { color: var(--text-dim); }
-    /* Interactive Mic'd toggle — mirrors the A2 button, styled like the badge. */
+    /* Interactive Mic'd toggle — mirrors the A2 button exactly, including
+       the fact that hover, focus and active change nothing. */
     .mto-micd-btn {
         font-family: inherit; cursor: pointer; white-space: nowrap;
         background: transparent; border: 1px solid var(--border-bright);
-        font-weight: 800; font-size: 9px; letter-spacing: 0.04em;
-        padding: 3px 6px; border-radius: 4px; color: var(--text-dim);
-        transition: background 0.12s, border-color 0.12s, color 0.12s;
+        font-weight: 800; font-size: 10px; letter-spacing: 0.04em;
+        padding: 4px 8px; min-height: 28px; border-radius: 4px; color: var(--text-dim);
+        transition: none; -webkit-appearance: none; appearance: none;
     }
-    .mto-micd-btn.on { background: rgba(47,224,106,0.16); color: #2fe06a; border-color: rgba(47,224,106,0.5); }
-    .mto-micd-btn.off:hover { color: #2fe06a; border-color: rgba(47,224,106,0.5); background: rgba(47,224,106,0.08); }
-    .mto-micd-btn.on:hover { background: rgba(47,224,106,0.28); }
-    .mto-micd-btn:disabled { cursor: default; border-color: transparent; }
-    .mto-micd-btn:disabled.off { color: var(--text-dim); }
-    .mto-micd-btn:disabled:hover { background: transparent; border-color: transparent; }
-    .mto-micd-btn:disabled.on:hover { background: rgba(47,224,106,0.16); border-color: rgba(47,224,106,0.5); }
+    .mto-micd-btn.off,
+    .mto-micd-btn.off:hover,
+    .mto-micd-btn.off:focus,
+    .mto-micd-btn.off:active,
+    .mto-micd-btn:disabled.off,
+    .mto-micd-btn:disabled.off:hover {
+        background: transparent; color: var(--text-dim);
+        border-color: var(--border-bright); box-shadow: none;
+    }
+    .mto-micd-btn.on,
+    .mto-micd-btn.on:hover,
+    .mto-micd-btn.on:focus,
+    .mto-micd-btn.on:active,
+    .mto-micd-btn:disabled.on,
+    .mto-micd-btn:disabled.on:hover {
+        background: var(--accent-green); color: var(--mtt-micd-fg);
+        border-color: var(--accent-green); box-shadow: none;
+    }
+    .mto-micd-btn:disabled { cursor: default; }
     .mto-empty-large { padding: 48px 24px; text-align: center; margin: 24px; border: 1px dashed var(--border-bright); border-radius: 6px; }
     .mto-empty-large-title { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; }
     .mto-empty-large-sub { font-size: 12px; color: var(--text-dim); }
 
-    /* Mic type badge (reused visually from the A1 tab). */
+    /* Mic type: a neutral label, matching the A1 tab. */
     .mto-type-badge {
         display: inline-flex; align-items: center; gap: 4px;
-        padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 700;
-        background: rgba(255,255,255,0.06); color: var(--text-secondary);
+        padding: 2px 0; font-size: 11px; font-weight: 600;
+        background: transparent; color: var(--text-secondary);
         white-space: nowrap; max-width: 100%;
     }
+
+    /* Unassigned rows are NOT dimmed, matching the tracker: .mto-unassigned
+     * above already reads as absent, and an opacity on the row took the RF#
+     * and the Mic'd badge down with it.
+     *
+     * .is-unassigned stays on the row as the state marker mtoSetAssigned()
+     * keeps in step with the name field. Nothing gives it an opacity. */
     </style>
 {% endblock %}
 
 {% block content %}
 {% csrf_token %}
 <div id="mto-update-banner" style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999;
-     background:linear-gradient(90deg,#ff8a00,#ff3d54); color:#fff; padding:14px 20px; text-align:center;
-     font-size:16px; font-weight:800; letter-spacing:0.01em; box-shadow:0 6px 28px rgba(255,61,84,0.55);
-     border-bottom:2px solid rgba(255,255,255,0.4);">
+     background:linear-gradient(90deg,var(--mtt-banner-start),var(--mtt-banner-end)); color:var(--mtt-banner-text); padding:14px 20px; text-align:center;
+     font-size:16px; font-weight:800; letter-spacing:0.01em; box-shadow:0 6px 28px rgba(var(--mtt-rgb-banner-end), 0.55);
+     border-bottom:2px solid rgba(var(--mtt-rgb-white), 0.4);">
     ⚠️ The show was updated — refresh to see the latest
-    <button onclick="location.reload()" style="margin-left:14px; background:#fff; color:#c0102f; border:none;
+    <button onclick="location.reload()" style="margin-left:14px; background:var(--mtt-banner-btn-bg); color:var(--mtt-banner-btn-fg); border:none;
         padding:8px 18px; border-radius:6px; cursor:pointer; font-weight:800; font-size:15px;">🔄 Refresh Now</button>
-    <button id="mto-banner-dismiss" style="margin-left:8px; background:transparent; border:1px solid rgba(255,255,255,0.6);
-        color:#fff; padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
+    <button id="mto-banner-dismiss" style="margin-left:8px; background:transparent; border:1px solid rgba(var(--mtt-rgb-white), 0.6);
+        color:var(--mtt-banner-text); padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
 </div>
 <div id="mto-root">
     <div class="mto-header">
@@ -226,6 +244,7 @@
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
             <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement and Mic'd are editable here.</div>
         </div>
+        <div class="mto-header-actions"></div>
     </div>
 
     <div class="mtt-toplevel-tabs">
@@ -274,27 +293,27 @@
                 {% with slots=assignment.presenter_slots.all slot_count=assignment.presenter_slots.count %}
                 {% if slot_count > 1 %}
                 {% for slot in slots %}
-                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %}">
+                <tr class="mto-row {% if slot.is_micd %}mto-row-micd{% endif %} {% if not slot.presenter %}is-unassigned{% endif %}">
                     <td class="mto-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
                     {% include "planner/_mto_row_fields.html" with edit_slot=slot %}
                     <td class="mto-micd">
                         <button type="button" class="mto-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
                                 data-assignment-id="{{ assignment.id }}" data-slot-id="{{ slot.id }}"
                                 onclick="mtoToggleSlotMicd({{ assignment.id }}, {{ slot.id }}, this)"
-                                {% if is_viewer %}disabled{% endif %}>{% if slot.is_micd %}MIC'D{% else %}—{% endif %}</button>
+                                {% if is_viewer %}disabled{% endif %}>{% if slot.is_micd %}ON{% else %}OFF{% endif %}</button>
                     </td>
                 </tr>
                 {% endfor %}
                 {% else %}
                 {% with active_slot=assignment.active_slot %}
-                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %}">
+                <tr class="mto-row {% if assignment.is_micd %}mto-row-micd{% endif %} {% if not active_slot.presenter %}is-unassigned{% endif %}">
                     <td class="mto-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
                     {% include "planner/_mto_row_fields.html" with edit_slot=active_slot %}
                     <td class="mto-micd">
                         <button type="button" class="mto-micd-btn {% if assignment.is_micd %}on{% else %}off{% endif %}"
                                 data-assignment-id="{{ assignment.id }}"
                                 onclick="mtoToggleMicd({{ assignment.id }}, this)"
-                                {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}MIC'D{% else %}—{% endif %}</button>
+                                {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}ON{% else %}OFF{% endif %}</button>
                     </td>
                 </tr>
                 {% endwith %}
@@ -381,7 +400,9 @@
     function setBtn(btn, on) {
         btn.classList.toggle('on', on);
         btn.classList.toggle('off', !on);
-        btn.textContent = on ? "MIC'D" : '—';
+        // ON / OFF, matching the tracker tab. The two show the same column
+        // one click apart, so they must word it the same way.
+        btn.textContent = on ? 'ON' : 'OFF';
         var row = btn.closest('.mto-row');
         if (row) row.classList.toggle('mto-row-micd', on);
     }
@@ -424,10 +445,22 @@
     // Issue #68: save an editable A2 field (Type/Headset/Placement) on a
     // specific presenter slot. Always targets the explicit slot_id so multi-
     // presenter rows edit the right slot (not just the active one).
+    // Keep the row's assigned/unassigned state in step with the field, and
+    // keep the value ATTRIBUTE in step with the property — a form reset or an
+    // attribute selector reads the attribute, and only the property changes
+    // when someone types.
+    function mtoSetAssigned(el, name) {
+        if (!el) return;
+        el.setAttribute('value', name || '');
+        var row = el.closest('.mto-row');
+        if (row) row.classList.toggle('is-unassigned', !name);
+    }
+
     window.mtoSaveSlotField = async function(slotId, field, value, el) {
         try { await post('/audiopatch/api/mic/slot/update/', {slot_id: slotId, field: field, value: value}); }
         catch (e) { alert('Could not save — ' + e.message + '. Refresh and try again.'); return; }
         if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
+        if (field === 'presenter_name') mtoSetAssigned(el, (value || '').trim());
         if (el) { el.classList.add('mto-saved-flash'); setTimeout(function() { el.classList.remove('mto-saved-flash'); }, 700); }
     };
 })();

@@ -13,25 +13,9 @@
 
 {% block extrastyle %}
     {{ block.super }}
+    {# Colour tokens shared by both Mic Tracker pages. #}
+    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
     <style>
-    :root {
-        --bg-base:       #0f0f1a;
-        --bg-card:       #181828;
-        --bg-raised:     #1e1e32;
-        --bg-input:      #252540;
-        --border:        #2a2a45;
-        --border-bright: #3a3a60;
-        --accent-blue:   #4a9eff;
-        --accent-green:  #00e676;
-        --accent-amber:  #ffab00;
-        --accent-red:    #ff5252;
-        --text-primary:  #e8e8f0;
-        --text-secondary:#9090b0;
-        --text-dim:      #505070;
-        --micd-bg:       rgba(0, 230, 118, 0.08);
-        --micd-border:   rgba(0, 230, 118, 0.35);
-    }
-
     #mic-tracker-root * { box-sizing: border-box; }
     #mic-tracker-root {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -50,11 +34,16 @@
         font-size: 16px; font-weight: 700; letter-spacing: 0.12em;
         text-transform: uppercase; color: var(--accent-blue); white-space: nowrap;
     }
-    .mtt-show-meta { display: flex; gap: 24px; flex: 1; flex-wrap: wrap; }
+    .mtt-show-meta { display: flex; gap: 24px; flex: 1 1 320px; flex-wrap: wrap; min-width: 0; }
     .mtt-meta-item { display: flex; flex-direction: column; gap: 2px; }
-    .mtt-meta-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+    .mtt-meta-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
     .mtt-meta-value { font-size: 13px; color: var(--text-secondary); }
-    .mtt-header-actions { display: flex; gap: 8px; align-items: center; }
+    /* The action strip is six buttons wide. Without wrapping it simply ran
+       off the right edge below ~1200px -- and with the admin sidebar eating
+       ~220px, an iPad landscape content column is ~800px, so Export and
+       Listen Setup were unreachable. It now wraps within itself, and the
+       strip as a whole drops to its own line before it has to. */
+    .mtt-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 
     .btn-mtt {
         padding: 7px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
@@ -64,9 +53,28 @@
     }
     .btn-mtt:active { transform: scale(0.97); }
     .btn-mtt:hover { opacity: 0.85; }
-    .btn-mtt-primary { background: var(--accent-blue); color: #000; }
+    .btn-mtt-primary { background: var(--accent-blue); color: var(--mtt-text-on-accent); }
+    /* Outlined secondary. Add Day and Presenters are utilities, not the page's
+       action, so the header carries no fill at all -- the filled primary is
+       kept for the empty-state Add Day and the modals' confirm, where it is
+       the one thing to press.
+     *
+     * Presenters is an <a>, and base_site.html paints
+     * `a, a:link, a:visited { color: #8ba4ff !important }` admin-wide.
+     * !important alone does NOT win that: both are !important, so
+     * specificity decides, and `a:link` is (0,1,1) against a bare class's
+     * (0,1,0) -- measured in Chrome, the button came out #8ba4ff. Hence the
+     * :link/:visited forms at (0,2,1). The old markup dodged this with an
+     * inline `--mtt-text-inverse !important`, which is near-black: right on
+     * the blue fill it used to have, unreadable on a transparent one. */
+    .btn-mtt-secondary,
+    a.btn-mtt-secondary:link,
+    a.btn-mtt-secondary:visited { background: transparent; color: var(--text-secondary) !important; border: 1px solid var(--border-bright); }
+    .btn-mtt-secondary:hover,
+    a.btn-mtt-secondary:link:hover,
+    a.btn-mtt-secondary:visited:hover { opacity: 1; color: var(--text-primary) !important; border-color: var(--accent-blue); }
     .btn-mtt-ghost   { background: var(--bg-raised); color: var(--text-secondary); border: 1px solid var(--border-bright); }
-    .btn-mtt-export  { background: var(--bg-raised); color: var(--accent-amber); border: 1px solid rgba(255,171,0,0.3); }
+    .btn-mtt-export  { background: var(--bg-raised); color: var(--accent-amber); border: 1px solid rgba(var(--mtt-rgb-amber), 0.3); }
 
     /* Issue #68: top-level Tracker | Overview tab strip (shared with overview page). */
     .mtt-toplevel-tabs { display: flex; gap: 4px; padding: 0 24px; margin: 0;
@@ -99,7 +107,7 @@
     }
     .btn-icon-sm:hover {
         border-color: var(--accent-amber); color: var(--accent-amber);
-        background: #2a2a3a;
+        background: var(--mtt-bg-icon-hover);
     }
 
     .mtt-day { margin: 16px 24px; border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
@@ -107,7 +115,7 @@
         display: flex; align-items: center; gap: 14px; padding: 11px 16px;
         background: var(--bg-raised); cursor: pointer; user-select: none;
     }
-    .mtt-day-header:hover { background: #222238; }
+    .mtt-day-header:hover { background: var(--mtt-bg-day-hover); }
     .mtt-day-collapse { font-size: 10px; color: var(--text-dim); transition: transform 0.2s; width: 12px; text-align: center; flex-shrink: 0; }
     .mtt-day-collapse.collapsed { transform: rotate(-90deg); }
     .mtt-day-name { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
@@ -115,12 +123,12 @@
     .mtt-day-stats strong { color: var(--text-secondary); }
     .mtt-day-actions { display: flex; gap: 6px; }
 
-    .mtt-add-session-bar { padding: 10px 14px; border-top: 1px solid var(--border); background: #0f0f1a; }
+    .mtt-add-session-bar { padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg-base); }
 
     .mtt-session { margin: 14px 14px 0 14px; border: 1px solid var(--border); border-radius: 5px; overflow: visible; }
     .mtt-session-header {
         display: flex; align-items: center; gap: 10px;
-        padding: 0 14px; background: #14142a;
+        padding: 0 14px; background: var(--mtt-bg-session-header);
         border-bottom: 1px solid var(--border);
         min-height: 46px; flex-wrap: wrap;
         cursor: pointer; user-select: none;
@@ -149,11 +157,12 @@
     .session-actions { display: flex; gap: 8px; align-items: center; padding-left: 12px; border-left: 1px solid var(--border); height: 44px; margin-left: auto; }
     .session-panel { display: none; }
     .session-panel.active { display: block; }
-    .mtt-session-stats { font-size: 10px; color: var(--text-dim); padding: 6px 14px; background: #0f0f1a; border-top: 1px solid var(--border); display: flex; gap: 16px; }
-    .mtt-session-stats strong { color: var(--accent-green); }
+    .mtt-session-stats { font-size: 11px; color: var(--text-dim); padding: 6px 14px; background: var(--bg-base); border-top: 1px solid var(--border); display: flex; gap: 16px; }
+    /* A count, not a cue. Green belongs to the Mic'd control alone. */
+    .mtt-session-stats strong { color: var(--text-primary); }
 
     .mtt-dropdown { position: relative; display: inline-block; }
-    .mtt-dropdown-menu { display: none; position: absolute; right: 0; top: 100%; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 185px; z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow: hidden; }
+    .mtt-dropdown-menu { display: none; position: absolute; right: 0; top: 100%; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 185px; z-index: 200; box-shadow: 0 8px 24px rgba(var(--mtt-rgb-black), 0.4); overflow: hidden; }
     .mtt-dropdown:hover .mtt-dropdown-menu { display: block; }
     .mtt-dropdown-menu a { display: block; padding: 8px 14px; font-size: 11px; color: var(--text-secondary); text-decoration: none; }
     .mtt-dropdown-menu a:hover { background: var(--bg-input); color: var(--text-primary); }
@@ -163,73 +172,132 @@
     .a1-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .a1-table thead th {
         padding: 12px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-        text-transform: uppercase; color: var(--text-secondary); background: #13131f;
+        text-transform: uppercase; color: var(--text-secondary); background: var(--mtt-bg-sunken);
         text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
     }
     .a1-table thead th.th-center { text-align: center; }
 
-    /* Primary rows */
+    /* Primary rows.
+     *
+     * No row tint for mic'd. A tint on every mic'd row is most of the table
+     * glowing at once, and it said "mic'd" a third time on a row that
+     * already says it with the button and the RF#. Hover is the same
+     * neutral wash whatever the state, so hovering a mic'd row no longer
+     * flashes green.
+     */
     .a1-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-    .a1-row:hover { background: rgba(255,255,255,0.02); }
+    .a1-row:hover,
+    .a1-row.row-micd:hover { background: rgba(var(--mtt-rgb-white), 0.03); }
     .a1-row.row-micd { background: var(--micd-bg); }
-    .a1-row.row-micd:hover { background: rgba(0,230,118,0.11); }
     .a1-row td { padding: 9px 12px; vertical-align: middle; }
 
-    /* Expanded slot sub-rows */
-    .a1-slot-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-    .a1-slot-row:hover { background: rgba(255,255,255,0.02); }
-    .a1-slot-row.row-micd { background: var(--micd-bg); }
-    .a1-slot-row.row-micd:hover { background: rgba(0,230,118,0.11); }
-    .a1-slot-row td { padding: 9px 12px; vertical-align: middle; }
-    .a1-slot-row .a1-rf { color: var(--text-dim) !important; font-size: 14px !important; }
-    .a1-slot-row.row-micd .a1-rf { color: var(--accent-green) !important; }
-    .a1-slot-active { color: var(--accent-blue) !important; }
+    /* Expanded slot sub-rows take the .a1-row styling above and nothing of
+       their own -- a multi-presenter sub-row is a row of the same table,
+       read the same way. The .a1-slot-row class is a JS hook only (the row
+       id, plus toggleSlotRows()'s query); no CSS keys off it. */
+    .a1-slot-active { color: var(--text-primary) !important; font-weight: 700; }
 
-    .a1-rf { width: 56px; font-size: 20px; font-weight: 800; color: var(--text-primary); }
-    .a1-row.row-micd .a1-rf { color: var(--accent-green); }
+    /* RF# +20% (20 -> 24), main rows and multi-presenter sub-rows alike.
+       With the presenter name, the two things read from a step back.
+     *
+     * Every colour here is !important because base_site.html paints
+     * `th, td { color: #e0e0e0 !important }` across the whole admin. RF# is a
+     * <td>, so without this the mic'd green silently loses to it -- which is
+     * exactly what happened the first time round: the fill went green, the
+     * number stayed grey, and nothing in the stylesheet looked wrong.
+     */
+    .a1-rf { width: 62px; font-size: 24px; font-weight: 800; color: var(--text-primary) !important; }
 
-    .mic-type-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
-    .mic-type-badge .type-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .type-HH        { background: rgba(74,158,255,0.12);  color: #4a9eff; }  .type-HH       .type-dot { background: #4a9eff; }
-    .type-LAV       { background: rgba(255,171,0,0.12);   color: #ffab00; }  .type-LAV      .type-dot { background: #ffab00; }
-    .type-HEADSET   { background: rgba(180,100,255,0.12); color: #b464ff; }  .type-HEADSET  .type-dot { background: #b464ff; }
-    .type-PODIUM    { background: rgba(0,230,118,0.12);   color: #00e676; }  .type-PODIUM   .type-dot { background: #00e676; }
-    .type-BOOM      { background: rgba(255,82,82,0.12);   color: #ff5252; }  .type-BOOM     .type-dot { background: #ff5252; }
-    .type-BOUNDARY  { background: rgba(0,188,212,0.12);   color: #00bcd4; }  .type-BOUNDARY .type-dot { background: #00bcd4; }
-    .type-GOOSENECK { background: rgba(255,152,0,0.12);   color: #ff9800; }  .type-GOOSENECK .type-dot { background: #ff9800; }
-    .type-COMBO     { background: rgba(233,30,99,0.12);   color: #e91e63; }  .type-COMBO    .type-dot { background: #e91e63; }
-    .type-empty     { background: var(--bg-raised);       color: var(--text-dim); }  .type-empty .type-dot { background: var(--text-dim); }
-    .type-INSTRUMENT { background: rgba(0,230,118,0.12); color: #00e676; } .type-INSTRUMENT .type-dot { background: #00e676; }
+    /* Mic'd RF#: the one exact green, and the only place besides the button
+       that it appears. */
+    .a1-row.row-micd .a1-rf { color: var(--accent-green) !important; }
 
-    .a1-presenter-primary { font-size: 15px; font-weight: 600; color: var(--text-primary); }
-    .a1-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
-    .a1-slot-row.row-micd .a1-presenter-primary { color: var(--accent-green); }
-    .a1-unassigned { font-size: 12px; color: var(--text-dim); font-style: italic; }
+    /* Column headers are labels; the same blanket rule was pulling them up to
+       #e0e0e0, brighter than the data underneath them. */
+    .a1-table thead th { color: var(--text-dim) !important; }
+
+    /* Mic type is reference data, not a status.
+     *
+     * It used to be nine hue-coded chips -- blue HH, amber LAV, purple
+     * HEADSET, and two of them (PODIUM, INSTRUMENT) in the same green as
+     * Mic'd, so a column of mic types read as a column of states. One
+     * neutral label for all nine: still legible, no longer competing with
+     * the one colour on the page that means something.
+     *
+     * The dot carried no information once the chips lost their hues, so it
+     * goes rather than becoming nine identical grey dots.
+     */
+    .mic-type-badge { display: inline-flex; align-items: center; padding: 3px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; color: var(--text-secondary); background: transparent; }
+    .mic-type-badge .type-dot { display: none; }
+    .type-empty { color: var(--text-dim); }
+
+    /* Presenter name +20% (15 -> 18). It reads the same whatever the mic'd
+       state: the name is who, not whether. */
+    .a1-presenter-primary { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+    .a1-unassigned { font-size: 14px; color: var(--mtt-text-placeholder); font-style: italic; }
+
+    /* An unassigned slot is NOT dimmed. "— Unassigned —" in the placeholder
+       style above is the whole signal: it already reads as absent, and an
+       opacity on the row dimmed the RF#, the mic type and the Mic'd button
+       along with it -- a row you still have to read across a dark room.
+     *
+     * .is-unassigned is still set on the row (template + renderer) as the
+     * state marker the renderer keeps in step with the rest of slot state.
+     * Nothing gives it an opacity, and nothing should. */
     .a1-shared-tag {
         display: inline-block; margin-left: 8px; font-size: 9px;
         background: var(--bg-raised); color: var(--accent-blue);
-        border: 1px solid rgba(74,158,255,0.4); padding: 1px 7px;
+        border: 1px solid rgba(var(--mtt-rgb-blue), 0.4); padding: 1px 7px;
         border-radius: 10px; vertical-align: middle; cursor: pointer;
         transition: background 0.15s;
     }
-    .a1-shared-tag:hover { background: rgba(74,158,255,0.15); }
+    .a1-shared-tag:hover { background: rgba(var(--mtt-rgb-blue), 0.15); }
 
-    .a1-micd-cell { width: 80px; text-align: center; }
+    /* ── Mic'd toggle ───────────────────────────────────────────────────
+     * ON  = a solid #4fae6a fill with a near-black label.
+     * OFF = a grey outline with no fill at all.
+     *
+     * Fill-vs-outline is the primary cue and brightness the second, so the
+     * state survives a glance from a step back, a dim screen, or a colour
+     * vision deficiency -- none of which green-vs-grey alone would.
+     *
+     * Every state is pinned to the same two appearances. Previously hover
+     * inherited a generic opacity fade and Safari's clicked-button styling
+     * shifted the fill, so the green an A1 sees mid-show depended on where
+     * the pointer happened to be. The glow is gone with it: a shadow the
+     * colour of the fill just makes the edge of the one important control
+     * mushy.
+     */
+    .a1-micd-cell { width: 92px; text-align: center; }
     .a1-micd-toggle {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 58px; height: 28px; border-radius: 4px; font-size: 11px;
-        font-weight: 800; letter-spacing: 0.1em; cursor: pointer; border: none;
-        transition: all 0.15s; text-transform: uppercase; font-family: inherit;
+        min-width: 72px; min-height: 34px; border-radius: 4px; font-size: 12px;
+        font-weight: 800; letter-spacing: 0.1em; cursor: pointer;
+        transition: none; text-transform: uppercase; font-family: inherit;
+        box-shadow: none; -webkit-appearance: none; appearance: none;
     }
-    .a1-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
-    .a1-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 12px rgba(0,230,118,0.4); }
+    .a1-micd-toggle.off,
+    .a1-micd-toggle.off:hover,
+    .a1-micd-toggle.off:focus,
+    .a1-micd-toggle.off:active {
+        background: transparent; color: var(--text-dim);
+        border: 1px solid var(--border-bright); box-shadow: none;
+    }
+    .a1-micd-toggle.on,
+    .a1-micd-toggle.on:hover,
+    .a1-micd-toggle.on:focus,
+    .a1-micd-toggle.on:active {
+        background: var(--accent-green); color: var(--mtt-micd-fg);
+        border: 1px solid var(--accent-green); box-shadow: none;
+    }
 
+    .a1-type-cell { width: 120px; }
     .a1-notes-cell { width: 200px; }
     .a1-notes-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary); font-size: 11px; font-family: inherit; padding: 2px 4px; outline: none; transition: border-color 0.15s; }
     .a1-notes-input:focus { border-bottom-color: var(--border-bright); }
     .a1-notes-input::placeholder { color: var(--text-dim); }
 
-    .a1-actions-bar { display: flex; justify-content: flex-end; padding: 7px 12px; background: #13131f; border-bottom: 1px solid var(--border); gap: 6px; }
+    .a1-actions-bar { display: flex; justify-content: flex-end; padding: 7px 12px; background: var(--mtt-bg-sunken); border-bottom: 1px solid var(--border); gap: 6px; }
 
     /* ── A2 Cards ── */
     /* auto-fill min was 460 which forced a single column inside the ~800px
@@ -238,35 +306,46 @@
        on wider desktops. */
     .a2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; padding: 14px; }
     .a2-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; overflow: visible; }
-    .a2-card.card-micd { border-color: var(--micd-border); box-shadow: 0 0 0 1px rgba(0,230,118,0.1) inset; }
+    /* A mic'd card is not also an outlined card and not also a tinted card.
+       Only the badge digits and the Mic'd button change. */
+    .a2-card.card-micd { border-color: var(--micd-border); box-shadow: none; }
     .a2-presenter-details { flex: 1; min-width: 0; overflow: visible; }
-    .a2-card.card-micd .a2-card-header { background: rgba(0,230,118,0.06); border-bottom-color: var(--micd-border); }
-    .a2-rf-badge { width: 40px; height: 40px; border-radius: 5px; background: var(--bg-raised); border: 1px solid var(--border-bright); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
-    .a2-card.card-micd .a2-rf-badge { background: rgba(0,230,118,0.15); border-color: var(--accent-green); color: var(--accent-green); }
-    .a2-card.group-blue   { border-left: 4px solid #4a9eff; }
-    .a2-card.group-amber  { border-left: 4px solid #ffab00; }
-    .a2-card.group-red    { border-left: 4px solid #ff5252; }
-    .a2-card.group-purple { border-left: 4px solid #b464ff; }
-    .a2-card.group-teal   { border-left: 4px solid #00bcd4; }
+    .a2-card.card-micd .a2-card-header { background: var(--mtt-bg-session-header); border-bottom-color: var(--border); }
+    /* RF# +20% (17 -> 20), box grown to match. */
+    .a2-rf-badge { width: 46px; height: 46px; border-radius: 5px; background: var(--bg-raised); border: 1px solid var(--border-bright); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--text-primary); flex-shrink: 0; }
+    .a2-card.card-micd .a2-rf-badge { background: var(--bg-raised); border-color: var(--border-bright); color: var(--accent-green); }
+    .a2-card.group-blue   { border-left: 4px solid var(--mtt-group-blue); }
+    .a2-card.group-amber  { border-left: 4px solid var(--mtt-group-amber); }
+    .a2-card.group-red    { border-left: 4px solid var(--mtt-group-red); }
+    .a2-card.group-purple { border-left: 4px solid var(--mtt-group-purple); }
+    .a2-card.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
     .a2-card-meta { flex: 1; }
-    .a2-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #14142a; border-bottom: 1px solid var(--border); justify-content: space-between; }
+    .a2-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--mtt-bg-session-header); border-bottom: 1px solid var(--border); justify-content: space-between; }
     .a2-header-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
     /* Issue #74 — Listen button */
     .a2-listen-btn { padding: 8px 12px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; border: 1px solid var(--border-bright); background: var(--bg-raised); color: var(--text-secondary); transition: all 0.15s; display: flex; align-items: center; gap: 6px; font-family: inherit; }
     .a2-listen-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
-    .a2-listen-btn.listen-active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); box-shadow: 0 0 14px rgba(74,158,255,0.4); }
+    .a2-listen-btn.listen-active { background: var(--accent-blue); color: var(--mtt-text-inverse); border-color: var(--accent-blue); box-shadow: 0 0 14px rgba(var(--mtt-rgb-blue), 0.4); }
     .a2-listen-icon { font-size: 13px; line-height: 1; }
     .a2-listen-ch { width: 100%; }
-    .a2-micd-toggle { padding: 8px 16px; border-radius: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; border: none; transition: all 0.15s; display: flex; align-items: center; gap: 7px; font-family: inherit; }
-    .a2-micd-toggle.off { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); }
-    .a2-micd-toggle.on  { background: var(--accent-green); color: #000; box-shadow: 0 0 16px rgba(0,230,118,0.45); }
+    /* Same two appearances as the A1 toggle, pinned across every state. */
+    .a2-micd-toggle { padding: 9px 18px; min-height: 38px; border-radius: 5px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: none; display: flex; align-items: center; gap: 7px; font-family: inherit; -webkit-appearance: none; appearance: none; }
+    .a2-micd-toggle.off,
+    .a2-micd-toggle.off:hover,
+    .a2-micd-toggle.off:focus,
+    .a2-micd-toggle.off:active { background: transparent; color: var(--text-dim); border: 1px solid var(--border-bright); box-shadow: none; }
+    .a2-micd-toggle.on,
+    .a2-micd-toggle.on:hover,
+    .a2-micd-toggle.on:focus,
+    .a2-micd-toggle.on:active { background: var(--accent-green); color: var(--mtt-micd-fg); border: 1px solid var(--accent-green); box-shadow: none; }
     .a2-micd-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-    .a2-micd-toggle.on .a2-micd-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
-    @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:0.6} }
+    /* The pulse made the one element that must read instantly also the only
+       moving thing on the page. The fill already says it. */
+    .a2-micd-toggle.on .a2-micd-dot { animation: none; }
 
     .a2-presenter-block { display: flex; padding: 14px; border-bottom: 1px solid var(--border); }
     .a2-presenter-block:last-of-type { border-bottom: none; }
-    .a2-presenter-block.shared-block { background: rgba(255,255,255,0.015); padding-left: 20px; }
+    .a2-presenter-block.shared-block { background: rgba(var(--mtt-rgb-white), 0.015); padding-left: 20px; }
 
     .a2-photo-zone { width: 70px; height: 70px; flex-shrink: 0; border-radius: 5px; border: 1px dashed var(--border-bright); background: var(--bg-raised); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: visible; cursor: pointer; margin-right: 14px; transition: border-color 0.15s; position: relative; }
     .a2-photo-zone:hover { border-color: var(--accent-blue); }
@@ -275,37 +354,41 @@
     .a2-photo-icon { font-size: 22px; opacity: 0.25; }
     .a2-photo-label { font-size: 8px; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
     .a2-photo-input { display: none; }
-    .a2-photo-expand { display: none; position: absolute; top: 0; left: 0; z-index: 200; width: 200px; height: 200px; border-radius: 8px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.6); border: 2px solid var(--accent-blue); }
+    .a2-photo-expand { display: none; position: absolute; top: 0; left: 0; z-index: 200; width: 200px; height: 200px; border-radius: 8px; overflow: hidden; box-shadow: 0 8px 32px rgba(var(--mtt-rgb-black), 0.6); border: 2px solid var(--accent-blue); }
     .a2-photo-expand img { width: 100%; height: 100%; object-fit: cover; }
     .a2-photo-zone:hover .a2-photo-expand { display: block; }
 
     .a2-presenter-details { flex: 1; min-width: 0; }
     .a2-presenter-name-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; position: relative; }
     .a2-presenter-role { font-size: 9px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
-    .a2-presenter-name { font-size: 15px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .a2-unassigned { color: #6060a0; font-style: italic; font-size: 13px; }
+    /* Presenter name +20% (15 -> 18), matching the A1 table. */
+    .a2-presenter-name { font-size: 18px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .a2-unassigned { color: var(--mtt-text-placeholder); font-style: italic; font-size: 15px; }
+
+    /* Same treatment as an unassigned A1 row: no dimming. The .a2-unassigned
+       placeholder above carries it. */
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
-    .a2-setting-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #c3ccd8; margin-bottom: 1px; }
+    .a2-setting-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mtt-text-label); margin-bottom: 1px; }
     .a2-select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; border-radius: 3px; padding: 3px 6px; font-family: inherit; cursor: pointer; }
     .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
-    .a2-select option { background: #1e1e32; }
+    .a2-select option { background: var(--bg-raised); }
     .a2-setting-notes { flex: 1; min-width: 200px; }
     .a2-setting-notes .a2-notes-input { width: 100%; min-height: 26px; height: 26px; max-height: 80px; resize: vertical; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); font-size: 11px; font-family: inherit; padding: 3px 6px; outline: none; transition: border-color 0.15s, height 0.15s; box-sizing: border-box; }
     .a2-setting-notes .a2-notes-input:focus { border-color: var(--accent-blue); height: 60px; }
-    .a2-setting-notes .a2-notes-input::placeholder { color: #6060a0; }
+    .a2-setting-notes .a2-notes-input::placeholder { color: var(--mtt-text-placeholder); }
 
-    .a2-slot-queue { border-top: 1px solid var(--border); padding: 8px 14px 4px; background: #13131f; }
+    .a2-slot-queue { border-top: 1px solid var(--border); padding: 8px 14px 4px; background: var(--mtt-bg-sunken); }
     .a2-slot-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .a2-slot-btn { background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.4); color: var(--accent-blue); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer; letter-spacing: 0.05em; }
-    .a2-slot-btn:hover { background: rgba(74,158,255,0.25); }
+    .a2-slot-btn { background: rgba(var(--mtt-rgb-blue), 0.15); border: 1px solid rgba(var(--mtt-rgb-blue), 0.4); color: var(--accent-blue); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer; letter-spacing: 0.05em; }
+    .a2-slot-btn:hover { background: rgba(var(--mtt-rgb-blue), 0.25); }
     .a2-slot-counter { font-size: 11px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.05em; }
     .a2-slot-list { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
     .a2-slot-chip { font-size: 10px; padding: 3px 9px; border-radius: 10px; background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border); display: inline-flex; align-items: center; }
-    .a2-slot-chip.active { background: rgba(74,158,255,0.15); color: var(--accent-blue); border-color: rgba(74,158,255,0.4); font-weight: 600; }
-    .a2-slot-remove { margin-left: 7px; cursor: pointer; font-size: 14px; font-weight: 800; line-height: 1; color: #ff6b6b; padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(255,107,107,0.45); }
-    .a2-slot-remove:hover { color: #fff; background: #ff4444; border-color: #ff4444; }
-    .a2-add-slot-bar { padding: 6px 14px 10px; background: #13131f; border-top: 1px solid var(--border); }
+    .a2-slot-chip.active { background: rgba(var(--mtt-rgb-blue), 0.15); color: var(--accent-blue); border-color: rgba(var(--mtt-rgb-blue), 0.4); font-weight: 600; }
+    .a2-slot-remove { margin-left: 7px; cursor: pointer; font-size: 14px; font-weight: 800; line-height: 1; color: var(--mtt-slot-remove); padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(var(--mtt-rgb-slot-remove), 0.45); }
+    .a2-slot-remove:hover { color: var(--mtt-text-inverse); background: var(--mtt-slot-remove-hover); border-color: var(--mtt-slot-remove-hover); }
+    .a2-add-slot-bar { padding: 6px 14px 10px; background: var(--mtt-bg-sunken); border-top: 1px solid var(--border); }
     .a2-add-slot-btn { background: none; border: 1px dashed var(--border-bright); color: var(--text-dim); font-size: 10px; padding: 4px 12px; border-radius: 4px; cursor: pointer; width: 100%; }
     .a2-add-slot-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 
@@ -313,38 +396,38 @@
         .mtt-header-actions, .session-tabs, .mtt-day-actions, .session-actions,
         .a1-actions-bar, .mtt-add-session-bar, .session-panel:not(.active),
         #mic-tracker-update-banner, .a1-micd-cell { display: none !important; }
-        body, #mic-tracker-root { background: #fff; color: #000; }
-        .a1-table thead th { background: #f0f0f0; color: #333; }
-        .a1-row { border-bottom-color: #ddd; }
-        .a1-micd-toggle.on { background: #000; color: #fff; box-shadow: none; }
-        .mtt-day, .mtt-session { border-color: #ccc; }
-        .mtt-day-header, .mtt-session-header { background: #f5f5f5; }
+        body, #mic-tracker-root { background: var(--mtt-print-bg); color: var(--mtt-print-fg); }
+        .a1-table thead th { background: var(--mtt-print-th-bg); color: var(--mtt-print-th-fg); }
+        .a1-row { border-bottom-color: var(--mtt-print-row-rule); }
+        .a1-micd-toggle.on { background: var(--mtt-print-fg); color: var(--mtt-print-bg); box-shadow: none; }
+        .mtt-day, .mtt-session { border-color: var(--mtt-print-border); }
+        .mtt-day-header, .mtt-session-header { background: var(--mtt-print-header-bg); }
     }
 
     #mic-tracker-update-banner {
         display: none; position: fixed; top: 0; left: 0; right: 0;
-        background: linear-gradient(90deg, #ff8a00, #ff3d54);
-        color: #fff; padding: 15px 20px; text-align: center; z-index: 99999;
+        background: linear-gradient(90deg, var(--mtt-banner-start), var(--mtt-banner-end));
+        color: var(--mtt-banner-text); padding: 15px 20px; text-align: center; z-index: 99999;
         font-size: 17px; font-weight: 800; letter-spacing: 0.01em;
-        border-bottom: 2px solid rgba(255,255,255,0.4);
-        box-shadow: 0 6px 28px rgba(255,61,84,0.55);
+        border-bottom: 2px solid rgba(var(--mtt-rgb-white), 0.4);
+        box-shadow: 0 6px 28px rgba(var(--mtt-rgb-banner-end), 0.55);
         animation: mtt-banner-pulse 1.3s ease-in-out infinite;
     }
     #mtt-banner-refresh {
-        margin-left: 16px; background: #fff; color: #c0102f; border: none;
+        margin-left: 16px; background: var(--mtt-banner-btn-bg); color: var(--mtt-banner-btn-fg); border: none;
         padding: 10px 22px; border-radius: 6px; cursor: pointer;
         font-weight: 800; font-size: 15px; letter-spacing: 0.02em;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+        box-shadow: 0 2px 10px rgba(var(--mtt-rgb-black), 0.25);
         animation: mtt-btn-pulse 1.3s ease-in-out infinite;
     }
-    #mtt-banner-refresh:hover { background: #fff0f2; }
+    #mtt-banner-refresh:hover { background: var(--mtt-banner-btn-hover); }
     #mic-tracker-update-banner #banner-dismiss {
-        margin-left: 8px; background: transparent; border: 1px solid rgba(255,255,255,0.6);
-        color: #fff; padding: 9px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;
+        margin-left: 8px; background: transparent; border: 1px solid rgba(var(--mtt-rgb-white), 0.6);
+        color: var(--mtt-banner-text); padding: 9px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;
     }
     @keyframes mtt-banner-pulse {
-        0%, 100% { box-shadow: 0 6px 24px rgba(255,61,84,0.45); }
-        50%      { box-shadow: 0 8px 40px rgba(255,138,0,0.9); }
+        0%, 100% { box-shadow: 0 6px 24px rgba(var(--mtt-rgb-banner-end), 0.45); }
+        50%      { box-shadow: 0 8px 40px rgba(var(--mtt-rgb-banner-start), 0.9); }
     }
     @keyframes mtt-btn-pulse {
         0%, 100% { transform: scale(1); }
@@ -354,9 +437,9 @@
         #mic-tracker-update-banner, #mtt-banner-refresh { animation: none; }
     }
 
-    .a2-presenter-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-primary); font-size: 15px; font-weight: 600; font-family: inherit; width: 100%; outline: none; padding: 2px 0; transition: border-color 0.15s; }
+    .a2-presenter-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-primary); font-size: 18px; font-weight: 600; font-family: inherit; width: 100%; outline: none; padding: 2px 0; transition: border-color 0.15s; }
     .a2-presenter-input:focus { border-bottom-color: var(--border-bright); }
-    .a2-presenter-input::placeholder { color: #6060a0; font-style: italic; font-weight: 400; font-size: 13px; }
+    .a2-presenter-input::placeholder { color: var(--mtt-text-placeholder); font-style: italic; font-weight: 400; font-size: 15px; }
 
     .presenter-dropdown { position: absolute; top: auto; bottom: auto; left: 0; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 4px; min-width: 220px; z-index: 1000; display: none; max-height: 160px; overflow-y: auto; padding-top: 4px; }
     .presenter-dropdown.open { display: block; }
@@ -365,25 +448,20 @@
     .presenter-dd-add { color: var(--accent-blue); border-top: 1px solid var(--border); }
 
     /* ── Group colors ── */
-    .a1-row.group-blue   { border-left: 4px solid #4a9eff; }
-    .a1-row.group-amber  { border-left: 4px solid #ffab00; }
-    .a1-row.group-red    { border-left: 4px solid #ff5252; }
-    .a1-row.group-purple { border-left: 4px solid #b464ff; }
-    .a1-row.group-teal   { border-left: 4px solid #00bcd4; }
-    .a1-slot-row.group-blue   { border-left: 4px solid #4a9eff; }
-    .a1-slot-row.group-amber  { border-left: 4px solid #ffab00; }
-    .a1-slot-row.group-red    { border-left: 4px solid #ff5252; }
-    .a1-slot-row.group-purple { border-left: 4px solid #b464ff; }
-    .a1-slot-row.group-teal   { border-left: 4px solid #00bcd4; }
+    .a1-row.group-blue   { border-left: 4px solid var(--mtt-group-blue); }
+    .a1-row.group-amber  { border-left: 4px solid var(--mtt-group-amber); }
+    .a1-row.group-red    { border-left: 4px solid var(--mtt-group-red); }
+    .a1-row.group-purple { border-left: 4px solid var(--mtt-group-purple); }
+    .a1-row.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
 
     .group-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; }
     .group-dot:hover { transform: scale(1.2); }
     .group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .group-dot.color-blue   { background: #4a9eff; }
-    .group-dot.color-amber  { background: #ffab00; }
-    .group-dot.color-red    { background: #ff5252; }
-    .group-dot.color-purple { background: #b464ff; }
-    .group-dot.color-teal   { background: #00bcd4; }
+    .group-dot.color-blue   { background: var(--mtt-group-blue); }
+    .group-dot.color-amber  { background: var(--mtt-group-amber); }
+    .group-dot.color-red    { background: var(--mtt-group-red); }
+    .group-dot.color-purple { background: var(--mtt-group-purple); }
+    .group-dot.color-teal   { background: var(--mtt-group-teal); }
 
     /* Multi-group dot stack containers (A1 and A2). The stack itself is the
        click target for the picker; individual dots inside don't react to hover.
@@ -392,17 +470,17 @@
        base .group-dot rule has equal specificity in some cascades and the row
        tint classes can otherwise win. */
     .group-dot-stack { display: inline-flex !important; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 2px; cursor: pointer; padding: 1px; border-radius: 4px; transition: background 0.1s; vertical-align: middle; box-sizing: content-box; }
-    .group-dot-stack:hover { background: rgba(255,255,255,0.06); }
+    .group-dot-stack:hover { background: rgba(var(--mtt-rgb-white), 0.06); }
     .group-dot-stack > .group-dot { width: 8px !important; height: 8px !important; border-width: 0 !important; box-sizing: content-box !important; cursor: pointer; flex: 0 0 auto; }
     .group-dot-stack > .group-dot.empty { width: 14px !important; height: 14px !important; border-width: 2px !important; }
     .group-dot-stack > .group-dot:hover { transform: none; }
     .a2-group-dot-stack { display: inline-flex !important; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 2px; cursor: pointer; padding: 1px 2px; border-radius: 4px; margin-left: 6px; vertical-align: middle; transition: background 0.1s; box-sizing: content-box; }
-    .a2-group-dot-stack:hover { background: rgba(255,255,255,0.06); }
+    .a2-group-dot-stack:hover { background: rgba(var(--mtt-rgb-white), 0.06); }
     .a2-group-dot-stack > .a2-group-dot { width: 8px !important; height: 8px !important; border-width: 0 !important; box-sizing: content-box !important; margin-left: 0 !important; flex: 0 0 auto; }
     .a2-group-dot-stack > .a2-group-dot.empty { width: 12px !important; height: 12px !important; border-width: 2px !important; }
     .a2-group-dot-stack > .a2-group-dot:hover { transform: none; }
 
-    .group-picker { position: absolute; z-index: 500; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 6px; padding: 10px; min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none; }
+    .group-picker { position: absolute; z-index: 500; background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 6px; padding: 10px; min-width: 180px; box-shadow: 0 8px 24px rgba(var(--mtt-rgb-black), 0.4); display: none; }
     .group-picker.open { display: block; }
     .group-picker-title { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
     .group-picker-item { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; color: var(--text-secondary); }
@@ -416,38 +494,38 @@
     .a2-group-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; margin-left: 6px; vertical-align: middle; }
     .a2-group-dot:hover { transform: scale(1.2); }
     .a2-group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .a2-group-dot.color-blue   { background: #4a9eff; }
-    .a2-group-dot.color-amber  { background: #ffab00; }
-    .a2-group-dot.color-red    { background: #ff5252; }
-    .a2-group-dot.color-purple { background: #b464ff; }
-    .a2-group-dot.color-teal   { background: #00bcd4; }
+    .a2-group-dot.color-blue   { background: var(--mtt-group-blue); }
+    .a2-group-dot.color-amber  { background: var(--mtt-group-amber); }
+    .a2-group-dot.color-red    { background: var(--mtt-group-red); }
+    .a2-group-dot.color-purple { background: var(--mtt-group-purple); }
+    .a2-group-dot.color-teal   { background: var(--mtt-group-teal); }
     .a2-group-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 6px; }
-    .a2-group-pill.color-blue   { background: rgba(74,158,255,0.15); color: #4a9eff; border: 1px solid rgba(74,158,255,0.3); }
-    .a2-group-pill.color-amber  { background: rgba(255,171,0,0.15);  color: #ffab00; border: 1px solid rgba(255,171,0,0.3); }
-    .a2-group-pill.color-red    { background: rgba(255,82,82,0.15);  color: #ff5252; border: 1px solid rgba(255,82,82,0.3); }
-    .a2-group-pill.color-purple { background: rgba(180,100,255,0.15);color: #b464ff; border: 1px solid rgba(180,100,255,0.3); }
-    .a2-group-pill.color-teal   { background: rgba(0,188,212,0.15);  color: #00bcd4; border: 1px solid rgba(0,188,212,0.3); }
+    .a2-group-pill.color-blue   { background: rgba(var(--mtt-rgb-group-blue), 0.15); color: var(--mtt-group-blue); border: 1px solid rgba(var(--mtt-rgb-group-blue), 0.3); }
+    .a2-group-pill.color-amber  { background: rgba(var(--mtt-rgb-group-amber), 0.15);  color: var(--mtt-group-amber); border: 1px solid rgba(var(--mtt-rgb-group-amber), 0.3); }
+    .a2-group-pill.color-red    { background: rgba(var(--mtt-rgb-group-red), 0.15);  color: var(--mtt-group-red); border: 1px solid rgba(var(--mtt-rgb-group-red), 0.3); }
+    .a2-group-pill.color-purple { background: rgba(var(--mtt-rgb-group-purple), 0.15);color: var(--mtt-group-purple); border: 1px solid rgba(var(--mtt-rgb-group-purple), 0.3); }
+    .a2-group-pill.color-teal   { background: rgba(var(--mtt-rgb-group-teal), 0.15);  color: var(--mtt-group-teal); border: 1px solid rgba(var(--mtt-rgb-group-teal), 0.3); }
     .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
     .a2-group-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; margin-left: 6px; vertical-align: middle; }
     .a2-group-dot:hover { transform: scale(1.2); }
     .a2-group-dot.empty { background: var(--border-bright); border: 2px dashed var(--text-dim); }
-    .a2-group-dot.color-blue   { background: #4a9eff; }
-    .a2-group-dot.color-amber  { background: #ffab00; }
-    .a2-group-dot.color-red    { background: #ff5252; }
-    .a2-group-dot.color-purple { background: #b464ff; }
-    .a2-group-dot.color-teal   { background: #00bcd4; }
+    .a2-group-dot.color-blue   { background: var(--mtt-group-blue); }
+    .a2-group-dot.color-amber  { background: var(--mtt-group-amber); }
+    .a2-group-dot.color-red    { background: var(--mtt-group-red); }
+    .a2-group-dot.color-purple { background: var(--mtt-group-purple); }
+    .a2-group-dot.color-teal   { background: var(--mtt-group-teal); }
     .a2-group-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 6px; }
-    .a2-group-pill.color-blue   { background: rgba(74,158,255,0.15); color: #4a9eff; border: 1px solid rgba(74,158,255,0.3); }
-    .a2-group-pill.color-amber  { background: rgba(255,171,0,0.15);  color: #ffab00; border: 1px solid rgba(255,171,0,0.3); }
-    .a2-group-pill.color-red    { background: rgba(255,82,82,0.15);  color: #ff5252; border: 1px solid rgba(255,82,82,0.3); }
-    .a2-group-pill.color-purple { background: rgba(180,100,255,0.15);color: #b464ff; border: 1px solid rgba(180,100,255,0.3); }
-    .a2-group-pill.color-teal   { background: rgba(0,188,212,0.15);  color: #00bcd4; border: 1px solid rgba(0,188,212,0.3); }
+    .a2-group-pill.color-blue   { background: rgba(var(--mtt-rgb-group-blue), 0.15); color: var(--mtt-group-blue); border: 1px solid rgba(var(--mtt-rgb-group-blue), 0.3); }
+    .a2-group-pill.color-amber  { background: rgba(var(--mtt-rgb-group-amber), 0.15);  color: var(--mtt-group-amber); border: 1px solid rgba(var(--mtt-rgb-group-amber), 0.3); }
+    .a2-group-pill.color-red    { background: rgba(var(--mtt-rgb-group-red), 0.15);  color: var(--mtt-group-red); border: 1px solid rgba(var(--mtt-rgb-group-red), 0.3); }
+    .a2-group-pill.color-purple { background: rgba(var(--mtt-rgb-group-purple), 0.15);color: var(--mtt-group-purple); border: 1px solid rgba(var(--mtt-rgb-group-purple), 0.3); }
+    .a2-group-pill.color-teal   { background: rgba(var(--mtt-rgb-group-teal), 0.15);  color: var(--mtt-group-teal); border: 1px solid rgba(var(--mtt-rgb-group-teal), 0.3); }
     .a2-group-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; }
 
     /* Add Day / Add Session modals — centered overlay (Issue #64) */
-    .mtt-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .mtt-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(var(--mtt-rgb-black), 0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
     .mtt-modal.hidden { display: none; }
-    .mtt-modal-box { background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 8px; padding: 24px 26px; width: 100%; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+    .mtt-modal-box { background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 8px; padding: 24px 26px; width: 100%; max-width: 420px; box-shadow: 0 12px 40px rgba(var(--mtt-rgb-black), 0.5); }
     .mtt-modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 18px; }
     .mtt-modal-field { margin-bottom: 14px; }
     .mtt-modal-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
@@ -456,7 +534,7 @@
     .mtt-modal-error { font-size: 13px; color: var(--accent-red); margin-bottom: 12px; }
     .mtt-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
-    .group-manage-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .group-manage-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(var(--mtt-rgb-black), 0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .group-manage-modal.hidden { display: none; }
     .group-manage-box { background: var(--bg-raised); border: 1px solid var(--border-bright); border-radius: 8px; padding: 24px; min-width: 320px; max-width: 400px; }
     .group-manage-title { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
@@ -468,7 +546,7 @@
     .group-add-row { display: flex; gap: 8px; margin-top: 12px; }
     .group-add-input { flex: 1; background: var(--bg-input); border: 1px solid var(--border-bright); color: var(--text-primary); border-radius: 4px; padding: 6px 10px; font-size: 12px; }
     .group-color-select { background: var(--bg-input); border: 1px solid var(--border-bright); color: var(--text-primary); border-radius: 4px; padding: 6px 8px; font-size: 12px; }
-    .group-add-btn { background: var(--accent-blue); color: #000; border: none; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .group-add-btn { background: var(--accent-blue); color: var(--mtt-text-on-accent); border: none; border-radius: 4px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
     .group-modal-close { float: right; background: none; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; margin-top: -4px; }
 
     .a1-group-cell { width: 54px; text-align: center; padding: 0 4px !important; position: relative; }
@@ -480,27 +558,35 @@
         background: var(--border-bright); flex-shrink: 0; display: inline-block;
         transition: background 0.2s, box-shadow 0.2s;
     }
-    .a2-slot-micd-dot.on { background: var(--accent-green); box-shadow: 0 0 6px rgba(0,230,118,0.7); }
-    .a2-slot-chip.micd { background: rgba(0,230,118,0.12); border-color: rgba(0,230,118,0.4); color: var(--accent-green); font-weight: 600; }
+    .a2-slot-micd-dot.on { background: var(--accent-green); box-shadow: none; }
+    /* The chip itself stays neutral -- its button and dot already carry the
+       state, and a tinted chip made the whole queue read as mic'd. */
+    .a2-slot-chip.micd { background: var(--bg-raised); border-color: var(--border-bright); color: var(--text-primary); font-weight: 600; }
     .a2-slot-micd-btn {
-        font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
-        padding: 2px 7px; border-radius: 3px; cursor: pointer;
+        font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+        padding: 3px 9px; border-radius: 3px; cursor: pointer;
         border: 1px solid var(--border-bright); font-family: inherit;
-        transition: all 0.15s; line-height: 1.5; white-space: nowrap;
+        transition: none; line-height: 1.5; white-space: nowrap;
+        -webkit-appearance: none; appearance: none;
     }
-    .a2-slot-micd-btn.off { background: var(--bg-input); color: var(--text-dim); }
-    .a2-slot-micd-btn.on  { background: var(--accent-green); color: #000; border-color: var(--accent-green); box-shadow: 0 0 8px rgba(0,230,118,0.35); }
-    .a2-slot-micd-btn:hover { opacity: 0.85; }
+    .a2-slot-micd-btn.off,
+    .a2-slot-micd-btn.off:hover,
+    .a2-slot-micd-btn.off:focus,
+    .a2-slot-micd-btn.off:active { background: transparent; color: var(--text-dim); border-color: var(--border-bright); box-shadow: none; opacity: 1; }
+    .a2-slot-micd-btn.on,
+    .a2-slot-micd-btn.on:hover,
+    .a2-slot-micd-btn.on:focus,
+    .a2-slot-micd-btn.on:active { background: var(--accent-green); color: var(--mtt-micd-fg); border-color: var(--accent-green); box-shadow: none; opacity: 1; }
 
     /* ── Issue #38: drag-and-drop presenter reorder ── */
     .a1-row-draggable { cursor: grab; }
     .a1-row-draggable.dragging { opacity: 0.4; cursor: grabbing; }
     .a1-row.drop-above { box-shadow: inset 0 3px 0 var(--accent-blue); }
     .a1-row.drop-below { box-shadow: inset 0 -3px 0 var(--accent-blue); }
-    .a1-row.drop-swap { background: rgba(74,158,255,0.18); }
+    .a1-row.drop-swap { background: rgba(var(--mtt-rgb-blue), 0.18); }
 
     /* ── Issue #39: drag-and-drop photo upload ── */
-    .a2-photo-zone.dragover { border-style: solid; border-color: var(--accent-blue); background: rgba(74,158,255,0.12); }
+    .a2-photo-zone.dragover { border-style: solid; border-color: var(--accent-blue); background: rgba(var(--mtt-rgb-blue), 0.12); }
     </style>
 {% endblock %}
 
@@ -535,11 +621,11 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span></div>
         </div>
         <div class="mtt-header-actions">
-            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
-            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:#ffffff !important;">👤 Presenters</a>
-            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-blue) !important;">↓ Export PDF</a>
+            {% if not is_viewer %}<button class="btn-mtt btn-mtt-secondary" onclick="addNewDay()">+ Add Day</button>{% endif %}
+            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-secondary">👤 Presenters</a>
+            <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-amber) !important;">↓ Export PDF</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
-            {# Issue #74 — A2 Listen companion setup #}
+            {# Issue #74 — A2 Listen companion setup. #}
             <button class="btn-mtt btn-mtt-export" onclick="openListenSetup()" title="Pair this device with the Listen companion app">🎧 Listen Setup</button>
         </div>
     </div>
@@ -581,10 +667,17 @@ silently 403-ing background saves and stopping updates from reaching others.
                     {% if session.location %}<span class="mtt-session-loc">· {{ session.location }}</span>{% endif %}
                     {% if session.start_time %}<span class="mtt-session-time">· {{ session.start_time|time:"g:i A" }}{% if session.end_time %} – {{ session.end_time|time:"g:i A" }}{% endif %}</span>{% endif %}
                     {% if not is_viewer %}
+                    {% comment %}
+                    Delete is deliberately NOT here. A trash icon 40px from the
+                    A1/A2 tabs, on a row that is tapped all day to collapse and
+                    expand sessions, is one mis-tap from destroying a session
+                    and every mic assignment under it. It now lives inside
+                    Settings, behind a confirmation that makes you type the
+                    session's name. Duplicate and Settings are unchanged.
+                    {% endcomment %}
                     <div class="session-actions">
                         <button class="btn-icon-sm" title="Duplicate" onclick="duplicateSession({{ session.id }})">📋</button>
-                        <button class="btn-icon-sm" title="Settings" onclick="editSession({{ session.id }})">⚙</button>
-                        <button class="btn-icon-sm" title="Delete Session" onclick="deleteSession({{ session.id }})" style="color:#ff4d4d;">🗑</button>
+                        <button class="btn-icon-sm" title="Settings (includes Delete)" onclick="editSession({{ session.id }})">⚙</button>
                     </div>
                     {% endif %}
                 </div>
@@ -603,12 +696,12 @@ silently 403-ing background saves and stopping updates from reaching others.
                                         {% if not is_viewer %}
                                         <button onclick="openGroupManager({{ session.id }})"
                                                 style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
-                                                    background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
+                                                    background:rgba(var(--mtt-rgb-blue), 0.15);border:1px solid var(--accent-blue);
                                                     color:var(--accent-blue);border-radius:3px;cursor:pointer;line-height:1;">GRP</button>
                                         {% endif %}
                                     </th>
                                     <th style="width:56px;">RF#</th>
-                                    <th style="width:110px;">Type</th>
+                                    <th class="a1-type-cell">Type</th>
                                     <th>Presenter</th>
                                     <th class="th-center a1-micd-cell">MIC'D</th>
                                     <th class="a1-notes-cell">A1 Notes</th>
@@ -623,10 +716,31 @@ silently 403-ing background saves and stopping updates from reaching others.
                             {% for slot in slots %}
                             {% with slot_groups=slot.groups.all fallback_group=assignment.groups.first %}
                             {% with first_slot_group=slot_groups.0 %}
-                            <tr class="a1-row {% if slot.is_micd %}row-micd{% endif %} {% if first_slot_group %}group-{{ first_slot_group.color }}{% elif fallback_group %}group-{{ fallback_group.color }}{% endif %}"
+                            {% comment %}
+                            data-* carries this slot's facts for
+                            admin/js/mic_tracker_render.js, which re-renders
+                            the row from them on load and after every edit.
+                            They are the only copy of the truth on the client,
+                            so a change path can't disagree with the server.
+                            The .a1-slot-row CLASS is required by one JS
+                            selector -- toggleSlotRows()'s expand/collapse
+                            query -- and had never been emitted, so that
+                            query always matched nothing. (The three
+                            getElementById('a1-slot-row-<id>') lookups use
+                            the id below, which was always emitted.) No CSS
+                            keys off the class: a sub-row reads exactly like
+                            a main row.
+                            {% endcomment %}
+                            <tr class="a1-row a1-slot-row {% if slot.is_micd %}row-micd{% endif %} {% if not slot.presenter %}is-unassigned{% endif %} {% if first_slot_group %}group-{{ first_slot_group.color }}{% elif fallback_group %}group-{{ fallback_group.color }}{% endif %}"
                                 id="a1-slot-row-{{ slot.id }}"
                                 data-assignment-id="{{ assignment.id }}"
-                                data-slot-id="{{ slot.id }}">
+                                data-slot-id="{{ slot.id }}"
+                                data-slot-count="{{ slot_count }}"
+                                data-presenter="{% if slot.presenter %}{{ slot.presenter.name }}{% endif %}"
+                                data-micd="{% if slot.is_micd %}1{% else %}0{% endif %}"
+                                data-mic-type="{{ slot.mic_type|default:assignment.mic_type|default:'' }}"
+                                data-group="{% if first_slot_group %}{{ first_slot_group.color }}{% elif fallback_group %}{{ fallback_group.color }}{% endif %}"
+                                data-active="{% if slot.is_active %}1{% else %}0{% endif %}">
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
                                     <span class="group-dot-stack"
@@ -642,7 +756,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     {% endif %}
                                 </td>
                                 <td class="a1-rf">{% if forloop.first %}{{ assignment.rf_number|stringformat:"02d" }}{% endif %}</td>
-                                <td>
+                                <td class="a1-type-cell">
                                     {% if slot.mic_type %}
                                     <span class="mic-type-badge type-{{ slot.mic_type }}"><span class="type-dot"></span>{{ slot.mic_type }}</span>
                                     {% elif assignment.mic_type %}
@@ -662,7 +776,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     <button class="a1-micd-toggle {% if slot.is_micd %}on{% else %}off{% endif %}"
                                             id="a1-micd-slot-{{ slot.id }}"
                                             disabled style="cursor:default">
-                                        {% if slot.is_micd %}ON{% else %}—{% endif %}
+                                        {% if slot.is_micd %}ON{% else %}OFF{% endif %}
                                     </button>
                                 </td>
                                 <td class="a1-notes-cell">
@@ -680,8 +794,16 @@ silently 403-ing background saves and stopping updates from reaching others.
                             {# ── SINGLE PRESENTER row ── #}
                             {% with assn_groups=assignment.groups.all %}
                             {% with first_assn_group=assn_groups.0 %}
-                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if first_assn_group %}group-{{ first_assn_group.color }}{% endif %}"
+                            {% with single_slot=assignment.active_slot %}
+                            <tr class="a1-row {% if not is_viewer %}a1-row-draggable{% endif %} {% if assignment.is_micd %}row-micd{% endif %} {% if not single_slot.presenter %}is-unassigned{% endif %} {% if first_assn_group %}group-{{ first_assn_group.color }}{% endif %}"
                                 id="a1-row-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}"
+                                data-slot-id="{% if single_slot %}{{ single_slot.id }}{% endif %}"
+                                data-slot-count="1"
+                                data-presenter="{% if single_slot.presenter %}{{ single_slot.presenter.name }}{% endif %}"
+                                data-micd="{% if assignment.is_micd %}1{% else %}0{% endif %}"
+                                data-mic-type="{{ single_slot.mic_type|default:'' }}"
+                                data-group="{% if first_assn_group %}{{ first_assn_group.color }}{% endif %}"
+                                data-active="1"
                                 {% if not is_viewer %}draggable="true"{% endif %}>
                                 <td class="a1-group-cell">
                                     {% if not is_viewer %}
@@ -698,7 +820,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     {% endif %}
                                 </td>
                                 <td class="a1-rf">{{ assignment.rf_number|stringformat:"02d" }}</td>
-                                <td>
+                                <td class="a1-type-cell">
                                     {% with active_slot=assignment.active_slot %}
                                     {% if active_slot.mic_type %}
                                     <span class="mic-type-badge type-{{ active_slot.mic_type }}"><span class="type-dot"></span>{{ active_slot.mic_type }}</span>
@@ -720,7 +842,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     <button class="a1-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
                                             onclick="toggleMicd({{ assignment.id }}, this)"
                                             {% if is_viewer %}disabled style="cursor:default"{% endif %}>
-                                        {% if assignment.is_micd %}ON{% else %}—{% endif %}
+                                        {% if assignment.is_micd %}ON{% else %}OFF{% endif %}
                                     </button>
                                 </td>
                                 <td class="a1-notes-cell">
@@ -731,7 +853,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                            {% if is_viewer %}readonly{% endif %}>
                                 </td>
                             </tr>
-                            {% endwith %}{% endwith %}
+                            {% endwith %}{% endwith %}{% endwith %}
                             {% endif %}
 
                             {% endwith %}
@@ -746,13 +868,22 @@ silently 403-ing background saves and stopping updates from reaching others.
                         <div style="padding: 8px 14px 0;">
                             <button onclick="openGroupManager({{ session.id }})"
                                     style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
-                                           background:rgba(74,158,255,0.15);border:1px solid var(--accent-blue);
+                                           background:rgba(var(--mtt-rgb-blue), 0.15);border:1px solid var(--accent-blue);
                                            color:var(--accent-blue);border-radius:3px;cursor:pointer;line-height:1;">GRP</button>
                         </div>
                         {% endif %}
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
-                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %}"
+                        {% comment %}
+                        The group stripe and the unassigned state class are
+                        both emitted here as well as applied by the renderer.
+                        The group class in particular used to be added only
+                        by the JS group picker, so a card showed no stripe
+                        until you changed its group and then lost it again on
+                        reload.
+                        {% endcomment %}
+                        {% with card_slot=assignment.active_slot card_group=assignment.groups.first %}
+                        <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %} {% if not card_slot.presenter %}is-unassigned{% endif %} {% if card_group %}group-{{ card_group.color }}{% endif %}"
                              id="a2-card-{{ assignment.id }}" data-assignment-id="{{ assignment.id }}">
 
                             <div class="a2-card-header">
@@ -798,7 +929,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                             id="a2-micd-btn-{{ assignment.id }}"
                                             onclick="toggleMicd({{ assignment.id }}, this)"
                                             {% if is_viewer %}disabled style="cursor:default"{% endif %}>
-                                        <span class="a2-micd-dot"></span>MIC'D
+                                        <span class="a2-micd-dot"></span>{% if assignment.is_micd %}ON{% else %}OFF{% endif %}
                                     </button>
                                     {% endif %}
                                 </div>
@@ -945,7 +1076,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                         <span class="a2-slot-remove" onclick="event.stopPropagation(); removePresenterSlot({{ assignment.id }}, {{ slot.id }})">✕</span>
                                         <button class="a2-slot-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
                                                 id="a2-slot-micd-{{ slot.id }}"
-                                                onclick="event.stopPropagation(); toggleMicdSlot({{ assignment.id }}, {{ slot.id }}, this)">{% if slot.is_micd %}ON{% else %}MIC'D{% endif %}</button>
+                                                onclick="event.stopPropagation(); toggleMicdSlot({{ assignment.id }}, {{ slot.id }}, this)">{% if slot.is_micd %}ON{% else %}OFF{% endif %}</button>
                                         {% endif %}
                                     </div>
                                     {% endfor %}
@@ -960,6 +1091,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                             {% endwith %}
 
                         </div>
+                        {% endwith %}
                         {% endfor %}
                         </div>
                     </div>
@@ -977,6 +1109,7 @@ silently 403-ing background saves and stopping updates from reaching others.
             {% endfor %}
 
             {% if not is_viewer %}
+            {# Same class of structural edit as "+ Add Day", so it goes with it. #}
             <div class="mtt-add-session-bar">
                 <button class="btn-mtt btn-mtt-ghost" style="font-size:10px;padding:5px 10px;" onclick="event.stopPropagation(); openAddSessionModal({{ day_data.day.id }})">+ Add Session</button>
             </div>
@@ -1045,10 +1178,10 @@ silently 403-ing background saves and stopping updates from reaching others.
         background: var(--bg-raised); border: 1px solid var(--border); border-radius: 5px;
         font-size: 12px; color: var(--text-secondary); }
     .listen-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
-    .listen-live-status.ok .listen-live-dot { background: var(--accent-green); }
-    .listen-live-status.warn .listen-live-dot { background: #ffab00; }
-    .listen-live-status.warn { color: #ffab00; }
-    .listen-live-status.err .listen-live-dot { background: #ff5252; }
+    .listen-live-status.ok .listen-live-dot { background: var(--text-primary); }
+    .listen-live-status.warn .listen-live-dot { background: var(--accent-amber); }
+    .listen-live-status.warn { color: var(--accent-amber); }
+    .listen-live-status.err .listen-live-dot { background: var(--accent-red); }
     .listen-advanced summary { cursor: pointer; color: var(--text-dim); font-size: 12px; }
     .listen-advanced[open] summary { color: var(--text-secondary); }
 </style>
@@ -1065,7 +1198,7 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="a2-setting-label" style="margin-bottom:6px;">1 · Start on the rack Mac</div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                 <button class="btn-mtt btn-mtt-primary" id="listen-start-btn" onclick="startListenOnThisMac()"
-                        style="color:#ffffff !important;">▶ Start on this Mac</button>
+                        style="color:var(--mtt-text-inverse) !important;">▶ Start on this Mac</button>
                 <span id="listen-start-note" style="color:var(--text-dim);font-size:11px;"></span>
             </div>
             <div id="listen-get-app" class="listen-setup-hint"
@@ -1152,6 +1285,9 @@ silently 403-ing background saves and stopping updates from reaching others.
 })();
 </script>
 
+{# The single slot renderer. Loaded before mic_tracker_v5.js and the inline
+   script below, both of which delegate every slot-state write to it. #}
+<script src="{% static 'admin/js/mic_tracker_render.js' %}"></script>
 <script src="{% static 'admin/js/mic_tracker_v5.js' %}"></script>
 
 <script>
@@ -1210,7 +1346,7 @@ function saveCompanionUrl() {
     checkCompanionStatus();
     if (status) {
         status.textContent = val ? '  ✓ Saved.' : '  Cleared.';
-        status.style.color = val ? 'var(--accent-green)' : 'var(--text-dim)';
+        status.style.color = val ? 'var(--text-primary)' : 'var(--text-dim)';
     }
 }
 // "ShowStack Listen" Mac app — started by link, found on its loopback port.
@@ -1537,118 +1673,49 @@ function toggleDay(dayId, headerEl) {
 }
 
 // ── MIC'D toggles ─────────────────────────────────────────────
+// Every one of these used to hand-write classes and labels across the A1 row,
+// the A2 card and the chip list, and each one drifted from what the template
+// renders. They now do one thing: work out the new DATA and hand it to the
+// renderer, which is also what runs on page load.
+
 function toggleMicd(assignmentId, btn) {
     markLocalChange();
-    const isOn = btn.classList.contains('on');
-    const newState = !isOn;
-    btn.classList.toggle('on', newState);
-    btn.classList.toggle('off', !newState);
-    // Preserve inner dot span, just update the text node
-    const dot = btn.querySelector('.a2-micd-dot');
-    if (dot) {
-        Array.from(btn.childNodes).forEach(n => { if (n.nodeType === 3) n.remove(); });
-        btn.appendChild(document.createTextNode(newState ? ' ON' : " MIC'D"));
-    } else {
-        btn.textContent = newState ? 'ON' : '—';
-    }
-    // Sync A1 row
-    const a1Row = document.getElementById('a1-row-' + assignmentId);
-    if (a1Row) {
-        a1Row.classList.toggle('row-micd', newState);
-        const a1Btn = a1Row.querySelector('.a1-micd-toggle');
-        if (a1Btn) { a1Btn.classList.toggle('on', newState); a1Btn.classList.toggle('off', !newState); a1Btn.textContent = newState ? 'ON' : '—'; }
-    }
-    // Sync A2 card border
-    const card = document.getElementById('a2-card-' + assignmentId);
-    if (card) {
-        card.classList.toggle('card-micd', newState);
-        const a2btn = document.getElementById('a2-micd-btn-' + assignmentId);
-        if (a2btn && a2btn !== btn) { a2btn.classList.toggle('on', newState); a2btn.classList.toggle('off', !newState); }
-    }
+    const newState = !btn.classList.contains('on');
+    MTTSlots.setMicd(assignmentId, null, newState);
     updateField(assignmentId, 'is_micd', newState);
 }
 
 function updateMicType(assignmentId, value) {
     updateField(assignmentId, 'mic_type', value);
-    const card = document.getElementById('a2-card-' + assignmentId);
-    if (!card) return;
-    const meta = card.querySelector('.a2-card-meta');
-    if (!meta) return;
-    const labels = { 'HH':'HH','LAV':'LAV','HEADSET':'HEADSET','PODIUM':'PODIUM','BOOM':'BOOM','INSTRUMENT':'INSTRUMENT' };
-    if (value && labels[value]) {
-        meta.innerHTML = '<span class="mic-type-badge type-' + value + '" style="font-size:9px;padding:2px 7px;"><span class="type-dot"></span>' + labels[value] + '</span>';
-    } else { meta.innerHTML = ''; }
-    const a1td = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
-    if (a1td) { a1td.className = 'mic-type-badge type-' + (value || 'empty'); a1td.innerHTML = '<span class="type-dot"></span>' + (labels[value] || '—'); }
+    // The A2 selects always edit the card's ACTIVE slot, so that is the slot
+    // whose type changed. Previously only the single-presenter A1 row was
+    // updated, so a multi-presenter row kept its old badge until a reload.
+    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+    MTTSlots.patch(assignmentId, active ? active.slotId : null, { micType: value || '' });
 }
 
-// toggleMicdSlot: radio behavior — called from per-chip MIC'D buttons
-// Signature: toggleMicdSlot(assignmentId, slotId, btn)
+// toggleMicdSlot: radio behaviour — called from the per-chip MIC'D buttons.
+// The server clears every sibling slot, so the renderer does the same. This
+// function no longer writes a single class or label itself; the 50 lines it
+// used to spend doing that by hand are exactly where the A1 rows, the chips
+// and the card drifted apart from each other and from a fresh reload.
 async function toggleMicdSlot(assignmentId, slotId, btn) {
     markLocalChange();
-    const isOn = btn.classList.contains('on');
-    const newState = !isOn;
+    const newState = !btn.classList.contains('on');
 
+    let data;
     try {
         const resp = await fetch('/audiopatch/api/mic/slot/toggle-micd/', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
             body: JSON.stringify({slot_id: slotId, is_micd: newState})
         });
-        const data = await resp.json();
+        data = await resp.json();
         if (!data.success) return;
-    } catch(e) { return; }
+    } catch (e) { return; }
 
-    // Clear ALL chip MIC'D buttons/dots/highlights for this assignment
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-micd-btn').forEach(b => {
-        b.classList.remove('on'); b.classList.add('off'); b.textContent = "MIC'D";
-    });
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-micd-dot').forEach(d => d.classList.remove('on'));
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach(c => c.classList.remove('micd'));
-
-    // Clear all A1 slot rows for this assignment
-    document.querySelectorAll('.a1-row[data-assignment-id="' + assignmentId + '"]').forEach(row => {
-        row.classList.remove('row-micd');
-        const b = row.querySelector('.a1-micd-toggle');
-        if (b) { b.classList.remove('on'); b.classList.add('off'); b.textContent = '—'; }
-    });
-
-    // Also clear single-presenter A1 row if present
-    const a1SingleRow = document.getElementById('a1-row-' + assignmentId);
-    if (a1SingleRow) {
-        a1SingleRow.classList.remove('row-micd');
-        const b = a1SingleRow.querySelector('.a1-micd-toggle');
-        if (b) { b.classList.remove('on'); b.classList.add('off'); b.textContent = '—'; }
-    }
-
-    // Light up only the toggled slot if turning ON
-    if (newState) {
-        // A2 chip
-        btn.classList.add('on'); btn.classList.remove('off'); btn.textContent = 'ON';
-        const chip = btn.closest('.a2-slot-chip');
-        if (chip) {
-            chip.classList.add('micd');
-            const dot = chip.querySelector('.a2-slot-micd-dot');
-            if (dot) dot.classList.add('on');
-        }
-        // A1 slot row
-        const a1Row = document.getElementById('a1-slot-row-' + slotId);
-        if (a1Row) {
-            a1Row.classList.add('row-micd');
-            const a1Btn = document.getElementById('a1-micd-slot-' + slotId);
-            if (a1Btn) { a1Btn.classList.add('on'); a1Btn.classList.remove('off'); a1Btn.textContent = 'ON'; }
-        }
-        // Single-presenter A1 row (slot_count==1)
-        const a1Btn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
-        if (a1Btn) { a1Btn.classList.add('on'); a1Btn.classList.remove('off'); a1Btn.textContent = 'ON'; if (a1SingleRow) a1SingleRow.classList.add('row-micd'); }
-
-        // Card border
-        const card = document.getElementById('a2-card-' + assignmentId);
-        if (card) card.classList.add('card-micd');
-    } else {
-        const card = document.getElementById('a2-card-' + assignmentId);
-        if (card) card.classList.remove('card-micd');
-    }
+    MTTSlots.setMicd(assignmentId, slotId, newState);
+    MTTSlots.applyStats(assignmentId, data.session_stats, data.day_stats);
 }
 
 // ── Expand/collapse slot rows ──────────────────────────────────
@@ -1715,15 +1782,16 @@ function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl) {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
         body: JSON.stringify({slot_id: slotId, group_id: groupId})
     }).then(r => r.json()).then(function(data) {
-        if (data.success) {
-            dotEl.className = 'group-dot ' + (groupColor ? 'color-' + groupColor : 'empty');
-            dotEl.title = groupName || 'Assign group';
-            const row = document.getElementById('a1-slot-row-' + slotId);
-            if (row) {
-                row.classList.remove('group-blue','group-amber','group-red','group-purple','group-teal');
-                if (groupColor) row.classList.add('group-' + groupColor);
-            }
-        }
+        if (!data.success) return;
+        // dotEl is the .group-dot-stack CONTAINER, not a dot. The old line
+        // here was `dotEl.className = 'group-dot …'`, which overwrote the
+        // container's own class and left the real dots orphaned inside it —
+        // a shape no reload could ever produce. renderDotStack is the same
+        // function the assignment-level picker uses.
+        renderDotStack(dotEl, groupId ? [{id: groupId, name: groupName, color: groupColor}] : [], 'group-dot');
+        const row = document.getElementById('a1-slot-row-' + slotId);
+        const aid = row ? row.dataset.assignmentId : null;
+        if (aid) MTTSlots.patch(aid, slotId, { group: groupColor || '' });
     });
 }
 
@@ -1837,7 +1905,7 @@ function _saveStateEl() {
         el.id = 'mtt-save-state';
         el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;'
             + 'font:600 12px/1 system-ui,-apple-system,sans-serif;padding:9px 15px;'
-            + 'border-radius:999px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.35);'
+            + 'border-radius:999px;color:var(--mtt-save-text);box-shadow:0 6px 20px rgba(var(--mtt-rgb-black), .35);'
             + 'opacity:0;transition:opacity .2s;pointer-events:none;';
         document.body.appendChild(el);
     }
@@ -1851,9 +1919,9 @@ function showSaveState(text, color, autohide) {
     if (_saveHideTimer) { clearTimeout(_saveHideTimer); _saveHideTimer = null; }
     if (autohide) _saveHideTimer = setTimeout(function() { el.style.opacity = '0'; }, 1400);
 }
-function saveSaving() { showSaveState('Saving…', '#b8860b', false); }
-function saveOk()     { showSaveState('Saved ✓', '#2e7d32', true); }
-function saveFailed() { showSaveState('Save failed', '#c62828', false); }
+function saveSaving() { showSaveState('Saving…', 'var(--mtt-save-pending)', false); }
+function saveOk()     { showSaveState('Saved ✓', 'var(--mtt-save-ok)', true); }
+function saveFailed() { showSaveState('Save failed', 'var(--mtt-save-failed)', false); }
 // expose for mic_tracker_v5.js (loaded in a separate <script>)
 window.saveSaving = saveSaving; window.saveOk = saveOk; window.saveFailed = saveFailed;
 
@@ -1922,58 +1990,15 @@ function debounce(fn, wait) {
 })();
 
 // ── Presenter search dropdown ──────────────────────────────────
-// ── Sync a presenter name change into the A1 table immediately ──
-// Works for both single-presenter (a1-row-{assignmentId}) and
-// multi-presenter stacked rows (a1-slot-row-{slotId}).
-// slotId is optional — if omitted we look up the active chip's data-slot-id.
-function syncPresenterToA1(assignmentId, name, slotId) {
-    // Resolve slotId from the active chip if not provided
-    if (!slotId) {
-        const activeChip = document.querySelector('#slot-queue-' + assignmentId + ' .a2-slot-chip.active');
-        if (activeChip) slotId = activeChip.dataset.slotId;
-    }
 
-    // Helper: set text on a cell, replacing unassigned placeholder if needed
-    function setName(cell, text) {
-        if (!cell) return;
-        const existing = cell.querySelector('.a1-presenter-primary');
-        if (existing) {
-            existing.textContent = text;
-        } else {
-            const unassigned = cell.querySelector('.a1-unassigned');
-            if (unassigned) {
-                // Preserve active-slot class if present on the old element
-                const wasActive = unassigned.classList.contains('a1-slot-active');
-                unassigned.outerHTML = '<span class="a1-presenter-primary' + (wasActive ? ' a1-slot-active' : '') + '">' + text + '</span>';
-            }
-        }
-    }
-
-    // Try multi-presenter slot row first
-    if (slotId) {
-        const slotRow = document.getElementById('a1-slot-row-' + slotId);
-        if (slotRow) {
-            setName(slotRow.querySelector('td:nth-child(4)'), name);
-            // Also update the active chip label in A2 (text node before the ✕ and MIC'D btn)
-            const activeChip = document.querySelector('#slot-queue-' + assignmentId + ' .a2-slot-chip.active');
-            if (activeChip) {
-                // Update just the text node (first child text node)
-                for (const node of activeChip.childNodes) {
-                    if (node.nodeType === 3 && node.textContent.trim()) {
-                        node.textContent = name;
-                        break;
-                    }
-                }
-            }
-            return;
-        }
-    }
-
-    // Fall back to single-presenter row
-    const singleRow = document.getElementById('a1-row-' + assignmentId);
-    if (singleRow) {
-        setName(singleRow.querySelector('td:nth-child(4)'), name);
-    }
+// Set the presenter on the card's active slot. Replaces syncPresenterToA1,
+// which walked the A1 cell by hand (and swapped .a1-unassigned for
+// .a1-presenter-primary but never back again). The optimistic patch here is
+// confirmed a moment later when updateField re-patches with the server's own
+// presenter_display — same function, so the two can't disagree.
+function mttSetPresenter(assignmentId, name) {
+    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+    MTTSlots.patch(assignmentId, active ? active.slotId : null, { presenter: (name || '').trim() });
 }
 
 // Debounced dispatcher — avoid firing a lookup on every keystroke.
@@ -2000,7 +2025,7 @@ function _searchPresentersNow(assignmentId, query) {
                     document.getElementById('presenter-input-' + assignmentId).value = p.name;
                     dd.classList.remove('open');
                     updateField(assignmentId, 'presenter_id', p.id);
-                    syncPresenterToA1(assignmentId, p.name);
+                    mttSetPresenter(assignmentId, p.name);
                 };
                 dd.appendChild(item);
             });
@@ -2009,9 +2034,9 @@ function _searchPresentersNow(assignmentId, query) {
             const spaceBelow = window.innerHeight - inputRect.bottom;
             const spaceAbove = inputRect.top;
             if (spaceAbove > spaceBelow && spaceAbove > 160) {
-                dd.style.bottom = '100%'; dd.style.top = 'auto'; dd.style.marginBottom = '4px'; dd.style.marginTop = '0'; dd.style.boxShadow = '0 -8px 24px rgba(0,0,0,0.4)';
+                dd.style.bottom = '100%'; dd.style.top = 'auto'; dd.style.marginBottom = '4px'; dd.style.marginTop = '0'; dd.style.boxShadow = '0 -8px 24px rgba(var(--mtt-rgb-black), 0.4)';
             } else {
-                dd.style.bottom = 'auto'; dd.style.top = '100%'; dd.style.marginBottom = '0'; dd.style.marginTop = '4px'; dd.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+                dd.style.bottom = 'auto'; dd.style.top = '100%'; dd.style.marginBottom = '0'; dd.style.marginTop = '4px'; dd.style.boxShadow = '0 8px 24px rgba(var(--mtt-rgb-black), 0.4)';
             }
             dd.classList.add('open');
             const exactMatch = data.presenters.some(p => p.name.toLowerCase() === query.toLowerCase());
@@ -2031,7 +2056,7 @@ function _searchPresentersNow(assignmentId, query) {
                             document.getElementById('presenter-input-' + assignmentId).value = query;
                             dd.classList.remove('open');
                             updateField(assignmentId, 'presenter_id', data.presenter_id);
-                            syncPresenterToA1(assignmentId, query);
+                            mttSetPresenter(assignmentId, query);
                         }
                     });
                 };
@@ -2043,8 +2068,13 @@ function _searchPresentersNow(assignmentId, query) {
 function assignPresenter(assignmentId, value) {
     const dd = document.getElementById('presenter-dd-' + assignmentId);
     dd.classList.remove('open');
-    if (value) syncPresenterToA1(assignmentId, value);
-    updateField(assignmentId, 'presenter_id', value || '');
+    // Note the absent `if (value)`. That guard is why clearing a name left it
+    // showing on the A1 row and left the card styled as assigned: the only
+    // sync happened when a name was being SET, never when it was removed.
+    const name = (value || '').trim();
+    const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
+    MTTSlots.patch(assignmentId, active ? active.slotId : null, { presenter: name });
+    updateField(assignmentId, 'presenter_id', name);
 }
 
 async function nextSlot(assignmentId) {
@@ -2125,31 +2155,29 @@ function applySlotData(assignmentId, data) {
         groupDot.title = data.a2_group_name || 'Assign group';
     }
 
-    document.querySelectorAll('#slot-queue-' + assignmentId + ' .a2-slot-chip').forEach((chip, i) => {
-        chip.classList.toggle('active', i === data.slot_index);
-    });
-
-    // Update A1 primary row
-    const a1primary = document.querySelector('#a1-row-' + assignmentId + ' .a1-presenter-primary');
-    if (a1primary) a1primary.textContent = data.presenter_name || '— Unassigned —';
-
-    // Re-wire A1 primary row MIC'D button id to new active slot
-    // Also update A2 MIC'D button's active slot reference
+    // Everything that is slot STATE — which chip is active, the presenter
+    // name on the A1 row, the type badge, the Mic'd state, the unassigned
+    // dimming — goes through the renderer. This block used to do it by hand
+    // and got three things wrong: it wrote "— Unassigned —" into the ASSIGNED
+    // span (so the row read unassigned but stayed styled assigned), it never
+    // applied is_micd at all (so switching slots showed the previous slot's
+    // Mic'd state), and it cleared the active highlight via `.a1-slot-row`,
+    // a class the template had never emitted.
     if (data.slot_id) {
+        MTTSlots.patch(assignmentId, data.slot_id, {
+            presenter: data.presenter_name || '',
+            micType:   data.mic_type || '',
+            isMicd:    !!data.is_micd
+        });
+        MTTSlots.setActive(assignmentId, data.slot_id);
+
+        // Ids the renderer does not own: the A1 toggle is addressed by the
+        // active slot's id elsewhere, and the A2 toggle carries it for the
+        // Listen panel.
         const a2MicdBtn = document.getElementById('a2-micd-btn-' + assignmentId);
         if (a2MicdBtn) a2MicdBtn.dataset.activeSlotId = data.slot_id;
         const a1MicdBtn = document.querySelector('#a1-row-' + assignmentId + ' .a1-micd-toggle');
         if (a1MicdBtn) a1MicdBtn.id = 'a1-micd-slot-' + data.slot_id;
-        // Update type badge on primary row
-        const a1TypeBadge = document.querySelector('#a1-row-' + assignmentId + ' .mic-type-badge');
-        if (a1TypeBadge) {
-            a1TypeBadge.className = 'mic-type-badge type-' + (data.mic_type || 'empty');
-            a1TypeBadge.innerHTML = '<span class="type-dot"></span>' + (data.mic_type || '—');
-        }
-        // Highlight active slot in expanded rows
-        document.querySelectorAll('.a1-slot-row[data-assignment-id="' + assignmentId + '"] .a1-presenter-primary').forEach(el => el.classList.remove('a1-slot-active'));
-        const activeSlotName = document.querySelector('#a1-slot-row-' + data.slot_id + ' .a1-presenter-primary');
-        if (activeSlotName) activeSlotName.classList.add('a1-slot-active');
     }
 
     // Update photo zone
@@ -2206,7 +2234,7 @@ document.querySelectorAll('[data-session-id]').forEach(function(session) {
         inp.scrollIntoView({block: 'center'});
         inp.focus(); inp.select();
     }
-    if (typeof showSaveState === 'function') showSaveState('Presenter added ✓', '#2e7d32', true);
+    if (typeof showSaveState === 'function') showSaveState('Presenter added ✓', 'var(--mtt-save-ok)', true);
 })();
 
 // ─── Issue #38: drag-and-drop presenter reorder on A1 rows ───
