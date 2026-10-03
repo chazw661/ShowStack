@@ -4530,7 +4530,13 @@ def _no_cache(response):
 @require_http_methods(["GET"])
 def mic_tracker_checksum(request):
     """Return a checksum of mic tracker data to detect changes."""
+    # Fall back to the middleware-resolved project. Returning checksum=None
+    # makes the poll a no-op, so a session without the key written — and the
+    # middleware only writes it when it has to auto-select — meant that
+    # machine never saw an update banner and, now, never auto-refreshes.
     project_id = request.session.get('current_project_id')
+    if not project_id and getattr(request, 'current_project', None):
+        project_id = request.current_project.id
     if not project_id:
         return _no_cache(JsonResponse({'checksum': None}))
 
