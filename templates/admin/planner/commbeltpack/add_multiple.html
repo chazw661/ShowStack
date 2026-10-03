@@ -1,0 +1,111 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% comment %}
+Bulk entry for comm devices. One device per form page meant 20 devices cost 20
+page loads; this is the same six fields, twenty rows, one save.
+
+The grid is wrapped in .inline-group so it inherits the console input grid's
+control sizing and row dividers from surfaces.css rather than restating them.
+Only the column widths and the toolbar are specific to this page, and those
+live in comm_admin_v2.css.
+{% endcomment %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/comm_admin_v2.css' %}">
+{% endblock %}
+
+{% comment %}
+change-form is what base_site.html's spreadsheet navigation looks for before it
+binds Enter-moves-to-the-next-field, so the grid behaves like the console input
+grid it is modelled on.
+{% endcomment %}
+{% block bodyclass %}{{ block.super }} change-form{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:planner_commbeltpack_changelist' %}">Comm Devices</a>
+    &rsaquo; Add multiple
+</div>
+{% endblock %}
+
+{% block content %}
+<form method="post" id="bp-bulk-form" novalidate>
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    {% comment %}
+    There is no System Type control any more: it follows from each row's
+    Model, so a wireless beltpack cannot be filed as hardwired.
+    {% endcomment %}
+    <div class="bp-bulk-toolbar">
+        <p class="bp-bulk-hint">
+            Pick a <strong>Model</strong> and the rest follows &mdash; Wireless
+            or Hardwired comes from the device type. BP&nbsp;#s continue from
+            the highest already in this project; a row you do not type in is
+            ignored.
+        </p>
+    </div>
+
+    {% if formset.non_form_errors %}
+    <ul class="errorlist">
+        {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="inline-group">
+        <div class="bp-bulk-scroll">
+            <table class="bp-bulk-grid">
+                <thead>
+                    <tr>
+                        <th class="bp-col-num">BP #</th>
+                        <th class="bp-col-sys">Model</th>
+                        <th class="bp-col-pos">Position</th>
+                        <th class="bp-col-name">Name</th>
+                        <th class="bp-col-head">Headset</th>
+                        <th class="bp-col-group">Group</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in formset %}
+                    <tr class="form-row{% if form.errors %} bp-row-error{% endif %}">
+                        {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                        <td class="bp-col-num">
+                            {{ form.bp_number }}
+                            {% for error in form.bp_number.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                        </td>
+                        <td class="bp-col-sys">
+                            {{ form.device_model }}
+                            {% for error in form.device_model.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                        </td>
+                        <td class="bp-col-pos">
+                            {{ form.position }}
+                            {% for error in form.position.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                        </td>
+                        <td class="bp-col-name">
+                            {{ form.name }}
+                            {% for error in form.name.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                        </td>
+                        <td class="bp-col-head">
+                            {{ form.headset }}
+                            {% for error in form.headset.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                        </td>
+                        <td class="bp-col-group">
+                            {{ form.group }}
+                            {% for error in form.group.errors %}<span class="bp-row-errmsg">{{ error }}</span>{% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="submit-row">
+        <input type="submit" value="Create devices" class="default">
+        <a href="{% url 'admin:planner_commbeltpack_changelist' %}" class="closelink">Cancel</a>
+    </div>
+</form>
+{% endblock %}

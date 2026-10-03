@@ -183,3 +183,121 @@
     border-color: var(--ss-accent) !important;
     color: #ffffff !important;
 }
+
+/* ============================================================
+ * Belt pack form: system-type-conditional fields
+ *
+ * IP Address belongs to a hardwired pack and "Checked out" to a wireless
+ * one. Both are always rendered (see CommBeltPackAdmin.get_fieldsets);
+ * the fieldset carries bp-sys-WIRELESS or bp-sys-HARDWIRED, set
+ * server-side from the saved value so the right field is hidden on
+ * first paint, and swapped by comm_beltpack_admin.js when the System
+ * Type select changes.
+ *
+ * No !important: these are plain `display` rules on a .form-row that
+ * nothing else in the admin is fighting over, and leaving them weak
+ * means a future rule can still override them normally.
+ * ============================================================ */
+
+fieldset.bp-sys-WIRELESS .form-row.field-ip_address,
+fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
+    display: none;
+}
+
+/* ============================================================
+ * Bulk add grid ("Add multiple")
+ *
+ * The table itself is wrapped in .inline-group so it inherits the
+ * console input grid's control sizing and row dividers from
+ * surfaces.css rather than restating them here. Only what is specific
+ * to this page lives below.
+ * ============================================================ */
+
+.bp-bulk-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--ss-raised);
+    border: 1px solid var(--ss-border);
+    border-radius: var(--ss-field-radius);
+}
+
+.bp-bulk-toolbar label {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-right: 6px;
+}
+
+.bp-bulk-hint {
+    flex: 1 1 260px;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* The grid is wider than a phone; let it scroll on its own rather than
+   letting the page scroll sideways. */
+.bp-bulk-scroll {
+    overflow-x: auto;
+}
+
+.bp-bulk-grid {
+    width: 100%;
+    border-collapse: collapse;
+    /* Without this the column widths below are only suggestions: a select is
+       as wide as its longest option ("Clear-Com FreeSpeak Edge/Icon"), and six
+       of them push the table past its container no matter what % it is given. */
+    table-layout: fixed;
+}
+
+.bp-bulk-grid th {
+    padding: 8px 6px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--ss-border);
+    white-space: nowrap;
+}
+
+.bp-bulk-grid td {
+    padding: 4px 6px;
+}
+
+.bp-bulk-grid input[type="number"],
+.bp-bulk-grid select {
+    width: 100%;
+}
+
+/* BP # is a two or three digit number; everything else wants the room, and
+   System needs the most of it -- it carries the longest labels. */
+.bp-bulk-grid .bp-col-num { width: 7%; }
+.bp-bulk-grid .bp-col-sys { width: 23%; }
+.bp-bulk-grid .bp-col-pos,
+.bp-bulk-grid .bp-col-name { width: 20%; }
+.bp-bulk-grid .bp-col-head,
+.bp-bulk-grid .bp-col-group { width: 15%; }
+
+/* A row the user has not touched is not an error, it is just an empty row,
+   so the whole grid stays quiet until something is actually wrong. */
+.bp-bulk-grid tr.bp-row-error td {
+    background: rgba(220, 80, 80, 0.12);
+}
+
+.bp-bulk-grid .bp-row-errmsg {
+    display: block;
+    padding: 2px 0 6px;
+    font-size: 12px;
+    color: #ff9d9d;
+}
+
+@media (max-width: 1024px) {
+    /* Keep every column reachable by scrolling the grid instead of
+       squeezing six controls into a tablet width. */
+    .bp-bulk-grid { min-width: 860px; }
+}

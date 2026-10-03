@@ -2865,6 +2865,79 @@ class CommCrewName(models.Model):
 
 
 
+class CommDeviceModel(models.Model):
+    """One piece of comm hardware, as a row rather than a hard-coded choice.
+
+    The belt pack form used to carry a `MANUFACTURER_CHOICES` list in Python,
+    which meant adding a device was a code change and a migration, and the list
+    could only ever describe belt packs. This table describes the *device* --
+    an FSII beltpack, a key panel, a speaker station -- and the systems those
+    devices run on (an Arcadia, say) are configured in COMM Config, not named
+    here.
+
+    Deliberately global rather than per-project: it is a hardware catalogue,
+    the same for every show, and a project that needed its own entry would be
+    describing a device, not a project. Only superusers can edit it (see
+    CommDeviceModelAdmin) so one tenant cannot reshape another's dropdown.
+    """
+
+    DEVICE_TYPE_CHOICES = [
+        ('WIRELESS_BP', 'Wireless Beltpack'),
+        ('WIRED_BP', 'Wired Beltpack'),
+        ('KEY_PANEL', 'Key Panel'),
+        ('STATION', 'Speaker/Remote Station'),
+    ]
+
+    # System Type follows from the device type rather than being chosen
+    # separately: a wireless beltpack is the only one of these that is not
+    # cabled to the system.
+    WIRELESS_DEVICE_TYPES = frozenset({'WIRELESS_BP'})
+
+    manufacturer = models.CharField(
+        max_length=80,
+        help_text="Groups the dropdown, e.g. Clear-Com, RTS, Riedel",
+    )
+    name = models.CharField(
+        max_length=120,
+        verbose_name="Model",
+        help_text="The device as it is written on the device, e.g. FSII-BP19",
+    )
+    device_type = models.CharField(
+        max_length=20,
+        choices=DEVICE_TYPE_CHOICES,
+    )
+    default_channel_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Default channel count",
+        help_text="Channel keys this device carries. 0 if not known.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Unticking hides it from the dropdown without deleting it, "
+                  "so devices already recorded against it keep their model.",
+    )
+
+    class Meta:
+        verbose_name = "Comm Device Model"
+        verbose_name_plural = "Comm Device Models"
+        ordering = ['manufacturer', 'name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['manufacturer', 'name'],
+                name='unique_comm_device_model',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.manufacturer} {self.name}"
+
+    @property
+    def system_type(self):
+        """WIRELESS or HARDWIRED, derived from the device type."""
+        return ('WIRELESS' if self.device_type in self.WIRELESS_DEVICE_TYPES
+                else 'HARDWIRED')
+
+
 class CommBeltPack(models.Model):
     """Belt pack assignment and configuration"""
     SYSTEM_TYPE_CHOICES = [
@@ -2890,15 +2963,19 @@ class CommBeltPack(models.Model):
     ]
     
 
+    # LEGACY. `device_model` replaced this; the column is kept, populated, and
+    # out of every form so that a device whose old value did not map to a
+    # catalogue row still says what it used to say. Nothing writes it any more.
     MANUFACTURER_CHOICES = [
         # Hardwired
         ('clearcom_helixnet', 'Clear-Com HelixNet'),
         ('rts_partyline', 'RTS Partyline'),
         ('rts_odin', 'RTS ODIN Matrix'),
         ('riedel_performer', 'Riedel Performer'),
-        
+
         # Wireless
         ('clearcom_freespeak', 'Clear-Com FreeSpeak Edge/Icon'),
+        ('clearcom_freespeak_ii', 'Clear-Com FreeSpeak II'),
         ('riedel_bolero', 'Riedel Bolero'),
         ('rad_uv1g', 'Radio Active Designs RAD'),
     ]
@@ -2921,23 +2998,36 @@ class CommBeltPack(models.Model):
         blank=True,
         related_name='comm_beltpacks',
         verbose_name="Location",
-        help_text="Equipment location for this belt pack"
+        help_text="Equipment location for this device"
     )
 
-    # Manufacturer/System - NEW
+    device_model = models.ForeignKey(
+        'CommDeviceModel',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='devices',
+        verbose_name="Model",
+        help_text="The device itself. System Type follows from its device type.",
+    )
+
+    # LEGACY, see MANUFACTURER_CHOICES above. Left on the model so the original
+    # value survives for any device the backfill could not map; no form writes
+    # it.
     manufacturer = models.CharField(
         max_length=50,
         choices=MANUFACTURER_CHOICES,
         default='clearcom_helixnet',
-        verbose_name="System/Manufacturer",
-        help_text="Belt pack system manufacturer"
+        blank=True,
+        verbose_name="System/Manufacturer (legacy)",
+        help_text="Superseded by Model."
     )
 
     ip_address = models.GenericIPAddressField(
         blank=True,
         null=True,
         verbose_name="IP Address",
-        help_text="IP address for hardwired belt packs (optional)"
+        help_text="IP address for hardwired devices (optional)"
     )
     
     bp_number = models.IntegerField(verbose_name="BP #")
@@ -2987,17 +3077,20 @@ class CommBeltPack(models.Model):
     
     checked_out = models.BooleanField(
     default=False,
-    help_text="Whether this belt pack has been checked out (Wireless only)"
+    help_text="Whether this device has been checked out (Wireless only)"
 
     )
     
     notes = models.TextField(blank=True)
     
     class Meta:
-        verbose_name = "Comm Belt Pack"
-        verbose_name_plural = "Comm Belt Packs"  # PARENT
-        # UPDATE THIS: Likely field is 'bp_number'
-        ordering = ['system_type', 'manufacturer', 'bp_number'] 
+        # "Belt Pack" stopped being the whole truth once the catalogue grew
+        # key panels and speaker stations: they are the same record with a
+        # different device type, so they live here rather than in a second
+        # module that would duplicate the channels inline and the bulk grid.
+        verbose_name = "Comm Device"
+        verbose_name_plural = "Comm Devices"  # PARENT
+        ordering = ['system_type', 'bp_number']
     
     def __str__(self):
         system_prefix = "W" if self.system_type == "WIRELESS" else "H"
@@ -3006,7 +3099,12 @@ class CommBeltPack(models.Model):
         return f"{system_prefix}-BP {self.bp_number}"
     
     def save(self, *args, **kwargs):
-    # Force checked_out to False for Hardwired beltpacks
+        # System Type follows from the device type, so a wireless beltpack
+        # cannot end up filed as hardwired. A device whose model did not map
+        # (device_model is null) keeps whatever it already had.
+        if self.device_model_id:
+            self.system_type = self.device_model.system_type
+        # Force checked_out to False for Hardwired beltpacks
         if self.system_type == 'HARDWIRED':
             self.checked_out = False
         super().save(*args, **kwargs)
@@ -3021,13 +3119,22 @@ class CommBeltPack(models.Model):
         super().clean()
 
     def get_channel_count(self):
-        """Return number of available channels based on manufacturer"""
+        """Channels this device carries.
+
+        The catalogue row is the answer when there is one. The map below is
+        only still here for a device whose legacy value never mapped.
+        """
+        if self.device_model_id and self.device_model.default_channel_count:
+            return self.device_model.default_channel_count
         channel_map = {
             'clearcom_helixnet': 24,  # Can be 4, 12, or 24
             'rts_partyline': 2,
             'rts_odin': 8,
             'riedel_performer': 4,
             'clearcom_freespeak': 8,  # Edge and Icon
+            # FSII-BP: 4 channel keys plus a reply key (CLAUDE.md, verified on
+            # hardware for the .cca export).
+            'clearcom_freespeak_ii': 4,
             'riedel_bolero': 6,
             'rad_uv1g': 6,
         }
