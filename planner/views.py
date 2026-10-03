@@ -47,6 +47,8 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 from .models import AudioChecklist, AudioChecklistTask, Project, ProjectMember
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo
+# count_micd: the one definition of "mic'd" (see planner/models.py).
+from .models import count_micd
 import json as _json
 from django.http import JsonResponse
 
@@ -3013,9 +3015,9 @@ def dashboard(request):
 
     mic_stats = {
         'total': MicAssignment.objects.count(),
-        'micd': MicAssignment.objects.filter(is_micd=True).count(),
+        'micd': count_micd(MicAssignment.objects.all()),
         'd_mic': MicAssignment.objects.filter(is_d_mic=True).count(),
-        'available': MicAssignment.objects.filter(is_micd=False).count(),
+        'available': MicAssignment.objects.count() - count_micd(MicAssignment.objects.all()),
         'shared': MicAssignment.objects.annotate(
             presenter_count=Count('shared_presenters')
         ).filter(presenter_count__gt=0).count(),
@@ -6327,7 +6329,7 @@ def dashboard_stats(request):
             'comm_packs': CommBeltPack.objects.filter(**p).count(),
             'comm_checked': CommBeltPack.objects.filter(**{**p, 'checked_out': True}).count(),
             'mic_total': sum(d['mic_count'] for d in show_days),
-            'mic_micd': MicAssignment.objects.filter(session__day__project=cp, is_micd=True).count() if cp else 0,
+            'mic_micd': count_micd(MicAssignment.objects.filter(session__day__project=cp)) if cp else 0,
             'power_plans': PowerDistributionPlan.objects.filter(**p).count(),
             'power_amps': 0,
             'show_days': show_days,

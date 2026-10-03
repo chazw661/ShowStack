@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.http import require_http_methods
 from .models import Project, ProjectMember, SoundvisionPrediction, ShowDay, MicSession, MicAssignment, CommBeltPack
+from .models import count_micd
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -351,7 +352,9 @@ def mic_tracker_sessions(request, project_id, day_id):
     for session in sessions:
         assignments = session.mic_assignments.all()
         total = assignments.count()
-        assigned = assignments.filter(is_micd=True).count()
+        # Same definition of "mic'd" as the desktop tracker — a shared RF whose
+        # hot mic is a PresenterSlot counts here too.
+        assigned = count_micd(assignments)
         session_data.append({
             'session': session,
             'total_mics': total,

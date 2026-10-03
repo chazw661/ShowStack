@@ -3085,6 +3085,32 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 import json
 
+
+# ── One definition of "mic'd" ──────────────────────────────────────────────
+# A mic lives in two places, because the UI has two shapes of row:
+#
+#   · a single-presenter RF toggles MicAssignment.is_micd
+#   · a shared RF (more than one PresenterSlot) toggles PresenterSlot.is_micd,
+#     radio-style — toggle_slot_micd clears every sibling slot, so at most one
+#     slot per assignment is ever hot
+#
+# Every counter used to read only the first of those, so mic'ing a presenter
+# on a shared RF moved no number at all — not the session strip, not the day
+# header, not the mobile day list — and a reload "corrected" it to the same
+# wrong figure. The unit being counted is the RF channel, so an assignment is
+# mic'd when either flag says so, and this is the only place that decides it.
+MICD_Q = Q(is_micd=True) | Q(presenter_slots__is_micd=True)
+
+
+def count_micd(assignments):
+    """Number of mic'd RF channels in a MicAssignment queryset.
+
+    .distinct() matters: the join onto presenter_slots multiplies a row per
+    matching slot, so a shared RF would otherwise count more than once.
+    """
+    return assignments.filter(MICD_Q).distinct().count()
+
+
 class ShowDay(models.Model):
     """Represents a day in the show schedule"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE) 
@@ -3106,16 +3132,16 @@ class ShowDay(models.Model):
         return self.date.strftime('%Y-%m-%d')
     
     def get_all_mics_status(self):
-        """Get a summary of all mics across all sessions for this day"""
-        sessions = self.sessions.all()
-        total_mics = 0
-        used_mics = 0
-        
-        for session in sessions:
-            assignments = session.mic_assignments.all()
-            total_mics += assignments.count()
-            used_mics += assignments.filter(is_micd=True).count()
-        
+        """Summary of all mics across every session in this day.
+
+        One query pair over the whole day rather than two per session, and
+        'used' comes from count_micd() so the day header can't disagree with
+        the session strip under it.
+        """
+        assignments = MicAssignment.objects.filter(session__day=self)
+        total_mics = assignments.count()
+        used_mics = count_micd(assignments)
+
         return {
             'total': total_mics,
             'used': used_mics,
@@ -3275,14 +3301,24 @@ class MicSession(models.Model):
         return True
 
     def get_mic_usage_stats(self):
-        """Get statistics about mic usage in this session"""
+        """Statistics about mic usage in this session.
+
+        'micd' counts RF channels via count_micd(), so a shared RF whose hot
+        mic is a PresenterSlot counts exactly once. 'available' is derived
+        from it rather than re-filtered, which is what let the two disagree.
+        """
         assignments = self.mic_assignments.all()
+        total = assignments.count()
+        micd = count_micd(assignments)
         return {
-            'total': assignments.count(),
-            'micd': assignments.filter(is_micd=True).count(),
+            'total': total,
+            'micd': micd,
             'd_mic': assignments.filter(is_d_mic=True).count(),
-            'available': assignments.filter(is_micd=False).count(),
-            'shared': assignments.filter(shared_presenters__isnull=False).count()
+            'available': total - micd,
+            # .distinct() for the same reason as count_micd: the M2M join
+            # multiplies a row per shared presenter, so a mic shared by
+            # three people was counted three times.
+            'shared': assignments.filter(shared_presenters__isnull=False).distinct().count()
         }
     
     def duplicate_to_session(self, target_session):
