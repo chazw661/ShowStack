@@ -10,9 +10,11 @@
  *
  *   · the A2 Mic'd button said "MIC'D" after a reload and "ON" after a
  *     toggle, because the template and toggleMicd() disagreed on the label
+ *     (every Mic'd button now reads ON / OFF, from one place)
  *   · an unassigned card stayed dimmed after you typed a name, because the
  *     dimming keyed off the `value` ATTRIBUTE and JS only ever set the
- *     `.value` PROPERTY -- the attribute still said ""
+ *     `.value` PROPERTY -- the attribute still said "" (the dimming is now
+ *     gone entirely; the placeholder text is the only unassigned signal)
  *   · clearing a name left it on the A1 row, because assignPresenter() only
  *     synced to A1 `if (value)`
  *   · applySlotData() wrote "— Unassigned —" into a .a1-presenter-primary
@@ -38,11 +40,11 @@
  * there is no second copy of the truth to go stale, and the server stays
  * the source of it.
  *
- * The one deliberate asymmetry: labels follow the TEMPLATE, because a fresh
- * reload is the reference the whole exercise is measured against.
- *   A1 toggle   ON / —
- *   A2 toggle   MIC'D always (the fill carries the state, not the word)
- *   chip button ON / MIC'D
+ * Labels follow the TEMPLATE, because a fresh reload is the reference the
+ * whole exercise is measured against. Every Mic'd button -- the A1 toggle,
+ * the A2 card toggle and the per-slot chip button -- now reads ON / OFF, so
+ * the word states the state rather than naming the control, and a live edit
+ * can't word it differently from a reload.
  */
 (function (global) {
     'use strict';
@@ -102,9 +104,10 @@
 
     /* The presenter cell is a SPAN SWAP, not a text update. .a1-unassigned
        and .a1-presenter-primary are different sizes, colours and styles, and
-       .a1-unassigned is what the row's dimming is keyed to -- so writing the
-       placeholder text into the assigned span (what applySlotData used to do)
-       produced a row that read unassigned but was styled assigned. */
+       since the row itself is no longer dimmed, that span IS the only thing
+       saying the slot is empty -- so writing the placeholder text into the
+       assigned span (what applySlotData used to do) produced a row that read
+       unassigned but was styled assigned. */
     function renderPresenterCell(cell, name, isActive) {
         if (!cell) return;
         var span = cell.querySelector('.a1-presenter-primary, .a1-unassigned');
@@ -149,7 +152,7 @@
             row.classList.toggle('is-unassigned', !assigned);
             setGroupClass(row, st.group);
             renderPresenterCell(row.querySelector('td:nth-child(4)'), st.presenter, st.isActive && st.slotCount > 1);
-            setMicdButton(row.querySelector('.a1-micd-toggle'), st.isMicd, 'ON', '—');
+            setMicdButton(row.querySelector('.a1-micd-toggle'), st.isMicd, 'ON', 'OFF');
             setTypeBadge(row.querySelector('.mic-type-badge'), st.micType);
         }
 
@@ -162,9 +165,9 @@
                 chip.classList.toggle('active', st.isActive);
                 var cdot = chip.querySelector('.a2-slot-micd-dot');
                 if (cdot) cdot.classList.toggle('on', st.isMicd);
-                setMicdButton(chip.querySelector('.a2-slot-micd-btn'), st.isMicd, 'ON', "MIC'D");
+                setMicdButton(chip.querySelector('.a2-slot-micd-btn'), st.isMicd, 'ON', 'OFF');
                 /* The chip's name is a bare text node sitting between the dot
-                   and the ✕ / MIC'D controls, so it is updated in place. */
+                   and the ✕ / ON-OFF controls, so it is updated in place. */
                 for (var i = 0; i < chip.childNodes.length; i++) {
                     var n = chip.childNodes[i];
                     if (n.nodeType === 3 && n.textContent.trim()) {
@@ -195,7 +198,7 @@
             input.setAttribute('value', st.presenter || '');
         }
 
-        setMicdButton(card.querySelector('.a2-micd-toggle'), st.isMicd, "MIC'D", "MIC'D");
+        setMicdButton(card.querySelector('.a2-micd-toggle'), st.isMicd, 'ON', 'OFF');
 
         var meta = card.querySelector('.a2-card-meta');
         if (meta) {

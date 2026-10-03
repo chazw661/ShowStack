@@ -54,6 +54,25 @@
     .btn-mtt:active { transform: scale(0.97); }
     .btn-mtt:hover { opacity: 0.85; }
     .btn-mtt-primary { background: var(--accent-blue); color: var(--mtt-text-on-accent); }
+    /* Outlined secondary. Add Day and Presenters are utilities, not the page's
+       action, so the header carries no fill at all -- the filled primary is
+       kept for the empty-state Add Day and the modals' confirm, where it is
+       the one thing to press.
+     *
+     * Presenters is an <a>, and base_site.html paints
+     * `a, a:link, a:visited { color: #8ba4ff !important }` admin-wide.
+     * !important alone does NOT win that: both are !important, so
+     * specificity decides, and `a:link` is (0,1,1) against a bare class's
+     * (0,1,0) -- measured in Chrome, the button came out #8ba4ff. Hence the
+     * :link/:visited forms at (0,2,1). The old markup dodged this with an
+     * inline `--mtt-text-inverse !important`, which is near-black: right on
+     * the blue fill it used to have, unreadable on a transparent one. */
+    .btn-mtt-secondary,
+    a.btn-mtt-secondary:link,
+    a.btn-mtt-secondary:visited { background: transparent; color: var(--text-secondary) !important; border: 1px solid var(--border-bright); }
+    .btn-mtt-secondary:hover,
+    a.btn-mtt-secondary:link:hover,
+    a.btn-mtt-secondary:visited:hover { opacity: 1; color: var(--text-primary) !important; border-color: var(--accent-blue); }
     .btn-mtt-ghost   { background: var(--bg-raised); color: var(--text-secondary); border: 1px solid var(--border-bright); }
     .btn-mtt-export  { background: var(--bg-raised); color: var(--accent-amber); border: 1px solid rgba(var(--mtt-rgb-amber), 0.3); }
 
@@ -172,16 +191,14 @@
     .a1-row.row-micd { background: var(--micd-bg); }
     .a1-row td { padding: 9px 12px; vertical-align: middle; }
 
-    /* Expanded slot sub-rows */
-    .a1-slot-row { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-    .a1-slot-row:hover,
-    .a1-slot-row.row-micd:hover { background: rgba(var(--mtt-rgb-white), 0.03); }
-    .a1-slot-row.row-micd { background: var(--micd-bg); }
-    .a1-slot-row td { padding: 9px 12px; vertical-align: middle; }
+    /* Expanded slot sub-rows take the .a1-row styling above and nothing of
+       their own -- a multi-presenter sub-row is a row of the same table,
+       read the same way. The .a1-slot-row class is a JS hook only (the row
+       id, plus toggleSlotRows()'s query); no CSS keys off it. */
     .a1-slot-active { color: var(--text-primary) !important; font-weight: 700; }
 
-    /* RF# +20% (20 -> 24, sub-rows 14 -> 17). With the presenter name, the
-       two things read from a step back.
+    /* RF# +20% (20 -> 24), main rows and multi-presenter sub-rows alike.
+       With the presenter name, the two things read from a step back.
      *
      * Every colour here is !important because base_site.html paints
      * `th, td { color: #e0e0e0 !important }` across the whole admin. RF# is a
@@ -190,12 +207,10 @@
      * number stayed grey, and nothing in the stylesheet looked wrong.
      */
     .a1-rf { width: 62px; font-size: 24px; font-weight: 800; color: var(--text-primary) !important; }
-    .a1-slot-row .a1-rf { color: var(--text-dim) !important; font-size: 17px !important; }
 
     /* Mic'd RF#: the one exact green, and the only place besides the button
        that it appears. */
-    .a1-row.row-micd .a1-rf,
-    .a1-slot-row.row-micd .a1-rf { color: var(--accent-green) !important; }
+    .a1-row.row-micd .a1-rf { color: var(--accent-green) !important; }
 
     /* Column headers are labels; the same blanket rule was pulling them up to
        #e0e0e0, brighter than the data underneath them. */
@@ -221,20 +236,14 @@
     .a1-presenter-primary { font-size: 18px; font-weight: 600; color: var(--text-primary); }
     .a1-unassigned { font-size: 14px; color: var(--mtt-text-placeholder); font-style: italic; }
 
-    /* An unassigned slot still carries every field -- it is where the next
-       presenter gets typed -- but it is not something to read past on the
-       way to a name, so it sits back. Hover and focus bring it fully
-       forward, so nothing being read or edited is ever dimmed.
+    /* An unassigned slot is NOT dimmed. "— Unassigned —" in the placeholder
+       style above is the whole signal: it already reads as absent, and an
+       opacity on the row dimmed the RF#, the mic type and the Mic'd button
+       along with it -- a row you still have to read across a dark room.
      *
-     * Keyed to .is-unassigned, which admin/js/mic_tracker_render.js owns.
-     * This was `:has(.a2-presenter-input[value=""])`, which read the value
-     * ATTRIBUTE -- so typing a name (which only changes the .value PROPERTY)
-     * never cleared the dimming, and clearing a name never restored it. A
-     * class the renderer sets alongside every other piece of slot state
-     * cannot drift from the rest of the row. */
-    .a1-row.is-unassigned { opacity: 0.6; transition: opacity 0.12s; }
-    .a1-row.is-unassigned:hover,
-    .a1-row.is-unassigned:focus-within { opacity: 1; }
+     * .is-unassigned is still set on the row (template + renderer) as the
+     * state marker the renderer keeps in step with the rest of slot state.
+     * Nothing gives it an opacity, and nothing should. */
     .a1-shared-tag {
         display: inline-block; margin-left: 8px; font-size: 9px;
         background: var(--bg-raised); color: var(--accent-blue);
@@ -356,11 +365,8 @@
     .a2-presenter-name { font-size: 18px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .a2-unassigned { color: var(--mtt-text-placeholder); font-style: italic; font-size: 15px; }
 
-    /* Same treatment as an unassigned A1 row: every field is still there,
-       it just sits back until you touch it. */
-    .a2-card.is-unassigned { opacity: 0.6; transition: opacity 0.12s; }
-    .a2-card.is-unassigned:hover,
-    .a2-card.is-unassigned:focus-within { opacity: 1; }
+    /* Same treatment as an unassigned A1 row: no dimming. The .a2-unassigned
+       placeholder above carries it. */
     .a2-settings-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     .a2-setting { display: flex; flex-direction: column; gap: 3px; }
     .a2-setting-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mtt-text-label); margin-bottom: 1px; }
@@ -447,11 +453,6 @@
     .a1-row.group-red    { border-left: 4px solid var(--mtt-group-red); }
     .a1-row.group-purple { border-left: 4px solid var(--mtt-group-purple); }
     .a1-row.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
-    .a1-slot-row.group-blue   { border-left: 4px solid var(--mtt-group-blue); }
-    .a1-slot-row.group-amber  { border-left: 4px solid var(--mtt-group-amber); }
-    .a1-slot-row.group-red    { border-left: 4px solid var(--mtt-group-red); }
-    .a1-slot-row.group-purple { border-left: 4px solid var(--mtt-group-purple); }
-    .a1-slot-row.group-teal   { border-left: 4px solid var(--mtt-group-teal); }
 
     .group-dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; transition: transform 0.1s; }
     .group-dot:hover { transform: scale(1.2); }
@@ -620,8 +621,8 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span></div>
         </div>
         <div class="mtt-header-actions">
-            {% if not is_viewer %}<button class="btn-mtt btn-mtt-primary" onclick="addNewDay()">+ Add Day</button>{% endif %}
-            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-primary" style="color:var(--mtt-text-inverse) !important;">👤 Presenters</a>
+            {% if not is_viewer %}<button class="btn-mtt btn-mtt-secondary" onclick="addNewDay()">+ Add Day</button>{% endif %}
+            <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-secondary">👤 Presenters</a>
             <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-amber) !important;">↓ Export PDF</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
             {# Issue #74 — A2 Listen companion setup. #}
@@ -721,9 +722,14 @@ silently 403-ing background saves and stopping updates from reaching others.
                             the row from them on load and after every edit.
                             They are the only copy of the truth on the client,
                             so a change path can't disagree with the server.
-                            .a1-slot-row is required: three CSS rules and two
-                            JS selectors key off it, and it had never been
-                            emitted, so all five silently did nothing.
+                            The .a1-slot-row CLASS is required by one JS
+                            selector -- toggleSlotRows()'s expand/collapse
+                            query -- and had never been emitted, so that
+                            query always matched nothing. (The three
+                            getElementById('a1-slot-row-<id>') lookups use
+                            the id below, which was always emitted.) No CSS
+                            keys off the class: a sub-row reads exactly like
+                            a main row.
                             {% endcomment %}
                             <tr class="a1-row a1-slot-row {% if slot.is_micd %}row-micd{% endif %} {% if not slot.presenter %}is-unassigned{% endif %} {% if first_slot_group %}group-{{ first_slot_group.color }}{% elif fallback_group %}group-{{ fallback_group.color }}{% endif %}"
                                 id="a1-slot-row-{{ slot.id }}"
@@ -770,7 +776,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     <button class="a1-micd-toggle {% if slot.is_micd %}on{% else %}off{% endif %}"
                                             id="a1-micd-slot-{{ slot.id }}"
                                             disabled style="cursor:default">
-                                        {% if slot.is_micd %}ON{% else %}—{% endif %}
+                                        {% if slot.is_micd %}ON{% else %}OFF{% endif %}
                                     </button>
                                 </td>
                                 <td class="a1-notes-cell">
@@ -836,7 +842,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     <button class="a1-micd-toggle {% if assignment.is_micd %}on{% else %}off{% endif %}"
                                             onclick="toggleMicd({{ assignment.id }}, this)"
                                             {% if is_viewer %}disabled style="cursor:default"{% endif %}>
-                                        {% if assignment.is_micd %}ON{% else %}—{% endif %}
+                                        {% if assignment.is_micd %}ON{% else %}OFF{% endif %}
                                     </button>
                                 </td>
                                 <td class="a1-notes-cell">
@@ -869,11 +875,12 @@ silently 403-ing background saves and stopping updates from reaching others.
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
                         {% comment %}
-                        The group stripe and the unassigned dimming are both
-                        emitted here as well as applied by the renderer. The
-                        group class in particular used to be added only by the
-                        JS group picker, so a card showed no stripe until you
-                        changed its group and then lost it again on reload.
+                        The group stripe and the unassigned state class are
+                        both emitted here as well as applied by the renderer.
+                        The group class in particular used to be added only
+                        by the JS group picker, so a card showed no stripe
+                        until you changed its group and then lost it again on
+                        reload.
                         {% endcomment %}
                         {% with card_slot=assignment.active_slot card_group=assignment.groups.first %}
                         <div class="a2-card {% if assignment.is_micd %}card-micd{% endif %} {% if not card_slot.presenter %}is-unassigned{% endif %} {% if card_group %}group-{{ card_group.color }}{% endif %}"
@@ -922,7 +929,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                             id="a2-micd-btn-{{ assignment.id }}"
                                             onclick="toggleMicd({{ assignment.id }}, this)"
                                             {% if is_viewer %}disabled style="cursor:default"{% endif %}>
-                                        <span class="a2-micd-dot"></span>MIC'D
+                                        <span class="a2-micd-dot"></span>{% if assignment.is_micd %}ON{% else %}OFF{% endif %}
                                     </button>
                                     {% endif %}
                                 </div>
@@ -1069,7 +1076,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                         <span class="a2-slot-remove" onclick="event.stopPropagation(); removePresenterSlot({{ assignment.id }}, {{ slot.id }})">✕</span>
                                         <button class="a2-slot-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
                                                 id="a2-slot-micd-{{ slot.id }}"
-                                                onclick="event.stopPropagation(); toggleMicdSlot({{ assignment.id }}, {{ slot.id }}, this)">{% if slot.is_micd %}ON{% else %}MIC'D{% endif %}</button>
+                                                onclick="event.stopPropagation(); toggleMicdSlot({{ assignment.id }}, {{ slot.id }}, this)">{% if slot.is_micd %}ON{% else %}OFF{% endif %}</button>
                                         {% endif %}
                                     </div>
                                     {% endfor %}

@@ -217,16 +217,12 @@
         white-space: nowrap; max-width: 100%;
     }
 
-    /* Unassigned rows sit back but keep every field, and come forward on
-       hover or focus so nothing being read or edited is ever dimmed.
+    /* Unassigned rows are NOT dimmed, matching the tracker: .mto-unassigned
+     * above already reads as absent, and an opacity on the row took the RF#
+     * and the Mic'd badge down with it.
      *
-     * Keyed to a class, not to `[value=""]`: typing into the input changes
-     * the .value PROPERTY and never the attribute, so the attribute form
-     * dimmed a row you had just named and left a row you had just cleared
-     * bright. mtoSetAssigned() below keeps the class in step. */
-    .mto-row.is-unassigned { opacity: 0.6; transition: opacity 0.12s; }
-    .mto-row.is-unassigned:hover,
-    .mto-row.is-unassigned:focus-within { opacity: 1; }
+     * .is-unassigned stays on the row as the state marker mtoSetAssigned()
+     * keeps in step with the name field. Nothing gives it an opacity. */
     </style>
 {% endblock %}
 
@@ -304,7 +300,7 @@
                         <button type="button" class="mto-micd-btn {% if slot.is_micd %}on{% else %}off{% endif %}"
                                 data-assignment-id="{{ assignment.id }}" data-slot-id="{{ slot.id }}"
                                 onclick="mtoToggleSlotMicd({{ assignment.id }}, {{ slot.id }}, this)"
-                                {% if is_viewer %}disabled{% endif %}>{% if slot.is_micd %}MIC'D{% else %}—{% endif %}</button>
+                                {% if is_viewer %}disabled{% endif %}>{% if slot.is_micd %}ON{% else %}OFF{% endif %}</button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -317,7 +313,7 @@
                         <button type="button" class="mto-micd-btn {% if assignment.is_micd %}on{% else %}off{% endif %}"
                                 data-assignment-id="{{ assignment.id }}"
                                 onclick="mtoToggleMicd({{ assignment.id }}, this)"
-                                {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}MIC'D{% else %}—{% endif %}</button>
+                                {% if is_viewer %}disabled{% endif %}>{% if assignment.is_micd %}ON{% else %}OFF{% endif %}</button>
                     </td>
                 </tr>
                 {% endwith %}
@@ -404,7 +400,9 @@
     function setBtn(btn, on) {
         btn.classList.toggle('on', on);
         btn.classList.toggle('off', !on);
-        btn.textContent = on ? "MIC'D" : '—';
+        // ON / OFF, matching the tracker tab. The two show the same column
+        // one click apart, so they must word it the same way.
+        btn.textContent = on ? 'ON' : 'OFF';
         var row = btn.closest('.mto-row');
         if (row) row.classList.toggle('mto-row-micd', on);
     }
