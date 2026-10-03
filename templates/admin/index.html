@@ -1,7 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}ShowStack — System Overview{% endblock %}
+{# Same "Page — Project — ShowStack" shape base_site.html gives every other admin page. #}
+{% block title %}System Overview{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% comment %}
 Django fills the <h1> and the breadcrumb from {{ title }}, which for the index

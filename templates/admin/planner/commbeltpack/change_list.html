@@ -29,7 +29,18 @@
     border-color: #4a7090;
     color: #fff;
 }
-.comm-nav-btn .btn-icon { font-size: 15px; }
+/* Line icons, matching the System Overview dashboard: 24x24 viewBox, 1.5
+   stroke, currentColor. The emoji rendered at a different size, weight and
+   colour in every browser and read as decoration rather than as part of the
+   control. */
+.comm-nav-btn .btn-icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    color: var(--text-muted);
+}
+
+.comm-nav-btn:hover .btn-icon { color: #e0e0e0; }
 .comm-summary {
     display: flex;
     gap: 16px;
@@ -119,13 +130,13 @@
 {% block content %}
 <div class="comm-nav-buttons">
     <a href="{% url 'admin:planner_commposition_changelist' %}" class="comm-nav-btn">
-        <span class="btn-icon">🎯</span> Positions
+        <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> Positions
     </a>
     <a href="{% url 'admin:planner_commcrewname_changelist' %}" class="comm-nav-btn">
-        <span class="btn-icon">👤</span> Crew Names
+        <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Crew Names
     </a>
     <a href="{% url 'admin:planner_commchannel_changelist' %}" class="comm-nav-btn">
-        <span class="btn-icon">📻</span> Channels
+        <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4"/><path d="M4.9 19.1a10 10 0 0 1 0-14.2"/><path d="M19.1 4.9a10 10 0 0 1 0 14.2"/></svg> Channels
     </a>
 </div>
 <div class="comm-summary">
