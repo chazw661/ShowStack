@@ -132,6 +132,15 @@ html[data-theme="auto"] {
     flex-wrap: wrap;
 }
 
+/* The switcher and Help were two separate flex items of #user-tools; grouping
+   them so one media query can hide the pair has to not change how they sit on
+   the desktop header, hence the same gap and centring here. */
+.ss-header-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .ss-header-btn {
     background: none;
     border: 1px solid var(--ss-border);
@@ -222,6 +231,7 @@ html[data-theme="auto"] {
 }
 
 .ss-user-menu__panel a,
+.ss-user-menu__action,
 .ss-user-menu__logout button {
     display: block;
     width: 100%;
@@ -241,6 +251,8 @@ html[data-theme="auto"] {
 
 .ss-user-menu__panel a:hover,
 .ss-user-menu__panel a:focus,
+.ss-user-menu__action:hover,
+.ss-user-menu__action:focus,
 .ss-user-menu__logout button:hover,
 .ss-user-menu__logout button:focus {
     background: var(--ss-raised);
@@ -253,21 +265,132 @@ html[data-theme="auto"] {
     border-top: 1px solid var(--ss-border);
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
+/* ---- Tablet: the project switcher and Help, folded into the menu ------ */
+
+/* Only shown at <=1024px (see the media query below); on the desktop header
+   these two live in #user-tools as their own controls. */
+.ss-user-menu__compact {
+    display: none;
+    margin: 0 0 4px;
+    padding: 2px 10px 8px;
+    border-bottom: 1px solid var(--ss-border);
+}
+
+.ss-user-menu__label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.ss-user-menu__compact .ss-project-switcher {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.ss-user-menu__projectname {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ss-field-text);
+    word-break: break-word;
+}
+
+.ss-user-menu__compact .ss-user-menu__action {
+    margin-top: 8px;
+    /* Pull the padding back in line with the panel's other rows, which are
+       not inside this inset block. */
+    margin-left: -10px;
+    margin-right: -10px;
+    width: calc(100% + 20px);
+}
+
+/* ---- Compact header at tablet widths --------------------------------- */
+
+/* Django's responsive.css turns #header into a column below 1024px. With a
+   wordmark, a Project Dashboard link, a project switcher, a Help button and
+   the user menu in it, that stacked into four rows ~150px tall -- a third of
+   an iPad's height gone before any content. Back to one ~56px row here:
+   logo, Project Dashboard, user menu. The switcher and Help are not dropped,
+   they move into .ss-user-menu__compact above, so nothing becomes
+   unreachable. Above 1024px none of this applies and the header is
+   unchanged. */
+@media (max-width: 1024px) {
+    #header {
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 12px;
+        min-height: 56px;
+        padding: 0 16px !important;
+    }
+
+    /* #branding is the flex child that holds the wrapper; without this it
+       sizes to content and the user menu floats in mid-row. */
+    #branding {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
     #branding-wrapper {
-        flex-direction: column !important;
-        gap: 10px;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 16px;
+        padding: 0;
+    }
+
+    /* responsive.css gives #site-name an 8px bottom margin for the stacked
+       layout, which shows up as an off-centre row here. */
+    #branding-wrapper h1#site-name {
+        margin: 0 !important;
+        line-height: 1;
+    }
+
+    #branding-wrapper h1#site-name a {
+        font-size: 1.0625rem;
+        gap: 8px;
+    }
+
+    #branding-wrapper h1#site-name img {
+        height: 24px;
     }
 
     .dashboard-nav {
-        width: 100%;
-        justify-content: center;
+        width: auto;
+        justify-content: flex-start;
     }
+
+    #user-tools {
+        margin: 0 !important;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+        line-height: normal;
+    }
+
+    .ss-header-tools { display: none !important; }
+    .ss-user-menu__compact { display: block; }
+}
+
+/* Phones: the icon alone carries the home link, so the single row still fits
+   a 375px viewport without the menu trigger wrapping. */
+@media (max-width: 420px) {
+    #branding-wrapper { gap: 12px; }
+    .ss-wordmark { display: none !important; }
 }
 </style>
 
 <script>
+// The in-menu Help button. Closing the <details> first keeps the menu from
+// sitting open behind the modal, which covers the whole page anyway.
+function ssMenuHelp(btn) {
+    var menu = btn.closest('details');
+    if (menu) menu.open = false;
+    helpOpen();
+}
+
 // Dismiss the user menu on an outside click or Escape -- the only behaviour
 // <details> does not give us for free.
 (function () {
@@ -304,27 +427,34 @@ gone rather than merely restyled.
 
 {% block userlinks %}
     
-    <!-- Project Switcher (for superusers and owners) or Static Display (for editors/viewers) -->
-    {% if show_project_dropdown %}
-        <div style="display: inline-block; margin-right: 20px;">
-            <label for="project-switcher" style="color: #fff; margin-right: 10px;">🔧 Project:</label>
-            <select id="project-switcher" style="padding: 5px 10px; background: var(--ss-raised); color: #fff; border: 1px solid #4a9eff; border-radius: 4px; font-size: 14px;">
-                <option value="">-- Select Project --</option>
-                {% for project in user_projects %}
-                    <option value="{{ project.id }}" {% if current_project and project.id == current_project.id %}selected{% endif %}>
-                        {{ project.name }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-    {% elif current_project %}
-        <!-- Static project display for editors/viewers -->
-        <div style="display: inline-block; margin-right: 20px; padding: 5px 15px; background: var(--ss-raised); border: 1px solid #4ecca3; border-radius: 4px;">
-            <span style="color: #95a5a6; font-size: 13px; margin-right: 8px;">🔧 Project:</span>
-            <span style="color: #4ecca3; font-weight: 600; font-size: 14px;">{{ current_project.name }}</span>
-        </div>
-    {% endif %}
-    <button type="button" class="ss-header-btn" onclick="helpOpen()">? Help</button>
+    {% comment %}
+    The switcher and Help are wrapped in .ss-header-tools so one rule can take
+    them out of the header row at tablet widths; the copies that take over
+    there live in the user menu panel below.
+    {% endcomment %}
+    <div class="ss-header-tools">
+        <!-- Project Switcher (for superusers and owners) or Static Display (for editors/viewers) -->
+        {% if show_project_dropdown %}
+            <div style="display: inline-block; margin-right: 20px;">
+                <label for="project-switcher" style="color: #fff; margin-right: 10px;">🔧 Project:</label>
+                <select id="project-switcher" class="ss-project-switcher" style="padding: 5px 10px; background: var(--ss-raised); color: #fff; border: 1px solid #4a9eff; border-radius: 4px; font-size: 14px;">
+                    <option value="">-- Select Project --</option>
+                    {% for project in user_projects %}
+                        <option value="{{ project.id }}" {% if current_project and project.id == current_project.id %}selected{% endif %}>
+                            {{ project.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% elif current_project %}
+            <!-- Static project display for editors/viewers -->
+            <div style="display: inline-block; margin-right: 20px; padding: 5px 15px; background: var(--ss-raised); border: 1px solid #4ecca3; border-radius: 4px;">
+                <span style="color: #95a5a6; font-size: 13px; margin-right: 8px;">🔧 Project:</span>
+                <span style="color: #4ecca3; font-weight: 600; font-size: 14px;">{{ current_project.name }}</span>
+            </div>
+        {% endif %}
+        <button type="button" class="ss-header-btn" onclick="helpOpen()">? Help</button>
+    </div>
 
     {% if user.is_authenticated %}
     {# Phase 6 (D-04, D-12): My Crew now lives inside this menu. #}
@@ -345,6 +475,30 @@ gone rather than merely restyled.
                 {% elif user_role == 'viewer' %}
                     <span class="ss-role-badge">VIEWER</span>
                 {% endif %}
+            </div>
+            {% comment %}
+            Shown only at <=1024px, where .ss-header-tools is hidden. The
+            switcher is a second <select> rather than the same element moved
+            by script: the change handler binds by class, so both drive the
+            same navigation, and nothing depends on JS running to place it.
+            {% endcomment %}
+            <div class="ss-user-menu__compact">
+                {% if show_project_dropdown %}
+                    <label class="ss-user-menu__label" for="project-switcher-menu">🔧 Project</label>
+                    <select id="project-switcher-menu" class="ss-project-switcher">
+                        <option value="">-- Select Project --</option>
+                        {% for project in user_projects %}
+                            <option value="{{ project.id }}" {% if current_project and project.id == current_project.id %}selected{% endif %}>
+                                {{ project.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                {% elif current_project %}
+                    <span class="ss-user-menu__label">🔧 Project</span>
+                    <span class="ss-user-menu__projectname">{{ current_project.name }}</span>
+                {% endif %}
+                <button type="button" class="ss-user-menu__action" role="menuitem"
+                        onclick="ssMenuHelp(this)">? Help</button>
             </div>
             <a href="{% url 'crew_index' %}" role="menuitem">My Crew</a>
             {% if user.has_usable_password %}
@@ -1514,14 +1668,23 @@ body, #container, .main, #content, #content-main, .content, .colMS, .colM {
    one rule for it, not an #8ba4ff here and a #00ff88 above. */
 #user-tools, #user-tools a { color: #cfccec !important; border-bottom-color: rgba(167,139,250,0.3) !important; }
 
-/* Project switcher dropdown */
-#project-switcher {
+/* Project switcher dropdown.
+   Both copies are named by id rather than by their shared class because this
+   has to out-specify surfaces.css's
+   `select:has(> option[value=""]:checked)` (0,2,2), which greys out a select
+   whose empty option is the selected one. With a class here (0,1,0) that rule
+   wins and "-- Select Project --" renders in the muted placeholder colour
+   instead of the field colour -- a visible change on the desktop header,
+   which is meant to be untouched. */
+#project-switcher,
+#project-switcher-menu {
     background: var(--ss-field-bg) !important;
     color: var(--ss-field-text) !important;
     border: 1px solid var(--ss-field-border) !important;
     border-radius: var(--ss-field-radius) !important;
 }
-#project-switcher:hover { border-color: var(--ss-field-border-hover) !important; }
+#project-switcher:hover,
+#project-switcher-menu:hover { border-color: var(--ss-field-border-hover) !important; }
 
 /* Project Dashboard button: flat, styled in the branding block above. */
 
@@ -1797,20 +1960,20 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- Project Switcher -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Project switcher loaded');
-    const switcher = document.getElementById('project-switcher');
-    if (switcher) {
-        console.log('Switcher found, adding listener');
+    // Bound by class, not by id: there are two switchers in the markup now --
+    // the header one and the copy inside the user menu that replaces it at
+    // tablet widths -- and only one of the two is visible at any width.
+    const switchers = document.querySelectorAll('.ss-project-switcher');
+    console.log('Project switchers found:', switchers.length);
+    switchers.forEach(function(switcher) {
         switcher.addEventListener('change', function() {
             const newProjectId = this.value;
             console.log('Switching to project:', newProjectId);
-            
+
             // Simple direct navigation - let the view handle redirect
             window.location.href = '/audiopatch/switch-project/' + newProjectId + '/';
         });
-    } else {
-        console.log('Switcher NOT found');
-    }
+    });
 });
 </script>
 
