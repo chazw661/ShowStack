@@ -327,17 +327,11 @@ class Project(models.Model):
                     )
             
             # 6. Duplicate Mic Tracker System
-            # Duplicate Presenters first (needed for sessions)
-            presenter_map = {}
-            for presenter in self.presenters.all():
-                new_presenter = Presenter.objects.create(
-                project=new_project,
-                name=presenter.name,
-                notes=presenter.notes
-            )
-                presenter_map[presenter.id] = new_presenter
-            # 6. Duplicate Mic Tracker System
-            # Duplicate Presenters first (needed for sessions)
+            # Duplicate Presenters first (needed for sessions).
+            # This loop was pasted in twice. The second pass overwrote
+            # presenter_map, so every duplicated project started life with two
+            # Presenter rows per person and half of them orphaned — a roster
+            # that read double before anyone had touched it.
             presenter_map = {}
             for presenter in self.presenters.all():
                 new_presenter = Presenter.objects.create(
@@ -3178,7 +3172,43 @@ class Presenter(models.Model):
         verbose_name = "Presenter"
         verbose_name_plural = "Presenters"  # Child of Show Mic Tracker
         ordering = ['name']
-    
+
+    @classmethod
+    def resolve(cls, name, project_id):
+        """Return the Presenter called `name` in this project, creating one
+        only if nobody by that name is already there.
+
+        Every assign/rename path used to call
+        get_or_create(name=..., project_id=...), which matches the name
+        EXACTLY. So "Jane Doe", "jane doe" and "Jane  Doe" each minted a new
+        Presenter, and a roster that should hold one person held three — each
+        with its own headshot, notes and history. Matching is therefore
+        case-insensitive here, and whitespace is collapsed before comparing.
+
+        Returns None for a blank name (callers clear the slot with that), and
+        keeps the OLDEST match when a project already has duplicates, so the
+        row with the history attached is the one that survives. Use
+        `manage.py list_duplicate_presenters` to see what is already there.
+        """
+        name = ' '.join((name or '').split())
+        if not name or not project_id:
+            return None
+
+        existing = cls.objects.filter(
+            project_id=project_id, name__iexact=name
+        ).order_by('id').first()
+        if existing:
+            return existing
+
+        # No unique constraint on (project, name) to lean on, so two
+        # simultaneous first-time assignments of the same name can still both
+        # insert. Re-check after the insert and hand back the older row so the
+        # loser of that race is at least never the one we return.
+        created = cls.objects.create(project_id=project_id, name=name)
+        return cls.objects.filter(
+            project_id=project_id, name__iexact=name
+        ).order_by('id').first() or created
+
     def __str__(self):
         return self.name    
 

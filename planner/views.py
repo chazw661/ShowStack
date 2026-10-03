@@ -1280,9 +1280,13 @@ def update_mic_assignment(request):
         value = data.get('value')
 
         assignment = get_object_or_404(MicAssignment, id=assignment_id)
-        current_project_id = request.session.get('current_project')
-        if not current_project_id and hasattr(request, 'current_project') and request.current_project:
-            current_project_id = request.current_project.id
+        # Take the project from the row being edited, not from the session.
+        # This used to read the legacy 'current_project' session alias, which
+        # is written only by mic_tracker_view — so an edit arriving with that
+        # key stale or unset resolved the presenter against the wrong project
+        # (or against project None) and minted a duplicate: the name existed,
+        # just not where we looked.
+        current_project_id = assignment.session.day.project_id
 
         if field in ('is_micd', 'is_d_mic'):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
@@ -1312,25 +1316,16 @@ def update_mic_assignment(request):
                 )
             presenter_changed = False
             if field in ('presenter', 'presenter_name'):
-                if value:
-                    presenter, _ = Presenter.objects.get_or_create(
-                        name=value.strip(), project_id=current_project_id
-                    )
-                    slot.presenter = presenter
-                else:
-                    slot.presenter = None
+                slot.presenter = Presenter.resolve(value, current_project_id)
                 presenter_changed = True
             elif field == 'presenter_id':
+                # assignPresenter() sends a NAME through this field, so the
+                # non-numeric path is the common one, not the exception.
                 if value:
                     try:
                         slot.presenter = Presenter.objects.get(id=int(value))
                     except (ValueError, Presenter.DoesNotExist):
-                        # Value is a name string, use get_or_create
-                        presenter, _ = Presenter.objects.get_or_create(
-                            name=value.strip(),
-                            project_id=current_project_id
-                        )
-                        slot.presenter = presenter
+                        slot.presenter = Presenter.resolve(value, current_project_id)
                 else:
                     slot.presenter = None
                 presenter_changed = True
@@ -1397,19 +1392,15 @@ def add_shared_presenter(request):
             })
         
         assignment = MicAssignment.objects.get(id=assignment_id)
-        
-        # Get or create the presenter WITH PROJECT
-        current_project_id = request.session.get('current_project')
-        if not current_project_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'No project selected'
-            })
 
-        presenter, created = Presenter.objects.get_or_create(
-            name=presenter_name,
-            project_id=current_project_id
-)
+        # The assignment knows its own project, so take it from there rather
+        # than from a session key that may be stale or unset — a shared
+        # presenter must never land in a different project's roster.
+        current_project_id = assignment.session.day.project_id
+
+        presenter = Presenter.resolve(presenter_name, current_project_id)
+        if not presenter:
+            return JsonResponse({'success': False, 'error': 'Name required'})
         
         # Check if presenter is already the main presenter
         if assignment.presenter and assignment.presenter.id == presenter.id:
@@ -1708,12 +1699,8 @@ def update_slot_field(request):
         # card's name path and keeps the slot headshot in sync (Issue #10).
         if field == 'presenter_name':
             name = (value or '').strip()
-            if name:
-                project_id = slot.assignment.session.day.project_id
-                presenter, _ = Presenter.objects.get_or_create(name=name, project_id=project_id)
-                slot.presenter = presenter
-            else:
-                slot.presenter = None
+            project_id = slot.assignment.session.day.project_id
+            slot.presenter = Presenter.resolve(name, project_id)
             slot.photo_data = _presenter_photo_data_url(slot.presenter)
             slot.save()
             return JsonResponse({
@@ -1826,7 +1813,12 @@ def create_presenter(request):
     if not name:
         return JsonResponse({'success': False})
     project = getattr(request, 'current_project', None)
-    presenter, created = Presenter.objects.get_or_create(name=name, project=project)
+    if not project:
+        return JsonResponse({'success': False, 'error': 'No project selected'})
+    # The dropdown only offers "+ Add" when no case-insensitive match was
+    # listed, but two A2 cards racing on the same new name both reach here —
+    # resolve() makes the second one reuse the first's row.
+    presenter = Presenter.resolve(name, project.id)
     return JsonResponse({'success': True, 'presenter_id': presenter.id})
 
 
@@ -4241,16 +4233,17 @@ def import_presenters_csv(request):
                     if name.lower() in ['name', 'presenter', 'names', 'presenters']:
                         continue
                     
-                    # Get or create presenter with project
-                    presenter, created = Presenter.objects.get_or_create(
-                        name=name,
-                        project=project  # ✅ Add project
-                    )
-                    
-                    if created:
-                        imported_count += 1
-                    else:
+                    # Reuse an existing roster entry whose name differs only
+                    # in case/spacing rather than importing a second copy.
+                    existed = Presenter.objects.filter(
+                        project=project, name__iexact=' '.join(name.split())
+                    ).exists()
+                    Presenter.resolve(name, project.id)
+
+                    if existed:
                         skipped_count += 1
+                    else:
+                        imported_count += 1
             
             messages.success(
                 request,
