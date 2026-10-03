@@ -26,12 +26,38 @@ python manage.py migrate
 railway login --browserless
 railway logs
 railway run python manage.py <command>   # run Django mgmt commands against prod
-
-# Direct psql when migrations need manual fix
-psql "$DATABASE_PUBLIC_URL"              # turntable.proxy.rlwy.net:34865
 ```
 
 **Do not** run destructive SQL against Railway Postgres without confirming with Charlie first.
+
+### Connecting to prod Postgres from your laptop
+
+**Public access to the Postgres service is disabled, and that is the default
+state.** The app service only receives `DATABASE_URL` pointing at
+`postgres.railway.internal`, which does not resolve outside Railway's network —
+so nothing on your laptop can reach the production database until public
+networking is deliberately turned on.
+
+When a local `psql` or a one-off management command is genuinely needed:
+
+1. Railway dashboard → **Postgres** service → **Settings → Networking** → enable
+   the TCP proxy. Railway allocates a `*.proxy.rlwy.net` host and port; the pair
+   may differ every time it is enabled, so never hard-code it anywhere — read it
+   from `DATABASE_PUBLIC_URL` instead.
+2. Run what you need:
+   ```bash
+   railway run --service Postgres psql "$DATABASE_PUBLIC_URL"
+
+   # one-off Django management command against prod
+   railway run --service Postgres bash -c \
+     'DATABASE_URL="$DATABASE_PUBLIC_URL" ./venv/bin/python manage.py <command>'
+   ```
+   `--service Postgres` matters: `DATABASE_PUBLIC_URL` exists only on the
+   Postgres service, not the app service. The re-alias is because
+   `dj_database_url.config()` reads `DATABASE_URL` and nothing else.
+3. **Disable the proxy again as soon as you are done.** While it is on, the
+   production database is reachable from the public internet behind nothing but
+   the Postgres password.
 
 ---
 
