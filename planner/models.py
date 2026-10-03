@@ -3209,6 +3209,44 @@ class Presenter(models.Model):
             project_id=project_id, name__iexact=name
         ).order_by('id').first() or created
 
+    def retire_if_typing_orphan(self, superseded_by):
+        """Delete this Presenter if it is only a half-typed version of another.
+
+        The A2 name field saves on a 600ms pause so a name and a Mic'd toggle
+        made together reach the other machine together. The cost is that
+        pausing while typing "Dana" can save "Dan" first, and resolve() will
+        create a Presenter for it — so without this, a slow typist fills the
+        roster with D, Da, Dan.
+
+        Deliberately narrow, because deleting a real person's record would be
+        far worse than leaving a stray row. All four must hold:
+          · nothing references it any more — no slots, no shared assignments
+          · the new name starts with this one, i.e. it IS the prefix we just
+            typed past (a genuine rename from "Bob" to "Robert" is left alone)
+          · the names actually differ
+          · it was created in the last two minutes, so it can only ever be a
+            row from the editing burst still in progress
+
+        Returns True if the row was removed.
+        """
+        import datetime
+        from django.utils import timezone as _tz
+
+        new_name = ' '.join((superseded_by or '').split()).casefold()
+        old_name = ' '.join((self.name or '').split()).casefold()
+        if not new_name or not old_name or old_name == new_name:
+            return False
+        if not new_name.startswith(old_name):
+            return False
+        if not self.created_at or (
+                _tz.now() - self.created_at) > datetime.timedelta(minutes=2):
+            return False
+        if self.slots.exists() or self.shared_assignments.exists():
+            return False
+
+        self.delete()
+        return True
+
     def __str__(self):
         return self.name    
 

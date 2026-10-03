@@ -395,46 +395,13 @@
     @media print {
         .mtt-header-actions, .session-tabs, .mtt-day-actions, .session-actions,
         .a1-actions-bar, .mtt-add-session-bar, .session-panel:not(.active),
-        #mic-tracker-update-banner, .a1-micd-cell { display: none !important; }
+        .a1-micd-cell { display: none !important; }
         body, #mic-tracker-root { background: var(--mtt-print-bg); color: var(--mtt-print-fg); }
         .a1-table thead th { background: var(--mtt-print-th-bg); color: var(--mtt-print-th-fg); }
         .a1-row { border-bottom-color: var(--mtt-print-row-rule); }
         .a1-micd-toggle.on { background: var(--mtt-print-fg); color: var(--mtt-print-bg); box-shadow: none; }
         .mtt-day, .mtt-session { border-color: var(--mtt-print-border); }
         .mtt-day-header, .mtt-session-header { background: var(--mtt-print-header-bg); }
-    }
-
-    #mic-tracker-update-banner {
-        display: none; position: fixed; top: 0; left: 0; right: 0;
-        background: linear-gradient(90deg, var(--mtt-banner-start), var(--mtt-banner-end));
-        color: var(--mtt-banner-text); padding: 15px 20px; text-align: center; z-index: 99999;
-        font-size: 17px; font-weight: 800; letter-spacing: 0.01em;
-        border-bottom: 2px solid rgba(var(--mtt-rgb-white), 0.4);
-        box-shadow: 0 6px 28px rgba(var(--mtt-rgb-banner-end), 0.55);
-        animation: mtt-banner-pulse 1.3s ease-in-out infinite;
-    }
-    #mtt-banner-refresh {
-        margin-left: 16px; background: var(--mtt-banner-btn-bg); color: var(--mtt-banner-btn-fg); border: none;
-        padding: 10px 22px; border-radius: 6px; cursor: pointer;
-        font-weight: 800; font-size: 15px; letter-spacing: 0.02em;
-        box-shadow: 0 2px 10px rgba(var(--mtt-rgb-black), 0.25);
-        animation: mtt-btn-pulse 1.3s ease-in-out infinite;
-    }
-    #mtt-banner-refresh:hover { background: var(--mtt-banner-btn-hover); }
-    #mic-tracker-update-banner #banner-dismiss {
-        margin-left: 8px; background: transparent; border: 1px solid rgba(var(--mtt-rgb-white), 0.6);
-        color: var(--mtt-banner-text); padding: 9px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;
-    }
-    @keyframes mtt-banner-pulse {
-        0%, 100% { box-shadow: 0 6px 24px rgba(var(--mtt-rgb-banner-end), 0.45); }
-        50%      { box-shadow: 0 8px 40px rgba(var(--mtt-rgb-banner-start), 0.9); }
-    }
-    @keyframes mtt-btn-pulse {
-        0%, 100% { transform: scale(1); }
-        50%      { transform: scale(1.06); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-        #mic-tracker-update-banner, #mtt-banner-refresh { animation: none; }
     }
 
     .a2-presenter-input { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-primary); font-size: 18px; font-weight: 600; font-family: inherit; width: 100%; outline: none; padding: 2px 0; transition: border-color 0.15s; }
@@ -604,12 +571,6 @@ silently 403-ing background saves and stopping updates from reaching others.
 {% endcomment %}
 {% csrf_token %}
 <div id="mic-tracker-root">
-
-    <div id="mic-tracker-update-banner">
-        ⚠️ <strong id="banner-message">The show was updated — refresh to see the latest</strong>
-        <button id="mtt-banner-refresh" onclick="location.reload()">🔄 Refresh Now</button>
-        <button id="banner-dismiss">Dismiss</button>
-    </div>
 
     <!-- Page Header -->
     <div class="mtt-header">
@@ -846,8 +807,16 @@ silently 403-ing background saves and stopping updates from reaching others.
                                     </button>
                                 </td>
                                 <td class="a1-notes-cell">
+                                    {% comment %}
+                                    slot.notes, not assignment.notes. updateField's
+                                    'notes' branch writes the SLOT, so rendering the
+                                    assignment's note here meant a note typed on a
+                                    single-presenter row vanished on reload and could
+                                    never agree with the other machine. The A2 card's
+                                    notes box was already the slot's.
+                                    {% endcomment %}
                                     <input type="text" class="a1-notes-input"
-                                           value="{{ assignment.notes|default:'' }}"
+                                           value="{{ single_slot.notes|default:'' }}"
                                            placeholder="notes..."
                                            onblur="updateField({{ assignment.id }}, 'notes', this.value)"
                                            {% if is_viewer %}readonly{% endif %}>
@@ -971,7 +940,8 @@ silently 403-ing background saves and stopping updates from reaching others.
                                                placeholder="— Unassigned —"
                                                autocomplete="off"
                                                onfocus="searchPresenters({{ assignment.id }}, '')"
-                                               oninput="searchPresenters({{ assignment.id }}, this.value)"
+                                               oninput="presenterInput({{ assignment.id }}, this.value)"
+                                               onkeydown="presenterKey({{ assignment.id }}, event, this)"
                                                onchange="assignPresenter({{ assignment.id }}, this.value)"
                                                onblur="assignPresenter({{ assignment.id }}, this.value)"
                                                {% if is_viewer %}readonly{% endif %}>
@@ -1679,7 +1649,6 @@ function toggleDay(dayId, headerEl) {
 // renderer, which is also what runs on page load.
 
 function toggleMicd(assignmentId, btn) {
-    markLocalChange();
     const newState = !btn.classList.contains('on');
     MTTSlots.setMicd(assignmentId, null, newState);
     updateField(assignmentId, 'is_micd', newState);
@@ -1700,7 +1669,6 @@ function updateMicType(assignmentId, value) {
 // used to spend doing that by hand are exactly where the A1 rows, the chips
 // and the card drifted apart from each other and from a fresh reload.
 async function toggleMicdSlot(assignmentId, slotId, btn) {
-    markLocalChange();
     const newState = !btn.classList.contains('on');
 
     let data;
@@ -1731,7 +1699,6 @@ function toggleSlotRows(assignmentId) {
 // ── Update a slot field via API ────────────────────────────────
 async function updateSlotField(slotId, field, value) {
     if (!slotId) return;
-    markLocalChange();
     saveSaving();
     try {
         const resp = await fetch('/audiopatch/api/mic/slot/update/', {
@@ -1804,7 +1771,6 @@ function triggerPhotoForSlot(slotId, assignmentId) {
 
 async function uploadPhotoForSlot(slotId, assignmentId, input) {
     if (!slotId || !input.files[0]) return;
-    markLocalChange();
     const fd = new FormData();
     fd.append('slot_id', slotId);
     fd.append('photo', input.files[0]);
@@ -1886,13 +1852,6 @@ function getCsrfToken() {
     return c ? c.trim().split('=')[1] : '';
 }
 
-// ── Live update checker ────────────────────────────────────────
-// lastLocalChange: updated whenever THIS user saves anything.
-// If a checksum change is detected within 10s of a local save, we assume
-// it was caused by us — skip the countdown so we don't bounce ourselves.
-var lastLocalChange = 0;
-function markLocalChange() { lastLocalChange = Date.now(); }
-
 // ── Save-state indicator ───────────────────────────────────────
 // A single unobtrusive pill (bottom-right) that reports whether the
 // last edit persisted. This is the reassurance users previously only
@@ -1935,106 +1894,151 @@ function debounce(fn, wait) {
     };
 }
 
-// ── Update banner, with an idle auto-refresh ─────────────────────────
-// Polls the project checksum every 5s. When another user changes something:
+// ── Live sync ────────────────────────────────────────────────────────
+// Every 5s this asks the server for a checksum of everything the tracker
+// renders. If it moved, it pulls the current state of the sessions on this
+// page and hands the rows to mic_tracker_render.js -- the same renderer that
+// paints the page on load. Nothing reloads, nothing is announced, and there
+// is nothing to click: the screen is simply correct within about five
+// seconds of any machine changing anything.
 //
-//   · idle for IDLE_REFRESH_MS with nothing focused → reload automatically,
-//     so a tracker left open at FOH is showing live data without anyone
-//     having to notice a banner and click it
-//   · otherwise → the dismissible "Updates available" banner, exactly as
-//     before, and the reload waits until the user stops working
+// What this replaces, and why none of it worked on two real machines:
+//   · a banner you had to notice and click, so two stations agreed only when
+//     somebody happened to be looking at the right one
+//   · an idle timer gating a full page reload, so whether an edit arrived
+//     depended on whether the other operator had touched their trackpad in
+//     the last 30 seconds -- which is exactly the "inconsistent" part
+//   · "if we saved in the last 10 seconds, this change must be ours", which
+//     is a guess, and was wrong in both directions: it swallowed a real
+//     remote edit landing inside somebody's 10s window, and stopped
+//     suppressing an echo as soon as a save took longer than that
 //
-// History: this page DID auto-reload until afd7f2a (2026-08-15), but on a
-// 5s countdown fired on any change regardless of what the user was doing —
-// it interrupted edits and lost scroll and focus, so it was removed wholesale
-// rather than gated. This is that gate: the auto-reload is back, but only for
-// a page nobody is touching.
+// The echo problem is now answered exactly rather than guessed: every save
+// endpoint returns the checksum as of that save, the client stores it, and
+// so its own writes are never seen as somebody else's.
 (function() {
-    const IDLE_REFRESH_MS = 30000;
+    const POLL_MS = 5000;
+    const SELF_PULL_MS = 800;
 
     let lastChecksum = null;
-    let pendingUpdate = false;
-    let lastActivity = Date.now();
+    let syncing = false;
+    let selfPullTimer = null;
 
-    // Deliberate interaction only. Mouse MOVEMENT is excluded on purpose: a
-    // laptop jostled on a crowded FOH table would otherwise keep the page
-    // "active" all show and the auto-refresh would never fire.
-    ['keydown', 'pointerdown', 'touchstart', 'wheel', 'input', 'focusin']
-        .forEach(function(evt) {
-            document.addEventListener(evt, function() { lastActivity = Date.now(); },
-                                      { capture: true, passive: true });
-        });
-    window.addEventListener('scroll', function() { lastActivity = Date.now(); },
-                            { passive: true });
-
-    function isEditing() {
-        const ae = document.activeElement;
-        if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return true;
-        // an open presenter/group dropdown means the user is actively working
-        if (document.querySelector('.presenter-dd.open, .presenter-dropdown.open, .group-picker.open')) return true;
-        // An open modal holds typed-but-unsaved data (Add Day, Add Session,
-        // group manager, Listen setup) and nothing in it need be focused for
-        // that to be true, so reloading over one would silently discard work.
-        if (document.querySelector('.mtt-modal:not(.hidden), .group-manage-modal:not(.hidden)')) return true;
-        return false;
+    /* Sessions rendered on this page -- the sync only has to carry these. */
+    function sessionIds() {
+        return Array.from(document.querySelectorAll('.mtt-session[data-session-id]'))
+            .map(function(el) { return el.dataset.sessionId; })
+            .filter(Boolean).join(',');
     }
 
-    // Idle means: no interaction for IDLE_REFRESH_MS, nothing focused or open,
-    // and no save of our own still settling (a save counts as activity, and
-    // markLocalChange() is called by every edit path).
-    function isIdle() {
-        const quietFor = Date.now() - Math.max(lastActivity, lastLocalChange);
-        return quietFor >= IDLE_REFRESH_MS && !isEditing();
-    }
-
-    function showBanner() {
-        const banner = document.getElementById('mic-tracker-update-banner');
-        const msg = document.getElementById('banner-message');
-        const dismiss = document.getElementById('banner-dismiss');
-        if (!banner || !msg || !dismiss) return;
-        msg.textContent = 'The show was updated — refresh to see the latest';
-        banner.style.setProperty('display', 'block', 'important');
-        dismiss.onclick = function() {
-            banner.style.setProperty('display', 'none', 'important');
-            // Dismiss means "not this one" — it cancels the pending auto-
-            // refresh too. The next change from another user re-arms both.
-            pendingUpdate = false;
-        };
-    }
-
-    function autoRefresh() {
-        // Keep scroll position and collapsed sections across the reload. An
-        // unprompted jump back to the top of a 12-session show is most of
-        // what made the old auto-reload hostile.
-        try { saveMicTrackerState(); } catch (e) {}
-        location.reload();
+    async function pull() {
+        if (syncing) return;   /* the next tick or self-pull will catch up */
+        syncing = true;
+        try {
+            const ids = sessionIds();
+            const r = await realFetch('/api/mic-tracker-sync/?t=' + Date.now() +
+                                  (ids ? '&sessions=' + encodeURIComponent(ids) : ''),
+                                  { cache: 'no-store' });
+            if (!r.ok) return;
+            const data = await r.json();
+            if (!data || !data.checksum) return;
+            if (window.MTTSlots) {
+                MTTSlots.applyRemote(data.slots);
+                MTTSlots.applySessionStats(data.sessions);
+            }
+            // Only after a successful apply, so a failed pull is retried on
+            // the next tick instead of being marked as seen.
+            lastChecksum = data.checksum;
+        } catch (e) {
+        } finally {
+            syncing = false;
+        }
     }
 
     async function check() {
         try {
-            // Cache-bust + no-store so a caching proxy / browser on a slow
-            // shared network can't feed this machine a stale checksum (which
-            // would silently suppress the "Updates available" banner).
-            const r = await fetch('/api/mic-tracker-checksum/?t=' + Date.now(), { cache: 'no-store' });
+            // Cache-bust + no-store: on a shared venue network a caching proxy
+            // or the browser's own heuristics can otherwise hand one machine a
+            // stale checksum indefinitely, and that machine then never syncs.
+            const r = await realFetch('/api/mic-tracker-checksum/?t=' + Date.now(),
+                                      { cache: 'no-store' });
             if (!r.ok) return;
             const data = await r.json();
             if (!data.checksum) return;
             if (lastChecksum === null) { lastChecksum = data.checksum; return; }
-            if (data.checksum !== lastChecksum) {
-                lastChecksum = data.checksum;
-                // Our own save within the last 10s — absorb it silently.
-                if (Date.now() - lastLocalChange < 10000) return;
-                pendingUpdate = true;
-            }
-            if (!pendingUpdate) return;
-            // Idle: take the update now. Busy: show the banner and re-check
-            // on the next poll, so the reload lands as soon as they stop.
-            if (isIdle()) autoRefresh();
-            else if (!isEditing()) showBanner();
-        } catch(e) {}
+            if (data.checksum !== lastChecksum) await pull();
+        } catch (e) {}
     }
-    setInterval(check, 5000);
-    setTimeout(check, 5000);
+
+    /* Every mutating endpoint stamps its JSON response with the checksum as
+       of that write (see stamp_checksum in views.py). Rather than teach two
+       dozen call sites to pass it on -- and miss the next endpoint somebody
+       adds -- we read it off the responses themselves. The clone() matters:
+       the caller still needs to read the body. */
+    const realFetch = window.fetch.bind(window);
+    window.fetch = function(input, init) {
+        const url = (typeof input === 'string') ? input : (input && input.url) || '';
+        const p = realFetch(input, init);
+        if (url.indexOf('mic-tracker-checksum') !== -1 ||
+            url.indexOf('mic-tracker-sync') !== -1) return p;   /* handled below */
+        return p.then(function(resp) {
+            try {
+                const ct = resp.headers.get('content-type') || '';
+                if (resp.ok && ct.indexOf('application/json') !== -1) {
+                    resp.clone().json().then(function(d) {
+                        if (d && d.checksum) {
+                            lastChecksum = d.checksum;
+                            // ...and reconcile ourselves with it shortly after.
+                            //
+                            // Stamping the checksum stops the POLLER treating
+                            // our own write as somebody else's. It does not
+                            // make our screen right, and the two are not the
+                            // same thing: the server normalises what we sent.
+                            // Type "jane doe" where "Jane Doe" already exists
+                            // and resolve() hands back the existing row, so
+                            // the server's name is not the one in our input.
+                            // Without this the saving machine is the one left
+                            // showing something nobody else sees.
+                            //
+                            // Applying our own change costs nothing now that
+                            // it is an in-place render rather than a reload,
+                            // and the renderer skips whatever field we are
+                            // still typing in. Debounced, so a burst of saves
+                            // reconciles once.
+                            clearTimeout(selfPullTimer);
+                            selfPullTimer = setTimeout(pull, SELF_PULL_MS);
+                        }
+                    }).catch(function() {});
+                }
+            } catch (e) {}
+            return resp;
+        });
+    };
+
+    window.MTTSync = {
+        // Called with every save response. The server stamps each one with the
+        // checksum as of that write, so this station already knows about its
+        // own change and will not re-apply it to itself.
+        noteChecksum: function(c) { if (c) lastChecksum = c; },
+        // For a save whose response carried no checksum: pull once, rather
+        // than letting this station sit on a checksum it can no longer match.
+        pullSoon: function() { setTimeout(pull, 250); },
+        pull: pull
+    };
+
+    setInterval(check, POLL_MS);
+    setTimeout(check, 1500);
+
+    // Chrome throttles timers in a tab that is not on screen -- measured at
+    // 5.0s while visible and 60s once hidden. A tab nobody is looking at does
+    // not need 5s updates, but it MUST be right the instant somebody looks at
+    // it, so becoming visible pulls immediately rather than waiting out the
+    // throttled interval. Without this, switching back to the tracker showed
+    // up to a minute of stale show data with no indication it was stale.
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') check();
+    });
+    window.addEventListener('pageshow', function(e) { if (e.persisted) check(); });
 })();
 
 // ── Presenter search dropdown ──────────────────────────────────
@@ -2113,16 +2117,46 @@ function _searchPresentersNow(assignmentId, query) {
         });
 }
 
-function assignPresenter(assignmentId, value) {
-    const dd = document.getElementById('presenter-dd-' + assignmentId);
-    dd.classList.remove('open');
+// Saving a presenter name is one operation with three triggers: a 600ms
+// pause in typing, Enter, and blur. The debounce is what makes a name and a
+// Mic'd toggle done together arrive together -- without it the name sat in
+// an unsaved input until the field lost focus, so the other machine saw the
+// toggle alone and the two screens disagreed until somebody clicked away.
+const PRESENTER_SAVE_MS = 600;
+var _presenterSaveTimers = {};
+
+function savePresenterName(assignmentId, value) {
+    clearTimeout(_presenterSaveTimers[assignmentId]);
     // Note the absent `if (value)`. That guard is why clearing a name left it
     // showing on the A1 row and left the card styled as assigned: the only
     // sync happened when a name was being SET, never when it was removed.
     const name = (value || '').trim();
     const active = MTTSlots.slotsOf(assignmentId).filter(s => s.isActive)[0];
     MTTSlots.patch(assignmentId, active ? active.slotId : null, { presenter: name });
-    updateField(assignmentId, 'presenter_id', name);
+    return updateField(assignmentId, 'presenter_id', name);
+}
+
+// oninput: feed the dropdown AND queue the save.
+function presenterInput(assignmentId, value) {
+    searchPresenters(assignmentId, value);
+    clearTimeout(_presenterSaveTimers[assignmentId]);
+    _presenterSaveTimers[assignmentId] = setTimeout(function() {
+        savePresenterName(assignmentId, value);
+    }, PRESENTER_SAVE_MS);
+}
+
+function presenterKey(assignmentId, event, el) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        savePresenterName(assignmentId, el.value);
+        el.blur();
+    }
+}
+
+function assignPresenter(assignmentId, value) {
+    const dd = document.getElementById('presenter-dd-' + assignmentId);
+    if (dd) dd.classList.remove('open');
+    savePresenterName(assignmentId, value);
 }
 
 async function nextSlot(assignmentId) {

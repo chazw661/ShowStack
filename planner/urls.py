@@ -297,6 +297,7 @@ urlpatterns = [
     #------Auto Refresh for Mic Trackser---
 
     path('api/mic-tracker-checksum/', views.mic_tracker_checksum, name='mic_tracker_checksum'),
+    path('api/mic-tracker-sync/', views.mic_tracker_sync, name='mic_tracker_sync'),
 
     #------A2 Listen companion API (Issue #74)------
     path('api/listen/session/', views_listen.listen_session, name='listen_session'),

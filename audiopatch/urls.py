@@ -43,6 +43,8 @@ urlpatterns = [
 
      # API endpoints at root level (no prefix)
     path('api/mic-tracker-checksum/', planner_views.mic_tracker_checksum, name='mic_tracker_checksum'),
+    # In-place sync: current slot state for the sessions on the caller's page.
+    path('api/mic-tracker-sync/', planner_views.mic_tracker_sync, name='mic_tracker_sync'),
 
 
     
