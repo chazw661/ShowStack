@@ -99,6 +99,18 @@ td[style*="background: #ffff99"] {
     border: 1px solid #555 !important;
 }
 
+/* Count and Length are the two list_editable columns. Django sizes
+   .vIntegerField at 5em-plus, which on a 10-column table pushed the Cable,
+   Notes and Drawing Ref columns off the right edge at laptop and iPad widths
+   for the sake of two fields that never hold more than three digits. */
+#result_list td.field-count input,
+#result_list td.field-length input {
+    width: 64px !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+    text-align: center;
+}
+
 /* Alternating row colors for better readability */
 #result_list tbody tr:nth-child(even) {
     background: #252525 !important;

@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}Import Presenters from CSV{% endblock %}
+{% block title %}Import Presenters{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% block content %}
 <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
