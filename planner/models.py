@@ -2890,15 +2890,20 @@ class CommBeltPack(models.Model):
     ]
     
 
+    # COMM Config exports offline .cca configs for Clear-Com Arcadia and
+    # FreeSpeak II, but neither system could be named here, so a belt pack
+    # could not be recorded for a system this product configures.
     MANUFACTURER_CHOICES = [
         # Hardwired
         ('clearcom_helixnet', 'Clear-Com HelixNet'),
+        ('clearcom_arcadia', 'Clear-Com Arcadia'),
         ('rts_partyline', 'RTS Partyline'),
         ('rts_odin', 'RTS ODIN Matrix'),
         ('riedel_performer', 'Riedel Performer'),
-        
+
         # Wireless
         ('clearcom_freespeak', 'Clear-Com FreeSpeak Edge/Icon'),
+        ('clearcom_freespeak_ii', 'Clear-Com FreeSpeak II'),
         ('riedel_bolero', 'Riedel Bolero'),
         ('rad_uv1g', 'Radio Active Designs RAD'),
     ]
@@ -3024,10 +3029,17 @@ class CommBeltPack(models.Model):
         """Return number of available channels based on manufacturer"""
         channel_map = {
             'clearcom_helixnet': 24,  # Can be 4, 12, or 24
+            # Arcadia hosts a mix of pack types; 12 is the common partyline
+            # case and nothing reads this method yet, so confirm it against
+            # hardware before anything starts relying on it.
+            'clearcom_arcadia': 12,
             'rts_partyline': 2,
             'rts_odin': 8,
             'riedel_performer': 4,
             'clearcom_freespeak': 8,  # Edge and Icon
+            # FSII-BP: 4 channel keys plus a reply key (CLAUDE.md, verified on
+            # hardware for the .cca export).
+            'clearcom_freespeak_ii': 4,
             'riedel_bolero': 6,
             'rad_uv1g': 6,
         }

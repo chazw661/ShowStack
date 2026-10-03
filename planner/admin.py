@@ -13,6 +13,7 @@ from django.shortcuts import render, redirect
 from django.contrib.admin.views.decorators import staff_member_required  
 from django.views.decorators.http import require_POST  
 from django import forms
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q, Max
 from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment
 from django.db.models import Sum 
@@ -4071,10 +4072,31 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         return super().has_delete_permission(request, obj)
     
     def save_model(self, request, obj, form, change):
-        """Auto-assign current project"""
+        """Auto-assign current project, and flag a name that is really a position.
+
+        Crew Names and Positions are two separate pick lists on the belt pack
+        form, and they are only useful while they hold different kinds of
+        thing. In practice a crew list drifts: "GFX 1" and "LED 2" get typed in
+        here, and then the Name dropdown is half people and half positions.
+
+        This does not block the save -- sometimes a position really is the best
+        label available on the day -- it says so once, when the name is written.
+        """
         if not change and hasattr(request, 'current_project') and request.current_project:
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
+
+        project = getattr(obj, 'project', None)
+        if project and obj.name and CommPosition.objects.filter(
+                project=project, name__iexact=obj.name).exists():
+            self.message_user(
+                request,
+                '"%s" is also a Position in this project. Crew Names are for '
+                'people; keeping positions in the Positions list is what stops '
+                'the Name dropdown on a belt pack filling up with them.'
+                % obj.name,
+                messages.WARNING,
+            )
 
         
     class Media:
@@ -4427,12 +4449,11 @@ class CommBeltPackAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Hide checked_out field for Hardwired beltpacks
-        if self.instance and self.instance.system_type == 'HARDWIRED':
-            if 'checked_out' in self.fields:
-                self.fields['checked_out'].widget = forms.HiddenInput()
-                self.fields['checked_out'].required = False
-        
+        # checked_out is NOT swapped for a HiddenInput on a hardwired pack
+        # any more: it has to stay a normal row so the bp-sys-* CSS can
+        # show it again the moment System Type is switched back to
+        # Wireless. The model still forces it False for hardwired on save.
+
         # For new objects, add help text
         if not self.instance.pk:
             if 'checked_out' in self.fields:
@@ -4456,6 +4477,25 @@ class CommBeltPackAdminForm(forms.ModelForm):
             for channel_field in ['channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']:
                 if channel_field in self.fields:
                     self.fields[channel_field].queryset = CommChannel.objects.filter(project=project).order_by('input_designation')
+
+    def clean(self):
+        """A hardwired pack is simply not checked out -- it is not an error.
+
+        `checked_out` is a real checkbox now rather than a HiddenInput, and a
+        checkbox that CSS has hidden still posts if it was ticked. So ticking
+        "Checked out" on a wireless pack and then switching System Type to
+        Hardwired used to reach `CommBeltPack.clean()` and come back as
+        "Hardwired belt packs cannot be checked out." -- an error about a field
+        the user could no longer see, with nothing on screen to fix.
+
+        Model.save() already drops the flag for a hardwired pack without
+        complaint; this makes the form agree with it instead of refusing the
+        save.
+        """
+        cleaned = super().clean()
+        if cleaned.get('system_type') == 'HARDWIRED':
+            cleaned['checked_out'] = False
+        return cleaned
 
     class Media:
         css = {
@@ -4500,6 +4540,78 @@ class ProjectFilteredLocationFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(unit_location_id=self.value())
         return queryset
+
+
+class CommBeltPackBulkRowForm(forms.ModelForm):
+    """One row of the "Add multiple" grid.
+
+    Deliberately the six columns and no more: BP #, System, Position, Name,
+    Headset, Group. System Type is not a column because a batch is realistically
+    all wireless or all hardwired -- it is chosen once in the toolbar above the
+    grid and applied to every row the formset creates.
+
+    Position and Name stay two separate pick lists, reading CommPosition and
+    CommCrewName respectively. That separation is the point of the grid as much
+    as the speed is: one combined "name" column is how a crew list ends up
+    holding "GFX 1" and "LED 2" alongside people.
+    """
+
+    # What makes a row real. BP # is excluded on purpose: every row arrives
+    # with one prefilled, so counting it would turn twenty untouched rows into
+    # twenty numbered empty belt packs on the first save. System is excluded
+    # for the same reason -- it has a default and so always posts a value --
+    # and is picked up separately below when the user actually changes it.
+    CONTENT_FIELDS = ('position', 'name', 'headset', 'group')
+
+    class Meta:
+        model = CommBeltPack
+        fields = ('bp_number', 'manufacturer', 'position', 'name', 'headset',
+                  'group')
+
+    def __init__(self, *args, **kwargs):
+        project = kwargs.pop('project', None)
+        super().__init__(*args, **kwargs)
+
+        # Multi-tenancy: both pick lists are this project's, same as the
+        # single-pack form does.
+        if project is not None:
+            self.fields['position'].queryset = CommPosition.objects.filter(
+                project=project).order_by('name')
+            self.fields['name'].queryset = CommCrewName.objects.filter(
+                project=project).order_by('name')
+        else:
+            self.fields['position'].queryset = CommPosition.objects.none()
+            self.fields['name'].queryset = CommCrewName.objects.none()
+
+        self.fields['position'].empty_label = '---'
+        self.fields['name'].empty_label = '---'
+
+        # Blank is the normal state of most of this grid. `manufacturer` is
+        # left required: it has a model default, so its select renders with a
+        # real system already chosen rather than an empty option, and no row
+        # can be saved with no system on it.
+        for field_name in ('bp_number',) + self.CONTENT_FIELDS:
+            self.fields[field_name].required = False
+
+    def is_filled(self):
+        """True if the user put something in this row.
+
+        Called after validation; an unvalidated or untouched form has no
+        cleaned_data and is simply not a row.
+        """
+        cleaned = getattr(self, 'cleaned_data', None) or {}
+        if any(cleaned.get(f) for f in self.CONTENT_FIELDS):
+            return True
+        # Picking a different system is content too -- it is how you add ten
+        # Arcadia packs that have no crew assigned yet.
+        return 'manufacturer' in self.changed_data and bool(
+            cleaned.get('manufacturer'))
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.is_filled() and cleaned.get('bp_number') in (None, ''):
+            self.add_error('bp_number', 'BP # is required for a filled row.')
+        return cleaned
 
 
 class CommBeltPackAdmin(BaseEquipmentAdmin):
@@ -4763,44 +4875,44 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     display_channels.short_description = "Channels"
     
     def get_fieldsets(self, request, obj=None):
-        """Dynamic fieldsets based on system type"""
-        # Base fieldsets without checked_out
-        base_fieldsets = [
+        """Fieldsets carrying the current system type as a CSS hook.
+
+        IP Address is a hardwired-only field and "Checked out" a wireless-only
+        one, and this used to express that by leaving `checked_out` out of the
+        fieldset entirely for a saved hardwired pack. That cannot toggle: the
+        field is not in the DOM, so changing System Type did nothing until the
+        page was saved and reloaded, and IP Address showed for every pack
+        regardless.
+
+        Both fields are always rendered now, and which one is visible is a
+        `bp-sys-WIRELESS` / `bp-sys-HARDWIRED` class on the fieldsets that hold
+        them (see comm_admin_v2.css). The class is set here from the saved
+        value, so the right field is hidden on first paint with no JavaScript;
+        comm_beltpack_admin.js only has to swap the class when the select
+        changes. The model still forces checked_out False for a hardwired pack
+        on save, so a hidden field cannot carry a wrong value into the data.
+        """
+        system_class = 'bp-sys-HARDWIRED' if (
+            obj and obj.system_type == 'HARDWIRED') else 'bp-sys-WIRELESS'
+
+        return [
             ('System Configuration', {
-                'fields': ('system_type', 'manufacturer', 'bp_number', 'unit_location', 'ip_address')
+                'fields': ('system_type', 'manufacturer', 'bp_number',
+                           'unit_location', 'ip_address'),
+                'classes': (system_class,),
             }),
             ('Assignment', {
                 'fields': ('position', 'name', 'headset'),
             }),
-            
-        
-        ]
-        
-        # Add Settings section with or without checked_out
-        if obj and obj.system_type == 'HARDWIRED':
-            # Hardwired: no checked_out field
-            base_fieldsets.append(
-                ('Settings', {
-                    'fields': ('audio_pgm', 'group'),
-                })
-            )
-        else:
-            # Wireless or new objects: include checked_out
-            base_fieldsets.append(
-                ('Settings', {
-                    'fields': ('audio_pgm', 'group', 'checked_out'),
-                })
-            )
-        
-        # Add Notes section
-        base_fieldsets.append(
+            ('Settings', {
+                'fields': ('audio_pgm', 'group', 'checked_out'),
+                'classes': (system_class,),
+            }),
             ('Notes', {
                 'fields': ('notes',),
-                'classes': ('collapse',)
-            })
-        )
-        
-        return base_fieldsets
+                'classes': ('collapse',),
+            }),
+        ]
     
 
     def get_urls(self):
@@ -4810,8 +4922,139 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         custom_urls = [
             path('assign-channel/', self.admin_site.admin_view(self.assign_channel_view), name='commbeltpack_assign_channel'),
             path('get-channels/', self.admin_site.admin_view(self.get_channels_view), name='commbeltpack_get_channels'),
+            path('add-multiple/', self.admin_site.admin_view(self.add_multiple_view), name='commbeltpack_add_multiple'),
         ]
         return custom_urls + urls
+
+    # ------------------------------------------------------------------
+    # "Add multiple" grid
+    # ------------------------------------------------------------------
+
+    BULK_ROWS = 20
+
+    def _bulk_can_edit(self, request):
+        """Per-project gate for the bulk grid.
+
+        `has_add_permission` on the base admin answers "may this user add
+        equipment *somewhere*" -- it is satisfied by editor access on any
+        project at all. That is the global-group-versus-per-project-role trap,
+        so the role on the project actually being written to is checked here as
+        well, the same pair of roles the single-pack form allows.
+        """
+        if request.user.is_superuser:
+            return True
+        if not self.has_add_permission(request):
+            return False
+        project = getattr(request, 'current_project', None)
+        return self._get_user_role_for_project(request, project) in (
+            'owner', 'editor')
+
+    def _bulk_formset_class(self):
+        return forms.modelformset_factory(
+            CommBeltPack,
+            form=CommBeltPackBulkRowForm,
+            extra=self.BULK_ROWS,
+            can_delete=False,
+        )
+
+    def _bulk_initial(self, project):
+        """Sequential BP #s continuing from the project's highest.
+
+        Passed on POST as well as on GET, so `changed_data` means what it says
+        -- a row's System only counts as filled in when it differs from the
+        value the grid handed the user.
+        """
+        start = (CommBeltPack.objects.filter(project=project).aggregate(
+            models.Max('bp_number'))['bp_number__max'] or 0) + 1
+        default_system = CommBeltPack._meta.get_field('manufacturer').default
+        return [
+            {'bp_number': start + i, 'manufacturer': default_system}
+            for i in range(self.BULK_ROWS)
+        ]
+
+    def add_multiple_view(self, request):
+        """Create a screenful of belt packs in one save."""
+        from django.shortcuts import redirect, render
+
+        project = getattr(request, 'current_project', None)
+        if not project:
+            self.message_user(
+                request, 'Select a project before adding belt packs.',
+                messages.ERROR)
+            return redirect('admin:planner_commbeltpack_changelist')
+
+        if not self._bulk_can_edit(request):
+            raise PermissionDenied
+
+        FormSet = self._bulk_formset_class()
+        queryset = CommBeltPack.objects.none()
+        system_type = request.POST.get('system_type') or 'WIRELESS'
+        valid_types = dict(CommBeltPack.SYSTEM_TYPE_CHOICES)
+        if system_type not in valid_types:
+            system_type = 'WIRELESS'
+
+        initial = self._bulk_initial(project)
+
+        if request.method == 'POST':
+            formset = FormSet(
+                request.POST, queryset=queryset, initial=initial,
+                form_kwargs={'project': project},
+            )
+            if formset.is_valid():
+                # Not formset.save(): that keys off has_changed(), and every
+                # row here arrives with a prefilled BP # and system, so all
+                # twenty would count as changed and twenty empty packs would
+                # appear. is_filled() asks the narrower question.
+                packs = []
+                for form in formset.forms:
+                    if not form.is_filled():
+                        continue
+                    pack = form.save(commit=False)
+                    pack.project = project
+                    pack.system_type = system_type
+                    # Model.save() already forces checked_out False for a
+                    # hardwired pack; nothing here needs to repeat that.
+                    pack.save()
+                    packs.append(pack)
+
+                if packs:
+                    self.message_user(
+                        request,
+                        'Added %d %s belt pack%s.' % (
+                            len(packs), valid_types[system_type].lower(),
+                            '' if len(packs) == 1 else 's'),
+                        messages.SUCCESS)
+                    return redirect('admin:planner_commbeltpack_changelist')
+
+                # Nothing filled in: say so rather than bouncing the user back
+                # to the list as though something had happened.
+                self.message_user(
+                    request, 'No rows were filled in, so nothing was added.',
+                    messages.WARNING)
+        else:
+            formset = FormSet(
+                queryset=queryset, initial=initial,
+                form_kwargs={'project': project},
+            )
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Add multiple belt packs',
+            'formset': formset,
+            'system_type': system_type,
+            'system_type_choices': CommBeltPack.SYSTEM_TYPE_CHOICES,
+            'opts': self.model._meta,
+            'current_project': project,
+            'has_view_permission': True,
+            # Six columns of data entry want the window. With the module
+            # sidebar taking ~460px there is not enough left at 1280 for the
+            # grid to show Headset and Group without scrolling sideways, and
+            # this page is a destination you arrive at from the belt pack list
+            # and leave again, not somewhere you navigate onward from.
+            'is_nav_sidebar_enabled': False,
+        }
+        return render(
+            request, 'admin/planner/commbeltpack/add_multiple.html', context)
 
     def get_channels_view(self, request):
         """Return available channels as JSON for the popup"""
