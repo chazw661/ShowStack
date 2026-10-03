@@ -5,6 +5,8 @@ Provides role-based admin interface visibility
 from django.contrib import admin
 from django.contrib.auth.models import Group, User
 
+from planner.admin_titles import with_plain_titles
+
 
 class ShowStackAdminSite(admin.AdminSite):
     """
@@ -18,7 +20,19 @@ class ShowStackAdminSite(admin.AdminSite):
     site_header = "ShowStack"
     site_title = "ShowStack"
     index_title = "Equipment Management"
-    
+
+    def register(self, model_or_iterable, admin_class=None, **options):
+        """Give every model admin plain page titles.
+
+        Done here rather than on each of the ~40 ModelAdmin classes in
+        admin.py: both `showstack_admin_site.register(...)` and
+        `@admin.register(..., site=showstack_admin_site)` funnel through here,
+        so there is no way to register a model and miss it.
+        """
+        admin_class = with_plain_titles(admin_class or admin.ModelAdmin)
+        return super().register(model_or_iterable, admin_class, **options)
+
+
     def get_app_list(self, request, app_label=None):
         """
         Customize the app list based on user role AND apply custom ordering.

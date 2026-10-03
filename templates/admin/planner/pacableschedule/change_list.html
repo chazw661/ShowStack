@@ -12,7 +12,15 @@
         .object-tools a[href*="add"] {
             background-color: var(--ss-accent) !important;
             color: #ffffff !important;
-            padding: 8px 16px !important;
+            /* Django draws the "+" as a background image pinned to
+               `right 7px center` and reserves room for it with
+               `padding-right: 26px`. Flattening the padding to 8px 16px took
+               that room away, so the icon sat on the final letter -- the
+               button read "ADD PA CABLE ENTRY+". Keep the extra right padding
+               and push the icon clear of the text. */
+            padding: 8px 32px 8px 16px !important;
+            background-repeat: no-repeat !important;
+            background-position: right 11px center !important;
             font-size: 13px !important;
             font-weight: 600 !important;
             border: 1px solid var(--ss-accent) !important;
@@ -51,6 +59,34 @@
             background-color: var(--ss-accent-ring) !important;
             border-color: var(--ss-accent) !important;
             color: #ffffff !important;
+        }
+
+        /* Django floats .object-tools right and pulls it up 48px to sit level
+           with the page title. With three buttons that stops fitting beside
+           the title at tablet widths -- at 768px they landed on top of
+           "PA Cable" and on top of each other. Let them wrap onto their own
+           row instead. */
+        @media (max-width: 1100px) {
+            #content-main > .object-tools,
+            .object-tools {
+                float: none !important;
+                margin-top: 0 !important;
+                display: flex !important;
+                flex-wrap: wrap !important;
+                gap: 8px;
+                padding-left: 0 !important;
+            }
+
+            .object-tools li {
+                float: none !important;
+                height: auto !important;
+                margin-left: 0 !important;
+            }
+
+            .object-tools li a:link,
+            .object-tools li a:visited {
+                float: none !important;
+            }
         }
 
         /* Issue #73: fan-out / coupler / extension chips in the combined PA
@@ -125,6 +161,58 @@
     border-collapse: collapse;
     margin-top: 10px;
     background: var(--ss-surface);
+}
+
+/* 14 columns in `width: 100%` meant that below roughly 1000px the header
+   cells squeezed until "Total Runs", "Total Length (ft)" and the five length
+   labels wrapped into each other and could not be told apart. The table keeps
+   a floor width and scrolls sideways inside its own box instead; the page
+   itself still never scrolls horizontally. */
+.cable-summary-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* macOS hides overlay scrollbars until you scroll, so give this one a
+       permanent track -- otherwise there is nothing to say the Couplers
+       column continues past the right edge. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--ss-field-border) transparent;
+}
+
+.cable-summary-table-scroll::-webkit-scrollbar {
+    height: 10px;
+}
+
+.cable-summary-table-scroll::-webkit-scrollbar-thumb {
+    background: var(--ss-field-border);
+    border-radius: 5px;
+}
+
+.cable-summary-table-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.cable-summary-section .cable-summary-table-scroll table {
+    min-width: 900px;
+}
+
+/* The Fan Out and Quick Order tables are only three columns, but two of their
+   headers are long ("TOTAL QUANTITY", "ORDER QTY (+20% SAFETY)"), so below
+   about 1000px they ran straight into each other. Narrower floor than the
+   14-column table above, same scroll behaviour. */
+.cable-summary-section .cable-summary-table-scroll--narrow table {
+    min-width: 520px;
+}
+
+.cable-summary-section thead th,
+.cable-summary-section tbody td {
+    white-space: nowrap;
+}
+
+/* The two five-column blocks (CABLES NEEDED / ORDER QTY) read as one run of
+   ten identical length headers without a divider between them. */
+.cable-summary-section th.block-start,
+.cable-summary-section td.block-start {
+    border-left: 2px solid var(--ss-field-border) !important;
 }
 
 /* Item 9: the header rows of all three summary tables (Cable Summary, Fan
@@ -250,23 +338,24 @@
 <div class="cable-summary-section">
     <h2>Cable Summary with Ordering Calculations</h2>
     
+    <div class="cable-summary-table-scroll">
     <table>
         <thead>
             <tr>
                 <th rowspan="2">Cable Type</th>
                 <th rowspan="2">Total Runs</th>
                 <th rowspan="2">Total Length (ft)</th>
-                <th colspan="5">CABLES NEEDED</th>
-                <th colspan="5">ORDER QTY (+20% SAFETY)</th>
-                <th rowspan="2">Couplers</th>
+                <th colspan="5" class="block-start">CABLES NEEDED</th>
+                <th colspan="5" class="block-start">ORDER QTY (+20% SAFETY)</th>
+                <th rowspan="2" class="block-start">Couplers</th>
             </tr>
             <tr>
-                <th>100'</th>
+                <th class="block-start">100'</th>
                 <th>50'</th>
                 <th>25'</th>
                 <th>10'</th>
                 <th>5'</th>
-                <th>100'</th>
+                <th class="block-start">100'</th>
                 <th>50'</th>
                 <th>25'</th>
                 <th>10'</th>
@@ -279,27 +368,29 @@
                 <td>{{ cable_type }}</td>
                 <td>{{ data.total_runs }}</td>
                 <td>{{ data.total_length }}</td>
-                <td>{{ data.hundreds }}</td>
+                <td class="block-start">{{ data.hundreds }}</td>
                 <td>{{ data.fifties }}</td>
                 <td>{{ data.twenty_fives }}</td>
                 <td>{{ data.tens }}</td>
                 <td>{{ data.fives }}</td>
-                <td class="safety-cells">{{ data.hundreds_with_safety }}</td>
+                <td class="safety-cells block-start">{{ data.hundreds_with_safety }}</td>
                 <td class="safety-cells">{{ data.fifties_with_safety }}</td>
                 <td class="safety-cells">{{ data.twenty_fives_with_safety }}</td>
                 <td class="safety-cells">{{ data.tens_with_safety }}</td>
                 <td class="safety-cells">{{ data.fives_with_safety }}</td>
-                <td>{{ data.couplers }}</td>
+                <td class="block-start">{{ data.couplers }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 
     <!-- Fan Out Summary Section -->
     {% if fan_out_summary %}
     <div style="margin-top: 20px;">
         <h2>Fan Out Summary</h2>
         
+        <div class="cable-summary-table-scroll cable-summary-table-scroll--narrow">
         <table>
             <thead>
                 <tr>
@@ -318,6 +409,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
     {% endif %}
     
@@ -326,6 +418,7 @@
     <div class="quick-order-panel">
         <h3>Quick Order List</h3>
 
+        <div class="cable-summary-table-scroll cable-summary-table-scroll--narrow">
         <table>
             <thead>
                 <tr>
@@ -404,7 +497,8 @@
                 {% endif %}
             </tbody>
         </table>
-        
+        </div>
+
         <p class="quick-order-note">
             <strong>Note:</strong> All quantities include 20% safety margin.
         </p>

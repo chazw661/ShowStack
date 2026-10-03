@@ -3002,7 +3002,6 @@ class PACableInline(admin.TabularInline):
         css = {
             'all': ('planner/css/pa_cable_admin.css',)
         }
-        js = ('planner/js/pa_cable_calculations.js',)
 
 class PAFanOutInline(admin.TabularInline):
         """Inline for managing multiple fan outs per cable run"""
@@ -3165,6 +3164,9 @@ class PACouplerInline(admin.TabularInline):
 class PACableAdmin(BaseEquipmentAdmin):
     """Admin for PA Cable Schedule"""
     form = PACableInlineForm
+
+    plain_title_plural = "PA Cable"
+    plain_title = "PA Cable Entry"
     inlines = [PAFanOutInline, PAFanOutExtensionInline, PACouplerInline]
 
     def response_post_save_change(self, request, obj):
@@ -3789,7 +3791,6 @@ class PACableAdmin(BaseEquipmentAdmin):
         # assets here — a second `class Media` further up would silently
         # overwrite this one (Python class-body semantics).
         js = (
-            'planner/js/pa_cable_calculations.js',
             'admin/js/pa_cable_inlines.js',
             'admin/js/pa_cable_entry_mode.js',
             'admin/js/pa_cable_array_speakers.js',
@@ -4503,6 +4504,11 @@ class ProjectFilteredLocationFilter(admin.SimpleListFilter):
 
 class CommBeltPackAdmin(BaseEquipmentAdmin):
     form = CommBeltPackAdminForm
+
+    # Page headings only -- the sidebar keeps reading Meta.verbose_name_plural,
+    # so this needs no model change.
+    plain_title_plural = "Belt Packs"
+    plain_title = "Belt Pack"
     
     # Add autocomplete for better UX (optional but recommended)
     #autocomplete_fields = ['position', 'name', 'channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']
@@ -5255,6 +5261,9 @@ class ShowDayAdminForm(forms.ModelForm):
 
 class ShowDayAdmin(BaseEquipmentAdmin):
     form = ShowDayAdminForm
+
+    plain_title_plural = "Show Days"
+    plain_title = "Show Day"
     list_display = ('date', 'name', 'session_count', 'total_mics', 'mics_used', 'view_day_link')
     list_filter = ('date',)
     search_fields = ('name',)

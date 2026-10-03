@@ -1,6 +1,15 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
+{% comment %}
+This template extends admin/base.html directly rather than Django's
+admin/base_site.html, and Django's `{% block title %}` lives in base_site --
+which is why every admin page shipped an empty <title> and browser tabs showed
+the raw URL. Define it here, once, for every admin page: "Page - Project -
+ShowStack".
+{% endcomment %}
+{% block title %}{{ title|default:"ShowStack" }}{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
+
 {% block extrastyle %}
 {{ block.super }}
 <link rel="stylesheet" href="{% static 'css/surfaces.css' %}">
@@ -30,43 +39,72 @@ html[data-theme="auto"] {
 {% endblock %}
 
 {% block branding %}
-<div id="branding-wrapper" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 20px;">
+<div id="branding-wrapper">
     <h1 id="site-name">
-    <a href="{% url 'admin:index' %}" style="display: flex; align-items: center; gap: 10px;">
-        <img src="{% static 'admin/img/showstack_icon.svg' %}" alt="ShowStack" height="32" style="vertical-align: middle;">
-        <span><span style="color: #4a9eff;">ShowStack</span></span>
-    </a>
-</h1>
-    <div class="dashboard-nav" style="display: flex; gap: 10px; align-items: center;">
-        <a href="{% url 'dashboard' %}" class="dashboard-button">
-            📊 Project Dashboard
+        <a href="{% url 'admin:index' %}">
+            <img src="{% static 'admin/img/showstack_icon.svg' %}" alt="" height="32">
+            <span class="ss-wordmark">ShowStack</span>
         </a>
+    </h1>
+    <div class="dashboard-nav">
+        <a href="{% url 'dashboard' %}" class="dashboard-link">Project Dashboard</a>
+    </div>
 </div>
 
 <style>
-/* Flat, same shape as the primary buttons elsewhere in the admin. */
-.dashboard-button,
-.dashboard-button:link,
-.dashboard-button:visited {
-    background: var(--ss-accent) !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    color: #fff !important;
-    padding: 8px 16px;
-    border: 1px solid var(--ss-accent);
-    border-radius: var(--ss-field-radius);
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 13px;
-    display: inline-flex;
+#branding-wrapper {
+    display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 10px 20px;
 }
 
-.dashboard-button:hover {
-    filter: brightness(1.12);
+#branding-wrapper h1#site-name a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* The wordmark is the one thing on the page that should never compete for
+   attention -- it was #00ff88 (and #4a9eff on the inner span), the brightest
+   colour in the header. Neutral, same weight as body text. */
+.ss-wordmark,
+#branding h1 a:link .ss-wordmark,
+#branding h1 a:visited .ss-wordmark,
+#branding h1 a:hover .ss-wordmark {
+    color: var(--ss-field-text) !important;
+}
+
+.dashboard-nav {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Project Dashboard is navigation, not the action of the page, so it reads as
+   a nav link: no accent fill, no gradient, no glow. Accent on hover only. */
+.dashboard-link,
+.dashboard-link:link,
+.dashboard-link:visited,
+.dashboard-link:active {
+    background: none !important;
+    background-image: none !important;
     box-shadow: none !important;
-    color: #fff !important;
+    border: 0 !important;
+    padding: 6px 2px;
+    color: var(--ss-field-text) !important;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.dashboard-link:hover,
+.dashboard-link:focus {
+    color: #a78bfa !important;
+    text-decoration: none;
+    box-shadow: none !important;
 }
 
 /* Role chip: informational, not an alert. */
@@ -82,10 +120,137 @@ html[data-theme="auto"] {
     text-transform: uppercase;
 }
 
-.dashboard-button:link,
-.dashboard-button:visited,
-.dashboard-button:active {
+/* ---- Header controls + user menu -------------------------------------- */
+
+/* #user-tools is a run of inline text nodes by default; the menu needs it to
+   be a flex row so the panel can anchor to the trigger. */
+#user-tools {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ss-header-btn {
+    background: none;
+    border: 1px solid var(--ss-border);
+    border-radius: var(--ss-field-radius);
+    color: var(--ss-field-text);
+    font-size: 13px;
+    padding: 5px 12px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.ss-header-btn:hover,
+.ss-header-btn:focus {
+    color: #a78bfa;
+    border-color: #a78bfa;
+}
+
+.ss-user-menu {
+    position: relative;
+    /* Django uppercases everything in #user-tools, which turned the menu into
+       MY CREW / CHANGE PASSWORD next to a sentence-case "Log out" button. */
+    text-transform: none;
+}
+
+/* <details>/<summary> rather than a scripted dropdown: it opens on click and
+   on Enter/Space with no JS, which also means it still works if the inline
+   script below is blocked. Safari needs the explicit marker reset. */
+.ss-user-menu > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+    cursor: pointer;
+    padding: 5px 12px;
+    border: 1px solid var(--ss-border);
+    border-radius: var(--ss-field-radius);
+    color: var(--ss-field-text);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.ss-user-menu > summary::-webkit-details-marker { display: none; }
+.ss-user-menu > summary::marker { content: ''; }
+
+.ss-user-menu > summary:hover,
+.ss-user-menu > summary:focus-visible {
+    color: #a78bfa;
+    border-color: #a78bfa;
+}
+
+.ss-user-menu__caret {
+    font-size: 9px;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+}
+
+.ss-user-menu[open] .ss-user-menu__caret { transform: rotate(180deg); }
+
+.ss-user-menu__panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1000;
+    min-width: 200px;
+    padding: 6px;
+    background: var(--ss-surface);
+    border: 1px solid var(--ss-border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    text-align: left;
+}
+
+.ss-user-menu__who {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--ss-border);
+}
+
+.ss-user-menu__username {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ss-user-menu__panel a,
+.ss-user-menu__logout button {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 0 !important;
+    border-radius: 4px;
+    background: none;
+    color: var(--ss-field-text) !important;
+    font-size: 13px;
+    font-weight: 400;
+    text-align: left;
+    text-decoration: none !important;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.ss-user-menu__panel a:hover,
+.ss-user-menu__panel a:focus,
+.ss-user-menu__logout button:hover,
+.ss-user-menu__logout button:focus {
+    background: var(--ss-raised);
     color: #fff !important;
+}
+
+.ss-user-menu__logout {
+    margin: 4px 0 0;
+    padding-top: 4px;
+    border-top: 1px solid var(--ss-border);
 }
 
 /* Mobile responsive */
@@ -94,7 +259,7 @@ html[data-theme="auto"] {
         flex-direction: column !important;
         gap: 10px;
     }
-    
+
     .dashboard-nav {
         width: 100%;
         justify-content: center;
@@ -102,24 +267,42 @@ html[data-theme="auto"] {
 }
 </style>
 
+<script>
+// Dismiss the user menu on an outside click or Escape -- the only behaviour
+// <details> does not give us for free.
+(function () {
+    document.addEventListener('click', function (e) {
+        var menu = document.getElementById('ss-user-menu');
+        if (menu && menu.open && !menu.contains(e.target)) {
+            menu.open = false;
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var menu = document.getElementById('ss-user-menu');
+        if (menu && menu.open) {
+            menu.open = false;
+            var summary = menu.querySelector('summary');
+            if (summary) summary.focus();
+        }
+    });
+})();
+</script>
+
 {% endblock %}
 
+{% comment %}
+Django's default userlinks is a row of bare text links -- "View site / Change
+password / Log out" -- which is admin furniture, not product navigation, and it
+sat beside a separate "My Crew" button and a duplicate of the username. All of
+it collapses into one user menu: name, caret, and the three things a user
+actually goes looking for. `{{ block.super }}` is deliberately NOT called, so
+Django's own links (and "View site", which points at the marketing site) are
+gone rather than merely restyled.
+{% endcomment %}
+{% block welcome-msg %}{% endblock %}
+
 {% block userlinks %}
-    <!-- User Role Badge -->
-    {% if user.is_authenticated %}
-        <span style="display: inline-block; margin-right: 15px;">
-            <span style="color: #fff; margin-right: 8px;">{{ user.username }}</span>
-            {% if user.is_superuser %}
-                <span class="ss-role-badge">SUPERUSER</span>
-            {% elif user_role == 'owner' %}
-                <span class="ss-role-badge">OWNER</span>
-            {% elif user_role == 'editor' %}
-                <span class="ss-role-badge">EDITOR</span>
-            {% elif user_role == 'viewer' %}
-                <span class="ss-role-badge">VIEWER</span>
-            {% endif %}
-        </span>
-    {% endif %}
     
     <!-- Project Switcher (for superusers and owners) or Static Display (for editors/viewers) -->
     {% if show_project_dropdown %}
@@ -141,18 +324,39 @@ html[data-theme="auto"] {
             <span style="color: #4ecca3; font-weight: 600; font-size: 14px;">{{ current_project.name }}</span>
         </div>
     {% endif %}
-        <button onclick="helpOpen()" style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;" onmouseover="this.style.color='#c4b5fd';this.style.borderColor='#a78bfa'" onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">? Help</button>
+    <button type="button" class="ss-header-btn" onclick="helpOpen()">? Help</button>
 
-    {# Phase 6 (D-04, D-12): My Crew link — always visible for authenticated users. #}
     {% if user.is_authenticated %}
-    <a href="{% url 'crew_index' %}"
-       style="background:none;border:1px solid #444;border-radius:4px;color:#ccc;font-size:13px;padding:5px 12px;cursor:pointer;margin-right:12px;text-decoration:none;"
-       onmouseover="this.style.color='#c4b5fd';this.style.borderColor='#a78bfa'"
-       onmouseout="this.style.color='#ccc';this.style.borderColor='#444'">My Crew</a>
+    {# Phase 6 (D-04, D-12): My Crew now lives inside this menu. #}
+    <details class="ss-user-menu" id="ss-user-menu">
+        <summary>
+            <span class="ss-user-menu__name">{% firstof user.get_short_name user.get_username %}</span>
+            <span class="ss-user-menu__caret" aria-hidden="true">&#9662;</span>
+        </summary>
+        <div class="ss-user-menu__panel" role="menu">
+            <div class="ss-user-menu__who">
+                <span class="ss-user-menu__username">{{ user.get_username }}</span>
+                {% if user.is_superuser %}
+                    <span class="ss-role-badge">SUPERUSER</span>
+                {% elif user_role == 'owner' %}
+                    <span class="ss-role-badge">OWNER</span>
+                {% elif user_role == 'editor' %}
+                    <span class="ss-role-badge">EDITOR</span>
+                {% elif user_role == 'viewer' %}
+                    <span class="ss-role-badge">VIEWER</span>
+                {% endif %}
+            </div>
+            <a href="{% url 'crew_index' %}" role="menuitem">My Crew</a>
+            {% if user.has_usable_password %}
+            <a href="{% url 'admin:password_change' %}" role="menuitem">Change password</a>
+            {% endif %}
+            <form method="post" action="{% url 'admin:logout' %}" class="ss-user-menu__logout">
+                {% csrf_token %}
+                <button type="submit" role="menuitem">Log out</button>
+            </form>
+        </div>
+    </details>
     {% endif %}
-
-
-    {{ block.super }}
 {% endblock %}
 
 
@@ -865,7 +1069,7 @@ body, #container, #content, #content-main, .main, .content, .colMS, .colM {
 }
 
 #branding h1, #branding h1 a:link, #branding h1 a:visited {
-    color: #00ff88 !important;
+    color: var(--ss-field-text) !important;
 }
 
 /* #user-tools was position:fixed which floated the "Welcome, X" text over
@@ -884,7 +1088,12 @@ div.breadcrumbs {
 }
 
 div.breadcrumbs a {
-    color: #00ff88 !important;
+    color: #b0b4bc !important;
+}
+
+div.breadcrumbs a:hover,
+div.breadcrumbs a:focus {
+    color: #a78bfa !important;
 }
 
 /* Modules and fieldsets */
@@ -1301,7 +1510,8 @@ body, #container, .main, #content, #content-main, .content, .colMS, .colM {
     background: linear-gradient(90deg, #8b5cf6 0%, #e879c9 50%, #4fd6d0 100%);
     z-index: 2;
 }
-#branding h1 span span { color: #8ba4ff !important; }
+/* Wordmark colour lives with the branding markup (.ss-wordmark) so there is
+   one rule for it, not an #8ba4ff here and a #00ff88 above. */
 #user-tools, #user-tools a { color: #cfccec !important; border-bottom-color: rgba(167,139,250,0.3) !important; }
 
 /* Project switcher dropdown */
@@ -1318,11 +1528,14 @@ body, #container, .main, #content, #content-main, .content, .colMS, .colM {
 /* Breadcrumbs */
 div.breadcrumbs {
     background: var(--ss-surface) !important;
-    color: #aba8d6 !important;
+    color: var(--text-muted) !important;
     border-bottom: 1px solid var(--ss-border) !important;
 }
-div.breadcrumbs a { color: #a78bfa !important; }
-div.breadcrumbs a:hover { color: #c4b5fd !important; }
+/* Breadcrumb links are neutral grey; the accent is reserved for hover, so a
+   trail of four links is not four coloured words. */
+div.breadcrumbs a { color: #b0b4bc !important; }
+div.breadcrumbs a:hover,
+div.breadcrumbs a:focus { color: #a78bfa !important; }
 
 /* Left navigation sidebar */
 #nav-sidebar {

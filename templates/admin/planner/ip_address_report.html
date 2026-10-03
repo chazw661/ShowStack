@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}IP Address Manager - {{ site_title }}{% endblock %}
+{% block title %}IP Address Manager{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% block extrastyle %}
 <link rel="stylesheet" href="{% static 'css/surfaces.css' %}">

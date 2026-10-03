@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load i18n admin_urls static %}
 
-{% block title %}Amp Rack View | {{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block title %}Amp Rack View{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">

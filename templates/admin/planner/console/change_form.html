@@ -27,7 +27,12 @@
         background: #1a1a1a;
         border-top: 2px solid #64B5F6;
         padding: 15px !important;
-        margin: 20px -20px -20px -20px !important;
+        /* Was `margin: 20px -20px -20px -20px`, which bled the bar 20px past
+           its container on both sides and 20px below it -- the overhang the
+           audit flags. The full-width bleed is deliberate on
+           .spreadsheet-status-bar (a page-wide strip); the save bar belongs
+           inside the form it submits. */
+        margin: 20px 0 0 0 !important;
         z-index: 100;
     }
     
