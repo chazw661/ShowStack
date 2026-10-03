@@ -1,7 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}Mic Tracker — Overview{% endblock %}
+{# Same "Page — Project — ShowStack" shape every admin page uses. #}
+{% block title %}Mic Tracker Overview{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">

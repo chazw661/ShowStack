@@ -572,6 +572,32 @@ class SystemDashboardView(LoginRequiredMixin, View):
 
    
 
+def _shared_header_context(request):
+    """Context the shared admin header needs on a non-admin page.
+
+    The Mic Tracker templates extend admin/base_site.html, so they already
+    inherit the branding block (wordmark + plain "Project Dashboard" link).
+    What they did NOT get is `#user-tools` -- the project switcher, "? Help"
+    and the user menu -- because Django's admin/base.html wraps that whole
+    block in `{% if has_permission %}`, and `has_permission` is only ever set
+    by `AdminSite.each_context()`. These are plain planner views, so the flag
+    was simply absent and the block silently rendered nothing.
+
+    Deliberately NOT calling `each_context()` wholesale: it also sets
+    `is_nav_sidebar_enabled`, which would drop the admin module sidebar onto
+    the Mic Tracker and change the page below the header. The one flag is
+    enough, and it is read off the admin site so the gate matches the rule the
+    admin itself applies rather than hardcoding True.
+
+    Everything else the header reads (user_projects, current_project,
+    show_project_dropdown, user_role) already arrives from the
+    `planner.context_processors.user_projects` processor, which runs for every
+    template.
+    """
+    from planner.admin_site import showstack_admin_site
+    return {'has_permission': showstack_admin_site.has_permission(request)}
+
+
 @staff_member_required
 def mic_tracker_view(request):
     """Main mic tracker view with spreadsheet-like interface"""
@@ -668,8 +694,9 @@ def mic_tracker_view(request):
         # Issue #74 — A2 Listen: pairing token for the companion app so the
         # A2 view can build companion URLs and show the launch command.
         'listen_token': request.current_project.listen_token if request.current_project else '',
-    }  # ← This closing brace needs to be indented with 4 spaces, not at column 0
-    
+    }
+    context.update(_shared_header_context(request))
+
     return render(request, 'planner/mic_tracker.html', context)
 
 
@@ -706,6 +733,7 @@ def mic_tracker_overview_view(request):
                 is_viewer = True
 
     return render(request, 'planner/mic_tracker_overview.html', {
+        **_shared_header_context(request),
         'show_info': show_info,
         'days_data': days_data,
         'is_viewer': is_viewer,
