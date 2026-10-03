@@ -50,6 +50,7 @@ from .models import ShowDay, MicSession, MicAssignment, MicShowInfo
 # count_micd: the one definition of "mic'd" (see planner/models.py).
 from .models import count_micd
 import json as _json
+from functools import wraps
 from django.http import JsonResponse
 
 from django.views.decorators.csrf import csrf_exempt  # not needed if using CSRF token in headers
@@ -1269,8 +1270,45 @@ def _presenter_photo_data_url(presenter):
         return ''
 
 
+def stamp_checksum(view):
+    """Add the post-save checksum to a mutating endpoint's JSON response.
+
+    The client stores whatever comes back here as its own last-seen checksum,
+    so the edit it just made is never re-detected as somebody else's. This
+    replaces the old "did we save in the last 10 seconds?" guess, which was
+    wrong in both directions: it swallowed a genuine remote edit that happened
+    to land inside your 10s window, and it stopped suppressing your own save
+    as soon as a request took longer than that. On a venue network that is
+    most of the inconsistency — one machine deciding a real change was its own
+    echo and never applying it.
+
+    Wrapping the response rather than editing a dozen return sites keeps the
+    views themselves unaware of any of this.
+    """
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        response = view(request, *args, **kwargs)
+        try:
+            if (getattr(response, 'status_code', 0) == 200
+                    and response.get('Content-Type', '').startswith('application/json')):
+                data = json.loads(response.content.decode('utf-8'))
+                if isinstance(data, dict) and data.get('success'):
+                    project_id = _current_project_id(request)
+                    if project_id:
+                        data['checksum'] = _mic_sync_checksum(project_id)
+                        return JsonResponse(data)
+        except Exception:
+            # A response we could not stamp is still a valid response; the
+            # client just falls back to learning the new checksum from its
+            # next poll, which costs one redundant sync and nothing else.
+            pass
+        return response
+    return wrapper
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
+@stamp_checksum
 def update_mic_assignment(request):
     """Update a mic assignment field"""
     try:
@@ -1315,6 +1353,11 @@ def update_mic_assignment(request):
                     assignment=assignment, order=0, is_active=True
                 )
             presenter_changed = False
+            # Held so a half-typed name left behind by the 600ms debounce can
+            # be retired once the slot has moved off it (see
+            # Presenter.retire_if_typing_orphan).
+            previous_presenter = slot.presenter
+            typed_name = value if isinstance(value, str) else ''
             if field in ('presenter', 'presenter_name'):
                 slot.presenter = Presenter.resolve(value, current_project_id)
                 presenter_changed = True
@@ -1324,6 +1367,7 @@ def update_mic_assignment(request):
                 if value:
                     try:
                         slot.presenter = Presenter.objects.get(id=int(value))
+                        typed_name = slot.presenter.name
                     except (ValueError, Presenter.DoesNotExist):
                         slot.presenter = Presenter.resolve(value, current_project_id)
                 else:
@@ -1339,6 +1383,11 @@ def update_mic_assignment(request):
                 slot.photo_data = _presenter_photo_data_url(slot.presenter)
 
             slot.save()
+
+            if (presenter_changed and previous_presenter
+                    and previous_presenter.pk != getattr(slot.presenter, 'pk', None)):
+                # After the save, so the slot no longer points at it.
+                previous_presenter.retire_if_typing_orphan(typed_name)
         else:
             return JsonResponse({'success': False, 'error': f'Unknown field: {field}'}, status=400)
 
@@ -1372,6 +1421,7 @@ def update_mic_assignment(request):
 
 
 @require_POST
+@stamp_checksum
 def add_shared_presenter(request):
     """Add a new shared presenter to a mic assignment"""
     try:
@@ -1439,6 +1489,7 @@ def add_shared_presenter(request):
 
 
 @require_POST
+@stamp_checksum
 def remove_shared_presenter(request):
     """Remove a shared presenter from a mic assignment"""
     try:
@@ -1688,6 +1739,7 @@ def dmic_and_rotate(request):
     
 
 @require_POST
+@stamp_checksum
 def update_slot_field(request):
     try:
         data = json.loads(request.body)
@@ -1737,6 +1789,7 @@ def _resolve_group_ids(data, session_id):
 
 
 @require_POST
+@stamp_checksum
 def assign_slot_group(request):
     try:
         data = json.loads(request.body)
@@ -1751,6 +1804,7 @@ def assign_slot_group(request):
 
 
 @require_POST
+@stamp_checksum
 def assign_slot_a2_group(request):
     try:
         data = json.loads(request.body)
@@ -1764,6 +1818,7 @@ def assign_slot_a2_group(request):
         return JsonResponse({'success': False, 'error': str(e)})
 
 @require_POST
+@stamp_checksum
 def toggle_slot_micd(request):
     try:
         data = json.loads(request.body)
@@ -1970,6 +2025,7 @@ def upload_slot_photo_from_url(request):
 
 
 @require_POST
+@stamp_checksum
 def advance_presenter_slot(request):
     """Move to next presenter slot"""
     try:
@@ -2005,6 +2061,7 @@ def advance_presenter_slot(request):
         return JsonResponse({'success': False, 'error': str(e)})
 
 @require_POST
+@stamp_checksum
 def previous_presenter_slot(request):
     """Move to previous presenter slot"""
     try:
@@ -2105,6 +2162,7 @@ def remove_presenter_slot(request):
 
 
 @require_POST
+@stamp_checksum
 def activate_presenter_slot(request):
     """Make a specific presenter slot the active one (clicking its chip)."""
     try:
@@ -4526,6 +4584,119 @@ def _no_cache(response):
     return response
 
 
+# ── In-place sync ──────────────────────────────────────────────────────────
+# One function builds the rows, and BOTH the checksum and the sync payload are
+# derived from it. That equivalence is the whole point: "the checksum changed"
+# now means exactly "something the tracker renders changed", so a poll can
+# never report a change the sync can't deliver, and — more importantly — can
+# never miss one. The old checksum hashed a different, narrower set of columns
+# than the page displayed (no notes, no sensitivity/output level, no groups),
+# so those edits reached nobody until something else happened to bump it.
+#
+# The rows mirror what the TEMPLATE renders, quirks included, so an in-place
+# update and a fresh page load produce the same screen:
+#   · a single-presenter row reads Mic'd / notes off the MicAssignment,
+#     a shared row reads them off the PresenterSlot
+#   · a shared row's group falls back to the assignment's group when the slot
+#     has none; a single-presenter row only ever uses the assignment's
+
+
+def _mic_sync_rows(project_id, session_ids=None):
+    """Per-slot state for the tracker, in render order.
+
+    Returns (rows, sessions) where sessions carries the counter strips. Rows
+    are plain dicts of exactly the fields mic_tracker_render.js stores, so the
+    client can hand them straight to the renderer.
+    """
+    assignments = (
+        MicAssignment.objects
+        .filter(session__day__project_id=project_id)
+        .select_related('session', 'session__day')
+        .prefetch_related(
+            'presenter_slots__presenter',
+            'presenter_slots__groups',
+            'groups',
+        )
+        .order_by('session_id', 'rf_number', 'id')
+    )
+    if session_ids:
+        assignments = assignments.filter(session_id__in=session_ids)
+
+    rows = []
+    for a in assignments:
+        slots = list(a.presenter_slots.all())
+        slot_count = len(slots)
+        assn_groups = list(a.groups.all())
+        assn_group = assn_groups[0].color if assn_groups else ''
+
+        for slot in slots:
+            if slot_count > 1:
+                slot_groups = list(slot.groups.all())
+                group = slot_groups[0].color if slot_groups else assn_group
+                is_micd = slot.is_micd
+                notes = slot.notes or ''
+                mic_type = slot.mic_type or a.mic_type or ''
+            else:
+                group = assn_group
+                is_micd = a.is_micd
+                # The slot's note, matching where updateField('notes') writes
+                # and what the A2 card already shows.
+                notes = slot.notes or ''
+                mic_type = slot.mic_type or ''
+
+            rows.append({
+                'assignment_id': a.id,
+                'slot_id': slot.id,
+                'session_id': a.session_id,
+                'slot_count': slot_count,
+                'presenter': slot.presenter.name if slot.presenter else '',
+                'is_micd': is_micd,
+                'is_active': slot.is_active,
+                'mic_type': mic_type,
+                'group': group,
+                'notes': notes,
+                'headset_color': slot.headset_color or '',
+                'placement': slot.placement or '',
+                'sensitivity': slot.sensitivity or '',
+                'output_level': slot.output_level or '',
+            })
+
+    sessions = {}
+    for session in MicSession.objects.filter(
+        day__project_id=project_id
+    ).select_related('day').order_by('id'):
+        if session_ids and session.id not in session_ids:
+            continue
+        sessions[str(session.id)] = {
+            'day_id': session.day_id,
+            'stats': session.get_mic_usage_stats(),
+            'day_stats': session.day.get_all_mics_status(),
+        }
+
+    return rows, sessions
+
+
+def _mic_sync_checksum(project_id):
+    """Checksum over the same rows the sync endpoint serves.
+
+    Structure is folded in deliberately: a slot or session appearing or
+    disappearing changes the row set, so it changes the checksum, and the
+    client can tell an in-place-able change from a structural one.
+    """
+    rows, sessions = _mic_sync_rows(project_id)
+    blob = json.dumps({'rows': rows, 'sessions': sorted(sessions)},
+                      sort_keys=True, default=str)
+    return hashlib.md5(blob.encode()).hexdigest()
+
+
+def _current_project_id(request):
+    """Project this request is scoped to, middleware first."""
+    if getattr(request, 'current_project', None):
+        return request.current_project.id
+    return (request.session.get('current_project_id')
+            or request.session.get('current_project'))
+
+
 @login_required
 @require_http_methods(["GET"])
 def mic_tracker_checksum(request):
@@ -4533,39 +4704,42 @@ def mic_tracker_checksum(request):
     # Fall back to the middleware-resolved project. Returning checksum=None
     # makes the poll a no-op, so a session without the key written — and the
     # middleware only writes it when it has to auto-select — meant that
-    # machine never saw an update banner and, now, never auto-refreshes.
-    project_id = request.session.get('current_project_id')
-    if not project_id and getattr(request, 'current_project', None):
-        project_id = request.current_project.id
+    # machine never saw another station's edits at all.
+    project_id = _current_project_id(request)
     if not project_id:
         return _no_cache(JsonResponse({'checksum': None}))
+    return _no_cache(JsonResponse({'checksum': _mic_sync_checksum(project_id)}))
 
-    sessions = MicSession.objects.filter(
-        day__project_id=project_id
-    ).values('id', 'name', 'start_time', 'end_time').order_by('id')
 
-    assignments = MicAssignment.objects.filter(
-        session__day__project_id=project_id
-    ).values('id', 'rf_number', 'is_micd', 'is_d_mic').order_by('id')
+@login_required
+@require_http_methods(["GET"])
+def mic_tracker_sync(request):
+    """Current slot state for the sessions on the caller's page.
 
-    # Include presenter slots so edits trigger a refresh banner for other users.
-    # Covers every field editable from the A2 card and the Overview tab
-    # (headset_color/placement added so Overview edits to them also notify).
-    slots = PresenterSlot.objects.filter(
-        assignment__session__day__project_id=project_id
-    ).values(
-        'id', 'assignment_id', 'presenter_id', 'mic_type',
-        'headset_color', 'placement', 'is_micd', 'is_active',
-    ).order_by('id')
+    The client calls this only when the checksum moved, and feeds the rows
+    straight to mic_tracker_render.js — the same renderer that paints the page
+    on load, so a synced screen and a reloaded screen are the same screen.
+    """
+    project_id = _current_project_id(request)
+    if not project_id:
+        return _no_cache(JsonResponse({'checksum': None, 'slots': [], 'sessions': {}}))
 
-    data_string = json.dumps({
-        'sessions': list(sessions),
-        'assignments': list(assignments),
-        'slots': list(slots),
-    }, default=str)
+    raw = (request.GET.get('sessions') or '').strip()
+    session_ids = None
+    if raw:
+        try:
+            session_ids = {int(x) for x in raw.split(',') if x.strip()}
+        except ValueError:
+            session_ids = None
 
-    checksum = hashlib.md5(data_string.encode()).hexdigest()
-    return _no_cache(JsonResponse({'checksum': checksum}))
+    rows, sessions = _mic_sync_rows(project_id, session_ids)
+    return _no_cache(JsonResponse({
+        # Project-wide, so it matches what the poll compares against even when
+        # the rows were filtered down to the sessions this page shows.
+        'checksum': _mic_sync_checksum(project_id),
+        'slots': rows,
+        'sessions': sessions,
+    }))
 
 
 

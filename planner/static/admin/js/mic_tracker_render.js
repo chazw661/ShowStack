@@ -67,10 +67,46 @@
                 assignmentId: String(assignmentId),
                 slotId: slotId ? String(slotId) : '',
                 presenter: '', isMicd: false, micType: '',
-                group: '', isActive: false, slotCount: 1
+                group: '', isActive: false, slotCount: 1,
+                /* Everything below is here because the SYNC carries it. The
+                   renderer used to own only what a toggle could change; now
+                   that another machine's edit arrives as data rather than as
+                   a page reload, every field the server can change has to be
+                   something this file can write, or those edits would simply
+                   never appear. */
+                notes: '', headsetColor: '', placement: '',
+                sensitivity: '', outputLevel: ''
             };
         }
         return store[k];
+    }
+
+    /* ── The one rule that makes remote updates safe ──────────────────────
+       Never write to the control the user is in. Everything else about that
+       slot still updates, so a remote Mic'd toggle lands while you are part
+       way through typing a name, and the name you are typing is not yanked
+       out from under you. The field catches up on blur: setField stops
+       skipping, and the focusout handler below re-renders the slot. */
+    function focused(el) {
+        return el && document.activeElement === el;
+    }
+
+    function setField(el, value) {
+        if (!el || focused(el)) return;
+        if (el.value !== value) el.value = value;
+        /* The attribute as well as the property: an attribute selector or a
+           form reset reads the attribute, and setting only one of them is the
+           original "unassigned styling never clears" bug. */
+        if (el.tagName === 'INPUT') el.setAttribute('value', value);
+    }
+
+    /* A select is written the same way, but silently ignores a value it has
+       no option for rather than blanking itself. */
+    function setSelect(el, value) {
+        if (!el || focused(el)) return;
+        for (var i = 0; i < el.options.length; i++) {
+            if (el.options[i].value === value) { el.value = value; return; }
+        }
     }
 
     /* Every slot belonging to one assignment, in DOM order. */
@@ -154,6 +190,7 @@
             renderPresenterCell(row.querySelector('td:nth-child(4)'), st.presenter, st.isActive && st.slotCount > 1);
             setMicdButton(row.querySelector('.a1-micd-toggle'), st.isMicd, 'ON', 'OFF');
             setTypeBadge(row.querySelector('.mic-type-badge'), st.micType);
+            setField(row.querySelector('.a1-notes-input'), st.notes);
         }
 
         /* ---- A2 chip for this slot ------------------------------------- */
@@ -188,15 +225,22 @@
         card.classList.toggle('is-unassigned', !assigned);
         setGroupClass(card, st.group);
 
-        var input = card.querySelector('.a2-presenter-input');
-        if (input) {
-            /* BOTH forms. The property is what the user sees and what the
-               form submits; the attribute is what any attribute selector and
-               a form reset read. Setting only one of them is the original
-               "unassigned styling never clears" bug. */
-            if (document.activeElement !== input) input.value = st.presenter || '';
-            input.setAttribute('value', st.presenter || '');
-        }
+        setField(card.querySelector('.a2-presenter-input'), st.presenter || '');
+
+        /* The A2 selects are identified by what their onchange calls, which is
+           how the rest of this page already finds them (applySlotData does the
+           same). They show the ACTIVE slot, and the early return above means
+           we only get here for it. */
+        card.querySelectorAll('.a2-select').forEach(function (sel) {
+            var oc = sel.getAttribute('onchange') || '';
+            if (oc.indexOf('updateMicType') !== -1) setSelect(sel, st.micType || '');
+            else if (oc.indexOf("'headset_color'") !== -1) setSelect(sel, st.headsetColor || '');
+            else if (oc.indexOf("'placement'") !== -1) setSelect(sel, st.placement || '');
+            else if (oc.indexOf("'sensitivity'") !== -1) setSelect(sel, st.sensitivity || '');
+            else if (oc.indexOf("'output_level'") !== -1) setSelect(sel, st.outputLevel || '');
+        });
+
+        setField(card.querySelector('.a2-notes-input'), st.notes || '');
 
         setMicdButton(card.querySelector('.a2-micd-toggle'), st.isMicd, 'ON', 'OFF');
 
@@ -305,18 +349,97 @@
                 micType: d.micType || '',
                 group: d.group || '',
                 isActive: d.active === '1',
-                slotCount: parseInt(d.slotCount || '1', 10)
+                slotCount: parseInt(d.slotCount || '1', 10),
+                /* Seeded from the controls Django rendered, so the first sync
+                   diffs against what is actually on screen. */
+                notes: (row.querySelector('.a1-notes-input') || {}).value || '',
+                headsetColor: '', placement: '', sensitivity: '', outputLevel: ''
             };
         });
         for (var k in store) {
             if (store.hasOwnProperty(k)) render(store[k].assignmentId, store[k].slotId);
         }
+        wireFocusCatchUp();
+    }
 
+    /* ── Applying another machine's state ─────────────────────────────────
+       A sync row is the server's whole truth about one slot, so it is applied
+       wholesale. Rows arrive already shaped the way the template's data-*
+       attributes are shaped, including the template's own quirks (a
+       single-presenter row's Mic'd and notes come off the MicAssignment, a
+       shared row's off the PresenterSlot) — so an in-place update and a fresh
+       page load land on the same screen, which is the only definition of
+       "synced" worth having. */
+    function applyRemote(rows) {
+        var seen = 0;
+        (rows || []).forEach(function (r) {
+            var k = key(r.assignment_id, r.slot_id);
+            if (!store[k]) return;   /* a slot this page has no row for */
+            seen++;
+            patch(r.assignment_id, r.slot_id, {
+                presenter: r.presenter || '',
+                isMicd: !!r.is_micd,
+                isActive: !!r.is_active,
+                micType: r.mic_type || '',
+                group: r.group || '',
+                slotCount: r.slot_count,
+                notes: r.notes || '',
+                headsetColor: r.headset_color || '',
+                placement: r.placement || '',
+                sensitivity: r.sensitivity || '',
+                outputLevel: r.output_level || ''
+            });
+        });
+        return seen;
+    }
+
+    /* Counters for every session on the page, from the same payload. */
+    function applySessionStats(sessions) {
+        if (!sessions) return;
+        Object.keys(sessions).forEach(function (sid) {
+            var el = document.querySelector('.mtt-session[data-session-id="' + sid + '"]');
+            if (!el) return;
+            var anchor = el.querySelector('[data-assignment-id]');
+            if (anchor) {
+                applyStats(anchor.dataset.assignmentId,
+                           sessions[sid].stats, sessions[sid].day_stats);
+            }
+        });
+    }
+
+    /* The other half of the focus rule: when a field the renderer was skipping
+       loses focus, re-render its slot so whatever arrived meanwhile is applied
+       at once rather than waiting for the next poll. The element's own save
+       has already been dispatched by then (blur handlers run first), and the
+       store carries that save's result, so this shows the user's own value —
+       not a stale one. */
+    function wireFocusCatchUp() {
+        document.addEventListener('focusout', function (e) {
+            var el = e.target;
+            if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+            var row = el.closest('.a1-row');
+            var aid = '', sid = '';
+            if (row) {
+                aid = row.dataset.assignmentId;
+                sid = row.dataset.slotId || '';
+            } else {
+                var card = el.closest('.a2-card');
+                if (!card) return;
+                aid = (card.id || '').replace('a2-card-', '');
+                var active = slotsOf(aid).filter(function (x) { return x.isActive; })[0];
+                sid = active ? active.slotId : '';
+            }
+            if (!aid) return;
+            /* After the field's own save has had a chance to land, so we are
+               rendering the post-save store rather than racing it. */
+            setTimeout(function () { render(aid, sid); }, 350);
+        }, true);
     }
 
     global.MTTSlots = {
         get: get, patch: patch, render: render, slotsOf: slotsOf,
         setMicd: setMicd, setActive: setActive, applyStats: applyStats,
+        applyRemote: applyRemote, applySessionStats: applySessionStats,
         init: init, UNASSIGNED: UNASSIGNED
     };
 
