@@ -394,12 +394,44 @@ fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
     font-size: 13px;
 }
 
-/* The row accent for a checked-out device. box-shadow rather than
-   border-left: a border would shift every cell in the row by 3px as it
-   appears, and the rows are a grid the eye tracks across. */
+/* The checked-out row. Three signals, all hanging off the single
+   `comm-row-out` class that paintCell() puts on the <tr> -- so the accent,
+   the tint and the amber Device # cannot disagree with the button, on load
+   or after a toggle, because one function sets all four.
+
+   box-shadow rather than border-left for the accent: a border would shift
+   every cell in the row by 4px as it appears, and the rows are a grid the
+   eye tracks across. */
 #result_list tbody tr.comm-row-out > td:first-child,
 #result_list tbody tr.comm-row-out > th:first-child {
-    box-shadow: inset 3px 0 0 0 var(--bus-variable);
+    box-shadow: inset 4px 0 0 0 var(--bus-variable);
+}
+
+/* 8% amber wash across the whole row. --bus-variable-bg is exactly that,
+   rgba(232, 176, 74, 0.08), so the tint and the accent are one palette
+   entry apart rather than two hand-mixed colours.
+
+   !important and every cell individually, because Django paints the row
+   striping on the cells, not the <tr>. */
+#result_list tbody tr.comm-row-out > td,
+#result_list tbody tr.comm-row-out > th {
+    background-color: var(--bus-variable-bg) !important;
+}
+
+/* The row is clickable, and its hover rule (change_list.html) repaints every
+   cell. Without this the amber vanishes under the pointer, which reads as the
+   row changing state. Same hue, lifted, so hover still registers as hover. */
+#result_list tbody tr.comm-row-out.bp-clickable-row:hover > td,
+#result_list tbody tr.comm-row-out.bp-clickable-row:hover > th {
+    background-color: rgba(232, 176, 74, 0.14) !important;
+}
+
+/* Device # in amber. The number is a link, so the <a> needs saying too --
+   Django admin colours changelist links with its own rule. */
+#result_list tbody tr.comm-row-out > .field-bp_number,
+#result_list tbody tr.comm-row-out > .field-bp_number a {
+    color: var(--bus-variable) !important;
+    font-weight: 700;
 }
 
 /* ============================================================
@@ -414,16 +446,20 @@ fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
 .ch-badge-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px;
-    max-width: 150px;
+    /* 4px, not 2: at 2px the chips read as one run of text ("1:PROD2:AUD")
+       rather than as separate channels, which is the whole point of them. */
+    gap: 4px;
+    /* The column decides the width now (see "column widths" below); a fixed
+       max-width here just left the extra space empty. */
+    max-width: 100%;
 }
 
 .ch-badge {
     display: inline-block;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-size: 10px;
-    line-height: 1.5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.45;
     white-space: nowrap;
     cursor: pointer;
 }
@@ -492,11 +528,15 @@ fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
 #result_list th.column-name,
 #result_list td.field-name { width: 15%; }
 
+/* Location holds "FOH", "SL", "Stage Right" -- short names in a dropdown,
+   so the select does not need 13% to stay readable. The 5 points come off
+   it and go to Channels, which is the column that was actually running out
+   of room and wrapping chips onto three lines. */
 #result_list th.column-unit_location,
-#result_list td.field-unit_location { width: 13%; }
+#result_list td.field-unit_location { width: 9%; }
 
 #result_list th.column-channel_summary,
-#result_list td.field-channel_summary { width: 15%; }
+#result_list td.field-channel_summary { width: 19%; }
 
 /* Wide enough that the "Checked out" header is not flush against the right
    edge of the table at 1024. */
@@ -519,6 +559,5 @@ fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
 }
 
 @media (max-width: 1100px) {
-    .ch-badge-grid { max-width: 116px; }
     .comm-filter__select { max-width: 150px; }
 }

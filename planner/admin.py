@@ -4934,12 +4934,12 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 badge = (f'<span class="ch-badge assigned" data-bpc-id="{ch.id}" '
                          f'data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" '
                          f'title="Channel {ch.channel_number}: {ch_abbrev}">'
-                         f'{ch.channel_number}:{ch_abbrev}</span>')
+                         f'{ch.channel_number}: {ch_abbrev}</span>')
             else:
                 badge = (f'<span class="ch-badge unassigned" data-bpc-id="{ch.id}" '
                          f'data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" '
                          f'title="Channel {ch.channel_number}: unassigned">'
-                         f'{ch.channel_number}:—</span>')
+                         f'{ch.channel_number}: —</span>')
             badges.append(badge)
 
         result = f'''<div class="ch-badge-grid">{''.join(badges)}</div>'''
@@ -5136,6 +5136,54 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def duplicate_device_numbers(project):
+        """Device #s that more than one device in this project is using.
+
+        One query, one caller-facing shape -- the changelist banner and the
+        post-save warning both read this, so they cannot disagree about what
+        counts as a duplicate.
+        """
+        rows = (CommBeltPack.objects
+                .filter(project=project)
+                .values('bp_number')
+                .annotate(n=Count('pk'))
+                .filter(n__gt=1)
+                .order_by('bp_number'))
+        return {row['bp_number']: row['n'] for row in rows}
+
+    def warn_duplicate_device_numbers(self, request, project, only=None):
+        """Say which Device #s are doubled up. A warning, never a block.
+
+        Deliberately not a validation error. Two devices really do share a
+        number for a few minutes during load-in while a rack is being
+        renumbered, and a save that refuses at that moment costs more than it
+        saves. `only` narrows the warning to one number, for the case where a
+        single save is what created the clash.
+        """
+        if not project:
+            return
+        dups = self.duplicate_device_numbers(project)
+        if only is not None:
+            dups = {n: c for n, c in dups.items() if n == only}
+        if not dups:
+            return
+
+        url = reverse('admin:planner_commbeltpack_changelist')
+        # Each number links to the list searched for it, so the clash is one
+        # click away rather than something to go hunting for in 50 rows.
+        links = format_html_join(
+            ', ', '<a href="{}?q={}">#{}</a> ({} devices)',
+            ((url, number, number, count) for number, count in dups.items()))
+        self.message_user(
+            request,
+            format_html(
+                'Duplicate Device {}: {}. Device numbers are not required to '
+                'be unique, so nothing was blocked \u2014 but a repeated number '
+                'makes a pack impossible to identify on a run sheet.',
+                'number' if len(dups) == 1 else 'numbers', links),
+            messages.WARNING)
+
+    @staticmethod
     def wireless_counters(project):
         """Total / out / available for this project's wireless devices.
 
@@ -5291,6 +5339,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                         'Added %d comm device%s.' % (
                             len(packs), '' if len(packs) == 1 else 's'),
                         messages.SUCCESS)
+                    # Twenty prefilled Device #s is where duplicates actually
+                    # come from, so the grid says so on the way out.
+                    self.warn_duplicate_device_numbers(request, project)
                     return redirect('admin:planner_commbeltpack_changelist')
 
                 # Nothing filled in: say so rather than bouncing the user back
@@ -5434,7 +5485,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                 'wireless_groups': wireless_groups,
                 'hardwired_groups': hardwired_groups,
             })
-        
+
+            self.warn_duplicate_device_numbers(request, current_project)
+
         return super().changelist_view(request, extra_context)
     
 
@@ -5451,6 +5504,17 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         if not change and hasattr(request, 'current_project') and request.current_project:
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
+        # Warn at the moment the clash is made, not only next time the list is
+        # opened -- this is the save that caused it, and the one the user can
+        # still undo from memory.
+        #
+        # Only when the save keeps the user off the changelist, though
+        # ("Save and continue editing", "Save and add another"). A plain Save
+        # lands on the list, which warns on its own, and stacking both would
+        # show the same warning twice on one screen.
+        if '_continue' in request.POST or '_addanother' in request.POST:
+            self.warn_duplicate_device_numbers(
+                request, obj.project, only=obj.bp_number)
         
 
     
