@@ -72,6 +72,8 @@ def _quick_order_rows(queryset):
 
     # cable display name -> Counter of {stock length: raw qty}
     totals = {}
+    # cable display name -> raw quantity, for the types ordered by count
+    jumper_totals = {}
     display_names = dict(PACableSchedule.CABLE_TYPE_CHOICES)
 
     # Group by each row's own cable value. Iterating CABLE_TYPE_CHOICES and
@@ -80,6 +82,11 @@ def _quick_order_rows(queryset):
     for cable in queryset:
         cable_name = display_names.get(cable.cable, cable.cable)
         if not cable_name:
+            continue
+        if pa_cable_math.is_jumper(cable.cable):
+            # Ordered by quantity; whatever length is stored is ignored.
+            jumper_totals[cable_name] = (
+                jumper_totals.get(cable_name, 0) + (cable.count or 0))
             continue
         totals.setdefault(cable_name, Counter()).update(
             pa_cable_math.run_breakdown(
@@ -108,11 +115,17 @@ def _quick_order_rows(queryset):
     # -> "raw" 18), so merging an extension could add a cable out of nowhere.
     order = [label for _, label in PACableSchedule.CABLE_TYPE_CHOICES]
     ordered_names = sorted(
-        totals,
+        set(totals) | set(jumper_totals),
         key=lambda n: (order.index(n) if n in order else len(order), n))
 
     quick_order_data = []
     for cable_name in ordered_names:
+        if cable_name in jumper_totals:
+            qty = pa_cable_math.with_safety(jumper_totals[cable_name])
+            if qty > 0:
+                # No length column value: a jumper is not cut from stock.
+                quick_order_data.append([cable_name, '—', str(qty)])
+            continue
         counts = totals[cable_name]
         for stock in pa_cable_math.all_stock_lengths():
             qty = pa_cable_math.with_safety(counts.get(stock, 0))

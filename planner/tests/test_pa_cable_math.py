@@ -13,12 +13,15 @@ Run with::
     python manage.py test planner.tests.test_pa_cable_math \
         --settings=audiopatch.test_settings
 """
+import json
 from collections import Counter
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.forms import modelform_factory
 from django.test import Client, TestCase
 
+from planner.forms import PACableChangelistForm, PACableInlineForm
 from planner.models import (
     PACableSchedule,
     PACoupler,
@@ -51,6 +54,11 @@ NUTANIX_NL4 = [
 NUTANIX_CACOM = [
     (1, 100), (1, 100), (4, 50), (2, 175), (4, 150), (1, 200), (1, 300),
 ]
+
+# Two jumpers, deliberately carrying lengths that must be ignored: one short,
+# one long enough that counting it would show up loudly in the footage.
+# qty 2 -> order 3.
+NUTANIX_JUMPERS = [(1, 3), (1, 100)]
 
 
 class StockBreakdownTests(TestCase):
@@ -91,6 +99,47 @@ class StockBreakdownTests(TestCase):
         self.assertEqual(stock_breakdown(300), Counter({100: 3}))
         self.assertEqual(stock_breakdown(325), Counter({100: 3, 25: 1}))
         self.assertEqual(stock_breakdown(275), Counter({100: 3}))
+
+    def test_jumpers_never_go_through_the_breakdown(self):
+        """Blank, short or long -- a jumper's length is ignored outright."""
+        for length in (None, 0, 3, 25, 100, 250):
+            for cable_type in ('NL4_JUMPER', 'NL4 Jumper'):
+                with self.subTest(length=length, cable_type=cable_type):
+                    self.assertEqual(
+                        stock_breakdown(length, cable_type), Counter())
+                    self.assertEqual(
+                        run_breakdown(length, 4, cable_type), Counter())
+
+    def test_is_jumper_accepts_the_value_or_the_label(self):
+        self.assertTrue(pa_cable_math.is_jumper('NL4_JUMPER'))
+        self.assertTrue(pa_cable_math.is_jumper('NL4 Jumper'))
+        self.assertFalse(pa_cable_math.is_jumper('NL_4'))
+        self.assertFalse(pa_cable_math.is_jumper('NL 4'))
+        self.assertFalse(pa_cable_math.is_jumper(None))
+        self.assertFalse(pa_cable_math.is_jumper(''))
+
+    def test_jumper_values_are_derived_from_the_labels(self):
+        """JUMPER_TYPES is the only place a jumper is named."""
+        self.assertEqual(pa_cable_math.JUMPER_TYPES, {'NL4 Jumper'})
+        self.assertEqual(pa_cable_math.jumper_type_values(), {'NL4_JUMPER'})
+
+    def test_adding_a_jumper_type_picks_up_its_stored_value(self):
+        """What adding "NL8 Jumper" later would take: one line."""
+        with patch.object(pa_cable_math, 'JUMPER_TYPES', {'NL4 Jumper', 'NL 8'}):
+            self.assertEqual(pa_cable_math.jumper_type_values(),
+                             {'NL4_JUMPER', 'NL_8'})
+            self.assertTrue(pa_cable_math.is_jumper('NL_8'))
+            self.assertEqual(stock_breakdown(150, 'NL_8'), Counter())
+        # and the memo does not leak back out
+        self.assertEqual(pa_cable_math.jumper_type_values(), {'NL4_JUMPER'})
+        self.assertEqual(stock_breakdown(150, 'NL_8'),
+                         Counter({100: 1, 50: 1}))
+
+    def test_rule_text_names_the_jumper_rule(self):
+        self.assertIn('Jumpers are counted by quantity only',
+                      pa_cable_math.RULE_TEXT)
+        self.assertIn('not Jumper, for any run that needs a length',
+                      pa_cable_math.RULE_TEXT)
 
     def test_a_per_type_stock_list_changes_the_breakdown(self):
         """STOCK_LENGTHS_BY_TYPE is the seam for a type that differs."""
@@ -181,10 +230,52 @@ class NutanixFixtureTests(_SummaryFixtureMixin, TestCase):
 
     def setUp(self):
         self.add_rows('NL_4', NUTANIX_NL4)
+        self.add_rows('NL4_JUMPER', NUTANIX_JUMPERS)
 
     def test_fixture_matches_the_audited_project(self):
         self.assertEqual(sum(c for c, _ in NUTANIX_NL4), 31)
         self.assertEqual(sum(c * l for c, l in NUTANIX_NL4), 2490)
+
+    def test_jumpers_do_not_disturb_the_cable_numbers(self):
+        """Adding jumpers to the project changes nothing about NL 4."""
+        data = self.summary()['NL 4']
+        self.assertEqual(data['total_runs'], 31)
+        self.assertEqual(data['total_length'], 2490)
+        self.assertEqual(
+            (data['hundreds'], data['fifties'], data['twenty_fives']),
+            (18, 17, 2))
+
+    def test_jumper_row_is_quantity_only(self):
+        data = self.summary()['NL4 Jumper']
+        self.assertTrue(data['is_jumper'])
+        self.assertEqual(data['total_runs'], 2)
+        self.assertEqual(data['quantity_with_safety'], 3)
+        # No length and no breakdown, even though one jumper stores 100'.
+        self.assertEqual(data['total_length'], 0)
+        self.assertEqual(
+            (data['hundreds'], data['fifties'], data['twenty_fives']),
+            (0, 0, 0))
+
+    def test_grand_total_excludes_jumpers(self):
+        client = Client()
+        client.force_login(self.user)
+        session = client.session
+        session['current_project_id'] = self.project.pk
+        session.save()
+        response = client.get('/admin/planner/pacableschedule/')
+        # 2,490 ft of NL 4; the jumpers' stored 103' does not join in.
+        self.assertEqual(response.context_data['grand_total'], 2490)
+
+    def test_jumper_in_the_quick_order_list(self):
+        rows = {
+            (name, label): qty
+            for name, label, qty in _quick_order_rows(
+                PACableSchedule.objects.filter(project=self.project))
+        }
+        self.assertEqual(rows[('NL4 Jumper', '—')], '3')
+        # and no stock-length rows for it
+        for stock in (100, 50, 25):
+            self.assertNotIn(('NL4 Jumper', "%d'" % stock), rows)
 
     def test_cables_needed(self):
         data = self.summary()['NL 4']
@@ -371,3 +462,164 @@ class GrandTotalTests(_SummaryFixtureMixin, TestCase):
         data = self.summary()['NL 4']
         self.assertEqual(data['couplers'], 3)
         self.assertEqual(data['hundreds'], 1)
+
+
+class JumperFormTests(_SummaryFixtureMixin, TestCase):
+    """Length is optional for a jumper and required for everything else.
+
+    The input is hidden client-side, so nothing is posted for it; these pin
+    the server half, which is what actually decides whether a save is valid.
+    """
+
+    def base_data(self, **overrides):
+        # `project` is normally filled in by the admin's save_model; a bare
+        # form has to be handed it.
+        data = {
+            'project': self.project.pk,
+            'entry_mode': 'text',
+            'destination': 'SL Amp Rack',
+            'count': 2,
+            'cable': 'NL_4',
+            'length': 100,
+            'color': '#FFFFFF',
+            'notes': '',
+            'drawing_ref': '',
+        }
+        data.update(overrides)
+        return data
+
+    def test_length_is_required_for_a_cable_type(self):
+        form = PACableInlineForm(data=self.base_data(length=''))
+        self.assertFalse(form.is_valid())
+        self.assertIn('length', form.errors)
+        self.assertIn('choose a Jumper type', str(form.errors['length']))
+
+    def test_length_is_not_required_for_a_jumper(self):
+        form = PACableInlineForm(
+            data=self.base_data(cable='NL4_JUMPER', length=''))
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['length'], 0)
+
+    def test_a_new_jumper_with_a_typed_length_stores_zero(self):
+        """Nothing read it anyway; a new row should not carry a fiction."""
+        form = PACableInlineForm(
+            data=self.base_data(cable='NL4_JUMPER', length=250))
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['length'], 0)
+
+    def test_an_existing_jumper_keeps_its_stored_length(self):
+        """Editing something else must not rewrite a legacy jumper length."""
+        run = PACableSchedule.objects.create(
+            project=self.project, cable='NL4_JUMPER', count=4, length=3,
+            destination='SL Amp Rack', entry_mode='text')
+        form = PACableInlineForm(
+            instance=run,
+            data=self.base_data(cable='NL4_JUMPER', count=6, length=''))
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        saved.refresh_from_db()
+        self.assertEqual(saved.count, 6)
+        self.assertEqual(saved.length, 3)
+
+    def test_switching_a_cable_to_a_jumper_keeps_the_old_length(self):
+        run = PACableSchedule.objects.create(
+            project=self.project, cable='NL_4', count=1, length=150,
+            destination='SL Amp Rack', entry_mode='text')
+        form = PACableInlineForm(
+            instance=run, data=self.base_data(cable='NL4_JUMPER', length=''))
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        saved.refresh_from_db()
+        self.assertEqual(saved.cable, 'NL4_JUMPER')
+        self.assertEqual(saved.length, 150)   # ignored, not cleared
+        # and it no longer contributes footage
+        self.assertEqual(self.summary()['NL4 Jumper']['total_length'], 0)
+
+    def test_switching_a_jumper_back_to_a_cable_needs_a_length(self):
+        run = PACableSchedule.objects.create(
+            project=self.project, cable='NL4_JUMPER', count=1, length=0,
+            destination='SL Amp Rack', entry_mode='text')
+        form = PACableInlineForm(
+            instance=run, data=self.base_data(cable='NL_4', length=''))
+        self.assertFalse(form.is_valid())
+        self.assertIn('length', form.errors)
+
+    def test_the_cable_select_tells_the_js_which_values_are_jumpers(self):
+        form = PACableInlineForm()
+        attrs = form.fields['cable'].widget.attrs
+        self.assertEqual(json.loads(attrs['data-jumper-values']),
+                         ['NL4_JUMPER'])
+
+    def grid_form(self, instance, **data):
+        """The grid row as Django builds it: narrowed to list_editable.
+
+        modelformset_factory passes ``fields=self.list_editable``, so the
+        row form carries Count and Length and nothing else -- which is why
+        the mixin has to read the cable type off the stored instance.
+        """
+        Form = modelform_factory(
+            PACableSchedule, form=PACableChangelistForm,
+            fields=['count', 'length'])
+        return Form(instance=instance, data=data)
+
+    def test_changelist_grid_takes_the_type_from_the_stored_row(self):
+        """The grid edits count and length only, so `cable` is not posted."""
+        run = PACableSchedule.objects.create(
+            project=self.project, cable='NL4_JUMPER', count=1, length=3,
+            destination='SL Amp Rack', entry_mode='text')
+        form = self.grid_form(run, count=5, length='')
+        self.assertNotIn('cable', form.fields)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        saved.refresh_from_db()
+        self.assertEqual(saved.count, 5)
+        self.assertEqual(saved.length, 3)
+
+    def test_changelist_grid_still_requires_a_length_for_a_cable(self):
+        run = PACableSchedule.objects.create(
+            project=self.project, cable='NL_4', count=1, length=100,
+            destination='SL Amp Rack', entry_mode='text')
+        form = self.grid_form(run, count=2, length='')
+        self.assertFalse(form.is_valid())
+        self.assertIn('length', form.errors)
+
+
+class JumperRenderTests(_SummaryFixtureMixin, TestCase):
+    """The changelist, the add form and the change form all render."""
+
+    def setUp(self):
+        self.add_rows('NL_4', [(1, 150)])
+        self.add_rows('NL4_JUMPER', NUTANIX_JUMPERS)
+        self.client = Client()
+        self.client.force_login(self.user)
+        session = self.client.session
+        session['current_project_id'] = self.project.pk
+        session.save()
+
+    def test_changelist_renders_and_marks_the_jumper_rows(self):
+        r = self.client.get('/admin/planner/pacableschedule/')
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertIn('data-jumper="true"', html)
+        self.assertIn('data-jumper="false"', html)
+        self.assertIn('pa_cable_jumpers.js', html)
+
+    def test_add_form_renders(self):
+        r = self.client.get('/admin/planner/pacableschedule/add/')
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-jumper-values', r.content.decode())
+
+    def test_change_form_renders_for_a_jumper(self):
+        run = PACableSchedule.objects.filter(
+            project=self.project, cable='NL4_JUMPER').first()
+        r = self.client.get(
+            '/admin/planner/pacableschedule/%d/change/' % run.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('data-jumper-values', r.content.decode())
+
+    def test_summary_shows_dashes_for_the_jumper_row(self):
+        r = self.client.get('/admin/planner/pacableschedule/')
+        data = r.context_data['cable_summary']
+        self.assertTrue(data['NL4 Jumper']['is_jumper'])
+        self.assertFalse(data['NL 4']['is_jumper'])
+        self.assertIn('&mdash;', r.content.decode())
