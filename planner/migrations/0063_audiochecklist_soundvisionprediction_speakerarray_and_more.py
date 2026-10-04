@@ -11,6 +11,23 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # `'managed': False` used to sit in these options, because
+        # planner/models.py defined AudioChecklist twice in 2025-09 and the
+        # managed=False "dummy for the admin" won the makemigrations race.
+        # managed=False makes CreateModel emit no DDL at all, so this table was
+        # never created on any backend -- and 0108 then dropped `managed` from
+        # the options, leaving the state claiming a real table that no database
+        # had been told to build. On PostgreSQL that surfaced one migration
+        # later: 0108 creates AudioChecklistTask with a foreign key REFERENCES
+        # audio_checklist_dummy, and a fresh build died with
+        # `relation "audio_checklist_dummy" does not exist`.
+        #
+        # Dropping the flag makes this CreateModel do on a fresh database what
+        # the state has claimed since 0108 -- 0113 then renames the table and
+        # fills in the columns. Production applied 0063 on 2025-09-22 and will
+        # never run it again, and the FINAL state of the graph is byte-identical
+        # either way (0108 drops `managed`, 0113 sets db_table to None), so
+        # nothing downstream of here can tell the difference.
         migrations.CreateModel(
             name='AudioChecklist',
             fields=[
@@ -20,7 +37,6 @@ class Migration(migrations.Migration):
                 'verbose_name': 'Audio Checklist',
                 'verbose_name_plural': 'Audio Checklists',
                 'db_table': 'audio_checklist_dummy',
-                'managed': False,
             },
         ),
         migrations.CreateModel(
