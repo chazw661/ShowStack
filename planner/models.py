@@ -2461,10 +2461,19 @@ class PACableSchedule(models.Model):
     )
     
     cable = models.CharField(
-        max_length=20, 
+        max_length=20,
         choices=CABLE_TYPE_CHOICES,
         verbose_name="Cable",
-        default='100_NL4',
+        # Was '100_NL4', which is not one of CABLE_TYPE_CHOICES -- a row saved
+        # without an explicit type carried a value no lookup recognised, so it
+        # grouped under its own raw name in the summary and could not be
+        # reached by the Cable filter at all. 'NL_4' is the same cable the old
+        # default meant, spelled the way the choices list spells it.
+        #
+        # Rows already stored with the old value are left alone; every reader
+        # flags an unrecognised value rather than dropping it. See
+        # pa_cable_math.cable_type_label().
+        default='NL_4',
     )
     
     
