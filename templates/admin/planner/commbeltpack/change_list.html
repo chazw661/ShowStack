@@ -243,6 +243,27 @@ document.addEventListener('change', function (e) {
             if (!table) return;
             var tbody = table.querySelector('tbody');
             if (!tbody) return;
+            // Below 900px three of these headers are shortened -- to "#",
+            // "Loc" and "Out" -- and Type's is dropped altogether, because at
+            // an iPad's portrait width they do not fit their columns and were
+            // being cut off mid-word (comm_admin_v2.css). The full wording
+            // lives here, on the <th> itself, so it is one hover or long-press
+            // away at every width -- and because the swap is a media query
+            // rather than a text rewrite, rotating the iPad puts the long
+            // labels back without this having to run again.
+            //
+            // Above the empty-table guard below on purpose: the headers are
+            // rendered whether or not there is a device under them.
+            Object.entries({
+                'bp_number': 'Device #',
+                'system_type_icon': 'Type',
+                'unit_location': 'Location',
+                'checkout_control': 'Checked out'
+            }).forEach(function (pair) {
+                var th = table.querySelector('thead th.column-' + pair[0]);
+                if (th) th.title = pair[1];
+            });
+
             var rows = Array.from(tbody.querySelectorAll('tr'));
             if (!rows.length) return;
 

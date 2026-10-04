@@ -561,3 +561,85 @@ fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
 @media (max-width: 1100px) {
     .comm-filter__select { max-width: 150px; }
 }
+
+/* ============================================================
+ * Tablet portrait: below 900px
+ *
+ * At an iPad's 768 portrait width three headers were wider than the
+ * columns under them and were cut off mid-word -- "DEVICE", "TYP",
+ * "LOCATIO", "CHECKED OU" -- and the Type column clipped the device
+ * icon in every row as well.
+ *
+ * The labels shorten; the table does not start scrolling sideways. A
+ * run sheet you have to drag horizontally to read is a run sheet you
+ * misread, and on this page horizontal room is the whole problem.
+ * "Device #" becomes "#", "Location" becomes "Loc", "Checked out"
+ * becomes "Out", and Type loses its header entirely -- the column is
+ * nothing but the device icon, which says what it is without a word
+ * above it.
+ *
+ * The full wording is kept twice over: in each header's title
+ * attribute (set in commbeltpack/change_list.html, so a pointer or a
+ * long-press still gets it) and in the DOM, because `font-size: 0`
+ * hides the text visually without removing it -- a screen reader
+ * still announces "Device #" and "Checked out", not "#" and "Out".
+ *
+ * The width Type gains comes off Model / Position / Name, which hold
+ * truncating <select>s and narrow gracefully, rather than off
+ * Channels, whose chips wrap onto extra lines and make every row
+ * taller instead.
+ * ============================================================ */
+@media (max-width: 899px) {
+    #result_list thead th.column-bp_number .text a,
+    #result_list thead th.column-system_type_icon .text span,
+    #result_list thead th.column-unit_location .text a,
+    #result_list thead th.column-checkout_control .text span {
+        font-size: 0;
+        letter-spacing: 0;
+    }
+
+    #result_list thead th.column-bp_number .text a::after,
+    #result_list thead th.column-unit_location .text a::after,
+    #result_list thead th.column-checkout_control .text span::after {
+        /* Same type as every other header; only the words are shorter. */
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    #result_list thead th.column-bp_number .text a::after { content: '#'; }
+    #result_list thead th.column-unit_location .text a::after { content: 'Loc'; }
+    #result_list thead th.column-checkout_control .text span::after { content: 'Out'; }
+
+    /* Re-budgeted for this width; same scheme as the full-width set
+       above, three points moved from the <select> columns to Type. */
+    #result_list th.column-bp_number,
+    #result_list td.field-bp_number { width: 6%; }
+
+    #result_list th.column-system_type_icon,
+    #result_list td.field-system_type_icon { width: 7%; }
+
+    #result_list th.column-device_model,
+    #result_list td.field-device_model { width: 13%; }
+
+    #result_list th.column-position,
+    #result_list td.field-position { width: 14%; }
+
+    #result_list th.column-name,
+    #result_list td.field-name { width: 14%; }
+
+    #result_list th.column-unit_location,
+    #result_list td.field-unit_location { width: 10%; }
+
+    #result_list th.column-channel_summary,
+    #result_list td.field-channel_summary { width: 19%; }
+
+    #result_list th.column-checkout_control,
+    #result_list td.field-checkout_control { width: 11%; }
+
+    /* Django pads every changelist cell 8px either side. On a column
+       holding one emoji that padding is most of the column, which is
+       what clipped the icon -- not the column being too narrow. */
+    #result_list th.column-system_type_icon,
+    #result_list td.field-system_type_icon { padding-left: 2px; padding-right: 2px; }
+}

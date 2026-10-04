@@ -44,8 +44,12 @@
        off the right edge below ~1200px -- and with the admin sidebar eating
        ~220px, an iPad landscape content column is ~800px, so Export and
        Listen Setup were unreachable. It now wraps within itself, and the
-       strip as a whole drops to its own line before it has to. */
-    .mtt-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+       strip as a whole drops to its own line before it has to.
+
+       flex: 1 so the strip still sits against the right edge when the
+       show-meta block next to it is not rendered at all (nothing filled in)
+       and there is no longer a flexible element between it and the title. */
+    .mtt-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; flex: 1 1 auto; }
 
     .btn-mtt {
         padding: 7px 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
@@ -191,7 +195,12 @@
     .a1-row:hover,
     .a1-row.row-micd:hover { background: rgba(var(--mtt-rgb-white), 0.03); }
     .a1-row.row-micd { background: var(--micd-bg); }
-    .a1-row td { padding: 9px 12px; vertical-align: middle; }
+    /* 5px, not 9. The Mic'd toggle and the notes field grew to the 44px/40px
+       touch floor, and the row is as tall as its tallest control plus this
+       padding twice. Spending the 8px here keeps the row at ~55px, so the
+       controls got bigger and the count of RF rows on an iPad screen did
+       not go down. */
+    .a1-row td { padding: 5px 12px; vertical-align: middle; }
 
     /* Expanded slot sub-rows take the .a1-row styling above and nothing of
        their own -- a multi-presenter sub-row is a row of the same table,
@@ -236,7 +245,13 @@
     /* Presenter name +20% (15 -> 18). It reads the same whatever the mic'd
        state: the name is who, not whether. */
     .a1-presenter-primary { font-size: 18px; font-weight: 600; color: var(--text-primary); }
-    .a1-unassigned { font-size: 14px; color: var(--mtt-text-placeholder); font-style: italic; }
+    /* nowrap: at 768 the Presenter column got narrow enough that the em-dashes
+       became break points and "— Unassigned —" came apart over three lines,
+       which made every empty row 4px taller than every filled one. Told not to
+       wrap, the auto-layout table simply hands the column the ~25px it needs
+       out of Type and Notes, both of which have it spare -- the table stays
+       exactly as wide as before and every row is the same height. */
+    .a1-unassigned { font-size: 14px; color: var(--mtt-text-placeholder); font-style: italic; white-space: nowrap; }
 
     /* An unassigned slot is NOT dimmed. "— Unassigned —" in the placeholder
        style above is the whole signal: it already reads as absent, and an
@@ -271,9 +286,14 @@
      * mushy.
      */
     .a1-micd-cell { width: 92px; text-align: center; }
+    /* 72x44 at 14px: the iPad touch floor. An A1 hits this control wearing
+       gloves, in the dark, on a moving truss deck, and 34px tall was below
+       what a fingertip reliably lands on. The row absorbs the extra height by
+       giving up cell padding (see .a1-row td) rather than growing, so the
+       number of RF rows on screen is unchanged. */
     .a1-micd-toggle {
         display: inline-flex; align-items: center; justify-content: center;
-        min-width: 72px; min-height: 34px; border-radius: 4px; font-size: 12px;
+        min-width: 72px; min-height: 44px; border-radius: 4px; font-size: 14px;
         font-weight: 800; letter-spacing: 0.1em; cursor: pointer;
         transition: none; text-transform: uppercase; font-family: inherit;
         box-shadow: none; -webkit-appearance: none; appearance: none;
@@ -295,7 +315,10 @@
 
     .a1-type-cell { width: 120px; }
     .a1-notes-cell { width: 200px; }
-    .a1-notes-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary); font-size: 11px; font-family: inherit; padding: 2px 4px; outline: none; transition: border-color 0.15s; }
+    /* 40px tall and 14px text, for the same reason as the toggle: this is a
+       field you tap once and type into with a thumb. The placeholder stays
+       --text-dim so an empty note still reads as empty. */
+    .a1-notes-input { width: 100%; min-height: 40px; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary); font-size: 14px; font-family: inherit; padding: 2px 4px; outline: none; transition: border-color 0.15s; }
     .a1-notes-input:focus { border-bottom-color: var(--border-bright); }
     .a1-notes-input::placeholder { color: var(--text-dim); }
 
@@ -331,7 +354,7 @@
     .a2-listen-icon { font-size: 13px; line-height: 1; }
     .a2-listen-ch { width: 100%; }
     /* Same two appearances as the A1 toggle, pinned across every state. */
-    .a2-micd-toggle { padding: 9px 18px; min-height: 38px; border-radius: 5px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: none; display: flex; align-items: center; gap: 7px; font-family: inherit; -webkit-appearance: none; appearance: none; }
+    .a2-micd-toggle { padding: 9px 18px; min-width: 72px; min-height: 44px; border-radius: 5px; font-size: 14px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: none; display: flex; align-items: center; justify-content: center; gap: 7px; font-family: inherit; -webkit-appearance: none; appearance: none; }
     .a2-micd-toggle.off,
     .a2-micd-toggle.off:hover,
     .a2-micd-toggle.off:focus,
@@ -376,8 +399,9 @@
     .a2-select:focus { border-color: var(--accent-blue); color: var(--text-primary); }
     .a2-select option { background: var(--bg-raised); }
     .a2-setting-notes { flex: 1; min-width: 200px; }
-    .a2-setting-notes .a2-notes-input { width: 100%; min-height: 26px; height: 26px; max-height: 80px; resize: vertical; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); font-size: 11px; font-family: inherit; padding: 3px 6px; outline: none; transition: border-color 0.15s, height 0.15s; box-sizing: border-box; }
-    .a2-setting-notes .a2-notes-input:focus { border-color: var(--accent-blue); height: 60px; }
+    /* Same 40px / 14px touch floor as the A1 notes field. */
+    .a2-setting-notes .a2-notes-input { width: 100%; min-height: 40px; height: 40px; max-height: 96px; resize: vertical; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); font-size: 14px; font-family: inherit; padding: 6px 8px; outline: none; transition: border-color 0.15s, height 0.15s; box-sizing: border-box; }
+    .a2-setting-notes .a2-notes-input:focus { border-color: var(--accent-blue); height: 76px; }
     .a2-setting-notes .a2-notes-input::placeholder { color: var(--mtt-text-placeholder); }
 
     .a2-slot-queue { border-top: 1px solid var(--border); padding: 8px 14px 4px; background: var(--mtt-bg-sunken); }
@@ -531,8 +555,14 @@
     /* The chip itself stays neutral -- its button and dot already carry the
        state, and a tinted chip made the whole queue read as mic'd. */
     .a2-slot-chip.micd { background: var(--bg-raised); border-color: var(--border-bright); color: var(--text-primary); font-weight: 600; }
+    /* The chip's ON/OFF is the same control as the A1 row's and the card's --
+       one renderer writes all three -- so it gets the same 72x44 touch target
+       rather than staying a 10px chip-sized button that only a stylus hits.
+       The chip grows around it; the queue already wraps. */
     .a2-slot-micd-btn {
-        font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 72px; min-height: 44px;
+        font-size: 14px; font-weight: 800; letter-spacing: 0.06em;
         padding: 3px 9px; border-radius: 3px; cursor: pointer;
         border: 1px solid var(--border-bright); font-family: inherit;
         transition: none; line-height: 1.5; white-space: nowrap;
@@ -577,12 +607,23 @@ silently 403-ing background saves and stopping updates from reaching others.
     <!-- Page Header -->
     <div class="mtt-header">
         <div class="mtt-title">🎤 Mic Tracker</div>
+        {% comment %}
+        Four em-dashes under four labels is a strip that costs a line of an
+        iPad screen and tells you nothing -- and a brand new project has all
+        four empty, so that is the state most people meet first. The strip is
+        rendered only when there is something in it, and only the fields that
+        are filled appear, so it reports what is known rather than enumerating
+        what is not. Filling any one of them in Mic Show Information brings it
+        back with that field alone.
+        {% endcomment %}
+        {% if show_info.show_name or show_info.venue_name or show_info.ballroom_name or show_info.duration_display %}
         <div class="mtt-show-meta">
-            <div class="mtt-meta-item"><span class="mtt-meta-label">Show</span><span class="mtt-meta-value">{{ show_info.show_name|default:"—" }}</span></div>
-            <div class="mtt-meta-item"><span class="mtt-meta-label">Venue</span><span class="mtt-meta-value">{{ show_info.venue_name|default:"—" }}</span></div>
-            <div class="mtt-meta-item"><span class="mtt-meta-label">Room</span><span class="mtt-meta-value">{{ show_info.ballroom_name|default:"—" }}</span></div>
-            <div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display|default:"—" }}</span></div>
+            {% if show_info.show_name %}<div class="mtt-meta-item"><span class="mtt-meta-label">Show</span><span class="mtt-meta-value">{{ show_info.show_name }}</span></div>{% endif %}
+            {% if show_info.venue_name %}<div class="mtt-meta-item"><span class="mtt-meta-label">Venue</span><span class="mtt-meta-value">{{ show_info.venue_name }}</span></div>{% endif %}
+            {% if show_info.ballroom_name %}<div class="mtt-meta-item"><span class="mtt-meta-label">Room</span><span class="mtt-meta-value">{{ show_info.ballroom_name }}</span></div>{% endif %}
+            {% if show_info.duration_display %}<div class="mtt-meta-item"><span class="mtt-meta-label">Dates</span><span class="mtt-meta-value">{{ show_info.duration_display }}</span></div>{% endif %}
         </div>
+        {% endif %}
         <div class="mtt-header-actions">
             {% if not is_viewer %}<button class="btn-mtt btn-mtt-secondary" onclick="addNewDay()">+ Add Day</button>{% endif %}
             <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-secondary">👤 Presenters</a>
