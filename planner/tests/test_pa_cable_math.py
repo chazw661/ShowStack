@@ -289,6 +289,27 @@ class ExtensionRoundingTests(_SummaryFixtureMixin, TestCase):
             with self.subTest(length=length):
                 self.assertEqual(stock_breakdown(length), Counter({25: 1}))
 
+    def test_dropdown_offers_nothing_under_25(self):
+        offered = sorted(dict(PAFanOutExtension.EXTENSION_LENGTH_CHOICES))
+        self.assertEqual(offered, [25, 50, 100, 150])
+
+    def test_a_stored_6_foot_row_survives_an_unrelated_save(self):
+        """Migration 0196 trimmed the choices; it did not touch any row.
+
+        Editing something else on a legacy row must not rewrite or reject its
+        length -- Model.save() does not run choices validation, and nothing
+        here should start.
+        """
+        run = self._add_extension(6)
+        ext = run.fan_outs.first().extensions.first()
+        ext.quantity = 2
+        ext.save()
+        ext.refresh_from_db()
+        self.assertEqual(ext.extension_length, 6)
+        self.assertEqual(ext.quantity, 2)
+        # And it is costed as two 25' cables, not two 5' ones.
+        self.assertEqual(self.summary()['NL 4']['twenty_fives'], 2)
+
     def test_extension_quantity_multiplies(self):
         self._add_extension(150, quantity=3)
         data = self.summary()['NL 4']
