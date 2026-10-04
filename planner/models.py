@@ -3030,7 +3030,11 @@ class CommBeltPack(models.Model):
         help_text="IP address for hardwired devices (optional)"
     )
     
-    bp_number = models.IntegerField(verbose_name="BP #")
+    # "BP #" stopped being right when the module became Comm Devices and the
+    # catalogue grew key panels and speaker stations. The column name is the
+    # field's verbose_name, so renaming it here renames it on the form and in
+    # the list at once rather than in two places that could disagree.
+    bp_number = models.IntegerField(verbose_name="Device #")
     updated_at = models.DateTimeField(auto_now=True)
     
 
@@ -3150,10 +3154,11 @@ class CommBeltPackChannel(models.Model):
         related_name='channels'
     )
     
-    channel_number = models.PositiveIntegerField(
-        verbose_name="Channel #",
-        help_text="Channel number (1, 2, 3, etc.)"
-    )
+    # No help_text on purpose. A tabular inline renders help_text as Django's
+    # icon-unknown.svg next to the column header, which on the dark theme reads
+    # as a stray "?" beside "Channel #" -- and the text it was hiding,
+    # "Channel number (1, 2, 3, etc.)", says nothing the header does not.
+    channel_number = models.PositiveIntegerField(verbose_name="Channel #")
     
     channel = models.ForeignKey(
         'CommChannel',

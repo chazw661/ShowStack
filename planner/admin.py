@@ -4374,6 +4374,11 @@ clear_all_beltpacks.short_description = '⚠️ DELETE all belt packs'
 class CommBeltPackChannelInline(admin.TabularInline):
     """Inline for managing belt pack channels"""
     model = CommBeltPackChannel
+    # Named here rather than on the model: it is what this section is called
+    # in the admin, matching the Channels column on the list, and an admin
+    # label costs no migration.
+    verbose_name = 'Channel'
+    verbose_name_plural = 'Channels'
     extra = 0  # Don't show empty forms by default
     # Issue #66: one-click "×" delete in place of Django's default "Delete?"
     # checkbox column, which rendered as a tiny near-invisible checkbox on the
@@ -4528,10 +4533,14 @@ class ProjectFilteredPositionFilter(admin.SimpleListFilter):
     def lookups(self, request, model_admin):
         current_project = getattr(request, 'current_project', None)
         if current_project:
-            # Get distinct positions used in this project's beltpacks
+            # Every position in the project, not only the ones already in use.
+            # Django drops a filter whose lookups are empty, so listing only
+            # positions already assigned meant the Position dropdown vanished
+            # from the filter row entirely until somebody had assigned one --
+            # which is exactly when you want to filter by it. Matches what the
+            # Location filter does.
             positions = CommPosition.objects.filter(
-                beltpacks__project=current_project
-            ).distinct().order_by('name')
+                project=current_project).order_by('name')
             return [(p.id, p.name) for p in positions]
         return []
     
@@ -4539,6 +4548,14 @@ class ProjectFilteredPositionFilter(admin.SimpleListFilter):
         if self.value():
             return queryset.filter(position_id=self.value())
         return queryset
+
+
+class SystemFilter(admin.RelatedFieldListFilter):
+    """device_model, titled "System" rather than Django's "model"."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.title = 'System'
 
 
 class ProjectFilteredLocationFilter(admin.SimpleListFilter):
@@ -4787,17 +4804,20 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     #autocomplete_fields = ['position', 'name', 'channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']
     
     # Right after autocomplete_fields, add:
+    # Headset Type and IP Address are deliberately not here. Nine columns
+    # plus the filter sidebar did not fit at 1280 (let alone 1024) and these
+    # two were the least useful to scan: a headset type is a per-person detail
+    # and an IP only ever applies to a hardwired device and was blank on most
+    # rows. Both are still on the device form and still searchable.
     list_display = [
         'bp_number',
         'system_type_icon',  # Custom method
-        'device_model',  
+        'device_model',
         'position',  # Keep as field for inline editing
         'name',
         'unit_location',  # Location column
         'channel_summary',
-        'headset',
-        'ip_address',
-        'checked_out'
+        'checkout_control',
     ]
 
 
@@ -4806,23 +4826,30 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
       # ← Line 3324 - end of list_display
     
     # ADD THIS RIGHT HERE:
+    # checked_out left on purpose: it is a one-tap toggle that saves on its
+    # own now (see checkout_control / toggle_checkout_view), so putting it in
+    # the formset as well would give it a second, slower way to change that
+    # could disagree with the button.
     list_editable = [
         'position',
         'name',
         'unit_location',
-        'headset',
-        'ip_address',
-        'checked_out'
     ]
     
         
     
+    # Rendered as one compact row above the table, not a sidebar -- see the
+    # `filters` block in commbeltpack/change_list.html. Still Django's own
+    # filter machinery, so the query strings are unchanged.
+    #
+    # System Type and Headset dropped from the set: the rows are already
+    # grouped into Wireless / Hardwired with counts, and headset is not
+    # something a list gets filtered by in practice.
     list_filter = [
-        'system_type',
-        'device_model',
+        ('device_model', SystemFilter),
+        'device_model__device_type',
         ProjectFilteredLocationFilter,
         ProjectFilteredPositionFilter,
-        'headset',
         'checked_out',
     ]
 
@@ -4895,20 +4922,31 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         if not channels:
             return mark_safe('<span style="color: #666;">No channels</span>')
         
+        # Styling moved to comm_admin_v2.css (.ch-badge / .ch-badge-grid):
+        # a 380px-wide four-column grid of 75px badges was the widest column
+        # on the page by far and is what stopped everything fitting at 1024.
+        # The badges keep their classes and data-* attributes, so the channel
+        # assignment popup still finds them.
         badges = []
         for ch in channels[:12]:
             if ch.channel:
                 ch_abbrev = ch.channel.abbreviation if hasattr(ch.channel, 'abbreviation') and ch.channel.abbreviation else ch.channel.name[:4]
-                badge = f'''<span class="ch-badge assigned" data-bpc-id="{ch.id}" data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" style="display: inline-block; background: #14b8a6; color: #000; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; font-weight: 500; white-space: nowrap; min-width: 75px; text-align: center; cursor: pointer;">{ch.channel_number}: {ch_abbrev}</span>'''
+                badge = (f'<span class="ch-badge assigned" data-bpc-id="{ch.id}" '
+                         f'data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" '
+                         f'title="Channel {ch.channel_number}: {ch_abbrev}">'
+                         f'{ch.channel_number}: {ch_abbrev}</span>')
             else:
-                badge = f'''<span class="ch-badge unassigned" data-bpc-id="{ch.id}" data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" style="display: inline-block; background: #333; color: #666; padding: 2px 8px; margin: 2px; border-radius: 3px; font-size: 11px; white-space: nowrap; min-width: 75px; text-align: center; cursor: pointer;">{ch.channel_number}: —</span>'''
+                badge = (f'<span class="ch-badge unassigned" data-bpc-id="{ch.id}" '
+                         f'data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" '
+                         f'title="Channel {ch.channel_number}: unassigned">'
+                         f'{ch.channel_number}: —</span>')
             badges.append(badge)
-        
-        result = f'''<div style="display: grid; grid-template-columns: repeat(4, auto); gap: 3px; max-width: 380px; justify-items: start;">{''.join(badges)}</div>'''
-        
+
+        result = f'''<div class="ch-badge-grid">{''.join(badges)}</div>'''
+
         if channels.count() > 12:
-            result += f'''<span style="color: #14b8a6; font-size: 11px; margin-left: 5px;">+{channels.count() - 12} more</span>'''
-        
+            result += f'''<span class="ch-badge-more">+{channels.count() - 12}</span>'''
+
         return mark_safe(result)
 
     channel_summary.short_description = 'Channels'
@@ -4957,7 +4995,10 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         css = {
             'all': ('admin/css/comm_admin_v2.css',)
         }
-        js = ('admin/js/comm_beltpack_admin.js',)
+        js = (
+            'admin/js/comm_beltpack_admin.js',
+            'admin/js/comm_checkout.js',
+        )
 
 
 
@@ -5086,8 +5127,130 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
             path('assign-channel/', self.admin_site.admin_view(self.assign_channel_view), name='commbeltpack_assign_channel'),
             path('get-channels/', self.admin_site.admin_view(self.get_channels_view), name='commbeltpack_get_channels'),
             path('add-multiple/', self.admin_site.admin_view(self.add_multiple_view), name='commbeltpack_add_multiple'),
+            path('toggle-checkout/', self.admin_site.admin_view(self.toggle_checkout_view), name='commbeltpack_toggle_checkout'),
         ]
         return custom_urls + urls
+
+    # ------------------------------------------------------------------
+    # Check-out toggle
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def duplicate_device_numbers(project):
+        """Device #s that more than one device in this project is using.
+
+        One query, one caller-facing shape -- the changelist banner and the
+        post-save warning both read this, so they cannot disagree about what
+        counts as a duplicate.
+        """
+        rows = (CommBeltPack.objects
+                .filter(project=project)
+                .values('bp_number')
+                .annotate(n=Count('pk'))
+                .filter(n__gt=1)
+                .order_by('bp_number'))
+        return {row['bp_number']: row['n'] for row in rows}
+
+    def warn_duplicate_device_numbers(self, request, project, only=None):
+        """Say which Device #s are doubled up. A warning, never a block.
+
+        Deliberately not a validation error. Two devices really do share a
+        number for a few minutes during load-in while a rack is being
+        renumbered, and a save that refuses at that moment costs more than it
+        saves. `only` narrows the warning to one number, for the case where a
+        single save is what created the clash.
+        """
+        if not project:
+            return
+        dups = self.duplicate_device_numbers(project)
+        if only is not None:
+            dups = {n: c for n, c in dups.items() if n == only}
+        if not dups:
+            return
+
+        url = reverse('admin:planner_commbeltpack_changelist')
+        # Each number links to the list searched for it, so the clash is one
+        # click away rather than something to go hunting for in 50 rows.
+        links = format_html_join(
+            ', ', '<a href="{}?q={}">#{}</a> ({} devices)',
+            ((url, number, number, count) for number, count in dups.items()))
+        self.message_user(
+            request,
+            format_html(
+                'Duplicate Device {}: {}. Device numbers are not required to '
+                'be unique, so nothing was blocked \u2014 but a repeated number '
+                'makes a pack impossible to identify on a run sheet.',
+                'number' if len(dups) == 1 else 'numbers', links),
+            messages.WARNING)
+
+    @staticmethod
+    def wireless_counters(project):
+        """Total / out / available for this project's wireless devices.
+
+        One function so the numbers the page loads with and the numbers a
+        toggle sends back cannot drift apart -- they are the same query.
+        """
+        wireless = CommBeltPack.objects.filter(
+            project=project, system_type='WIRELESS')
+        total = wireless.count()
+        out = wireless.filter(checked_out=True).count()
+        return {'total': total, 'out': out, 'avail': total - out}
+
+    @admin.display(description='Checked out')
+    def checkout_control(self, obj):
+        """An empty cell carrying state; comm_checkout.js paints the button.
+
+        Deliberately not rendering the button here. The Mic Tracker learned
+        this the hard way: when the server paints one version of a control and
+        the script paints another after a change, the two drift and a reloaded
+        screen stops matching a live one. There is one renderer, it is in the
+        JS, and it runs over this cell on load and again after every toggle.
+        """
+        return format_html(
+            '<span class="comm-checkout" data-device-id="{}" '
+            'data-system-type="{}" data-checked-out="{}"></span>',
+            obj.pk, obj.system_type, 'true' if obj.checked_out else 'false')
+
+    def toggle_checkout_view(self, request):
+        """Flip one wireless device's checked-out flag and report the state."""
+        from django.http import JsonResponse
+
+        if request.method != 'POST':
+            return JsonResponse({'error': 'POST required'}, status=405)
+
+        project = getattr(request, 'current_project', None)
+        if not project:
+            return JsonResponse({'error': 'No project selected'}, status=400)
+        if not self._bulk_can_edit(request):
+            return JsonResponse({'error': 'Read-only access'}, status=403)
+
+        try:
+            payload = json.loads(request.body or '{}')
+            device_id = int(payload.get('device_id'))
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Bad device id'}, status=400)
+
+        # Scoped to the current project: an id from another tenant's page must
+        # not be togglable just because it is a valid id.
+        device = CommBeltPack.objects.filter(
+            pk=device_id, project=project).first()
+        if device is None:
+            return JsonResponse({'error': 'Not found'}, status=404)
+        if device.system_type != 'WIRELESS':
+            return JsonResponse(
+                {'error': 'Only a wireless device can be checked out'},
+                status=400)
+
+        device.checked_out = not device.checked_out
+        device.save(update_fields=['checked_out', 'updated_at'])
+
+        return JsonResponse({
+            'ok': True,
+            'device_id': device.pk,
+            'checked_out': device.checked_out,
+            'system_type': device.system_type,
+            'counters': self.wireless_counters(project),
+        })
 
     # ------------------------------------------------------------------
     # "Add multiple" grid
@@ -5176,6 +5339,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
                         'Added %d comm device%s.' % (
                             len(packs), '' if len(packs) == 1 else 's'),
                         messages.SUCCESS)
+                    # Twenty prefilled Device #s is where duplicates actually
+                    # come from, so the grid says so on the way out.
+                    self.warn_duplicate_device_numbers(request, project)
                     return redirect('admin:planner_commbeltpack_changelist')
 
                 # Nothing filled in: say so rather than bouncing the user back
@@ -5262,21 +5428,22 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     def changelist_view(self, request, extra_context=None):
         """Add summary information grouped by system type"""
         extra_context = extra_context or {}
+        # Every column has to be readable at 1024 without scrolling sideways.
+        # The filter sidebar is gone (see the change_list template) and the
+        # module nav would otherwise still take ~460px of the window, so this
+        # page drops it the way the Add multiple grid does.
+        extra_context.setdefault('is_nav_sidebar_enabled', False)
         
         # Get current project
         current_project = getattr(request, 'current_project', None)
         
         if current_project:
-            # Get counts by system type - FILTERED BY PROJECT
-            wireless_total = CommBeltPack.objects.filter(
-                project=current_project, 
-                system_type='WIRELESS'
-            ).count()
-            wireless_checked = CommBeltPack.objects.filter(
-                project=current_project,
-                system_type='WIRELESS', 
-                checked_out=True
-            ).count()
+            # Same function the toggle endpoint answers with, so a freshly
+            # loaded page and a page that has been toggled show numbers that
+            # were produced the same way.
+            counters = self.wireless_counters(current_project)
+            wireless_total = counters['total']
+            wireless_checked = counters['out']
             hardwired_total = CommBeltPack.objects.filter(
                 project=current_project,
                 system_type='HARDWIRED'
@@ -5312,13 +5479,15 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
             extra_context.update({
                 'wireless_total': wireless_total,
                 'wireless_checked': wireless_checked,
-                'wireless_available': wireless_total - wireless_checked,
+                'wireless_available': counters['avail'],
                 'hardwired_total': hardwired_total,
                 'hardwired_available': hardwired_total - hardwired_checked,
                 'wireless_groups': wireless_groups,
                 'hardwired_groups': hardwired_groups,
             })
-        
+
+            self.warn_duplicate_device_numbers(request, current_project)
+
         return super().changelist_view(request, extra_context)
     
 
@@ -5335,6 +5504,17 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         if not change and hasattr(request, 'current_project') and request.current_project:
             obj.project = request.current_project
         super().save_model(request, obj, form, change)
+        # Warn at the moment the clash is made, not only next time the list is
+        # opened -- this is the save that caused it, and the one the user can
+        # still undo from memory.
+        #
+        # Only when the save keeps the user off the changelist, though
+        # ("Save and continue editing", "Save and add another"). A plain Save
+        # lands on the list, which warns on its own, and stacking both would
+        # show the same warning twice on one screen.
+        if '_continue' in request.POST or '_addanother' in request.POST:
+            self.warn_duplicate_device_numbers(
+                request, obj.project, only=obj.bp_number)
         
 
     

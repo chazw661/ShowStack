@@ -1,106 +1,14 @@
 /* planner/static/admin/css/comm_admin_v2.css */
 
-/* ========================================
-   FORCE TABLE LAYOUT TO AUTO FOR FLEXIBILITY
-   ======================================== */
+/* The column sizing that used to live here pinned each column by
+   `nth-child` with !important pixel min-widths, for a ten-column list that no
+   longer exists. It added up to ~1400px -- wider than the window at 1024 --
+   and after Headset and IP Address came out of the list it was sizing the
+   wrong columns: the 320px meant for Channels was landing on Location, which
+   is what made the table overflow.
 
-#changelist-form table {
-    table-layout: auto !important;
-    width: 100% !important;
-}
-
-/* ========================================
-   NEW COLUMN WIDTH SPECIFICATIONS
-   ======================================== */
-
-/* Column 1: Checkbox */
-#changelist-form table th:nth-child(1),
-#changelist-form table td:nth-child(1) {
-    width: 40px !important;
-    min-width: 40px !important;
-}
-
-/* Column 2: BP # */
-#changelist-form table th:nth-child(2),
-#changelist-form table td:nth-child(2) {
-    width: 60px !important;
-    min-width: 60px !important;
-}
-
-/* Column 3: TYPE (icon) */
-#changelist-form table th:nth-child(3),
-#changelist-form table td:nth-child(3) {
-    width: 50px !important;
-    min-width: 50px !important;
-    text-align: center !important;
-}
-
-/* Column 4: SYSTEM (manufacturer) */
-#changelist-form table th:nth-child(4),
-#changelist-form table td:nth-child(4) {
-    width: 180px !important;
-    min-width: 180px !important;
-}
-
-/* Column 5: POSITION */
-#changelist-form table th:nth-child(5),
-#changelist-form table td:nth-child(5) {
-    width: 200px !important;
-    min-width: 200px !important;
-}
-
-/* Column 6: NAME */
-#changelist-form table th:nth-child(6),
-#changelist-form table td:nth-child(6) {
-    width: 200px !important;
-    min-width: 200px !important;
-}
-
-/* Column 7: CHANNELS (badge column) - WIDER */
-#changelist-form table th:nth-child(7),
-#changelist-form table td:nth-child(7) {
-    width: 320px !important;
-    min-width: 320px !important;
-    vertical-align: top !important;
-}
-
-/* Column 8: HEADSET TYPE */
-#changelist-form table th:nth-child(8),
-#changelist-form table td:nth-child(8) {
-    width: 120px !important;
-    min-width: 120px !important;
-}
-
-/* Column 9: IP ADDRESS */
-#changelist-form table th:nth-child(9),
-#changelist-form table td:nth-child(9) {
-    width: 130px !important;
-    min-width: 130px !important;
-}
-
-/* Column 10: CHECKED OUT */
-#changelist-form table th:nth-child(10),
-#changelist-form table td:nth-child(10) {
-    width: 100px !important;
-    min-width: 100px !important;
-    text-align: center !important;
-}
-
-/* ========================================
-   FIX: CONSTRAIN INPUT FIELDS
-   ======================================== */
-
-/* Limit the IP ADDRESS input field width */
-#changelist-form table td:nth-child(9) input {
-    max-width: 120px !important;
-    width: 120px !important;
-}
-
-/* Center the CHECKED OUT checkbox */
-#changelist-form table td:nth-child(10) input[type="checkbox"] {
-    margin: 0 auto !important;
-    display: block !important;
-}
+   Sizing is by column class now, in one place, at the bottom of this file. A
+   class cannot drift onto the wrong column when the list changes. */
 
 /* ========================================
    DROPDOWN STYLING
@@ -123,10 +31,20 @@
     overflow-x: auto;
 }
 
-#result_list {
-    width: auto !important;
-    min-width: 100%;
+/* Django's action bar carries horizontal padding on top of a full width, so
+   it sat ~20px past the table and put a scrollbar on #changelist even though
+   the table itself fitted. */
+#changelist .actions {
+    box-sizing: border-box;
+    max-width: 100%;
 }
+
+/* `width: auto !important; min-width: 100%` used to live here, which let the
+   table grow past its container and scroll sideways. That is exactly what the
+   list must not do any more, and because `table-layout: fixed` needs a
+   definite width to mean anything, the !important here was silently cancelling
+   the fixed layout set further down. The table's sizing is all in one place
+   now: see "Comm Devices list: column widths". */
 
 /* ========================================
    SWAP BUTTON POSITIONS AND STYLE ADD BUTTON
@@ -300,4 +218,346 @@ fieldset.bp-sys-HARDWIRED .form-row.field-checked_out {
     /* Keep every column reachable by scrolling the grid instead of
        squeezing six controls into a tablet width. */
     .bp-bulk-grid { min-width: 860px; }
+}
+
+/* ============================================================
+ * Comm Devices list: compact filter row
+ *
+ * Replaces the right-hand sidebar, which took ~380px of a 1280px
+ * window. Django still does the filtering -- each option carries
+ * the query string the sidebar would have linked to.
+ * ============================================================ */
+
+.comm-filterbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px 16px;
+    margin-bottom: 12px;
+}
+
+.comm-filterbar__search {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+/* #toolbar comes from Django with its own block layout and margins, and its
+   form is a block whose children stack unless told otherwise -- Safari was
+   putting the magnifier, the field and the Search button on three lines. */
+.comm-filterbar__search #toolbar {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: none !important;
+}
+
+.comm-filterbar__search #changelist-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.comm-filterbar__search #changelist-search > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.comm-filterbar__search label {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+.comm-filterbar__search #searchbar {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+}
+
+.comm-filterbar__search input[type="submit"] {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.comm-filterbar__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 12px;
+    /* flex items refuse to shrink below min-content by default, so without
+       this the five dropdowns sat past the right edge and "Checked out" was
+       cut off instead of wrapping to a second line. */
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.comm-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.comm-filter__label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.comm-filter__select {
+    max-width: 190px;
+    font-size: 13px;
+    padding: 5px 8px;
+}
+
+.comm-filter__clear {
+    align-self: center;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-muted) !important;
+    text-decoration: underline;
+}
+
+.comm-filter__clear:hover { color: #a78bfa !important; }
+
+/* ============================================================
+ * Check-out toggle
+ *
+ * One amber, --bus-variable (#e8b04a), in every state. Hover,
+ * focus and active are deliberately identical to rest: this is a
+ * status readout that happens to be tappable, and a button that
+ * lightens under the finger reads as "not yet applied" when in
+ * fact the tap has already saved. Safari also keeps its own
+ * :active shading on buttons unless it is turned off, which is
+ * what `appearance: none` below is for.
+ * ============================================================ */
+
+.comm-checkout__btn {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-block;
+    min-width: 54px;
+    padding: 5px 12px;
+    border-radius: var(--ss-field-radius);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    font-family: inherit;
+    line-height: 1.4;
+    cursor: pointer;
+    text-align: center;
+    /* No transition: the state change is the feedback. */
+    transition: none;
+    background: transparent;
+    border: 1px solid var(--ss-field-border);
+    color: var(--text-muted);
+}
+
+.comm-checkout__btn:hover,
+.comm-checkout__btn:focus,
+.comm-checkout__btn:active,
+.comm-checkout__btn:focus-visible {
+    background: transparent;
+    border-color: var(--ss-field-border);
+    color: var(--text-muted);
+}
+
+.comm-checkout__btn.is-out,
+.comm-checkout__btn.is-out:hover,
+.comm-checkout__btn.is-out:focus,
+.comm-checkout__btn.is-out:active,
+.comm-checkout__btn.is-out:focus-visible {
+    background: var(--bus-variable);
+    border-color: var(--bus-variable);
+    /* Dark text: #e8b04a is a light fill. */
+    color: #1a1407;
+}
+
+/* Keyboard users still need to see where they are; a ring rather than a
+   colour change, so the amber stays exactly one amber. */
+.comm-checkout__btn:focus-visible {
+    outline: 2px solid var(--ss-accent);
+    outline-offset: 2px;
+}
+
+.comm-checkout.is-busy { opacity: 0.6; }
+
+.comm-checkout__na {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* The checked-out row. Three signals, all hanging off the single
+   `comm-row-out` class that paintCell() puts on the <tr> -- so the accent,
+   the tint and the amber Device # cannot disagree with the button, on load
+   or after a toggle, because one function sets all four.
+
+   box-shadow rather than border-left for the accent: a border would shift
+   every cell in the row by 4px as it appears, and the rows are a grid the
+   eye tracks across. */
+#result_list tbody tr.comm-row-out > td:first-child,
+#result_list tbody tr.comm-row-out > th:first-child {
+    box-shadow: inset 4px 0 0 0 var(--bus-variable);
+}
+
+/* 8% amber wash across the whole row. --bus-variable-bg is exactly that,
+   rgba(232, 176, 74, 0.08), so the tint and the accent are one palette
+   entry apart rather than two hand-mixed colours.
+
+   !important and every cell individually, because Django paints the row
+   striping on the cells, not the <tr>. */
+#result_list tbody tr.comm-row-out > td,
+#result_list tbody tr.comm-row-out > th {
+    background-color: var(--bus-variable-bg) !important;
+}
+
+/* The row is clickable, and its hover rule (change_list.html) repaints every
+   cell. Without this the amber vanishes under the pointer, which reads as the
+   row changing state. Same hue, lifted, so hover still registers as hover. */
+#result_list tbody tr.comm-row-out.bp-clickable-row:hover > td,
+#result_list tbody tr.comm-row-out.bp-clickable-row:hover > th {
+    background-color: rgba(232, 176, 74, 0.14) !important;
+}
+
+/* Device # in amber. The number is a link, so the <a> needs saying too --
+   Django admin colours changelist links with its own rule. */
+#result_list tbody tr.comm-row-out > .field-bp_number,
+#result_list tbody tr.comm-row-out > .field-bp_number a {
+    color: var(--bus-variable) !important;
+    font-weight: 700;
+}
+
+/* ============================================================
+ * Compact channel badges
+ *
+ * Was a 380px four-column grid of 75px badges -- the widest column
+ * on the page, and the reason the table did not fit. Two columns
+ * of content-width chips instead; the classes and data-* the
+ * assignment popup binds to are unchanged.
+ * ============================================================ */
+
+.ch-badge-grid {
+    display: flex;
+    flex-wrap: wrap;
+    /* 4px, not 2: at 2px the chips read as one run of text ("1:PROD2:AUD")
+       rather than as separate channels, which is the whole point of them. */
+    gap: 4px;
+    /* The column decides the width now (see "column widths" below); a fixed
+       max-width here just left the extra space empty. */
+    max-width: 100%;
+}
+
+.ch-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.45;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ch-badge.assigned {
+    background: #14b8a6;
+    color: #000;
+    font-weight: 500;
+}
+
+.ch-badge.unassigned {
+    background: var(--ss-raised);
+    color: var(--text-muted);
+}
+
+.ch-badge-more {
+    margin-left: 4px;
+    font-size: 10px;
+    color: #14b8a6;
+}
+
+/* ============================================================
+ * Comm Devices list: column widths
+ *
+ * Eight columns have to fit 1024 without scrolling sideways, so the
+ * ones that can be narrow are told to be.
+ * ============================================================ */
+
+/* table-layout: fixed is what actually makes this work. Without it a
+   <select> is as wide as its longest option, three of them in a row push the
+   table past the window, and #changelist grows with it -- which is why the
+   filter row was being cut off on the right as well. */
+#result_list {
+    table-layout: fixed;
+    /* !important only to out-rank Django's own `.change-list .filtered table`
+       sizing, not a local rule -- there is no other #result_list width now. */
+    width: 100% !important;
+    min-width: 0;
+}
+
+#result_list th,
+#result_list td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Percentages, so the same layout holds at 1280 and at 1024. */
+/* Django pins this to 1.5em in changelists.css, which under a fixed layout
+   is the whole column -- the checkbox ends up touching both edges. */
+#changelist table thead th.action-checkbox-column,
+#result_list th.action-checkbox-column,
+#result_list td.action-checkbox { width: 40px; text-align: center; }
+
+#result_list th.column-bp_number,
+#result_list td.field-bp_number { width: 7%; }
+
+#result_list th.column-system_type_icon,
+#result_list td.field-system_type_icon { width: 4%; text-align: center; }
+
+#result_list th.column-device_model,
+#result_list td.field-device_model { width: 16%; }
+
+#result_list th.column-position,
+#result_list td.field-position { width: 15%; }
+
+#result_list th.column-name,
+#result_list td.field-name { width: 15%; }
+
+/* Location holds "FOH", "SL", "Stage Right" -- short names in a dropdown,
+   so the select does not need 13% to stay readable. The 5 points come off
+   it and go to Channels, which is the column that was actually running out
+   of room and wrapping chips onto three lines. */
+#result_list th.column-unit_location,
+#result_list td.field-unit_location { width: 9%; }
+
+#result_list th.column-channel_summary,
+#result_list td.field-channel_summary { width: 19%; }
+
+/* Wide enough that the "Checked out" header is not flush against the right
+   edge of the table at 1024. */
+#result_list th.column-checkout_control,
+#result_list td.field-checkout_control { width: 11%; }
+
+/* Django marks these cells nowrap, which with a fixed layout would clip the
+   select rather than let it shrink. */
+#result_list td.field-position,
+#result_list td.field-name,
+#result_list td.field-unit_location,
+#result_list td.field-device_model { white-space: normal !important; }
+
+#result_list td.field-position select,
+#result_list td.field-name select,
+#result_list td.field-unit_location select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+@media (max-width: 1100px) {
+    .comm-filter__select { max-width: 150px; }
 }

@@ -40,3 +40,17 @@ def get_item(dictionary, key):
 def chunk(lst, n):
     lst = list(lst)
     return [lst[i:i+n] for i in range(0, len(lst), n)]
+
+
+@register.simple_tag
+def filter_choices(changelist, spec):
+    """The choices for one changelist filter.
+
+    `spec.choices(cl)` takes the changelist as an argument, so a template
+    cannot call it: Django's engine only calls zero-argument callables. The
+    admin's own filter.html gets around this because the `admin_list_filter`
+    tag prepares the list for it, but that tag renders the sidebar markup too.
+    The Comm Devices list wants Django's filtering with its own compact row of
+    dropdowns, so it asks for just the choices.
+    """
+    return list(spec.choices(changelist))

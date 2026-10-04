@@ -1,4 +1,5 @@
 {% extends "admin/change_list.html" %}
+{% load custom_tags %}
 {% load i18n %}
 
 {% block extrastyle %}
@@ -150,13 +151,21 @@ fields in a grid; see CommBeltPackAdmin.add_multiple_view.
     </a>
 </div>
 {% endif %}
+{% comment %}
+The wireless numbers are rendered from data-* by comm_checkout.js, the same
+function that repaints them after a toggle -- so a loaded page and a toggled
+page cannot show numbers produced two different ways.
+{% endcomment %}
 <div class="comm-summary">
-    <div class="comm-summary-card">
+    <div class="comm-summary-card" id="comm-wireless-counters"
+         data-total="{{ wireless_total|default:"0" }}"
+         data-out="{{ wireless_checked|default:"0" }}"
+         data-avail="{{ wireless_available|default:"0" }}">
         <h4>📡 Wireless</h4>
         <div class="comm-stat-row">
-            <span class="comm-stat">Total: <strong>{{ wireless_total|default:"0" }}</strong></span>
-            <span class="comm-stat">Out: <strong>{{ wireless_checked|default:"0" }}</strong></span>
-            <span class="comm-stat">Avail: <strong>{{ wireless_available|default:"0" }}</strong></span>
+            <span class="comm-stat">Total: <strong data-counter="total"></strong></span>
+            <span class="comm-stat">Out: <strong data-counter="out"></strong></span>
+            <span class="comm-stat">Avail: <strong data-counter="avail"></strong></span>
         </div>
         {% if wireless_groups %}
         <div class="comm-group-pills">
@@ -181,6 +190,48 @@ fields in a grid; see CommBeltPackAdmin.add_multiple_view.
     </div>
 </div>
 {{ block.super }}
+{% endblock %}
+
+{% comment %}
+The right-hand filter sidebar is gone: it took ~380px of a 1280px window and
+left the table scrolling sideways. Same filters, same Django query strings --
+`filter_choices` just hands back what the sidebar would have listed -- in one
+row above the table.
+{% endcomment %}
+{% block filters %}{% endblock %}
+
+{% block search %}
+<div class="comm-filterbar">
+    <div class="comm-filterbar__search">{{ block.super }}</div>
+    {% if cl.filter_specs %}
+    <div class="comm-filterbar__filters">
+        {% for spec in cl.filter_specs %}
+        {% filter_choices cl spec as choices %}
+        <label class="comm-filter">
+            <span class="comm-filter__label">{{ spec.title|capfirst }}</span>
+            <select class="comm-filter__select" data-comm-filter>
+                {% for choice in choices %}
+                <option value="{{ choice.query_string }}"{% if choice.selected %} selected{% endif %}>{{ choice.display }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% endfor %}
+        {% if cl.has_active_filters %}
+        <a class="comm-filter__clear" href="{{ cl.clear_all_filters_qs }}">Clear</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+<script>
+// Navigating is the whole behaviour: each option already carries the query
+// string Django built for it, so there is no filter logic here to drift from
+// the server's.
+document.addEventListener('change', function (e) {
+    var select = e.target.closest ? e.target.closest('[data-comm-filter]') : null;
+    if (!select) return;
+    window.location.search = select.value;
+});
+</script>
 {% endblock %}
 
 {% block result_list %}
@@ -224,7 +275,7 @@ fields in a grid; see CommBeltPackAdmin.add_multiple_view.
                 headerDiv.className = 'system-group-header' + (borderClass ? ' ' + borderClass : '') + (isCollapsed ? ' collapsed' : '');
                 headerDiv.innerHTML =
                     '<span><span class="toggle-icon">\u25BC</span>' + icon + ' ' + label + '</span>' +
-                    '<div class="header-right"><span class="count-badge">' + groupRows.length + ' belt pack' + (groupRows.length !== 1 ? 's' : '') + '</span></div>';
+                    '<div class="header-right"><span class="count-badge">' + groupRows.length + ' device' + (groupRows.length !== 1 ? 's' : '') + '</span></div>';
                 headerTd.appendChild(headerDiv);
                 headerTr.appendChild(headerTd);
                 tbody.insertBefore(headerTr, groupRows[0]);
