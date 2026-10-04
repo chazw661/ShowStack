@@ -27,7 +27,7 @@ from django.urls import reverse
 from planner.models import (
     Project, Console, ConsoleInput, ConsoleAuxOutput,
     Device, DeviceInput, DeviceOutput,
-    Amp, AmpChannel, AmpModel, Location,
+    Amp, AmpChannel, AmpModel, AmpLocation, Location,
     SystemProcessor, P1Processor, P1Input, P1Output,
     GalaxyProcessor, GalaxyInput, GalaxyOutput,
     SignalFlowDiagram,
@@ -46,7 +46,8 @@ class _Phase10Base(TestCase):
       - self.other_user     — owner of self.other_project (cross-project IDOR)
       - self.project        — primary project (session-scoped)
       - self.other_project  — second project for cross-project IDOR tests
-      - self.location       — Location in self.project (FK target for Amp/SystemProcessor)
+      - self.location       — Location in self.project (FK target for SystemProcessor)
+      - self.amp_location   — AmpLocation in self.project (FK target for Amp)
       - self.client         — test client with session['current_project_id']
     """
 
@@ -71,11 +72,24 @@ class _Phase10Base(TestCase):
             name='phase10_other_project',
             owner=self.other_user,
         )
+        # Issue #29 split amp-rack locations off from equipment locations, so
+        # Amp.location is an AmpLocation while SystemProcessor.location is
+        # still a Location. These tests were written three weeks before that
+        # change and kept handing an Amp a Location, which is why every one of
+        # them errored in setUp without reaching a single assertion.
         self.location = Location.objects.create(
             project=self.project,
             name='HL LA Racks',
         )
         self.other_location = Location.objects.create(
+            project=self.other_project,
+            name='Other Racks',
+        )
+        self.amp_location = AmpLocation.objects.create(
+            project=self.project,
+            name='HL LA Racks',
+        )
+        self.other_amp_location = AmpLocation.objects.create(
             project=self.other_project,
             name='Other Racks',
         )
@@ -130,7 +144,7 @@ class SignalFlowLabelAutocompleteTests(_Phase10Base):
             manufacturer='L\'Acoustics', model_name='LA12X', channel_count=4,
         )
         self.amp = Amp.objects.create(
-            project=self.project, location=self.location,
+            project=self.project, location=self.amp_location,
             amp_model=amp_model, name='HL Amp 1',
         )
         # Amp.save() auto-creates 4 channels with channel_name=''.
@@ -289,7 +303,7 @@ class SignalFlowAutosaveAllowlistTests(_Phase10Base):
             manufacturer='L\'Acoustics', model_name='LA12X', channel_count=4,
         )
         self.amp = Amp.objects.create(
-            project=self.project, location=self.location,
+            project=self.project, location=self.amp_location,
             amp_model=amp_model, name='HL Amp 1',
         )
         self.system_processor = SystemProcessor.objects.create(
@@ -373,7 +387,7 @@ class SignalFlowAutosaveAllowlistTests(_Phase10Base):
             manufacturer='L\'Acoustics', model_name='LA12X', channel_count=4,
         )
         other_amp = Amp.objects.create(
-            project=self.other_project, location=self.other_location,
+            project=self.other_project, location=self.other_amp_location,
             amp_model=amp_model, name='Other Amp',
         )
         canvas = self._build_canvas(other_amp, 'Amp')
@@ -417,7 +431,7 @@ class SignalFlowStateEnrichAmpProcessorTests(_Phase10Base):
             manufacturer='L\'Acoustics', model_name='LA12X', channel_count=4,
         )
         self.amp = Amp.objects.create(
-            project=self.project, location=self.location,
+            project=self.project, location=self.amp_location,
             amp_model=amp_model, name='HL Amp 1',
         )
         self.system_processor = SystemProcessor.objects.create(
@@ -497,7 +511,7 @@ class SignalFlowPickerProcessorAmpTests(_Phase10Base):
             manufacturer='L\'Acoustics', model_name='LA12X', channel_count=4,
         )
         self.amp = Amp.objects.create(
-            project=self.project, location=self.location,
+            project=self.project, location=self.amp_location,
             amp_model=amp_model, name='HL Amp Alpha',
         )
         self.system_processor = SystemProcessor.objects.create(
@@ -547,7 +561,7 @@ class SignalFlowPickerProcessorAmpTests(_Phase10Base):
             manufacturer='L\'Acoustics', model_name='LA12X', channel_count=4,
         )
         Amp.objects.create(
-            project=self.other_project, location=self.other_location,
+            project=self.other_project, location=self.other_amp_location,
             amp_model=amp_model, name='Cross-Project Amp',
         )
         resp = self._picker_get('amp')

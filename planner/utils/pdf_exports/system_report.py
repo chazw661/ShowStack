@@ -26,6 +26,7 @@ from datetime import datetime
 import io
 
 from .pdf_styles import LANDSCAPE_PAGE, MARGIN
+from planner.utils import pa_cable_math
 
 # ---------------------------------------------------------------------------
 # Palette - a restrained, professional scheme built around the ShowStack blue.
@@ -900,8 +901,16 @@ def _section_pa_cable(project, styles, PACableSchedule):
             f"{fo.get_fan_out_type_display()} x{fo.quantity or 1}"
             for fo in cable.fan_outs.all() if fo.fan_out_type
         ) or '-'
+        # `cable`, not the legacy `cable_type` mirror. cable_type is an
+        # editable=False copy that PACableSchedule.save() keeps in step, so
+        # anything written without save() (bulk_create, queryset update())
+        # leaves it stale -- and it holds the stored code, so the column read
+        # "NL_4" and "NL4_JUMPER" rather than "NL 4" and "NL4 Jumper".
+        # cable_type_label() also flags a value that is not a known choice
+        # instead of printing it as though it were a real type.
         rows.append([
-            str(cable.label or ''), cable.cable_type or '',
+            str(cable.label or ''),
+            pa_cable_math.cable_type_label(cable.cable),
             str(cable.length) if cable.length else '',
             str(cable.count) if cable.count else '0',
             cable.to_location or '', fan_str,

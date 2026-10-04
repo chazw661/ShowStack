@@ -145,6 +145,36 @@ def is_jumper(cable_type):
     return cable_type in JUMPER_TYPES or cable_type in jumper_type_values()
 
 
+#: Appended to a stored `cable` value that is not one of the declared
+#: choices, so it shows up on a report or a filter instead of reading as a
+#: real type.
+UNKNOWN_CABLE_SUFFIX = ' (unknown type)'
+
+
+def is_known_cable_type(value):
+    """True if ``value`` is one of PACableSchedule.CABLE_TYPE_CHOICES."""
+    from planner.models import PACableSchedule
+    return value in dict(PACableSchedule.CABLE_TYPE_CHOICES)
+
+
+def cable_type_label(value):
+    """Display label for a stored ``cable`` value, flagging unknown ones.
+
+    ``PACableSchedule.cable`` defaulted to '100_NL4' until migration 0197,
+    which is not one of the choices, so rows saved without an explicit type
+    carry a value nothing recognises. They are not rewritten -- every reader
+    goes through here instead, and an unrecognised value comes back as
+    itself plus a marker rather than as a blank cell nobody notices.
+    """
+    from planner.models import PACableSchedule
+    labels = dict(PACableSchedule.CABLE_TYPE_CHOICES)
+    if value in labels:
+        return labels[value]
+    if not value:
+        return '(no cable type)'
+    return '%s%s' % (value, UNKNOWN_CABLE_SUFFIX)
+
+
 def stock_lengths_for(cable_type=None):
     """The stock lengths carried for ``cable_type``, longest first."""
     return STOCK_LENGTHS_BY_TYPE.get(cable_type, DEFAULT_STOCK_LENGTHS)

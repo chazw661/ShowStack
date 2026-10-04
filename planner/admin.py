@@ -3163,6 +3163,43 @@ class PACouplerInline(admin.TabularInline):
     verbose_name_plural = 'PA Couplers'
 
 
+class CableTypeFilter(admin.SimpleListFilter):
+    """Cable filter that can also reach rows with an unrecognised value.
+
+    Django's default filter for a field with choices lists only the declared
+    choices. `PACableSchedule.cable` defaulted to '100_NL4' until migration
+    0197 -- not one of them -- so rows carrying that (or any other legacy
+    value) had no option that selected them: they sat in the list under
+    "All" with no way to filter to them and no sign they existed.
+
+    Declared choices are always offered, in their declared order. Any other
+    value actually present in this project is offered after them, flagged,
+    so it can be found and fixed. Nothing is hidden either way -- an
+    unselected filter still shows every row.
+    """
+
+    title = 'Cable'
+    parameter_name = 'cable'
+
+    def lookups(self, request, model_admin):
+        known = list(PACableSchedule.CABLE_TYPE_CHOICES)
+        known_values = {value for value, _ in known}
+
+        qs = model_admin.get_queryset(request)
+        present = set(qs.values_list('cable', flat=True).distinct())
+        unknown = sorted(v for v in present if v and v not in known_values)
+
+        return known + [
+            (value, pa_cable_math.cable_type_label(value)) for value in unknown
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(cable=value)
+
+
 class PACableAdmin(BaseEquipmentAdmin):
     """Admin for PA Cable Schedule"""
     form = PACableInlineForm
@@ -3197,7 +3234,7 @@ class PACableAdmin(BaseEquipmentAdmin):
     'cable_display', 'fan_outs_col', 'couplers_col', 'extensions_col',  # issue #73: broken out
     'notes', 'drawing_ref','color_display'
 ]
-    list_filter = ['cable']
+    list_filter = [CableTypeFilter]
     search_fields = ['destination', 'notes', 'drawing_ref']
     list_editable = ['count' ,'length']  
     
