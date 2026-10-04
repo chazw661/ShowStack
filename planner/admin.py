@@ -2988,7 +2988,7 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
 # Add these to your admin.py file
 
 from .models import PACableSchedule, PAZone, PAFanOut, PAFanOutExtension, PACoupler
-from .forms import PACableInlineForm, PAZoneForm
+from .forms import PACableChangelistForm, PACableInlineForm, PAZoneForm
 
 class PACableInline(admin.TabularInline):
     """Inline admin for PA cables - spreadsheet-like entry"""
@@ -3347,7 +3347,14 @@ class PACableAdmin(BaseEquipmentAdmin):
     array_speaker_reference.short_description = 'Array speakers & assigned cable'
 
     def cable_display(self, obj):
-        return obj.get_cable_display()
+        # The data-* is what pa_cable_jumpers.js reads to blank the Length
+        # input on a jumper row -- the server says what the row is, the JS
+        # paints it, so the grid and the form agree without a second copy of
+        # the jumper list in JavaScript.
+        return format_html(
+            '<span class="pa-cable-type" data-jumper="{}">{}</span>',
+            'true' if pa_cable_math.is_jumper(obj.cable) else 'false',
+            obj.get_cable_display())
     cable_display.short_description = 'Cable'
     cable_display.admin_order_field = 'cable'
 
@@ -3411,8 +3418,13 @@ class PACableAdmin(BaseEquipmentAdmin):
         # 25' -- 10' and 5' are not carried, and a shorter run takes a 25'.
         stock_keys = {100: 'hundreds', 50: 'fifties', 25: 'twenty_fives'}
 
-        def empty_entry():
+        def empty_entry(is_jumper=False):
             entry = {'total_runs': 0, 'total_length': 0,
+                     # A jumper is ordered by quantity, so it has no length
+                     # and no stock breakdown. The template reads this to
+                     # print "-" in those columns instead of a misleading 0.
+                     'is_jumper': is_jumper,
+                     'quantity_with_safety': 0,
                      # Issue #23 follow-up: couplers are an explicit PACoupler
                      # entity. The legacy hundreds-1 "between consecutive 100'
                      # runs" estimate would double up with the user-added
@@ -3430,6 +3442,11 @@ class PACableAdmin(BaseEquipmentAdmin):
                     entry[key] += qty
 
         def apply_safety(entry):
+            if entry['is_jumper']:
+                # Nothing to break down -- the margin goes on the quantity.
+                entry['quantity_with_safety'] = pa_cable_math.with_safety(
+                    entry['total_runs'])
+                return
             for key in stock_keys.values():
                 entry['%s_with_safety' % key] = pa_cable_math.with_safety(
                     entry[key])
@@ -3447,8 +3464,13 @@ class PACableAdmin(BaseEquipmentAdmin):
             name = display_names.get(cable.cable, cable.cable)
             if not name:
                 continue
-            entry = cable_summary.setdefault(name, empty_entry())
+            jumper = pa_cable_math.is_jumper(cable.cable)
+            entry = cable_summary.setdefault(name, empty_entry(jumper))
             entry['total_runs'] += cable.count or 0
+            if jumper:
+                # Whatever length is stored against a jumper is ignored, not
+                # rewritten -- old rows keep theirs, they just stop counting.
+                continue
             entry['total_length'] += (cable.length or 0) * (cable.count or 0)
             add_cables(entry, pa_cable_math.run_breakdown(
                 cable.length, cable.count, cable.cable))
@@ -3550,7 +3572,10 @@ class PACableAdmin(BaseEquipmentAdmin):
         response.context_data['cable_summary'] = cable_summary
         response.context_data['fan_out_summary'] = fan_out_summary
         response.context_data['coupler_summary'] = coupler_summary
-        response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
+        # Jumpers have no length, so they are not part of a length total.
+        response.context_data['grand_total'] = sum(
+            s['total_length'] for s in cable_summary.values()
+            if not s['is_jumper'])
         response.context_data['cable_rule_text'] = pa_cable_math.RULE_TEXT
 
         return response
@@ -3759,6 +3784,15 @@ class PACableAdmin(BaseEquipmentAdmin):
             return True
         return super().has_delete_permission(request, obj)
     
+    def get_changelist_form(self, request, **kwargs):
+        """The list_editable grid uses the jumper-aware form.
+
+        Without this the grid's Length input stays model-required, and a
+        jumper row -- whose input the JS blanks -- could not be saved.
+        """
+        kwargs.setdefault('form', PACableChangelistForm)
+        return super().get_changelist_form(request, **kwargs)
+
     class Media:
         css = {
             'all': ('planner/css/pa_cable_admin.css',)
@@ -3771,6 +3805,7 @@ class PACableAdmin(BaseEquipmentAdmin):
             'admin/js/pa_cable_inlines.js',
             'admin/js/pa_cable_entry_mode.js',
             'admin/js/pa_cable_array_speakers.js',
+            'admin/js/pa_cable_jumpers.js',
         )
 
 

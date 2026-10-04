@@ -1,9 +1,12 @@
 
 # planner/forms.py
 
+import json
+
 from django import forms
 from django.forms import modelformset_factory
 from django.contrib.contenttypes.models import ContentType
+from planner.utils import pa_cable_math
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
 from .models import  ConsoleStereoOutput
@@ -983,9 +986,78 @@ class PACableForm(forms.ModelForm):
         self.fields['drawing_ref'].label = 'Drawing Ref'
 
 
-class PACableInlineForm(forms.ModelForm):
+class JumperLengthMixin:
+    """Length is ignored for jumper types, and required for everything else.
+
+    A jumper ("NL4 Jumper") is a short box-to-box link ordered by quantity,
+    so its length input is hidden by pa_cable_jumpers.js and nothing is
+    posted for it. That means the field cannot stay form-required, and it
+    also means a *stored* length on an old jumper row must survive untouched
+    -- the rule is that jumper lengths are ignored, not cleared.
+
+    Shared by the add/change form and the changelist grid so the two cannot
+    disagree about when a length is needed.
+    """
+
+    #: Attribute the JS reads to learn which options are jumpers, so the
+    #: list of jumper types stays in pa_cable_math and nowhere else.
+    JUMPER_DATA_ATTR = 'data-jumper-values'
+
+    def _init_jumper_length(self):
+        if 'length' in self.fields:
+            # Not removed from the form: the input has to stay in the DOM so
+            # switching the type back to a cable reveals it again with no
+            # reload. clean() below re-imposes it for non-jumpers.
+            self.fields['length'].required = False
+        if 'cable' in self.fields:
+            self.fields['cable'].widget.attrs[self.JUMPER_DATA_ATTR] = (
+                json.dumps(sorted(pa_cable_math.jumper_type_values())))
+
+    def _cable_type(self, cleaned):
+        """The row's cable type, whether or not it is editable on this form.
+
+        The changelist grid only edits count and length, so there the type
+        comes from the stored instance.
+        """
+        if 'cable' in self.fields:
+            return cleaned.get('cable') or getattr(self.instance, 'cable', None)
+        return getattr(self.instance, 'cable', None)
+
+    def _clean_jumper_length(self, cleaned):
+        if pa_cable_math.is_jumper(self._cable_type(cleaned)):
+            # Keep whatever is stored. `self.instance` still holds the DB
+            # value here -- ModelForm._post_clean runs after clean().
+            cleaned['length'] = (
+                self.instance.length if self.instance.pk else 0)
+            # A blank length on a jumper is not an error to report.
+            self.errors.pop('length', None)
+        elif cleaned.get('length') in (None, ''):
+            self.add_error(
+                'length',
+                'Enter a length, or choose a Jumper type if this is a short '
+                'box-to-box link.',
+            )
+        return cleaned
+
+
+class PACableChangelistForm(JumperLengthMixin, forms.ModelForm):
+    """The list_editable grid row. Count and length only; see the mixin."""
+
+    class Meta:
+        model = PACableSchedule
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._init_jumper_length()
+
+    def clean(self):
+        return self._clean_jumper_length(super().clean())
+
+
+class PACableInlineForm(JumperLengthMixin, forms.ModelForm):
     """Inline form for admin interface"""
-    
+
     class Meta:
         model = PACableSchedule
         fields = '__all__'
@@ -996,6 +1068,7 @@ class PACableInlineForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._init_jumper_length()
 
         # Customize field widgets for inline display
         self.fields['destination'].widget.attrs['style'] = 'width: 120px;'
@@ -1011,7 +1084,7 @@ class PACableInlineForm(forms.ModelForm):
             self.fields['destination'].required = False
 
     def clean(self):
-        cleaned = super().clean()
+        cleaned = self._clean_jumper_length(super().clean())
         mode = cleaned.get('entry_mode')
         if mode == 'linked':
             # A linked cable must point at a Speaker Array / single Speaker.

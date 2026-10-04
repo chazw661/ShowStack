@@ -48,6 +48,15 @@ Run length   Stock cables          Why
 300'         3 x 100'              exact
 ===========  ====================  ==================================
 
+Jumpers
+-------
+A jumper ("NL4 Jumper", see ``JUMPER_TYPES``) is a short box-to-box link.
+You order N of them; you do not cut them to length. So a jumper is counted
+by quantity only: it never goes through the breakdown above, its stored
+length is ignored wherever one exists, and it contributes nothing to any
+total-length figure. Any run that needs a length belongs to a cable type,
+not to Jumper.
+
 Per cable type
 --------------
 Every type carries the same three lengths today. ``STOCK_LENGTHS_BY_TYPE``
@@ -78,6 +87,18 @@ STOCK_LENGTHS_BY_TYPE = {}
 #: Temporary-installation ordering margin.
 SAFETY_FACTOR = 1.2
 
+#: Cable types that are counted by quantity only, by display label.
+#:
+#: A jumper is a short box-to-box link: you order N of them, you do not cut
+#: them to length. So a jumper never goes through the breakdown, its length
+#: is ignored wherever it is stored, and it contributes nothing to any
+#: total-length figure. Anything that needs a length is a cable type, not a
+#: jumper.
+#:
+#: Add a type here (e.g. "NL8 Jumper") and the stored CABLE_TYPE_CHOICES
+#: value is picked up with it -- see ``jumper_type_values()``.
+JUMPER_TYPES = {"NL4 Jumper"}
+
 #: Said in plain words under the summary table, so the screen explains itself.
 RULE_TEXT = (
     "Stock is 100', 50' and 25'. Each run is built from physical cables: "
@@ -86,8 +107,42 @@ RULE_TEXT = (
     "less takes a 25', 50' or less takes a 50', anything longer takes a "
     "100'). A row's Count multiplies the whole breakdown — 4 × 50' "
     "is four 50' cables, not two 100' ones. Order qty adds a 20% margin, "
-    "rounded up."
+    "rounded up. "
+    "Jumpers are counted by quantity only. Use a cable type, not Jumper, "
+    "for any run that needs a length."
 )
+
+#: Memo for jumper_type_values(), keyed by the JUMPER_TYPES it was built
+#: from so a test that patches the set is not served a stale answer.
+_jumper_values_cache = {}
+
+
+def jumper_type_values():
+    """The stored ``cable`` values whose display label is in JUMPER_TYPES.
+
+    The summary groups rows by display label while the breakdown is handed
+    the row's stored value, so both spellings have to resolve. Deriving one
+    from the other keeps JUMPER_TYPES the single place a jumper is named.
+
+    The model import is deferred: this module is imported from admin.py and
+    the PDF exporter, and a module-level ``from planner.models import ...``
+    would make that a cycle.
+    """
+    key = frozenset(JUMPER_TYPES)
+    if key not in _jumper_values_cache:
+        from planner.models import PACableSchedule
+        _jumper_values_cache[key] = frozenset(
+            value for value, label in PACableSchedule.CABLE_TYPE_CHOICES
+            if label in JUMPER_TYPES
+        )
+    return _jumper_values_cache[key]
+
+
+def is_jumper(cable_type):
+    """True for a jumper, given either its stored value or its display label."""
+    if not cable_type:
+        return False
+    return cable_type in JUMPER_TYPES or cable_type in jumper_type_values()
 
 
 def stock_lengths_for(cable_type=None):
@@ -132,11 +187,17 @@ def round_up_to_stock(leftover, cable_type=None):
 def stock_breakdown(length, cable_type=None):
     """Stock cables for ONE run of ``length`` feet, as ``{stock: qty}``.
 
+    A jumper returns nothing at all: it is ordered by quantity, so whatever
+    length is stored against it -- blank, 3', 100' -- is ignored rather than
+    cut from stock.
+
     A zero, negative or missing length needs no cable and returns an empty
     Counter rather than raising -- a half-entered row should not take the
     whole summary down.
     """
     cables = Counter()
+    if is_jumper(cable_type):
+        return cables
     if not length or length <= 0:
         return cables
 
@@ -153,7 +214,11 @@ def stock_breakdown(length, cable_type=None):
 
 
 def run_breakdown(length, count, cable_type=None):
-    """``stock_breakdown(length)`` multiplied by the row's ``count``."""
+    """``stock_breakdown(length)`` multiplied by the row's ``count``.
+
+    Empty for a jumper. The count is not lost -- the caller tallies a
+    jumper's quantity directly (see ``PACableAdmin.changelist_view``).
+    """
     cables = Counter()
     if not count or count <= 0:
         return cables

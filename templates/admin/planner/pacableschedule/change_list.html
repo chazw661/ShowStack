@@ -179,6 +179,11 @@
 }
 .cable-summary-rule strong { color: var(--ss-field-text); }
 
+/* "-" where a figure does not apply (a jumper has no length and no stock
+   breakdown). Muted, so it reads as "not applicable" rather than as a value
+   sitting next to the real numbers. */
+.cable-summary-na { color: var(--text-muted); }
+
 .cable-summary-table-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -378,13 +383,26 @@
             <tr>
                 <td>{{ cable_type }}</td>
                 <td>{{ data.total_runs }}</td>
-                <td>{{ data.total_length }}</td>
-                <td class="block-start">{{ data.hundreds }}</td>
-                <td>{{ data.fifties }}</td>
-                <td>{{ data.twenty_fives }}</td>
-                <td class="safety-cells block-start">{{ data.hundreds_with_safety }}</td>
-                <td class="safety-cells">{{ data.fifties_with_safety }}</td>
-                <td class="safety-cells">{{ data.twenty_fives_with_safety }}</td>
+                {% if data.is_jumper %}
+                    {% comment %}
+                    A jumper is ordered by quantity: Total Runs above is the
+                    qty, and the one order qty spans the breakdown block
+                    rather than pretending to be a count of 100' cables.
+                    {% endcomment %}
+                    <td class="cable-summary-na">&mdash;</td>
+                    <td class="cable-summary-na block-start">&mdash;</td>
+                    <td class="cable-summary-na">&mdash;</td>
+                    <td class="cable-summary-na">&mdash;</td>
+                    <td class="safety-cells block-start" colspan="3">{{ data.quantity_with_safety }}</td>
+                {% else %}
+                    <td>{{ data.total_length }}</td>
+                    <td class="block-start">{{ data.hundreds }}</td>
+                    <td>{{ data.fifties }}</td>
+                    <td>{{ data.twenty_fives }}</td>
+                    <td class="safety-cells block-start">{{ data.hundreds_with_safety }}</td>
+                    <td class="safety-cells">{{ data.fifties_with_safety }}</td>
+                    <td class="safety-cells">{{ data.twenty_fives_with_safety }}</td>
+                {% endif %}
                 <td class="block-start">{{ data.couplers }}</td>
             </tr>
             {% endfor %}
@@ -447,6 +465,13 @@
             </thead>
             <tbody>
                 {% for cable_type, data in cable_summary.items %}
+                    {% if data.is_jumper %}
+                    <tr>
+                        <td class="item-type">{{ cable_type }}</td>
+                        <td class="cable-summary-na">&mdash;</td>
+                        <td class="order-qty">{{ data.quantity_with_safety }}</td>
+                    </tr>
+                    {% endif %}
                     {% if data.hundreds_with_safety > 0 %}
                     <tr>
                         <td class="item-type">{{ cable_type }}</td>

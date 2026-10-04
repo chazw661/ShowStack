@@ -225,3 +225,11 @@ tr:has(td:contains("GRAND TOTAL")) {
     margin-top: 6px;
     font-size: 12px;
 }
+
+/* Jumpers have no length: pa_cable_jumpers.js hides the input and drops this
+   in its place. Muted, so it reads as "not applicable" rather than as a
+   value. */
+.pa-length-na {
+    color: var(--text-muted);
+    font-size: 13px;
+}
