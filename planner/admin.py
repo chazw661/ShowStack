@@ -3406,10 +3406,10 @@ class PACableAdmin(BaseEquipmentAdmin):
         # rule and carries the worked examples.
         cable_summary = {}
 
-        # Keyed by stock length, so adding a spool size is one line here
-        # rather than five parallel counters kept in step by hand.
-        stock_keys = {100: 'hundreds', 50: 'fifties', 25: 'twenty_fives',
-                      10: 'tens', 5: 'fives'}
+        # Keyed by stock length, so a spool size is one line here rather than
+        # a set of parallel counters kept in step by hand. Stock is 100'/50'/
+        # 25' -- 10' and 5' are not carried, and a shorter run takes a 25'.
+        stock_keys = {100: 'hundreds', 50: 'fifties', 25: 'twenty_fives'}
 
         def empty_entry():
             entry = {'total_runs': 0, 'total_length': 0,
@@ -3451,7 +3451,7 @@ class PACableAdmin(BaseEquipmentAdmin):
             entry['total_runs'] += cable.count or 0
             entry['total_length'] += (cable.length or 0) * (cable.count or 0)
             add_cables(entry, pa_cable_math.run_breakdown(
-                cable.length, cable.count))
+                cable.length, cable.count, cable.cable))
 
         # A 0' row contributes a run but no cable. Drop a type only when it
         # has neither, which is what the old `total_length > 0` guard meant.
@@ -3482,10 +3482,9 @@ class PACableAdmin(BaseEquipmentAdmin):
                 # An extension is a cable like any other, so it goes through
                 # the same rule. It used to have one of its own that rounded
                 # the wrong way -- `ext_length >= 100` put a 150' extension
-                # down as a single 100' cable (short by a 50'), and a 6' one
-                # as a single 5' (short by the whole thing). Both 150' and 6'
-                # are offered in EXTENSION_LENGTH_CHOICES, so neither was
-                # hypothetical.
+                # down as a single 100' cable, short by a 50'. Anything
+                # stored below 25' (the old 5'/6'/10' options) now rounds up
+                # to a 25', the shortest length actually carried.
                 ext_cable_map = {'NL4': 'NL 4', 'NL8': 'NL 8'}
                 for ext in fan_out.extensions.all():
                     ext_length = ext.extension_length

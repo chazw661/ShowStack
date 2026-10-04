@@ -14,6 +14,7 @@ Run with::
         --settings=audiopatch.test_settings
 """
 from collections import Counter
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -25,11 +26,15 @@ from planner.models import (
     PAFanOutExtension,
     Project,
 )
+from planner.utils import pa_cable_math
 from planner.utils.pa_cable_math import (
+    DEFAULT_STOCK_LENGTHS,
+    all_stock_lengths,
     explain_run,
     round_up_to_stock,
     run_breakdown,
     stock_breakdown,
+    stock_lengths_for,
     with_safety,
 )
 from planner.utils.pdf_exports.pa_cable_pdf import _quick_order_rows
@@ -51,8 +56,13 @@ NUTANIX_CACOM = [
 class StockBreakdownTests(TestCase):
     """The rule, stated as cases."""
 
+    def test_stock_is_only_100_50_and_25(self):
+        self.assertEqual(DEFAULT_STOCK_LENGTHS, (100, 50, 25))
+        self.assertEqual(all_stock_lengths(), (100, 50, 25))
+        self.assertEqual(stock_lengths_for('NL_4'), (100, 50, 25))
+
     def test_exact_stock_lengths_take_one_cable(self):
-        for length in (5, 10, 25, 50, 100):
+        for length in (25, 50, 100):
             with self.subTest(length=length):
                 self.assertEqual(stock_breakdown(length), Counter({length: 1}))
 
@@ -63,13 +73,16 @@ class StockBreakdownTests(TestCase):
         self.assertEqual(stock_breakdown(26), Counter({50: 1}))
         self.assertEqual(stock_breakdown(51), Counter({100: 1}))
 
-    def test_ten_and_five_only_on_an_exact_fit(self):
-        # A 10' cable does not reach 12', and a 5' does not reach 7'.
-        self.assertEqual(stock_breakdown(10), Counter({10: 1}))
-        self.assertEqual(stock_breakdown(5), Counter({5: 1}))
-        self.assertEqual(stock_breakdown(7), Counter({25: 1}))
-        self.assertEqual(stock_breakdown(12), Counter({25: 1}))
-        self.assertEqual(stock_breakdown(3), Counter({25: 1}))
+    def test_short_runs_take_a_25(self):
+        """Nothing under 25' is carried, so a short run coils the slack."""
+        for length in (1, 3, 5, 6, 7, 10, 12, 24, 25):
+            with self.subTest(length=length):
+                self.assertEqual(stock_breakdown(length), Counter({25: 1}))
+
+    def test_leftover_under_25_takes_a_25(self):
+        self.assertEqual(stock_breakdown(110), Counter({100: 1, 25: 1}))
+        self.assertEqual(stock_breakdown(101), Counter({100: 1, 25: 1}))
+        self.assertEqual(stock_breakdown(210), Counter({100: 2, 25: 1}))
 
     def test_long_runs_take_whole_hundreds_then_one_leftover(self):
         self.assertEqual(stock_breakdown(150), Counter({100: 1, 50: 1}))
@@ -78,6 +91,18 @@ class StockBreakdownTests(TestCase):
         self.assertEqual(stock_breakdown(300), Counter({100: 3}))
         self.assertEqual(stock_breakdown(325), Counter({100: 3, 25: 1}))
         self.assertEqual(stock_breakdown(275), Counter({100: 3}))
+
+    def test_a_per_type_stock_list_changes_the_breakdown(self):
+        """STOCK_LENGTHS_BY_TYPE is the seam for a type that differs."""
+        with patch.dict(pa_cable_math.STOCK_LENGTHS_BY_TYPE,
+                        {'SC32': (50, 25)}, clear=False):
+            # Longest spool for SC32 is 50', so 110' is two 50's and a 25'.
+            self.assertEqual(stock_breakdown(110, 'SC32'),
+                             Counter({50: 2, 25: 1}))
+            # Everything else is untouched.
+            self.assertEqual(stock_breakdown(110, 'NL_4'),
+                             Counter({100: 1, 25: 1}))
+            self.assertEqual(all_stock_lengths(), (100, 50, 25))
 
     def test_count_multiplies_physical_cables(self):
         # The whole point: four 50' runs are four 50' cables. They go to four
@@ -166,9 +191,11 @@ class NutanixFixtureTests(_SummaryFixtureMixin, TestCase):
         self.assertEqual(data['total_runs'], 31)
         self.assertEqual(data['total_length'], 2490)
         self.assertEqual(
-            (data['hundreds'], data['fifties'], data['twenty_fives'],
-             data['tens'], data['fives']),
-            (18, 17, 2, 0, 0))
+            (data['hundreds'], data['fifties'], data['twenty_fives']),
+            (18, 17, 2))
+        # The 10' and 5' buckets are gone with the spools.
+        self.assertNotIn('tens', data)
+        self.assertNotIn('fives', data)
 
     def test_order_qty_carries_the_20_percent_margin(self):
         data = self.summary()['NL 4']
@@ -225,6 +252,9 @@ class ExtensionRoundingTests(_SummaryFixtureMixin, TestCase):
 
     They used to have a rule of their own that rounded DOWN: a 150'
     extension counted as a single 100' cable, and a 6' one as a single 5'.
+
+    Sub-25' lengths are no longer offered, but rows stored before the choices
+    were trimmed still carry them, so the math still has to answer for them.
     """
 
     def _add_extension(self, length, quantity=1, cable='NL4'):
@@ -245,13 +275,19 @@ class ExtensionRoundingTests(_SummaryFixtureMixin, TestCase):
         self.assertEqual(data['hundreds'], 1)
         self.assertEqual(data['fifties'], 1)
 
-    def test_six_foot_extension_rounds_up_not_down(self):
-        # 6' fits neither a 5' nor a 10' exactly, so it takes a 25'.
+    def test_six_foot_extension_rounds_up_to_a_25(self):
+        """A legacy 6' row: nothing under 25' is carried, so it takes a 25'."""
         self._add_extension(6)
         data = self.summary()['NL 4']
         self.assertEqual(data['twenty_fives'], 1)
-        self.assertEqual(data['fives'], 0)
-        self.assertEqual(data['tens'], 0)
+        self.assertEqual(data['hundreds'], 0)
+        self.assertEqual(data['fifties'], 0)
+
+    def test_legacy_sub_25_extension_lengths_all_take_a_25(self):
+        """5', 6' and 10' were dropped from the dropdown, not from the data."""
+        for length in (5, 6, 10):
+            with self.subTest(length=length):
+                self.assertEqual(stock_breakdown(length), Counter({25: 1}))
 
     def test_extension_quantity_multiplies(self):
         self._add_extension(150, quantity=3)

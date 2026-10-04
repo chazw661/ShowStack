@@ -82,13 +82,15 @@ def _quick_order_rows(queryset):
         if not cable_name:
             continue
         totals.setdefault(cable_name, Counter()).update(
-            pa_cable_math.run_breakdown(cable.length, cable.count))
+            pa_cable_math.run_breakdown(
+                cable.length, cable.count, cable.cable))
 
     # Extension cables (issue #23: extensions live in their own table with a
     # per-extension quantity). They are cables like any other, so they go
     # through the same rule and land in the same stock buckets -- a 150'
     # extension is a 100' plus a 50', not a non-stock "150'" line item that
-    # nobody can order off a shelf.
+    # nobody can order off a shelf. Anything stored below 25' (the old
+    # 5'/6'/10' options) rounds up to a 25'.
     ext_cable_map = {'NL4': 'NL 4', 'NL8': 'NL 8'}
     for cable in queryset.prefetch_related('fan_outs__extensions'):
         for fan_out in cable.fan_outs.all():
@@ -112,7 +114,7 @@ def _quick_order_rows(queryset):
     quick_order_data = []
     for cable_name in ordered_names:
         counts = totals[cable_name]
-        for stock in pa_cable_math.STOCK_LENGTHS:
+        for stock in pa_cable_math.all_stock_lengths():
             qty = pa_cable_math.with_safety(counts.get(stock, 0))
             if qty > 0:
                 quick_order_data.append([cable_name, f"{stock}'", str(qty)])
