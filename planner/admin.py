@@ -31,6 +31,7 @@ import json
 from datetime import datetime, timedelta  
 
 from planner.models import Project, ProjectMember
+from planner.utils import pa_cable_math
 from django.db import models
 
 # Model imports (add the mic tracking models to your existing model imports)
@@ -3397,84 +3398,69 @@ class PACableAdmin(BaseEquipmentAdmin):
         except (AttributeError, KeyError):
             return response
         
-        # Calculate cable summaries
-        from django.db.models import Sum
+        # Calculate cable summaries.
+        #
+        # The breakdown rule lives in planner/utils/pa_cable_math.py and
+        # nowhere else -- this view and the PDF Quick Order List both call it,
+        # so the screen and the export cannot drift. That module states the
+        # rule and carries the worked examples.
         cable_summary = {}
-        
-        for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
-            cables = qs.filter(cable=cable_type[0])
-            if cables.exists():
-                # Initialize counters FIRST - at this indentation level
-                hundreds = 0
-                fifties = 0
-                twenty_fives = 0
-                tens = 0
-                fives = 0
-                total_length = 0  # ← Must be here, BEFORE the loop
-                
-                # Process each cable individually
-                # Process each cable individually
-                for cable in cables:
-                    # Get per-run length and count
-                    run_length = cable.length  # Single run length
-                    run_count = cable.count    # Number of runs
-                    
-                    total_length += run_length * run_count
-                    
-                    # Calculate standard lengths needed for ONE run
-                    remaining = run_length
-                    run_hundreds = 0
-                    run_fifties = 0
-                    run_twenty_fives = 0
-                    run_tens = 0
-                    run_fives = 0
-                    
-                    # Count 100' cables for this single run
-                    while remaining > 50:
-                        run_hundreds += 1
-                        remaining -= 100
-                    
-                    # Count remaining for this single run
-                    if remaining > 25:
-                        run_fifties += 1
-                    elif remaining > 10:
-                        run_twenty_fives += 1
-                    elif remaining > 5:
-                        run_tens += 1
-                    elif remaining > 0:
-                        run_fives += 1
-                    
-                    # Multiply by count to get total cables needed
-                    hundreds += run_hundreds * run_count
-                    fifties += run_fifties * run_count
-                    twenty_fives += run_twenty_fives * run_count
-                    tens += run_tens * run_count
-                    fives += run_fives * run_count
-                
-                # AFTER the loop, check and add to summary
-                if total_length > 0:
-                    cable_summary[cable_type[1]] = {
-                        'total_runs': cables.aggregate(Sum('count'))['count__sum'] or 0,
-                        'total_length': total_length,
-                        'hundreds': hundreds,
-                        'hundreds_with_safety': math.ceil(hundreds * 1.2),
-                        'fifties': fifties,
-                        'fifties_with_safety': math.ceil(fifties * 1.2),
-                        'twenty_fives': twenty_fives,
-                        'twenty_fives_with_safety': math.ceil(twenty_fives * 1.2),
-                        'tens': tens,
-                        'tens_with_safety': math.ceil(tens * 1.2),
-                        'fives': fives,
-                        'fives_with_safety': math.ceil(fives * 1.2),
-                        # Issue #23 follow-up: couplers are now an explicit
-                        # PACoupler entity. The legacy hundreds-1 "between
-                        # consecutive 100' runs" estimate would double up
-                        # with the user-added rows, so this starts at 0 and
-                        # the loop below increments it from PACoupler.
-                        'couplers': 0,
-                    }
-        
-       # Calculate fan out totals with 20% overage and merge extensions into cable counts
+
+        # Keyed by stock length, so adding a spool size is one line here
+        # rather than five parallel counters kept in step by hand.
+        stock_keys = {100: 'hundreds', 50: 'fifties', 25: 'twenty_fives',
+                      10: 'tens', 5: 'fives'}
+
+        def empty_entry():
+            entry = {'total_runs': 0, 'total_length': 0,
+                     # Issue #23 follow-up: couplers are an explicit PACoupler
+                     # entity. The legacy hundreds-1 "between consecutive 100'
+                     # runs" estimate would double up with the user-added
+                     # rows, so this starts at 0 and the coupler loop fills it.
+                     'couplers': 0}
+            for key in stock_keys.values():
+                entry[key] = 0
+                entry['%s_with_safety' % key] = 0
+            return entry
+
+        def add_cables(entry, cables):
+            for stock, qty in cables.items():
+                key = stock_keys.get(stock)
+                if key:
+                    entry[key] += qty
+
+        def apply_safety(entry):
+            for key in stock_keys.values():
+                entry['%s_with_safety' % key] = pa_cable_math.with_safety(
+                    entry[key])
+
+        # Group by each row's own cable value instead of iterating
+        # CABLE_TYPE_CHOICES and filtering. PACableSchedule.cable defaults to
+        # '100_NL4', which is not one of those choices, so the old loop
+        # dropped any such row from the summary entirely: it counted toward
+        # nothing on screen while a hand count of the drawing still included
+        # it. An unrecognised value now appears under its raw name rather
+        # than silently disappearing.
+        display_names = dict(PACableSchedule.CABLE_TYPE_CHOICES)
+
+        for cable in qs:
+            name = display_names.get(cable.cable, cable.cable)
+            if not name:
+                continue
+            entry = cable_summary.setdefault(name, empty_entry())
+            entry['total_runs'] += cable.count or 0
+            entry['total_length'] += (cable.length or 0) * (cable.count or 0)
+            add_cables(entry, pa_cable_math.run_breakdown(
+                cable.length, cable.count))
+
+        # A 0' row contributes a run but no cable. Drop a type only when it
+        # has neither, which is what the old `total_length > 0` guard meant.
+        cable_summary = {
+            name: entry for name, entry in cable_summary.items()
+            if entry['total_runs'] or entry['total_length']
+        }
+
+        # Calculate fan out totals with 20% overage and merge extensions into cable counts
         fan_out_summary = {}
         
         for cable in qs.prefetch_related('fan_outs__extensions'):
@@ -3492,41 +3478,24 @@ class PACableAdmin(BaseEquipmentAdmin):
                 # Merge each extension into cable_summary (issue #23: extensions
                 # now have their own quantity field — fan-out qty is no longer
                 # the multiplier).
+                #
+                # An extension is a cable like any other, so it goes through
+                # the same rule. It used to have one of its own that rounded
+                # the wrong way -- `ext_length >= 100` put a 150' extension
+                # down as a single 100' cable (short by a 50'), and a 6' one
+                # as a single 5' (short by the whole thing). Both 150' and 6'
+                # are offered in EXTENSION_LENGTH_CHOICES, so neither was
+                # hypothetical.
                 ext_cable_map = {'NL4': 'NL 4', 'NL8': 'NL 8'}
                 for ext in fan_out.extensions.all():
                     ext_length = ext.extension_length
                     ext_qty = ext.quantity
                     cable_name = ext_cable_map.get(ext.extension_cable, ext.extension_cable)
-                    if cable_name not in cable_summary:
-                        cable_summary[cable_name] = {
-                            'total_runs': 0, 'total_length': 0,
-                            'hundreds': 0, 'hundreds_with_safety': 0,
-                            'fifties': 0, 'fifties_with_safety': 0,
-                            'twenty_fives': 0, 'twenty_fives_with_safety': 0,
-                            'tens': 0, 'tens_with_safety': 0,
-                            'fives': 0, 'fives_with_safety': 0,
-                            'couplers': 0,
-                        }
-                    entry = cable_summary[cable_name]
-                    if ext_length >= 100:
-                        entry['hundreds'] += ext_qty
-                    elif ext_length >= 50:
-                        entry['fifties'] += ext_qty
-                    elif ext_length >= 25:
-                        entry['twenty_fives'] += ext_qty
-                    elif ext_length >= 10:
-                        entry['tens'] += ext_qty
-                    elif ext_length > 0:
-                        entry['fives'] += ext_qty
+                    entry = cable_summary.setdefault(cable_name, empty_entry())
+                    add_cables(entry, pa_cable_math.run_breakdown(
+                        ext_length, ext_qty))
                     entry['total_runs'] += ext_qty
-                    entry['total_length'] += ext_length * ext_qty
-                    
-                    # Recalculate safety margins
-                    entry['hundreds_with_safety'] = math.ceil(entry['hundreds'] * 1.2)
-                    entry['fifties_with_safety'] = math.ceil(entry['fifties'] * 1.2)
-                    entry['twenty_fives_with_safety'] = math.ceil(entry['twenty_fives'] * 1.2)
-                    entry['tens_with_safety'] = math.ceil(entry['tens'] * 1.2)
-                    entry['fives_with_safety'] = math.ceil(entry['fives'] * 1.2)
+                    entry['total_length'] += (ext_length or 0) * ext_qty
 
         # Issue #23 follow-up: add explicit PACoupler counts into the
         # 'COUPLERS' column of the corresponding cable-type row. These are
@@ -3537,29 +3506,36 @@ class PACableAdmin(BaseEquipmentAdmin):
             'NL8_COUPLER': 'NL 8',
             'CACOM_COUPLER': 'CA-COM',
         }
-        empty_summary = lambda: {
-            'total_runs': 0, 'total_length': 0,
-            'hundreds': 0, 'hundreds_with_safety': 0,
-            'fifties': 0, 'fifties_with_safety': 0,
-            'twenty_fives': 0, 'twenty_fives_with_safety': 0,
-            'tens': 0, 'tens_with_safety': 0,
-            'fives': 0, 'fives_with_safety': 0,
-            'couplers': 0,
-        }
         coupler_summary = {}  # for the Quick Order List row group
         for cable in qs.prefetch_related('couplers'):
             for c in cable.couplers.all():
                 cable_name = coupler_cable_map.get(c.coupler_type)
                 if not cable_name:
                     continue
-                if cable_name not in cable_summary:
-                    cable_summary[cable_name] = empty_summary()
-                cable_summary[cable_name]['couplers'] += c.quantity
+                entry = cable_summary.setdefault(cable_name, empty_entry())
+                entry['couplers'] += c.quantity
 
                 label = c.get_coupler_type_display()
                 if label not in coupler_summary:
                     coupler_summary[label] = {'total_quantity': 0, 'with_overage': 0}
                 coupler_summary[label]['total_quantity'] += c.quantity
+
+        # The 20% ordering margin goes on ONCE, here, now that runs and
+        # extensions have both been counted. It used to be reapplied after
+        # every extension, which meant un-ceiling a subtotal to add to it --
+        # and ceil() does not survive that round trip.
+        for entry in cable_summary.values():
+            apply_safety(entry)
+
+        # Keep the table in CABLE_TYPE_CHOICES order, with any unrecognised
+        # cable value after the known ones rather than wherever the rows
+        # happened to fall.
+        choice_order = [label for _, label in PACableSchedule.CABLE_TYPE_CHOICES]
+        cable_summary = dict(sorted(
+            cable_summary.items(),
+            key=lambda kv: (choice_order.index(kv[0])
+                            if kv[0] in choice_order else len(choice_order),
+                            kv[0])))
 
         # Calculate 20% overage for each fan out type
         for fan_out_type in fan_out_summary:
@@ -3576,6 +3552,7 @@ class PACableAdmin(BaseEquipmentAdmin):
         response.context_data['fan_out_summary'] = fan_out_summary
         response.context_data['coupler_summary'] = coupler_summary
         response.context_data['grand_total'] = sum(s['total_length'] for s in cable_summary.values())
+        response.context_data['cable_rule_text'] = pa_cable_math.RULE_TEXT
 
         return response
     

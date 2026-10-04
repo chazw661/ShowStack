@@ -168,6 +168,17 @@
    labels wrapped into each other and could not be told apart. The table keeps
    a floor width and scrolls sideways inside its own box instead; the page
    itself still never scrolls horizontally. */
+/* The "How this was calculated" note. Muted and small: it is reference the
+   eye should be able to skip once it has been read, not a second heading. */
+.cable-summary-rule {
+    margin: 10px 2px 0;
+    max-width: 90ch;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+.cable-summary-rule strong { color: var(--ss-field-text); }
+
 .cable-summary-table-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -384,6 +395,17 @@
         </tbody>
     </table>
     </div>
+
+    {% comment %}
+    The rule in plain words, from planner/utils/pa_cable_math.RULE_TEXT --
+    the same module that does the arithmetic, so the explanation cannot
+    describe a rule the code no longer follows.
+    {% endcomment %}
+    {% if cable_summary and cable_rule_text %}
+    <p class="cable-summary-rule">
+        <strong>How this was calculated:</strong> {{ cable_rule_text }}
+    </p>
+    {% endif %}
 
     <!-- Fan Out Summary Section -->
     {% if fan_out_summary %}

@@ -59,87 +59,63 @@ def _cable_rows(queryset, S):
 
 def _quick_order_rows(queryset):
     """Roll up all cable, extension, fan-out and coupler quantities into the
-    Quick Order List (same logic as the original export, incl. 20% safety)."""
+    Quick Order List, including the 20% temporary-installation margin.
+
+    The breakdown rule is planner/utils/pa_cable_math.py -- the same module
+    the on-screen "Cables needed" summary calls, so the PDF and the screen
+    are one calculation rather than two that have to be kept in step.
+    """
+    from collections import Counter
+
     from planner.models import PACableSchedule
+    from planner.utils import pa_cable_math
 
-    quick_order_data = []
+    # cable display name -> Counter of {stock length: raw qty}
+    totals = {}
+    display_names = dict(PACableSchedule.CABLE_TYPE_CHOICES)
 
-    for cable_type in PACableSchedule.CABLE_TYPE_CHOICES:
-        cables = queryset.filter(cable=cable_type[0])
-        if cables.exists():
-            hundreds = 0
-            fifties = 0
-            twenty_fives = 0
-            tens = 0
-            fives = 0
+    # Group by each row's own cable value. Iterating CABLE_TYPE_CHOICES and
+    # filtering silently dropped any row whose value is not a listed choice --
+    # and `cable` defaults to '100_NL4', which is not one.
+    for cable in queryset:
+        cable_name = display_names.get(cable.cable, cable.cable)
+        if not cable_name:
+            continue
+        totals.setdefault(cable_name, Counter()).update(
+            pa_cable_math.run_breakdown(cable.length, cable.count))
 
-            for cable in cables:
-                cable_length = cable.length or 0
-                cable_count = cable.count or 0
-
-                for _ in range(cable_count):
-                    remaining = cable_length
-                    while remaining > 0:
-                        if remaining > 50:
-                            hundreds += 1
-                            remaining -= 100
-                        elif remaining > 25:
-                            fifties += 1
-                            remaining -= 50
-                        elif remaining > 10:
-                            twenty_fives += 1
-                            remaining -= 25
-                        elif remaining > 5:
-                            tens += 1
-                            remaining -= 10
-                        elif remaining > 0:
-                            fives += 1
-                            remaining -= 5
-
-            hundreds_safe = math.ceil(hundreds * 1.2) if hundreds > 0 else 0
-            fifties_safe = math.ceil(fifties * 1.2) if fifties > 0 else 0
-            twenty_fives_safe = math.ceil(twenty_fives * 1.2) if twenty_fives > 0 else 0
-            tens_safe = math.ceil(tens * 1.2) if tens > 0 else 0
-            fives_safe = math.ceil(fives * 1.2) if fives > 0 else 0
-
-            cable_name = cable_type[1]
-
-            if hundreds_safe > 0:
-                quick_order_data.append([cable_name, "100'", str(hundreds_safe)])
-            if fifties_safe > 0:
-                quick_order_data.append([cable_name, "50'", str(fifties_safe)])
-            if twenty_fives_safe > 0:
-                quick_order_data.append([cable_name, "25'", str(twenty_fives_safe)])
-            if tens_safe > 0:
-                quick_order_data.append([cable_name, "10'", str(tens_safe)])
-            if fives_safe > 0:
-                quick_order_data.append([cable_name, "5'", str(fives_safe)])
-
-    # Add extension cables to quick order totals (issue #23: extensions now
-    # live in their own table with per-extension quantity).
+    # Extension cables (issue #23: extensions live in their own table with a
+    # per-extension quantity). They are cables like any other, so they go
+    # through the same rule and land in the same stock buckets -- a 150'
+    # extension is a 100' plus a 50', not a non-stock "150'" line item that
+    # nobody can order off a shelf.
     ext_cable_map = {'NL4': 'NL 4', 'NL8': 'NL 8'}
     for cable in queryset.prefetch_related('fan_outs__extensions'):
         for fan_out in cable.fan_outs.all():
             for ext in fan_out.extensions.all():
-                cable_name = ext_cable_map.get(ext.extension_cable, ext.extension_cable)
-                ext_length = ext.extension_length
-                ext_qty = ext.quantity
+                cable_name = ext_cable_map.get(
+                    ext.extension_cable, ext.extension_cable)
+                totals.setdefault(cable_name, Counter()).update(
+                    pa_cable_math.run_breakdown(
+                        ext.extension_length, ext.quantity))
 
-                length_label = f"{ext_length}'"
-                # Check if this cable+length already exists in quick_order_data
-                found = False
-                for row in quick_order_data:
-                    if row[0] == cable_name and row[1] == length_label:
-                        # Recalculate: add raw ext_qty to pre-safety total, reapply safety
-                        current_safe = int(row[2])
-                        # Reverse the 20% to get raw, add extension, reapply
-                        raw_estimate = round(current_safe / 1.2)
-                        new_total = raw_estimate + ext_qty
-                        row[2] = str(math.ceil(new_total * 1.2))
-                        found = True
-                        break
-                if not found:
-                    quick_order_data.append([cable_name, length_label, str(math.ceil(ext_qty * 1.2))])
+    # Emit in CABLE_TYPE_CHOICES order, longest spool first, with the margin
+    # applied once to the finished raw total. The old code applied it per
+    # cable type and then tried to un-apply it to merge extensions in --
+    # `round(safe / 1.2)` does not recover the raw number (raw 17 -> safe 21
+    # -> "raw" 18), so merging an extension could add a cable out of nowhere.
+    order = [label for _, label in PACableSchedule.CABLE_TYPE_CHOICES]
+    ordered_names = sorted(
+        totals,
+        key=lambda n: (order.index(n) if n in order else len(order), n))
+
+    quick_order_data = []
+    for cable_name in ordered_names:
+        counts = totals[cable_name]
+        for stock in pa_cable_math.STOCK_LENGTHS:
+            qty = pa_cable_math.with_safety(counts.get(stock, 0))
+            if qty > 0:
+                quick_order_data.append([cable_name, f"{stock}'", str(qty)])
 
     # Add fan outs to Quick Order List
     fan_out_summary = {}
