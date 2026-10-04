@@ -7,60 +7,87 @@ from django.db import migrations, models
 
 # Migration 0113 background
 # --------------------------
-# AudioChecklist was created in 0063 as managed=False with db_table='audio_checklist_dummy'.
-# Because managed=False, Django never created that table in SQLite test databases.
-# This migration adds fields + renames the table, which requires the table to exist.
-# In production PostgreSQL the table existed and these operations ran successfully.
+# AudioChecklist was created in 0063 as managed=False with
+# db_table='audio_checklist_dummy', because planner/models.py defined the model
+# twice at the time and the dummy won the makemigrations race. managed=False
+# means CreateModel emits no DDL, so no backend ever got the table from the
+# migration graph. 0108 then dropped `managed` from the model's options --
+# AlterModelOptions replaces the whole options dict and only keeps the keys you
+# hand it -- so from 0108 onwards the migration *state* says this is an ordinary
+# managed model called planner_audiochecklist, while no database had ever been
+# told to create it. 0113 is where that gets repaired.
 #
-# Strategy: wrap every operation that touches the audiochecklist table in a
-# PostgreSQL-only callable; the remaining operations (commbeltpack, showday)
-# are pure Django ORM changes that work on any backend.
+# This migration used to repair it with hand-written PostgreSQL gated on
+# `vendor == 'postgresql'`, which meant a fresh database on any other backend
+# came out of 0113 with the state claiming a table that was not there. The next
+# migration to touch it then failed: 0177 joins planner_audiochecklist and 0178
+# adds a column to it, so `manage.py test` could not build a test database at
+# all. _ensure_audiochecklist_table below does the same repair through Django's
+# own schema editor instead, on whatever backend is in front of it, and only
+# when the table is actually missing.
+#
+# It has to be done HERE rather than in a new migration at the end of the
+# graph: the failures are at 0177/0178, a new migration lands after them, and
+# `run_before` would make an applied migration (0177) depend on an unapplied one
+# and break production's migration-history consistency check on the next deploy.
+# Nothing about this edit touches migration STATE, and production recorded 0113
+# as applied in 2025-12 -- it will never run this function again.
 
 
-def _audiochecklist_postgres_ops(apps, schema_editor):
-    """Apply the audiochecklist DDL changes only on PostgreSQL.
+def _ensure_audiochecklist_table(apps, schema_editor):
+    """Create planner_audiochecklist if, and only if, it is not already there.
 
-    Equivalent to: AddField created_at/name/project/updated_at,
-    AlterUniqueTogether, AlterModelTable — all skipped on SQLite.
+    Three cases, in the order they are checked:
+
+    1. The table is already there. Production, and every database that has been
+       through here before. Return without issuing a single statement -- this is
+       the branch that makes the migration a no-op for anything carrying real
+       data, and it is deliberately the first thing checked.
+    2. Only the legacy `audio_checklist_dummy` name is there. This is the normal
+       path on a fresh database now that 0063 creates that table: rename it
+       rather than creating a second one, so the foreign key 0108 pointed at it
+       follows the rename, then add the four columns 0063 never gave it.
+    3. Neither is there. A database that applied 0063 back when it was
+       managed=False -- so nothing was created -- and has not reached 0113 yet.
+       Create the model outright.
+
+    `apps` carries the state *after* the SeparateDatabaseAndState block below
+    (operations are applied in order), so the model handed to the schema editor
+    already has created_at / name / project / updated_at and the
+    planner_audiochecklist table name. num_days arrives later, in 0178.
     """
-    if schema_editor.connection.vendor != 'postgresql':
+    connection = schema_editor.connection
+    with connection.cursor() as cursor:
+        tables = set(connection.introspection.table_names(cursor))
+
+    if 'planner_audiochecklist' in tables:
         return
 
-    db = schema_editor.connection
-    with db.cursor() as cursor:
-        # AddField created_at (auto_now_add, so default is NOT NULL)
-        cursor.execute(
-            "ALTER TABLE audio_checklist_dummy "
-            "ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"
+    model = apps.get_model('planner', 'AudioChecklist')
+
+    if 'audio_checklist_dummy' in tables:
+        schema_editor.alter_db_table(
+            model, 'audio_checklist_dummy', 'planner_audiochecklist')
+        for field in model._meta.local_fields:
+            if field.name != 'id':
+                schema_editor.add_field(model, field)
+        # SQLite implements most ALTERs by rebuilding the table from the model,
+        # and the model already carries unique_together -- so by now the index
+        # may exist, and asking for it again is an error rather than a no-op.
+        # PostgreSQL adds columns in place and needs it created explicitly.
+        # Ask the database which of those two just happened.
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, 'planner_audiochecklist')
+        already = any(
+            c.get('unique') and set(c.get('columns') or ()) == {'project_id', 'name'}
+            for c in constraints.values()
         )
-        # AddField name
-        cursor.execute(
-            "ALTER TABLE audio_checklist_dummy "
-            "ADD COLUMN IF NOT EXISTS name VARCHAR(100) NOT NULL DEFAULT '';"
-        )
-        # AddField project FK
-        cursor.execute(
-            "ALTER TABLE audio_checklist_dummy "
-            "ADD COLUMN IF NOT EXISTS project_id BIGINT REFERENCES planner_project(id) "
-            "ON DELETE CASCADE;"
-        )
-        cursor.execute(
-            "UPDATE audio_checklist_dummy SET project_id = 1 WHERE project_id IS NULL;"
-        )
-        # AddField updated_at
-        cursor.execute(
-            "ALTER TABLE audio_checklist_dummy "
-            "ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"
-        )
-        # AlterUniqueTogether (project, name)
-        cursor.execute(
-            "ALTER TABLE audio_checklist_dummy "
-            "ADD CONSTRAINT IF NOT EXISTS audiochecklist_project_name_uniq UNIQUE (project_id, name);"
-        )
-        # AlterModelTable — rename from dummy to standard Django name
-        cursor.execute(
-            "ALTER TABLE audio_checklist_dummy RENAME TO planner_audiochecklist;"
-        )
+        if not already:
+            schema_editor.alter_unique_together(model, set(), {('project', 'name')})
+        return
+
+    schema_editor.create_model(model)
 
 
 class Migration(migrations.Migration):
@@ -69,63 +96,14 @@ class Migration(migrations.Migration):
         ('planner', '0112_fix_showday_date_constraint'),
     ]
 
-    state_operations = [
-        # These state operations update Django's migration graph without touching the DB.
-        # They must be listed so downstream migrations that reference these fields work.
-        migrations.AddField(
-            model_name='audiochecklist',
-            name='created_at',
-            field=models.DateTimeField(auto_now_add=True, default=django.utils.timezone.now),
-            preserve_default=False,
-        ),
-        migrations.AddField(
-            model_name='audiochecklist',
-            name='name',
-            field=models.CharField(default=1, max_length=100),
-            preserve_default=False,
-        ),
-        migrations.AddField(
-            model_name='audiochecklist',
-            name='project',
-            field=models.ForeignKey(default=1, on_delete=django.db.models.deletion.CASCADE, related_name='audio_checklists', to='planner.project'),
-            preserve_default=False,
-        ),
-        migrations.AddField(
-            model_name='audiochecklist',
-            name='updated_at',
-            field=models.DateTimeField(auto_now=True),
-        ),
-        migrations.AlterField(
-            model_name='commbeltpack',
-            name='unit_location',
-            field=models.ForeignKey(blank=True, help_text='Equipment location for this belt pack', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='comm_beltpacks', to='planner.location', verbose_name='Location'),
-        ),
-        migrations.AlterField(
-            model_name='showday',
-            name='date',
-            field=models.DateField(),
-        ),
-        migrations.AlterUniqueTogether(
-            name='audiochecklist',
-            unique_together={('project', 'name')},
-        ),
-        migrations.AlterUniqueTogether(
-            name='showday',
-            unique_together={('project', 'date')},
-        ),
-        migrations.AlterModelTable(
-            name='audiochecklist',
-            table=None,
-        ),
-    ]
+    # A module-level `state_operations` list used to sit here, duplicating the
+    # state operations inside the SeparateDatabaseAndState below. Django's
+    # Migration class does not read such an attribute -- only `operations` --
+    # so it was a second, silently ignored copy of the truth, and the obvious
+    # thing for somebody to edit by mistake. Gone; the real ones are below.
 
     operations = [
-        # audiochecklist DDL — PostgreSQL only (table was managed=False in SQLite)
-        migrations.RunPython(
-            _audiochecklist_postgres_ops,
-            migrations.RunPython.noop,
-        ),
-        # commbeltpack and showday field changes work on any backend
+        # commbeltpack and showday field changes work on any backend.
         migrations.AlterField(
             model_name='commbeltpack',
             name='unit_location',
@@ -177,5 +155,13 @@ class Migration(migrations.Migration):
                     table=None,
                 ),
             ],
+        ),
+        # Last, so the state above is in place and the model handed to the
+        # schema editor is the finished one. No-op wherever the table exists.
+        migrations.RunPython(
+            _ensure_audiochecklist_table,
+            # No reverse. Dropping the table would destroy real production data
+            # to undo a migration that, on production, created nothing.
+            migrations.RunPython.noop,
         ),
     ]

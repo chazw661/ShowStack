@@ -4254,19 +4254,16 @@ class AmplifierAssignment(models.Model):
 
 
     #-------Audio Checklist----
-
-class AudioChecklist(models.Model):
-        """
-        Dummy model for Audio Checklist admin interface
-        This doesn't create a real table, just provides admin interface
-        """
-        class Meta:
-            managed = False  # Don't create/delete DB table
-            db_table = 'audio_checklist_dummy'  # Dummy table name
-            verbose_name = 'Audio Checklist'
-            verbose_name_plural = 'Audio Checklists'
-            app_label = 'planner'
-
+    # The real AudioChecklist is defined further down this file, next to
+    # AudioChecklistTask. A second, managed=False "dummy for the admin
+    # interface" used to sit here; it was dead the moment the real model was
+    # written, because the later class definition replaced it in the app
+    # registry (Django only logs "Model 'planner.audiochecklist' was already
+    # registered" and overwrites). All it still did was emit that warning on
+    # every startup -- and, back in 2025-09, make makemigrations record the
+    # table as unmanaged in 0063, which is why the migration graph never
+    # created planner_audiochecklist on any backend at all. See 0063 and 0113
+    # for the repair.
 
 
             #--------Prediction Module----
