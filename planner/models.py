@@ -2688,8 +2688,11 @@ class PAFanOutExtension(models.Model):
         ('NL4', 'NL4'),
         ('NL8', 'NL8'),
     ]
+    # Stock is 100'/50'/25' (planner/utils/pa_cable_math). The 6' option is
+    # gone with the sub-25' spools; rows stored before this still carry it
+    # and are left exactly as they are -- the breakdown rounds anything
+    # under 25' up to a 25'.
     EXTENSION_LENGTH_CHOICES = [
-        (6, "6'"),
         (25, "25'"),
         (50, "50'"),
         (100, "100'"),

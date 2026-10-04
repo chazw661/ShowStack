@@ -168,6 +168,17 @@
    labels wrapped into each other and could not be told apart. The table keeps
    a floor width and scrolls sideways inside its own box instead; the page
    itself still never scrolls horizontally. */
+/* The "How this was calculated" note. Muted and small: it is reference the
+   eye should be able to skip once it has been read, not a second heading. */
+.cable-summary-rule {
+    margin: 10px 2px 0;
+    max-width: 90ch;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+.cable-summary-rule strong { color: var(--ss-field-text); }
+
 .cable-summary-table-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -345,21 +356,21 @@
                 <th rowspan="2">Cable Type</th>
                 <th rowspan="2">Total Runs</th>
                 <th rowspan="2">Total Length (ft)</th>
-                <th colspan="5" class="block-start">CABLES NEEDED</th>
-                <th colspan="5" class="block-start">ORDER QTY (+20% SAFETY)</th>
+                {% comment %}
+                Stock is 100'/50'/25'. The 10' and 5' columns are gone with
+                the spools -- see planner/utils/pa_cable_math.
+                {% endcomment %}
+                <th colspan="3" class="block-start">CABLES NEEDED</th>
+                <th colspan="3" class="block-start">ORDER QTY (+20% SAFETY)</th>
                 <th rowspan="2" class="block-start">Couplers</th>
             </tr>
             <tr>
                 <th class="block-start">100'</th>
                 <th>50'</th>
                 <th>25'</th>
-                <th>10'</th>
-                <th>5'</th>
                 <th class="block-start">100'</th>
                 <th>50'</th>
                 <th>25'</th>
-                <th>10'</th>
-                <th>5'</th>
             </tr>
         </thead>
         <tbody>
@@ -371,19 +382,26 @@
                 <td class="block-start">{{ data.hundreds }}</td>
                 <td>{{ data.fifties }}</td>
                 <td>{{ data.twenty_fives }}</td>
-                <td>{{ data.tens }}</td>
-                <td>{{ data.fives }}</td>
                 <td class="safety-cells block-start">{{ data.hundreds_with_safety }}</td>
                 <td class="safety-cells">{{ data.fifties_with_safety }}</td>
                 <td class="safety-cells">{{ data.twenty_fives_with_safety }}</td>
-                <td class="safety-cells">{{ data.tens_with_safety }}</td>
-                <td class="safety-cells">{{ data.fives_with_safety }}</td>
                 <td class="block-start">{{ data.couplers }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     </div>
+
+    {% comment %}
+    The rule in plain words, from planner/utils/pa_cable_math.RULE_TEXT --
+    the same module that does the arithmetic, so the explanation cannot
+    describe a rule the code no longer follows.
+    {% endcomment %}
+    {% if cable_summary and cable_rule_text %}
+    <p class="cable-summary-rule">
+        <strong>How this was calculated:</strong> {{ cable_rule_text }}
+    </p>
+    {% endif %}
 
     <!-- Fan Out Summary Section -->
     {% if fan_out_summary %}
@@ -448,20 +466,6 @@
                         <td class="item-type">{{ cable_type }}</td>
                         <td>25'</td>
                         <td class="order-qty">{{ data.twenty_fives_with_safety }}</td>
-                    </tr>
-                    {% endif %}
-                    {% if data.tens_with_safety > 0 %}
-                    <tr>
-                        <td class="item-type">{{ cable_type }}</td>
-                        <td>10'</td>
-                        <td class="order-qty">{{ data.tens_with_safety }}</td>
-                    </tr>
-                    {% endif %}
-                    {% if data.fives_with_safety > 0 %}
-                    <tr>
-                        <td class="item-type">{{ cable_type }}</td>
-                        <td>5'</td>
-                        <td class="order-qty">{{ data.fives_with_safety }}</td>
                     </tr>
                     {% endif %}
                 {% endfor %}
