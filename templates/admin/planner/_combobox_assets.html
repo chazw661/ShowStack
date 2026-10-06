@@ -1,3 +1,20 @@
+{% comment %}
+  Shared combobox for the free-text signal-name fields: a filterable panel
+  over any <input list="..."> whose <datalist> this page also renders.
+
+  Included by device_input_grid.html, device_output_grid.html,
+  p1_input_inline.html and galaxy_input_inline.html. Two of those appear on
+  the same change page, so the script installs itself once (window flag) and
+  then enhances every input[list] in the document.
+
+  The panel is appended to <body> and positioned fixed. It used to be an
+  absolutely positioned child of the input's wrapper, which the I/O device
+  grid clipped to an invisible ~52px sliver: both .device-{input,output}-cell
+  (overflow: hidden, from the Safari fixed-layout fix in PR #78) and Django
+  admin's own .form-row (overflow: hidden, forms.css) cut it off. Neither of
+  those rules can go -- the 8-column grid alignment depends on the first --
+  so the panel leaves the clipping context instead.
+{% endcomment %}
 <style>
   .combobox-wrap {
     position: relative;
@@ -27,24 +44,30 @@
     opacity: 0.7;
   }
   .combobox-toggle:hover { opacity: 1; }
+
+  /* Fixed, body-level layer: left/top/bottom/width/max-height are all set
+   * from script against the input's bounding rect. The colours are the
+   * floating-surface ones (--ss-raised), not --body-bg: on this dark admin
+   * the page background would make the panel read as flush with the page. */
   .combobox-panel {
-    position: absolute;
-    top: 100%;
+    position: fixed;
     left: 0;
-    right: 0;
-    margin: 2px 0 0 0;
+    top: 0;
+    margin: 0;
     padding: 0;
     list-style: none;
-    background: var(--body-bg, #fff);
-    color: var(--body-fg, #333);
-    border: 1px solid var(--border-color, #ccc);
-    border-radius: 3px;
-    max-height: 220px;
+    background: var(--ss-raised, #26282d);
+    color: var(--ss-field-text, #e8e8ea);
+    border: 1px solid var(--ss-field-border, #42454d);
+    border-radius: 4px;
+    min-width: 280px;
+    max-height: 320px;
     overflow-y: auto;
-    z-index: 1000;
+    overscroll-behavior: contain;
+    z-index: 10000;
     text-align: left;
     font-size: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   }
   .combobox-panel li {
     padding: 5px 8px;
@@ -53,23 +76,63 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* The origin prefix ("FOH PM7 · Ch 3 · ") is there to disambiguate, not to
+   * be read first -- the signal name after it stays the bright part. */
+  .combobox-panel .combobox-opt-meta {
+    color: var(--text-muted, #8b8f98);
+  }
   .combobox-panel li.active,
   .combobox-panel li:hover {
-    background: var(--primary, #79aec8);
-    color: var(--primary-fg, #fff);
+    background: var(--ss-accent, #8b5cf6);
+    color: #fff;
+  }
+  .combobox-panel li.active .combobox-opt-meta,
+  .combobox-panel li:hover .combobox-opt-meta {
+    color: rgba(255, 255, 255, 0.75);
   }
 </style>
 
 <script>
 (function () {
+  // Included once per inline; several inlines share one change page.
+  if (window.__ssComboboxInstalled) return;
+  window.__ssComboboxInstalled = true;
+
+  var MIN_WIDTH = 280;   // keep in sync with .combobox-panel min-width
+  var MAX_HEIGHT = 320;  // keep in sync with .combobox-panel max-height
+  var MARGIN = 4;        // breathing room against the viewport edges
+  var GAP = 2;           // gap between the input and the panel
+
+  // Only one panel is ever open: they are siblings on <body> now, so two
+  // open panels could overlap each other rather than just their own cells.
+  var openCombo = null;
+
+  function readOptions(datalist) {
+    return Array.prototype.slice
+      .call(datalist.querySelectorAll('option'))
+      .map(function (o) {
+        var value = (o.value || '').trim();
+        // p1/galaxy datalists carry a bare value and no label/meta; the
+        // device I/O grids carry all three (see forms._suggestion).
+        var label = (o.getAttribute('label') || '').trim() || value;
+        var meta = (o.getAttribute('data-meta') || '').trim();
+        // Filter over label and value together so a typed console name, bus
+        // number or signal name all narrow the list.
+        return {
+          value: value,
+          label: label,
+          meta: meta,
+          haystack: (label + ' ' + value).toLowerCase(),
+        };
+      })
+      .filter(function (o) { return o.value; });
+  }
+
   function enhance(input) {
     if (input.dataset.comboboxEnhanced) return;
     var datalist = document.getElementById(input.getAttribute('list'));
     if (!datalist) return;
-    var options = Array.prototype.slice
-      .call(datalist.querySelectorAll('option'))
-      .map(function (o) { return o.value; })
-      .filter(function (v) { return v; });
+    var options = readOptions(datalist);
     if (!options.length) return;
     input.dataset.comboboxEnhanced = '1';
 
@@ -88,46 +151,108 @@
     toggle.tabIndex = -1;
     toggle.className = 'combobox-toggle';
     toggle.setAttribute('aria-label', 'Show suggestions');
-    toggle.innerHTML = '▾'; // ▾
+    toggle.innerHTML = '&#9662;'; // ▾
     wrap.appendChild(toggle);
 
     var panel = document.createElement('ul');
     panel.className = 'combobox-panel';
     panel.hidden = true;
-    wrap.appendChild(panel);
+    document.body.appendChild(panel);
 
     var activeIndex = -1;
     var filtered = [];
+    var combo = { close: close, position: position };
+
+    // Anchor the panel under the input, or above it when the room below is
+    // both too small for the content and smaller than the room above.
+    // Call only while the panel is visible -- scrollHeight is 0 when hidden.
+    function position() {
+      var r = input.getBoundingClientRect();
+      var width = Math.min(
+        Math.max(r.width, MIN_WIDTH),
+        Math.max(MIN_WIDTH, window.innerWidth - 2 * MARGIN)
+      );
+      var left = Math.min(r.left, window.innerWidth - width - MARGIN);
+      panel.style.width = width + 'px';
+      panel.style.left = Math.max(MARGIN, left) + 'px';
+
+      var below = window.innerHeight - r.bottom - GAP - MARGIN;
+      var above = r.top - GAP - MARGIN;
+      // Compare the room against the height the panel will actually take --
+      // the content height capped at MAX_HEIGHT -- not its raw scrollHeight.
+      // A 400-row list always "needs" thousands of pixels, so measuring the
+      // uncapped content flipped the panel above for every cell below the
+      // halfway line even when 320px fit underneath perfectly well.
+      var wanted = Math.min(MAX_HEIGHT, panel.scrollHeight);
+      var flip = below < wanted && above > below;
+      var room = Math.max(flip ? above : below, 72);
+      panel.style.maxHeight = Math.min(MAX_HEIGHT, room) + 'px';
+      if (flip) {
+        panel.style.top = 'auto';
+        panel.style.bottom = (window.innerHeight - r.top + GAP) + 'px';
+      } else {
+        panel.style.bottom = 'auto';
+        panel.style.top = (r.bottom + GAP) + 'px';
+      }
+    }
 
     function render(filter) {
-      var f = (filter || '').toLowerCase();
-      filtered = f
-        ? options.filter(function (o) { return o.toLowerCase().indexOf(f) !== -1; })
+      // Every whitespace-separated term must match, so "mon 12" and
+      // "12 vox" both find the same channel.
+      var terms = (filter || '').toLowerCase().split(/\s+/).filter(Boolean);
+      filtered = terms.length
+        ? options.filter(function (o) {
+            return terms.every(function (t) { return o.haystack.indexOf(t) !== -1; });
+          })
         : options.slice();
       panel.innerHTML = '';
       if (!filtered.length) {
-        panel.hidden = true;
+        close();
         return;
       }
-      filtered.forEach(function (value, i) {
+      filtered.forEach(function (opt, i) {
         var li = document.createElement('li');
-        li.textContent = value;
+        if (opt.meta) {
+          var metaEl = document.createElement('span');
+          metaEl.className = 'combobox-opt-meta';
+          metaEl.textContent = opt.meta + ' · ';
+          li.appendChild(metaEl);
+          li.appendChild(document.createTextNode(opt.value));
+        } else {
+          li.textContent = opt.label;
+        }
+        li.title = opt.label;  // the panel ellipsises; the tooltip doesn't
         li.dataset.idx = i;
         li.addEventListener('mousedown', function (e) {
-          e.preventDefault();
-          pick(value);
+          e.preventDefault();  // keep focus on the input, so blur can't race
+          pick(opt.value);
         });
         panel.appendChild(li);
       });
       activeIndex = -1;
+      show();
+    }
+
+    function show() {
+      if (openCombo && openCombo !== combo) openCombo.close();
+      openCombo = combo;
       panel.hidden = false;
+      panel.scrollTop = 0;
+      position();
+    }
+
+    function close() {
+      panel.hidden = true;
+      if (openCombo === combo) openCombo = null;
     }
 
     function pick(value) {
+      // Only the bare signal name is ever written -- the console/channel
+      // prefix is display only, and signal_name stays free text.
       input.value = value;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      panel.hidden = true;
+      close();
       input.focus();
     }
 
@@ -145,17 +270,22 @@
     input.addEventListener('focus', function () { render(input.value); });
     input.addEventListener('input', function () { render(input.value); });
     input.addEventListener('keydown', function (e) {
+      // Tab is the grid's own navigation -- never swallow it, just get the
+      // panel out of the way before focus lands on the next cell.
+      if (e.key === 'Tab') { close(); return; }
       if (panel.hidden) {
         if (e.key === 'ArrowDown') { render(''); e.preventDefault(); }
         return;
       }
       if (e.key === 'ArrowDown') { setActive(activeIndex + 1); e.preventDefault(); }
       else if (e.key === 'ArrowUp') { setActive(activeIndex - 1); e.preventDefault(); }
-      else if (e.key === 'Enter' && activeIndex >= 0) { pick(filtered[activeIndex]); e.preventDefault(); }
-      else if (e.key === 'Escape') { panel.hidden = true; }
+      else if (e.key === 'Enter' && activeIndex >= 0) { pick(filtered[activeIndex].value); e.preventDefault(); }
+      // Escape closes the panel and keeps what was typed; without
+      // preventDefault some browsers also revert the field's value.
+      else if (e.key === 'Escape') { close(); e.preventDefault(); }
     });
     input.addEventListener('blur', function () {
-      setTimeout(function () { panel.hidden = true; }, 150);
+      setTimeout(close, 150);
     });
     toggle.addEventListener('mousedown', function (e) {
       e.preventDefault();
@@ -163,7 +293,7 @@
         input.focus();
         render('');
       } else {
-        panel.hidden = true;
+        close();
       }
     });
   }
@@ -171,6 +301,17 @@
   function init() {
     document.querySelectorAll('input[list]').forEach(enhance);
   }
+
+  // A fixed panel is anchored to a rect that any scroll invalidates, so
+  // follow the input rather than leaving the panel stranded. Capture phase:
+  // the admin scrolls inner containers (overflow-x: auto inline groups),
+  // whose scroll events don't bubble.
+  window.addEventListener('scroll', function () {
+    if (openCombo) openCombo.position();
+  }, true);
+  window.addEventListener('resize', function () {
+    if (openCombo) openCombo.position();
+  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

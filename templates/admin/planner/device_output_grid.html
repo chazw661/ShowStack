@@ -26,10 +26,15 @@
     {{ inline_admin_formset.formset.management_form }}
 
     {% with first_form=inline_admin_formset.forms.0 %}
+      {% comment %}
+        value = what gets written into signal_name (the bare output name).
+        label = the whole line shown and filtered on, data-meta = the dimmed
+        "<Console> · Aux <n>" prefix of it. See forms._suggestion.
+      {% endcomment %}
       {% if first_form.output_suggestions %}
         <datalist id="device-output-suggestions">
-          {% for name in first_form.output_suggestions %}
-            <option value="{{ name }}"></option>
+          {% for s in first_form.output_suggestions %}
+            <option value="{{ s.value }}" label="{{ s.label }}" data-meta="{{ s.meta }}"></option>
           {% endfor %}
         </datalist>
       {% endif %}
