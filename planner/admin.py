@@ -861,27 +861,37 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 
 
     def export_buttons(self, obj):
-        """Add PDF and Yamaha CSV export buttons"""
-       
-        
-        
-        # PDF export using the new URL pattern
+        """The two per-console exports, as one row of buttons that cannot wrap.
+
+        Styling is by class, not by `style=`. The inline colours these two
+        used to carry (#4a9eff and #2a9d8f) never reached the page:
+        base_site.html paints `.button` #417690 with !important, and an
+        !important declaration outranks a plain inline style, so both
+        buttons rendered in the steel blue the rest of the admin is moving
+        away from. They now take the shared secondary-button tokens from
+        css/surfaces.css, sized for a table cell.
+
+        .ss-btn-row is what holds them on one line -- in a 108px column
+        "Yamaha CSV" wrapped inside its own button. The column is given
+        room for the pair in admin/css/console_list_buttons.css.
+        """
         pdf_url = reverse('planner:console_pdf_export', args=[obj.id])
-        
-        # Yamaha CSV export using the existing URL pattern
+
+        # Left as a literal path rather than reverse()d: this ModelAdmin is
+        # registered on ShowStackAdminSite, so the route's namespace is not
+        # simply "admin". This is the path get_urls() builds, unchanged.
         yamaha_url = f'/admin/planner/console/{obj.pk}/export-yamaha/'
-        
+
         return format_html(
-            '<a class="button" href="{}" target="_blank" '
-            'style="padding: 6px 12px; background: #4a9eff; color: white; '
-            'text-decoration: none; border-radius: 4px; margin-right: 5px; '
-            'font-weight: 500;">📄 PDF</a>'
-            '<a class="button" href="{}" target="_blank" '
-            'style="padding: 6px 12px; background: #2a9d8f; color: white; '
-            'text-decoration: none; border-radius: 4px; font-weight: 500;">📊 Yamaha CSV</a>',
+            '<span class="ss-btn-row">'
+            '<a class="ss-btn ss-btn--secondary ss-btn--compact" '
+            'href="{}" target="_blank">📄 PDF</a>'
+            '<a class="ss-btn ss-btn--secondary ss-btn--compact" '
+            'href="{}" target="_blank">📊 Yamaha CSV</a>'
+            '</span>',
             pdf_url,
-            yamaha_url
-    )
+            yamaha_url,
+        )
 
     export_buttons.short_description = 'Exports'
     
