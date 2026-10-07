@@ -28,13 +28,16 @@
     {% with first_form=inline_admin_formset.forms.0 %}
       {% comment %}
         value = what gets written into signal_name (the bare output name).
-        label = the whole line shown and filtered on, data-meta = the dimmed
-        "<Console> · Aux <n>" prefix of it. See forms._suggestion.
+        data-console = the group this row is filed under (one header per
+        console), data-bus = the dimmed "Aux <n>" / "Mtx <n>" / "St <L|R|M>"
+        prefix the row shows, and label = the whole line, which is what typing
+        filters against. See forms._suggestion.
       {% endcomment %}
       {% if first_form.output_suggestions %}
         <datalist id="device-output-suggestions">
           {% for s in first_form.output_suggestions %}
-            <option value="{{ s.value }}" label="{{ s.label }}" data-meta="{{ s.meta }}"></option>
+            <option value="{{ s.value }}" label="{{ s.label }}"
+                    data-console="{{ s.console }}" data-bus="{{ s.bus }}"></option>
           {% endfor %}
         </datalist>
       {% endif %}

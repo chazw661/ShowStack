@@ -2,8 +2,11 @@
 
 The device input/output inlines render one free-text ``signal_name`` field
 backed by a datalist of the current project's console channels. A bare source
-name is ambiguous on a two-console show, so each suggestion now carries where
-it came from ("FOH PM7 · Ch 3 · Kick") while still inserting only the name.
+name is ambiguous on a two-console show, so each suggestion carries where it
+came from ("FOH PM7 · Ch 3 · Kick") while still inserting only the name. The
+panel renders that as one sticky header per console over rows reading
+"Ch 3 · Kick", which is why ``console`` is a separate key here and not just a
+prefix of ``bus``.
 
 Under test: planner.forms._device_input_suggestions and
 planner.forms._device_output_suggestions.
@@ -51,7 +54,7 @@ class DeviceInputSuggestionTests(TestCase):
         )
         self.assertEqual(
             _device_input_suggestions(self.project.id),
-            [{'value': 'Kick', 'meta': 'FOH PM7 · Ch 3',
+            [{'value': 'Kick', 'console': 'FOH PM7', 'bus': 'Ch 3',
               'label': 'FOH PM7 · Ch 3 · Kick'}],
         )
 
@@ -99,7 +102,23 @@ class DeviceInputSuggestionTests(TestCase):
         ConsoleInput.objects.create(console=self.foh, input_ch='', source='Kick')
         self.assertEqual(
             _device_input_suggestions(self.project.id),
-            [{'value': 'Kick', 'meta': 'FOH PM7', 'label': 'FOH PM7 · Kick'}],
+            [{'value': 'Kick', 'console': 'FOH PM7', 'bus': '',
+              'label': 'FOH PM7 · Kick'}],
+        )
+
+    def test_console_is_a_separate_grouping_key(self):
+        """The panel groups on ``console``, so it must not carry the channel."""
+        ConsoleInput.objects.create(console=self.foh, input_ch='3', source='Kick')
+        ConsoleInput.objects.create(console=self.foh, input_ch='4', source='Snare')
+        ConsoleInput.objects.create(console=self.mons, input_ch='3', source='Kick')
+        suggestions = _device_input_suggestions(self.project.id)
+        self.assertEqual(
+            [(s['console'], s['bus'], s['value']) for s in suggestions],
+            [
+                ('FOH PM7', 'Ch 3', 'Kick'),
+                ('FOH PM7', 'Ch 4', 'Snare'),
+                ('Mons PM5', 'Ch 3', 'Kick'),
+            ],
         )
 
     def test_scoped_to_project(self):
@@ -158,7 +177,7 @@ class DeviceOutputSuggestionTests(TestCase):
         )
         self.assertEqual(
             _device_output_suggestions(self.project.id),
-            [{'value': 'Drum Fill', 'meta': 'FOH PM7 · Aux 6',
+            [{'value': 'Drum Fill', 'console': 'FOH PM7', 'bus': 'Aux 6',
               'label': 'FOH PM7 · Aux 6 · Drum Fill'}],
         )
 
@@ -172,6 +191,29 @@ class DeviceOutputSuggestionTests(TestCase):
         self.assertEqual(
             [s['label'] for s in _device_output_suggestions(self.project.id)],
             ['FOH PM7 · Aux 1 · Broadcast', 'FOH PM7 · Mtx 1 · Broadcast'],
+        )
+
+    def test_one_console_is_one_group_across_aux_matrix_and_stereo(self):
+        """Three separate queries, one header: the console key must match."""
+        mons = Console.objects.create(project=self.project, name='Mons PM5')
+        ConsoleAuxOutput.objects.create(
+            console=self.foh, aux_number='6', name='Drum Fill',
+        )
+        ConsoleAuxOutput.objects.create(console=mons, aux_number='1', name='IEM 1')
+        ConsoleMatrixOutput.objects.create(
+            console=self.foh, matrix_number='2', name='Lobby',
+        )
+        ConsoleStereoOutput.objects.create(
+            console=self.foh, stereo_type='L', name='PA Left',
+        )
+        suggestions = _device_output_suggestions(self.project.id)
+        self.assertEqual(
+            {s['console'] for s in suggestions}, {'FOH PM7', 'Mons PM5'},
+        )
+        self.assertEqual(
+            [(s['console'], s['bus']) for s in suggestions
+             if s['console'] == 'FOH PM7'],
+            [('FOH PM7', 'Aux 6'), ('FOH PM7', 'Mtx 2'), ('FOH PM7', 'St L')],
         )
 
     def test_numeric_aux_order(self):
