@@ -259,10 +259,15 @@ select option {
     border: 1px solid var(--ss-border) !important;
 }
 
-/* The *_buttons.css files each carry `.object-tools li:not(.addlink) a`
- * at #417690 !important, which outranks a plain `.object-tools a.historylink`,
- * so match their specificity here. */
-.object-tools li:not(.addlink) a.historylink,
+/* The long selector list is historical and now belt-and-braces: the
+ * *_buttons.css files used to carry `.object-tools li:not(.addlink) a` at
+ * #417690 !important, which outranked a plain `.object-tools a.historylink`,
+ * so these had to match its specificity. Those files now say
+ * `a:not(.addlink):not(.historylink)` and exclude the History button by
+ * name, so nothing is competing for it any more. Kept because any page
+ * that still styles its toolbar inline -- the PA Cable changelist does --
+ * can reintroduce the fight, and losing it would repaint History steel
+ * blue on that page only. */
 .object-tools li a.historylink,
 .object-tools a.historylink,
 a.historylink,

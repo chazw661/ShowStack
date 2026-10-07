@@ -6,12 +6,18 @@
     <style>
         /* Item 9: three steel-blue (#417690) fills of three different sizes
            became one filled primary (Add) and two outlined secondaries
-           (Import CSV, Export to PDF), on the same accent and radius the
-           console save bar and the amp toolbar use. */
+           (Import CSV, Export to PDF).
+           This page states its own toolbar rules rather than taking the
+           shared block in the *_buttons.css files, because it needs Django's
+           "+" glyph kept and cleared (see the padding note below). It is a
+           couple of pixels tighter than the swept pages as a result. The
+           colours are not its own, though: they are the same --ss-btn-*
+           tokens every swept page uses, so there is one place to change
+           them. */
         .object-tools li .addlink,
         .object-tools a[href*="add"] {
-            background-color: var(--ss-accent) !important;
-            color: #ffffff !important;
+            background-color: var(--ss-btn-primary-bg) !important;
+            color: var(--ss-btn-primary-fg) !important;
             /* Django draws the "+" as a background image pinned to
                `right 7px center` and reserves room for it with
                `padding-right: 26px`. Flattening the padding to 8px 16px took
@@ -23,8 +29,8 @@
             background-position: right 11px center !important;
             font-size: 13px !important;
             font-weight: 600 !important;
-            border: 1px solid var(--ss-accent) !important;
-            border-radius: var(--ss-field-radius) !important;
+            border: 1px solid var(--ss-btn-primary-border) !important;
+            border-radius: var(--ss-btn-radius) !important;
             box-shadow: none !important;
             text-decoration: none !important;
         }
@@ -32,23 +38,26 @@
         .object-tools li .addlink:hover,
         .object-tools a[href*="add"]:hover {
             filter: brightness(1.12);
-            color: #ffffff !important;
         }
 
-        /* Secondary: outlined. The selector carries the same weight as the
+        /* Secondary: outlined.
+           The doubled selector is historical. It was weighted to beat the
            `.object-tools li:not(.addlink) a` rule the shared *_buttons.css
-           files set at #417690 !important, which would otherwise win. */
+           files set at #417690 !important; those files have since moved to
+           `a:not(.addlink):not(.historylink)` on the shared --ss-btn-*
+           tokens, so there is nothing left to out-rank. Harmless either way
+           -- an <li> never carries `addlink`, Django puts that class on the
+           anchor -- and kept so this page does not depend on that sweep. */
         .object-tools li a.export-pdf-btn,
         .object-tools li:not(.addlink) a.export-pdf-btn,
         .export-pdf-btn {
-            background-color: transparent !important;
+            background-color: var(--ss-btn-secondary-bg) !important;
             background-image: none !important;
-            color: var(--ss-field-text) !important;
             padding: 8px 16px !important;
             font-size: 13px !important;
             font-weight: 600 !important;
-            border: 1px solid var(--ss-field-border) !important;
-            border-radius: var(--ss-field-radius) !important;
+            border: 1px solid var(--ss-btn-secondary-border) !important;
+            border-radius: var(--ss-btn-radius) !important;
             text-decoration: none !important;
             display: inline-block !important;
         }
@@ -56,9 +65,42 @@
         .object-tools li a.export-pdf-btn:hover,
         .object-tools li:not(.addlink) a.export-pdf-btn:hover,
         .export-pdf-btn:hover {
-            background-color: var(--ss-accent-ring) !important;
-            border-color: var(--ss-accent) !important;
-            color: #ffffff !important;
+            background-color: var(--ss-btn-secondary-bg-hover) !important;
+            border-color: var(--ss-btn-secondary-border-hover) !important;
+        }
+
+        /* Text colour, resting and hovered, has to be stated at id
+           specificity. base_site.html carries
+
+               #content-main a       { color: #ffffff !important }
+               #content-main a:hover { color: #00ff88 !important }
+
+           and .object-tools sits inside #content-main, so a class selector
+           cannot reach these three buttons however many !importants it
+           carries -- which is why the colour declarations are here rather
+           than in the blocks above. Measured in Chromium and WebKit before
+           the move: all three turned #00ff88 under the pointer, and the two
+           outlined ones sat at #ffffff at rest instead of the token. Same
+           trap and same fix as admin/css/console_list_buttons.css.
+
+           No new colours: these are the --ss-btn-* tokens the rules above
+           already name, which is what the rest of the sweep put every
+           other page's toolbar on. */
+        #content-main .object-tools li .addlink,
+        #content-main .object-tools li .addlink:hover,
+        #content-main .object-tools a[href*="add"],
+        #content-main .object-tools a[href*="add"]:hover {
+            color: var(--ss-btn-primary-fg) !important;
+        }
+
+        #content-main .object-tools li a.export-pdf-btn,
+        #content-main .export-pdf-btn {
+            color: var(--ss-btn-secondary-fg) !important;
+        }
+
+        #content-main .object-tools li a.export-pdf-btn:hover,
+        #content-main .export-pdf-btn:hover {
+            color: var(--ss-btn-secondary-fg-hover) !important;
         }
 
         /* Django floats .object-tools right and pulls it up 48px to sit level

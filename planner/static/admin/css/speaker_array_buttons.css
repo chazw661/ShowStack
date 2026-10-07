@@ -1,40 +1,95 @@
-/* planner/static/admin/css/speaker_array_buttons.css */
+/* planner/static/admin/css/speaker_array_buttons.css
+ *
+ * Toolbar buttons for the Speaker Arrays admin pages.
+ *
+ * Selector note -- this file used to carry, as about twenty of its
+ * siblings did, the pair
+ *
+ *     .object-tools li.addlink a      { ...a cyan gradient... }
+ *     .object-tools li:not(.addlink) a { ...#417690... }
+ *
+ * Django puts the class on the ANCHOR, `<li><a class="addlink">`, never on
+ * the <li>. So the first rule matched nothing -- that gradient was never
+ * once painted on any page -- and the second matched *every* button
+ * including the Add one, which is why Add came out the same steel blue as
+ * the secondary tools it was supposed to stand out from.
+ *
+ * Colours now come from the shared button tokens in css/surfaces.css.
+ * Nothing here should name a hex.
+ */
 
-/* Container for the top buttons */
 .object-tools {
     display: flex !important;
-    gap: 15px !important;
+    gap: 12px !important;
     align-items: center !important;
 }
 
-/* Make ADD SPEAKER ARRAY button bigger and more prominent */
-.object-tools li.addlink a {
-    font-size: 16px !important;
-    font-weight: 600 !important;
-    padding: 12px 24px !important;
-    background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
-    color: white !important;
-    border-radius: 6px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-    box-shadow: 0 4px 12px rgba(0, 153, 255, 0.3) !important;
-    transition: all 0.3s ease !important;
-}
-
-.object-tools li.addlink a:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 6px 16px rgba(0, 153, 255, 0.4) !important;
-    background: linear-gradient(135deg, #00e4ff 0%, #00aaff 100%) !important;
-}
-
-.object-tools li:not(.addlink) a {
+/* The Add button: the one action the page is for. */
+.object-tools a.addlink {
+    display: inline-flex !important;
+    align-items: center !important;
     font-size: 13px !important;
-    padding: 8px 16px !important;
-    background: #417690 !important;
-    color: white !important;
-    border-radius: 4px !important;
+    font-weight: 600 !important;
+    padding: 10px 18px !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
+    background: var(--ss-btn-primary-bg) !important;
+    /* Django's default toolbar button carries tooltag-add.svg and 26px of
+     * right padding to clear it; both go. */
+    background-image: none !important;
+    border: 1px solid var(--ss-btn-primary-border) !important;
+    border-radius: var(--ss-btn-radius) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: filter .15s ease, background-color .15s ease, border-color .15s ease;
 }
 
-.object-tools li:not(.addlink) a:hover {
-    background: #5b8ba6 !important;
+/* Every other tool on the page. The History button on a change form is
+ * excluded by name: css/surfaces.css gives it a raised-panel look of its
+ * own, and it is navigation rather than one of this page's actions. */
+.object-tools a:not(.addlink):not(.historylink) {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 10px 18px !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
+    background: var(--ss-btn-secondary-bg) !important;
+    background-image: none !important;
+    border: 1px solid var(--ss-btn-secondary-border) !important;
+    border-radius: var(--ss-btn-radius) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+/* Text colour, resting and hovered, has to be stated at id specificity:
+ * base_site.html carries
+ *
+ *     #content-main a       { color: #ffffff !important }
+ *     #content-main a:hover { color: #00ff88 !important }
+ *
+ * and .object-tools sits inside #content-main, so a class selector cannot
+ * reach it however many !importants it carries. Without these the buttons
+ * turn bright green under the pointer -- a colour that belongs to links,
+ * not to actions. */
+#content-main .object-tools a.addlink,
+#content-main .object-tools a.addlink:hover {
+    color: var(--ss-btn-primary-fg) !important;
+}
+
+#content-main .object-tools a.addlink:hover {
+    filter: brightness(1.12);
+}
+
+#content-main .object-tools a:not(.addlink):not(.historylink) {
+    color: var(--ss-btn-secondary-fg) !important;
+}
+
+#content-main .object-tools a:not(.addlink):not(.historylink):hover {
+    background: var(--ss-btn-secondary-bg-hover) !important;
+    color: var(--ss-btn-secondary-fg-hover) !important;
+    border-color: var(--ss-btn-secondary-border-hover) !important;
 }
