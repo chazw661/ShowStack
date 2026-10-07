@@ -80,6 +80,34 @@ html[data-theme="auto"] {
 }
 
 /* ============================================================
+ * color-scheme
+ *
+ * Everything this admin paints is dark, but the *browser* was never told
+ * so, and the parts it draws itself kept their light defaults: scrollbars
+ * above all. Any element that scrolls -- the inline grids on the console
+ * page, a long changelist, a textarea -- got a white trough with a grey
+ * thumb laid over a #16171a page.
+ *
+ * `color-scheme: dark` hands those UA-drawn surfaces to the dark set in
+ * both engines, so a scrollbar that does appear matches the page instead
+ * of announcing itself. It also darkens native select popups, date
+ * pickers and the focus ring's default colour; the explicit field styling
+ * below already covers the rest.
+ *
+ * Declared on the same selector list as the variables above because this
+ * admin is dark in every theme state -- base_site.html paints the
+ * surfaces unconditionally, so html[data-theme="light"] is dark too and
+ * leaving it on a light color-scheme would only bring the white
+ * scrollbars back.
+ * ============================================================ */
+:root,
+html[data-theme="dark"],
+html[data-theme="light"],
+html[data-theme="auto"] {
+    color-scheme: dark;
+}
+
+/* ============================================================
  * Form controls
  *
  * The single source of truth for input / select / textarea
@@ -174,6 +202,39 @@ select option {
 #content .inline-group tr.form-row:last-child > td,
 #content .inline-group tr.form-row:last-child > th {
     border-bottom: none !important;
+}
+
+/* ============================================================
+ * Inline panels: the 2px that put a scrollbar under every grid
+ *
+ * Django gives `.inline-related fieldset` `width: 100%` and no border
+ * (forms.css), and the admin's default box model is content-box. Then
+ * base_site.html paints every panel with
+ *
+ *     .module, fieldset, .inline-group { border: 1px solid ... !important }
+ *
+ * so the fieldset keeps a width of exactly 100% of its container and
+ * gains 1px of border on each side on top of it -- 2px wider than the box
+ * it sits in. `.inline-related` is a scroll container (see the overflow-x
+ * safety net further down), so those 2px were enough to arm it: every
+ * tabular inline on the console page reported scrollWidth 1061 against
+ * clientWidth 1059 at a 1440 viewport and drew a horizontal scrollbar
+ * under a grid that was not actually too wide for its column widths.
+ *
+ * border-box is the fix at the source: the declared 100% now *includes*
+ * the border the panel was given, the fieldset matches its container
+ * exactly, and the scrollbar is gone. The border stays visible -- the
+ * panel still looks like a panel -- and the table inside, itself
+ * width: 100%, simply gets 2px less to work with.
+ *
+ * Not fixed by dropping the border instead: these panels are meant to
+ * read as cards (base_site.html gives them the radius and shadow too),
+ * and the same width: 100% + border combination would still be waiting
+ * for the next person who adds one.
+ * ============================================================ */
+
+.inline-related fieldset {
+    box-sizing: border-box;
 }
 
 /* ============================================================
@@ -329,15 +390,123 @@ input[type="radio"]:disabled {
 }
 
 /* ============================================================
- * Submit row: one filled action, the rest outlined
+ * Buttons: one filled action, the rest outlined
+ *
+ * The note at the top of this file says buttons are deliberately not
+ * defined here. That held while every button was Django's steel blue;
+ * it stopped holding once the submit row below was given the theme's
+ * violet-filled / outlined pair, because that pair is the house button
+ * style and nothing named it. The result was #417690 hardcoded in two
+ * dozen *_buttons.css files and in inline `style=` attributes, each one
+ * a separate place to edit and none of them agreeing.
+ *
+ * So the two treatments get names. The submit row consumes them below
+ * (same values it already used -- this is a rename, not a restyle), and
+ * anything else that needs a button can take the .ss-btn classes rather
+ * than inventing a third blue.
  * ============================================================ */
+:root {
+    /* Primary: the one action a page is *for*. Filled violet. */
+    --ss-btn-primary-bg: var(--ss-accent);
+    --ss-btn-primary-fg: #ffffff;
+    --ss-btn-primary-border: var(--ss-accent);
+
+    /* Secondary: everything else. Outlined, transparent until hovered,
+     * so a row of them does not compete with the primary. */
+    --ss-btn-secondary-bg: transparent;
+    --ss-btn-secondary-fg: var(--ss-field-text);
+    --ss-btn-secondary-border: var(--ss-field-border);
+    --ss-btn-secondary-bg-hover: var(--ss-accent-ring);
+    --ss-btn-secondary-fg-hover: #ffffff;
+    --ss-btn-secondary-border-hover: var(--ss-accent);
+
+    --ss-btn-radius: var(--ss-field-radius);
+}
+
+/* ------------------------------------------------------------------
+ * .ss-btn -- opt-in button classes
+ *
+ * Doubled class selectors (`.ss-btn.ss-btn--primary`, specificity 0,2,0)
+ * rather than the single class they read as. base_site.html carries
+ *
+ *     .button, input[type=submit], a.button { background: #417690 !important }
+ *
+ * at (0,1,0)/(0,1,1) and loads after this file, and an !important
+ * declaration is only beaten by another !important declaration that wins
+ * on specificity -- a plain `.ss-btn--primary` would lose to it. Hence
+ * both the doubled selector and the !important on the painted
+ * properties. Geometry (padding, gap, radius) needs neither: nothing
+ * declares it !important.
+ *
+ * Note these still lose to an *id* rule. `#content-main a { color: #fff
+ * !important }` in base_site.html paints every link inside the content
+ * column, so a .ss-btn placed in there has to restate its colours at id
+ * specificity locally -- see console_list_buttons.css for the worked
+ * example.
+ * ------------------------------------------------------------------ */
+.ss-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: var(--ss-btn-radius) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+.ss-btn.ss-btn--primary {
+    background: var(--ss-btn-primary-bg) !important;
+    color: var(--ss-btn-primary-fg) !important;
+    border: 1px solid var(--ss-btn-primary-border) !important;
+}
+.ss-btn.ss-btn--primary:hover {
+    /* Brightening the token beats naming a second violet that would have
+     * to be kept in step with the first. */
+    filter: brightness(1.12);
+}
+
+.ss-btn.ss-btn--secondary {
+    background: var(--ss-btn-secondary-bg) !important;
+    color: var(--ss-btn-secondary-fg) !important;
+    border: 1px solid var(--ss-btn-secondary-border) !important;
+}
+.ss-btn.ss-btn--secondary:hover {
+    background: var(--ss-btn-secondary-bg-hover) !important;
+    color: var(--ss-btn-secondary-fg-hover) !important;
+    border-color: var(--ss-btn-secondary-border-hover) !important;
+}
+
+/* For buttons that live in a table cell rather than a toolbar. */
+.ss-btn.ss-btn--compact {
+    gap: 4px;
+    padding: 5px 9px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* A row of buttons that must stay on one line. */
+.ss-btn-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+/* --- the submit row, in those terms --- */
 
 .submit-row input[type="submit"].default,
 .submit-row input[type="submit"].default:hover {
-    background: var(--ss-accent) !important;
+    background: var(--ss-btn-primary-bg) !important;
     background-image: none !important;
-    color: #ffffff !important;
-    border: 1px solid var(--ss-accent) !important;
+    color: var(--ss-btn-primary-fg) !important;
+    border: 1px solid var(--ss-btn-primary-border) !important;
     box-shadow: none !important;
 }
 .submit-row input[type="submit"].default:hover {
@@ -346,17 +515,17 @@ input[type="radio"]:disabled {
 
 .submit-row input[type="submit"]:not(.default),
 .submit-row a.button:not(.deletelink) {
-    background: transparent !important;
+    background: var(--ss-btn-secondary-bg) !important;
     background-image: none !important;
-    color: var(--ss-field-text) !important;
-    border: 1px solid var(--ss-field-border) !important;
+    color: var(--ss-btn-secondary-fg) !important;
+    border: 1px solid var(--ss-btn-secondary-border) !important;
     box-shadow: none !important;
 }
 .submit-row input[type="submit"]:not(.default):hover,
 .submit-row a.button:not(.deletelink):hover {
-    border-color: var(--ss-accent) !important;
-    color: #ffffff !important;
-    background: var(--ss-accent-ring) !important;
+    border-color: var(--ss-btn-secondary-border-hover) !important;
+    color: var(--ss-btn-secondary-fg-hover) !important;
+    background: var(--ss-btn-secondary-bg-hover) !important;
 }
 
 /* Delete stays red, pushed to the right edge */

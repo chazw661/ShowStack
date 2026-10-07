@@ -3,7 +3,15 @@
 {% block object-tools-items %}
     {{ block.super }}
     <li>
-        <a href="{{ template_library_url }}" class="button" style="background: #4a9eff; color: white; padding: 10px 15px; font-weight: 500;">
+        {% comment %}
+        No inline style: the toolbar's filled/outlined treatment lives in
+        admin/css/console_list_buttons.css and reads its colours from the
+        shared button tokens. The background this used to carry never
+        painted anything anyway -- base_site.html sets `.button` to #417690
+        with !important, and an !important declaration outranks a plain
+        inline style.
+        {% endcomment %}
+        <a href="{{ template_library_url }}" class="button">
             📋 Template Library
         </a>
     </li>
