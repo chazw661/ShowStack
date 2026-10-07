@@ -1,12 +1,26 @@
 {% extends "admin/change_list.html" %}
 {% block object-tools-items %}
+    {% comment %}
+    No inline style on the Belt Packs link. It described a navy gradient
+    that never painted: the toolbar rules in admin/css/*_buttons.css are
+    !important, and an !important declaration outranks a plain inline
+    style. The link takes the shared outlined secondary like every other
+    tool on the page.
+    {% endcomment %}
     <li style="float: left;">
-        <a href="../commbeltpack/" class="viewlink" style="background: linear-gradient(135deg, #1a2a3a, #243447); border: 1px solid #3a5068; border-radius: 6px; padding: 6px 14px; color: #e0e0e0; font-weight: 500; transition: all 0.2s ease;">
+        <a href="../commbeltpack/" class="viewlink">
             ← Belt Packs
         </a>
     </li>
+    {% comment %}
+    Import CSV carries no class. It used to say `addlink`, which was only
+    ever a way to borrow the Add button's styling -- and once `addlink`
+    came to mean "the one primary action on this page", that borrowing put
+    two filled purple buttons side by side and neither read as the main
+    one. Importing a CSV is a secondary action; it now looks like one.
+    {% endcomment %}
     <li>
-        <a href="{% url 'planner:import_comm_crew_names_csv' %}" class="addlink">
+        <a href="{% url 'planner:import_comm_crew_names_csv' %}">
             Import CSV
         </a>
     </li>

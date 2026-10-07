@@ -46,60 +46,82 @@
    the fixed layout set further down. The table's sizing is all in one place
    now: see "Comm Devices list: column widths". */
 
-/* ========================================
-   SWAP BUTTON POSITIONS AND STYLE ADD BUTTON
-   ======================================== */
+/* ============================================================
+ * Toolbar: the Add button filled, everything else outlined
+ *
+ * This page was the first to key its selectors off the anchor rather than
+ * the <li> -- Django writes `<li><a class="addlink">`, so the
+ * `.object-tools li.addlink a` the other twenty files carried matched
+ * nothing and `li:not(.addlink) a` caught the Add button instead. The
+ * sweep that fixed the rest brought this one onto the same shared tokens
+ * and dropped the belt-and-braces `li:not(.addlink) a:not(.addlink)`
+ * half of each selector, which was only ever there to cover the old form.
+ *
+ * It also gained the id-specificity colour rules below: stating
+ * `color: #ffffff !important` on a class selector was not enough to beat
+ * `#content-main a:hover { color: #00ff88 !important }` in base_site.html,
+ * so Add and the secondary tools both turned green under the pointer here.
+ * ============================================================ */
 
-/* Container for the top buttons */
 .object-tools {
     display: flex !important;
     flex-direction: row-reverse !important;
-    gap: 15px !important;
+    gap: 12px !important;
     align-items: center !important;
 }
 
-/* Item 10: "Add Comm Belt Pack" is the primary action.
- *
- * It was rendering steel blue, not the cyan gradient the old rule here
- * described, because `addlink` is a class on the <a>, not on the <li>:
- * `.object-tools li.addlink a` matched nothing and `.object-tools
- * li:not(.addlink) a` -- the "less prominent" rule -- caught the Add button
- * instead. Both selectors now key off the anchor. */
 .object-tools a.addlink {
+    display: inline-flex !important;
+    align-items: center !important;
     font-size: 13px !important;
     font-weight: 600 !important;
-    padding: 8px 16px !important;
-    background: var(--ss-accent) !important;
+    padding: 10px 18px !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
+    background: var(--ss-btn-primary-bg) !important;
     background-image: none !important;
-    color: #ffffff !important;
-    border: 1px solid var(--ss-accent) !important;
-    border-radius: var(--ss-field-radius) !important;
+    border: 1px solid var(--ss-btn-primary-border) !important;
+    border-radius: var(--ss-btn-radius) !important;
     box-shadow: none !important;
+    text-shadow: none !important;
+    transition: filter .15s ease, background-color .15s ease, border-color .15s ease;
 }
 
-.object-tools a.addlink:hover {
-    filter: brightness(1.12);
-    color: #ffffff !important;
-}
-
-/* Everything else in the toolbar is a secondary: outlined, no fill. */
-.object-tools li:not(.addlink) a:not(.addlink),
-.object-tools a:not(.addlink) {
+.object-tools a:not(.addlink):not(.historylink) {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
     font-size: 13px !important;
     font-weight: 600 !important;
-    padding: 8px 16px !important;
-    background: transparent !important;
+    padding: 10px 18px !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
+    background: var(--ss-btn-secondary-bg) !important;
     background-image: none !important;
-    color: var(--ss-field-text) !important;
-    border: 1px solid var(--ss-field-border) !important;
-    border-radius: var(--ss-field-radius) !important;
+    border: 1px solid var(--ss-btn-secondary-border) !important;
+    border-radius: var(--ss-btn-radius) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
-.object-tools li:not(.addlink) a:not(.addlink):hover,
-.object-tools a:not(.addlink):hover {
-    background: var(--ss-accent-ring) !important;
-    border-color: var(--ss-accent) !important;
-    color: #ffffff !important;
+#content-main .object-tools a.addlink,
+#content-main .object-tools a.addlink:hover {
+    color: var(--ss-btn-primary-fg) !important;
+}
+
+#content-main .object-tools a.addlink:hover {
+    filter: brightness(1.12);
+}
+
+#content-main .object-tools a:not(.addlink):not(.historylink) {
+    color: var(--ss-btn-secondary-fg) !important;
+}
+
+#content-main .object-tools a:not(.addlink):not(.historylink):hover {
+    background: var(--ss-btn-secondary-bg-hover) !important;
+    color: var(--ss-btn-secondary-fg-hover) !important;
+    border-color: var(--ss-btn-secondary-border-hover) !important;
 }
 
 /* ============================================================

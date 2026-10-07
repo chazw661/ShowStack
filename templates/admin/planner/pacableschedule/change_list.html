@@ -7,7 +7,11 @@
         /* Item 9: three steel-blue (#417690) fills of three different sizes
            became one filled primary (Add) and two outlined secondaries
            (Import CSV, Export to PDF), on the same accent and radius the
-           console save bar and the amp toolbar use. */
+           console save bar and the amp toolbar use.
+           This page styles its own toolbar rather than taking the shared
+           block in the *_buttons.css files, because it needs Django's "+"
+           glyph kept and cleared (see the padding note below). It is a
+           couple of pixels tighter than the swept pages as a result. */
         .object-tools li .addlink,
         .object-tools a[href*="add"] {
             background-color: var(--ss-accent) !important;
@@ -35,9 +39,14 @@
             color: #ffffff !important;
         }
 
-        /* Secondary: outlined. The selector carries the same weight as the
+        /* Secondary: outlined.
+           The doubled selector is historical. It was weighted to beat the
            `.object-tools li:not(.addlink) a` rule the shared *_buttons.css
-           files set at #417690 !important, which would otherwise win. */
+           files set at #417690 !important; those files have since moved to
+           `a:not(.addlink):not(.historylink)` on the shared --ss-btn-*
+           tokens, so there is nothing left to out-rank. Harmless either way
+           -- an <li> never carries `addlink`, Django puts that class on the
+           anchor -- and kept so this page does not depend on that sweep. */
         .object-tools li a.export-pdf-btn,
         .object-tools li:not(.addlink) a.export-pdf-btn,
         .export-pdf-btn {

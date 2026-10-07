@@ -806,8 +806,21 @@ class DanteDeviceConfigInline(admin.StackedInline):
 
 
 class ConsoleAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'location','primary_ip_address', 'secondary_ip_address', 'is_template','export_buttons']
-    list_filter = ['is_template', 'location']
+    # "Is template" is deliberately absent from both of these. Templates are
+    # managed in the Console Template Library (/console-template-library/),
+    # which is what the toolbar button beside Add Console opens, so the column
+    # restated a fact the list has somewhere better to say. It was not free:
+    # 68px of a table that has to fit its columns into the 628px a 1280
+    # viewport leaves once both sidebars are open -- see the column budget in
+    # admin/css/console_list_buttons.css.
+    #
+    # Nothing about the flag itself changes. It is still on the add/change
+    # form, Console.Meta.ordering still lists templates first, and template
+    # consoles still appear in this list -- they simply no longer carry a
+    # marker here. ConsoleAdmin.name_with_template_badge is still defined and
+    # unused if that marker is ever wanted back in the Name column.
+    list_display = ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'export_buttons']
+    list_filter = ['location']
     
     fieldsets = (
         ('Console Information', {

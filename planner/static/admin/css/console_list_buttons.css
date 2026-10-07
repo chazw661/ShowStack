@@ -131,14 +131,17 @@
  *     checkbox      32      Django's own 1.5em, rounded
  *     Location      88      "FOH", "Monitor World", "Broadcast Truck"
  *     Primary IP   130      15 mono characters at 13px = 117, + padding
- *     Secondary IP 130
- *     Is template   68      one 13px icon under a two-line header
+ *     Secondary IP 130      hidden at 1280 and below, see the foot of file
  *     Exports      192      the measured button pair, + padding
  *     -----------------
- *     pinned       640      leaving Name everything above that
+ *     pinned       572      leaving Name everything above that
+ *
+ * "Is template" used to sit in here at 68px. It is gone from list_display
+ * altogether now -- templates are managed in the Console Template Library
+ * -- and Name collected the 68px.
  *
  * At a 1440 viewport with both sidebars open the table gets 788-789px
- * depending on engine, so Name lands on ~148px and nothing scrolls.
+ * depending on engine, so Name lands on ~216px and nothing scrolls.
  * ============================================================ */
 
 #result_list {
@@ -155,13 +158,12 @@
      * with both sidebars open that was literally 0px -- the column
      * vanished and took the console names with it.
      *
-     * 640px of pinned columns plus a 146px floor for Name. Below that the
+     * 572px of pinned columns plus a 150px floor for Name. Below that the
      * table stops shrinking and `.results` (overflow-x: auto, Django's
-     * own) scrolls instead. Seven columns genuinely do not fit the 628px
-     * the 276px nav sidebar and the 241px filter panel leave at 1280; a
-     * table you can scroll beats a column that is not there.
+     * own) scrolls instead, rather than Name being squeezed out of
+     * existence.
      */
-    min-width: 786px;
+    min-width: 722px;
 }
 
 /* Under a fixed layout a cell cannot widen itself, so anything too long
@@ -231,24 +233,6 @@
     white-space: nowrap;
     padding-left: 6px;
     padding-right: 6px;
-}
-
-/* One 13px icon under a header that wraps to IS / TEMPLATE.
- *
- * Padding goes on the td alone. Under table-layout: fixed the column
- * takes its width from the header cell, and these th are content-box, so
- * padding declared on the th is *added* to the width rather than fitting
- * inside it -- 4px either side here made a 68px column measure 76 and
- * quietly took the difference off Name. */
-#result_list th.column-is_template,
-#result_list td.field-is_template {
-    width: 68px;
-    text-align: center;
-}
-
-#result_list td.field-is_template {
-    padding-left: 4px;
-    padding-right: 4px;
 }
 
 /* ------------------------------------------------------------------
@@ -363,20 +347,18 @@
  * 629px at a 1280 viewport and 453px at 1024 with both open. Seven
  * columns do not fit either; what this trim buys is how far you have to
  * scroll to reach the last of them, and it is enough to fit 1024 outright
- * once the nav sidebar is collapsed (729px against the 726px below).
+ * once the nav sidebar is collapsed.
  *
  * The fixed columns give up their slack in the order they can afford it.
  * Name's floor does not move: it is the column the trim exists to
- * protect.
+ * protect. Below 1280 a column goes entirely -- see the next block.
  * ============================================================ */
 
-@media (max-width: 1300px) {
+@media (max-width: 1400px) {
     #result_list {
-        /* 596px pinned (32 + 72 + 120 + 120 + 68 + 184) plus a 130px
-         * floor under Name. 726 is not an arbitrary landing place: it is
-         * what fits the 729px a 1024 viewport leaves once the nav sidebar
-         * is collapsed, which is how this page is used at that width. */
-        min-width: 726px;
+        /* 528px pinned (32 + 72 + 120 + 120 + 184) plus the same 150px
+         * floor under Name. */
+        min-width: 678px;
     }
 
     #result_list th.column-location,
@@ -419,14 +401,6 @@
         padding-right: 4px;
     }
 
-    /* Is template keeps its full 68px here.
-     *
-     * Squeezing it to 60 was a false economy: TEMPLATE is 67px at the
-     * header's own size and has nowhere to break, so the column then
-     * needed its label shortened and its sort controls un-floated to
-     * avoid shaving the final E off. Leaving the width alone costs 8px
-     * that Name can spare and keeps one header for both breakpoints. */
-
     /* Same WebKit-first sum as the full-width column above: 57.8 + 107.5
      * for the buttons at the reduced padding below, a 5px gap and 8px of
      * cell padding is 178.3 -- so 184, not the 172 a Chrome-only
@@ -440,5 +414,46 @@
     #result_list td.field-export_buttons a.ss-btn {
         padding-left: 6px;
         padding-right: 6px;
+    }
+}
+
+/* ============================================================
+ * 1280 and below: Secondary IP goes
+ *
+ * The nav sidebar is 276px and the filter panel 241px, so a 1280 viewport
+ * leaves this table 628px and a 1024 viewport leaves it 452px. Trimming
+ * the remaining columns was not enough at 1280: 528px of pinned columns
+ * against 628 left Name 100px, under its floor, and the table scrolled.
+ *
+ * So one column goes rather than every column being squeezed. Secondary
+ * IP is the one that can: it is empty on most consoles, it is the
+ * redundant half of a pair, and the value is still on the console's own
+ * page one click away. Primary IP, Location and Exports all say something
+ * the list cannot say twice.
+ *
+ * Hidden with display: none on both the header and the body cell. Under
+ * table-layout: fixed the column is then not laid out at all and the
+ * remaining widths still add up, which is why this is done here and not
+ * by zeroing the width -- a zero-width column keeps its borders and its
+ * cell padding and would leave a seam between Primary IP and Exports.
+ *
+ * That leaves 408px pinned (32 + 72 + 120 + 184) and a 150px floor under
+ * Name: 558px, inside the 628px a 1280 viewport gives. 1024 still
+ * scrolls -- 452px cannot hold five columns and a readable name -- and
+ * the next column to go would be Exports, the largest remaining at 184px
+ * and the only one whose job is reachable elsewhere (both exports are on
+ * each console's own change page). That is a call for a human, so it is
+ * written down here rather than done.
+ * ============================================================ */
+
+@media (max-width: 1280px) {
+    #result_list {
+        /* 408px pinned (32 + 72 + 120 + 184) plus the 150px Name floor. */
+        min-width: 558px;
+    }
+
+    #result_list th.column-secondary_ip_address,
+    #result_list td.field-secondary_ip_address {
+        display: none;
     }
 }

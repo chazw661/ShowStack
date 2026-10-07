@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.forms import modelform_factory
+from django.templatetags.static import static
 from django.test import Client, TestCase
 
 from planner.forms import PACableChangelistForm, PACableInlineForm
@@ -602,7 +603,14 @@ class JumperRenderTests(_SummaryFixtureMixin, TestCase):
         html = r.content.decode()
         self.assertIn('data-jumper="true"', html)
         self.assertIn('data-jumper="false"', html)
-        self.assertIn('pa_cable_jumpers.js', html)
+        # Ask the staticfiles storage what this asset's URL is rather than
+        # assuming the raw filename survives into the markup. Under
+        # ForgivingManifestStaticFilesStorage it does not: once
+        # `collectstatic` has been run the URL carries a content hash --
+        # `pa_cable_jumpers.6ff1ca6b1ea9.js` -- so this assertion passed on a
+        # clean checkout and failed on any tree where staticfiles/ had been
+        # built, which is every tree that has run the deploy command once.
+        self.assertIn(static('admin/js/pa_cable_jumpers.js'), html)
 
     def test_add_form_renders(self):
         r = self.client.get('/admin/planner/pacableschedule/add/')
