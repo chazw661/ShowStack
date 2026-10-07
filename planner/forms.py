@@ -347,28 +347,30 @@ SUGGESTION_DOT = '·'  # middle dot between the parts of a suggestion label
 
 
 def _suggestion(console_name, kind, channel, name):
-    """One combobox suggestion: what to insert, and what to show.
+    """One combobox suggestion: what to insert, how to group it, what to show.
 
     ``value`` is all that is ever written into DeviceInput/DeviceOutput
     .signal_name — picking a suggestion stores the bare source/output name,
-    exactly as typing it by hand would. ``meta`` is the dimmed origin prefix
-    ("FOH PM7 · Ch 3") and ``label`` is the whole line the engineer reads
-    ("FOH PM7 · Ch 3 · Kick"), which is also what the panel filters on, so a
-    console name, a channel number and a source name all narrow the list.
-    Parts we don't have are dropped rather than rendered empty.
+    exactly as typing it by hand would.
+
+    The other three are display and filtering. ``console`` is the group the
+    panel files this row under — one sticky header per console — and ``bus`` is
+    the dimmed channel prefix the row itself shows ("Ch 9", "Aux 6", "St L"),
+    so a row reads "Ch 9 · Wless 9" beneath the "FOH PM7" header. ``label`` is
+    the whole line, console included: it is both the de-duplication key and
+    what the panel filters on, so a console name, a channel number and a
+    signal name all narrow the list. Parts we don't have are dropped rather
+    than rendered empty — a channel-less row is just its name.
     """
     sep = ' %s ' % SUGGESTION_DOT
-    parts = []
     console = (console_name or '').strip()
-    if console:
-        parts.append(console)
     channel = (channel or '').strip()
-    if channel:
-        parts.append('%s %s' % (kind, channel))
+    bus = '%s %s' % (kind, channel) if channel else ''
     return {
         'value': name,
-        'meta': sep.join(parts),
-        'label': sep.join(parts + [name]),
+        'console': console,
+        'bus': bus,
+        'label': sep.join([p for p in (console, bus, name) if p]),
     }
 
 
@@ -387,6 +389,10 @@ def _device_input_suggestions(project_id):
     two consoles: "Kick" at FOH and "Kick" on monitors are different
     channels and both belong in the list. De-duplication is therefore on
     the full label, not on the name alone.
+
+    The flat, console-then-channel ordered list this returns is what the panel
+    groups under one header per console, so the order here is the order of the
+    groups and of the rows inside them.
     """
     if not project_id:
         return []
@@ -428,6 +434,10 @@ def _device_output_suggestions(project_id):
     to match the Console admin inlines (aux first, then matrix, then stereo),
     and labelled with their origin the same way inputs are — "FOH PM7 · Aux 6
     · Drum Fill", with Mtx and St for the matrix and stereo buses.
+
+    Each console is one group in the panel, so a console's aux, matrix and
+    stereo rows all land under its single header even though they come from
+    three separate queries run one after the other.
     """
     if not project_id:
         return []

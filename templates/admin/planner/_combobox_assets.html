@@ -14,6 +14,11 @@
   admin's own .form-row (overflow: hidden, forms.css) cut it off. Neither of
   those rules can go -- the 8-column grid alignment depends on the first --
   so the panel leaves the clipping context instead.
+
+  Rows are grouped by console: one non-selectable sticky header per console,
+  then its channels as "Ch 9 · Wless 9". Options that carry no data-console
+  (the p1/galaxy datalists, which are bare names) render as one ungrouped,
+  headerless list exactly as before.
 {% endcomment %}
 <style>
   .combobox-wrap {
@@ -25,6 +30,14 @@
     width: 100%;
     padding-right: 20px !important;
     box-sizing: border-box;
+  }
+  /* Safari ignores autocomplete="off" on text inputs and paints its contact
+   * AutoFill glyph inside the field, right where our ▾ toggle lives. There is
+   * no attribute that turns it off, so hide the shadow-DOM button -- scoped to
+   * these comboboxes, since it is a legitimate affordance elsewhere. */
+  .combobox-wrap > input::-webkit-contacts-auto-fill-button {
+    visibility: hidden;
+    pointer-events: none;
   }
   .combobox-toggle {
     position: absolute;
@@ -69,25 +82,65 @@
     font-size: 12px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   }
-  .combobox-panel li {
+  /* One console per <li>: its header, then a nested <ul> of its rows. The
+   * nesting is what scopes the sticky header to its own group -- a sticky
+   * element is held by its containing block, so each header rides along with
+   * its console's rows and the next group's header pushes it out, instead of
+   * every header stacking at the top of a flat list. */
+  .combobox-panel .combobox-group { padding: 0; }
+  .combobox-panel .combobox-sublist {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .combobox-panel .combobox-opt {
     padding: 5px 8px;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* The origin prefix ("FOH PM7 · Ch 3 · ") is there to disambiguate, not to
-   * be read first -- the signal name after it stays the bright part. */
+
+  /* Opaque background: its own rows scroll underneath it. */
+  .combobox-panel .combobox-opt-group {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 5px 8px 3px;
+    background: var(--ss-raised, #26282d);
+    color: var(--text-muted, #8b8f98);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    cursor: default;
+    border-top: 1px solid var(--ss-field-border, #42454d);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .combobox-panel .combobox-group:first-child .combobox-opt-group {
+    border-top: 0;
+  }
+
+  /* The bus prefix ("Ch 3 · ") is there to disambiguate, not to be read
+   * first -- the signal name after it stays the bright part. */
   .combobox-panel .combobox-opt-meta {
     color: var(--text-muted, #8b8f98);
   }
-  .combobox-panel li.active,
-  .combobox-panel li:hover {
+  /* Scoped to .combobox-opt: a header is neither hoverable nor selectable.
+   * The colour needs !important -- base_site.html paints all general text with
+   * `label, p, li, dt, dd, th, td, h1..h5 { color: #e0e0e0 !important }`, which
+   * reaches these <li>s directly, so the row under the cursor or the arrow keys
+   * never actually went white. The header and the bus prefix escape that rule
+   * by not being <li>s. */
+  .combobox-panel .combobox-opt.active,
+  .combobox-panel .combobox-opt:hover {
     background: var(--ss-accent, #8b5cf6);
-    color: #fff;
+    color: #fff !important;
   }
-  .combobox-panel li.active .combobox-opt-meta,
-  .combobox-panel li:hover .combobox-opt-meta {
+  .combobox-panel .combobox-opt.active .combobox-opt-meta,
+  .combobox-panel .combobox-opt:hover .combobox-opt-meta {
     color: rgba(255, 255, 255, 0.75);
   }
 </style>
@@ -112,20 +165,44 @@
       .call(datalist.querySelectorAll('option'))
       .map(function (o) {
         var value = (o.value || '').trim();
-        // p1/galaxy datalists carry a bare value and no label/meta; the
-        // device I/O grids carry all three (see forms._suggestion).
+        // p1/galaxy datalists carry a bare value and no label/console/bus;
+        // the device I/O grids carry all of them (see forms._suggestion).
         var label = (o.getAttribute('label') || '').trim() || value;
-        var meta = (o.getAttribute('data-meta') || '').trim();
-        // Filter over label and value together so a typed console name, bus
-        // number or signal name all narrow the list.
         return {
           value: value,
           label: label,
-          meta: meta,
+          console: (o.getAttribute('data-console') || '').trim(),
+          bus: (o.getAttribute('data-bus') || '').trim(),
+          // Filter over the whole label so a typed console name, bus number
+          // or signal name all narrow the list. Because the label starts with
+          // the console name, typing one keeps that console's group whole --
+          // every row in it matches -- while any other query narrows to the
+          // matching rows and their header.
           haystack: (label + ' ' + value).toLowerCase(),
         };
       })
       .filter(function (o) { return o.value; });
+  }
+
+  // Console name -> its rows, in first-appearance order. Outputs arrive as
+  // three consecutive passes (aux, then matrix, then stereo), each ordered by
+  // console, so the same console shows up more than once in the flat list and
+  // its rows have to merge into one group rather than open a second header.
+  // Prefixed keys and a null prototype: a console called "constructor" is
+  // unlikely but must not collide with Object.prototype.
+  function buildGroups(options) {
+    var groups = [];
+    var byName = Object.create(null);
+    options.forEach(function (o) {
+      var key = 'c:' + o.console;
+      var group = byName[key];
+      if (!group) {
+        group = byName[key] = { name: o.console, options: [] };
+        groups.push(group);
+      }
+      group.options.push(o);
+    });
+    return groups;
   }
 
   function enhance(input) {
@@ -135,6 +212,7 @@
     var options = readOptions(datalist);
     if (!options.length) return;
     input.dataset.comboboxEnhanced = '1';
+    var groups = buildGroups(options);
 
     // Drop the native datalist binding so the browser's built-in dropdown
     // doesn't pop up alongside our custom combobox panel (double-menu bug).
@@ -160,7 +238,10 @@
     document.body.appendChild(panel);
 
     var activeIndex = -1;
-    var filtered = [];
+    // The selectable rows only -- headers are not in here, which is what
+    // makes the arrow keys skip them.
+    var rows = [];      // <li> elements, display order
+    var rowOpts = [];   // their options, same order
     var combo = { close: close, position: position };
 
     // Anchor the panel under the input, or above it when the room below is
@@ -196,39 +277,69 @@
       }
     }
 
+    // One console: a header plus the nested list its rows go into.
+    function addGroup(name) {
+      var item = document.createElement('li');
+      item.className = 'combobox-group';
+      var header = document.createElement('div');
+      header.className = 'combobox-opt-group';
+      header.textContent = name;
+      header.title = name;  // the header ellipsises long console names
+      // A header is not a target, but it is inside the panel: without this a
+      // click on one would blur the input and dismiss the whole panel.
+      header.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      var sublist = document.createElement('ul');
+      sublist.className = 'combobox-sublist';
+      item.appendChild(header);
+      item.appendChild(sublist);
+      panel.appendChild(item);
+      return sublist;
+    }
+
+    function addRow(parent, opt) {
+      var li = document.createElement('li');
+      li.className = 'combobox-opt';
+      if (opt.bus) {
+        var busEl = document.createElement('span');
+        busEl.className = 'combobox-opt-meta';
+        busEl.textContent = opt.bus + ' · ';
+        li.appendChild(busEl);
+        li.appendChild(document.createTextNode(opt.value));
+      } else {
+        // No bus to show: inside a group that is just the name, and for the
+        // ungrouped p1/galaxy lists the label *is* the name.
+        li.textContent = opt.console ? opt.value : opt.label;
+      }
+      li.addEventListener('mousedown', function (e) {
+        e.preventDefault();  // keep focus on the input, so blur can't race
+        pick(opt.value);
+      });
+      parent.appendChild(li);
+      rows.push(li);
+      rowOpts.push(opt);
+    }
+
     function render(filter) {
       // Every whitespace-separated term must match, so "mon 12" and
       // "12 vox" both find the same channel.
       var terms = (filter || '').toLowerCase().split(/\s+/).filter(Boolean);
-      filtered = terms.length
-        ? options.filter(function (o) {
-            return terms.every(function (t) { return o.haystack.indexOf(t) !== -1; });
-          })
-        : options.slice();
       panel.innerHTML = '';
-      if (!filtered.length) {
+      rows = [];
+      rowOpts = [];
+      groups.forEach(function (group) {
+        var matching = terms.length
+          ? group.options.filter(function (o) {
+              return terms.every(function (t) { return o.haystack.indexOf(t) !== -1; });
+            })
+          : group.options;
+        if (!matching.length) return;  // a header with no rows is not drawn
+        var parent = group.name ? addGroup(group.name) : panel;
+        matching.forEach(function (opt) { addRow(parent, opt); });
+      });
+      if (!rows.length) {
         close();
         return;
       }
-      filtered.forEach(function (opt, i) {
-        var li = document.createElement('li');
-        if (opt.meta) {
-          var metaEl = document.createElement('span');
-          metaEl.className = 'combobox-opt-meta';
-          metaEl.textContent = opt.meta + ' · ';
-          li.appendChild(metaEl);
-          li.appendChild(document.createTextNode(opt.value));
-        } else {
-          li.textContent = opt.label;
-        }
-        li.title = opt.label;  // the panel ellipsises; the tooltip doesn't
-        li.dataset.idx = i;
-        li.addEventListener('mousedown', function (e) {
-          e.preventDefault();  // keep focus on the input, so blur can't race
-          pick(opt.value);
-        });
-        panel.appendChild(li);
-      });
       activeIndex = -1;
       show();
     }
@@ -256,14 +367,26 @@
       input.focus();
     }
 
+    // scrollIntoView({block: 'nearest'}) would park a row under its own
+    // sticky header when stepping upwards, so scroll by hand and keep the
+    // header's height clear at the top edge.
+    function reveal(li) {
+      var group = li.closest('.combobox-group');
+      var header = group && group.querySelector('.combobox-opt-group');
+      var pad = header ? header.offsetHeight : 0;
+      var pr = panel.getBoundingClientRect();
+      var lr = li.getBoundingClientRect();
+      if (lr.top < pr.top + pad) panel.scrollTop -= (pr.top + pad - lr.top);
+      else if (lr.bottom > pr.bottom) panel.scrollTop += (lr.bottom - pr.bottom);
+    }
+
     function setActive(i) {
-      var items = panel.querySelectorAll('li');
-      if (!items.length) return;
-      if (i < 0) i = items.length - 1;
-      if (i >= items.length) i = 0;
-      items.forEach(function (el) { el.classList.remove('active'); });
-      items[i].classList.add('active');
-      items[i].scrollIntoView({ block: 'nearest' });
+      if (!rows.length) return;
+      if (i < 0) i = rows.length - 1;
+      if (i >= rows.length) i = 0;
+      rows.forEach(function (el) { el.classList.remove('active'); });
+      rows[i].classList.add('active');
+      reveal(rows[i]);
       activeIndex = i;
     }
 
@@ -279,7 +402,7 @@
       }
       if (e.key === 'ArrowDown') { setActive(activeIndex + 1); e.preventDefault(); }
       else if (e.key === 'ArrowUp') { setActive(activeIndex - 1); e.preventDefault(); }
-      else if (e.key === 'Enter' && activeIndex >= 0) { pick(filtered[activeIndex].value); e.preventDefault(); }
+      else if (e.key === 'Enter' && activeIndex >= 0) { pick(rowOpts[activeIndex].value); e.preventDefault(); }
       // Escape closes the panel and keeps what was typed; without
       // preventDefault some browsers also revert the field's value.
       else if (e.key === 'Escape') { close(); e.preventDefault(); }
