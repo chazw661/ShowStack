@@ -343,8 +343,37 @@ def _numeric_channel_order(field_name):
     )
 
 
+SUGGESTION_DOT = '·'  # middle dot between the parts of a suggestion label
+
+
+def _suggestion(console_name, kind, channel, name):
+    """One combobox suggestion: what to insert, and what to show.
+
+    ``value`` is all that is ever written into DeviceInput/DeviceOutput
+    .signal_name — picking a suggestion stores the bare source/output name,
+    exactly as typing it by hand would. ``meta`` is the dimmed origin prefix
+    ("FOH PM7 · Ch 3") and ``label`` is the whole line the engineer reads
+    ("FOH PM7 · Ch 3 · Kick"), which is also what the panel filters on, so a
+    console name, a channel number and a source name all narrow the list.
+    Parts we don't have are dropped rather than rendered empty.
+    """
+    sep = ' %s ' % SUGGESTION_DOT
+    parts = []
+    console = (console_name or '').strip()
+    if console:
+        parts.append(console)
+    channel = (channel or '').strip()
+    if channel:
+        parts.append('%s %s' % (kind, channel))
+    return {
+        'value': name,
+        'meta': sep.join(parts),
+        'label': sep.join(parts + [name]),
+    }
+
+
 def _device_input_suggestions(project_id):
-    """ConsoleInput.source values for the device-input datalist.
+    """Console input suggestions for the device-input combobox.
 
     Mirrors the Processor Issue #16 pattern: the inline used to render a
     Console Input dropdown FK. We replaced that with a single free-text
@@ -352,6 +381,12 @@ def _device_input_suggestions(project_id):
     names don't leak across shows. Existing rows keep their console_input
     FK (the device PDF's 'Console Source' column still reads it); new
     rows just store signal_name.
+
+    Each suggestion carries where the name came from — "FOH PM7 · Ch 3 ·
+    Kick" — because a bare source name is ambiguous the moment a show runs
+    two consoles: "Kick" at FOH and "Kick" on monitors are different
+    channels and both belong in the list. De-duplication is therefore on
+    the full label, not on the name alone.
     """
     if not project_id:
         return []
@@ -366,12 +401,16 @@ def _device_input_suggestions(project_id):
           .exclude(source='')
           .annotate(_ch_num=_numeric_channel_order('input_ch'))
           .order_by('console__name', '_ch_num'))
-    for source in qs.values_list('source', flat=True):
-        name = source.strip()
-        if not name or name in seen:
+    rows = qs.values_list('console__name', 'input_ch', 'source')
+    for console_name, input_ch, source in rows:
+        name = (source or '').strip()
+        if not name:
             continue
-        seen.add(name)
-        suggestions.append(name)
+        item = _suggestion(console_name, 'Ch', input_ch, name)
+        if item['label'] in seen:
+            continue
+        seen.add(item['label'])
+        suggestions.append(item)
     return suggestions
 
 
@@ -386,7 +425,9 @@ def _device_output_suggestions(project_id):
     free-text signal_name combobox + datalist the input side already uses,
     scoped to the current project. Suggestions are drawn from the project's
     ConsoleAuxOutput / ConsoleMatrixOutput / ConsoleStereoOutput names, ordered
-    to match the Console admin inlines (aux first, then matrix, then stereo).
+    to match the Console admin inlines (aux first, then matrix, then stereo),
+    and labelled with their origin the same way inputs are — "FOH PM7 · Aux 6
+    · Drum Fill", with Mtx and St for the matrix and stereo buses.
     """
     if not project_id:
         return []
@@ -408,13 +449,24 @@ def _device_output_suggestions(project_id):
                  .exclude(name__isnull=True).exclude(name='')
                  .order_by('console__name', 'stereo_type'))
 
-    for qs in (aux_qs, matrix_qs, stereo_qs):
-        for output_name in qs.values_list('name', flat=True):
+    # (queryset, bus abbreviation, field holding the bus number). Stereo has
+    # no number — stereo_type is L/R/M — so its labels read "St L".
+    groups = (
+        (aux_qs, 'Aux', 'aux_number'),
+        (matrix_qs, 'Mtx', 'matrix_number'),
+        (stereo_qs, 'St', 'stereo_type'),
+    )
+    for qs, kind, number_field in groups:
+        rows = qs.values_list('console__name', number_field, 'name')
+        for console_name, number, output_name in rows:
             name = (output_name or '').strip()
-            if not name or name in seen:
+            if not name:
                 continue
-            seen.add(name)
-            suggestions.append(name)
+            item = _suggestion(console_name, kind, number, name)
+            if item['label'] in seen:
+                continue
+            seen.add(item['label'])
+            suggestions.append(item)
     return suggestions
 
 
