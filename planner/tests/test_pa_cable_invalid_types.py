@@ -13,6 +13,9 @@ The three readers audited here:
 
 The changelist summary is covered by test_pa_cable_math.UnknownCableTypeTests.
 
+``SystemReportLiveFieldTests`` below extends the same audit to every other
+legacy mirror the System Report's cable table used to read.
+
 Run with::
 
     python manage.py test planner.tests.test_pa_cable_invalid_types \
@@ -25,7 +28,9 @@ from django.test import Client, TestCase
 
 from planner.admin import CableTypeFilter, PACableAdmin
 from planner.admin_site import showstack_admin_site
-from planner.models import PACableSchedule, PAZone, Project
+from planner.models import (Amp, AmpLocation, AmpModel, PACableSchedule,
+                            PAZone, Project, SoundvisionPrediction,
+                            SpeakerArray)
 from planner.utils import pa_cable_math
 
 LEGACY = '100_NL4'
@@ -145,7 +150,7 @@ class CableTypeFilterTests(_ProjectMixin, TestCase):
 class SystemReportCableTypeTests(_ProjectMixin, TestCase):
     """The System Report's Cable Type column."""
 
-    HEADERS = ['Label', 'Cable Type', 'Length', 'Count', 'To Location',
+    HEADERS = ['Array/Speaker', 'Cable Type', 'Length', 'Count', 'Destination',
                'Fan Outs']
 
     def rows(self):
@@ -203,6 +208,156 @@ class SystemReportCableTypeTests(_ProjectMixin, TestCase):
         # the contract. This only asserts we did not break the view if it is
         # reachable.
         self.assertIn(response.status_code, (200, 302, 404))
+
+
+class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
+    """Every System Report cable column reads a live field, not a mirror.
+
+    ``PACableSchedule`` carries seven editable=False "hidden compatibility"
+    mirrors -- zone, cable_type, quantity, length_per_run, service_loop,
+    from_location, to_location -- and only ``save()`` refreshes them. A
+    ``queryset.update()`` bypasses ``save()``, so after one the mirror still
+    holds the *previous* value. The report must never print that.
+
+    ``update()`` is the probe here because it is the cheapest way to produce a
+    genuinely stale mirror; a bulk_create, a bulk_update or an admin bulk
+    action leaves the same wreckage.
+    """
+
+    HEADERS = SystemReportCableTypeTests.HEADERS
+    rows = SystemReportCableTypeTests.rows
+
+    def column(self, index):
+        return [row[index] for row in self.rows()[1:]]   # skip the header row
+
+    # -- Destination (was `to_location`) -------------------------------------
+
+    def test_destination_follows_an_update_that_skipped_save(self):
+        row = self.add('NL_4')                       # destination 'SL Amp Rack'
+        PACableSchedule.objects.filter(pk=row.pk).update(
+            destination='SR Amp Rack 2')
+        row.refresh_from_db()
+        self.assertEqual(row.to_location, 'SL Amp Rack')   # mirror now stale
+        self.assertEqual(self.column(4), ['SR Amp Rack 2'])
+
+    def test_destination_is_blank_rather_than_a_ghost(self):
+        """A row whose destination was cleared must not print the old one."""
+        row = self.add('NL_4')
+        PACableSchedule.objects.filter(pk=row.pk).update(destination='')
+        row.refresh_from_db()
+        self.assertEqual(row.to_location, 'SL Amp Rack')   # mirror now stale
+        self.assertEqual(self.column(4), [''])
+
+    def test_destination_resolves_a_linked_amp(self):
+        """Linked mode: Destination comes from the Amp, as it does on screen.
+
+        That is ``destination_display``, the same property the PA Cable
+        changelist's Destination column uses (issue #73).
+        """
+        # Amp.save() -> setup_channels() dereferences amp_model unguarded, so
+        # a model is required even though the FK is null=True.
+        amp = Amp.objects.create(
+            project=self.project, name='SL Rack LA12X #1',
+            location=AmpLocation.objects.create(
+                project=self.project, name='SL LA Racks'),
+            amp_model=AmpModel.objects.create(
+                manufacturer="L'Acoustics", model_name='LA12X',
+                channel_count=4))
+        row = self.add('NL_4')
+        row.entry_mode = 'linked'
+        row.amp = amp
+        row.save()
+        self.assertEqual(self.column(4), ['SL Rack LA12X #1'])
+
+    # -- Array/Speaker (was the bare `label` FK) -----------------------------
+
+    def test_array_speaker_follows_a_relabel_that_skipped_save(self):
+        zone_a = PAZone.objects.create(project=self.project, name='Main L')
+        zone_b = PAZone.objects.create(project=self.project, name='Main R')
+        row = self.add('NL_4')
+        row.label = zone_a
+        row.save()
+        PACableSchedule.objects.filter(pk=row.pk).update(label=zone_b)
+        row.refresh_from_db()
+        self.assertEqual(row.zone, 'Main L')               # mirror now stale
+        self.assertEqual(self.column(0), ['Main R'])
+
+    def test_array_speaker_resolves_a_linked_array(self):
+        """Linked mode used to print nothing: `label` is null on those rows."""
+        prediction = SoundvisionPrediction.objects.create(
+            project=self.project, file_name='mirror probe.pdf')
+        array = SpeakerArray.objects.create(
+            prediction=prediction, source_name='Main Hang L',
+            array_base_name='Main Hang L',
+            configuration='vertical_flown', bumper_type='NONE')
+        row = self.add('NL_4')
+        row.entry_mode = 'linked'
+        row.speaker_array = array
+        row.label = None
+        row.save()
+        self.assertEqual(self.column(0), ['Main Hang L'])
+        self.assertEqual(self.column(0), [array.display_name])
+
+    # -- Length (was `length_per_run`) and Count (was `quantity`) ------------
+
+    def test_length_follows_an_update_that_skipped_save(self):
+        row = self.add('NL_4', length=100)
+        PACableSchedule.objects.filter(pk=row.pk).update(length=250)
+        row.refresh_from_db()
+        # save() derives length_per_run from the cable choice's *name*, so it
+        # never held the typed length to begin with (0 for NL_4). The point of
+        # this test is that the column tracks `length`.
+        self.assertEqual(float(row.length_per_run), 0.0)
+        self.assertEqual(self.column(2), ['250'])
+
+    def test_count_follows_an_update_that_skipped_save(self):
+        row = self.add('NL_4', count=2)
+        PACableSchedule.objects.filter(pk=row.pk).update(count=7)
+        row.refresh_from_db()
+        self.assertEqual(row.quantity, 2)                  # mirror now stale
+        self.assertEqual(self.column(3), ['7'])
+
+    # -- the mirrors that have no live counterpart at all --------------------
+
+    def test_no_column_reads_a_never_written_mirror(self):
+        """`service_loop` and `from_location` are never synced by save().
+
+        They sit on their constant defaults for the life of the row, so a
+        column reading either would print 10.0 / "AMP RACK" forever. Assert
+        neither value reaches the table.
+        """
+        row = self.add('NL_4')
+        self.assertEqual(float(row.service_loop), 10.0)
+        self.assertEqual(row.from_location, 'AMP RACK')
+        flat = [str(cell) for cell in self.rows()[1]]
+        self.assertNotIn('AMP RACK', flat)
+        self.assertNotIn('10.0', flat)
+
+
+class LiveTotalCableLengthTests(_ProjectMixin, TestCase):
+    """`total_cable_length` is `count * length`, and is defined exactly once.
+
+    There used to be two properties of that name in the class body; the live
+    one won only because it came second. The PA Cable CSV export's "Total
+    Length (ft)" column depends on it.
+    """
+
+    def test_it_is_count_times_length(self):
+        row = self.add('NL_4', count=3, length=50)
+        self.assertEqual(row.total_cable_length, 150)
+
+    def test_it_ignores_the_mirrors(self):
+        row = self.add('NL_4', count=3, length=50)
+        PACableSchedule.objects.filter(pk=row.pk).update(
+            quantity=99, length_per_run=0, service_loop=10)
+        row.refresh_from_db()
+        self.assertEqual(row.total_cable_length, 150)
+
+    def test_only_one_definition_survives_in_the_class_body(self):
+        """A duplicate would make the column depend on method ordering."""
+        import inspect
+        source = inspect.getsource(PACableSchedule)
+        self.assertEqual(source.count('def total_cable_length(self):'), 1)
 
 
 class CsvImportInvalidCableTests(_ProjectMixin, TestCase):
