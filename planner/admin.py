@@ -1499,7 +1499,11 @@ class AmpChannelInlineForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.amp_id:
+        if self.instance.amp_id and self.instance.amp.amp_model_id:
+            # An amp with no model yet has no capabilities to read, so
+            # every input field stays visible rather than crashing the
+            # inline. planner/forms.py's copy of this form already
+            # guarded it; this one did not.
             amp = self.instance.amp
             # Show/hide input fields based on amp model capabilities
             if not amp.amp_model.has_avb_inputs:
@@ -2077,7 +2081,11 @@ class AmpAdmin(BaseEquipmentAdmin):
             }),
         ]
         
-        if obj and obj.amp_model.nl4_connector_count > 0:
+        # `obj.amp_model` needs the same guard `obj` gets: the field is
+        # nullable, so an amp awaiting a model reaches this page and the
+        # bare deref made the change form itself a 500. The SC32 block
+        # below always had the guard; these three did not.
+        if obj and obj.amp_model and obj.amp_model.nl4_connector_count > 0:
             nl4_fields = []
             if obj.amp_model.nl4_connector_count >= 1:
                 nl4_fields.append(('nl4_a_pair_1', 'nl4_a_pair_2'))
@@ -2089,7 +2097,7 @@ class AmpAdmin(BaseEquipmentAdmin):
                 
             }))
         
-        if obj and obj.amp_model.cacom_output_count > 0:
+        if obj and obj.amp_model and obj.amp_model.cacom_output_count > 0:
             cacom_fields = []
             for i in range(1, min(obj.amp_model.cacom_output_count + 1, 5)):
                 # Each CaCom has 4 channels
@@ -2106,7 +2114,7 @@ class AmpAdmin(BaseEquipmentAdmin):
             }))
 
 
-        if obj and obj.amp_model.nl8_connector_count > 0:
+        if obj and obj.amp_model and obj.amp_model.nl8_connector_count > 0:
             nl8_fields = []
             if obj.amp_model.nl8_connector_count >= 1:
                 nl8_fields.extend(['nl8_a_pair_1', 'nl8_a_pair_2', 'nl8_a_pair_3', 'nl8_a_pair_4'])
@@ -3652,9 +3660,15 @@ class PACableAdmin(BaseEquipmentAdmin):
         writer.writerow([f'Generated: {timezone.now().strftime("%Y-%m-%d %H:%M")}'])
         writer.writerow([])
         
+        # Eight headings over seven values put every column after 'Cable'
+        # one cell to the left of its own name: the fan-outs landed under
+        # 'Count2', the notes under 'Fan Out', the drawing ref under
+        # 'Notes', and 'Drawing Ref' was always empty. 'Count2' is the
+        # phantom -- there is no count2 field on PACableSchedule and
+        # nothing has ever written one.
         writer.writerow([
-            'Label', 'Destination', 'Count', 'Cable', 
-            'Count2', 'Fan Out', 'Notes', 'Drawing Ref'
+            'Array/Speaker', 'Destination', 'Count', 'Cable',
+            'Fan Out', 'Notes', 'Drawing Ref'
         ])
         
         # Group by cable type for summary
@@ -3663,7 +3677,10 @@ class PACableAdmin(BaseEquipmentAdmin):
         
         
         # Write data rows
-        for cable in queryset.prefetch_related('fan_outs').order_by('label__sort_order', 'cable'):
+        for cable in (queryset
+                      .select_related('label', 'speaker_array', 'amp')
+                      .prefetch_related('fan_outs')
+                      .order_by('label__sort_order', 'cable')):
             # Build fan out summary string for this cable
             fan_out_display = ''
             if cable.fan_outs.exists():
@@ -3673,9 +3690,16 @@ class PACableAdmin(BaseEquipmentAdmin):
                         fan_out_items.append(f'{fan_out.get_fan_out_type_display()} x{fan_out.quantity}')
                 fan_out_display = ', '.join(fan_out_items)
             
+            # array_speaker_display / destination_display, not the raw
+            # label and destination columns: a cable entered in "From
+            # Soundvision / Amps" mode leaves both of those empty and
+            # carries its array and amp in speaker_array / amp instead
+            # (issue #73), so the raw reads exported a run with no
+            # indication of what it ran from or to. Same two properties
+            # as the changelist columns and the System Report (#99).
             writer.writerow([
-                cable.label.name if cable.label else '',
-                cable.destination,
+                cable.array_speaker_display or '',
+                cable.destination_display or '',
                 cable.count,
                 cable.get_cable_display(),
                 fan_out_display,  # Changed: now shows all fan outs
@@ -3692,14 +3716,20 @@ class PACableAdmin(BaseEquipmentAdmin):
                 }
             cable_totals[cable_type_name]['quantity'] += cable.count
             cable_totals[cable_type_name]['total_length'] += cable.total_cable_length
-            
-            # Track fan out totals (lines 1279-1284 should be replaced with:)
-        for fan_out in cable.fan_outs.all():
-            if fan_out.fan_out_type:
-                fan_out_name = fan_out.get_fan_out_type_display()
-                if fan_out_name not in fan_out_totals:
-                    fan_out_totals[fan_out_name] = 0
-                fan_out_totals[fan_out_name] += fan_out.quantity
+
+            # Track fan out totals. This loop used to sit one level out,
+            # in the method body rather than in the per-cable loop, so it
+            # ran once on whichever cable the loop happened to leave
+            # behind: the FAN OUT SUMMARY at the foot of the CSV counted
+            # the last row's fan-outs and no others. (On an empty
+            # queryset it also read an unbound `cable`, though an admin
+            # action always has rows selected.)
+            for fan_out in cable.fan_outs.all():
+                if fan_out.fan_out_type:
+                    fan_out_name = fan_out.get_fan_out_type_display()
+                    if fan_out_name not in fan_out_totals:
+                        fan_out_totals[fan_out_name] = 0
+                    fan_out_totals[fan_out_name] += fan_out.quantity
             
         
         # Write cable summary

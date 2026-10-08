@@ -7,8 +7,8 @@ navy/blue look used across all ShowStack module exports (title header, navy
 table headers, zebra striping, "Page X of Y" footer, orphan-safe page breaks).
 
 Data preserved from the original export:
-  * the cable run list (label, destination, count, length, cable type,
-    fan-outs, notes, drawing ref)
+  * the cable run list (array/speaker, destination, count, length, cable
+    type, fan-outs, notes, drawing ref)
   * the Quick Order List summary (cable lengths rolled up to stock spools,
     fan-outs, extension cables, and PA couplers -- all with the 20% safety
     margin for temporary installations)
@@ -32,11 +32,24 @@ def _project_name(queryset):
 
 
 def _cable_rows(queryset, S):
-    """Build the main cable-run table rows."""
+    """Build the main cable-run table rows.
+
+    Array/Speaker and Destination come from ``array_speaker_display`` and
+    ``destination_display`` -- the two properties that resolve a cable's
+    effective values whichever entry mode it is in (issue #73), and the same
+    two the PA Cable changelist columns and the System Report use (#99).
+
+    Reading the raw ``label`` and ``destination`` columns instead, as this did,
+    printed an empty cell for both on every row entered in "From Soundvision /
+    Amps" mode: a linked cable leaves ``label`` NULL and ``destination`` blank
+    and carries its array and amp in ``speaker_array`` / ``amp``. The run was
+    in the table, with its cable type, count and length -- just with no
+    indication of what it ran from or to.
+    """
     data = []
     for cable in queryset.prefetch_related('fan_outs'):
-        label_text = str(cable.label) if cable.label else '-'
-        destination = cable.destination or '-'
+        label_text = cable.array_speaker_display or '-'
+        destination = cable.destination_display or '-'
         count = str(cable.count) if cable.count else '1'
         length = f"{cable.length}'" if cable.length else '-'
         cable_type = cable.get_cable_display() if cable.cable else '-'
@@ -171,11 +184,11 @@ def generate_pa_cable_pdf(queryset):
 
     # ==================== CABLE LIST ====================
     if queryset.exists():
-        headers = ['Label', 'Destination', 'Count', 'Length', 'Cable',
+        headers = ['Array/Speaker', 'Destination', 'Count', 'Length', 'Cable',
                    'Fan Outs', 'Notes', 'Dwg Ref']
         widths = [w * inch for w in (1.1, 1.4, 0.6, 0.7, 1.0, 1.7, 2.2, 0.8)]
         data = _cable_rows(queryset, S)
-        # Keep Label + Destination even if a page happens to be blank.
+        # Keep Array/Speaker + Destination even if a page happens to be blank.
         headers, data, widths = kit.prune_empty_columns(headers, data, widths, keep=(0, 1))
         table = kit.data_table(headers, data, widths)
         if table is not None:
