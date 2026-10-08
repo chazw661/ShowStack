@@ -1901,12 +1901,45 @@ class Amp(models.Model):
 
         super().save(*args, **kwargs)
 
-        # Auto-create/update channels when amp is created or model changes
-        if is_new or (old_model and old_model != self.amp_model):
+        # Auto-create/update channels when amp is created or model changes.
+        #
+        # The `old_model and` guard this used to carry meant "the model
+        # changed from one model to another", which silently excluded the
+        # case that matters most for a nullable FK: going from no model to
+        # a model. An amp first saved with the dropdown left empty then
+        # kept zero channels forever, however many times you came back and
+        # picked one -- the dropdown appeared to do nothing. Comparing the
+        # two values plainly covers all of it, and setup_channels() returns
+        # early when there is still no model to size the list from:
+        #
+        #   new amp            -> build (or no-op while model-less)
+        #   model A -> model B -> reconcile the count
+        #   no model -> model  -> build        <- was missed
+        #   model -> no model  -> no-op, channels kept
+        #   unchanged          -> not called
+        if is_new or old_model != self.amp_model:
             self.setup_channels()
     
     def setup_channels(self):
-        """Create or adjust channels based on amp model"""
+        """Create or adjust channels based on amp model.
+
+        ``amp_model`` is null=True/blank=True, so the admin renders its
+        dropdown as optional and an engineer can save an amp without one
+        -- on the Add form, or by clearing it on the change form to pick
+        a different one. This method used to dereference it regardless
+        and turn either into a 500.
+
+        With no model there is nothing to size the channel list from, so
+        leave the existing channels alone rather than treating the target
+        as zero and deleting them: the names, AVB streams and AES/analog
+        assignments on those rows are the engineer's work, and "clear the
+        model" is usually a step towards choosing another one, not an
+        instruction to discard a rack's patch. Picking a model runs this
+        again and the count is reconciled then.
+        """
+        if self.amp_model_id is None:
+            return
+
         current_count = self.channels.count()
         target_count = self.amp_model.channel_count
         
@@ -1923,6 +1956,10 @@ class Amp(models.Model):
             self.channels.filter(channel_number__gt=target_count).delete()
     
     def __str__(self):
+        # Without the guard an amp awaiting a model reads
+        # "SL LA12X #1 - None" in every dropdown and log line.
+        if self.amp_model_id is None:
+            return f"{self.name} (no model)"
         return f"{self.name} - {self.amp_model}"
 
 

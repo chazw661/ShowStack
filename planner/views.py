@@ -554,7 +554,15 @@ class SystemDashboardView(LoginRequiredMixin, View):
             
             # Amp Status
             'total_amps': Amp.objects.count(),
-            'total_amp_channels': sum(a.amp_model.channel_count for a in Amp.objects.select_related('amp_model')),
+            # An amp awaiting a model contributes no channels rather
+            # than taking the whole dashboard down with it. This sum is
+            # also not scoped to the current project -- pre-existing,
+            # and true of most counts in this dict.
+            'total_amp_channels': sum(
+                a.amp_model.channel_count
+                for a in Amp.objects.select_related('amp_model')
+                if a.amp_model_id
+            ),
             
             # Cable Statistics
             'total_cable_runs': PACableSchedule.objects.count(),
@@ -3870,9 +3878,14 @@ def all_pa_cables_pdf_export(request):
     
     # Filter by current project and preserve ordering
     if hasattr(request, 'current_project') and request.current_project:
+        # speaker_array and amp join the select_related because the table's
+        # Array/Speaker and Destination columns resolve through them for a
+        # linked-mode cable (issue #73).
         queryset = PACableSchedule.objects.filter(
             project=request.current_project
-        ).select_related('label').order_by('label__name', 'destination')
+        ).select_related(
+            'label', 'speaker_array', 'amp'
+        ).order_by('label__name', 'destination')
     else:
         queryset = PACableSchedule.objects.none()
     
