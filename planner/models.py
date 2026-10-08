@@ -2585,14 +2585,31 @@ class PACableSchedule(models.Model):
         
     @property
     def total_length_per_run(self):
-        """Length including service loop"""
+        """Length including service loop -- legacy mirrors, no callers.
+
+        ``length_per_run`` and ``service_loop`` are two of the
+        editable=False mirrors below. ``service_loop`` is never written at
+        all (it sits on its 10.0 default forever) and ``save()`` derives
+        ``length_per_run`` from the *name* of the cable choice, which no
+        current choice but NL4_JUMPER matches -- so for almost every row
+        this returns 10.0 no matter what length the user typed. The live
+        per-run length is ``length``.
+
+        Kept so the attribute does not vanish from under anything that
+        still reaches for it; do not call it from new code.
+        """
         return float(self.length_per_run) + float(self.service_loop)
     
-    @property
-    def total_cable_length(self):
-        """Total cable needed for all runs"""
-        return self.total_length_per_run * self.quantity
-        
+    # NOTE: a second ``total_cable_length`` used to live here, defined as
+    # ``total_length_per_run * quantity`` -- mirror arithmetic on top of
+    # mirror fields. It was already dead: the live definition further down
+    # this class body (``count * length``) redefines the name and wins, so
+    # every caller was getting the live version. Deleted rather than left
+    # in place, because the correctness of the "Total Length (ft)" column
+    # in the PA Cable CSV export rested on nothing but the order of two
+    # methods in one file -- removing the live one would silently have
+    # swapped that whole column over to (0 + 10.0) * quantity.
+
     @property
     def total_fan_out_count(self):
         """Total number of fan out items needed"""
