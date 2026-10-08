@@ -1,8 +1,11 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import render, get_object_or_404, redirect
+from planner.tenancy import current_project_or_none as _scoped_project
+from planner.tenancy import scope_queryset
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, IntegrityError
@@ -85,7 +88,9 @@ from planner.utils.console_csv_import import (
 )
 
 def console_detail(request, console_id):
-    console = get_object_or_404(Console, pk=console_id)
+    console = get_object_or_404(
+        Console, pk=console_id, project=_scoped_project(request),
+    )
 
     InputFormSet = modelformset_factory(
         ConsoleInput,
@@ -161,7 +166,10 @@ def add_source_hardware_option(request):
 @staff_member_required
 def p1_processor_export(request, p1_processor_id):
     """Export P1 configuration as JSON or CSV"""
-    p1 = get_object_or_404(P1Processor, pk=p1_processor_id)
+    p1 = get_object_or_404(
+        P1Processor, pk=p1_processor_id,
+        system_processor__project=_scoped_project(request),
+    )
     format_type = request.GET.get('format', 'json')
     
     if format_type == 'csv':
@@ -238,7 +246,9 @@ def p1_processor_export(request, p1_processor_id):
 
 def console_pdf_export(request, console_id):
     """Export a console configuration as PDF"""
-    console = get_object_or_404(Console, id=console_id)
+    console = get_object_or_404(
+        Console, id=console_id, project=_scoped_project(request),
+    )
     return export_console_pdf(console)
 
         
@@ -248,7 +258,10 @@ def console_pdf_export(request, console_id):
 @staff_member_required
 def p1_processor_summary(request, p1_processor_id):
     """Display a summary view of P1 configuration"""
-    p1 = get_object_or_404(P1Processor, pk=p1_processor_id)
+    p1 = get_object_or_404(
+        P1Processor, pk=p1_processor_id,
+        system_processor__project=_scoped_project(request),
+    )
     
     context = {
         'p1': p1,
@@ -269,7 +282,10 @@ def p1_processor_summary(request, p1_processor_id):
 @staff_member_required
 def galaxy_processor_export(request, galaxy_processor_id):
     """Export GALAXY configuration as JSON or CSV"""
-    galaxy = get_object_or_404(GalaxyProcessor, pk=galaxy_processor_id)
+    galaxy = get_object_or_404(
+        GalaxyProcessor, pk=galaxy_processor_id,
+        system_processor__project=_scoped_project(request),
+    )
     format_type = request.GET.get('format', 'json')
     
     if format_type == 'csv':
@@ -357,7 +373,10 @@ def galaxy_processor_export(request, galaxy_processor_id):
 @staff_member_required
 def galaxy_processor_summary(request, galaxy_processor_id):
     """Display a summary view of GALAXY configuration"""
-    galaxy = get_object_or_404(GalaxyProcessor, pk=galaxy_processor_id)
+    galaxy = get_object_or_404(
+        GalaxyProcessor, pk=galaxy_processor_id,
+        system_processor__project=_scoped_project(request),
+    )
     
     context = {
         'galaxy': galaxy,
@@ -534,43 +553,62 @@ def import_comm_names(request):
 
 
 class SystemDashboardView(LoginRequiredMixin, View):
+    """System overview for the *current project*.
+
+    Issue #100 (a): every count here used to be a global `.objects.count()`,
+    so each tenant's dashboard reported the whole install's equipment --
+    console and device counts, I/O totals, processor and belt-pack counts,
+    amp and channel totals, cable runs and total cable length. No names, but
+    the aggregate size of every other customer's rig.
+
+    Each count now runs through `scope_queryset`, which filters to the
+    accessible current project and returns `none()` when there isn't one --
+    so "no project selected" shows zeros rather than everything.
+    """
+
     def get(self, request):
+        def scoped(model, path='project'):
+            return scope_queryset(request, model.objects.all(), path)
+
+        devices = scoped(Device)
+        amps = scoped(Amp).select_related('amp_model')
+        beltpacks = scoped(CommBeltPack)
+        processors = scoped(SystemProcessor)
+        positions_count = scoped(CommPosition).count()
+        cables = scoped(PACableSchedule)
+
         context = {
             # System Status Overview
-            'console_count': Console.objects.count(),
-            'device_count': Device.objects.count(),
-            'total_inputs': sum(d.input_count for d in Device.objects.all()),
-            'total_outputs': sum(d.output_count for d in Device.objects.all()),
-            
+            'console_count': scoped(Console).count(),
+            'device_count': devices.count(),
+            'total_inputs': sum(d.input_count for d in devices),
+            'total_outputs': sum(d.output_count for d in devices),
+
             # Processor Status
-            'p1_processors': SystemProcessor.objects.filter(device_type='P1').count(),
-            'galaxy_processors': SystemProcessor.objects.filter(device_type='GALAXY').count(),
-            
+            'p1_processors': processors.filter(device_type='P1').count(),
+            'galaxy_processors': processors.filter(device_type='GALAXY').count(),
+
             # COMM System Status
-            'wireless_beltpacks': CommBeltPack.objects.filter(system_type='WIRELESS').count(),
-            'hardwired_beltpacks': CommBeltPack.objects.filter(system_type='HARDWIRED').count(),
-            'checked_out': CommBeltPack.objects.filter(checked_out=True).count(),
-            'positions_configured': CommPosition.objects.count() > 0,
-            
+            'wireless_beltpacks': beltpacks.filter(system_type='WIRELESS').count(),
+            'hardwired_beltpacks': beltpacks.filter(system_type='HARDWIRED').count(),
+            'checked_out': beltpacks.filter(checked_out=True).count(),
+            'positions_configured': positions_count > 0,
+
             # Amp Status
-            'total_amps': Amp.objects.count(),
+            'total_amps': amps.count(),
             # An amp awaiting a model contributes no channels rather
-            # than taking the whole dashboard down with it. This sum is
-            # also not scoped to the current project -- pre-existing,
-            # and true of most counts in this dict.
+            # than taking the whole dashboard down with it.
             'total_amp_channels': sum(
-                a.amp_model.channel_count
-                for a in Amp.objects.select_related('amp_model')
-                if a.amp_model_id
+                a.amp_model.channel_count for a in amps if a.amp_model_id
             ),
-            
+
             # Cable Statistics
-            'total_cable_runs': PACableSchedule.objects.count(),
-            'total_cable_length': sum(c.total_cable_length for c in PACableSchedule.objects.all()),
-            
+            'total_cable_runs': cables.count(),
+            'total_cable_length': sum(c.total_cable_length for c in cables),
+
             # Setup Warnings
-            'needs_comm_setup': CommPosition.objects.count() == 0,
-            'no_devices': Device.objects.count() == 0,
+            'needs_comm_setup': positions_count == 0,
+            'no_devices': devices.count() == 0,
         }
         return render(request, 'planner/dashboard.html', context)
     
@@ -763,7 +801,10 @@ def bulk_update_mics(request):
         session_id = data.get('session_id')
         action = data.get('action')
         
-        session = get_object_or_404(MicSession, id=session_id)
+        session = get_object_or_404(
+            MicSession, id=session_id,
+            day__project=_scoped_project(request),
+        )
         
         with transaction.atomic():
             if action == 'clear_all':
@@ -866,7 +907,10 @@ def bulk_update_mics(request):
         session_id = data.get('session_id')
         action = data.get('action')
         
-        session = get_object_or_404(MicSession, id=session_id)
+        session = get_object_or_404(
+            MicSession, id=session_id,
+            day__project=_scoped_project(request),
+        )
         
         with transaction.atomic():
             if action == 'clear_all':
@@ -921,7 +965,10 @@ def duplicate_session(request):
         if not target_session_name:
             return JsonResponse({'success': False, 'error': 'A name for the new session is required.'})
 
-        source_session = get_object_or_404(MicSession, id=source_session_id)
+        source_session = get_object_or_404(
+            MicSession, id=source_session_id,
+            day__project=_scoped_project(request),
+        )
 
         with transaction.atomic():
             # Append after existing sessions in the same day.
@@ -982,7 +1029,10 @@ def delete_session(request):
     try:
         data = json.loads(request.body)
         session_id = data.get("session_id")
-        session = get_object_or_404(MicSession, id=session_id)
+        session = get_object_or_404(
+            MicSession, id=session_id,
+            day__project=_scoped_project(request),
+        )
         session.delete()
         return JsonResponse({"success": True})
     except Exception as e:
@@ -1060,7 +1110,10 @@ def delete_session(request):
     try:
         data = json.loads(request.body)
         session_id = data.get('session_id')
-        session = get_object_or_404(MicSession, id=session_id)
+        session = get_object_or_404(
+            MicSession, id=session_id,
+            day__project=_scoped_project(request),
+        )
         session.delete()
         return JsonResponse({'success': True})
     except Exception as e:
@@ -1353,7 +1406,10 @@ def update_mic_assignment(request):
         field = data.get('field')
         value = data.get('value')
 
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         # Take the project from the row being edited, not from the session.
         # This used to read the legacy 'current_project' session alias, which
         # is written only by mic_tracker_view — so an edit arriving with that
@@ -1693,7 +1749,10 @@ def reset_presenter_rotation(request):
 def get_assignment_details(request, assignment_id):
     """Fetch assignment details including shared presenters"""
     try:
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         
         # Get shared presenters as a list of names
         shared_presenters = [p.name for p in assignment.shared_presenters.all()]
@@ -1779,7 +1838,10 @@ def dmic_and_rotate(request):
 def update_slot_field(request):
     try:
         data = json.loads(request.body)
-        slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
+        slot = get_object_or_404(
+            PresenterSlot, id=data['slot_id'],
+            assignment__session__day__project=_scoped_project(request),
+        )
         field = data['field']
         value = data['value']
         # Editable presenter name on a specific slot (Overview edit). Resolve/create
@@ -1829,7 +1891,10 @@ def _resolve_group_ids(data, session_id):
 def assign_slot_group(request):
     try:
         data = json.loads(request.body)
-        slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
+        slot = get_object_or_404(
+            PresenterSlot, id=data['slot_id'],
+            assignment__session__day__project=_scoped_project(request),
+        )
         ids = _resolve_group_ids(data, slot.assignment.session_id)
         slot.groups.set(ids)
         slot.group_id = ids[0] if ids else None
@@ -1844,7 +1909,10 @@ def assign_slot_group(request):
 def assign_slot_a2_group(request):
     try:
         data = json.loads(request.body)
-        slot = get_object_or_404(PresenterSlot, id=data['slot_id'])
+        slot = get_object_or_404(
+            PresenterSlot, id=data['slot_id'],
+            assignment__session__day__project=_scoped_project(request),
+        )
         ids = _resolve_group_ids(data, slot.assignment.session_id)
         slot.a2_groups.set(ids)
         slot.a2_group_id = ids[0] if ids else None
@@ -1860,7 +1928,10 @@ def toggle_slot_micd(request):
         data = json.loads(request.body)
         slot_id = data.get('slot_id')
         new_state = data.get('is_micd', False)
-        slot = get_object_or_404(PresenterSlot, id=slot_id)
+        slot = get_object_or_404(
+            PresenterSlot, id=slot_id,
+            assignment__session__day__project=_scoped_project(request),
+        )
         # Turn off all sibling slots on this assignment
         PresenterSlot.objects.filter(assignment=slot.assignment).update(is_micd=False)
         if new_state:
@@ -2067,7 +2138,10 @@ def advance_presenter_slot(request):
     try:
         data = json.loads(request.body)
         assignment_id = data.get('assignment_id')
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         slots = list(assignment.presenter_slots.order_by('order'))
         if not slots:
             return JsonResponse({'success': False, 'error': 'No slots'})
@@ -2103,7 +2177,10 @@ def previous_presenter_slot(request):
     try:
         data = json.loads(request.body)
         assignment_id = data.get('assignment_id')
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         slots = list(assignment.presenter_slots.order_by('order'))
         if not slots:
             return JsonResponse({'success': False, 'error': 'No slots'})
@@ -2138,7 +2215,10 @@ def add_presenter_slot(request):
     try:
         data = json.loads(request.body)
         assignment_id = data.get('assignment_id')
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         
         # Get next order number
         last_slot = assignment.presenter_slots.order_by('-order').first()
@@ -2171,7 +2251,10 @@ def remove_presenter_slot(request):
         assignment_id = data.get('assignment_id')
         slot_id = data.get('slot_id')
         
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         slots = list(assignment.presenter_slots.order_by('order'))
         
         if len(slots) <= 1:
@@ -2205,7 +2288,10 @@ def activate_presenter_slot(request):
         data = json.loads(request.body)
         assignment_id = data.get('assignment_id')
         slot_id = data.get('slot_id')
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         slots = list(assignment.presenter_slots.order_by('order'))
         if not slots:
             return JsonResponse({'success': False, 'error': 'No slots'})
@@ -2238,7 +2324,10 @@ def activate_presenter_slot(request):
 
 @staff_member_required
 def manage_mic_groups(request, session_id):
-    session = get_object_or_404(MicSession, id=session_id)
+    session = get_object_or_404(
+            MicSession, id=session_id,
+            day__project=_scoped_project(request),
+        )
     if request.method == 'POST':
         data = json.loads(request.body)
         action = data.get('action')
@@ -2259,7 +2348,10 @@ def manage_mic_groups(request, session_id):
 def assign_mic_group(request):
     try:
         data = json.loads(request.body)
-        assignment = get_object_or_404(MicAssignment, id=data['assignment_id'])
+        assignment = get_object_or_404(
+            MicAssignment, id=data['assignment_id'],
+            session__day__project=_scoped_project(request),
+        )
         ids = _resolve_group_ids(data, assignment.session_id)
         assignment.groups.set(ids)
         assignment.group_id = ids[0] if ids else None
@@ -2272,7 +2364,10 @@ def assign_mic_group(request):
 def get_assignment_details(request, assignment_id):
     """Fetch assignment details including shared presenters"""
     try:
-        assignment = get_object_or_404(MicAssignment, id=assignment_id)
+        assignment = get_object_or_404(
+            MicAssignment, id=assignment_id,
+            session__day__project=_scoped_project(request),
+        )
         
         shared_presenters = assignment.shared_presenters
         if shared_presenters is None:
@@ -2892,16 +2987,23 @@ def audio_checklist(request):
 
 
 def predictions_list(request):
-    """List all predictions with filtering"""
+    """List the current project's predictions, with filtering.
+
+    Both querysets used to be `.objects.all()`, which listed every tenant's
+    prediction filenames and show-day names. `scope_queryset` returns
+    `none()` when there is no accessible current project.
+    """
     show_day_filter = request.GET.get('show_day')
-    
-    predictions = SoundvisionPrediction.objects.all()
-    
+
+    predictions = scope_queryset(request, SoundvisionPrediction.objects.all())
+
     if show_day_filter:
         predictions = predictions.filter(show_day_id=show_day_filter)
-    
-    show_days = ShowDay.objects.all().order_by('name')
-    
+
+    # Scoped too: this feeds the filter dropdown, so an unscoped list would
+    # leak day names even though the table below it is now correct.
+    show_days = scope_queryset(request, ShowDay.objects.all()).order_by('name')
+
     context = {
         'predictions': predictions,
         'show_days': show_days,
@@ -2915,7 +3017,9 @@ def predictions_list(request):
 
 def prediction_detail(request, pk):
     """Display detailed prediction with collapsible arrays grouped by Soundvision group and base name"""
-    prediction = get_object_or_404(SoundvisionPrediction, pk=pk)
+    prediction = get_object_or_404(
+        SoundvisionPrediction, pk=pk, project=_scoped_project(request),
+    )
     
     # Group arrays by their Soundvision group context FIRST, then by base name
     # This keeps "KARA II 1" in "KARA Mains" separate from "KARA II 1" in "Delay"
@@ -2987,7 +3091,9 @@ def upload_prediction(request):
 def export_prediction_summary(request, pk):
     """Export prediction summary as CSV"""
     
-    prediction = get_object_or_404(SoundvisionPrediction, pk=pk)
+    prediction = get_object_or_404(
+        SoundvisionPrediction, pk=pk, project=_scoped_project(request),
+    )
     
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = f'attachment; filename="prediction_{prediction.show_day}_{prediction.id}.csv"'
@@ -3417,13 +3523,15 @@ def device_pdf_export(request, device_id):
     from django.shortcuts import get_object_or_404
     
     # Get device and ensure it belongs to current project
-    device = get_object_or_404(Device, id=device_id)
+    device = get_object_or_404(
+        Device, id=device_id, project=_scoped_project(request),
+    )
     
-    # Security check - ensure device belongs to current project
-    if hasattr(request, 'current_project') and request.current_project:
-        if device.project != request.current_project:
-            return HttpResponse("Access denied - device not in current project", status=403)
-    
+    # The guard that used to live here read
+    #     if request.current_project and device.project != request.current_project
+    # which skipped the comparison entirely when there was no current project,
+    # serving the PDF. The scoped lookup above cannot fail open: with no
+    # accessible project it filters on project=None and 404s.
     return export_device_pdf(device)
 
 
@@ -3438,7 +3546,9 @@ def amp_reorder(request):
     """Reorder an amp within its location group"""
     try:
         data = json.loads(request.body)
-        amp = get_object_or_404(Amp, id=data['amp_id'])
+        amp = get_object_or_404(
+            Amp, id=data['amp_id'], project=_scoped_project(request),
+        )
         direction = data.get('direction')  # 'up' or 'down'
         location_items = get_location_items(amp.location, amp.project)
         idx = next((i for i, item in enumerate(location_items) if item.get('type') == 'amp' and item['obj'].id == amp.id), None)
@@ -3468,7 +3578,10 @@ def amp_divider_add(request):
     """Add a new divider to a location"""
     try:
         data = request.POST
-        location = get_object_or_404(AmpLocation, id=data['location_id'])
+        location = get_object_or_404(
+            AmpLocation, id=data['location_id'],
+            project=_scoped_project(request),
+        )
         project = get_object_or_404(Project, id=data['project_id'])
         # Place at end of location items
         location_items = get_location_items(location, project)
@@ -3488,7 +3601,9 @@ def amp_divider_update(request, divider_id):
     """Update a divider label"""
     try:
         data = request.POST
-        divider = get_object_or_404(AmpDivider, id=divider_id)
+        divider = get_object_or_404(
+            AmpDivider, id=divider_id, project=_scoped_project(request),
+        )
         divider.label = data.get('label', '')
         divider.save()
         return JsonResponse({'success': True})
@@ -3499,7 +3614,9 @@ def amp_divider_update(request, divider_id):
 def amp_divider_delete(request, divider_id):
     """Delete a divider"""
     try:
-        divider = get_object_or_404(AmpDivider, id=divider_id)
+        divider = get_object_or_404(
+            AmpDivider, id=divider_id, project=_scoped_project(request),
+        )
         divider.delete()
         return JsonResponse({'success': True})
     except Exception as e:
@@ -3516,7 +3633,9 @@ def amp_divider_reorder(request, divider_id):
     positions in the rack render path.
     """
     try:
-        divider = get_object_or_404(AmpDivider, id=divider_id)
+        divider = get_object_or_404(
+            AmpDivider, id=divider_id, project=_scoped_project(request),
+        )
         direction = request.POST.get('direction')
         amp_count = Amp.objects.filter(
             location=divider.location, project=divider.project,
@@ -3545,7 +3664,10 @@ def get_location_items(location, project):
 def amp_divider_sync(request):
     """Sync all dividers for a location from localStorage state"""
     try:
-        location = get_object_or_404(AmpLocation, id=request.POST.get('location_id'))
+        location = get_object_or_404(
+            AmpLocation, id=request.POST.get('location_id'),
+            project=_scoped_project(request),
+        )
         project = get_object_or_404(Project, id=request.POST.get('project_id'))
         dividers_data = json.loads(request.POST.get('dividers', '[]'))
         
@@ -3657,7 +3779,10 @@ def mic_assignment_delete(request, mic_id):
     """Issue #36: one-click delete for a MicAssignment row inside the
     MicSession admin change form. Posts here from the inline's "X"
     button instead of using Django's default "Delete?" checkbox."""
-    mic = get_object_or_404(MicAssignment, id=mic_id)
+    mic = get_object_or_404(
+        MicAssignment, id=mic_id,
+        session__day__project=_scoped_project(request),
+    )
     project = mic.session.day.project
     allowed = (
         request.user.is_superuser
@@ -3678,7 +3803,10 @@ def pa_cable_array_speakers(request, array_id):
     """Issue #73 (Phase 2): list the speakers in a Soundvision speaker array for
     the PA cable edit page's vertical reference panel. Read-only, so any member
     of the array's project (owner, editor, or viewer) may fetch it."""
-    array = get_object_or_404(SpeakerArray, id=array_id)
+    array = get_object_or_404(
+        SpeakerArray, id=array_id,
+        prediction__project=_scoped_project(request),
+    )
     project = array.prediction.project
     allowed = (
         request.user.is_superuser
@@ -3701,7 +3829,10 @@ def comm_beltpack_channel_delete(request, channel_id):
     instead of Django's default "Delete?" checkbox (which rendered as a tiny,
     near-invisible checkbox on the dark admin theme). Mirrors
     ``mic_assignment_delete``."""
-    bp_channel = get_object_or_404(CommBeltPackChannel, id=channel_id)
+    bp_channel = get_object_or_404(
+        CommBeltPackChannel, id=channel_id,
+        beltpack__project=_scoped_project(request),
+    )
     project = bp_channel.beltpack.project
     allowed = (
         request.user.is_superuser
@@ -3898,10 +4029,18 @@ def all_pa_cables_pdf_export(request):
 #--------Comm Beltpack PDF-----
 
 def all_comm_beltpacks_pdf_export(request):
-    """Export the current project's Comm Belt Packs to PDF."""
+    """Export the current project's Comm Belt Packs to PDF.
+
+    The old code passed `getattr(request, 'current_project', None)` straight
+    through, and the generator treated None as "every project" -- so a request
+    with no project got every tenant's crew names, positions, channels and
+    IPs. Refuse instead; the generator now rejects None as well.
+    """
     from .utils.pdf_exports.comm_pdf import generate_comm_beltpacks_pdf
 
-    project = getattr(request, 'current_project', None)
+    project = _scoped_project(request)
+    if project is None:
+        return HttpResponse("No project selected.", status=403)
     pdf = generate_comm_beltpacks_pdf(project=project)
 
     response = HttpResponse(pdf, content_type='application/pdf')
@@ -4371,7 +4510,10 @@ def export_soundvision_pdf(request, prediction_id):
     """Export Soundvision Prediction as PDF"""
     from planner.utils.pdf_exports.soundvision_pdf import generate_soundvision_pdf
     
-    prediction = get_object_or_404(SoundvisionPrediction, id=prediction_id)
+    prediction = get_object_or_404(
+        SoundvisionPrediction, id=prediction_id,
+        project=_scoped_project(request),
+    )
     pdf = generate_soundvision_pdf(prediction)
     
     response = HttpResponse(pdf, content_type='application/pdf')
@@ -5054,7 +5196,9 @@ def _seed_factory_defaults(config):
 def comm_config_update_partyline(request):
     try:
         data = _json.loads(request.body)
-        pl = CommConfigPartyline.objects.get(id=data['partyline_id'])
+        pl = CommConfigPartyline.objects.get(
+            id=data['partyline_id'], config__project=_scoped_project(request),
+        )
         if 'label' in data:
             pl.label = data['label']
         if 'helixnet_enabled' in data:
@@ -5062,6 +5206,10 @@ def comm_config_update_partyline(request):
         pl.save()
         return JsonResponse({'ok': True})
     except CommConfigPartyline.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5071,7 +5219,9 @@ def comm_config_update_partyline(request):
 def comm_config_add_partyline(request):
     try:
         data = _json.loads(request.body)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         # Next available channel number
         existing = config.partylines.values_list('channel_number', flat=True)
         next_ch = max(existing, default=0) + 1
@@ -5082,6 +5232,10 @@ def comm_config_add_partyline(request):
             helixnet_enabled=True,
         )
         return JsonResponse({'ok': True, 'partyline_id': pl.id, 'channel_number': pl.channel_number, 'label': pl.label})
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -5090,12 +5244,18 @@ def comm_config_add_partyline(request):
 def comm_config_delete_partyline(request):
     try:
         data = _json.loads(request.body)
-        pl = CommConfigPartyline.objects.get(id=data['partyline_id'])
+        pl = CommConfigPartyline.objects.get(
+            id=data['partyline_id'], config__project=_scoped_project(request),
+        )
         # Detach any keyset assignments pointing to this partyline
         CommConfigKeyset.objects.filter(partyline=pl).update(partyline=None, entity_type=None)
         pl.delete()
         return JsonResponse({'ok': True})
     except CommConfigPartyline.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5111,7 +5271,9 @@ def comm_config_delete_partyline(request):
 def comm_config_update_keyset(request):
     try:
         data = _json.loads(request.body)
-        key = CommConfigKeyset.objects.get(id=data['keyset_id'])
+        key = CommConfigKeyset.objects.get(
+            id=data['keyset_id'], role__config__project=_scoped_project(request),
+        )
         field = data.get('field')
         value = data.get('value')
         allowed = {'activation_state', 'talk_mode', 'partyline'}
@@ -5123,7 +5285,9 @@ def comm_config_update_keyset(request):
                 key.is_call_key = True
                 key.entity_type = None
             elif value:
-                key.partyline = CommConfigPartyline.objects.get(id=value)
+                key.partyline = CommConfigPartyline.objects.get(
+                    id=value, config__project=_scoped_project(request),
+                )
                 key.is_call_key = False
                 key.entity_type = 0
             else:
@@ -5136,6 +5300,10 @@ def comm_config_update_keyset(request):
         return JsonResponse({'ok': True, 'role_id': key.role_id})
     except CommConfigKeyset.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -5147,12 +5315,18 @@ def comm_config_update_keyset(request):
 def comm_config_update_role(request):
     try:
         data = _json.loads(request.body)
-        role = CommConfigRole.objects.get(id=data['role_id'])
+        role = CommConfigRole.objects.get(
+            id=data['role_id'], config__project=_scoped_project(request),
+        )
         if 'label' in data:
             role.label = data['label']
         role.save()
         return JsonResponse({'ok': True})
     except CommConfigRole.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5165,10 +5339,16 @@ def comm_config_update_role(request):
 def comm_config_delete_role(request):
     try:
         data = _json.loads(request.body)
-        role = CommConfigRole.objects.get(id=data['role_id'])
+        role = CommConfigRole.objects.get(
+            id=data['role_id'], config__project=_scoped_project(request),
+        )
         role.delete()
         return JsonResponse({'ok': True})
     except CommConfigRole.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5183,7 +5363,9 @@ def comm_config_delete_role(request):
 def comm_config_add_role(request):
     try:
         data = _json.loads(request.body)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         device_type = data['device_type']
         label = data['label']
         role_number = int(data.get('role_number', 1))
@@ -5210,6 +5392,10 @@ def comm_config_add_role(request):
         return JsonResponse({'ok': True, 'role_id': role.id})
     except CommConfig.DoesNotExist:
         return JsonResponse({'error': 'Config not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -5220,7 +5406,9 @@ def comm_config_add_role(request):
 def comm_config_role_chips(request):
     try:
         role_id = request.GET.get('role_id')
-        role = CommConfigRole.objects.get(id=role_id)
+        role = CommConfigRole.objects.get(
+            id=role_id, config__project=_scoped_project(request),
+        )
         chips = []
         for key in role.keysets.all().order_by('key_index'):
             chips.append({
@@ -5230,6 +5418,10 @@ def comm_config_role_chips(request):
             })
         return JsonResponse({'ok': True, 'chips': chips})
     except CommConfigRole.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5241,7 +5433,9 @@ def comm_config_role_chips(request):
 def comm_config_assign_port(request):
     try:
         data = _json.loads(request.body)
-        port = CommConfigPortAssignment.objects.get(id=data['port_id'])
+        port = CommConfigPortAssignment.objects.get(
+            id=data['port_id'], config__project=_scoped_project(request),
+        )
         pl_id = data.get('partyline_id')
         allowed_fields = {
             'join_mode', 'port_function', 'receive_call_signal',
@@ -5249,13 +5443,21 @@ def comm_config_assign_port(request):
             'termination_enabled', 'port_label',
         }
         if 'partyline_id' in data:
-            port.partyline = CommConfigPartyline.objects.get(id=pl_id) if pl_id else None
+            port.partyline = (
+                CommConfigPartyline.objects.get(
+                    id=pl_id, config__project=_scoped_project(request),
+                ) if pl_id else None
+            )
         for field in allowed_fields:
             if field in data:
                 setattr(port, field, data[field])
         port.save()
         return JsonResponse({'ok': True})
     except (CommConfigPortAssignment.DoesNotExist, CommConfigPartyline.DoesNotExist):
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5280,7 +5482,9 @@ def comm_config_update_setting(request):
         field = data.get('field')
         if field not in _SETTINGS_ALLOWED_FIELDS:
             return JsonResponse({'error': f'Field "{field}" not editable'}, status=400)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         # Type-coerce booleans and integers as needed
         value = data['value']
         int_fields = {'wireless_region', 'display_brightness', 'touch_sensitivity'}
@@ -5294,6 +5498,10 @@ def comm_config_update_setting(request):
         return JsonResponse({'ok': True})
     except CommConfig.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -5305,13 +5513,19 @@ def comm_config_update_setting(request):
 def comm_config_delete(request):
     try:
         data = _json.loads(request.body)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         current_project = getattr(request, 'current_project', None)
         if config.project != current_project:
             return JsonResponse({'error': 'Forbidden'}, status=403)
         config.delete()
         return JsonResponse({'ok': True})
     except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -5328,7 +5542,9 @@ def comm_config_export(request, config_id):
     from django.conf import settings
     from datetime import datetime, timezone
 
-    config = get_object_or_404(CommConfig, id=config_id)
+    config = get_object_or_404(
+        CommConfig, id=config_id, project=_scoped_project(request),
+    )
 
     FACTORY_SYS_ID = 'lKcw3zUU'
     SEP = b'\xc3\xbf'
@@ -5771,16 +5987,22 @@ def comm_config_export(request, config_id):
 
 
 
+@user_passes_test(lambda u: u.is_superuser)
 def debug_device_ordering(request):
     """
     Temporary debug view to check device input/output ordering
     Access at: /audiopatch/debug-device-ordering/
+
+    It was undecorated and dumped `Device.objects.all()[:3]` with their input
+    and output signal names, so it served three arbitrary tenants' patch rows
+    as HTML to anyone who hit the URL. Now superuser-only and scoped to the
+    current project, which keeps it useful for its actual purpose.
     """
     html = ["<html><body><pre>"]
     html.append("<h1>Device Ordering Debug</h1>")
-    
-    # Get first 3 devices
-    devices = Device.objects.all()[:3]
+
+    # First 3 devices in the current project.
+    devices = scope_queryset(request, Device.objects.all())[:3]
     
     for device in devices:
         html.append(f"\n{'='*60}")
@@ -6312,7 +6534,9 @@ def audio_checklist_delete_template(request):
 def comm_config_add_dante(request):
     try:
         data = _json.loads(request.body)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         direction = data.get('direction', 'receive')
         existing = config.dante_channels.filter(direction=direction).count()
         ch = CommConfigDanteChannel.objects.create(
@@ -6323,6 +6547,10 @@ def comm_config_add_dante(request):
         )
         return JsonResponse({'ok': True, 'channel_id': ch.id})
     except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6337,10 +6565,18 @@ def comm_config_update_dante(request):
             ch.label = data['label']
         if 'partyline_id' in data:
             pl_id = data['partyline_id']
-            ch.partyline = CommConfigPartyline.objects.get(id=pl_id) if pl_id else None
+            ch.partyline = (
+                CommConfigPartyline.objects.get(
+                    id=pl_id, config__project=_scoped_project(request),
+                ) if pl_id else None
+            )
         ch.save()
         return JsonResponse({'ok': True})
     except CommConfigDanteChannel.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6366,7 +6602,9 @@ def comm_config_delete_dante(request):
 def comm_config_add_session(request):
     try:
         data = _json.loads(request.body)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         session = CommConfigSession.objects.create(
             config=config,
             session_type=data['session_type'],
@@ -6374,6 +6612,10 @@ def comm_config_add_session(request):
         )
         return JsonResponse({'ok': True, 'session_id': session.id})
     except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6383,7 +6625,9 @@ def comm_config_add_session(request):
 def comm_config_update_session(request):
     try:
         data = _json.loads(request.body)
-        session = CommConfigSession.objects.get(id=data['session_id'])
+        session = CommConfigSession.objects.get(
+            id=data['session_id'], config__project=_scoped_project(request),
+        )
         if 'label' in data:
             session.label = data['label']
         if 'roleset' in data:
@@ -6391,12 +6635,20 @@ def comm_config_update_session(request):
             session.roleset = CommConfigRoleset.objects.get(id=rs_id) if rs_id else None
         if 'default_role' in data:
             role_id = data['default_role']
-            session.default_role = CommConfigRole.objects.get(id=role_id) if role_id else None
+            session.default_role = (
+                CommConfigRole.objects.get(
+                    id=role_id, config__project=_scoped_project(request),
+                ) if role_id else None
+            )
         if 'addressable' in data:
             session.addressable = data['addressable']
         session.save()
         return JsonResponse({'ok': True})
     except CommConfigSession.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6406,10 +6658,16 @@ def comm_config_update_session(request):
 def comm_config_delete_session(request):
     try:
         data = _json.loads(request.body)
-        session = CommConfigSession.objects.get(id=data['session_id'])
+        session = CommConfigSession.objects.get(
+            id=data['session_id'], config__project=_scoped_project(request),
+        )
         session.delete()
         return JsonResponse({'ok': True})
     except CommConfigSession.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6422,7 +6680,9 @@ def comm_config_delete_session(request):
 def comm_config_add_roleset(request):
     try:
         data = _json.loads(request.body)
-        config = CommConfig.objects.get(id=data['config_id'])
+        config = CommConfig.objects.get(
+            id=data['config_id'], project=_scoped_project(request),
+        )
         next_num = (config.rolesets.aggregate(
             m=__import__('django.db.models', fromlist=['Max']).Max('roleset_number')
         )['m'] or 0) + 1
@@ -6433,6 +6693,10 @@ def comm_config_add_roleset(request):
         )
         return JsonResponse({'ok': True, 'roleset_id': rs.id})
     except CommConfig.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6493,10 +6757,16 @@ def comm_config_add_crew_name(request):
 def comm_config_delete_crew_name(request):
     try:
         data = _json.loads(request.body)
-        cn = CommCrewName.objects.get(id=data['crew_name_id'])
+        cn = CommCrewName.objects.get(
+            id=data['crew_name_id'], project=_scoped_project(request),
+        )
         cn.delete()
         return JsonResponse({'ok': True})
     except CommCrewName.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
         return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
@@ -6505,14 +6775,29 @@ def comm_config_delete_crew_name(request):
 # ─────────────────────────────────────────────────────────────
 # Dashboard Stats JSON endpoint
 # ─────────────────────────────────────────────────────────────
-@require_GET
-@require_GET
+@login_required
 @require_GET
 def dashboard_stats(request):
-    """JSON stats for the system overview dashboard."""
+    """JSON stats for the system overview dashboard.
+
+    Two fixes here (issue #100 (a)):
+
+    - It carried `@require_GET` three times and no authentication at all, so
+      it answered the public internet. Now `@login_required` as well, which is
+      belt-and-braces alongside the LoginRequiredMiddleware default-deny.
+    - `p = {'project': cp} if cp else {}` meant that with no current project
+      the filter kwargs collapsed to `{}` and *every count went global*. So an
+      anonymous visitor, or any logged-in user without a project, got counts
+      across all tenants. `cp` is now resolved through `_scoped_project`, and
+      with no project the filter becomes `project=None` -- which matches
+      nothing, because every one of these models has a non-null project. Zeros
+      instead of everything.
+    """
     from .models import ShowDay, MicAssignment
-    cp = getattr(request, 'current_project', None)
-    p = {'project': cp} if cp else {}
+    cp = _scoped_project(request)
+    # Never conditional: `project=None` is `project__isnull=True` in SQL, and
+    # matches no row. Dropping the key entirely is what leaked.
+    p = {'project': cp}
 
     try:
         # Show days with mic counts
@@ -6580,7 +6865,9 @@ def comm_config_save_as_template(request):
         template_name = data.get('template_name', '').strip()
         if not config_id or not template_name:
             return JsonResponse({'error': 'Missing config_id or template_name'}, status=400)
-        src = CommConfig.objects.get(id=config_id)
+        src = CommConfig.objects.get(
+            id=config_id, project=_scoped_project(request),
+        )
 
         # Delete existing template with same name
         CommConfig.objects.filter(is_template=True, template_name=template_name).delete()
@@ -6648,13 +6935,26 @@ def comm_config_save_as_template(request):
             )
 
         return JsonResponse({'ok': True, 'template_id': tmpl.id, 'template_name': template_name})
+    except ObjectDoesNotExist:
+        # Includes a cross-project id: the scoped lookup above
+        # raises DoesNotExist for it, same as for a missing row.
+        return JsonResponse({'error': 'Not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
 
 @require_GET
 def comm_config_list_templates(request):
-    templates = CommConfig.objects.filter(is_template=True).order_by('template_name').values('id', 'template_name', 'device_type')
+    """Template picker contents, scoped to the current project.
+
+    This listed `CommConfig.objects.filter(is_template=True)` across every
+    project, so the picker named other tenants' COMM templates.
+    """
+    templates = (
+        scope_queryset(request, CommConfig.objects.filter(is_template=True))
+        .order_by('template_name')
+        .values('id', 'template_name', 'device_type')
+    )
     return JsonResponse({'templates': list(templates)})
 
 
@@ -6667,7 +6967,11 @@ def comm_config_load_template(request):
         current_project = getattr(request, 'current_project', None)
         if not template_id or not current_project:
             return JsonResponse({'error': 'Missing template_id or project'}, status=400)
-        tmpl = CommConfig.objects.get(id=template_id, is_template=True)
+        # Scoped: an unscoped lookup here let a client load another tenant's
+        # template (pins, wireless ids, partylines) into its own project.
+        tmpl = CommConfig.objects.get(
+            id=template_id, is_template=True, project=current_project,
+        )
 
         name = data.get('name', tmpl.template_name).strip() or tmpl.template_name
         config = CommConfig.objects.create(
@@ -6734,7 +7038,9 @@ def comm_config_export_freespeak(request, config_id):
     from django.conf import settings
     from datetime import datetime, timezone
 
-    config = get_object_or_404(CommConfig, id=config_id)
+    config = get_object_or_404(
+        CommConfig, id=config_id, project=_scoped_project(request),
+    )
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config', 'fsii_factory')
 
     if not os.path.exists(factory_path):

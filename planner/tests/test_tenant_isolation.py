@@ -73,8 +73,12 @@ class TenantIsolationBase(TestCase):
         self.amp_model = AmpModel.objects.create(
             manufacturer='LA', model_name='LA12X', channel_count=4,
         )
+        # device_type must be a real choice: CommBeltPack.save() derives
+        # system_type from CommDeviceModel.system_type, which is itself derived
+        # from device_type. 'WIRELESS_BP' is what makes the belt packs below
+        # count as wireless on the dashboard.
         self.device_model = CommDeviceModel.objects.create(
-            manufacturer='Clear-Com', name='FSII-BP', device_type='beltpack',
+            manufacturer='Clear-Com', name='FSII-BP', device_type='WIRELESS_BP',
         )
 
         # Mirrored per-project objects.

@@ -82,6 +82,32 @@ def current_project_or_deny(request):
     return project
 
 
+def current_project_or_none(request):
+    """The request's current project if the user may access it, else ``None``.
+
+    For the JSON endpoints that wrap their whole body in
+    ``try: ... except Model.DoesNotExist: 404 / except Exception: 500``. Raising
+    from inside one of those is useless — the generic handler swallows it into a
+    500 — so instead the caller folds this value straight into the lookup::
+
+        pl = CommConfigPartyline.objects.get(
+            id=data['partyline_id'], config__project=_project(request),
+        )
+
+    ``project=None`` becomes ``project__isnull=True`` in SQL, which matches no
+    row (every one of these models has a non-null project), so a missing or
+    inaccessible project yields ``DoesNotExist`` → the endpoint's existing 404.
+    Fail-closed by construction, and no restructuring of the handlers.
+
+    The rule this encodes: **never make the filter itself conditional.** The
+    original bugs were all ``if project: filter(...)`` with no ``else``.
+    """
+    project = getattr(request, 'current_project', None)
+    if project is None or not can_access_project(request.user, project):
+        return None
+    return project
+
+
 def scoped_or_404(request, model, lookup_path='project', **lookup):
     """``get_object_or_404`` that cannot escape the current project.
 
