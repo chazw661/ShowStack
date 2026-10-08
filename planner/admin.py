@@ -134,6 +134,40 @@ class BaseEquipmentAdmin(BaseAdmin):
             role='editor'
         ).exists()
     
+
+    # ------------------------------------------------------------------
+    # Project-scoped dropdowns
+    # ------------------------------------------------------------------
+    # A relation field left out of this map renders Django's default
+    # queryset: the whole table. That is correct for the global hardware
+    # catalogues (AmpModel, CommDeviceModel) and wrong for everything else,
+    # and eleven admins were silently relying on the default -- offering
+    # other tenants' consoles, processors, sessions, predictions and devices
+    # in their dropdowns. A dropdown is a read surface: whatever is
+    # selectable is also visible.
+    #
+    # Keys are field names on this model; values are the ORM path from the
+    # *related* model to its Project.
+    project_scoped_fks = {}
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Narrow any field named in `project_scoped_fks` to the current project.
+
+        Subclasses that override this for one specific field should call
+        `super()` (they all do) so the declarative map still applies to the
+        rest.
+        """
+        scoped = getattr(self, 'project_scoped_fks', None) or {}
+        if db_field.name in scoped and 'queryset' not in kwargs:
+            related_project_path = scoped[db_field.name]
+            current_project = getattr(request, 'current_project', None)
+            base = db_field.remote_field.model._default_manager.all()
+            kwargs['queryset'] = (
+                base.filter(**{related_project_path: current_project})
+                if current_project else base.none()
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def get_exclude(self, request, obj=None):
         """Hide project field on add/edit forms - auto-assigned from current_project"""
         exclude = list(super().get_exclude(request, obj) or [])
@@ -158,12 +192,19 @@ class BaseEquipmentAdmin(BaseAdmin):
         
         current_project_id = request.current_project.id
         
-        # Map child models to their parent field path
-        # Map child models to their parent field path
+        # Map child models to the ORM path from them to their project.
+        #
+        # A model that is neither keyed here nor carrying a direct `project`
+        # field falls through to `qs.filter(project_id=...)` below and raises
+        # FieldError -- an HTTP 500 on that changelist, which is how
+        # MultitrackTemplate, ConsoleImport and MicGroup were broken. Adding a
+        # model to the admin means adding it here; see `MODELS_WITHOUT_PROJECT`
+        # for the one deliberate exception.
         child_model_paths = {
             'PAFanOut': 'cable_schedule__project_id',
             'MicSession': 'day__project_id',
             'MicAssignment': 'session__day__project_id',
+            'MicGroup': 'session__day__project_id',
             # 'Presenter': REMOVED - now has direct project FK ✓
             # 'MicShowInfo': REMOVED - now has direct project OneToOneField ✓
             'SpeakerArray': 'prediction__project_id',
@@ -175,21 +216,48 @@ class BaseEquipmentAdmin(BaseAdmin):
             'P1Output': 'p1_processor__system_processor__project_id',
             'GalaxyInput': 'galaxy_processor__system_processor__project_id',
             'GalaxyOutput': 'galaxy_processor__system_processor__project_id',
+            'ConsoleImport': 'console__project_id',
+            # Network Health Monitor children reach their project via device.
+            'PollResult': 'device__project_id',
+            'DeviceEvent': 'device__project_id',
+            'SwitchPortSnapshot': 'device__project_id',
         }
-        
+
+        # Models with no project at all, scoped by their owner instead.
+        # MultitrackTemplate is a personal template library keyed on
+        # created_by, so "the current project" is not the right question for
+        # it -- but "anyone's templates" is definitely the wrong answer, which
+        # is what the FieldError-ing fall-through used to produce once the
+        # crash was fixed naively.
+        owner_scoped_paths = {
+            'MultitrackTemplate': 'created_by',
+        }
+
         # Get the model name
         model_name = self.model.__name__
-        
+
         # If this is a child model, filter through parent
         if model_name in child_model_paths:
             filter_path = child_model_paths[model_name]
             filter_kwargs = {filter_path: current_project_id}
             return qs.filter(**filter_kwargs)
-        
-        # Otherwise, filter directly by project_id
-        return qs.filter(project_id=current_project_id)
-            
-        
+
+        if model_name in owner_scoped_paths:
+            if request.user.is_superuser:
+                return qs
+            return qs.filter(**{owner_scoped_paths[model_name]: request.user})
+
+        # Otherwise, filter directly by project_id -- but only if the model
+        # actually has one. It used to filter unconditionally, so a model that
+        # was neither keyed above nor carrying `project` raised FieldError and
+        # 500ed its changelist. Returning none() instead keeps a forgotten
+        # registration fail-closed rather than either crashing or, worse,
+        # showing everything.
+        if any(f.name == 'project' for f in self.model._meta.get_fields()):
+            return qs.filter(project_id=current_project_id)
+        return qs.none()
+
+
     def has_module_permission(self, request):
         """Show module if user has any accessible projects"""
         if not request.user.is_authenticated:
@@ -407,6 +475,74 @@ def duplicate_project_action(modeladmin, request, queryset):
 def test_action(modeladmin, request, queryset):
     modeladmin.message_user(request, "Test action works!", level=messages.SUCCESS)
 
+
+def project_scoped_filter(title, parameter_name, related_model,
+                          related_project_path='project', label=str,
+                          queryset_path=None, ordering='name'):
+    """Build a ``list_filter`` entry that only lists the current project's rows.
+
+    A bare relation in ``list_filter`` -- ``list_filter = ['location']`` --
+    gets Django's ``RelatedFieldListFilter``, and that calls
+    ``field.get_choices()``
+    (django/contrib/admin/filters.py:271-273), which reads the **entire**
+    related table. It does not consult the ModelAdmin's ``get_queryset``, so a
+    correctly scoped changelist still rendered every other tenant's location
+    names, show-day names and project names down the filter rail -- names, on
+    pages users legitimately have.
+
+    Issue #21 fixed this once by hand for the Amp changelist
+    (``AmpLocationFilter``). Nine other admins had the same entry and were
+    missed, which is the argument for a factory rather than a tenth copy.
+
+    Arguments:
+        title: sidebar heading.
+        parameter_name: query-string key, conventionally the field path.
+        related_model: model whose rows become the options.
+        related_project_path: ORM path from ``related_model`` to its Project.
+        label: option text from an instance; defaults to ``str``.
+        queryset_path: ORM path from the *filtered* model to ``related_model``
+            when it differs from ``parameter_name`` (e.g. a nested path).
+        ordering: field to order the options by.
+    """
+    _filter_path = (queryset_path or parameter_name)
+
+    class _ProjectScopedFilter(admin.SimpleListFilter):
+        pass
+
+    _ProjectScopedFilter.title = title
+    _ProjectScopedFilter.parameter_name = parameter_name
+
+    def lookups(self, request, model_admin):
+        current_project = getattr(request, 'current_project', None)
+        if not current_project:
+            return []
+        rows = related_model.objects.filter(
+            **{related_project_path: current_project}
+        ).order_by(ordering)
+        return [(row.pk, label(row)) for row in rows]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        # The option ids came from the scoped lookups above, but a
+        # hand-typed query string can name anything -- so re-scope here too
+        # rather than trusting the parameter.
+        allowed = related_model.objects.filter(
+            **{related_project_path: getattr(request, 'current_project', None)}
+        ).values_list('pk', flat=True)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return queryset.none()
+        if value not in set(allowed):
+            return queryset.none()
+        return queryset.filter(**{f'{_filter_path}_id': value})
+
+    _ProjectScopedFilter.lookups = lookups
+    _ProjectScopedFilter.queryset = queryset
+    _ProjectScopedFilter.__name__ = f'ProjectScoped_{parameter_name}_Filter'
+    return _ProjectScopedFilter
 
 
 @admin.register(Project, site=showstack_admin_site)
@@ -820,7 +956,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     # marker here. ConsoleAdmin.name_with_template_badge is still defined and
     # unused if that marker is ever wanted back in the Name column.
     list_display = ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'export_buttons']
-    list_filter = ['location']
+    list_filter = [project_scoped_filter('Location', 'location', Location)]
     
     fieldsets = (
         ('Console Information', {
@@ -1161,26 +1297,22 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
     def get_queryset(self, request):
-        """Filter consoles by current project"""
-         
-        
-    def get_queryset(self, request):
-        """Filter consoles by current project"""
+        """Consoles in the current project only.
+
+        There were two methods with this name here: an empty stub (returning
+        None) and this one. Python keeps the last, so the stub was dead --
+        harmless by luck rather than design, which is the same hazard as the
+        duplicated formfield_for_foreignkey in AmpAdmin.
+
+        The four debug prints this used to carry are gone too. One of them ran
+        `qs.count()` on the *unfiltered* queryset purely to log "Total
+        consoles: N" -- an extra query per render whose only output was a
+        cross-tenant total in the server log.
+        """
         qs = super().get_queryset(request)
-        
-        # DEBUG - print what we see
-        print(f"🔍 DEBUG: hasattr current_project: {hasattr(request, 'current_project')}")
-        if hasattr(request, 'current_project'):
-            print(f"🔍 DEBUG: Current project: {request.current_project}")
-            print(f"🔍 DEBUG: Current project ID: {request.current_project.id if request.current_project else 'None'}")
-        
         if hasattr(request, 'current_project') and request.current_project:
-            filtered_qs = qs.filter(project=request.current_project)
-            print(f"🔍 DEBUG: Total consoles: {qs.count()}, Filtered consoles: {filtered_qs.count()}")
-            return filtered_qs
-        
-        print(f"🔍 DEBUG: No project - returning empty queryset")
-        return qs.none()
+            return qs.filter(project=request.current_project)
+        return qs.none()  # No project selected = show nothing
     
 
     def save_model(self, request, obj, form, change):
@@ -2061,19 +2193,6 @@ class AmpAdmin(BaseEquipmentAdmin):
 
 
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Override to handle global vs project-specific ForeignKeys"""
-        if db_field.name == "amp_model":
-            # AmpModel is global - don't filter by project
-            kwargs["queryset"] = AmpModel.objects.all()
-        elif db_field.name == "location":
-            # Location is project-specific - filter by current project
-            if hasattr(request, 'current_project') and request.current_project:
-                kwargs["queryset"] = Location.objects.filter(project=request.current_project)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-    
-
-    
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
             ('Basic Information', {
@@ -2142,16 +2261,37 @@ class AmpAdmin(BaseEquipmentAdmin):
     
     inlines = [AmpChannelInline]
 
-    #----Only show locations in this project--
-
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter dropdown options based on current project"""
+        """The single dropdown hook for Amp (#100).
+
+        There were two methods with this name in this class. Python keeps the
+        last one defined, so the first was dead code -- and the dead one was
+        the one that handled `amp_model`. Merged here, with the live
+        behaviour preserved exactly:
+
+        - `location` is project-specific: only AmpLocations in
+          `request.current_project`, and `none()` rather than everything when
+          there is no project (issue #29).
+
+          Note the model. `Amp.location` points at **AmpLocation**; the dead
+          copy filtered `Location`, a different table. Had the definition
+          order been reversed, the dropdown would have been populated from
+          the wrong model entirely -- so this is the half to keep.
+
+        - `amp_model` is a global hardware catalogue and stays unfiltered.
+          Stating it costs nothing and records that the omission is deliberate
+          rather than another oversight.
+        """
         if db_field.name == "location":
-            # Only show amp locations from the current project (issue #29)
             if hasattr(request, 'current_project') and request.current_project:
-                kwargs["queryset"] = AmpLocation.objects.filter(project=request.current_project)
+                kwargs["queryset"] = AmpLocation.objects.filter(
+                    project=request.current_project
+                )
             else:
                 kwargs["queryset"] = AmpLocation.objects.none()
+        elif db_field.name == "amp_model":
+            # Global catalogue, the same for every show. Not project-scoped.
+            kwargs["queryset"] = AmpModel.objects.all()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     #----Only show Amps in this project
@@ -2301,7 +2441,11 @@ class LocationAdmin(BaseEquipmentAdmin):
 
 class SystemProcessorAdmin(BaseEquipmentAdmin):
     list_display = ['name', 'device_type', 'location', 'ip_address', 'created_at', 'configure_button']
-    list_filter = ['device_type', 'location', 'created_at']
+    list_filter = [
+        'device_type',
+        project_scoped_filter('Location', 'location', Location),
+        'created_at',
+    ]
     search_fields = ['name', 'ip_address']
     exclude = ['project']
 
@@ -2484,10 +2628,14 @@ except admin.sites.NotRegistered:
 
 
 class P1ProcessorAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'system_processor': 'project'}
     form = P1ProcessorAdminForm
     change_form_template = 'admin/planner/p1processor/change_form.html'
     list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
-    list_filter = ['system_processor__location']
+    list_filter = [project_scoped_filter(
+        'Location', 'system_processor__location', Location,
+        queryset_path='system_processor__location',
+    )]
     search_fields = ['system_processor__name', 'system_processor__ip_address']
     actions = ['export_configurations']
     inlines = [P1InputInline, P1OutputInline]
@@ -2766,10 +2914,14 @@ class GalaxyOutputInline(admin.TabularInline):
 
 
 class GalaxyProcessorAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'system_processor': 'project'}
     form = GalaxyProcessorAdminForm
     change_form_template = 'admin/planner/galaxyprocessor/change_form.html'
     list_display = ['system_processor', 'get_location', 'get_ip_address', 'input_count', 'output_count']
-    list_filter = ['system_processor__location']
+    list_filter = [project_scoped_filter(
+        'Location', 'system_processor__location', Location,
+        queryset_path='system_processor__location',
+    )]
     search_fields = ['system_processor__name', 'system_processor__ip_address']
     actions = ['export_configurations']
     inlines = [GalaxyInputInline, GalaxyOutputInline]
@@ -4955,16 +5107,6 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
     ]
 
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Remove add/edit/delete buttons from related field widgets in list view"""
-        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
-        if db_field.name in ['position', 'name', 'unit_location']:
-            formfield.widget.can_add_related = False
-            formfield.widget.can_change_related = False
-            formfield.widget.can_delete_related = False
-            formfield.widget.can_view_related = False
-        return formfield
-
     inlines = [CommBeltPackChannelInline]
     search_fields = ['bp_number', 'name__name', 'position__name', 'notes',
                      'unit_location__name', 'ip_address',
@@ -5105,30 +5247,61 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
 
 
 
+    # Related models reachable from a belt pack, and the field each one is
+    # offered under. Declared as data so the two concerns below -- scoping the
+    # queryset and stripping the widget's add/edit buttons -- cannot drift
+    # apart again.
+    _SCOPED_FK_SOURCES = {
+        'unit_location': (Location, 'name'),
+        'position': (CommPosition, 'name'),
+        'name': (CommCrewName, 'name'),
+        'channel_a': (CommChannel, 'input_designation'),
+        'channel_b': (CommChannel, 'input_designation'),
+        'channel_c': (CommChannel, 'input_designation'),
+        'channel_d': (CommChannel, 'input_designation'),
+        'channel_e': (CommChannel, 'input_designation'),
+        'channel_f': (CommChannel, 'input_designation'),
+    }
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter dropdown options by current project for multi-tenancy"""
-        
-        # Get the current project from the request
+        """The single dropdown hook for CommBeltPack (#100 follow-on).
+
+        This class also had two methods with this name, the same bug as
+        AmpAdmin. The later one -- the project scoping -- won, so the earlier
+        one's job was silently never done: the add/edit/delete buttons it
+        meant to strip from the `position`, `name` and `unit_location` widgets
+        have always been rendered. Both halves now live here.
+
+        The scoping itself also had a fail-open shape::
+
+            if current_project:
+                if db_field.name == ...: kwargs['queryset'] = ...
+
+        With no current project every branch was skipped and each dropdown
+        fell back to Django's default -- the entire table, so every tenant's
+        crew names and positions. The filter is now unconditional, with
+        ``none()`` as the no-project answer.
+        """
         current_project = getattr(request, 'current_project', None)
-        
-        if current_project:
-            # Filter location dropdown
-            if db_field.name == "unit_location":
-                kwargs["queryset"] = Location.objects.filter(project=current_project).order_by('name')
-            
-            # Filter position dropdown
-            elif db_field.name == "position":
-                kwargs["queryset"] = CommPosition.objects.filter(project=current_project).order_by('name')
-            
-            # Filter name dropdown
-            elif db_field.name == "name":
-                kwargs["queryset"] = CommCrewName.objects.filter(project=current_project).order_by('name')
-            
-            # Filter channel dropdowns (all 6 channels)
-            elif db_field.name in ['channel_a', 'channel_b', 'channel_c', 'channel_d', 'channel_e', 'channel_f']:
-                kwargs["queryset"] = CommChannel.objects.filter(project=current_project).order_by('input_designation')
-        
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        source = self._SCOPED_FK_SOURCES.get(db_field.name)
+        if source and 'queryset' not in kwargs:
+            model, order_by = source
+            kwargs['queryset'] = (
+                model.objects.filter(project=current_project).order_by(order_by)
+                if current_project else model.objects.none()
+            )
+
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+        # Crew names, positions and locations are managed on their own pages;
+        # the little green plus/pencil next to the belt pack row only invites
+        # half-populated rows. (This is the half that was dead code.)
+        if formfield is not None and db_field.name in ('position', 'name', 'unit_location'):
+            formfield.widget.can_add_related = False
+            formfield.widget.can_change_related = False
+            formfield.widget.can_delete_related = False
+            formfield.widget.can_view_related = False
+        return formfield
 
 
     
@@ -6073,7 +6246,10 @@ class PresenterAdmin(BaseEquipmentAdmin):
 
 class MicSessionAdmin(BaseEquipmentAdmin):
     list_display = ('name', 'day', 'session_type', 'start_time', 'location', 'mic_usage', 'edit_mics_link')
-    list_filter = ('day', 'session_type')
+    list_filter = (
+        project_scoped_filter('Day', 'day', ShowDay, ordering='date'),
+        'session_type',
+    )
     search_fields = ('name', 'location')
     ordering = ['day__date', 'order', 'start_time']
     inlines = [MicAssignmentInline]
@@ -6186,9 +6362,20 @@ class MicSessionAdmin(BaseEquipmentAdmin):
 
 
 class MicAssignmentAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'session': 'day__project', 'group': 'session__day__project'}
     form = MicAssignmentForm
     list_display = ('rf_display', 'session', 'mic_type', 'presenter_display', 'is_micd', 'is_d_mic', 'last_modified')
-    list_filter = ('session__day', 'session', 'mic_type', 'is_micd', 'is_d_mic')
+    list_filter = (
+        project_scoped_filter(
+            'Day', 'session__day', ShowDay,
+            queryset_path='session__day', ordering='date',
+        ),
+        project_scoped_filter(
+            'Session', 'session', MicSession,
+            related_project_path='day__project', ordering='day__date',
+        ),
+        'mic_type', 'is_micd', 'is_d_mic',
+    )
     search_fields = ('presenter__name', 'session__name', 'notes')
     list_editable = ('is_micd', 'is_d_mic')
     ordering = ['session__day__date', 'session__order', 'rf_number']
@@ -6253,6 +6440,7 @@ class MicAssignmentAdmin(BaseEquipmentAdmin):
         }
 
 class MicGroupAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'session': 'day__project'}
     list_display = ['name', 'color', 'session']
     list_filter = ['color']
     exclude = ['project']
@@ -6267,6 +6455,7 @@ class MicGroupAdmin(BaseEquipmentAdmin):
 
 
 class MicShowInfoAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'show_day': 'project'}
     fieldsets = (
         ('Show Information', {
             'fields': ('show_name', 'venue_name', 'ballroom_name')
@@ -6752,6 +6941,7 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
 
 
 class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'distribution_plan': 'project'}
     list_display = [
         'distribution_plan', 'zone', 'amplifier', 'quantity', 
         'duty_cycle', 'phase_assignment', 'calculated_total_current'
@@ -6852,7 +7042,10 @@ class SpeakerArrayInline(admin.StackedInline):
 
 class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
     list_display = ['show_day', 'file_name', 'version', 'date_generated', 'created_at', 'array_summary', 'view_detail_link']
-    list_filter = ['show_day', 'created_at', 'date_generated']
+    list_filter = [
+        project_scoped_filter('Show day', 'show_day', ShowDay, ordering='date'),
+        'created_at', 'date_generated',
+    ]
     search_fields = ['file_name', 'notes']
     readonly_fields = ['created_at', 'updated_at', 'parsed_data_display']
     change_form_template = 'admin/planner/soundvisionprediction/change_form.html'
@@ -6975,6 +7168,7 @@ class SoundvisionPredictionAdmin(BaseEquipmentAdmin):
         }
 
 class SpeakerArrayAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'prediction': 'project'}
     list_display = ['source_name', 'prediction', 'configuration','display_mbar_hole', 'display_weight', 
                    'display_trim', 'display_rigging', 'cabinet_count']
     list_filter = ['configuration', 'bumper_type', 'num_motors']
@@ -7053,6 +7247,7 @@ class SpeakerArrayAdmin(BaseEquipmentAdmin):
 
 
 class SpeakerCabinetAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'array': 'prediction__project'}
     list_display = ['position_number', 'speaker_model', 'array', 'angle_to_next', 
                    'site_angle', 'panflex_setting']
     list_filter = ['speaker_model', 'panflex_setting']
@@ -7111,6 +7306,7 @@ class SpeakerCabinetAdmin(BaseEquipmentAdmin):
 # ──────────────────────────────────────────────────────────────────
 
 class MultitrackSessionAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'console': 'project'}
     list_display = ['name', 'console', 'target_daw', 'feed_source', 'updated_at']
     list_filter = ['target_daw', 'feed_source', 'track_order_mode']
     search_fields = ['name', 'console__name']
@@ -7143,6 +7339,7 @@ class MultitrackSessionAdmin(BaseEquipmentAdmin):
 
 
 class ConsoleImportAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'console': 'project'}
     """Read-mostly audit-history admin for ConsoleImport rows (Phase 2 Console CSV Import).
 
     Per CONTEXT D-08 / D-09: imports are immutable audit history; every field is
@@ -7150,7 +7347,10 @@ class ConsoleImportAdmin(BaseEquipmentAdmin):
     mirroring MultitrackSessionAdmin (planner/admin.py:5904-5939).
     """
     list_display = ['console', 'original_filename', 'uploaded_by', 'uploaded_at', 'committed']
-    list_filter = ['committed', 'console']
+    list_filter = [
+        'committed',
+        project_scoped_filter('Console', 'console', Console),
+    ]
     search_fields = ['original_filename', 'console__name']
     readonly_fields = ['console', 'uploaded_by', 'uploaded_at', 'original_filename',
                        'raw_file', 'parsed_sections', 'summary', 'committed']
@@ -7308,22 +7508,31 @@ showstack_admin_site.register(SpeakerCabinet, SpeakerCabinetAdmin)
 # ============================================================
 # COMM CONFIG - Base Station Configuration Editor
 # ============================================================
-class CommConfigAdmin(admin.ModelAdmin):
-    # ... your existing fields ...
-    def has_module_perms(self, request):
-        return request.user.is_active and request.user.is_staff
+class CommConfigAdmin(BaseEquipmentAdmin):
+    """COMM Config admin.
 
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_active and request.user.is_staff
+    This was `admin.ModelAdmin` with five permission hooks that each returned
+    a bare `request.user.is_staff`, and no `get_queryset` override at all.
+    Every invited user is made `is_staff` (accounts/views.py:301), so any
+    editor or viewer on any project could open
+    `/admin/planner/commconfig/<id>/change/` for *any* tenant and read or
+    rewrite their Arcadia/FreeSpeak configuration -- crew names, roles,
+    partyline labels, pins. It was the one admin leak that needed no extra
+    permissions, and a test pins it shut:
+    `InvitedMemberScopingTests.test_editor_cannot_open_another_tenants_comm_config_change_form`.
 
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_active and request.user.is_staff
+    Inheriting BaseEquipmentAdmin is the fix rather than hand-written hooks:
+    its `get_queryset` filters to `request.current_project` and returns
+    `none()` when there is none, and because `ModelAdmin.get_object` runs
+    through `get_queryset`, a cross-project change URL 404s. Its permission
+    hooks also give the role model (owner/editor can write, viewer is
+    read-only) that the `is_staff` checks threw away, and keep the superuser
+    short-circuit.
+    """
 
-    def has_add_permission(self, request):
-        return request.user.is_active and request.user.is_staff
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_active and request.user.is_staff
+    # The changelist redirects to the user-facing editor, so no list_filter
+    # here -- and deliberately not `['project']`, which would render every
+    # tenant's project name in the sidebar (see the F5 findings).
 
 
     def get_urls(self):
@@ -7349,20 +7558,39 @@ showstack_admin_site.register(CommConfig, CommConfigAdmin)
 
 
 # --- Network Health Monitor Admin ---
+#
+# All six of these were plain `admin.ModelAdmin` with no get_queryset
+# override, so each changelist listed every tenant's rows: device labels, IP
+# addresses, port state, and -- worst -- ProjectSNMPConfig.community_string,
+# the SNMP credential for another project's switches. Today they are gated by
+# model permissions that setup_user_groups does not grant to Editor or Viewer,
+# so they were latent rather than live; they become live the moment anyone is
+# granted those permissions, which is exactly the kind of footgun to remove
+# while it is still cheap.
+#
+# Each now subclasses BaseEquipmentAdmin, whose get_queryset scopes to
+# request.current_project. The three child models reach their project through
+# `device`, which BaseEquipmentAdmin resolves via its child_model_paths map
+# (extended below for them).
+#
+# `list_filter` entries naming `project` or `session` are gone: Django's
+# RelatedFieldListFilter renders the whole related table in the sidebar
+# regardless of get_queryset, so those enumerated every project name. The
+# remaining filters are all plain choice fields, which enumerate nothing.
 
-class MonitorSessionAdmin(admin.ModelAdmin):
+class MonitorSessionAdmin(BaseEquipmentAdmin):
     list_display = ('__str__', 'project', 'started_at', 'ended_at')
-    list_filter = ('project',)
     readonly_fields = ('started_at',)
 
-class DiscoveredDeviceAdmin(admin.ModelAdmin):
+class DiscoveredDeviceAdmin(BaseEquipmentAdmin):
     list_display = ('label', 'ip_address', 'domain', 'last_known_state', 'consecutive_failures', 'is_active', 'project')
-    list_filter = ('domain', 'last_known_state', 'is_active', 'project')
+    list_filter = ('domain', 'last_known_state', 'is_active')
     search_fields = ('label', 'ip_address')
 
-class PollResultAdmin(admin.ModelAdmin):
+class PollResultAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'device': 'project', 'session': 'project'}
     list_display = ('device', 'is_reachable', 'latency_ms', 'polled_at')
-    list_filter = ('is_reachable', 'session')
+    list_filter = ('is_reachable',)
     readonly_fields = ('device', 'session', 'polled_at', 'is_reachable', 'latency_ms')
 
     def has_add_permission(self, request):
@@ -7371,9 +7599,10 @@ class PollResultAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False
 
-class DeviceEventAdmin(admin.ModelAdmin):
+class DeviceEventAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'device': 'project', 'session': 'project'}
     list_display = ('event_type', 'device', 'occurred_at', 'session')
-    list_filter = ('event_type', 'session')
+    list_filter = ('event_type',)
     readonly_fields = ('device', 'session', 'occurred_at', 'event_type', 'details')
 
     def has_add_permission(self, request):
@@ -7388,15 +7617,23 @@ showstack_admin_site.register(PollResult, PollResultAdmin)
 showstack_admin_site.register(DeviceEvent, DeviceEventAdmin)
 
 
-class ProjectSNMPConfigAdmin(admin.ModelAdmin):
+class ProjectSNMPConfigAdmin(BaseEquipmentAdmin):
+    """Per-project SNMP community string.
+
+    `list_display` puts a credential on screen, so this is the one of the six
+    where an unscoped changelist mattered most: it listed every project's SNMP
+    community string. `search_fields` is dropped too -- it fed
+    `/admin/autocomplete/`, which serves the *remote* admin's get_queryset for
+    any FK naming this model.
+    """
+
     list_display = ('project', 'community_string', 'updated_at')
-    list_filter = ('project',)
-    search_fields = ('project__name',)
 
 
-class SwitchPortSnapshotAdmin(admin.ModelAdmin):
+class SwitchPortSnapshotAdmin(BaseEquipmentAdmin):
+    project_scoped_fks = {'device': 'project', 'session': 'project'}
     list_display = ('device', 'port_index', 'oper_status', 'speed_mbps', 'bandwidth_pct', 'error_count', 'polled_at')
-    list_filter = ('oper_status', 'session')
+    list_filter = ('oper_status',)
     readonly_fields = ('device', 'session', 'port_index', 'port_description', 'oper_status', 'speed_mbps', 'bandwidth_pct', 'error_count', 'polled_at')
 
     def has_add_permission(self, request):
@@ -7427,7 +7664,9 @@ class SignalFlowDiagramAdmin(BaseEquipmentAdmin):
     """
 
     list_display = ['name', 'project', 'updated_at']
-    list_filter = ['project']
+    # No list_filter: 'project' would render every tenant's project name
+    # in the sidebar (RelatedFieldListFilter ignores get_queryset), and a
+    # project filter on a project-scoped changelist filters nothing.
     readonly_fields = ['canvas_state_display', 'version', 'created_at', 'updated_at']
     exclude = ['canvas_state', 'viewport']
 

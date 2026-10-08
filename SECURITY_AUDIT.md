@@ -94,13 +94,19 @@ table. Verified by listing the actual offered labels.
 | F4.2 | `ConsoleImportAdmin.console` | Console names |
 | F4.3 | `P1ProcessorAdmin.system_processor` | SystemProcessor names |
 | F4.4 | `GalaxyProcessorAdmin.system_processor` | SystemProcessor names |
-| F4.5 | `PACableAdmin.amp_location` | Location names — the existing override (`admin.py:3352`) scopes `label`, `speaker_array` and `amp` but misses this fourth FK |
 | F4.6 | `MicAssignmentAdmin.session` | MicSession names |
 | F4.7 | `MicGroupAdmin.session` | MicSession names |
 | F4.8 | `SpeakerArrayAdmin.prediction` | prediction filename + show-day name |
 | F4.9 | `PollResultAdmin.device` / `.session` | device labels, project names |
 | F4.10 | `DeviceEventAdmin.device` / `.session` | device labels, project names |
 | F4.11 | `SwitchPortSnapshotAdmin.device` / `.session` | device labels, project names |
+
+**Withdrawn finding.** `PACableSchedule.amp_location` first appeared in this
+list: the existing `PACableAdmin.formfield_for_foreignkey` (`admin.py:3352`)
+scopes `label`, `speaker_array` and `amp` but not this fourth FK. It is
+`editable=False` (`models.py:2547`), so Django drops it from every ModelForm —
+it is never rendered and never selectable. Not a leak; the isolation test now
+skips non-editable fields for this reason.
 
 The dropdowns that *are* correctly scoped, for contrast: `ConsoleAdmin.location`,
 `DeviceAdmin.location`, `AmpAdmin.location`, `SystemProcessorAdmin.location`,

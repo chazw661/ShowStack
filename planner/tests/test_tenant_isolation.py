@@ -264,6 +264,12 @@ class AdminDropdownScopingTests(TenantIsolationBase):
                 continue
             if field.name in exclude or field.auto_created:
                 continue
+            # `editable=False` fields are dropped from every ModelForm, so
+            # they are never a dropdown and never selectable. PACableSchedule.
+            # amp_location is the one that matters here -- it looked like a
+            # leak until you notice it cannot be rendered.
+            if not field.editable:
+                continue
             formfield = model_admin.formfield_for_foreignkey(field, request)
             if formfield is not None:
                 yield field.name, formfield.queryset
