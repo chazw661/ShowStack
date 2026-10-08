@@ -734,6 +734,185 @@ class AnonymousAccessTests(TenantIsolationBase):
 # 7. Superuser — still sees everything, and that is intended
 # ---------------------------------------------------------------------------
 
+class OwnProjectStillWorksTests(TenantIsolationBase):
+    """The other failure mode: scoping that locks out the rightful owner.
+
+    Every assertion above is of the form "B's data is absent". On its own that
+    is satisfiable by breaking the page, so these assert the positive: tenant
+    A still sees tenant A's own rows, and the pages still render.
+    """
+
+    def test_owner_sees_their_own_equipment_in_the_admin(self):
+        checks = {
+            Console: self.console_a,
+            Device: self.device_a,
+            Amp: self.amp_a,
+            Location: self.location_a,
+            SystemProcessor: self.processor_a,
+            ShowDay: self.show_day_a,
+            MicSession: self.mic_session_a,
+            MicAssignment: self.mic_assignment_a,
+            SoundvisionPrediction: self.prediction_a,
+            CommBeltPack: self.beltpack_a,
+            CommConfig: self.comm_config_a,
+            ConsoleImport: self.console_import_a,
+            MonitorSession: self.monitor_session_a,
+            DiscoveredDevice: self.discovered_a,
+            ProjectSNMPConfig: self.snmp_a,
+        }
+        request = self.admin_request()
+        missing = []
+        for model, obj in checks.items():
+            qs = showstack_admin_site._registry[model].get_queryset(request)
+            if obj.pk not in set(qs.values_list('pk', flat=True)):
+                missing.append(model.__name__)
+        self.assertEqual(
+            [], missing,
+            f'scoping hid the owner\'s own rows: {missing}',
+        )
+
+    def test_owner_dropdowns_still_offer_their_own_rows(self):
+        """The scoped dropdowns must still be usable, not just empty."""
+        cases = [
+            (Console, 'location', self.location_a),
+            (Device, 'location', self.location_a),
+            (Amp, 'location', self.amp_location_a),
+            (SystemProcessor, 'location', self.location_a),
+            (MicSession, 'day', self.show_day_a),
+            (MicAssignment, 'session', self.mic_session_a),
+            (CommBeltPack, 'unit_location', self.location_a),
+            (CommBeltPack, 'position', self.position_a),
+            (CommBeltPack, 'name', self.crew_name_a),
+        ]
+        request = self.admin_request()
+        missing = []
+        for model, field_name, expected in cases:
+            model_admin = showstack_admin_site._registry[model]
+            field = model._meta.get_field(field_name)
+            formfield = model_admin.formfield_for_foreignkey(field, request)
+            if expected not in set(formfield.queryset):
+                missing.append(f'{model.__name__}.{field_name}')
+        self.assertEqual(
+            [], missing, f'scoped dropdowns lost the owner\'s own rows: {missing}',
+        )
+
+    def test_owner_filter_sidebars_still_offer_their_own_rows(self):
+        """The replacement SimpleListFilters must list project A's options."""
+        from django.test import RequestFactory
+
+        request = RequestFactory().get('/admin/')
+        request.user = self.user_a
+        request.current_project = self.project_a
+        request.session = {}
+
+        model_admin = showstack_admin_site._registry[Console]
+        location_filter = model_admin.list_filter[0]
+        # SimpleListFilter, unlike FieldListFilter, takes no field or
+        # field_path: (request, params, model, model_admin).
+        spec = location_filter(request, {}, Console, model_admin)
+        self.assertIn(
+            (self.location_a.pk, self.location_a.name),
+            list(spec.lookup_choices),
+            'the scoped Location filter lost the project\'s own locations',
+        )
+        self.assertNotIn(
+            (self.location_b.pk, self.location_b.name),
+            list(spec.lookup_choices),
+        )
+
+    def test_owner_pages_still_render(self):
+        """A smoke pass over the pages the fixes touched most."""
+        broken = []
+        for name in ('system-dashboard', 'dashboard_stats', 'predictions_list',
+                     'comm_config_list_templates'):
+            resp = self.client.get(reverse(f'planner:{name}'))
+            if resp.status_code != 200:
+                broken.append(f'planner:{name} -> {resp.status_code}')
+        self.assertEqual([], broken, '\n'.join(broken))
+
+    def test_owner_can_still_edit_their_own_mic_assignment(self):
+        """The scoped lookup must accept the owner's own row."""
+        resp = self.client.post(
+            reverse('planner:update_mic_assignment'),
+            data=json.dumps({
+                'assignment_id': self.mic_assignment_a.id,
+                'field': 'is_micd', 'value': True,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(200, resp.status_code)
+        self.mic_assignment_a.refresh_from_db()
+        self.assertTrue(
+            self.mic_assignment_a.is_micd,
+            'the owner can no longer edit their own mic assignment',
+        )
+
+    def test_owner_can_still_add_a_partyline_to_their_own_config(self):
+        before = self.comm_config_a.partylines.count()
+        resp = self.client.post(
+            reverse('planner:comm_config_add_partyline'),
+            data=json.dumps({'config_id': self.comm_config_a.id}),
+            content_type='application/json',
+        )
+        self.assertEqual(200, resp.status_code, resp.content[:300])
+        self.assertEqual(before + 1, self.comm_config_a.partylines.count())
+
+    def test_owner_can_still_export_their_own_console_pdf(self):
+        resp = self.client.get(
+            reverse('planner:console_pdf_export', args=[self.console_a.id]),
+        )
+        self.assertEqual(200, resp.status_code)
+
+    def test_owner_can_still_export_their_own_beltpack_pdf(self):
+        resp = self.client.get(reverse('planner:all_comm_beltpacks_pdf_export'))
+        self.assertEqual(200, resp.status_code)
+
+    def test_public_marketing_pages_are_still_public(self):
+        """LoginRequiredMiddleware must not have taken the site down."""
+        blocked = []
+        for name in ('marketing:home', 'marketing:features', 'marketing:pricing',
+                     'marketing:privacy', 'marketing:terms', 'marketing:about',
+                     'marketing:contact'):
+            resp = self.anon.get(reverse(name))
+            if resp.status_code != 200:
+                blocked.append(f'{name} -> {resp.status_code}')
+        self.assertEqual([], blocked, '\n'.join(blocked))
+
+    def test_login_and_register_are_still_reachable_logged_out(self):
+        for name in ('login', 'register'):
+            resp = self.anon.get(reverse(name))
+            self.assertEqual(
+                200, resp.status_code,
+                f'{name} is unreachable for a logged-out visitor',
+            )
+
+    def test_agent_api_still_authenticates_by_bearer_token(self):
+        """The monitor agent has no session, so the middleware must not
+        intercept it -- it must reach its own token check and 401."""
+        resp = self.anon.get(
+            reverse('planner:agent_device_list'),
+        )
+        self.assertEqual(
+            401, resp.status_code,
+            'the agent API no longer reaches its own Bearer-token check',
+        )
+
+    def test_agent_api_serves_its_own_project_with_a_valid_token(self):
+        self.project_a.refresh_from_db()
+        token = self.project_a.agent_api_key
+        if not token:
+            self.skipTest('project has no agent_api_key default')
+        resp = self.anon.get(
+            reverse('planner:agent_device_list'),
+            headers={'authorization': f'Bearer {token}'},
+        )
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual(
+            [self.discovered_a.ip_address], resp.json()['devices'],
+            'the agent API returned the wrong project\'s devices',
+        )
+
+
 class SuperuserVisibilityTests(TenantIsolationBase):
     """Documents exactly where the superuser bypass applies, so a future
     tightening does not remove it by accident."""

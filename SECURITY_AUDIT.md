@@ -6,13 +6,21 @@ and count in `planner`, `accounts` and `marketing`. Question asked of each one:
 belong to?**
 
 Every finding below is reproduced by a test in
-`planner/tests/test_tenant_isolation.py` (39 tests; 23 failed against the
-unfixed tree, 0 errors). Run it with:
+`planner/tests/test_tenant_isolation.py`. Against the unfixed tree, 23 of 39
+failed with 0 errors — each failure a real finding. The suite now stands at 51
+tests, all passing; the 12 added after the fixes assert the *opposite* failure
+mode, that scoping did not lock out the rightful owner (see
+`OwnProjectStillWorksTests`). Full project suite: 366 passing.
 
 ```bash
 python manage.py test planner.tests.test_tenant_isolation \
     --settings=audiopatch.test_settings
 ```
+
+**Status: all findings below are fixed on this branch**, in four commits —
+proof tests, the anonymous default-deny, the view-layer scoping, then the
+admin. Each section's fix is described in its commit message; the short
+version is at the end of this document.
 
 ---
 
@@ -211,3 +219,21 @@ test_superuser_equipment_admin_still_follows_the_project_switcher` pins that.
   a pre-existing functional bug, not a security one.
 - **`SourceHardwareOption` being globally writable** — looks deliberate; left
   for a product decision.
+
+---
+
+## Summary of fixes
+
+| Finding group | Fix |
+|---|---|
+| F1, F2 (anonymous read and write) | `LoginRequiredMiddleware` added to `settings.MIDDLEWARE`, inverting the default from allow to deny. ~60 views needed no individual change; 24 genuinely public views opt out with `@login_not_required` (all 12 marketing pages, `accounts.register`, `accounts.accept_invitation`, the 9 Bearer-token agent endpoints, the 2 Listen endpoints, `mobile_login`). New views are safe by omission. |
+| F1.2 (belt-pack PDF) | `generate_comm_beltpacks_pdf(project=None)` now raises instead of spanning every project. There is no longer a way to ask for a cross-tenant report. |
+| F1.6 (fail-open guard) | The `if current_project: check` shape is gone. `planner/tenancy.py` is the shared rule, and its key design point is that callers fold the project into the lookup rather than branching on it — `project=None` compiles to `project__isnull=True` and matches nothing. |
+| F2.1–F2.5 (raw-id IDOR) | 34 lookup sites given a project predicate, so a cross-tenant id raises `DoesNotExist` and lands in each endpoint's existing 404 handler. 19 COMM Config endpoints also gained an `ObjectDoesNotExist` clause ahead of their generic `except Exception`, so the answer is 404 rather than a 500 carrying the exception text. |
+| F3 (unscoped changelists) | `CommConfigAdmin` and the six monitor admins now inherit `BaseEquipmentAdmin`. `CommConfigAdmin`'s five `is_staff` permission hooks are deleted, restoring the owner/editor/viewer role model. |
+| F4 (dropdowns) | New declarative `BaseEquipmentAdmin.project_scoped_fks`, applied to the eleven unscoped fields. A field left out of the map keeps Django's default — correct for the global catalogues, and now a per-field choice rather than an oversight. |
+| F5 (filter sidebars) | New `project_scoped_filter` factory, generalising the hand-written `AmpLocationFilter` from issue #21 to the nine entries that were missed. `project` entries on project-scoped changelists are dropped rather than scoped. |
+| F6 (dashboard counts) | `SystemDashboardView` counts run through `scope_queryset`. `dashboard_stats` is `@login_required` with an unconditional project filter, so no project means zeros rather than everything. |
+| F7.1–F7.3 (duplicate methods) | `AmpAdmin.formfield_for_foreignkey` and `CommBeltPackAdmin.formfield_for_foreignkey` each merged into one; `ConsoleAdmin.get_queryset` collapsed and its debug prints removed. `CommBeltPackAdmin`'s merge also closed a fail-open `if current_project:` with no `else`. |
+| F7.4, F7.5 (500s) | `ProjectMemberAdmin` and `InvitationAdmin` no longer filter on a non-existent `owner` field. `ConsoleImport` and `MicGroup` added to `child_model_paths`; `MultitrackTemplate` is owner-scoped; the fall-through returns `none()` instead of raising, so a forgotten registration fails closed. The unregistered `accounts.admin.ProjectAdmin` is deleted rather than left as a trap. |
+| F7.6 (duplicate view defs) | Reported only — see "Not fixed here, and why". |
