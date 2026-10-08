@@ -22,7 +22,7 @@ import ipaddress
 import json
 from urllib.parse import urlparse
 
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_not_required, login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
@@ -58,6 +58,7 @@ def _authenticate_listen(request):
         return None, JsonResponse({'error': 'Invalid listen token'}, status=403)
 
 
+@login_not_required
 @csrf_exempt
 @require_http_methods(["GET"])
 def listen_session(request):
@@ -251,6 +252,7 @@ def _app_age(app, now):
     return (now - parsed).total_seconds()
 
 
+@login_not_required
 @csrf_exempt
 @require_http_methods(["POST"])
 def listen_heartbeat(request):

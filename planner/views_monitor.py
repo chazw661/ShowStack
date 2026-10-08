@@ -20,7 +20,7 @@ from django.shortcuts import render
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_not_required, login_required
 from django.db import close_old_connections
 from django.utils import timezone
 
@@ -276,6 +276,7 @@ def dashboard_request_scan(request):
 # All endpoints use Bearer token auth (agent_api_key)
 # ──────────────────────────────────────────────
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_heartbeat(request):
@@ -309,6 +310,7 @@ def agent_heartbeat(request):
     })
 
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_stop(request):
@@ -329,6 +331,7 @@ def agent_stop(request):
     return JsonResponse({'ok': True, 'status': 'stopped'})
 
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_scan_results(request):
@@ -391,6 +394,7 @@ def agent_scan_results(request):
     return JsonResponse({'ok': True, 'added': added, 'updated': updated})
 
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_poll_results(request):
@@ -481,6 +485,7 @@ def agent_poll_results(request):
     })
 
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_remove_device(request):
@@ -507,6 +512,7 @@ def agent_remove_device(request):
     return JsonResponse({'ok': True, 'ip': ip})
 
 
+@login_not_required
 @csrf_exempt
 def agent_device_list(request):
     """Agent fetches the list of active devices to poll.
@@ -531,6 +537,7 @@ def agent_device_list(request):
 # Phase 2: SNMP endpoints
 # ──────────────────────────────────────────────
 
+@login_not_required
 @csrf_exempt
 def agent_snmp_settings(request):
     """Agent fetches SNMP community string and switch IPs.
@@ -559,6 +566,7 @@ def agent_snmp_settings(request):
     })
 
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_snmp_results(request):
@@ -653,6 +661,7 @@ def agent_snmp_results(request):
 # Phase 3: Dante endpoints
 # ──────────────────────────────────────────────
 
+@login_not_required
 @csrf_exempt
 @require_POST
 def agent_dante_results(request):
