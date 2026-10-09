@@ -5,7 +5,7 @@ These views serve the mobile-optimized interface at /m/
 """
 
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_not_required, login_required
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.http import require_http_methods
 from .models import Project, ProjectMember, SoundvisionPrediction, ShowDay, MicSession, MicAssignment, CommBeltPack
@@ -17,6 +17,7 @@ import json
 
 
 
+@login_not_required
 def mobile_login(request):
     """
     Mobile-optimized login page.

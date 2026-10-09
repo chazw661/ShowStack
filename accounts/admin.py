@@ -10,49 +10,13 @@ from planner.admin import BaseAdmin
 # ======================== PROJECT SYSTEM ADMIN ========================
 
 
-class ProjectAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'owner', 'start_date', 'venue', 'get_member_count', 'updated_at', 'is_archived']
-    list_filter = ['is_archived', 'start_date', 'owner']
-    search_fields = ['name', 'venue', 'client']
-    readonly_fields = ['created_at', 'updated_at']
-    
-    fieldsets = [
-        ('Project Details', {
-            'fields': ['name', 'owner', 'start_date', 'venue', 'client']
-        }),
-        ('Notes', {
-            'fields': ['notes'],
-            'classes': ['collapse']
-        }),
-        ('Status', {
-            'fields': ['is_archived', 'created_at', 'updated_at']
-        }),
-    ]
-    
-    
-    def has_module_permission(self, request):
-        """Only show Projects section to premium users who own projects"""
-        if request.user.is_superuser:
-            return True
-        
-        # Must be premium AND own at least one project
-        if not hasattr(request.user, 'userprofile'):
-            return False
-        
-        from planner.models import Project
-        is_premium = request.user.userprofile.account_type == 'premium'
-        owns_projects = Project.objects.filter(owner=request.user).exists()
-        
-        return is_premium and owns_projects
-    
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        # Show projects owned by user or where they're a member
-        return qs.filter(owner=request.user) | qs.filter(projectmember__user=request.user)
-    
-    
+# Project is registered against planner.admin.ProjectAdmin. A second,
+# never-registered ProjectAdmin used to sit here; it was deleted in the
+# tenant-isolation audit rather than left as dead code, because it carried
+# both the FieldError get_queryset body that broke the two admins below and a
+# `list_filter` entry on `owner` that would have enumerated every username in
+# the install. If Projects ever need an accounts-side admin, start from the
+# registered one.
 
 
 class ProjectMemberInline(admin.TabularInline):
@@ -89,11 +53,20 @@ class ProjectMemberAdmin(BaseEquipmentAdmin):
         return is_premium and owns_projects
     
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        # Show projects owned by user or where they're a member
-        return qs.filter(owner=request.user) | qs.filter(projectmember__user=request.user)
+        """Memberships of the current project.
+
+        This used to read
+            qs.filter(owner=request.user) | qs.filter(projectmember__user=...)
+        copied from ProjectAdmin. ProjectMember has neither an `owner` field
+        nor a `projectmember` relation, so it raised FieldError -- an HTTP 500
+        on this page for every non-superuser, i.e. for exactly the project
+        owners it exists for. (Superusers returned early and never saw it.)
+
+        BaseEquipmentAdmin.get_queryset already scopes to
+        request.current_project via ProjectMember.project, so the correct body
+        is to let it do that.
+        """
+        return super().get_queryset(request)
 
 
 
@@ -134,11 +107,13 @@ class InvitationAdmin(BaseEquipmentAdmin):
         return is_premium and owns_projects
     
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        # Show projects owned by user or where they're a member
-        return qs.filter(owner=request.user) | qs.filter(projectmember__user=request.user)
+        """Invitations for the current project.
+
+        Same copied-from-ProjectAdmin FieldError as ProjectMemberAdmin above:
+        Invitation has no `owner` field either. BaseEquipmentAdmin scopes this
+        to request.current_project through Invitation.project.
+        """
+        return super().get_queryset(request)
     
     def get_readonly_fields(self, request, obj=None):
         """Make fields readonly after creation"""

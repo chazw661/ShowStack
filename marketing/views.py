@@ -2,6 +2,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth.decorators import login_not_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.db import transaction
 from django.http import JsonResponse
@@ -14,6 +15,7 @@ from .models import WaitlistSignup
 logger = logging.getLogger(__name__)
 
 
+@login_not_required
 def home(request):
     """
     Landing page / homepage.
@@ -36,6 +38,7 @@ def home(request):
     return render(request, 'marketing/home.html', {'waitlist_form': form})
 
 
+@login_not_required
 def features(request):
     """
     Features page - detailed breakdown of capabilities.
@@ -43,6 +46,7 @@ def features(request):
     return render(request, 'marketing/features.html')
 
 
+@login_not_required
 def pricing(request):
     """
     Pricing page with plan comparison.
@@ -50,6 +54,7 @@ def pricing(request):
     return render(request, 'marketing/pricing.html')
 
 
+@login_not_required
 def contact(request):
     """
     Contact page.
@@ -66,6 +71,7 @@ def contact(request):
     return render(request, 'marketing/contact.html', {'form': form})
 
 
+@login_not_required
 def register(request):
     """
     User registration page.
@@ -120,6 +126,7 @@ def register(request):
     
 
 
+@login_not_required
 def user_login(request):
     """
     User login page.
@@ -145,6 +152,7 @@ def user_login(request):
     return render(request, 'marketing/login.html', {'form': form})
 
 
+@login_not_required
 def user_logout(request):
     """
     Log out and redirect to home.
@@ -154,6 +162,7 @@ def user_logout(request):
     return redirect('marketing:home')
 
 
+@login_not_required
 @require_POST
 def waitlist_ajax(request):
     """
@@ -169,12 +178,14 @@ def waitlist_ajax(request):
         return JsonResponse({'success': False, 'message': "Please enter a valid email."})
 
 
+@login_not_required
 def about(request):
     """
     About page.
     """
     return render(request, 'marketing/about.html')
 
+@login_not_required
 def pending(request):
     """
     Post-registration pending approval page.
@@ -182,6 +193,7 @@ def pending(request):
     return render(request, 'marketing/pending.html')
 
 
+@login_not_required
 def privacy(request):
     """
     Privacy policy page.
@@ -189,6 +201,7 @@ def privacy(request):
     return render(request, 'marketing/privacy.html')
 
 
+@login_not_required
 def terms(request):
     """
     Terms of service page.

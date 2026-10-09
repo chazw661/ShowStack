@@ -95,10 +95,18 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Default-deny for anonymous requests. Until this was added, a view without
+    # an explicit @login_required answered the public internet, and ~60 of them
+    # had none -- including exports that returned another tenant's patch sheet
+    # by id. Public views opt out with @login_not_required (marketing pages, the
+    # register/login flow, and the agent/companion APIs, which authenticate
+    # with a per-project Bearer token rather than a session).
+    # Must sit after AuthenticationMiddleware, which sets request.user.
+    'django.contrib.auth.middleware.LoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'planner.middleware.CurrentProjectMiddleware',
-    
+
 ]
 
 

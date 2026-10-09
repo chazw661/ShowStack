@@ -32,26 +32,34 @@ def generate_comm_beltpacks_pdf(project=None):
     Returns the PDF as raw ``bytes``. Uses the shared ``report_kit`` toolkit
     for the navy palette, title header, styled tables and "Page X of Y" footer.
 
-    ``project`` scopes the belt packs to a single project (multi-tenancy). If
-    omitted the report spans every project (legacy behaviour) - callers should
-    always pass ``request.current_project``.
+    ``project`` scopes the belt packs to a single project (multi-tenancy) and
+    is **required**.
+
+    It used to default to ``None`` meaning "span every project", and the only
+    caller passed ``getattr(request, 'current_project', None)`` -- so a request
+    without a project (for example an unauthenticated one) received every
+    tenant's crew names, positions, channel assignments and IPs in one PDF.
+    ``None`` now raises instead of widening the query: a report that spans
+    tenants is never the right answer, so there is no longer a way to ask for
+    one.
     """
     from planner.models import CommBeltPack
+
+    if project is None:
+        raise ValueError(
+            'generate_comm_beltpacks_pdf requires a project; passing None used '
+            'to emit every tenant\'s belt packs.'
+        )
 
     S = kit.styles()
     pagesize = kit.LANDSCAPE_PAGE
     usable = kit.usable_width(pagesize)
 
-    beltpacks = CommBeltPack.objects.all()
-    if project is not None:
-        beltpacks = beltpacks.filter(project=project)
-
-    if project is not None:
-        project_name = project.name
-    else:
-        # Legacy unscoped call: only name it when a single project is present.
-        names = list(beltpacks.values_list('project__name', flat=True).distinct())
-        project_name = names[0] if len(names) == 1 and names[0] else ''
+    # Unconditional, now that `project` is guaranteed non-None above. The
+    # `if project is not None:` guards this replaces were the leak: they left
+    # the queryset unfiltered on the path that mattered.
+    beltpacks = CommBeltPack.objects.filter(project=project)
+    project_name = project.name
 
     story = kit.title_header("COMM System", project_name, pagesize, S)
 

@@ -2,7 +2,7 @@ import logging
 
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_not_required, login_required
 from django.contrib import messages
 from django.contrib.auth.views import LoginView
 from django.urls import reverse_lazy
@@ -19,6 +19,7 @@ from planner.crew import claim_pending_crew_memberships
 
 logger = logging.getLogger(__name__)
 
+@login_not_required
 def register(request):
     """
     Public registration view - creates free accounts.
@@ -251,6 +252,7 @@ def project_invitations(request, project_id):
     return render(request, 'accounts/project_invitations.html', context)
 
 
+@login_not_required
 def accept_invitation(request, token):
     """
     Accept an invitation via unique token link.
