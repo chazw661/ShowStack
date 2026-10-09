@@ -30,7 +30,58 @@ railway run python manage.py <command>   # run Django mgmt commands against prod
 
 **Do not** run destructive SQL against Railway Postgres without confirming with Charlie first.
 
+### Running management commands against prod — without the database proxy
+
+**Use this, not the proxy, for anything that only needs to run a management
+command.** It never exposes Postgres to the internet and puts no credentials on
+your laptop. The app container already holds `DATABASE_URL` pointing at
+`postgres.railway.internal`, which resolves on Railway's private network, so a
+command run *inside* the container reaches the database directly:
+
+```bash
+# read-only reports (safe to run any time)
+railway ssh --service ShowStack -- /opt/venv/bin/python /app/manage.py report_duplicate_amp_channels
+railway ssh --service ShowStack -- /opt/venv/bin/python /app/manage.py report_duplicate_mic_assignments
+
+# narrow to one project / session
+railway ssh --service ShowStack -- /opt/venv/bin/python /app/manage.py report_duplicate_amp_channels --project 3
+railway ssh --service ShowStack -- /opt/venv/bin/python /app/manage.py report_duplicate_mic_assignments --session 24
+
+# or get a shell and stay there
+railway ssh --service ShowStack
+cd /app && /opt/venv/bin/python manage.py report_duplicate_amp_channels
+```
+
+Four things that will otherwise waste your time:
+
+1. **`/opt/venv/bin/python`, not `python`.** The SSH session's `PATH` is
+   `/nix/var/nix/profiles/default/bin:...`, which has a bare `python3` *without
+   Django* — `python manage.py` there fails with "Couldn't import Django". The
+   deploy's `startCommand` gets a different environment, which is why it can
+   say plain `python`. Dependencies live in `/opt/venv`.
+2. **`/app/manage.py`, not `manage.py`**, unless you `cd /app` first.
+3. **`railway run` does NOT work for this.** It runs the command *locally* with
+   the service's variables injected, and `postgres.railway.internal` does not
+   resolve off Railway's network. `railway ssh` runs inside the container;
+   that is the difference.
+4. **The command has to be deployed first.** `railway ssh` runs whatever is
+   live, which is `main`. A command that exists only on a branch is "Unknown
+   command" until the PR merges and Railway finishes redeploying — check with
+   `railway ssh --service ShowStack -- /opt/venv/bin/python /app/manage.py help`.
+
+`--service ShowStack` is explicit on purpose; the repo directory is linked to
+that service so it can be omitted, but being wrong about which service you are
+in is not a mistake worth risking. Confirm with `railway status`.
+
+For a cleanup command, the same invocation plus `--apply` (every cleanup here
+is a dry-run without it). **Take a Railway Postgres backup first**, and run the
+dry-run and read it before you add `--apply`.
+
 ### Connecting to prod Postgres from your laptop
+
+This is for a local `psql` session or a tool that must speak to Postgres from
+your machine. If you only need to run a management command, use `railway ssh`
+as above instead and leave the proxy off.
 
 **Public access to the Postgres service is disabled, and that is the default
 state.** The app service only receives `DATABASE_URL` pointing at

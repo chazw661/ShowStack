@@ -52,11 +52,13 @@ Usage:
     # Everything the rules can decide:
     python manage.py cleanup_duplicate_amp_channels --apply
 
-    # against prod — turn the public Postgres proxy on, and OFF again
-    # afterwards (CLAUDE.md). Take a Railway Postgres backup first.
-    railway run --service Postgres bash -c \\
-      'DATABASE_URL="$DATABASE_PUBLIC_URL" ./venv/bin/python manage.py \\
-       cleanup_duplicate_amp_channels --apply'
+    # against prod — runs inside the app container, so it needs no database
+    # proxy (see CLAUDE.md). Take a Railway Postgres backup first, and read the
+    # dry-run before adding --apply:
+    railway ssh --service ShowStack -- \\
+      /opt/venv/bin/python /app/manage.py cleanup_duplicate_amp_channels
+    railway ssh --service ShowStack -- \\
+      /opt/venv/bin/python /app/manage.py cleanup_duplicate_amp_channels --apply
 """
 
 from django.core.management.base import BaseCommand

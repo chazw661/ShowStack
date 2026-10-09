@@ -25,11 +25,11 @@ Usage:
     python manage.py report_duplicate_amp_channels --conflicting-only
     python manage.py report_duplicate_amp_channels --show-values
 
-    # against prod. Read-only, but reaching prod Postgres from a laptop still
-    # means turning the public proxy on — and off again (see CLAUDE.md):
-    railway run --service Postgres bash -c \\
-      'DATABASE_URL="$DATABASE_PUBLIC_URL" ./venv/bin/python manage.py \\
-       report_duplicate_amp_channels'
+    # against prod — runs inside the app container, so it needs no database
+    # proxy and no credentials on your laptop (see the "Running management
+    # commands against prod" section of CLAUDE.md for the gotchas):
+    railway ssh --service ShowStack -- \\
+      /opt/venv/bin/python /app/manage.py report_duplicate_amp_channels
 """
 
 from django.core.management.base import BaseCommand
