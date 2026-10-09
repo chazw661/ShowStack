@@ -4047,9 +4047,14 @@ class MicAssignment(models.Model):
         # which then 500s the change form. Short-circuit safely instead.
         if self.pk is None:
             return None
-        slot = self.presenter_slots.filter(is_active=True).first()
+        # photo_data deferred: the A2 card template calls this ~6 times per
+        # card and only the photo zone wants the image. Undeferred, a 16-card
+        # session ran 281 queries that each pulled the base64 headshot.
+        # Reading .photo_data on the result still works -- one query, once.
+        slots = self.presenter_slots.defer('photo_data')
+        slot = slots.filter(is_active=True).first()
         if not slot:
-            slot = self.presenter_slots.order_by('order').first()
+            slot = slots.order_by('order').first()
         return slot
 
     @property  

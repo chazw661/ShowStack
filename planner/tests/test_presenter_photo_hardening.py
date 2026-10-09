@@ -629,3 +629,25 @@ class SlotWritesSkipPhotoTests(PhotoTenantBase):
         self.assertNotEqual('PWNED', self.slot_b.notes)
         self.assertFalse(self.slot_b.is_micd)
         self.assertEqual(self.photo_b, self.slot_b.photo_data)
+
+
+# ---------------------------------------------------------------------------
+# 7. The mic tracker page reads each headshot once, not once per active_slot
+# ---------------------------------------------------------------------------
+
+class MicTrackerPageTests(PhotoTenantBase):
+
+    def test_page_loads_photos_once_and_still_shows_them(self):
+        """MicAssignment.active_slot runs a fresh query per call and the A2
+        card calls it ~6 times. Each used to pull photo_data: 281 photo
+        SELECTs for one 16-card session."""
+        cards = self.mic_session_a.mic_assignments.count()
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get(reverse('planner:mic_tracker'))
+        self.assertEqual(200, resp.status_code)
+        body = resp.content.decode()
+        self.assertIn(self.photo_a, body)
+        self.assertNotIn(self.MARKER_B, body)
+        photo_selects = _queries_touching_photo(ctx)
+        self.assertLess(len(photo_selects), cards,
+                        f'{len(photo_selects)} photo-loading queries for {cards} cards')
