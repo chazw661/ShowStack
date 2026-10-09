@@ -6401,6 +6401,7 @@ def audio_checklist_reset(request):
 # ─────────────────────────────────────────────────────────────
 # Audio Checklist Templates
 # ─────────────────────────────────────────────────────────────
+@login_required
 @require_POST
 def audio_checklist_save_template(request):
     """Save current checklist as a named template."""
@@ -6461,6 +6462,7 @@ def audio_checklist_list_templates(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def audio_checklist_load_template(request):
     """Replace current checklist tasks with a template."""
@@ -6470,6 +6472,11 @@ def audio_checklist_load_template(request):
         current_project = getattr(request, 'current_project', None)
         if not current_project:
             return JsonResponse({'error': 'No project'}, status=400)
+        # Loading deletes every task in the project's checklists before
+        # writing the template's, so it is a write: a viewer-role member
+        # could otherwise wipe the project's checklist.
+        if not _can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
 
         template = AudioChecklistTemplate.objects.get(id=template_id, created_by=request.user)
 
@@ -6511,6 +6518,7 @@ def audio_checklist_load_template(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
 @require_POST
 def audio_checklist_delete_template(request):
     """Delete a saved template."""
@@ -6856,6 +6864,7 @@ def comm_config_update_lan(request):
 # ─────────────────────────────────────────────────────────────
 # COMM Config — Templates
 # ─────────────────────────────────────────────────────────────
+@login_required
 @require_POST
 def comm_config_save_as_template(request):
     import json as _j
@@ -6869,70 +6878,83 @@ def comm_config_save_as_template(request):
             id=config_id, project=_scoped_project(request),
         )
 
-        # Delete existing template with same name
-        CommConfig.objects.filter(is_template=True, template_name=template_name).delete()
+        # Replacing a same-named template is scoped to the source config's
+        # project. This used to filter on is_template + template_name alone,
+        # so saving "Main" deleted every tenant's template called "Main" --
+        # and with no ATOMIC_REQUESTS that delete committed even though the
+        # create below then failed.
+        #
+        # The template now belongs to src.project. It was created with
+        # project=None, which the non-null FK rejects (IntegrityError -> 500),
+        # and comm_config_list_templates / load_template only ever look in
+        # the current project, so a projectless template could never have
+        # been found again anyway.
+        with transaction.atomic():
+            CommConfig.objects.filter(
+                project=src.project, is_template=True,
+                template_name=template_name,
+            ).exclude(pk=src.pk).delete()
 
-        # Create template record (no project)
-        tmpl = CommConfig.objects.create(
-            project=None,
-            name=template_name,
-            template_name=template_name,
-            is_template=True,
-            device_type=src.device_type,
-            wireless_region=src.wireless_region,
-            wireless_id=src.wireless_id,
-            admin_pin=src.admin_pin,
-            ota_pin=src.ota_pin,
-            display_brightness=src.display_brightness,
-            touch_sensitivity=src.touch_sensitivity,
-            battery_type=src.battery_type,
-            dsp_plc_state=src.dsp_plc_state,
-            disable_http=src.disable_http,
-            role_sorting=src.role_sorting,
-            antenna_0_connector=src.antenna_0_connector,
-            antenna_1_connector=src.antenna_1_connector,
-        )
-
-        # Copy partylines
-        pl_map = {}
-        for pl in src.partylines.all():
-            new_pl = CommConfigPartyline.objects.create(
-                config=tmpl, channel_number=pl.channel_number,
-                label=pl.label, helixnet_enabled=pl.helixnet_enabled,
+            tmpl = CommConfig.objects.create(
+                project=src.project,
+                name=template_name,
+                template_name=template_name,
+                is_template=True,
+                device_type=src.device_type,
+                wireless_region=src.wireless_region,
+                wireless_id=src.wireless_id,
+                admin_pin=src.admin_pin,
+                ota_pin=src.ota_pin,
+                display_brightness=src.display_brightness,
+                touch_sensitivity=src.touch_sensitivity,
+                battery_type=src.battery_type,
+                dsp_plc_state=src.dsp_plc_state,
+                disable_http=src.disable_http,
+                role_sorting=src.role_sorting,
+                antenna_0_connector=src.antenna_0_connector,
+                antenna_1_connector=src.antenna_1_connector,
             )
-            pl_map[pl.id] = new_pl
 
-        # Copy roles + keysets
-        for role in src.roles.all():
-            new_role = CommConfigRole.objects.create(
-                config=tmpl, label=role.label, device_type=role.device_type,
-                role_number=role.role_number, description=role.description,
-                display_brightness=role.display_brightness, master_volume=role.master_volume,
-                mic_type=role.mic_type, sidetone_control=role.sidetone_control,
-                sidetone_gain=role.sidetone_gain, headphone_limit=role.headphone_limit,
-            )
-            for key in role.keysets.all():
-                CommConfigKeyset.objects.create(
-                    role=new_role, key_index=key.key_index,
-                    partyline=pl_map.get(key.partyline_id),
-                    activation_state=key.activation_state,
-                    talk_mode=key.talk_mode,
-                    is_call_key=key.is_call_key,
-                    is_reply_key=key.is_reply_key,
-                    port_reference=key.port_reference,
+            # Copy partylines
+            pl_map = {}
+            for pl in src.partylines.all():
+                new_pl = CommConfigPartyline.objects.create(
+                    config=tmpl, channel_number=pl.channel_number,
+                    label=pl.label, helixnet_enabled=pl.helixnet_enabled,
                 )
+                pl_map[pl.id] = new_pl
 
-        # Copy port assignments
-        for pa in src.port_assignments.all():
-            CommConfigPortAssignment.objects.create(
-                config=tmpl, port_type=pa.port_type, port_label=pa.port_label,
-                port_gid=pa.port_gid,
-                partyline=pl_map.get(pa.partyline_id),
-                join_mode=pa.join_mode, port_function=pa.port_function,
-                receive_call_signal=pa.receive_call_signal, output_level=pa.output_level,
-                mode_2w=pa.mode_2w, power_enabled=pa.power_enabled,
-                termination_enabled=pa.termination_enabled,
-            )
+            # Copy roles + keysets
+            for role in src.roles.all():
+                new_role = CommConfigRole.objects.create(
+                    config=tmpl, label=role.label, device_type=role.device_type,
+                    role_number=role.role_number, description=role.description,
+                    display_brightness=role.display_brightness, master_volume=role.master_volume,
+                    mic_type=role.mic_type, sidetone_control=role.sidetone_control,
+                    sidetone_gain=role.sidetone_gain, headphone_limit=role.headphone_limit,
+                )
+                for key in role.keysets.all():
+                    CommConfigKeyset.objects.create(
+                        role=new_role, key_index=key.key_index,
+                        partyline=pl_map.get(key.partyline_id),
+                        activation_state=key.activation_state,
+                        talk_mode=key.talk_mode,
+                        is_call_key=key.is_call_key,
+                        is_reply_key=key.is_reply_key,
+                        port_reference=key.port_reference,
+                    )
+
+            # Copy port assignments
+            for pa in src.port_assignments.all():
+                CommConfigPortAssignment.objects.create(
+                    config=tmpl, port_type=pa.port_type, port_label=pa.port_label,
+                    port_gid=pa.port_gid,
+                    partyline=pl_map.get(pa.partyline_id),
+                    join_mode=pa.join_mode, port_function=pa.port_function,
+                    receive_call_signal=pa.receive_call_signal, output_level=pa.output_level,
+                    mode_2w=pa.mode_2w, power_enabled=pa.power_enabled,
+                    termination_enabled=pa.termination_enabled,
+                )
 
         return JsonResponse({'ok': True, 'template_id': tmpl.id, 'template_name': template_name})
     except ObjectDoesNotExist:
@@ -6958,6 +6980,7 @@ def comm_config_list_templates(request):
     return JsonResponse({'templates': list(templates)})
 
 
+@login_required
 @require_POST
 def comm_config_load_template(request):
     import json as _j
