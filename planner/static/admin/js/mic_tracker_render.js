@@ -53,7 +53,8 @@
     var CHIP_UNASSIGNED = 'Unassigned';
     var GROUP_CLASSES = ['group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal'];
 
-    /* key -> {assignmentId, slotId, presenter, isMicd, micType, group, isActive, slotCount} */
+    /* key -> {assignmentId, slotId, presenter, presenterId, photo, isMicd,
+               micType, group, isActive, slotCount} */
     var store = {};
 
     function key(assignmentId, slotId) {
@@ -75,7 +76,12 @@
                    something this file can write, or those edits would simply
                    never appear. */
                 notes: '', headsetColor: '', placement: '',
-                sensitivity: '', outputLevel: ''
+                sensitivity: '', outputLevel: '',
+                /* The photo is the PRESENTER's (PresenterPhoto), carried per
+                   slot as the URL the server resolved for it. presenterId is
+                   what lets one upload repaint every card that presenter is
+                   on -- see setPresenterPhoto. */
+                presenterId: '', photo: ''
             };
         }
         return store[k];
@@ -177,6 +183,47 @@
     }
 
     /* ── The renderer ──────────────────────────────────────────────────── */
+    /* The A2 photo zone. One element set per card, showing the active slot's
+       photo. Every path that changes a photo -- an upload, a drag-drop, a
+       presenter change, NEXT/PREV, another machine's edit -- lands here; it
+       used to be four hand-written copies of this DOM work, one per path. */
+    function renderPhoto(assignmentId, url, alt) {
+        var zone = document.getElementById('photo-zone-' + assignmentId);
+        if (!zone) return;
+        var img = document.getElementById('photo-img-' + assignmentId);
+        var expand = document.getElementById('photo-expand-' + assignmentId);
+        var placeholder = document.getElementById('photo-placeholder-' + assignmentId);
+        if (url) {
+            if (!img) {
+                img = document.createElement('img');
+                img.id = 'photo-img-' + assignmentId;
+                img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
+                zone.insertBefore(img, zone.firstChild);
+            }
+            /* Compare the attribute, not .src: .src is absolutised, and a
+               needless re-set restarts the load and flickers. */
+            if (img.getAttribute('src') !== url) img.setAttribute('src', url);
+            img.alt = alt || '';
+            img.style.display = 'block';
+            if (!expand) {
+                var wrapper = document.createElement('div');
+                wrapper.className = 'a2-photo-expand';
+                expand = document.createElement('img');
+                expand.id = 'photo-expand-' + assignmentId;
+                wrapper.appendChild(expand);
+                zone.appendChild(wrapper);
+            }
+            if (expand.getAttribute('src') !== url) expand.setAttribute('src', url);
+            /* Clear rather than set: the hover-expand is shown by CSS. */
+            if (expand.parentNode) expand.parentNode.style.display = '';
+            if (placeholder) placeholder.style.display = 'none';
+        } else {
+            if (img) img.style.display = 'none';
+            if (expand && expand.parentNode) expand.parentNode.style.display = 'none';
+            if (placeholder) placeholder.style.display = '';
+        }
+    }
+
     function render(assignmentId, slotId) {
         var st = get(assignmentId, slotId);
         var assigned = !!st.presenter;
@@ -261,6 +308,8 @@
 
         var listen = card.querySelector('.a2-listen-btn');
         if (listen) listen.dataset.presenter = st.presenter || '';
+
+        renderPhoto(st.assignmentId, st.photo || '', st.presenter || '');
     }
 
     /* Patch a slot's data and re-render it. The only supported way to change
@@ -288,6 +337,19 @@
             else if (mine) s.isMicd = false;   /* turning one off leaves the rest alone */
             render(s.assignmentId, s.slotId);
         });
+    }
+
+    /* A headshot belongs to the presenter, so a new one goes on every slot
+       they hold -- other cards, other sessions, the same page. */
+    function setPresenterPhoto(presenterId, url) {
+        if (!presenterId) return;
+        var pid = String(presenterId);
+        for (var k in store) {
+            if (store.hasOwnProperty(k) && store[k].presenterId === pid) {
+                store[k].photo = url || '';
+                render(store[k].assignmentId, store[k].slotId);
+            }
+        }
     }
 
     function setActive(assignmentId, slotId) {
@@ -353,7 +415,9 @@
                 /* Seeded from the controls Django rendered, so the first sync
                    diffs against what is actually on screen. */
                 notes: (row.querySelector('.a1-notes-input') || {}).value || '',
-                headsetColor: '', placement: '', sensitivity: '', outputLevel: ''
+                headsetColor: '', placement: '', sensitivity: '', outputLevel: '',
+                presenterId: d.presenterId || '',
+                photo: d.photo || ''
             };
         });
         for (var k in store) {
@@ -387,7 +451,9 @@
                 headsetColor: r.headset_color || '',
                 placement: r.placement || '',
                 sensitivity: r.sensitivity || '',
-                outputLevel: r.output_level || ''
+                outputLevel: r.output_level || '',
+                presenterId: r.presenter_id ? String(r.presenter_id) : '',
+                photo: r.photo || ''
             });
         });
         return seen;
@@ -439,6 +505,7 @@
     global.MTTSlots = {
         get: get, patch: patch, render: render, slotsOf: slotsOf,
         setMicd: setMicd, setActive: setActive, applyStats: applyStats,
+        setPresenterPhoto: setPresenterPhoto,
         applyRemote: applyRemote, applySessionStats: applySessionStats,
         init: init, UNASSIGNED: UNASSIGNED
     };
