@@ -507,3 +507,206 @@ class NothingIsDoubledAnywhereTests(_ProjectMixin, TestCase):
         before = MicAssignment.objects.count()
         self.project.duplicate(new_name='Copy')
         self.assertEqual(MicAssignment.objects.count(), before * 2)
+
+
+class MicAssignmentFieldsAreCopiedTests(_ProjectMixin, TestCase):
+    """The four columns ``duplicate()`` was dropping on the floor.
+
+    ``MicSession.duplicate_to_session()`` -- the single-session copy behind the
+    Mic Tracker's own Duplicate button -- has always carried ``placement``,
+    ``sensitivity`` and ``output_level`` across. ``Project.duplicate()`` never
+    did, so duplicating a *show* silently lost every mic's transmitter
+    settings: the pack gain and RF power an A2 sets before doors, and the
+    placement that says where the element goes on the presenter. The copy
+    looked complete in the Mic Tracker, which is why this went unnoticed.
+
+    ``input_channel`` is the issue #74 Listen override: which audio channel on
+    the companion device carries this mic when the rack patch is not 1:1. It
+    was lost the same way, and silently falls back to the RF number
+    (``effective_input_channel``), so a duplicated show monitored the wrong
+    channel rather than erroring.
+    """
+
+    # (field, value) pairs chosen from the real choice lists, and deliberately
+    # different from each other so a mix-up between two of them shows up.
+    SETTINGS = {
+        'placement': 'HAIR_MOUNT',
+        'sensitivity': '-15',
+        'output_level': '10',
+        'input_channel': 7,
+    }
+
+    def setUp(self):
+        super().setUp()
+        self.day = ShowDay.objects.create(project=self.project,
+                                          date=date(2026, 10, 8),
+                                          name='Day 1', order=0)
+        self.session = MicSession.objects.create(
+            day=self.day, name='General Session', num_mics=2, order=0)
+        for assignment in self.session.mic_assignments.order_by('rf_number'):
+            for field, value in self.SETTINGS.items():
+                setattr(assignment, field, value)
+            assignment.save()
+
+    def copied_assignments(self, project):
+        return (MicSession.objects.get(day__project=project)
+                .mic_assignments.order_by('rf_number'))
+
+    def test_the_source_really_holds_them(self):
+        """Guards the premise -- a test that passes because both sides are
+        empty would prove nothing."""
+        for assignment in self.session.mic_assignments.all():
+            for field, value in self.SETTINGS.items():
+                self.assertEqual(getattr(assignment, field), value)
+
+    def test_placement_is_copied(self):
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertEqual(assignment.placement, 'HAIR_MOUNT')
+
+    def test_sensitivity_is_copied(self):
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertEqual(assignment.sensitivity, '-15')
+
+    def test_output_level_is_copied(self):
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertEqual(assignment.output_level, '10')
+
+    def test_input_channel_is_copied(self):
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertEqual(assignment.input_channel, 7)
+
+    def test_the_effective_listen_channel_follows(self):
+        """The override exists so the Listen app streams the right channel; a
+        lost override silently falls back to the RF number."""
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertEqual(assignment.effective_input_channel, 7)
+            self.assertNotEqual(assignment.effective_input_channel,
+                                assignment.rf_number)
+
+    def test_all_four_arrive_together_on_every_row(self):
+        copy = self.project.duplicate(new_name='Copy')
+        got = [{field: getattr(assignment, field) for field in self.SETTINGS}
+               for assignment in self.copied_assignments(copy)]
+        self.assertEqual(got, [dict(self.SETTINGS)] * 2)
+
+    def test_an_unset_override_stays_unset(self):
+        """``input_channel`` is nullable and None is meaningful -- it selects
+        the RF-number fallback. Copying it as 0 or as the rf_number would
+        change behaviour."""
+        self.session.mic_assignments.update(input_channel=None)
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertIsNone(assignment.input_channel)
+            self.assertEqual(assignment.effective_input_channel,
+                             assignment.rf_number)
+
+    def test_blank_transmitter_settings_stay_blank(self):
+        self.session.mic_assignments.update(
+            placement='', sensitivity='', output_level='')
+        copy = self.project.duplicate(new_name='Copy')
+        for assignment in self.copied_assignments(copy):
+            self.assertEqual(
+                (assignment.placement, assignment.sensitivity,
+                 assignment.output_level), ('', '', ''))
+
+    def test_rows_keep_their_own_values_rather_than_the_first_rows(self):
+        first, second = self.session.mic_assignments.order_by('rf_number')
+        second.placement = 'BELT_CLIP'
+        second.input_channel = 12
+        second.save()
+
+        copy = self.project.duplicate(new_name='Copy')
+        got = sorted((a.rf_number, a.placement, a.input_channel)
+                     for a in self.copied_assignments(copy))
+        self.assertEqual(got, [(1, 'HAIR_MOUNT', 7), (2, 'BELT_CLIP', 12)])
+
+
+class AmpSortOrderIsCopiedTests(_ProjectMixin, TestCase):
+    """``Amp.sort_order`` -- the rack order an engineer dragged into place.
+
+    ``Amp.save()`` parks a new amp at the bottom of its location group when
+    ``sort_order`` is left at 0 (issue #18), which is right for the "Add Amp"
+    button. ``duplicate()`` never passed ``sort_order``, so every copied amp
+    took that branch and was renumbered ``max + 1`` in the order the amps were
+    iterated -- and ``Amp.Meta.ordering`` is ``['ip_address']``, which is not
+    the rack order. A duplicated project came out with its racks shuffled into
+    IP order.
+    """
+
+    def amp(self, name, ip_address, sort_order):
+        return Amp.objects.create(
+            project=self.project, location=self.amp_location, name=name,
+            amp_model=self.amp_model, ip_address=ip_address,
+            sort_order=sort_order)
+
+    def setUp(self):
+        super().setUp()
+        # sort_order deliberately disagrees with ip_address order, which is
+        # what self.project.amp_set.all() iterates in.
+        self.amp('Top of rack', '10.0.0.30', 1)
+        self.amp('Middle', '10.0.0.10', 2)
+        self.amp('Bottom', '10.0.0.20', 3)
+
+    def order_in(self, project):
+        return [(a.name, a.sort_order)
+                for a in Amp.objects.filter(project=project)
+                .order_by('sort_order')]
+
+    def test_the_source_order_disagrees_with_ip_order(self):
+        """The premise: if these agreed, the bug would be invisible."""
+        by_ip = [a.name for a in self.project.amp_set.all()]
+        by_sort = [name for name, _ in self.order_in(self.project)]
+        self.assertNotEqual(by_ip, by_sort)
+
+    def test_each_amp_keeps_its_own_sort_order(self):
+        copy = self.project.duplicate(new_name='Copy')
+        self.assertEqual(self.order_in(copy), self.order_in(self.project))
+
+    def test_the_rack_reads_in_the_same_order_as_the_source(self):
+        copy = self.project.duplicate(new_name='Copy')
+        self.assertEqual([name for name, _ in self.order_in(copy)],
+                         ['Top of rack', 'Middle', 'Bottom'])
+
+    def test_a_sort_order_of_zero_is_preserved(self):
+        """0 is falsy, so it is exactly the value ``save()`` overwrites. The
+        copy has to end up back at 0 rather than at max + 1."""
+        Amp.objects.filter(project=self.project).update(sort_order=0)
+        copy = self.project.duplicate(new_name='Copy')
+        self.assertEqual(
+            sorted(Amp.objects.filter(project=copy)
+                   .values_list('sort_order', flat=True)), [0, 0, 0])
+
+    def test_the_correction_does_not_rebuild_the_channels(self):
+        """The sort_order fix-up uses an UPDATE precisely so it does not
+        re-enter save() -> setup_channels(), which would double the channels
+        again."""
+        copy = self.project.duplicate(new_name='Copy')
+        for amp in Amp.objects.filter(project=copy):
+            self.assertEqual(amp.channels.count(), 4)
+            self.assertEqual(
+                sorted(amp.channels.values_list('channel_number', flat=True)),
+                [1, 2, 3, 4])
+
+    def test_the_source_amps_are_not_renumbered(self):
+        before = self.order_in(self.project)
+        self.project.duplicate(new_name='Copy')
+        self.assertEqual(self.order_in(self.project), before)
+
+    def test_duplicating_the_copy_keeps_the_order(self):
+        first = self.project.duplicate(new_name='Copy 1')
+        second = first.duplicate(new_name='Copy 2')
+        self.assertEqual(self.order_in(second), self.order_in(self.project))
+
+    def test_adding_an_amp_to_the_copy_still_parks_it_at_the_bottom(self):
+        """The issue #18 behaviour must survive for genuinely new amps."""
+        copy = self.project.duplicate(new_name='Copy')
+        location = AmpLocation.objects.get(project=copy)
+        fresh = Amp.objects.create(project=copy, location=location,
+                                   name='Added later',
+                                   amp_model=self.amp_model)
+        self.assertEqual(fresh.sort_order, 4)
