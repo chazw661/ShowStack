@@ -189,11 +189,6 @@ urlpatterns = [
 
     path('api/mic/slot/toggle-micd/', views.toggle_slot_micd, name='toggle_slot_micd'),
     
-    # Add to urls.py
-     path('api/mic/upload-presenter-photo/', views.upload_presenter_photo, name='upload_presenter_photo'),
-
-     path('api/mic/upload-photo-by-assignment/', views.upload_photo_by_assignment, name='upload_photo_by_assignment'),
-
      path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
      path('mic-tracker/export/pdf/', views.export_mic_tracker_pdf, name='export_mic_tracker_pdf'),
 
