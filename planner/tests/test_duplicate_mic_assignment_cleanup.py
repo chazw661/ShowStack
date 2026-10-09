@@ -47,6 +47,10 @@ from planner.utils.mic_assignment_dupes import (
     has_presenter, is_blank, judge, numbering_held, payload_of,
 )
 
+from planner.tests.legacy_duplicate_schema import (  # noqa: F401
+    setUpModule, tearDownModule,
+)
+
 
 class _SessionMixin:
     def setUp(self):

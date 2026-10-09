@@ -36,6 +36,10 @@ from planner.utils.amp_channel_dupes import (
     classify, duplicate_groups, is_blank, judge, keeper_of, patch_of,
 )
 
+from planner.tests.legacy_duplicate_schema import (  # noqa: F401
+    setUpModule, tearDownModule,
+)
+
 
 class _AmpMixin:
     def setUp(self):
