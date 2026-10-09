@@ -118,9 +118,12 @@ class TenantIsolationBase(TestCase):
             setattr(self, f'show_day_{tag}', show_day)
             session = MicSession.objects.create(day=show_day, name=f'Sess {mark}')
             setattr(self, f'mic_session_{tag}', session)
-            setattr(self, f'mic_assignment_{tag}', MicAssignment.objects.create(
-                session=session, rf_number=1,
-            ))
+            # MicSession.save() already scaffolded num_mics assignments, RF 1
+            # among them. Creating another rf_number=1 here made the fixture
+            # itself a duplicate -- which is what unique_session_rf_number
+            # exists to stop, so take the row that is already there.
+            setattr(self, f'mic_assignment_{tag}',
+                    session.mic_assignments.get(rf_number=1))
             setattr(self, f'prediction_{tag}', SoundvisionPrediction.objects.create(
                 project=project, show_day=show_day, file_name=f'pred-{mark}.pdf',
             ))

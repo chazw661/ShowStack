@@ -4,20 +4,11 @@ from django.contrib import admin
 from planner.models import ProjectMember, Project
 from planner.admin_site import showstack_admin_site
 
-# TEST - print on import
-print("=" * 50)
-print("ADMIN_ORDERING.PY LOADED")
-print("=" * 50)
-
-# Store the original get_app_list
 # Store the original get_app_list from showstack_admin_site
 original_get_app_list = showstack_admin_site.get_app_list
 
 
-
-
 def ordered_get_app_list(request, app_label=None):
-    print("*** FUNCTION CALLED ***")
     app_list = original_get_app_list(request, app_label)
     app_list = [app for app in app_list if app['app_label'] != 'admin_interface']
     
@@ -40,9 +31,6 @@ def ordered_get_app_list(request, app_label=None):
             # If ONLY viewer (no editor roles or owned projects), set read-only
             if not editor_owner_memberships and not owns_projects:
                 is_viewer = True
-    
-    # DEBUG
-    print(f"User: {request.user.username}, is_viewer: {is_viewer}")
     
     # Define child models that should be hidden from viewers
     child_models = {

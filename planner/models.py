@@ -1980,19 +1980,30 @@ class Amp(models.Model):
         if self.amp_model_id is None:
             return
 
-        current_count = self.channels.count()
         target_count = self.amp_model.channel_count
-        
-        if current_count < target_count:
-            # Add missing channels
-            for i in range(current_count + 1, target_count + 1):
-                AmpChannel.objects.create(
-                    amp=self,
-                    channel_number=i,
-                    channel_name=""
-                )
-        elif current_count > target_count:
-            # Remove extra channels
+
+        # Work from the numbers that exist, not from how many rows there are.
+        # A count-based range (current_count + 1 .. target_count) assumes the
+        # existing channels are a gapless 1..current_count run. They need not
+        # be: trim to a smaller model, hand-delete a row, or any legacy data
+        # leaves holes, and then the range starts past a number that is
+        # already taken -- so the "missing" channel it created was a second
+        # copy of an existing one. That is now a UniqueConstraint violation
+        # rather than a silent duplicate, so compute the gap properly.
+        existing = set(
+            self.channels.values_list('channel_number', flat=True)
+        )
+
+        missing = [n for n in range(1, target_count + 1) if n not in existing]
+        for n in missing:
+            AmpChannel.objects.create(
+                amp=self,
+                channel_number=n,
+                channel_name=""
+            )
+
+        if any(n > target_count for n in existing):
+            # Remove channels the new model does not have.
             self.channels.filter(channel_number__gt=target_count).delete()
     
     def __str__(self):
@@ -2048,8 +2059,24 @@ class AmpChannel(models.Model):
     class Meta:
         verbose_name = "Amp Channel"
         verbose_name_plural = "Amp Channels"
-        # UPDATE THIS: Likely fields are 'amp', 'channel_number'
         ordering = ['id']
+        constraints = [
+            # Issue #100 left 4-channel amps carrying 8 rows numbered
+            # 1,1,2,2,3,3,4,4. The duplication is fixed at the source, but
+            # nothing stopped the next bug writing the same shape, and every
+            # reader of a channel list (the rack view, the Rivage export, the
+            # PA cable schedule) assumes one row per channel.
+            #
+            # Not DEFERRABLE on purpose -- see the migration's module
+            # docstring. Nothing renumbers a channel in place: the only
+            # writers are Amp.setup_channels (gap-filling), Project.duplicate
+            # (which clears the scaffold before copying) and the rack page's
+            # inline update, which cannot touch channel_number.
+            models.UniqueConstraint(
+                fields=['amp', 'channel_number'],
+                name='unique_amp_channel_number',
+            ),
+        ]
     
     def __str__(self):
         return f"{self.amp.name} - Ch{self.channel_number}"
@@ -3541,17 +3568,26 @@ class MicSession(models.Model):
             self.create_mic_assignments()
     
     def create_mic_assignments(self):
-        """Create the specified number of mic assignments for this session"""
-        existing_count = self.mic_assignments.count()
-        
-        if existing_count < self.num_mics:
-            # Add more assignments
-            for i in range(existing_count + 1, self.num_mics + 1):
-                MicAssignment.objects.create(
-                    session=self,
-                    rf_number=i
-                )
-        elif existing_count > self.num_mics:
+        """Create the specified number of mic assignments for this session.
+
+        Fills the gaps in 1..num_mics rather than appending
+        ``existing_count + 1 .. num_mics``. The count-based form assumed the
+        surviving rf_numbers were a gapless 1..N run; when they were not
+        (a delete under ``numbering_held``, a legacy session, anything that
+        left a hole) the range started past a number already in use and
+        created a duplicate of it. That is now a UniqueConstraint violation,
+        so the gap is computed from the numbers themselves. Same fix as
+        ``Amp.setup_channels``.
+        """
+        existing = set(
+            self.mic_assignments.values_list('rf_number', flat=True)
+        )
+
+        for n in range(1, self.num_mics + 1):
+            if n not in existing:
+                MicAssignment.objects.create(session=self, rf_number=n)
+
+        if any(n > self.num_mics for n in existing):
             # Remove excess assignments (from the end)
             excess = self.mic_assignments.filter(rf_number__gt=self.num_mics)
             excess.delete()
@@ -3560,8 +3596,42 @@ class MicSession(models.Model):
         """Collapse MicAssignment.rf_number to consecutive 1..N and sync
         num_mics. Idempotent; returns True if anything was written.
 
-        Two-pass via negative rf values to stay collision-safe against
-        legacy rows that share an rf_number (issue #36 dup cleanup)."""
+        Two-pass via negative rf values. Pass one parks every row at a
+        distinct negative (-1..-N), which no real row can hold because
+        rf_number is validated >= 1; pass two writes the positives into space
+        nothing occupies.
+
+        What the second pass is and is not for
+        --------------------------------------
+        It is *not* what makes this safe under
+        ``unique_session_rf_number``. Given distinct input -- the only kind
+        the constraint permits -- one ascending pass cannot collide, and the
+        proof is short: rows are taken in rf order and the target is always
+        1..N, so row i's target i+1 is at or below the value c_i it already
+        holds, every earlier row has already dropped to at most i, and every
+        later row still holds c_j > c_i >= i+1. Nothing is ever written onto
+        occupied ground. ``test_unique_numbering`` pins that property over
+        every gapped subset rather than taking it on trust.
+
+        What it does buy, cheaply, is two things worth keeping:
+
+        * **The pre-migration repair path.** Duplicate-holding data breaks
+          the proof above -- [1, 1, 2, 2] -> [1, 2, 3, 4] writes 2 onto the
+          second row while two others still hold 2. That is the state issues
+          #36 and #100 left behind, and repairing it is what this method and
+          the ``renumber_mic_assignments`` command are for, on a database
+          that has not had migration 0198 applied yet (the migration refuses
+          to run until the duplicates are gone). The constraint is absent
+          there, so a single pass would not *raise* -- but the negatives keep
+          the method correct for that input instead of only incidentally so.
+        * **Independence from iteration order.** The proof leans entirely on
+          ``order_by('rf_number', 'id')``. Change that sort -- to ``id``, to
+          descending, to whatever a later reader finds tidier -- and a single
+          pass starts colliding on ordinary gapped data. The negatives mean
+          the sort is a presentation choice, not a correctness one.
+
+        Do not collapse this into one loop.
+        """
         from django.db import transaction
 
         assignments = list(
@@ -3825,7 +3895,23 @@ class MicAssignment(models.Model):
     class Meta:
         verbose_name = "Mic Assignment"
         verbose_name_plural = "Mic Assignments"  # Child
-        ordering = ['rf_number']  
+        ordering = ['rf_number']
+        constraints = [
+            # An RF number identifies one transmitter in the room. Two rows
+            # claiming RF 7 is not a display glitch -- it is two engineers
+            # looking at different mics on the same channel. Issue #100's
+            # duplication produced exactly that, which is why
+            # cleanup_duplicate_mic_assignments exists.
+            #
+            # Not DEFERRABLE on purpose -- see the migration's module
+            # docstring. renumber_assignments() is the only thing that
+            # renumbers in place, and it is collision-free for any numbering
+            # this constraint permits; its docstring carries the argument.
+            models.UniqueConstraint(
+                fields=['session', 'rf_number'],
+                name='unique_session_rf_number',
+            ),
+        ]
     
     # Replace the methods section in MicAssignment class (lines 1407-1440+)
 
