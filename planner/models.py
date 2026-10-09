@@ -250,13 +250,21 @@ class Project(models.Model):
                     cacom_4_ch4=amp.cacom_4_ch4
                 )
                 amp_map[amp.id] = new_amp
-                
+
+                # Amp.save() auto-created a blank channel list sized to the
+                # amp model; clear it so the copied channels don't double up
+                # (issue #100: a 4-channel amp came out of duplication with 8,
+                # numbered 1,1,2,2,3,3,4,4). The source rows win -- they are
+                # the ones carrying the patch.
+                new_amp.channels.all().delete()
+
                 # Duplicate Amp Channels
                 for channel in amp.channels.all():
-                                        AmpChannel.objects.create(
+                    AmpChannel.objects.create(
                         amp=new_amp,
                         channel_number=channel.channel_number,
                         channel_name=channel.channel_name,
+                        channel_setting=channel.channel_setting,
                         avb_stream=channel.avb_stream,
                         aes_input=channel.aes_input,
                         analog_input=channel.analog_input
@@ -370,6 +378,14 @@ class Project(models.Model):
                         column_position=session.column_position,
                         order=session.order
                     )
+
+                    # MicSession.save() auto-created num_mics blank
+                    # assignments; clear them so the copied assignments don't
+                    # double up. Same bug as the amp channels above (issue
+                    # #100), and the same fix duplicate_session() in views.py
+                    # already applies on the single-session path.
+                    new_session.mic_assignments.all().delete()
+
                     session_map[session.id] = new_session
 
                     # Duplicate MicGroups for this session and build group_map
