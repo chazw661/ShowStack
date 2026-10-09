@@ -220,6 +220,7 @@ class Project(models.Model):
                     name=amp.name,
                     ip_address=amp.ip_address,
                     color=amp.color,
+                    sort_order=amp.sort_order,
                     nl4_a_pair_1=amp.nl4_a_pair_1,
                     nl4_a_pair_2=amp.nl4_a_pair_2,
                     nl4_b_pair_1=amp.nl4_b_pair_1,
@@ -249,14 +250,35 @@ class Project(models.Model):
                     cacom_4_ch3=amp.cacom_4_ch3,
                     cacom_4_ch4=amp.cacom_4_ch4
                 )
+                # Amp.save() parks a new amp at the bottom of its location
+                # group when sort_order is left at 0 (issue #18). That is right
+                # for the "Add Amp" button and wrong for a copy, where it
+                # renumbers the rack: the amps are iterated in ip_address order
+                # (Amp.Meta.ordering), so a duplicated project came out with
+                # its racks in a different order than the source. Put the
+                # source's value back with an UPDATE rather than another save(),
+                # which would re-enter setup_channels().
+                if new_amp.sort_order != amp.sort_order:
+                    Amp.objects.filter(pk=new_amp.pk).update(
+                        sort_order=amp.sort_order)
+                    new_amp.sort_order = amp.sort_order
+
                 amp_map[amp.id] = new_amp
-                
+
+                # Amp.save() auto-created a blank channel list sized to the
+                # amp model; clear it so the copied channels don't double up
+                # (issue #100: a 4-channel amp came out of duplication with 8,
+                # numbered 1,1,2,2,3,3,4,4). The source rows win -- they are
+                # the ones carrying the patch.
+                new_amp.channels.all().delete()
+
                 # Duplicate Amp Channels
                 for channel in amp.channels.all():
-                                        AmpChannel.objects.create(
+                    AmpChannel.objects.create(
                         amp=new_amp,
                         channel_number=channel.channel_number,
                         channel_name=channel.channel_name,
+                        channel_setting=channel.channel_setting,
                         avb_stream=channel.avb_stream,
                         aes_input=channel.aes_input,
                         analog_input=channel.analog_input
@@ -370,6 +392,14 @@ class Project(models.Model):
                         column_position=session.column_position,
                         order=session.order
                     )
+
+                    # MicSession.save() auto-created num_mics blank
+                    # assignments; clear them so the copied assignments don't
+                    # double up. Same bug as the amp channels above (issue
+                    # #100), and the same fix duplicate_session() in views.py
+                    # already applies on the single-session path.
+                    new_session.mic_assignments.all().delete()
+
                     session_map[session.id] = new_session
 
                     # Duplicate MicGroups for this session and build group_map
@@ -392,6 +422,16 @@ class Project(models.Model):
                             is_d_mic=assignment.is_d_mic,
                             active_presenter_index=assignment.active_presenter_index,
                             notes=assignment.notes,
+                            # A2 transmitter settings and the issue #74 Listen
+                            # channel override. duplicate_to_session() copies
+                            # the first three; this loop never did, so a
+                            # duplicated show lost every mic's placement,
+                            # sensitivity and output level -- the settings an A2
+                            # sets on the transmitter before doors.
+                            placement=assignment.placement,
+                            sensitivity=assignment.sensitivity,
+                            output_level=assignment.output_level,
+                            input_channel=assignment.input_channel,
                             group=group_map.get(assignment.group_id) if assignment.group_id else None
                         )
 
