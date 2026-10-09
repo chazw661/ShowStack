@@ -6189,12 +6189,68 @@ class ShowDayAdmin(BaseEquipmentAdmin):
         }  
 
 
+class PresenterAdminForm(forms.ModelForm):
+    """Headshot upload for the Presenter change form.
+
+    Presenter.photo (an ImageField) used to be the upload here. Its files went
+    to the container's local disk and were lost on every redeploy -- all 53
+    on prod point at nothing. The headshot is a PresenterPhoto now; this
+    field feeds it through the same validation and re-encode as the A2 card.
+    """
+    headshot_upload = forms.FileField(
+        required=False, label='Headshot',
+        help_text='JPEG, PNG or WebP, up to 5 MB. Shown on every card this '
+                  'presenter is on, in every session.',
+        widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,image/webp'}),
+    )
+    clear_headshot = forms.BooleanField(required=False, label='Remove headshot')
+
+    class Meta:
+        model = Presenter
+        exclude = ['project', 'photo']
+
+    def clean_headshot_upload(self):
+        from planner.utils.image_upload import (
+            ImageRejected, normalize_headshot, read_upload_capped,
+        )
+        upload = self.cleaned_data.get('headshot_upload')
+        if not upload:
+            return None
+        try:
+            raw = read_upload_capped(upload)
+            normalize_headshot(raw)  # reject here, as a form error
+        except ImageRejected as e:
+            raise forms.ValidationError(str(e))
+        return raw
+
+
 class PresenterAdmin(BaseEquipmentAdmin):
-    list_display = ['name', 'created_at']
+    form = PresenterAdminForm
+    # Here as well as on the form: BaseEquipmentAdmin.get_exclude() returns a
+    # list, and a list from the admin replaces the form's Meta.exclude.
+    exclude = ['project', 'photo']
+    list_display = ['name', 'has_headshot', 'created_at']
     search_fields = ['name']
     ordering = ['name']
-    exclude = ['project']
+    readonly_fields = ['headshot_preview']
 
+    @admin.display(boolean=True, description='Photo')
+    def has_headshot(self, obj):
+        return bool(getattr(obj, '_has_headshot', False))
+
+    def get_queryset(self, request):
+        from django.db.models import Exists, OuterRef
+        from planner.models import PresenterPhoto
+        return super().get_queryset(request).annotate(
+            _has_headshot=Exists(PresenterPhoto.objects.filter(presenter=OuterRef('pk'))),
+        )
+
+    @admin.display(description='Current headshot')
+    def headshot_preview(self, obj):
+        url = obj.headshot_url if obj and obj.pk else ''
+        if not url:
+            return '—'
+        return format_html('<img src="{}" alt="" style="max-height:120px;border-radius:6px;">', url)
 
     def save_model(self, request, obj, form, change):
         """Auto-assign current project when adding presenter"""
@@ -6210,6 +6266,13 @@ class PresenterAdmin(BaseEquipmentAdmin):
                 except Project.DoesNotExist:
                     pass
         super().save_model(request, obj, form, change)
+
+        from planner.models import PresenterPhoto
+        raw = form.cleaned_data.get('headshot_upload')
+        if raw:
+            PresenterPhoto.store(obj, raw, request.user)
+        elif form.cleaned_data.get('clear_headshot'):
+            PresenterPhoto.objects.filter(presenter=obj).delete()
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}

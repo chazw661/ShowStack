@@ -59,7 +59,33 @@ def _data_url(mime, raw):
 
 
 def _queries_touching_photo(ctx):
-    return [q['sql'] for q in ctx.captured_queries if 'photo_data' in q['sql']]
+    """Queries that READ or WRITE the photo_data value.
+
+    A WHERE on it (PhotoIndex's ``photo_data <> ''`` test for a legacy photo)
+    is not counted: Postgres answers that from the TOAST length header without
+    reading the image. Selecting it, or SETting it, moves the bytes.
+    """
+    out = []
+    for q in ctx.captured_queries:
+        sql = q['sql']
+        if 'photo_data' not in sql:
+            continue
+        if sql.startswith('SELECT'):
+            selected = sql[len('SELECT'):sql.find(' FROM ')]
+            if 'photo_data' in selected:
+                out.append(sql)
+        elif sql.startswith('UPDATE'):
+            set_clause = sql[sql.find(' SET '):sql.find(' WHERE ') if ' WHERE ' in sql else None]
+            if 'photo_data' in set_clause:
+                out.append(sql)
+        else:
+            out.append(sql)
+    return out
+
+
+def _headshot(presenter):
+    from planner.models import PresenterPhoto
+    return PresenterPhoto.objects.filter(presenter=presenter).first()
 
 
 # ---------------------------------------------------------------------------
@@ -142,15 +168,17 @@ class UploadSlotPhotoTests(PhotoTenantBase):
     def test_editor_member_can_upload(self):
         resp = self.upload(self.editor, self.slot_a, PNG)
         self.assertEqual(200, resp.status_code, resp.content)
-        self.slot_a.refresh_from_db()
-        self.assertEqual(_data_url('image/png', PNG), self.slot_a.photo_data)
+        self.assertIsNotNone(_headshot(self.presenter_a))
+        self.assertEqual(self.presenter_a.id, resp.json()['presenter_id'])
 
-    def test_type_comes_from_bytes_not_header(self):
-        """A JPEG sent as image/png is stored as image/jpeg."""
-        resp = self.upload(self.client, self.slot_a, JPEG, 'x.png', 'image/png')
+    def test_stored_bytes_are_a_fresh_encode_not_the_upload(self):
+        """Whatever the header claimed, what is stored is Pillow's re-encode."""
+        resp = self.upload(self.client, self.slot_a, PNG, 'x.gif', 'image/gif')
         self.assertEqual(200, resp.status_code, resp.content)
-        self.slot_a.refresh_from_db()
-        self.assertTrue(self.slot_a.photo_data.startswith('data:image/jpeg;base64,'))
+        photo = _headshot(self.presenter_a)
+        self.assertEqual('image/jpeg', photo.content_type)
+        self.assertEqual('JPEG', Image.open(BytesIO(bytes(photo.content))).format)
+        self.assertNotEqual(PNG, bytes(photo.content))
 
     def test_webp_accepted(self):
         resp = self.upload(self.client, self.slot_a, WEBP, 'x.webp', 'image/webp')
@@ -187,13 +215,13 @@ class UploadSlotPhotoTests(PhotoTenantBase):
         resp = self.client.get(reverse('planner:upload_slot_photo'))
         self.assertEqual(405, resp.status_code)
 
-    def test_write_touches_only_photo_data(self):
+    def test_upload_never_touches_the_slot_row(self):
         with CaptureQueriesContext(connection) as ctx:
             self.upload(self.client, self.slot_a, PNG)
-        updates = [q['sql'] for q in ctx.captured_queries
-                   if q['sql'].startswith('UPDATE') and 'planner_presenterslot' in q['sql']]
-        self.assertEqual(1, len(updates), updates)
-        self.assertNotIn('"notes"', updates[0])
+        slot_writes = [q['sql'] for q in ctx.captured_queries
+                       if q['sql'].startswith('UPDATE') and 'planner_presenterslot' in q['sql']]
+        self.assertEqual([], slot_writes)
+        self.assertEqual([], _queries_touching_photo(ctx))
 
 
 # ---------------------------------------------------------------------------
@@ -259,12 +287,11 @@ class UploadFromUrlEndpointTests(PhotoTenantBase):
         fetch.assert_not_called()
 
     @mock.patch('planner.utils.safe_fetch.fetch_public')
-    def test_stores_type_from_bytes_not_remote_header(self, fetch):
+    def test_ignores_remote_content_type(self, fetch):
         fetch.return_value = (PNG, {'Content-Type': 'text/html'})
         resp = self.post(self.client, self.slot_a)
         self.assertEqual(200, resp.status_code, resp.content)
-        self.slot_a.refresh_from_db()
-        self.assertEqual(_data_url('image/png', PNG), self.slot_a.photo_data)
+        self.assertEqual('image/jpeg', _headshot(self.presenter_a).content_type)
 
     @mock.patch('planner.utils.safe_fetch.fetch_public')
     def test_non_image_body_is_rejected(self, fetch):
@@ -562,18 +589,17 @@ class SlotWritesSkipPhotoTests(PhotoTenantBase):
     def test_update_mic_assignment_notes(self):
         resp = self.assertNoPhotoSql('update_mic_assignment', {
             'assignment_id': self.mic_assignment_a.id, 'field': 'notes', 'value': 'hello'})
-        self.assertEqual('', resp.json()['slot_photo_data'])
+        self.assertEqual('', resp.json()['photo_url'])
 
     def test_activate_writes_only_is_active(self):
-        """The response still carries the newly active slot's photo -- loaded
-        for that one slot only, after the writes."""
+        """The response carries the newly active slot's photo as a URL; the
+        image itself is neither read nor written."""
+        from planner.utils.presenter_photos import legacy_slot_photo_url
         with CaptureQueriesContext(connection) as ctx:
             resp = self.post_json('activate_presenter_slot', {
                 'assignment_id': self.mic_assignment_a.id, 'slot_id': self.slot_a2.id})
-        self.assertEqual(self.slot_a2.photo_data, resp.json()['photo_url'])
-        photo_sql = _queries_touching_photo(ctx)
-        self.assertEqual(1, len(photo_sql), photo_sql)
-        self.assertTrue(photo_sql[0].startswith('SELECT'), photo_sql)
+        self.assertEqual(legacy_slot_photo_url(self.slot_a2.id), resp.json()['photo_url'])
+        self.assertEqual([], _queries_touching_photo(ctx))
 
     def test_advance_and_previous_write_only_is_active(self):
         for name in ('advance_presenter_slot', 'previous_presenter_slot'):
@@ -583,8 +609,9 @@ class SlotWritesSkipPhotoTests(PhotoTenantBase):
                 self.assertTrue(resp.json()['success'])
                 writes = [s for s in _queries_touching_photo(ctx) if not s.startswith('SELECT')]
                 self.assertEqual([], writes, f'{name} rewrote photo_data')
-                active = PresenterSlot.objects.get(id=resp.json()['slot_id'])
-                self.assertEqual(active.photo_data or None, resp.json()['photo_url'])
+                photo_url = resp.json()['photo_url']
+                self.assertTrue(photo_url is None or photo_url.startswith('/audiopatch/'),
+                                f'{name}: photo_url is not a URL: {str(photo_url)[:40]}')
 
     def test_remove_slot(self):
         self.assertNoPhotoSql('remove_presenter_slot', {
@@ -637,17 +664,16 @@ class SlotWritesSkipPhotoTests(PhotoTenantBase):
 
 class MicTrackerPageTests(PhotoTenantBase):
 
-    def test_page_loads_photos_once_and_still_shows_them(self):
+    def test_page_never_loads_a_photo(self):
         """MicAssignment.active_slot runs a fresh query per call and the A2
         card calls it ~6 times. Each used to pull photo_data: 281 photo
-        SELECTs for one 16-card session."""
-        cards = self.mic_session_a.mic_assignments.count()
+        SELECTs for one 16-card session. Photos are URLs now, so: none."""
+        from planner.utils.presenter_photos import legacy_slot_photo_url
         with CaptureQueriesContext(connection) as ctx:
             resp = self.client.get(reverse('planner:mic_tracker'))
         self.assertEqual(200, resp.status_code)
         body = resp.content.decode()
-        self.assertIn(self.photo_a, body)
+        self.assertNotIn(self.photo_a, body, 'a photo was inlined as base64')
+        self.assertIn(legacy_slot_photo_url(self.slot_a.id), body)
         self.assertNotIn(self.MARKER_B, body)
-        photo_selects = _queries_touching_photo(ctx)
-        self.assertLess(len(photo_selects), cards,
-                        f'{len(photo_selects)} photo-loading queries for {cards} cards')
+        self.assertEqual([], _queries_touching_photo(ctx))

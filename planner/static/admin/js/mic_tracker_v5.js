@@ -61,9 +61,10 @@ async function updateField(assignmentId, field, value) {
                         presenter: data.presenter_display || ''
                     });
                 }
-                // Issue #10: sync photo zone with the newly-assigned presenter's headshot
+                // Issue #10: the photo zone follows the newly-assigned presenter
                 if (typeof syncAssignmentPhoto === 'function') {
-                    syncAssignmentPhoto(assignmentId, data.slot_photo_data || '', data.active_slot_id || null);
+                    syncAssignmentPhoto(assignmentId, data.photo_url || '', data.active_slot_id || null,
+                                        data.presenter_id || null);
                 }
             }
             
@@ -851,9 +852,11 @@ async function duplicateSession(sessionId) {
     }
 }
 
-// ============ PHOTO UPLOAD — SLOT-BASED ============
-// Each presenter slot has its own discrete photo stored on PresenterSlot.photo.
-// All photo functions use slot_id as the key, never assignment_id.
+// ============ PHOTO UPLOAD ============
+// The A2 card uploads by slot id (that is what the card is showing), and the
+// photo lands on the slot's PRESENTER -- so it appears on every card that
+// presenter is on, in every session. These are the only definitions: the
+// page template used to redefine both, and its copies silently won.
 
 /**
  * Trigger the hidden file input for a specific presenter slot.
@@ -866,9 +869,10 @@ function triggerPhotoForSlot(slotId, assignmentId) {
 }
 
 /**
- * Upload a photo for a specific presenter slot.
- * Posts to /audiopatch/api/mic/slot/upload-photo/ with slot_id.
- * Updates the photo zone in the card without a page reload.
+ * Upload a photo picked on an A2 card.
+ * Posts to /audiopatch/api/mic/slot/upload-photo/ with slot_id; the reply
+ * carries the presenter id and the headshot URL, and the renderer repaints
+ * every slot that presenter holds.
  */
 async function uploadPhotoForSlot(slotId, assignmentId, input) {
     if (!slotId || !input.files || !input.files[0]) return;
@@ -876,6 +880,8 @@ async function uploadPhotoForSlot(slotId, assignmentId, input) {
     const fd = new FormData();
     fd.append('slot_id', slotId);
     fd.append('photo', input.files[0]);
+    // Let the same file be picked again after a failure.
+    input.value = '';
 
     try {
         const resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', {
@@ -883,42 +889,14 @@ async function uploadPhotoForSlot(slotId, assignmentId, input) {
             headers: { 'X-CSRFToken': csrftoken },
             body: fd
         });
-        const data = await resp.json();
+        let data = {};
+        try { data = await resp.json(); } catch (e) { /* a 404/500 page */ }
 
         if (data.success && data.photo_url) {
-            const zone = document.getElementById('photo-zone-' + assignmentId);
-            if (!zone) return;
-
-            // Hide placeholder
-            const placeholder = document.getElementById('photo-placeholder-' + assignmentId);
-            if (placeholder) placeholder.style.display = 'none';
-
-            // Update or create the thumbnail
-            let img = document.getElementById('photo-img-' + assignmentId);
-            if (!img) {
-                img = document.createElement('img');
-                img.id = 'photo-img-' + assignmentId;
-                img.style.cssText = 'width:70px;height:70px;object-fit:cover;border-radius:5px;display:block;';
-                zone.insertBefore(img, zone.firstChild);
-            }
-            img.style.display = 'block';
-            img.src = data.photo_url;
-
-            // Update or create the hover-expand panel
-            let expandImg = document.getElementById('photo-expand-' + assignmentId);
-            if (!expandImg) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'a2-photo-expand';
-                expandImg = document.createElement('img');
-                expandImg.id = 'photo-expand-' + assignmentId;
-                wrapper.appendChild(expandImg);
-                zone.appendChild(wrapper);
-            }
-            expandImg.src = data.photo_url;
-
+            MTTSlots.setPresenterPhoto(data.presenter_id, data.photo_url);
             showNotification('Photo saved', 'success');
         } else {
-            showNotification('Photo upload failed: ' + (data.error || 'Unknown error'), 'error');
+            showNotification('Photo upload failed: ' + (data.error || ('HTTP ' + resp.status)), 'error');
         }
     } catch (error) {
         console.error('Photo upload error:', error);
