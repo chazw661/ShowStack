@@ -363,6 +363,18 @@ class Project(models.Model):
                 )
                 presenter_map[presenter.id] = new_presenter
 
+            # Headshots go with them. A copy, not a shared row: the new
+            # project is its own tenant, and replacing a photo there must not
+            # change the original's.
+            for photo in PresenterPhoto.objects.filter(presenter__project=self):
+                new_presenter = presenter_map.get(photo.presenter_id)
+                if new_presenter is not None:
+                    PresenterPhoto.objects.create(
+                        presenter=new_presenter, content=photo.content,
+                        content_type=photo.content_type, sha256=photo.sha256,
+                        width=photo.width, height=photo.height,
+                    )
+
             # Duplicate ShowDays
             showday_map = {}
             for showday in self.showday_set.all():
@@ -3488,12 +3500,90 @@ class Presenter(models.Model):
             return False
         if self.slots.exists() or self.shared_assignments.exists():
             return False
+        # Someone put a face on it, so it is somebody's record now.
+        if PresenterPhoto.objects.filter(presenter=self).exists():
+            return False
 
         self.delete()
         return True
 
+    @property
+    def headshot_url(self):
+        """URL of this presenter's headshot, or '' if there is none.
+
+        Cheap only when the headshot row was select_related with its content
+        deferred (see MicAssignment.active_slot); otherwise one small query.
+        """
+        try:
+            return self.headshot.url
+        except PresenterPhoto.DoesNotExist:
+            return ''
+
     def __str__(self):
         return self.name    
+
+
+class PresenterPhoto(models.Model):
+    """A presenter's headshot. One per Presenter, so it follows them into
+    every session and every slot they are put in.
+
+    Its own table, not a column on Presenter: a presenter is loaded on every
+    Mic Tracker query and the image is only wanted by the one request that
+    serves it. The bytes are a normalised JPEG (see
+    planner.utils.image_upload.normalize_headshot), ~20-60 KB, never the
+    upload as sent.
+
+    Tenancy is the Presenter's: it has a non-null project, and every lookup
+    of this model goes through presenter__project.
+    """
+    presenter = models.OneToOneField(
+        Presenter, on_delete=models.CASCADE, primary_key=True,
+        related_name='headshot',
+    )
+    content = models.BinaryField()
+    content_type = models.CharField(max_length=32, default='image/jpeg')
+    sha256 = models.CharField(max_length=64)
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        verbose_name = "Presenter Photo"
+
+    @property
+    def url(self):
+        """Versioned by content hash, so a browser can cache it for good and
+        a replaced photo is simply a new URL."""
+        from django.urls import reverse
+        return (reverse('planner:presenter_photo', args=[self.presenter_id])
+                + f'?v={self.sha256[:12]}')
+
+    @classmethod
+    def store(cls, presenter, raw, user=None):
+        """Normalise ``raw`` and make it ``presenter``'s headshot.
+
+        Raises planner.utils.image_upload.ImageRejected for anything that is
+        not an acceptable image.
+        """
+        from planner.utils.image_upload import normalize_headshot
+
+        content, content_type, width, height, digest = normalize_headshot(raw)
+        photo, _ = cls.objects.update_or_create(
+            presenter=presenter,
+            defaults={
+                'content': content, 'content_type': content_type,
+                'sha256': digest, 'width': width, 'height': height,
+                'updated_by': user if (user and user.is_authenticated) else None,
+            },
+        )
+        return photo
+
+    def __str__(self):
+        return f"Photo of {self.presenter}"
 
 class MicSession(models.Model):
     """Represents a session within a show day"""
