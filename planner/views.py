@@ -1417,6 +1417,7 @@ def update_mic_assignment(request):
         # (or against project None) and minted a duplicate: the name existed,
         # just not where we looked.
         current_project_id = assignment.session.day.project_id
+        presenter_changed = False
 
         if field in ('is_micd', 'is_d_mic'):
             setattr(assignment, field, value if isinstance(value, bool) else value == 'true')
@@ -1437,14 +1438,17 @@ def update_mic_assignment(request):
             assignment.save(update_fields=['input_channel', 'last_modified'])
         elif field in ('presenter', 'presenter_name', 'presenter_id', 'mic_type',
                     'headset_color', 'placement', 'sensitivity', 'output_level', 'notes'):
-            slot = assignment.presenter_slots.filter(is_active=True).first()
+            # photo_data is deferred here and in every slot save below. A full
+            # save() re-sent the whole base64 headshot (avg ~300 KB, up to
+            # 4 MB) on every notes keystroke, and Postgres stored it again.
+            slots = assignment.presenter_slots.defer('photo_data')
+            slot = slots.filter(is_active=True).first()
             if not slot:
-                slot = assignment.presenter_slots.order_by('order').first()
+                slot = slots.order_by('order').first()
             if not slot:
                 slot = PresenterSlot.objects.create(
                     assignment=assignment, order=0, is_active=True
                 )
-            presenter_changed = False
             # Held so a half-typed name left behind by the 600ms debounce can
             # be retired once the slot has moved off it (see
             # Presenter.retire_if_typing_orphan).
@@ -1458,7 +1462,12 @@ def update_mic_assignment(request):
                 # non-numeric path is the common one, not the exception.
                 if value:
                     try:
-                        slot.presenter = Presenter.objects.get(id=int(value))
+                        # Scoped: an unscoped get() let a slot point at another
+                        # tenant's Presenter, and the photo sync below then
+                        # copied that tenant's headshot into this response.
+                        slot.presenter = Presenter.objects.get(
+                            id=int(value), project_id=current_project_id,
+                        )
                         typed_name = slot.presenter.name
                     except (ValueError, Presenter.DoesNotExist):
                         slot.presenter = Presenter.resolve(value, current_project_id)
@@ -1473,8 +1482,9 @@ def update_mic_assignment(request):
             # photo_data so a stale face doesn't hang on after re-assignment.
             if presenter_changed:
                 slot.photo_data = _presenter_photo_data_url(slot.presenter)
-
-            slot.save()
+                slot.save(update_fields=['presenter', 'photo_data'])
+            else:
+                slot.save(update_fields=[field])
 
             if (presenter_changed and previous_presenter
                     and previous_presenter.pk != getattr(slot.presenter, 'pk', None)):
@@ -1490,7 +1500,8 @@ def update_mic_assignment(request):
         # tracker rebuilds that strip from this payload, so a short dict here
         # meant a live edit silently dropped the D-MIC and Shared counts that
         # a reload showed. One definition, used by all three.
-        active_slot = assignment.presenter_slots.filter(is_active=True).first()
+        active_slot = (assignment.presenter_slots.defer('photo_data')
+                       .select_related('presenter').filter(is_active=True).first())
         presenter_display = active_slot.presenter.name if active_slot and active_slot.presenter else ''
 
         slot_count = assignment.presenter_slots.count()
@@ -1500,7 +1511,10 @@ def update_mic_assignment(request):
             'day_stats': session.day.get_all_mics_status(),
             'presenter_display': presenter_display,
             'presenter_count': slot_count,
-            'slot_photo_data': active_slot.photo_data if active_slot else '',
+            # Only a presenter change repaints the photo zone (mic_tracker_v5.js
+            # reads this key for presenter fields alone), so only then is the
+            # deferred image loaded and sent back.
+            'slot_photo_data': (active_slot.photo_data or '') if (active_slot and presenter_changed) else '',
             'active_slot_id': active_slot.id if active_slot else None,
             'effective_input_channel': assignment.effective_input_channel,
         })
@@ -1839,7 +1853,7 @@ def update_slot_field(request):
     try:
         data = json.loads(request.body)
         slot = get_object_or_404(
-            PresenterSlot, id=data['slot_id'],
+            PresenterSlot.objects.defer('photo_data'), id=data['slot_id'],
             assignment__session__day__project=_scoped_project(request),
         )
         field = data['field']
@@ -1852,14 +1866,14 @@ def update_slot_field(request):
             project_id = slot.assignment.session.day.project_id
             slot.presenter = Presenter.resolve(name, project_id)
             slot.photo_data = _presenter_photo_data_url(slot.presenter)
-            slot.save()
+            slot.save(update_fields=['presenter', 'photo_data'])
             return JsonResponse({
                 'success': True,
                 'presenter_name': slot.presenter.name if slot.presenter else '',
             })
         if field in ('notes', 'mic_type', 'headset_color', 'placement', 'sensitivity', 'output_level'):
             setattr(slot, field, value)
-            slot.save()
+            slot.save(update_fields=[field])
             return JsonResponse({'success': True})
         return JsonResponse({'success': False, 'error': 'Invalid field'})
     except Exception as e:
@@ -1892,7 +1906,7 @@ def assign_slot_group(request):
     try:
         data = json.loads(request.body)
         slot = get_object_or_404(
-            PresenterSlot, id=data['slot_id'],
+            PresenterSlot.objects.defer('photo_data'), id=data['slot_id'],
             assignment__session__day__project=_scoped_project(request),
         )
         ids = _resolve_group_ids(data, slot.assignment.session_id)
@@ -1910,7 +1924,7 @@ def assign_slot_a2_group(request):
     try:
         data = json.loads(request.body)
         slot = get_object_or_404(
-            PresenterSlot, id=data['slot_id'],
+            PresenterSlot.objects.defer('photo_data'), id=data['slot_id'],
             assignment__session__day__project=_scoped_project(request),
         )
         ids = _resolve_group_ids(data, slot.assignment.session_id)
@@ -1929,14 +1943,14 @@ def toggle_slot_micd(request):
         slot_id = data.get('slot_id')
         new_state = data.get('is_micd', False)
         slot = get_object_or_404(
-            PresenterSlot, id=slot_id,
+            PresenterSlot.objects.defer('photo_data'), id=slot_id,
             assignment__session__day__project=_scoped_project(request),
         )
         # Turn off all sibling slots on this assignment
         PresenterSlot.objects.filter(assignment=slot.assignment).update(is_micd=False)
         if new_state:
             slot.is_micd = True
-            slot.save()
+            slot.save(update_fields=['is_micd'])
         # Return the same stats shape as update_mic_field. The tracker's
         # session and day "n/total mic'd" counters are rendered from these on
         # page load, so without them a per-slot toggle left the counters
@@ -1959,10 +1973,10 @@ def toggle_slot_micd(request):
 @staff_member_required
 def get_presenters_list(request):
     q = request.GET.get('q', '')
-    project = getattr(request, 'current_project', None)
-    presenters = Presenter.objects.filter(name__icontains=q)
-    if project:
-        presenters = presenters.filter(project=project)
+    # Was `if project: filter(...)` with no else -- a session without a
+    # project got every tenant's presenters, and their ids are what the A2
+    # card's presenter_id field accepts.
+    presenters = scope_queryset(request, Presenter.objects.filter(name__icontains=q))
     presenters = presenters.order_by('name').values('id', 'name')
     return JsonResponse({'presenters': list(presenters)})
 
@@ -1987,58 +2001,64 @@ def create_presenter(request):
 
 
 
-@staff_member_required
-def upload_presenter_photo(request):
-    if request.method == 'POST':
-        presenter_id = request.POST.get('presenter_id')
-        photo = request.FILES.get('photo')
-        if not presenter_id or not photo:
-            return JsonResponse({'success': False, 'error': 'Missing data'})
-        try:
-            presenter = Presenter.objects.get(id=presenter_id)
-            presenter.photo.save(photo.name, photo, save=True)
-            return JsonResponse({'success': True, 'photo_url': presenter.photo.url})
-        except Presenter.DoesNotExist:
-            return JsonResponse({'success': False, 'error': 'Presenter not found'})
-    return JsonResponse({'success': False})
+# ── Presenter slot photos ───────────────────────────────────────────────
+# Two endpoints write PresenterSlot.photo_data: a file picked or dropped on
+# the A2 card, and an image URL dragged from another site. Both used to look
+# the slot up by id alone behind @staff_member_required -- and every account
+# is staff -- so any logged-in user could overwrite any tenant's headshot,
+# viewers included. upload_presenter_photo and upload_photo_by_assignment had
+# the same hole and no caller; they are gone.
+#
+# Now: the slot must be in the session's project (else 404, the same answer a
+# nonexistent id gets), the user must be its owner or an editor (else 403), and
+# the stored MIME type comes from Pillow reading the bytes, not from a header.
 
-@staff_member_required
-def upload_photo_by_assignment(request):
-    if request.method == 'POST':
-        assignment_id = request.POST.get('assignment_id')
-        photo = request.FILES.get('photo')
-        try:
-            assignment = MicAssignment.objects.get(id=assignment_id)
-            slot = assignment.presenter_slots.filter(is_active=True).first()
-            if not slot:
-                return JsonResponse({'success': False, 'error': 'No active slot'})
-            import os
-            filename = os.path.basename(photo.name)
-            slot.photo.save(f'slot_photos/{filename}', photo, save=True)
-            return JsonResponse({'success': True, 'photo_url': slot.photo.url})
-        except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
+def _scoped_slot_for_photo(request, slot_id):
+    """The slot if it is in the current project, else Http404.
+
+    photo_data is deferred: the row is only being overwritten, and loading it
+    would pull the old image (up to several MB) just to throw it away.
+    """
+    return get_object_or_404(
+        PresenterSlot.objects.defer('photo_data'), id=slot_id,
+        assignment__session__day__project=_scoped_project(request),
+    )
 
 
-@staff_member_required
+def _store_slot_photo(slot, data):
+    """Validate ``data`` and write it as the slot's data URL. Raises ImageRejected."""
+    import base64
+    from planner.utils.image_upload import validate_photo_bytes
+
+    mime_type = validate_photo_bytes(data)
+    slot.photo_data = f'data:{mime_type};base64,{base64.b64encode(data).decode("ascii")}'
+    slot.save(update_fields=['photo_data'])
+    return slot.photo_data
+
+
+@require_POST
+@login_required
 def upload_slot_photo(request):
-    if request.method == 'POST':
-        slot_id = request.POST.get('slot_id')
-        photo = request.FILES.get('photo')
-        if not slot_id or not photo:
-            return JsonResponse({'success': False, 'error': 'Missing slot_id or photo'})
-        try:
-            import base64
-            slot = PresenterSlot.objects.get(id=slot_id)
-            photo_bytes = photo.read()
-            mime_type = photo.content_type or 'image/jpeg'
-            b64 = base64.b64encode(photo_bytes).decode('utf-8')
-            slot.photo_data = f'data:{mime_type};base64,{b64}'
-            slot.save()
-            return JsonResponse({'success': True, 'photo_url': slot.photo_data})
-        except PresenterSlot.DoesNotExist:
-            return JsonResponse({'success': False, 'error': 'Slot not found'})
-    return JsonResponse({'success': False})
+    from planner.utils.image_upload import ImageRejected, read_upload_capped
+
+    slot_id = request.POST.get('slot_id')
+    photo = request.FILES.get('photo')
+    if not slot_id or not photo:
+        return JsonResponse({'success': False, 'error': 'Missing slot_id or photo'}, status=400)
+    try:
+        slot_id = int(slot_id)
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
+
+    slot = _scoped_slot_for_photo(request, slot_id)
+    if not _can_edit_current_project(request):
+        return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
+
+    try:
+        photo_url = _store_slot_photo(slot, read_upload_capped(photo))
+    except ImageRejected as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    return JsonResponse({'success': True, 'photo_url': photo_url})
 
 
 @require_POST
@@ -2050,20 +2070,13 @@ def upload_slot_photo_from_url(request):
 
     Body (JSON): {slot_id, url}
 
-    Hardening:
-    - Auth + project allowlist matching mic_assignment_reorder.
-    - URL must be http/https with a public-routable host (rejects
-      private, loopback, link-local, reserved, multicast).
-    - 10s connect/read timeout, 5 MB max response, image/* content-type.
+    The slot and permission checks run before anything is fetched, so a
+    request for another tenant's slot never makes an outbound connection.
+    The fetch itself (public addresses only, pinned to the resolved IP, every
+    redirect re-checked, size and time capped) is planner.utils.safe_fetch.
     """
-    import base64
-    import ipaddress
-    import socket
-    import urllib.parse
-
-    import requests
-
-    MAX_BYTES = 5 * 1024 * 1024
+    from planner.utils.image_upload import ImageRejected, MAX_PHOTO_BYTES
+    from planner.utils.safe_fetch import UnsafeFetchError, fetch_public
 
     try:
         data = json.loads(request.body)
@@ -2072,63 +2085,20 @@ def upload_slot_photo_from_url(request):
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
 
-    try:
-        slot = PresenterSlot.objects.select_related(
-            'assignment__session__day__project'
-        ).get(id=slot_id)
-    except PresenterSlot.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Slot not found'}, status=404)
-
-    project = slot.assignment.session.day.project
-    allowed = (
-        request.user.is_superuser
-        or project.owner_id == request.user.id
-        or ProjectMember.objects.filter(
-            user=request.user, project=project, role='editor'
-        ).exists()
-    )
-    if not allowed:
+    slot = _scoped_slot_for_photo(request, slot_id)
+    if not _can_edit_current_project(request):
         return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
 
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
-        return JsonResponse({'success': False, 'error': 'Only http(s) URLs accepted'}, status=400)
-
-    # SSRF guard: every resolved address must be public.
     try:
-        infos = socket.getaddrinfo(parsed.hostname, None)
-    except socket.gaierror:
-        return JsonResponse({'success': False, 'error': 'Cannot resolve host'}, status=400)
-    for info in infos:
-        try:
-            ip = ipaddress.ip_address(info[4][0])
-        except ValueError:
-            continue
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
-            return JsonResponse({'success': False, 'error': 'Refused: internal host'}, status=400)
+        body, _headers = fetch_public(url, max_bytes=MAX_PHOTO_BYTES)
+    except UnsafeFetchError as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
     try:
-        resp = requests.get(url, timeout=10, stream=True)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        return JsonResponse({'success': False, 'error': f'Fetch failed: {e}'}, status=400)
-
-    content_type = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
-    if not content_type.startswith('image/'):
-        return JsonResponse({'success': False, 'error': 'URL did not return an image'}, status=400)
-
-    buf = bytearray()
-    for chunk in resp.iter_content(chunk_size=64 * 1024):
-        buf.extend(chunk)
-        if len(buf) > MAX_BYTES:
-            resp.close()
-            return JsonResponse({'success': False, 'error': 'Image exceeds 5 MB limit'}, status=400)
-
-    b64 = base64.b64encode(bytes(buf)).decode('utf-8')
-    slot.photo_data = f'data:{content_type};base64,{b64}'
-    slot.save(update_fields=['photo_data'])
-    return JsonResponse({'success': True, 'photo_url': slot.photo_data})
+        photo_url = _store_slot_photo(slot, body)
+    except ImageRejected as e:
+        return JsonResponse({'success': False, 'error': f'URL did not return a usable image: {e}'}, status=400)
+    return JsonResponse({'success': True, 'photo_url': photo_url})
 
 
 @require_POST
@@ -2142,14 +2112,14 @@ def advance_presenter_slot(request):
             MicAssignment, id=assignment_id,
             session__day__project=_scoped_project(request),
         )
-        slots = list(assignment.presenter_slots.order_by('order'))
+        slots = list(assignment.presenter_slots.defer('photo_data').order_by('order'))
         if not slots:
             return JsonResponse({'success': False, 'error': 'No slots'})
         current = next((i for i, s in enumerate(slots) if s.is_active), 0)
         next_index = (current + 1) % len(slots)
         for i, slot in enumerate(slots):
             slot.is_active = (i == next_index)
-            slot.save()
+            slot.save(update_fields=['is_active'])
         active = slots[next_index]
         return JsonResponse({
             'success': True,
@@ -2181,14 +2151,14 @@ def previous_presenter_slot(request):
             MicAssignment, id=assignment_id,
             session__day__project=_scoped_project(request),
         )
-        slots = list(assignment.presenter_slots.order_by('order'))
+        slots = list(assignment.presenter_slots.defer('photo_data').order_by('order'))
         if not slots:
             return JsonResponse({'success': False, 'error': 'No slots'})
         current = next((i for i, s in enumerate(slots) if s.is_active), 0)
         prev_index = (current - 1) % len(slots)
         for i, slot in enumerate(slots):
             slot.is_active = (i == prev_index)
-            slot.save()
+            slot.save(update_fields=['is_active'])
         active = slots[prev_index]
         return JsonResponse({
             'success': True,
@@ -2255,25 +2225,25 @@ def remove_presenter_slot(request):
             MicAssignment, id=assignment_id,
             session__day__project=_scoped_project(request),
         )
-        slots = list(assignment.presenter_slots.order_by('order'))
+        slots = list(assignment.presenter_slots.defer('photo_data').order_by('order'))
         
         if len(slots) <= 1:
             return JsonResponse({'success': False, 'error': 'Cannot remove the only slot'})
         
-        slot = get_object_or_404(PresenterSlot, id=slot_id, assignment=assignment)
+        slot = get_object_or_404(PresenterSlot.objects.defer('photo_data'), id=slot_id, assignment=assignment)
         was_active = slot.is_active
         slot.delete()
         
         # Re-order remaining slots
-        remaining = list(assignment.presenter_slots.order_by('order'))
+        remaining = list(assignment.presenter_slots.defer('photo_data').order_by('order'))
         for i, s in enumerate(remaining):
             s.order = i
-            s.save()
+            s.save(update_fields=['order'])
         
         # If deleted slot was active, activate first slot
         if was_active and remaining:
             remaining[0].is_active = True
-            remaining[0].save()
+            remaining[0].save(update_fields=['is_active'])
         
         return JsonResponse({'success': True})
     except Exception as e:
@@ -2292,7 +2262,7 @@ def activate_presenter_slot(request):
             MicAssignment, id=assignment_id,
             session__day__project=_scoped_project(request),
         )
-        slots = list(assignment.presenter_slots.order_by('order'))
+        slots = list(assignment.presenter_slots.defer('photo_data').order_by('order'))
         if not slots:
             return JsonResponse({'success': False, 'error': 'No slots'})
         target_index = next((i for i, s in enumerate(slots) if s.id == slot_id), None)
@@ -2300,7 +2270,7 @@ def activate_presenter_slot(request):
             return JsonResponse({'success': False, 'error': 'Slot not found'})
         for i, slot in enumerate(slots):
             slot.is_active = (i == target_index)
-            slot.save()
+            slot.save(update_fields=['is_active'])
         active = slots[target_index]
         return JsonResponse({
             'success': True,
@@ -3907,9 +3877,10 @@ def mic_assignment_reorder(request):
         return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
 
     def _ensure_active_slot(assignment):
-        slot = assignment.presenter_slots.filter(is_active=True).first()
+        slots = assignment.presenter_slots.defer('photo_data')
+        slot = slots.filter(is_active=True).first()
         if not slot:
-            slot = assignment.presenter_slots.order_by('order').first()
+            slot = slots.order_by('order').first()
         if not slot:
             slot = PresenterSlot.objects.create(
                 assignment=assignment, order=0, is_active=True
@@ -4791,11 +4762,18 @@ def _mic_sync_rows(project_id, session_ids=None):
     are plain dicts of exactly the fields mic_tracker_render.js stores, so the
     client can hand them straight to the renderer.
     """
+    from django.db.models import Prefetch
+
     assignments = (
         MicAssignment.objects
         .filter(session__day__project_id=project_id)
         .select_related('session', 'session__day')
         .prefetch_related(
+            # The poll never sends a photo, but a bare 'presenter_slots'
+            # prefetch loaded every slot's base64 headshot -- the whole
+            # project's, every 5 s, per open tab -- and threw it away.
+            Prefetch('presenter_slots',
+                     queryset=PresenterSlot.objects.defer('photo_data')),
             'presenter_slots__presenter',
             'presenter_slots__groups',
             'groups',
