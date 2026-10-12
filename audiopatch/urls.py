@@ -52,13 +52,10 @@ urlpatterns = [
     
 
 
-    # Console Template Library
-    path('console-template-library/', 
-         lambda request: __import__('planner.admin', fromlist=['ConsoleAdmin']).ConsoleAdmin(
-             __import__('planner.models', fromlist=['Console']).Console, 
-             admin.site
-         ).console_template_library_view(request),
-         name='console_template_library'),
+    # Console Template Library now lives on ConsoleAdmin.get_urls(), behind
+    # admin_view(). This old path is kept only so bookmarks still land there.
+    path('console-template-library/',
+         RedirectView.as_view(pattern_name='admin:console_template_library')),
     
     # Root redirect to mic tracker
     path('', lambda request: redirect('/audiopatch/mic-tracker/')),

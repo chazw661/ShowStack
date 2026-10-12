@@ -1127,11 +1127,52 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         
         # Handle template import POST request
         if request.method == 'POST':
+            # The destination is request.current_project, so importing is a
+            # WRITE to it. CurrentProjectMiddleware only proves the user may
+            # *reach* that project -- a viewer-role member passes it -- so the
+            # per-project edit role is checked separately. _can_edit_current_project
+            # deliberately ignores the global 'Viewer' Django group; see its
+            # docstring for why. Imported locally to match how this file already
+            # defers its `views` import to the bottom of the module.
+            from planner.views import _can_edit_current_project
+            if not _can_edit_current_project(request):
+                messages.error(
+                    request,
+                    "You have read-only access to this project, so you cannot "
+                    "import a template into it.",
+                )
+                return redirect('admin:console_template_library')
+
             template_id = request.POST.get('template_id')
             if template_id:
                 try:
-                    original = Console.objects.get(id=template_id, is_template=True)
-                    
+                    # Scoped to the caller's OWN projects, matching the GET
+                    # listing below. Unscoped, this was an IDOR: the id came
+                    # straight from the form body and the only other condition
+                    # was is_template, so any logged-in user could POST any
+                    # other tenant's template id and copy that console -- every
+                    # input, its source names and its IPs -- into their own
+                    # project. The response even named the victim's project, via
+                    # the "(from {project.name})" suffix below.
+                    #
+                    # Superusers are exempt so support can still copy a
+                    # template between tenants by id; everyone else is held to
+                    # the same set the GET lists.
+                    if request.user.is_superuser:
+                        source_projects = Project.objects.all()
+                    else:
+                        source_projects = Project.objects.filter(owner=request.user)
+                    original = Console.objects.get(
+                        id=template_id,
+                        is_template=True,
+                        project__in=source_projects,
+                    )
+
+                    # `project__in` above cannot match a NULL project, so
+                    # original.project is non-null from here. It used to be
+                    # reachable with project=None, and this next line was then
+                    # an AttributeError -> HTTP 500.
+                    #
                     # Don't import if already in current project
                     if original.project.id == current_project.id:
                         messages.warning(request, f"Template '{original.name}' is already in this project.")
@@ -1229,7 +1270,14 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     def changelist_view(self, request, extra_context=None):
         """Add Template Library button to the console list page"""
         extra_context = extra_context or {}
-        extra_context['template_library_url'] = '/console-template-library/'
+        # reverse() rather than the literal '/console-template-library/' this
+        # used to carry: the library now lives on this ModelAdmin (see
+        # get_urls), and the old root path is only kept as a redirect for
+        # bookmarks. Reversing means the button follows the route rather than
+        # depending on that redirect staying.
+        extra_context['template_library_url'] = reverse(
+            'admin:console_template_library'
+        )
         return super().changelist_view(request, extra_context=extra_context)
     
     def export_yamaha_button(self, obj):
@@ -1263,6 +1311,22 @@ class ConsoleAdmin(BaseEquipmentAdmin):
             path('<int:pk>/export-yamaha/',
                  self.admin_site.admin_view(self.export_yamaha_view),
                  name='console-export-yamaha'),
+            # The Template Library used to be routed from audiopatch/urls.py by a
+            # lambda that built a ConsoleAdmin by hand and called this method
+            # directly. That route had no `admin_view()` wrapper, so the view's
+            # only gate was the global LoginRequiredMiddleware -- no staff check,
+            # no permission check of its own -- and it was built against
+            # `admin.site` rather than this site, so the three
+            # `redirect('admin:console_template_library')` calls inside it raised
+            # NoReverseMatch: the name was registered in the ROOT urlconf with no
+            # namespace, and nothing answered to `admin:`.
+            #
+            # Registering it here fixes both at once. `admin_view` applies the
+            # staff gate, and the name now resolves under the `admin:` namespace,
+            # which is what those redirects already asked for.
+            path('template-library/',
+                 self.admin_site.admin_view(self.console_template_library_view),
+                 name='console_template_library'),
         ]
         return custom_urls + urls
     
