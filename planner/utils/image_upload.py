@@ -63,3 +63,51 @@ def read_upload_capped(uploaded_file):
     if len(data) > MAX_PHOTO_BYTES:
         raise ImageRejected(f'Image exceeds {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit')
     return data
+
+
+# The A2 card shows the photo at 70 px and its hover-expand at roughly 200 px;
+# 512 on the long edge is sharp on a 2x screen with room to spare.
+HEADSHOT_MAX_EDGE = 512
+HEADSHOT_JPEG_QUALITY = 85
+
+
+def normalize_headshot(data):
+    """Validate ``data`` and re-encode it as the stored headshot.
+
+    Returns ``(jpeg_bytes, 'image/jpeg', width, height, sha256_hex)``.
+
+    Re-encoding rather than storing the upload is what makes the stored bytes
+    trustworthy: whatever was in the file (EXIF GPS, an ICC profile, trailing
+    data, a polyglot payload) does not survive a decode to pixels and a fresh
+    encode. It also takes the typical 300 KB PNG screenshot to ~30 KB.
+
+    Orientation is applied from EXIF first -- phone photos are stored sideways
+    with a rotate tag, and the tag is dropped by the re-encode. Transparency
+    is flattened onto white, since JPEG has no alpha.
+    """
+    import hashlib
+
+    from PIL import ImageOps
+
+    validate_photo_bytes(data)
+    try:
+        with Image.open(BytesIO(data)) as img:
+            img.draft('RGB', (HEADSHOT_MAX_EDGE * 2, HEADSHOT_MAX_EDGE * 2))
+            img = ImageOps.exif_transpose(img)
+            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                rgba = img.convert('RGBA')
+                flat = Image.new('RGB', rgba.size, (255, 255, 255))
+                flat.paste(rgba, mask=rgba.getchannel('A'))
+                img = flat
+            else:
+                img = img.convert('RGB')
+            img.thumbnail((HEADSHOT_MAX_EDGE, HEADSHOT_MAX_EDGE), Image.LANCZOS)
+            out = BytesIO()
+            img.save(out, format='JPEG', quality=HEADSHOT_JPEG_QUALITY,
+                     optimize=True, progressive=True)
+            width, height = img.size
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError,
+            SyntaxError, ValueError):
+        raise ImageRejected('That file is not a valid image')
+    content = out.getvalue()
+    return content, 'image/jpeg', width, height, hashlib.sha256(content).hexdigest()

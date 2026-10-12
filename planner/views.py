@@ -2,8 +2,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import render, get_object_or_404, redirect
 from planner.tenancy import current_project_or_none as _scoped_project
 from planner.tenancy import scope_queryset
+from planner.utils.presenter_photos import PhotoIndex, photo_url_for_slot
 from django.forms import modelformset_factory
-from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest, Http404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.views.decorators.http import require_POST, require_GET
@@ -686,6 +687,10 @@ def mic_tracker_view(request):
         Prefetch(
             'sessions__mic_assignments',
             queryset=MicAssignment.objects.select_related('group').prefetch_related(
+                # The multi-presenter A1 rows iterate these. The photo is a
+                # URL from photo_index now, so the image column stays behind.
+                Prefetch('presenter_slots',
+                         queryset=PresenterSlot.objects.defer('photo_data')),
                 'presenter_slots__presenter',
             ).distinct()
         ),
@@ -737,6 +742,7 @@ def mic_tracker_view(request):
         'mic_types': MicAssignment.MIC_TYPES,
         'session_types': MicSession.SESSION_TYPES,
         'is_viewer': is_viewer,  # ADD THIS LINE
+        'photo_index': PhotoIndex(request.current_project.id) if request.current_project else None,
         # Issue #74 — A2 Listen: pairing token for the companion app so the
         # A2 view can build companion URLs and show the launch command.
         'listen_token': request.current_project.listen_token if request.current_project else '',
@@ -1123,7 +1129,10 @@ def delete_session(request):
 def export_mic_tracker_pdf(request):
     """Export mic tracker A2 cards as PDF — current project, all days/sessions."""
 
-    project_id = request.session.get('current_project_id')
+    # The validated project, not the raw session key: this export now carries
+    # presenters' photos, so it must fail closed like every other read of them.
+    scoped = _scoped_project(request)
+    project_id = scoped.id if scoped else None
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -1199,6 +1208,33 @@ def export_mic_tracker_pdf(request):
     ).order_by('date').prefetch_related(
         'sessions__mic_assignments__presenter_slots__presenter',
     )
+    from planner.models import PresenterPhoto
+    headshots = dict(PresenterPhoto.objects.filter(
+        presenter__project_id=project_id,
+    ).values_list('presenter_id', 'content'))
+
+    def _photo_flowable(slot):
+        """The presenter's headshot, else (transitional) the slot's legacy
+        photo, else None. Was slot.photo -- an ImageField whose files were on
+        the container's disk and are gone, so every card printed blank."""
+        import base64
+        from reportlab.lib.utils import ImageReader
+
+        raw = headshots.get(slot.presenter_id)
+        if raw is None and slot.photo_data and ',' in slot.photo_data:
+            try:
+                raw = base64.b64decode(slot.photo_data.split(',', 1)[1])
+            except ValueError:
+                raw = None
+        if not raw:
+            return None
+        try:
+            ImageReader(BytesIO(bytes(raw)))  # refuses bytes it cannot draw
+            img = Image(BytesIO(bytes(raw)), width=PHOTO_SIZE, height=PHOTO_SIZE)
+        except Exception:
+            return None
+        img.hAlign = 'CENTER'
+        return img
 
     first_day = True
     for day in days:
@@ -1237,19 +1273,7 @@ def export_mic_tracker_pdf(request):
                     presenter_name = slot.presenter.name if slot.presenter else '— Unassigned —'
 
                     # ── Photo ────────────────────────────────────────────
-                    photo_cell = Spacer(PHOTO_SIZE, PHOTO_SIZE)
-                    if slot.photo and slot.photo.name:
-                        try:
-                            photo_path = slot.photo.path
-                            if os.path.exists(photo_path):
-                                photo_cell = Image(
-                                    photo_path,
-                                    width=PHOTO_SIZE,
-                                    height=PHOTO_SIZE,
-                                )
-                                photo_cell.hAlign = 'CENTER'
-                        except Exception:
-                            pass
+                    photo_cell = _photo_flowable(slot) or Spacer(PHOTO_SIZE, PHOTO_SIZE)
 
                     # ── Detail fields ────────────────────────────────────
                     def field_block(label, value):
@@ -1335,28 +1359,6 @@ def toggle_day_collapse(request):
         return JsonResponse({'success': False, 'error': 'Day not found'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})      
-
-
-def _presenter_photo_data_url(presenter):
-    """Return a data: URL string for a Presenter's headshot, or '' if none.
-
-    Used to auto-populate PresenterSlot.photo_data (an inline base64 data URL
-    that the A2 photo zone renders as <img src=...>) when a presenter is
-    assigned to a slot — Issue #10. Any read failure returns '' so the
-    assignment itself still succeeds; the photo just won't auto-populate.
-    """
-    if not presenter or not presenter.photo:
-        return ''
-    try:
-        import base64
-        import mimetypes
-        with presenter.photo.open('rb') as f:
-            content = f.read()
-        mime_type = mimetypes.guess_type(presenter.photo.name)[0] or 'image/jpeg'
-        b64 = base64.b64encode(content).decode('utf-8')
-        return f'data:{mime_type};base64,{b64}'
-    except Exception:
-        return ''
 
 
 def stamp_checksum(view):
@@ -1477,11 +1479,12 @@ def update_mic_assignment(request):
             else:
                 setattr(slot, field, value)
 
-            # Issue #10: when the presenter changes, sync the slot's headshot
-            # to the Presenter's photo. Clearing the presenter also clears
-            # photo_data so a stale face doesn't hang on after re-assignment.
+            # Issue #10: the photo now follows the Presenter (PresenterPhoto), so
+            # a presenter change needs no copying. The slot's own legacy photo
+            # belonged to whoever was here before -- clear it, or the fallback
+            # in PhotoIndex would show their face on the new presenter.
             if presenter_changed:
-                slot.photo_data = _presenter_photo_data_url(slot.presenter)
+                slot.photo_data = ''
                 slot.save(update_fields=['presenter', 'photo_data'])
             else:
                 slot.save(update_fields=[field])
@@ -1512,9 +1515,9 @@ def update_mic_assignment(request):
             'presenter_display': presenter_display,
             'presenter_count': slot_count,
             # Only a presenter change repaints the photo zone (mic_tracker_v5.js
-            # reads this key for presenter fields alone), so only then is the
-            # deferred image loaded and sent back.
-            'slot_photo_data': (active_slot.photo_data or '') if (active_slot and presenter_changed) else '',
+            # reads these for presenter fields alone).
+            'photo_url': photo_url_for_slot(active_slot) if (active_slot and presenter_changed) else '',
+            'presenter_id': active_slot.presenter_id if active_slot else None,
             'active_slot_id': active_slot.id if active_slot else None,
             'effective_input_channel': assignment.effective_input_channel,
         })
@@ -1865,7 +1868,9 @@ def update_slot_field(request):
             name = (value or '').strip()
             project_id = slot.assignment.session.day.project_id
             slot.presenter = Presenter.resolve(name, project_id)
-            slot.photo_data = _presenter_photo_data_url(slot.presenter)
+            # The legacy slot photo was the previous presenter's (see
+            # update_mic_assignment); the new one's headshot follows them.
+            slot.photo_data = ''
             slot.save(update_fields=['presenter', 'photo_data'])
             return JsonResponse({
                 'success': True,
@@ -2001,39 +2006,123 @@ def create_presenter(request):
 
 
 
-# ── Presenter slot photos ───────────────────────────────────────────────
-# Two endpoints write PresenterSlot.photo_data: a file picked or dropped on
-# the A2 card, and an image URL dragged from another site. Both used to look
-# the slot up by id alone behind @staff_member_required -- and every account
-# is staff -- so any logged-in user could overwrite any tenant's headshot,
-# viewers included. upload_presenter_photo and upload_photo_by_assignment had
-# the same hole and no caller; they are gone.
+# ── Presenter photos ────────────────────────────────────────────────────
+# A headshot belongs to the Presenter (PresenterPhoto), so it shows in every
+# session that presenter is in. The A2 card still uploads by slot id -- the
+# card is what the user is looking at -- and the photo lands on that slot's
+# presenter.
 #
-# Now: the slot must be in the session's project (else 404, the same answer a
-# nonexistent id gets), the user must be its owner or an editor (else 403), and
-# the stored MIME type comes from Pillow reading the bytes, not from a header.
+# Two endpoints write: a file picked or dropped on the A2 card, and an image
+# URL dragged from another site. The slot must be in the session's project
+# (else 404, the same answer a nonexistent id gets), the user must be its owner
+# or an editor (else 403), and the bytes are decoded and re-encoded by Pillow
+# (planner.utils.image_upload), never stored as sent.
+#
+# Two endpoints read, both login + project scoped, never public:
+# presenter_photo (the headshot) and legacy_slot_photo (the old per-slot
+# photo, only until migrate_slot_photos_to_presenters has run).
+
+_PHOTO_RESPONSE_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Disposition': 'inline',
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    # The URL is the same for every member of the project, but the answer
+    # depends on who is asking. Keep a browser shared by two logins from
+    # handing one of them the other's cached image.
+    'Vary': 'Cookie',
+}
+
+
+@login_required
+@require_GET
+def presenter_photo(request, presenter_id):
+    """A presenter's headshot, if they are in the session's project."""
+    from django.http import HttpResponseNotModified
+    from planner.models import PresenterPhoto
+
+    scoped = PresenterPhoto.objects.filter(
+        presenter_id=presenter_id, presenter__project=_scoped_project(request),
+    )
+    sha = scoped.values_list('sha256', flat=True).first()
+    if sha is None:
+        raise Http404
+    etag = f'"{sha}"'
+    if request.headers.get('If-None-Match') == etag:
+        resp = HttpResponseNotModified()
+    else:
+        photo = scoped.only('content', 'content_type').get()
+        resp = HttpResponse(bytes(photo.content), content_type=photo.content_type)
+    resp['ETag'] = etag
+    # A ?v= that matches is a URL that can never point at different bytes.
+    resp['Cache-Control'] = ('private, max-age=31536000, immutable'
+                             if request.GET.get('v') == sha[:12] else 'private, no-cache')
+    for k, v in _PHOTO_RESPONSE_HEADERS.items():
+        resp[k] = v
+    return resp
+
+
+@login_required
+@require_GET
+def legacy_slot_photo(request, slot_id):
+    """TRANSITIONAL: a slot's old base64 photo, for slots whose presenter has
+    no headshot yet. Removed with the photo_data column.
+
+    The stored data URL carries whatever MIME type the old upload trusted from
+    the browser, so it is not echoed: the bytes are decoded and checked, and
+    served with the type Pillow found -- or not at all.
+    """
+    import base64
+    import binascii
+    from planner.utils.image_upload import ImageRejected, validate_photo_bytes
+
+    data_url = get_object_or_404(
+        PresenterSlot.objects.only('id', 'photo_data'), id=slot_id,
+        assignment__session__day__project=_scoped_project(request),
+    ).photo_data or ''
+    if not data_url.startswith('data:') or ',' not in data_url:
+        raise Http404
+    try:
+        raw = base64.b64decode(data_url.split(',', 1)[1], validate=False)
+        mime_type = validate_photo_bytes(raw)
+    except (binascii.Error, ValueError, ImageRejected):
+        raise Http404
+    resp = HttpResponse(raw, content_type=mime_type)
+    resp['Cache-Control'] = 'private, no-cache'
+    for k, v in _PHOTO_RESPONSE_HEADERS.items():
+        resp[k] = v
+    return resp
 
 def _scoped_slot_for_photo(request, slot_id):
-    """The slot if it is in the current project, else Http404.
-
-    photo_data is deferred: the row is only being overwritten, and loading it
-    would pull the old image (up to several MB) just to throw it away.
-    """
+    """The slot if it is in the current project, else Http404."""
     return get_object_or_404(
-        PresenterSlot.objects.defer('photo_data'), id=slot_id,
+        PresenterSlot.objects.defer('photo_data').select_related(
+            'presenter', 'assignment__session__day'), id=slot_id,
         assignment__session__day__project=_scoped_project(request),
     )
 
 
-def _store_slot_photo(slot, data):
-    """Validate ``data`` and write it as the slot's data URL. Raises ImageRejected."""
-    import base64
-    from planner.utils.image_upload import validate_photo_bytes
+def _store_photo_for_slot(request, slot, data):
+    """Make ``data`` the headshot of ``slot``'s presenter.
 
-    mime_type = validate_photo_bytes(data)
-    slot.photo_data = f'data:{mime_type};base64,{base64.b64encode(data).decode("ascii")}'
-    slot.save(update_fields=['photo_data'])
-    return slot.photo_data
+    Returns the JSON response. ImageRejected becomes a 400 with its message.
+    """
+    from planner.models import PresenterPhoto
+    from planner.utils.image_upload import ImageRejected
+
+    presenter = slot.presenter
+    if presenter is None:
+        return JsonResponse({'success': False,
+                             'error': 'Assign a presenter before adding a photo.'}, status=400)
+    # The slot is in the session's project; its presenter must be too. Never
+    # seen on prod, but a photo written across that line would be a leak.
+    if presenter.project_id != slot.assignment.session.day.project_id:
+        raise Http404
+    try:
+        photo = PresenterPhoto.store(presenter, data, request.user)
+    except ImageRejected as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    return JsonResponse({'success': True, 'photo_url': photo.url,
+                         'presenter_id': presenter.id})
 
 
 @require_POST
@@ -2055,10 +2144,10 @@ def upload_slot_photo(request):
         return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
 
     try:
-        photo_url = _store_slot_photo(slot, read_upload_capped(photo))
+        data = read_upload_capped(photo)
     except ImageRejected as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
-    return JsonResponse({'success': True, 'photo_url': photo_url})
+    return _store_photo_for_slot(request, slot, data)
 
 
 @require_POST
@@ -2075,7 +2164,7 @@ def upload_slot_photo_from_url(request):
     The fetch itself (public addresses only, pinned to the resolved IP, every
     redirect re-checked, size and time capped) is planner.utils.safe_fetch.
     """
-    from planner.utils.image_upload import ImageRejected, MAX_PHOTO_BYTES
+    from planner.utils.image_upload import MAX_PHOTO_BYTES
     from planner.utils.safe_fetch import UnsafeFetchError, fetch_public
 
     try:
@@ -2088,17 +2177,17 @@ def upload_slot_photo_from_url(request):
     slot = _scoped_slot_for_photo(request, slot_id)
     if not _can_edit_current_project(request):
         return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
+    if slot.presenter_id is None:
+        # Checked before the fetch, not just in _store_photo_for_slot, so a
+        # card with no presenter never makes an outbound request.
+        return JsonResponse({'success': False,
+                             'error': 'Assign a presenter before adding a photo.'}, status=400)
 
     try:
         body, _headers = fetch_public(url, max_bytes=MAX_PHOTO_BYTES)
     except UnsafeFetchError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-    try:
-        photo_url = _store_slot_photo(slot, body)
-    except ImageRejected as e:
-        return JsonResponse({'success': False, 'error': f'URL did not return a usable image: {e}'}, status=400)
-    return JsonResponse({'success': True, 'photo_url': photo_url})
+    return _store_photo_for_slot(request, slot, body)
 
 
 @require_POST
@@ -2133,7 +2222,7 @@ def advance_presenter_slot(request):
             'notes': active.notes,
             'slot_index': next_index,
             'slot_count': len(slots),
-            'photo_url': active.photo_data or None,
+            'photo_url': photo_url_for_slot(active) or None,
             'a2_group_color': active.a2_group.color if active.a2_group else None,
             'a2_group_name': active.a2_group.name if active.a2_group else None,
         })
@@ -2172,7 +2261,7 @@ def previous_presenter_slot(request):
             'notes': active.notes,
             'slot_index': prev_index,
             'slot_count': len(slots),
-            'photo_url': active.photo_data or None,
+            'photo_url': photo_url_for_slot(active) or None,
             'a2_group_color': active.a2_group.color if active.a2_group else None,
             'a2_group_name': active.a2_group.name if active.a2_group else None,
         })
@@ -2284,7 +2373,7 @@ def activate_presenter_slot(request):
             'notes': active.notes,
             'slot_index': target_index,
             'slot_count': len(slots),
-            'photo_url': active.photo_data or None,
+            'photo_url': photo_url_for_slot(active) or None,
             'a2_group_color': active.a2_group.color if active.a2_group else None,
             'a2_group_name': active.a2_group.name if active.a2_group else None,
         })
@@ -3893,9 +3982,13 @@ def mic_assignment_reorder(request):
                 return JsonResponse({'success': False, 'error': MULTI_SLOT_ERR}, status=400)
             src_slot = _ensure_active_slot(source)
             tgt_slot = _ensure_active_slot(target)
+            # The headshot follows the presenter by itself. The legacy per-slot
+            # photo does not, so it is carried along until that column goes;
+            # before, a swap left each face on the other person's card.
             src_slot.presenter, tgt_slot.presenter = tgt_slot.presenter, src_slot.presenter
-            src_slot.save(update_fields=['presenter'])
-            tgt_slot.save(update_fields=['presenter'])
+            src_slot.photo_data, tgt_slot.photo_data = tgt_slot.photo_data, src_slot.photo_data
+            src_slot.save(update_fields=['presenter', 'photo_data'])
+            tgt_slot.save(update_fields=['presenter', 'photo_data'])
         else:  # move — kanban rotation across single-presenter rows
             assignments = list(
                 source.session.mic_assignments.order_by('rf_number')
@@ -3910,7 +4003,11 @@ def mic_assignment_reorder(request):
                     return JsonResponse({'success': False, 'error': MULTI_SLOT_ERR}, status=400)
 
             slots = [_ensure_active_slot(a) for a in assignments]
-            presenters = [s.presenter for s in slots]
+            # (presenter, legacy photo) travel together -- see the swap above.
+            # Only rows lo..hi can change, so only their photos are read, and
+            # all of them before any slot is written.
+            legacy_photo = {i: slots[i].photo_data for i in range(lo, hi + 1)}
+            presenters = [(s.presenter, i) for i, s in enumerate(slots)]
 
             moved = presenters.pop(source_idx)
             insert_idx = target_idx
@@ -3921,10 +4018,11 @@ def mic_assignment_reorder(request):
             insert_idx = max(0, min(insert_idx, len(presenters)))
             presenters.insert(insert_idx, moved)
 
-            for slot, new_p in zip(slots, presenters):
+            for slot, (new_p, from_idx) in zip(slots, presenters):
                 if (slot.presenter_id or None) != (new_p.id if new_p else None):
                     slot.presenter = new_p
-                    slot.save(update_fields=['presenter'])
+                    slot.photo_data = legacy_photo[from_idx]
+                    slot.save(update_fields=['presenter', 'photo_data'])
 
     return JsonResponse({'success': True})
 
@@ -4769,9 +4867,10 @@ def _mic_sync_rows(project_id, session_ids=None):
         .filter(session__day__project_id=project_id)
         .select_related('session', 'session__day')
         .prefetch_related(
-            # The poll never sends a photo, but a bare 'presenter_slots'
-            # prefetch loaded every slot's base64 headshot -- the whole
-            # project's, every 5 s, per open tab -- and threw it away.
+            # The poll sends each slot's photo as a URL (from photo_index),
+            # never the image. A bare 'presenter_slots' prefetch used to load
+            # every slot's base64 headshot -- the whole project's, every 5 s,
+            # per open tab -- and throw it away.
             Prefetch('presenter_slots',
                      queryset=PresenterSlot.objects.defer('photo_data')),
             'presenter_slots__presenter',
@@ -4782,6 +4881,7 @@ def _mic_sync_rows(project_id, session_ids=None):
     )
     if session_ids:
         assignments = assignments.filter(session_id__in=session_ids)
+    photo_index = PhotoIndex(project_id)
 
     rows = []
     for a in assignments:
@@ -4811,6 +4911,11 @@ def _mic_sync_rows(project_id, session_ids=None):
                 'session_id': a.session_id,
                 'slot_count': slot_count,
                 'presenter': slot.presenter.name if slot.presenter else '',
+                # A photo uploaded on one machine (or one card) changes the
+                # URL here, so it changes the checksum and reaches every
+                # card that presenter is on, on every open tracker.
+                'presenter_id': slot.presenter_id,
+                'photo': photo_index.for_slot(slot),
                 'is_micd': is_micd,
                 'is_active': slot.is_active,
                 'mic_type': mic_type,
