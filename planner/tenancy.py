@@ -87,3 +87,20 @@ def scope_queryset(request, queryset, lookup_path='project'):
     if project is None:
         return queryset.none()
     return queryset.filter(**{lookup_path: project})
+
+
+def owned_templates(request, queryset):
+    """Narrow a ShowTemplate ``queryset`` to what ``request.user`` owns.
+
+    Templates live outside projects, so the current-project rule above does
+    not apply: the boundary is the owner. Anonymous -> nothing, superuser ->
+    everything (support copies a template between tenants), anyone else ->
+    their own. Every list, load, rename and delete of a template goes through
+    here, so there is one place where "whose template is this" is decided.
+    """
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return queryset.none()
+    if user.is_superuser:
+        return queryset
+    return queryset.filter(owner=user)
