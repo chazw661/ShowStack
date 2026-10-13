@@ -8,7 +8,8 @@ The rule, and why each case exists, is in
 ``planner/utils/slot_photo_migration.py``. In short: a mic-position name
 (HH13, Q&A 2, A2 OS) or different photos in different sessions -> mic label,
 every slot photo stays per session; one photo, or re-uploads of one -> that
-person's headshot for every session. Slot photos are never cleared.
+person's headshot for every session, and the slot photos that are that
+headshot (or a near-duplicate) are cleared. Photos that differ stay.
 
 Usage:
     python manage.py migrate_slot_photos_to_presenters                 # dry run
@@ -56,6 +57,10 @@ def _choice(value):
 
 def _kb(n):
     return f'{n / 1024:.0f} KB'
+
+
+def _mb(n):
+    return f'{n / (1024 * 1024):.1f} MB'
 
 
 # The one-word tag in the listing, and the override that flips the decision.
@@ -109,8 +114,20 @@ def write_report(plan, write, verbose=False, applying=False, project=None):
     w(f'Presenter.photo files missing:       {len(plan.missing_files)}')
     w(f'Same-name presenter groups (not merged): {len(plan.same_name)}')
 
+    cleared = plan.slots_to_clear
+    kept = plan.kept_by_reason()
     w('')
-    w('EVERY PRESENTER, BY PROJECT  (* = the photo that becomes the headshot)')
+    w(f'SLOT PHOTOS: {plan.slots_with_photo} -- clear {len(cleared)}, keep {sum(kept.values())}')
+    w(f"  clear: the person's headshot or a near-duplicate of it: {len(cleared)} "
+      f'({_mb(plan.disk_bytes_cleared)} in the table)')
+    for reason, n in kept.items():
+        w(f'  keep:  {reason + ":":<56} {n}')
+    w(f'  Reclaimable afterwards: ~{_mb(plan.disk_bytes_cleared)} -- not returned to disk until '
+      f'VACUUM FULL planner_presenterslot (separate step, needs sign-off).')
+
+    w('')
+    w('EVERY PRESENTER, BY PROJECT  (* = the photo that becomes the headshot; '
+      'each photo marked CLEAR or KEEP)')
     project_id = None
     for d in plan.decisions:
         if d.kind == spm.PERSON_NO_PHOTO and not verbose:
@@ -131,15 +148,17 @@ def write_report(plan, write, verbose=False, applying=False, project=None):
             photos = f'file {p.photo_file}'
         else:
             photos = 'no photo'
-        w(f'  {_tag(d)} {p.id:>5}  {p.name[:40]:<40}  {d.kind:<32} {photos}'
+        slots = (f'  clears {len(d.clear)}, keeps {len(d.keep)}'
+                 if (d.clear or d.keep) else '')
+        w(f'  {_tag(d)} {p.id:>5}  {p.name[:40]:<40}  {d.kind:<32} {photos}{slots}'
           + (f'   [{hint}]' if hint else ''))
         # Every photo is listed when there is more than one, or when the
         # presenter is a label: that is what someone checking needs to see.
         if len(d.candidates) > 1 or (d.is_label and d.candidates):
             for c in d.candidates:
                 mark = '*' if c is d.chosen else ' '
-                w(f'        {mark} slot {c.newest_slot:<6} {c.mime:<10} {_kb(c.size):>7}  '
-                  f'on {len(c.slot_ids)}: '
+                w(f'        {mark} {"CLEAR" if d.clears(c) else "KEEP ":<5} slot {c.newest_slot:<6} '
+                  f'{c.mime:<10} {_kb(c.size):>7}  on {len(c.slot_ids)}: '
                   + '; '.join(f'{sid} ({lbl})' for sid, lbl in zip(c.slot_ids, c.labels)))
             if not d.is_label and len(d.candidates) > 1:
                 others = [c for c in d.candidates if c is not d.chosen]
@@ -147,7 +166,8 @@ def write_report(plan, write, verbose=False, applying=False, project=None):
                     f'--choose {p.id}={c.newest_slot}' for c in others))
         elif d.candidates:
             c = d.candidates[0]
-            w(f'        * slot {c.newest_slot:<6} {c.mime:<10} {_kb(c.size):>7}  on {len(c.slot_ids)}: '
+            w(f'        * {"CLEAR" if d.clears(c) else "KEEP ":<5} slot {c.newest_slot:<6} '
+              f'{c.mime:<10} {_kb(c.size):>7}  on {len(c.slot_ids)}: '
               + '; '.join(f'{sid} ({lbl})' for sid, lbl in zip(c.slot_ids, c.labels)))
 
     if plan.orphans:
@@ -225,9 +245,13 @@ class Command(BaseCommand):
                               'overrides) to write the above.')
             return
 
-        flags, headshots, failures = spm.apply_plan(plan)
+        flags, headshots, cleared, failures = spm.apply_plan(plan)
         self.stdout.write('')
-        self.stdout.write(f'Set is_mic_label on {flags} presenter(s); wrote {headshots} headshot(s).')
+        self.stdout.write(f'Set is_mic_label on {flags} presenter(s); wrote {headshots} headshot(s); '
+                          f'cleared {cleared} of {len(plan.slots_to_clear)} slot photo(s).')
+        if cleared < len(plan.slots_to_clear):
+            self.stdout.write('  The rest changed since the plan was read, or belong to a '
+                              'presenter that failed below; they were left alone.')
         for pid, err in failures:
             self.stderr.write(f'  FAILED presenter {pid}: {err}')
         if failures:

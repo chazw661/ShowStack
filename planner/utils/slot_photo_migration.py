@@ -20,11 +20,14 @@ The rule, agreed before this was written:
   ``--person`` (headshot by the rule above), ``--choose P=S`` (person, with
   the photo on slot S).
 
-Under the display rule (planner.utils.presenter_photos) a slot's own photo
-wins on its card, so a person's slot photos keep showing on their cards after
-this runs -- the headshot is what NEW sessions get. Nothing here clears
-``photo_data`` or deletes a headshot: a wrong classification is undone by
-re-running with an override, and no photo is lost either way.
+Once a person has a headshot, their slot photos that ARE that headshot --
+its source, or a near-duplicate within NEAR_IDENTICAL_BITS -- are cleared:
+the card shows the same picture from the headshot, and the copy in
+``photo_data`` is ~110 MB of base64 on prod. Kept: every mic label's photos,
+photos on slots with no presenter, and a person's slot photos that genuinely
+differ from their headshot (those still win on their own card). A headshot is
+never deleted, and a cleared slot is only one whose photo is still the one
+this plan read (checked by length at write time).
 
 Never across projects: a slot whose presenter belongs to another project is
 skipped and reported (none on prod when this was written; a headshot moved
@@ -41,6 +44,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from django.db import transaction
+from django.db.models import Func, IntegerField
 
 from planner.utils.image_upload import (
     NEAR_IDENTICAL_BITS, ImageRejected, fingerprint_distance, photo_fingerprint,
@@ -79,6 +83,7 @@ class PresenterInfo:
     has_headshot: bool = False
     photo_file: str = ''           # Presenter.photo's name, if set
     photo_file_exists: bool = False
+    headshot_fingerprint: int = None   # of the headshot they already have
 
 
 @dataclass
@@ -94,6 +99,8 @@ class PhotoRow:
     size: int = 0
     fingerprint: int = 0
     error: str = ''
+    stored_len: int = 0            # length of the stored data URL text
+    disk_bytes: int = 0            # what it occupies in the table (TOAST)
 
 
 @dataclass
@@ -105,6 +112,7 @@ class Candidate:
     size: int
     slot_ids: list = field(default_factory=list)
     labels: list = field(default_factory=list)
+    stored: dict = field(default_factory=dict)   # slot id -> (stored_len, disk_bytes)
 
     @property
     def newest_slot(self):
@@ -118,6 +126,11 @@ class Decision:
     candidates: list = field(default_factory=list)   # most slots first
     chosen: Candidate = None        # the photo that becomes the headshot
     spread: int = 0                 # largest fingerprint distance between candidates
+    clear: list = field(default_factory=list)    # slot ids whose photo is the headshot
+    keep: list = field(default_factory=list)     # slot ids whose photo stays
+
+    def clears(self, cand):
+        return bool(cand.slot_ids) and cand.slot_ids[0] in self.clear
 
     @property
     def is_label(self):
@@ -161,6 +174,33 @@ class Plan:
     same_name: list = field(default_factory=list)        # (project_id, name, [Decision])
     slots_with_photo: int = 0
     distinct_images: int = 0
+    stored_len: dict = field(default_factory=dict)   # slot id -> (stored_len, disk_bytes)
+
+    @property
+    def slots_to_clear(self):
+        return [sid for d in self.decisions for sid in d.clear]
+
+    def kept_by_reason(self):
+        """slot photos kept, by why -- every slot holding a photo is in
+        exactly one bucket or in slots_to_clear."""
+        out = {'mic label': 0, 'differs from the headshot': 0,
+               'no presenter on the slot': len(self.orphans),
+               'other (skipped, unreadable, other project, no headshot)':
+                   len(self.invalid) + len(self.cross_project)}
+        for d in self.decisions:
+            if not d.keep:
+                continue
+            if d.is_label:
+                out['mic label'] += len(d.keep)
+            elif d.kind != SKIP and (d.chosen is not None or d.presenter.headshot_fingerprint is not None):
+                out['differs from the headshot'] += len(d.keep)
+            else:
+                out['other (skipped, unreadable, other project, no headshot)'] += len(d.keep)
+        return out
+
+    @property
+    def disk_bytes_cleared(self):
+        return sum(self.stored_len[sid][1] for sid in self.slots_to_clear)
 
     def of_kind(self, kind):
         return [d for d in self.decisions if d.kind == kind]
@@ -210,6 +250,16 @@ def _clusters(cands):
     return len({root(i) for i in range(len(cands))})
 
 
+class _DiskBytes(Func):
+    """Bytes a value occupies in the table, compressed TOAST included
+    (Postgres); its length on SQLite. Read from the header, not the value."""
+    function = 'PG_COLUMN_SIZE'
+    output_field = IntegerField()
+
+    def as_sqlite(self, compiler, connection, **extra):
+        return self.as_sql(compiler, connection, function='LENGTH', **extra)
+
+
 def collect(project_id=None):
     """Read what classify() needs: every presenter, and every slot photo
     decoded, hashed and fingerprinted (one photo in memory at a time)."""
@@ -219,8 +269,14 @@ def collect(project_id=None):
     presenters_qs = Presenter.objects.select_related('project').order_by('project_id', 'name', 'id')
     if project_id is not None:
         presenters_qs = presenters_qs.filter(project_id=project_id)
-    has_headshot = set(PresenterPhoto.objects.filter(
-        presenter__in=presenters_qs).values_list('presenter_id', flat=True))
+    headshot_fp = {}
+    for pid, content in PresenterPhoto.objects.filter(
+            presenter__in=presenters_qs).values_list('presenter_id', 'content'):
+        try:
+            headshot_fp[pid] = photo_fingerprint(bytes(content))
+        except ImageRejected:
+            headshot_fp[pid] = None
+    has_headshot = set(headshot_fp)
     presenters = []
     for p in presenters_qs:
         name = p.photo.name if p.photo else ''
@@ -229,6 +285,7 @@ def collect(project_id=None):
             is_mic_label=p.is_mic_label, has_headshot=p.id in has_headshot,
             photo_file=name or '',
             photo_file_exists=bool(name) and default_storage.exists(name),
+            headshot_fingerprint=headshot_fp.get(p.id),
         ))
 
     slots = (PresenterSlot.objects
@@ -238,15 +295,17 @@ def collect(project_id=None):
         slots = slots.filter(assignment__session__day__project_id=project_id)
     photos = []
     for (slot_id, presenter_id, data_url, slot_project, day_name, day_date,
-         session_name, rf, presenter_project) in slots.values_list(
+         session_name, rf, presenter_project, disk) in slots.annotate(
+            disk=_DiskBytes('photo_data')).values_list(
             'id', 'presenter_id', 'photo_data',
             'assignment__session__day__project_id', 'assignment__session__day__name',
             'assignment__session__day__date', 'assignment__session__name',
-            'assignment__rf_number', 'presenter__project_id',
+            'assignment__rf_number', 'presenter__project_id', 'disk',
     ).iterator(chunk_size=20):
         row = PhotoRow(slot_id=slot_id, presenter_id=presenter_id,
                        slot_project_id=slot_project, presenter_project_id=presenter_project,
-                       label=f'{day_name or day_date} / {session_name} RF {rf}')
+                       label=f'{day_name or day_date} / {session_name} RF {rf}',
+                       stored_len=len(data_url), disk_bytes=disk or len(data_url))
         try:
             raw, row.mime = decode_data_url(data_url)
             row.digest = hashlib.sha256(raw).hexdigest()
@@ -286,6 +345,7 @@ def classify(presenters, photos, overrides=None):
     digests = set()
     for row in photos:
         plan.slots_with_photo += 1
+        plan.stored_len[row.slot_id] = (row.stored_len, row.disk_bytes)
         if row.presenter_id is None:
             plan.orphans.append(row)
             continue
@@ -302,6 +362,7 @@ def classify(presenters, photos, overrides=None):
             digest=row.digest, fingerprint=row.fingerprint, mime=row.mime, size=row.size))
         cand.slot_ids.append(row.slot_id)
         cand.labels.append(row.label)
+        cand.stored[row.slot_id] = (row.stored_len, row.disk_bytes)
     plan.distinct_images = len(digests)
 
     for pid, slot_id in o.choose.items():
@@ -352,6 +413,19 @@ def classify(presenters, photos, overrides=None):
         if d.kind == PERSON_FORCED and d.chosen is None and p.photo_file_exists:
             d.kind = PERSON_FILE
 
+        # Which slot photos the headshot makes redundant. Only a person's,
+        # only against the headshot they will have, only near-duplicates.
+        reference = None
+        if not d.is_label and d.kind != SKIP:
+            if d.writes_headshot and d.chosen is not None:
+                reference = d.chosen.fingerprint
+            elif d.kind == PERSON_KEEPS_HEADSHOT:
+                reference = p.headshot_fingerprint
+        for c in cands:
+            near = (reference is not None and
+                    fingerprint_distance(reference, c.fingerprint) <= NEAR_IDENTICAL_BITS)
+            (d.clear if near else d.keep).extend(c.slot_ids)
+
         plan.decisions.append(d)
         names[(p.project_id, _norm(p.name))].append(d)
 
@@ -369,18 +443,23 @@ def build_plan(project_id=None, overrides=None):
 
 def apply_plan(plan, user=None):
     """Write the plan: is_mic_label for every presenter whose classification
-    changes it, and a headshot for every person who gets one. One transaction
-    per presenter, so a bad image stops only its own presenter. Slot photos
-    are never touched. Returns (flags_written, headshots_written, failures).
+    changes it, a headshot for every person who gets one, and clear the slot
+    photos that headshot makes redundant. One transaction per presenter, so a
+    bad image stops only its own presenter -- and its slots are cleared only
+    if its headshot was written. A slot is cleared only if its photo is still
+    the length this plan read; one changed since is left alone and counted.
+
+    Returns (flags_written, headshots_written, slots_cleared, failures).
     """
     from django.core.files.storage import default_storage
     from planner.models import Presenter, PresenterPhoto, PresenterSlot
+    from planner.utils.presenter_photos import _ByteLength
 
-    flags = headshots = 0
+    flags = headshots = cleared = 0
     failures = []
     for d in plan.decisions:
         want_flag = d.sets_label
-        if want_flag is None and not d.writes_headshot:
+        if want_flag is None and not d.writes_headshot and not d.clear:
             continue
         try:
             raw = None
@@ -399,8 +478,16 @@ def apply_plan(plan, user=None):
                     presenter.save(update_fields=['is_mic_label'])
                 if raw is not None:
                     PresenterPhoto.store(presenter, raw, user)
+                n = 0
+                for slot_id in d.clear:
+                    n += (PresenterSlot.objects
+                          .filter(id=slot_id, presenter_id=d.presenter.id)
+                          .alias(n=_ByteLength('photo_data'))
+                          .filter(n=plan.stored_len[slot_id][0])
+                          .update(photo_data=''))
             flags += want_flag is not None
             headshots += raw is not None
+            cleared += n
         except Exception as e:  # report and carry on; the rest still move
             failures.append((d.presenter.id, f'{type(e).__name__}: {e}'))
-    return flags, headshots, failures
+    return flags, headshots, cleared, failures

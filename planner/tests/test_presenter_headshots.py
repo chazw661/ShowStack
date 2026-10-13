@@ -733,7 +733,10 @@ class MigrateSlotPhotosTests(HeadshotBase):
         return presenter.is_mic_label
 
     def all_slot_photos(self):
-        return dict(PresenterSlot.objects.exclude(photo_data='').exclude(
+        """Project A's slot photos (B's own person is legitimately cleared
+        by a run over every project)."""
+        return dict(PresenterSlot.objects.filter(
+            assignment__session__day__project=self.project_a).exclude(photo_data='').exclude(
             photo_data__isnull=True).values_list('id', 'photo_data'))
 
     def test_dry_run_writes_nothing(self):
@@ -743,12 +746,104 @@ class MigrateSlotPhotosTests(HeadshotBase):
         self.assertFalse(PresenterPhoto.objects.exists())
         self.assertFalse(Presenter.objects.filter(is_mic_label=True).exists())
 
-    def test_person_with_one_photo_gets_a_headshot_and_keeps_the_slot_photo(self):
-        before = self.all_slot_photos()
+    def test_person_with_one_photo_gets_a_headshot(self):
         self.run_cmd('--apply')
         self.assertHeadshot(self.presenter_a, RED)
         self.assertFalse(self.flag(self.presenter_a))
-        self.assertEqual(before, self.all_slot_photos(), 'a slot photo was changed')
+
+    # -- clearing the slot photos a headshot makes redundant -------------
+
+    def test_cleared_when_identical_and_the_card_still_shows_it(self):
+        second = self.slot(self.presenter_a, RED, 2)
+        self.run_cmd('--apply')
+        for slot in (self.slot_a, second):
+            slot.refresh_from_db()
+            self.assertEqual('', slot.photo_data, f'slot {slot.id} kept a copy of the headshot')
+        headshot = PresenterPhoto.objects.get(presenter=self.presenter_a)
+        shown = self.shown()
+        self.assertEqual(headshot.url, shown[self.slot_a.id])
+        self.assertEqual(headshot.url, shown[second.id])
+
+    def test_cleared_when_a_near_duplicate(self):
+        resaved = self.slot(self.presenter_a, _resaved(RED), 2)
+        self.run_cmd('--apply')
+        resaved.refresh_from_db()
+        self.slot_a.refresh_from_db()
+        self.assertEqual(('', ''), (self.slot_a.photo_data, resaved.photo_data))
+
+    def test_kept_when_different(self):
+        """A person (--person) with a second, genuinely different photo: the
+        headshot's slots are cleared, the other photo stays and still shows."""
+        green = self.slot(self.presenter_a, GREEN, 2)
+        green2 = self.slot(self.presenter_a, GREEN, 3)
+        self.run_cmd('--apply', '--person', str(self.presenter_a.id))
+        self.assertHeadshot(self.presenter_a, GREEN)
+        for slot in (green, green2):
+            slot.refresh_from_db()
+            self.assertEqual('', slot.photo_data)
+        self.slot_a.refresh_from_db()
+        self.assertEqual(_data_url(RED), self.slot_a.photo_data)
+        self.assertTrue(self.shown()[self.slot_a.id].startswith(_session_url_prefix(self.slot_a)))
+
+    def test_never_cleared_for_labels(self):
+        by_name = Presenter.objects.create(project=self.project_a, name='HH13')
+        named = self.slot(by_name, GREEN, 2)
+        by_photos = self.slot(self.presenter_a, GOLD, 3)       # RED + GOLD: label
+        forced = self.person('Forced Label')
+        forced_slot = self.slot(forced, GREY, 4)
+        flagged = Presenter.objects.create(project=self.project_a, name='Flagged', is_mic_label=True)
+        flagged_slot = self.slot(flagged, BLUE, 5)
+        PresenterPhoto.store(flagged, BLUE)                     # even with a matching headshot
+        before = self.all_slot_photos()
+        out = self.run_cmd('--apply', '--label', str(forced.id))
+        self.assertEqual(before, self.all_slot_photos())
+        for slot in (named, by_photos, forced_slot, flagged_slot, self.slot_a):
+            self.assertIn(f'KEEP  slot {slot.id}', out)
+
+    def test_unplaced_and_cross_project_slots_are_kept(self):
+        orphan = self.slot(None, RED, 2)
+        cross = self.slot(self.presenter_b, BLUE, 3)    # a slot in A naming B's presenter
+        self.run_cmd('--apply')
+        orphan.refresh_from_db()
+        cross.refresh_from_db()
+        self.assertEqual(_data_url(RED), orphan.photo_data)
+        self.assertEqual(_data_url(BLUE), cross.photo_data)
+
+    def test_existing_headshot_clears_only_its_own_duplicates(self):
+        PresenterPhoto.store(self.presenter_a, RED)
+        other = self.slot(self.presenter_a, RED, 2)
+        self.run_cmd('--apply')
+        other.refresh_from_db()
+        self.assertEqual('', other.photo_data)
+        PresenterPhoto.store(self.presenter_a, GOLD)            # headshot no longer matches
+        third = self.slot(self.presenter_a, RED, 3)
+        self.run_cmd('--apply')
+        third.refresh_from_db()
+        self.assertEqual(_data_url(RED), third.photo_data)
+
+    def test_a_slot_changed_after_the_dry_run_is_not_cleared(self):
+        from planner.utils import slot_photo_migration as spm
+        plan = spm.build_plan(self.project_a.id)
+        self.assertIn(self.slot_a.id, plan.slots_to_clear)
+        PresenterSlot.objects.filter(id=self.slot_a.id).update(photo_data=_data_url(GREY))
+        _flags, _heads, cleared, failures = spm.apply_plan(plan)
+        self.assertEqual([], failures)
+        self.assertEqual(0, cleared)
+        self.slot_a.refresh_from_db()
+        self.assertEqual(_data_url(GREY), self.slot_a.photo_data)
+
+    def test_dry_run_reports_clear_keep_and_reclaimable(self):
+        self.slot(self.presenter_a, RED, 2)
+        hh = Presenter.objects.create(project=self.project_a, name='HH 2')
+        self.slot(hh, GREEN, 3)
+        before = self.all_slot_photos()
+        out = self.run_cmd('--project', str(self.project_a.id))
+        self.assertIn('SLOT PHOTOS:', out)
+        self.assertIn('clear 2, keep', out)
+        self.assertIn('Reclaimable afterwards', out)
+        self.assertIn('VACUUM FULL', out)
+        self.assertRegex(out, r'keep:  mic label:\s+1')
+        self.assertEqual(before, self.all_slot_photos(), 'the dry run cleared something')
 
     def test_reuploads_of_one_photo_make_a_person(self):
         """Sutter's case: the same headshot uploaded in two sessions."""
