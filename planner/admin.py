@@ -38,6 +38,7 @@ from django.db import models
 from .models import Device, DeviceInput, DeviceOutput
 from .models import Console, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, SourceHardwareOption
 from .models import ConsoleImport
+from .models import ShowTemplate
 from .models import MultitrackSession, MultitrackTrack
 from .models import MultitrackTemplate, MultitrackTemplateSlot
 from .models import SignalFlowDiagram
@@ -231,6 +232,8 @@ class BaseEquipmentAdmin(BaseAdmin):
         # crash was fixed naively.
         owner_scoped_paths = {
             'MultitrackTemplate': 'created_by',
+            # Lives outside every project; see planner.tenancy.owned_templates.
+            'ShowTemplate': 'owner',
         }
 
         # Get the model name
@@ -943,7 +946,7 @@ class DanteDeviceConfigInline(admin.StackedInline):
 
 class ConsoleAdmin(BaseEquipmentAdmin):
     # "Is template" is deliberately absent from both of these. Templates are
-    # managed in the Console Template Library (/console-template-library/),
+    # ShowTemplates now, loaded through the library (/admin/planner/console/template-library/),
     # which is what the toolbar button beside Add Console opens, so the column
     # restated a fact the list has somewhere better to say. It was not free:
     # 68px of a table that has to fit its columns into the 628px a 1280
@@ -960,7 +963,11 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     
     fieldsets = (
         ('Console Information', {
-            'fields': ('name', 'location', 'primary_ip_address', 'secondary_ip_address', 'is_template')
+            # is_template is no longer on the form: templates are saved with
+            # the "Save selected console as template" action into ShowTemplate,
+            # and ticking the old box would put nothing in the library. The
+            # column stays until migrate_console_templates has run on prod.
+            'fields': ('name', 'location', 'primary_ip_address', 'secondary_ip_address')
         }),
     )
     
@@ -971,7 +978,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         ConsoleStereoOutputInline,
     ]
     
-    actions = ['export_yamaha_rivage_csvs',]
+    actions = ['export_yamaha_rivage_csvs', 'save_as_template']
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
         """Show the console's name as the page header instead of the generic
@@ -1114,158 +1121,136 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     
 
     def console_template_library_view(self, request):
+        """Load a console template from "My templates" into the current project.
+
+        Three requests, all on this one URL:
+
+        * GET -- the caller's console templates (owned_templates()).
+        * POST action=preview -- what the load would create, with every name
+          that collides in this project paired with a suggested rename.
+        * POST action=apply -- the rename map from the preview form; adds
+          the consoles in one transaction. It never deletes or overwrites,
+          and refuses (re-showing the preview) if any final name is taken.
+
+        The templates come from planner.show_templates, not from consoles
+        flagged is_template -- see ShowTemplate in models.py.
         """
-        Display all console templates from all projects.
-        Allow user to import template to current project.
-        """
-        # Get current project
+        from planner.show_templates import LoadConflict, apply_load, preview_load
+        from planner.tenancy import owned_templates
+
         current_project = getattr(request, 'current_project', None)
-        
         if not current_project:
             messages.error(request, "No project selected. Please select a project first.")
             return redirect('admin:planner_console_changelist')
-        
-        # Handle template import POST request
+
+        templates = owned_templates(
+            request, ShowTemplate.objects.filter(kind=ShowTemplate.KIND_CONSOLE),
+        ).select_related('source_project', 'owner')
+
         if request.method == 'POST':
-            # The destination is request.current_project, so importing is a
-            # WRITE to it. CurrentProjectMiddleware only proves the user may
-            # *reach* that project -- a viewer-role member passes it -- so the
-            # per-project edit role is checked separately. _can_edit_current_project
-            # deliberately ignores the global 'Viewer' Django group; see its
-            # docstring for why. Imported locally to match how this file already
-            # defers its `views` import to the bottom of the module.
+            # Loading is a WRITE to request.current_project, and
+            # CurrentProjectMiddleware only proves the user may *reach* it --
+            # a viewer-role member passes. _can_edit_current_project checks
+            # the per-project role and deliberately ignores the global
+            # 'Viewer' group; see its docstring. Imported locally to match how
+            # this file already defers its `views` import.
             from planner.views import _can_edit_current_project
             if not _can_edit_current_project(request):
                 messages.error(
                     request,
                     "You have read-only access to this project, so you cannot "
-                    "import a template into it.",
+                    "load a template into it.",
                 )
                 return redirect('admin:console_template_library')
 
-            template_id = request.POST.get('template_id')
-            if template_id:
+            # Looked up through owned_templates(): an id from the form body
+            # that belongs to another user is simply "not found".
+            template = templates.filter(pk=request.POST.get('template_id') or 0).first()
+            if template is None:
+                messages.error(request, "Template not found.")
+                return redirect('admin:console_template_library')
+
+            action = request.POST.get('action', 'preview')
+            plan = preview_load(template, current_project)
+            errors = {}
+
+            if action == 'apply':
+                renames = {
+                    item['id']: request.POST.get(f"name_{item['id']}", item['name'])
+                    for item in plan
+                }
                 try:
-                    # Scoped to the caller's OWN projects, matching the GET
-                    # listing below. Unscoped, this was an IDOR: the id came
-                    # straight from the form body and the only other condition
-                    # was is_template, so any logged-in user could POST any
-                    # other tenant's template id and copy that console -- every
-                    # input, its source names and its IPs -- into their own
-                    # project. The response even named the victim's project, via
-                    # the "(from {project.name})" suffix below.
-                    #
-                    # Superusers are exempt so support can still copy a
-                    # template between tenants by id; everyone else is held to
-                    # the same set the GET lists.
-                    if request.user.is_superuser:
-                        source_projects = Project.objects.all()
-                    else:
-                        source_projects = Project.objects.filter(owner=request.user)
-                    original = Console.objects.get(
-                        id=template_id,
-                        is_template=True,
-                        project__in=source_projects,
-                    )
-
-                    # `project__in` above cannot match a NULL project, so
-                    # original.project is non-null from here. It used to be
-                    # reachable with project=None, and this next line was then
-                    # an AttributeError -> HTTP 500.
-                    #
-                    # Don't import if already in current project
-                    if original.project.id == current_project.id:
-                        messages.warning(request, f"Template '{original.name}' is already in this project.")
-                        return redirect('admin:console_template_library')
-                    
-                    # Create new console in current project
-                    new_console = Console.objects.create(
-                        project=current_project,
-                        name=f"{original.name} (from {original.project.name})",
-                        is_template=False,
-                        primary_ip_address=original.primary_ip_address,
-                        secondary_ip_address=original.secondary_ip_address,
-                    )
-                    
-                    # Duplicate all related inputs
-                    for input_obj in original.consoleinput_set.all().order_by('input_ch'):
-                        ConsoleInput.objects.create(
-                            console=new_console,
-                            dante_number=input_obj.dante_number,
-                            input_ch=input_obj.input_ch,
-                            source=input_obj.source,
-                            group=input_obj.group,
-                            dca=input_obj.dca,
-                            mute=input_obj.mute,
-                            direct_out=input_obj.direct_out,
-                            omni_in=input_obj.omni_in,
-                        )
-                    
-                    # Duplicate aux outputs
-                    for aux in original.consoleauxoutput_set.all().order_by('aux_number'):
-                        ConsoleAuxOutput.objects.create(
-                            console=new_console,
-                            dante_number=aux.dante_number,
-                            aux_number=aux.aux_number,
-                            name=aux.name,
-                            mono_stereo=aux.mono_stereo,
-                            bus_type=aux.bus_type,
-                            omni_in=aux.omni_in,
-                            omni_out=aux.omni_out,
-                        )
-                    
-                    # Duplicate matrix outputs
-                    for matrix in original.consolematrixoutput_set.all().order_by('matrix_number'):
-                        ConsoleMatrixOutput.objects.create(
-                            console=new_console,
-                            dante_number=matrix.dante_number,
-                            matrix_number=matrix.matrix_number,
-                            name=matrix.name,
-                            mono_stereo=matrix.mono_stereo,
-                            destination=matrix.destination,
-                            omni_out=matrix.omni_out,
-                        )
-                    
+                    created = apply_load(template, current_project, renames)
+                except LoadConflict as exc:
+                    errors = exc.errors
+                    for item in plan:
+                        item['suggested'] = renames[item['id']]
+                else:
+                    names = ', '.join(c.name for c in created)
                     messages.success(
-                        request, 
-                        f"Successfully imported template '{original.name}' as '{new_console.name}'"
+                        request,
+                        f"Loaded template '{template.name}' into "
+                        f"{current_project.name}: {names}.",
                     )
-                    return redirect(f'/admin/planner/console/{new_console.id}/change/')
-                    
-                except Console.DoesNotExist:
-                    messages.error(request, "Template not found.")
-                    return redirect('admin:console_template_library')
-                except Exception as e:
-                    messages.error(request, f"Error importing template: {str(e)}")
-                    return redirect('admin:console_template_library')
-        
-        # GET request - show template library
-        # Scope to projects the current user OWNS only (issue #4).
-        # Member-only access to someone else's project does not surface their
-        # templates here; only the project owner's own templates are visible.
-        owned_projects = Project.objects.filter(owner=request.user)
-        all_templates = Console.objects.filter(is_template=True, project__in=owned_projects).select_related('project').annotate(
-            inputs_count=Count('consoleinput', distinct=True),
-            aux_count=Count('consoleauxoutput', distinct=True),
-            matrix_count=Count('consolematrixoutput', distinct=True),
-        ).order_by('project__name', 'name')
-        
-        # Group templates by project
-        templates_by_project = {}
-        for template in all_templates:
-            if template.project not in templates_by_project:
-                templates_by_project[template.project] = []
-            templates_by_project[template.project].append(template)
-        
-        context = {
-            'templates_by_project': templates_by_project,
-            'current_project': current_project,
-            'title': 'Console Template Library',
-        }
-        
-        return render(request, 'admin/planner/console_template_library.html', context)
+                    if len(created) == 1:
+                        return redirect('admin:planner_console_change', created[0].pk)
+                    return redirect('admin:planner_console_changelist')
 
-    
+            for item in plan:
+                item['error'] = errors.get(item['id'])
+            return render(request, 'admin/planner/console_template_preview.html', {
+                **self.admin_site.each_context(request),
+                'title': f"Load template: {template.name}",
+                'template': template,
+                'plan': plan,
+                'current_project': current_project,
+            })
+
+        from planner.show_templates import annotate_console_counts
+        templates = annotate_console_counts(templates).order_by('name')
+        return render(request, 'admin/planner/console_template_library.html', {
+            **self.admin_site.each_context(request),
+            'title': 'Load console template',
+            'templates': templates,
+            'current_project': current_project,
+            'my_templates_url': reverse('admin:planner_showtemplate_changelist'),
+        })
+
+    @admin.action(description="Save selected console as template")
+    def save_as_template(self, request, queryset):
+        """Snapshot exactly one console into the caller's "My templates".
+
+        The template is owned by whoever saves it, not by the project owner:
+        it is their library. The queryset is already scoped to the current
+        project by get_queryset, so this only ever reads a console the caller
+        can see.
+        """
+        from planner.show_templates import save_console_template, unique_template_name
+
+        if queryset.count() != 1:
+            self.message_user(
+                request, "Select exactly one console to save as a template.",
+                level=messages.ERROR,
+            )
+            return None
+        console = queryset.select_related('project', 'location').first()
+        name = unique_template_name(
+            request.user, ShowTemplate.KIND_CONSOLE, console.name,
+            alternate=(f"{console.name} ({console.project.name})"
+                       if console.project_id else None),
+        )
+        template = save_console_template(console, request.user, name)
+        self.message_user(
+            request,
+            format_html(
+                "Saved '{}' to <a href=\"{}\">My templates</a> as '{}'.",
+                console.name,
+                reverse('admin:planner_showtemplate_change', args=[template.pk]),
+                template.name,
+            ),
+            level=messages.SUCCESS,
+        )
+        return None
 
     def changelist_view(self, request, extra_context=None):
         """Add Template Library button to the console list page"""
@@ -7520,6 +7505,102 @@ class ConsoleImportAdmin(BaseEquipmentAdmin):
 
 
 # ──────────────────────────────────────────────────────────────────
+# ShowTemplate — "My templates" (per-module templates, PR 1)
+#
+# Not a BaseEquipmentAdmin: every permission method there resolves
+# obj.project, and a ShowTemplate has none. The boundary is the owner,
+# applied by planner.tenancy.owned_templates in get_queryset -- which is
+# also what get_object() reads, so another user's template id in a change
+# or delete URL is "doesn't exist", not "permission denied".
+# ──────────────────────────────────────────────────────────────────
+
+class ShowTemplateForm(forms.ModelForm):
+    class Meta:
+        model = ShowTemplate
+        fields = ['name', 'notes']
+
+    def clean_name(self):
+        # owner and kind are not form fields, so ModelForm's own
+        # validate_unique skips the (owner, kind, name) constraint and a
+        # clashing rename would surface as an IntegrityError -> 500.
+        name = self.cleaned_data['name'].strip()
+        clash = ShowTemplate.objects.filter(
+            owner_id=self.instance.owner_id, kind=self.instance.kind, name=name,
+        ).exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise forms.ValidationError(
+                f"You already have a {self.instance.get_kind_display().lower()} "
+                f"template called '{name}'."
+            )
+        return name
+
+
+class ShowTemplateAdmin(admin.ModelAdmin):
+    form = ShowTemplateForm
+    list_display = ['name', 'kind', 'source_project', 'summary', 'created_at']
+    list_filter = ['kind']
+    search_fields = ['name']
+    readonly_fields = ['kind', 'source_project', 'summary', 'payload_version',
+                       'created_at', 'updated_at']
+
+    def get_queryset(self, request):
+        from planner.tenancy import owned_templates
+        from planner.show_templates import annotate_console_counts
+        return annotate_console_counts(
+            owned_templates(request, super().get_queryset(request))
+        ).select_related('source_project', 'owner')
+
+    def get_list_display(self, request):
+        if request.user.is_superuser:
+            return ['name', 'owner', 'kind', 'source_project', 'summary', 'created_at']
+        return self.list_display
+
+    def get_readonly_fields(self, request, obj=None):
+        if request.user.is_superuser:
+            return ['owner'] + self.readonly_fields
+        return self.readonly_fields
+
+    @admin.display(description='Contents')
+    def summary(self, obj):
+        # Counts are annotated in get_queryset, which both the list and the
+        # change form (via get_object) read from.
+        if obj.kind != ShowTemplate.KIND_CONSOLE or not hasattr(obj, 'n_inputs'):
+            return '—'
+        consoles = obj.n_consoles
+        return ' · '.join([
+            f"{consoles} console" + ('' if consoles == 1 else 's'),
+            f"{obj.n_inputs} in", f"{obj.n_auxes} aux",
+            f"{obj.n_matrices} mtx", f"{obj.n_stereos} st",
+        ])
+
+    # Django's default has_*_permission checks auth model permissions, which
+    # the role groups do not grant for this model. Ownership is the rule, and
+    # get_queryset has already applied it, so an obj that reaches these is
+    # the caller's own (or the caller is a superuser).
+    def _owns(self, request, obj):
+        if not (request.user.is_authenticated and request.user.is_staff):
+            return False
+        return obj is None or request.user.is_superuser or obj.owner_id == request.user.id
+
+    def has_module_permission(self, request):
+        return request.user.is_authenticated and request.user.is_staff
+
+    def has_view_permission(self, request, obj=None):
+        return self._owns(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return self._owns(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._owns(request, obj)
+
+    def has_add_permission(self, request):
+        # Templates are made with "Save selected console as template" on the
+        # Consoles list; an empty template from this form would hold nothing.
+        return False
+
+
+# ──────────────────────────────────────────────────────────────────
 # MultitrackTemplate — Phase 3 (v3.0) admin registration
 # ──────────────────────────────────────────────────────────────────
 # CONTEXT D-05: owner-scoped via created_by FK (NOT project-scoped).
@@ -7621,6 +7702,7 @@ class SourceHardwareOptionAdmin(BaseAdmin):
 
 # Register all equipment admin classes
 showstack_admin_site.register(Console, ConsoleAdmin)
+showstack_admin_site.register(ShowTemplate, ShowTemplateAdmin)
 showstack_admin_site.register(SourceHardwareOption, SourceHardwareOptionAdmin)
 showstack_admin_site.register(MultitrackSession, MultitrackSessionAdmin)
 showstack_admin_site.register(MultitrackTemplate, MultitrackTemplateAdmin)

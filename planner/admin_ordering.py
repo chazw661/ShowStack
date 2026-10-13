@@ -105,6 +105,7 @@ def ordered_get_app_list(request, app_label=None):
         # Main Equipment (5-8)
         'location': 5,
         'console': 6,
+        'showtemplate': 6.2,   # "My templates" (per-module templates)
         'sourcehardwareoption': 6.5,
         'device': 7,
         'amp': 8,

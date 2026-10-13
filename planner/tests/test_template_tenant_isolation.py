@@ -4,7 +4,9 @@ Console Template Library import, Audio Checklist templates and COMM Config
 templates each take a template id from the request body, and each had a way
 across the tenant boundary:
 
-* the console import looked the id up with nothing but ``is_template=True``;
+* the console import looked the id up with nothing but ``is_template=True``
+  (the library now loads owner-scoped ShowTemplates; the rest of their
+  isolation tests are in test_show_templates.py);
 * the library was routed by a bare lambda outside ``admin_view()``;
 * COMM "save as template" deleted every tenant's template of the same name;
 * loading a checklist template into the current project never checked the
@@ -25,8 +27,9 @@ from django.urls import reverse
 from planner.models import (
     AudioChecklist, AudioChecklistTask, AudioChecklistTemplate,
     AudioChecklistTemplateTask, CommConfig, Console, ConsoleInput, Project,
-    ProjectMember, UserProfile,
+    ProjectMember, ShowTemplate, UserProfile,
 )
+from planner.show_templates import save_console_template
 from planner.tests.test_tenant_isolation import TenantIsolationBase
 
 
@@ -34,9 +37,10 @@ class _TemplateBase(TenantIsolationBase):
 
     def setUp(self):
         super().setUp()
-        # Project B's console doubles as B's library template.
-        self.console_b.is_template = True
-        self.console_b.save()
+        # B's library template, saved from project B's console.
+        self.template_b = save_console_template(
+            self.console_b, self.user_b, f'B Tmpl {self.MARKER_B}',
+        )
 
         # A viewer-role member of project A, who owns a project of their own
         # (so they DO have a template they are entitled to import elsewhere).
@@ -53,8 +57,9 @@ class _TemplateBase(TenantIsolationBase):
         self.viewer_project = Project.objects.create(
             name='Viewer Own', owner=self.viewer,
         )
-        self.viewer_template = Console.objects.create(
-            project=self.viewer_project, name='Viewer Tmpl', is_template=True,
+        self.viewer_template = save_console_template(
+            Console.objects.create(project=self.viewer_project, name='Viewer Tmpl'),
+            self.viewer, 'Viewer Tmpl',
         )
         self.viewer_client = self._client_for(self.viewer, self.project_a)
 
@@ -100,12 +105,16 @@ class ConsoleTemplateLibraryTests(_TemplateBase):
         self.assertEqual(302, resp.status_code)
         self.assertIn('/admin/login/', resp['Location'])
 
+    def _load(self, client, template_id, action='apply'):
+        return client.post(self.url, {'template_id': template_id, 'action': action})
+
     def test_user_a_cannot_import_user_b_template(self):
-        resp = self.client.post(self.url, {'template_id': self.console_b.id})
-        self.assertEqual(302, resp.status_code)
+        for action in ('preview', 'apply'):
+            resp = self._load(self.client, self.template_b.id, action)
+            self.assertEqual(302, resp.status_code, action)
         self.assertFalse(
             self._project_a_consoles_from_b().exists(),
-            "project B's template console was copied into project A",
+            "user B's template was loaded into project A",
         )
         self.assertFalse(
             ConsoleInput.objects.filter(
@@ -113,6 +122,11 @@ class ConsoleTemplateLibraryTests(_TemplateBase):
                 source__contains=self.MARKER_B,
             ).exists(),
         )
+
+    def test_preview_of_user_b_template_reveals_nothing(self):
+        resp = self._load(self.client, self.template_b.id, 'preview')
+        self.assertEqual(302, resp.status_code)
+        self.assertNoLeak(self.client.get(resp['Location']), 'library after preview')
 
     def test_import_view_itself_rejects_user_b_template(self):
         """Same IDOR, called on the view directly so it cannot pass just
@@ -123,7 +137,7 @@ class ConsoleTemplateLibraryTests(_TemplateBase):
         from planner.admin_site import showstack_admin_site
 
         request = RequestFactory().post(
-            self.url, {'template_id': self.console_b.id})
+            self.url, {'template_id': self.template_b.id, 'action': 'apply'})
         request.user = self.user_a
         request.current_project = self.project_a
         request.session = {}
@@ -139,19 +153,18 @@ class ConsoleTemplateLibraryTests(_TemplateBase):
 
     def test_owner_can_still_import_own_template_from_another_project(self):
         other = Project.objects.create(name='A Other', owner=self.user_a)
-        tmpl = Console.objects.create(project=other, name='Mine', is_template=True)
-        ConsoleInput.objects.create(console=tmpl, input_ch='1', source='Kick')
-        resp = self.client.post(self.url, {'template_id': tmpl.id})
+        src = Console.objects.create(project=other, name='Mine')
+        ConsoleInput.objects.create(console=src, input_ch='1', source='Kick')
+        tmpl = save_console_template(src, self.user_a, 'Mine')
+        resp = self._load(self.client, tmpl.id)
         self.assertEqual(302, resp.status_code)
-        copy = Console.objects.get(project=self.project_a, name__startswith='Mine')
+        copy = Console.objects.get(project=self.project_a, name='Mine')
         self.assertEqual(['Kick'], list(
             copy.consoleinput_set.values_list('source', flat=True)))
 
     def test_viewer_cannot_import_into_project(self):
         before = Console.objects.filter(project=self.project_a).count()
-        resp = self.viewer_client.post(
-            self.url, {'template_id': self.viewer_template.id},
-        )
+        resp = self._load(self.viewer_client, self.viewer_template.id)
         self.assertEqual(302, resp.status_code)
         self.assertEqual(
             before, Console.objects.filter(project=self.project_a).count(),
@@ -160,7 +173,7 @@ class ConsoleTemplateLibraryTests(_TemplateBase):
 
     def test_superuser_is_exempt(self):
         su = self._client_for(self.superuser, self.project_a)
-        su.post(self.url, {'template_id': self.console_b.id})
+        self._load(su, self.template_b.id)
         self.assertTrue(self._project_a_consoles_from_b().exists())
 
 

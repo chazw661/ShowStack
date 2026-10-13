@@ -1170,6 +1170,149 @@ class ConsoleImport(models.Model):
 
 
 # ──────────────────────────────────────────────────────────────────
+# Show templates (per-module templates, PR 1: console)
+#
+# A template belongs to a USER, not a project. The old library was a
+# Console with is_template=True sitting inside some project, which meant a
+# template was really a live console that happened to be ticked -- deleting
+# the project deleted the template, and importing it copied only the fields
+# the import loop remembered to name. ShowTemplate lives outside every
+# project; source_project is provenance only and goes NULL if that project
+# is deleted.
+#
+# The Template* child models mirror the Console* models field for field.
+# planner/show_templates.py copies them by introspecting the source model,
+# and planner/tests/test_show_templates.py fails if a Console* field has no
+# mirror here, so a field added to ConsoleInput cannot silently fall out of
+# templates the way source_b, color and the stereo outputs fell out of the
+# old import. `extra` holds anything a later payload_version needs without
+# a schema change.
+# ──────────────────────────────────────────────────────────────────
+
+class ShowTemplate(models.Model):
+    KIND_CONSOLE = 'console'
+    KIND_CHOICES = [
+        ('console', 'Console'),
+        ('io', 'I/O Device'),
+        ('console_io', 'Console + I/O'),
+        ('comm', 'COMM Config'),
+        ('checklist', 'Checklist'),
+    ]
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='show_templates')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    name = models.CharField(max_length=200)
+    payload_version = models.PositiveSmallIntegerField(default=1)
+    source_project = models.ForeignKey(
+        'Project', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+        help_text="The project this template was saved from. Provenance only.",
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "My template"
+        verbose_name_plural = "My templates"
+        ordering = ['kind', 'name']
+        constraints = [
+            UniqueConstraint(
+                fields=['owner', 'kind', 'name'],
+                name='unique_show_template_name_per_owner_kind',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class TemplateConsole(models.Model):
+    template = models.ForeignKey(ShowTemplate, on_delete=models.CASCADE, related_name='consoles')
+    name = models.CharField(max_length=100)
+    # By name, not FK: a Location belongs to a project and the template does
+    # not. Loading resolves it with get-or-create in the target project.
+    location_name = models.CharField(max_length=100, blank=True)
+    primary_ip_address = models.GenericIPAddressField(blank=True, null=True)
+    secondary_ip_address = models.GenericIPAddressField(blank=True, null=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return self.name
+
+
+class TemplateConsoleInput(models.Model):
+    console = models.ForeignKey(TemplateConsole, on_delete=models.CASCADE, related_name='inputs')
+    dante_number = models.CharField(max_length=3, blank=True, null=True)
+    input_ch = models.CharField(max_length=10, blank=True, null=True)
+    source = models.CharField(max_length=100, blank=True, null=True)
+    source_b = models.CharField(max_length=100, blank=True, null=True)
+    source_hardware = models.CharField(max_length=50, blank=True, null=True)
+    source_hardware_b = models.CharField(max_length=50, blank=True, null=True)
+    color = models.CharField(max_length=20, default='Blue', blank=True)
+    default_record = models.BooleanField(default=True)
+    group = models.CharField(max_length=100, blank=True, null=True)
+    dca = models.CharField(max_length=100, blank=True, null=True)
+    mute = models.CharField(max_length=100, blank=True, null=True)
+    direct_out = models.CharField(max_length=100, blank=True, null=True)
+    omni_in = models.CharField(max_length=100, blank=True, null=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['id']
+
+
+class TemplateConsoleAux(models.Model):
+    console = models.ForeignKey(TemplateConsole, on_delete=models.CASCADE, related_name='auxes')
+    dante_number = models.IntegerField(null=True, blank=True)
+    aux_number = models.CharField(max_length=10)
+    name = models.CharField(max_length=100, blank=True, null=True)
+    mono_stereo = models.CharField(max_length=10, blank=True, null=True)
+    bus_type = models.CharField(max_length=10, blank=True, null=True)
+    omni_in = models.CharField(max_length=100, blank=True)
+    omni_out = models.CharField(max_length=100, blank=True)
+    color = models.CharField(max_length=20, default='Blue', blank=True)
+    default_record = models.BooleanField(default=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['id']
+
+
+class TemplateConsoleMatrix(models.Model):
+    console = models.ForeignKey(TemplateConsole, on_delete=models.CASCADE, related_name='matrices')
+    dante_number = models.IntegerField(null=True, blank=True)
+    matrix_number = models.CharField(max_length=10)
+    name = models.CharField(max_length=100, blank=True, null=True)
+    mono_stereo = models.CharField(max_length=10, blank=True, null=True)
+    destination = models.CharField(max_length=100, blank=True, null=True)
+    omni_out = models.CharField(max_length=100, blank=True, null=True)
+    color = models.CharField(max_length=20, default='Blue', blank=True)
+    default_record = models.BooleanField(default=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['id']
+
+
+class TemplateConsoleStereo(models.Model):
+    console = models.ForeignKey(TemplateConsole, on_delete=models.CASCADE, related_name='stereos')
+    stereo_type = models.CharField(max_length=2)
+    name = models.CharField(max_length=100, blank=True, null=True)
+    dante_number = models.IntegerField(null=True, blank=True)
+    omni_out = models.CharField(max_length=100, blank=True, null=True)
+    color = models.CharField(max_length=20, default='Blue', blank=True)
+    default_record = models.BooleanField(default=True)
+    extra = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['id']
+
+
+# ──────────────────────────────────────────────────────────────────
 # Multitrack Session Builder (Phase 1 of v2.0)
 # Discriminator pattern per CONTEXT.md D-01: no FK to channel models;
 # (source_type, source_id) is the discriminator. post_delete signals
