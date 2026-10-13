@@ -84,8 +84,16 @@ phones keep trusting it, only the Listen address changes.
 
 ## How it behaves
 
-* **Switch channels instantly** from the Listen page dropdown — over a data
-  channel with no reconnect, never touching the console signal path.
+* **Switch channels instantly** by tapping a tile in the Listen page's channel
+  grid — over a data channel with no reconnect, never touching the console
+  signal path. Each tile shows the presenter, a live meter and an **ON** pill
+  when that mic is mic'd in ShowStack. Inputs that aren't in the show's map are
+  under **Other channels**, recently live ones first.
+* **Mic'd state stays current.** The app re-reads the channel map from ShowStack
+  every 5 s (3 s timeout, backing off to 10 s then 30 s while ShowStack is
+  unreachable) and pushes any change to connected phones straight away. If it
+  hasn't heard from ShowStack for 30 s the page says the mic'd state is stale;
+  audio and meters carry on regardless.
 * **Any sample rate.** The input is opened at whatever rate it's already set to
   (44.1 / 48 / 96 kHz…) and each listener's channel is resampled to 48 kHz for
   Opus. The app never changes a device's rate — on DVS that would retime the
@@ -155,6 +163,15 @@ python listen_companion.py --token <SHOW_LISTEN_TOKEN> --api https://showstack.i
 * **Quick local test, no hardware:** `--test-tone --http` synthesizes a tone per
   channel and serves plain HTTP on `localhost:8443` (WebRTC allows HTTP on
   localhost only). In 🎧 Listen Setup → Advanced, save `http://localhost:8443`.
+* **A whole fake show:** `--simulate N` plays N channels that each do something
+  different — tones at several levels, pink noise, speech-like bursts, silent
+  inputs that come alive over time and a near-clip last channel — for checking
+  the channel grid's meters and "recently live first" sort without a console.
+  The pattern is documented on `Simulator` in `listen_companion.py`.
+* **Tests:** `venv/bin/python -m unittest discover -s tests` (headless — no
+  audio device or network needed).
+* **Beta-testing a branch from source** next to the installed app: see
+  `LISTEN_BETA_TEST.md`.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -168,6 +185,7 @@ python listen_companion.py --token <SHOW_LISTEN_TOKEN> --api https://showstack.i
 | `--cert` / `--key` | automatic | Use your own TLS files instead |
 | `--no-verify-tls` | off | Skip TLS verify when calling ShowStack |
 | `--test-tone` | off | Synthesize a tone per channel (no audio device needed) |
+| `--simulate N` | off | Simulate a show on N channels (no audio device needed) |
 | `--http` | off | Serve plain HTTP only (localhost testing; phones need HTTPS) |
 | `--list-devices` | — | List audio devices and exit |
 
