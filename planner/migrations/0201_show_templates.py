@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('planner', '0199_presenter_photo'),
+        ('planner', '0200_presenter_is_mic_label'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
