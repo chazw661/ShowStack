@@ -59,8 +59,8 @@ def filter_choices(changelist, spec):
 @register.filter
 def photo_url_in(slot, photo_index):
     """``{{ slot|photo_url_in:photo_index }}`` -- the URL a Mic Tracker slot's
-    photo zone shows: its presenter's headshot, else (transitional) the slot's
-    legacy photo, else ''. See planner.utils.presenter_photos.PhotoIndex."""
+    photo zone shows: the slot's session photo, else a person's headshot,
+    else ''. See planner.utils.presenter_photos."""
     if not slot or photo_index is None:
         return ''
     return photo_index.for_slot(slot)

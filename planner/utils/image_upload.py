@@ -111,3 +111,51 @@ def normalize_headshot(data):
         raise ImageRejected('That file is not a valid image')
     content = out.getvalue()
     return content, 'image/jpeg', width, height, hashlib.sha256(content).hexdigest()
+
+
+def session_photo_data_url(data):
+    """``data`` re-encoded like a headshot, as the data URL a slot stores for
+    a session-only photo (PresenterSlot.photo_data)."""
+    import base64
+
+    content, content_type, _w, _h, _sha = normalize_headshot(data)
+    return f'data:{content_type};base64,' + base64.b64encode(content).decode('ascii')
+
+
+# Two photos whose fingerprints differ in this many bits or fewer are the same
+# picture -- a re-upload, a re-crop, a re-save. Measured on prod (October
+# 2026): the re-uploads of one headshot came out 1-9 bits apart; different
+# speakers on the same mic label 26-36; two genuinely different photos of one
+# person 16-18.
+NEAR_IDENTICAL_BITS = 10
+
+
+def photo_fingerprint(data):
+    """64-bit difference hash of ``data``: compares neighbouring pixels of a
+    9x8 greyscale thumbnail, so it survives re-encoding, rescaling and light
+    cropping, and two different faces land about half their bits apart.
+
+    Raises ImageRejected for anything Pillow cannot open.
+    """
+    from PIL import ImageOps
+
+    try:
+        with Image.open(BytesIO(data)) as img:
+            img = ImageOps.exif_transpose(img)
+            if img.mode != 'RGB':
+                rgba = img.convert('RGBA')
+                img = Image.new('RGBA', rgba.size, 'white')
+                img.alpha_composite(rgba)
+            px = list(img.convert('L').resize((9, 8), Image.LANCZOS).getdata())
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError,
+            SyntaxError, ValueError):
+        raise ImageRejected('That file is not a valid image')
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+    return bits
+
+
+def fingerprint_distance(a, b):
+    return bin(a ^ b).count('1')

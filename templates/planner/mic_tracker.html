@@ -586,6 +586,15 @@
 
     /* ── Issue #39: drag-and-drop photo upload ── */
     .a2-photo-zone.dragover { border-style: solid; border-color: var(--accent-blue); background: rgba(var(--mtt-rgb-blue), 0.12); }
+    /* Upload menu: this person in every session, or this session only. */
+    .photo-scope-menu { position: fixed; z-index: 1000; min-width: 240px; max-width: calc(100vw - 16px); padding: 6px; border-radius: 8px; background: var(--bg-raised); border: 1px solid var(--border-bright); box-shadow: 0 8px 32px rgba(var(--mtt-rgb-black), 0.5); display: flex; flex-direction: column; gap: 4px; }
+    .photo-scope-title { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); padding: 2px 6px 4px; }
+    .photo-scope-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; width: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; }
+    .photo-scope-option:hover:not(:disabled), .photo-scope-option:focus-visible { border-color: var(--accent-blue); outline: none; }
+    .photo-scope-option.is-default { border-color: var(--accent-blue); background: rgba(var(--mtt-rgb-blue), 0.12); }
+    .photo-scope-option:disabled { opacity: 0.45; cursor: not-allowed; }
+    .photo-scope-label { font-size: 13px; font-weight: 600; }
+    .photo-scope-hint { font-size: 11px; color: var(--text-secondary); }
     </style>
 {% endblock %}
 
@@ -742,6 +751,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                 data-slot-count="{{ slot_count }}"
                                 data-presenter="{% if slot.presenter %}{{ slot.presenter.name }}{% endif %}"
                                 data-presenter-id="{{ slot.presenter_id|default:'' }}"
+                                data-mic-label="{% if slot.presenter.is_mic_label %}1{% else %}0{% endif %}"
                                 data-photo="{{ slot|photo_url_in:photo_index }}"
                                 data-micd="{% if slot.is_micd %}1{% else %}0{% endif %}"
                                 data-mic-type="{{ slot.mic_type|default:assignment.mic_type|default:'' }}"
@@ -807,6 +817,7 @@ silently 403-ing background saves and stopping updates from reaching others.
                                 data-slot-count="1"
                                 data-presenter="{% if single_slot.presenter %}{{ single_slot.presenter.name }}{% endif %}"
                                 data-presenter-id="{{ single_slot.presenter_id|default:'' }}"
+                                data-mic-label="{% if single_slot.presenter.is_mic_label %}1{% else %}0{% endif %}"
                                 data-photo="{{ single_slot|photo_url_in:photo_index }}"
                                 data-micd="{% if assignment.is_micd %}1{% else %}0{% endif %}"
                                 data-mic-type="{{ single_slot.mic_type|default:'' }}"
@@ -1822,17 +1833,19 @@ function assignSlotGroup(slotId, groupId, groupName, groupColor, dotEl) {
 }
 
 // ── Photo uploads ──────────────────────────────────────────────
-// triggerPhotoForSlot / uploadPhotoForSlot live in mic_tracker_v5.js. This
-// page used to define them again, and these copies silently replaced those.
+// triggerPhotoForSlot / uploadPhotoForSlot / choosePhotoScope live in
+// mic_tracker_v5.js. This page used to define them again, and these copies
+// silently replaced those.
 
 // Issue #10: after a presenter change, the photo zone follows the new
 // presenter's headshot (or empties). Painting is the renderer's job; all this
 // adds is the slot's new presenter and photo, plus the upload wiring the
 // renderer does not own.
-function syncAssignmentPhoto(assignmentId, photoUrl, slotId, presenterId) {
+function syncAssignmentPhoto(assignmentId, photoUrl, slotId, presenterId, micLabel) {
     if (slotId) {
         MTTSlots.patch(assignmentId, slotId, {
             presenterId: presenterId ? String(presenterId) : '',
+            micLabel: !!micLabel,
             photo: photoUrl || ''
         });
     }
@@ -2260,6 +2273,7 @@ function applySlotData(assignmentId, data) {
         MTTSlots.patch(assignmentId, data.slot_id, {
             presenter:   data.presenter_name || '',
             presenterId: data.presenter_id ? String(data.presenter_id) : '',
+            micLabel:    !!data.presenter_is_mic_label,
             photo:       data.photo_url || '',
             micType:     data.mic_type || '',
             isMicd:      !!data.is_micd
@@ -2468,17 +2482,21 @@ document.querySelectorAll('[data-session-id]').forEach(function(session) {
         }
         e.preventDefault();
         zone.classList.remove('dragover');
+        if (file && !file.type.startsWith('image/')) {
+            alert('That file is not an image.');
+            return;
+        }
+        // Whose photo is it: this person's everywhere, or this session's.
+        const scope = await choosePhotoScope(zone, slotId, assignmentId);
+        if (!scope) return;
 
         try {
             let resp;
             if (file) {
-                if (!file.type.startsWith('image/')) {
-                    alert('That file is not an image.');
-                    return;
-                }
                 const fd = new FormData();
                 fd.append('slot_id', slotId);
                 fd.append('photo', file);
+                fd.append('scope', scope);
                 resp = await fetch('/audiopatch/api/mic/slot/upload-photo/', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': getCsrfToken() },
@@ -2488,14 +2506,13 @@ document.querySelectorAll('[data-session-id]').forEach(function(session) {
                 resp = await fetch('/audiopatch/api/mic/slot/upload-photo-from-url/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-                    body: JSON.stringify({ slot_id: slotId, url: url }),
+                    body: JSON.stringify({ slot_id: slotId, url: url, scope: scope }),
                 });
             }
             let json = {};
             try { json = await resp.json(); } catch (e) { /* a 404/500 page */ }
             if (json.success && json.photo_url) {
-                // The presenter's photo: every card they are on repaints.
-                MTTSlots.setPresenterPhoto(json.presenter_id, json.photo_url);
+                applyPhotoUpload(assignmentId, json);
             } else {
                 alert('Photo upload failed: ' + (json.error || 'Unknown error'));
             }

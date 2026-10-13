@@ -359,7 +359,8 @@ class Project(models.Model):
                 new_presenter = Presenter.objects.create(
                     project=new_project,
                     name=presenter.name,
-                    notes=presenter.notes
+                    notes=presenter.notes,
+                    is_mic_label=presenter.is_mic_label,
                 )
                 presenter_map[presenter.id] = new_presenter
 
@@ -3424,7 +3425,19 @@ class Presenter(models.Model):
         blank=True,
         help_text="Presenter headshot"
     )
-    
+    # HH13, Q&A 2, A2 OS: engineers name a "presenter" after the mic and put
+    # a different speaker's photo on it each session. For those, a photo
+    # stays with the session and the presenter never has a headshot shown.
+    # See planner.utils.presenter_photos for the display rule.
+    is_mic_label = models.BooleanField(
+        "Mic position — photos stay per session",
+        default=False,
+        help_text="Tick for a mic or position name (HH13, Q&A 2, A2 OS) whose "
+                  "speaker changes between sessions: each session keeps its "
+                  "own photo. Untick for a person, whose photo then shows in "
+                  "every session they are in.",
+    )
+
     class Meta:
         verbose_name = "Presenter"
         verbose_name_plural = "Presenters"  # Child of Show Mic Tracker
@@ -3446,7 +3459,12 @@ class Presenter(models.Model):
         keeps the OLDEST match when a project already has duplicates, so the
         row with the history attached is the one that survives. Use
         `manage.py list_duplicate_presenters` to see what is already there.
+
+        A new presenter whose name looks like a mic position (HH13, Q&A 2)
+        starts with is_mic_label set; an existing one keeps whatever it has.
         """
+        from planner.utils.mic_labels import looks_like_mic_label
+
         name = ' '.join((name or '').split())
         if not name or not project_id:
             return None
@@ -3461,7 +3479,8 @@ class Presenter(models.Model):
         # simultaneous first-time assignments of the same name can still both
         # insert. Re-check after the insert and hand back the older row so the
         # loser of that race is at least never the one we return.
-        created = cls.objects.create(project_id=project_id, name=name)
+        created = cls.objects.create(project_id=project_id, name=name,
+                                     is_mic_label=looks_like_mic_label(name))
         return cls.objects.filter(
             project_id=project_id, name__iexact=name
         ).order_by('id').first() or created

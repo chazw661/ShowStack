@@ -13,6 +13,7 @@ Run with::
 """
 
 import base64
+import re
 import json
 import shutil
 import tempfile
@@ -61,8 +62,9 @@ def _data_url(mime, raw):
 def _queries_touching_photo(ctx):
     """Queries that READ or WRITE the photo_data value.
 
-    A WHERE on it (PhotoIndex's ``photo_data <> ''`` test for a legacy photo)
-    is not counted: Postgres answers that from the TOAST length header without
+    A WHERE on it (PhotoIndex's ``photo_data <> ''`` test for a session
+    photo) is not counted, nor is selecting its LENGTH / OCTET_LENGTH (the
+    URL's version): Postgres answers both from the TOAST length header without
     reading the image. Selecting it, or SETting it, moves the bytes.
     """
     out = []
@@ -72,6 +74,7 @@ def _queries_touching_photo(ctx):
             continue
         if sql.startswith('SELECT'):
             selected = sql[len('SELECT'):sql.find(' FROM ')]
+            selected = re.sub(r'(?:OCTET_)?LENGTH\("planner_presenterslot"\."photo_data"\)', '', selected)
             if 'photo_data' in selected:
                 out.append(sql)
         elif sql.startswith('UPDATE'):
@@ -215,13 +218,27 @@ class UploadSlotPhotoTests(PhotoTenantBase):
         resp = self.client.get(reverse('planner:upload_slot_photo'))
         self.assertEqual(405, resp.status_code)
 
-    def test_upload_never_touches_the_slot_row(self):
-        with CaptureQueriesContext(connection) as ctx:
-            self.upload(self.client, self.slot_a, PNG)
-        slot_writes = [q['sql'] for q in ctx.captured_queries
-                       if q['sql'].startswith('UPDATE') and 'planner_presenterslot' in q['sql']]
-        self.assertEqual([], slot_writes)
-        self.assertEqual([], _queries_touching_photo(ctx))
+    def test_upload_never_rewrites_the_slot_row(self):
+        """An upload writes photo_data and nothing else on a slot: the
+        session photo itself, or (all sessions) clearing the presenter's
+        session photos. Never a full-row save, and it never reads a photo."""
+        for scope in ('all', 'session'):
+            with self.subTest(scope):
+                with CaptureQueriesContext(connection) as ctx:
+                    resp = self.client.post(reverse('planner:upload_slot_photo'), {
+                        'slot_id': self.slot_a.id, 'scope': scope,
+                        'photo': SimpleUploadedFile('p.png', PNG, content_type='image/png')})
+                self.assertEqual(200, resp.status_code, resp.content)
+                for q in ctx.captured_queries:
+                    sql = q['sql']
+                    if sql.startswith('UPDATE') and 'planner_presenterslot' in sql:
+                        set_clause = sql[sql.find(' SET '):sql.find(' WHERE ')]
+                        self.assertEqual(['photo_data'],
+                                         re.findall(r'"(\w+)" = ', set_clause), sql)
+                    if sql.startswith('SELECT') and 'planner_presenterslot' in sql:
+                        self.assertNotIn('"photo_data"', re.sub(
+                            r'(?:OCTET_)?LENGTH\("planner_presenterslot"\."photo_data"\)', '',
+                            sql[:sql.find(' FROM ')]), sql)
 
 
 # ---------------------------------------------------------------------------
@@ -594,11 +611,11 @@ class SlotWritesSkipPhotoTests(PhotoTenantBase):
     def test_activate_writes_only_is_active(self):
         """The response carries the newly active slot's photo as a URL; the
         image itself is neither read nor written."""
-        from planner.utils.presenter_photos import legacy_slot_photo_url
         with CaptureQueriesContext(connection) as ctx:
             resp = self.post_json('activate_presenter_slot', {
                 'assignment_id': self.mic_assignment_a.id, 'slot_id': self.slot_a2.id})
-        self.assertEqual(legacy_slot_photo_url(self.slot_a2.id), resp.json()['photo_url'])
+        self.assertTrue(resp.json()['photo_url'].startswith(
+            reverse('planner:slot_photo', args=[self.slot_a2.id]) + '?v='))
         self.assertEqual([], _queries_touching_photo(ctx))
 
     def test_advance_and_previous_write_only_is_active(self):
@@ -668,12 +685,11 @@ class MicTrackerPageTests(PhotoTenantBase):
         """MicAssignment.active_slot runs a fresh query per call and the A2
         card calls it ~6 times. Each used to pull photo_data: 281 photo
         SELECTs for one 16-card session. Photos are URLs now, so: none."""
-        from planner.utils.presenter_photos import legacy_slot_photo_url
         with CaptureQueriesContext(connection) as ctx:
             resp = self.client.get(reverse('planner:mic_tracker'))
         self.assertEqual(200, resp.status_code)
         body = resp.content.decode()
         self.assertNotIn(self.photo_a, body, 'a photo was inlined as base64')
-        self.assertIn(legacy_slot_photo_url(self.slot_a.id), body)
+        self.assertIn(reverse('planner:slot_photo', args=[self.slot_a.id]) + '?v=', body)
         self.assertNotIn(self.MARKER_B, body)
         self.assertEqual([], _queries_touching_photo(ctx))

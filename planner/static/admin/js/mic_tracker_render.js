@@ -53,7 +53,7 @@
     var CHIP_UNASSIGNED = 'Unassigned';
     var GROUP_CLASSES = ['group-blue', 'group-amber', 'group-red', 'group-purple', 'group-teal'];
 
-    /* key -> {assignmentId, slotId, presenter, presenterId, photo, isMicd,
+    /* key -> {assignmentId, slotId, presenter, presenterId, micLabel, photo, isMicd,
                micType, group, isActive, slotCount} */
     var store = {};
 
@@ -77,11 +77,14 @@
                    never appear. */
                 notes: '', headsetColor: '', placement: '',
                 sensitivity: '', outputLevel: '',
-                /* The photo is the PRESENTER's (PresenterPhoto), carried per
-                   slot as the URL the server resolved for it. presenterId is
-                   what lets one upload repaint every card that presenter is
-                   on -- see setPresenterPhoto. */
-                presenterId: '', photo: ''
+                /* The photo is carried per slot as the URL the server
+                   resolved for it: the slot's session photo, else a person's
+                   headshot (planner/utils/presenter_photos.py). presenterId
+                   is what lets an all-sessions upload repaint every card that
+                   presenter is on -- see setPresenterPhoto. micLabel (the
+                   presenter is a mic position, HH13 / Q&A 2) only sets the
+                   upload menu's default. */
+                presenterId: '', micLabel: false, photo: ''
             };
         }
         return store[k];
@@ -339,8 +342,10 @@
         });
     }
 
-    /* A headshot belongs to the presenter, so a new one goes on every slot
-       they hold -- other cards, other sessions, the same page. */
+    /* An all-sessions photo belongs to the presenter, so it goes on every
+       slot they hold -- other cards, other sessions, the same page. The
+       server cleared their session-only photos in the same request, so the
+       headshot is what every one of those cards now shows. */
     function setPresenterPhoto(presenterId, url) {
         if (!presenterId) return;
         var pid = String(presenterId);
@@ -417,6 +422,7 @@
                 notes: (row.querySelector('.a1-notes-input') || {}).value || '',
                 headsetColor: '', placement: '', sensitivity: '', outputLevel: '',
                 presenterId: d.presenterId || '',
+                micLabel: d.micLabel === '1',
                 photo: d.photo || ''
             };
         });
@@ -453,6 +459,7 @@
                 sensitivity: r.sensitivity || '',
                 outputLevel: r.output_level || '',
                 presenterId: r.presenter_id ? String(r.presenter_id) : '',
+                micLabel: !!r.mic_label,
                 photo: r.photo || ''
             });
         });
