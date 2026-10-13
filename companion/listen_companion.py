@@ -81,7 +81,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("listen")
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 SAMPLE_RATE = 48000        # WebRTC/Opus output rate
 BLOCK = 960                # 20 ms @ 48 kHz -> one Opus frame
@@ -209,6 +209,98 @@ def make_probe():
 # Audio hub — one input stream, fanned out to every listener
 # ──────────────────────────────────────────────────────────────────
 
+class Simulator:
+    """A fake show for --simulate N: every input does something different.
+
+    Deterministic (seeded, driven by a sample counter, not the wall clock), so
+    tests can ask what channel N looks like at second T. The pattern repeats
+    every 8 channels; the LAST channel is always the near-clip one:
+
+        (ch-1) % 8   behaviour
+        0            steady tone, -12 dBFS peak
+        1            pink noise, -20 dBFS RMS
+        2            silent
+        3            bursts: tone at -18 dBFS for 6 s in every 24 s,
+                     staggered by 3 s per channel (silent -> alive -> silent)
+        4            quiet tone, -40 dBFS peak
+        5            speech-like: pink noise in 4 Hz "syllables", 3 s on / 1 s off
+        6            late joiner: silent until 15 s + 2 s x ch, then -24 dBFS tone
+        7            silent
+        last ch      near clip: tone at -0.5 dBFS peak
+    """
+
+    PATTERN = ("tone", "pink", "silent", "burst", "quiet", "speech", "late", "silent")
+    PINK_SECONDS = 10
+
+    def __init__(self, channels, rate=SAMPLE_RATE, seed=74):
+        self.channels = channels
+        self.rate = rate
+        self.n = 0                                   # samples produced so far
+        self.pink = self._pink_noise(self.PINK_SECONDS * rate, seed)
+
+    @staticmethod
+    def _pink_noise(n, seed):
+        """Pink noise at 1.0 RMS: white noise shaped 1/sqrt(f) in one FFT,
+        then looped (an IIR filter per sample would cost real CPU in Python)."""
+        rng = np.random.default_rng(seed)
+        spec = np.fft.rfft(rng.standard_normal(n))
+        f = np.arange(len(spec), dtype=np.float64)
+        f[0] = 1.0
+        x = np.fft.irfft(spec / np.sqrt(f), n)
+        return (x / np.sqrt(np.mean(x * x))).astype(np.float32)
+
+    def kind(self, ch):
+        if ch == self.channels:
+            return "clip"
+        return self.PATTERN[(ch - 1) % len(self.PATTERN)]
+
+    def _tone(self, ch, t, peak_db):
+        freq = 220.0 * 2.0 ** (((ch - 1) % 24) / 12.0)   # two octaves of notes
+        return (10.0 ** (peak_db / 20.0)) * np.sin(2.0 * np.pi * freq * t)
+
+    def _pink_at(self, ch, start, frames):
+        # Each channel reads the loop from its own offset, so no two match.
+        idx = (start + ch * 7919 * 48 + np.arange(frames)) % len(self.pink)
+        return self.pink[idx]
+
+    @staticmethod
+    def _window(t, start, length, ramp=0.02):
+        """1 inside [start, start+length), 0 outside, 20 ms ramps (no clicks)."""
+        return np.clip(np.minimum(t - start, start + length - t) / ramp, 0.0, 1.0)
+
+    def block(self, frames):
+        """The next `frames` samples for every channel, (frames, channels) float32."""
+        start = self.n
+        t = (start + np.arange(frames)) / float(self.rate)
+        out = np.zeros((frames, self.channels), dtype=np.float32)
+        for ch in range(1, self.channels + 1):
+            kind = self.kind(ch)
+            if kind == "tone":
+                sig = self._tone(ch, t, -12.0)
+            elif kind == "quiet":
+                sig = self._tone(ch, t, -40.0)
+            elif kind == "clip":
+                sig = self._tone(ch, t, -0.5)
+            elif kind == "pink":
+                sig = 0.1 * self._pink_at(ch, start, frames)
+            elif kind == "burst":
+                phase = np.mod(t - 3.0 * ch, 24.0)
+                sig = self._tone(ch, t, -18.0) * self._window(phase, 0.0, 6.0)
+            elif kind == "speech":
+                syll = np.sin(2.0 * np.pi * 4.0 * t) ** 2
+                phrase = self._window(np.mod(t, 4.0), 0.0, 3.0)
+                sig = 0.125 * self._pink_at(ch, start, frames) * syll * phrase
+            elif kind == "late":
+                sig = self._tone(ch, t, -24.0) * np.clip((t - (15.0 + 2.0 * ch)) / 0.02, 0.0, 1.0)
+            else:
+                continue
+            out[:, ch - 1] = sig
+        self.n += frames
+        return out
+
+
+# ──────────────────────────────────────────────────────────────────
+
 class AudioHub:
     """Owns the input stream and fans blocks out to listeners.
 
@@ -225,11 +317,15 @@ class AudioHub:
     (audio stays live rather than drifting). Blocks are (ndarray, rate) pairs.
     """
 
-    def __init__(self, device_name, channels=None, test_tone=False):
+    def __init__(self, device_name, channels=None, test_tone=False, simulate=0):
         self.device_name = device_name
         self.channels_override = channels
         self.test_tone = test_tone
-        self.channels = channels or 8 if test_tone else 0
+        self.simulate = simulate or 0
+        if self.simulate:
+            self.channels = self.simulate
+        else:
+            self.channels = channels or 8 if test_tone else 0
         self.rate = SAMPLE_RATE
         self.loop = None
         self._subscribers = set()          # set[asyncio.Queue]
@@ -251,6 +347,8 @@ class AudioHub:
     @property
     def source_label(self):
         """Human-readable source for the Listen page, or None while lost."""
+        if self.simulate:
+            return "Simulated show · %d ch · 48 kHz" % self.channels
         if self.test_tone:
             return "Test tone · %d ch · 48 kHz" % self.channels
         if self._stream is None:
@@ -260,6 +358,11 @@ class AudioHub:
 
     def start(self, loop):
         self.loop = loop
+        if self.simulate:
+            self._tasks.append(loop.create_task(self._simulate_loop()))
+            log.info("SIMULATE mode: %d synthetic channels (tones, pink noise, silence, "
+                     "late joiners, one near clip) — no audio device", self.channels)
+            return
         if self.test_tone:
             # No audio device: synthesize a distinct tone per channel so the
             # whole path (WebRTC, channel switch, level meter) can be tested on
@@ -386,7 +489,7 @@ class AudioHub:
 
     async def switch_device(self, name):
         """Capture from a different input device, keeping every listener connected."""
-        if self.test_tone or name == self.device_name:
+        if self.test_tone or self.simulate or name == self.device_name:
             return
         log.info("Switching input device: %r -> %r", self.device_name, name)
         self.device_name = name
@@ -467,6 +570,31 @@ class AudioHub:
         except asyncio.CancelledError:
             pass
 
+    async def _simulate_loop(self):
+        sim = Simulator(self.channels)
+        period = BLOCK / SAMPLE_RATE
+        next_at = time.monotonic()
+        try:
+            while True:
+                block = sim.block(BLOCK)
+                self._meter(block)
+                for q in list(self._subscribers):
+                    self._push(q, (block, SAMPLE_RATE))
+                # Paced against the clock, not sleep-after-work, so the
+                # simulated show doesn't drift slow.
+                next_at += period
+                await asyncio.sleep(max(0.0, next_at - time.monotonic()))
+        except asyncio.CancelledError:
+            pass
+
+    def _meter(self, block):
+        """RMS and decaying peak per channel — same law as the real device."""
+        self.levels = np.clip(np.sqrt(np.mean(np.square(block), axis=0)), 0.0, 1.0)
+        peak = np.max(np.abs(block), axis=0)
+        if self.peaks.shape != peak.shape:
+            self.peaks = np.zeros_like(peak)
+        self.peaks = np.clip(np.maximum(peak, self.peaks * 0.85), 0.0, 1.0)
+
     def stop(self):
         for task in self._tasks:
             task.cancel()
@@ -526,6 +654,25 @@ def _describe_fp(fp):
 # ──────────────────────────────────────────────────────────────────
 
 MAX_CHANNEL = 512
+# Equal-power crossfade on a channel switch: a hard cut between two live mics
+# is a step in the waveform, i.e. a click in the A2's ear.
+XFADE_SECONDS = 0.008
+
+
+def equal_power_crossfade(old, new, n):
+    """Fade `old` out and `new` in over the first `n` samples (cos/sin law).
+
+    cos² + sin² = 1, so two unrelated mics hold their combined loudness
+    through the fade instead of dipping in the middle as a linear fade does.
+    Both inputs are the same block of two channels, so `old` here continues
+    exactly where the last block of the old channel left off — no step.
+    """
+    n = max(0, min(int(n), len(new)))
+    out = np.array(new, dtype=np.float32, copy=True)
+    if n:
+        x = (np.arange(n, dtype=np.float32) + 0.5) * (np.pi / 2.0 / n)
+        out[:n] = old[:n] * np.cos(x) + new[:n] * np.sin(x)
+    return out
 
 
 class ChannelTrack(MediaStreamTrack):
@@ -545,7 +692,9 @@ class ChannelTrack(MediaStreamTrack):
         super().__init__()
         self.hub = hub
         self.channel = 1
+        self._fade_from = None               # channel to crossfade away from
         self.set_channel(channel)
+        self._fade_from = None               # nothing playing yet: no fade
         self._queue = hub.subscribe()
         self._pts = 0
         self._resampler = None
@@ -560,7 +709,11 @@ class ChannelTrack(MediaStreamTrack):
             channel = int(channel)
         except (TypeError, ValueError):
             return
-        if 1 <= channel <= MAX_CHANNEL:
+        if 1 <= channel <= MAX_CHANNEL and channel != self.channel:
+            # Several switches before the next block still fade from what
+            # the A2 last actually heard.
+            if self._fade_from is None:
+                self._fade_from = self.channel
             self.channel = channel
 
     def _to_48k(self, pcm16, rate):
@@ -580,14 +733,21 @@ class ChannelTrack(MediaStreamTrack):
         self._in_pts += pcm16.shape[1]
         return [f.to_ndarray().reshape(1, -1) for f in self._resampler.resample(frame)]
 
+    @staticmethod
+    def _column(block, channel):
+        idx = channel - 1
+        if 0 <= idx < block.shape[1]:
+            return block[:, idx]
+        return np.zeros(block.shape[0], dtype=np.float32)
+
     async def recv(self):
         while not self._pending:
             block, rate = await self._queue.get()      # (frames, channels) float32
-            idx = self.channel - 1
-            if 0 <= idx < block.shape[1]:
-                mono = block[:, idx]
-            else:
-                mono = np.zeros(block.shape[0], dtype=np.float32)
+            mono = self._column(block, self.channel)
+            fade_from, self._fade_from = self._fade_from, None
+            if fade_from is not None and fade_from != self.channel:
+                mono = equal_power_crossfade(self._column(block, fade_from), mono,
+                                             rate * XFADE_SECONDS)
             pcm = np.clip(mono, -1.0, 1.0)
             pcm16 = (pcm * 32767.0).astype(np.int16).reshape(1, -1)  # (1, samples)
             self._pending.extend(self._to_48k(pcm16, rate))
@@ -609,8 +769,24 @@ class ChannelTrack(MediaStreamTrack):
 # Web app
 # ──────────────────────────────────────────────────────────────────
 
+# The phone shows "mic'd state stale" once the last good map is older than this.
+MAP_STALE_SECONDS = 30
+
+
+def meter_bytes(peaks):
+    """Every input's peak as one byte: 0 = -60 dBFS or below, 255 = 0 dBFS.
+
+    The same dB scale as the page's meters, so the page just divides by 255.
+    One binary data-channel message per tick (64 bytes for a 64-ch DVS).
+    """
+    p = np.asarray(peaks, dtype=np.float32)
+    db = 20.0 * np.log10(np.maximum(p, 1e-6))
+    return np.clip(np.round((db + 60.0) * (255.0 / 60.0)), 0, 255).astype(np.uint8).tobytes()
+
+
 class Companion:
-    def __init__(self, token, hub, mapping, show_name, sessions=None, extra_status=None):
+    def __init__(self, token, hub, mapping, show_name, sessions=None, extra_status=None,
+                 mapping_ok=True):
         self.token = token
         self.hub = hub
         self.sessions = sessions or []    # [{id, name, day, channels: [...]}]
@@ -618,6 +794,29 @@ class Companion:
         self.show_name = show_name
         self.extra_status = extra_status  # callable -> dict merged into /api/status
         self.pcs = set()
+        # Bumped whenever the map's content changes; each phone's data channel
+        # re-sends it when its copy is behind. Mic'd state rides in the map.
+        self.map_version = 0
+        self.map_ok_at = time.monotonic() if mapping_ok else None
+
+    def set_mapping(self, show, mapping, sessions):
+        """Store a freshly fetched map; phones get it on their next tick if it changed."""
+        self.map_ok_at = time.monotonic()
+        show = show or self.show_name
+        if (show, mapping, sessions) != (self.show_name, self.mapping, self.sessions):
+            self.show_name, self.mapping, self.sessions = show, mapping, sessions
+            self.map_version += 1
+
+    @property
+    def map_stale(self):
+        """True when ShowStack hasn't answered for a while (or never has)."""
+        return self.map_ok_at is None or \
+            time.monotonic() - self.map_ok_at > MAP_STALE_SECONDS
+
+    def map_payload(self):
+        return {"show": self.show_name, "channels": self.mapping,
+                "sessions": self.sessions, "inputs": self.hub.channels,
+                "stale": self.map_stale}
 
     def _check_token(self, request, body=None):
         supplied = request.query.get("token") or (body or {}).get("token") or ""
@@ -644,7 +843,7 @@ class Companion:
         data = {
             "version": __version__,
             "show": self.show_name,
-            "device": hub.device_name or "Test tone",
+            "device": hub.device_name or ("Simulated show" if hub.simulate else "Test tone"),
             "source": hub.source_label,          # null while the device is lost
             "channels": hub.channels,
             "sample_rate": hub.rate,
@@ -658,8 +857,7 @@ class Companion:
     async def channels(self, request):
         if not self._check_token(request):
             return web.json_response({"error": "bad token"}, status=403)
-        return web.json_response({"show": self.show_name, "channels": self.mapping,
-                                  "sessions": self.sessions})
+        return web.json_response(self.map_payload())
 
     async def listen_page(self, request):
         # Served regardless of token; the WebRTC /offer below enforces the token.
@@ -684,8 +882,12 @@ class Companion:
         @pc.on("datachannel")
         def on_datachannel(dc):
             # Browser opens a "control" channel: it sends {"channel": n} to
-            # switch; we push {"level": x, "channel": n, "src": label|null}
-            # back ~10x/sec (src is null while the input device is gone).
+            # switch. Back ~10x/sec we push, per tick:
+            #   * a binary message: every input's peak, one byte each (meter_bytes)
+            #   * {"level", "peak", "channel", "src", "channels", "stale"} for
+            #     the channel being heard (src is null while the device is gone)
+            # and {"map": {...}} whenever the map (names, mic'd state) changed,
+            # so the phone never has to poll for it while it's connected.
             @dc.on("message")
             def on_message(msg):
                 try:
@@ -695,23 +897,7 @@ class Companion:
                 if "channel" in data:
                     track.set_channel(data["channel"])
 
-            async def meter():
-                try:
-                    while True:
-                        idx = track.channel - 1
-                        levels = self.hub.levels
-                        peaks = self.hub.peaks
-                        level = float(levels[idx]) if 0 <= idx < len(levels) else 0.0
-                        peak = float(peaks[idx]) if 0 <= idx < len(peaks) else 0.0
-                        if dc.readyState == "open":
-                            dc.send(json.dumps({"level": level, "peak": peak,
-                                                "channel": track.channel,
-                                                "src": self.hub.source_label,
-                                                "channels": self.hub.channels}))
-                        await asyncio.sleep(0.1)
-                except Exception:
-                    pass
-            asyncio.ensure_future(meter())
+            asyncio.ensure_future(self.meter_loop(dc, track, pc))
 
         @pc.on("connectionstatechange")
         async def on_state():
@@ -727,6 +913,37 @@ class Companion:
             "sdp": pc.localDescription.sdp,
             "type": pc.localDescription.type,
         })
+
+    async def meter_loop(self, dc, track, pc=None, interval=0.1):
+        """Feed one phone's data channel until the channel or its peer is gone.
+
+        It used to loop on `while True`, so every phone that ever connected
+        left a task behind ticking forever against a dead channel.
+        """
+        sent_version = None
+        try:
+            while dc.readyState != "closed":
+                if pc is not None and pc.connectionState in ("closed", "failed"):
+                    break
+                idx = track.channel - 1
+                levels = self.hub.levels
+                peaks = self.hub.peaks
+                level = float(levels[idx]) if 0 <= idx < len(levels) else 0.0
+                peak = float(peaks[idx]) if 0 <= idx < len(peaks) else 0.0
+                if dc.readyState == "open":
+                    if sent_version != self.map_version:
+                        sent_version = self.map_version
+                        dc.send(json.dumps({"map": self.map_payload()}))
+                    if len(peaks):
+                        dc.send(meter_bytes(peaks))
+                    dc.send(json.dumps({"level": level, "peak": peak,
+                                        "channel": track.channel,
+                                        "src": self.hub.source_label,
+                                        "channels": self.hub.channels,
+                                        "stale": self.map_stale}))
+                await asyncio.sleep(interval)
+        except Exception:
+            pass
 
     async def on_shutdown(self, app):
         for pc in list(self.pcs):
@@ -745,33 +962,92 @@ LISTEN_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>A2 Listen</title>
 <style>
-  :root { color-scheme: dark; }
+  /* Values copied from planner/static/admin/css/mic_tracker.css (this page is
+     served by the companion, not Django, so it can't link the stylesheet).
+     Same names, so a change there is easy to carry over. Sizing follows #93:
+     44px touch floor, 14px text on anything you hit mid-show. */
+  :root {
+    color-scheme: dark;
+    --accent-green:   #4fae6a;   /* mic'd — the one strong colour */
+    --mtt-micd-fg:    #16171a;   /* label on the green fill */
+    --accent-blue:    #c9ccd2;   /* primary / active (neutral) */
+    --accent-amber:   #ffab00;   /* warnings (--mtt-group-amber) */
+    --accent-red:     #ff6b6b;
+    --bg-base:        #16171a;
+    --bg-card:        #1e1f23;
+    --bg-raised:      #26282d;
+    --bg-input:       #2a2c31;
+    --mtt-bg-sunken:  #191a1d;
+    --border:         #33353b;
+    --border-bright:  #42454d;
+    --text-primary:   #e8e8ea;
+    --text-secondary: #b4b8bf;
+    --text-dim:       #9aa0a8;
+    --mtt-text-on-accent: #16171a;
+    /* Meter: neutral body, amber from -12 dB, red from -3 dB — so the only
+       green on the page is still "mic'd". */
+    --meter-grad: linear-gradient(90deg, var(--text-secondary) 0%, var(--text-secondary) 80%,
+                                  var(--accent-amber) 80%, var(--accent-amber) 95%,
+                                  var(--accent-red) 95%);
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:#0d0d1a; color:#eee;
-         display:flex; flex-direction:column; min-height:100vh; }
-  header { padding:16px; border-bottom:1px solid #2a2a45; }
-  h1 { margin:0; font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:#aaa; }
-  main { flex:1; padding:20px; display:flex; flex-direction:column; gap:20px; }
+  body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:var(--bg-base);
+         color:var(--text-primary); display:flex; flex-direction:column; min-height:100vh; }
+  header { padding:16px; border-bottom:1px solid var(--border); }
+  h1 { margin:0; font-size:15px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
+  main { flex:1; padding:16px; display:flex; flex-direction:column; gap:18px; }
   .who { font-size:26px; font-weight:700; }
-  .sub { color:#8a8ab0; font-size:13px; margin-top:2px; }
-  select { width:100%; padding:12px; font-size:16px; border-radius:8px; background:#1a1a2e;
-           color:#eee; border:1px solid #2a2a45; }
-  label { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#8a8ab0; }
-  .meter-wrap { height:26px; background:#16162a; border:1px solid #2a2a45; border-radius:6px; overflow:hidden; }
-  .meter { height:100%; width:0%; background:linear-gradient(90deg,#00e676,#ffab00 75%,#ff5252); transition:width .06s linear; }
+  .sub { color:var(--text-secondary); font-size:14px; margin-top:2px; }
+  select { width:100%; min-height:44px; padding:10px 12px; font-size:16px; border-radius:8px;
+           background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); }
+  label, .label { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); }
+  .meter-wrap { height:26px; background:var(--mtt-bg-sunken); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  /* Full-width gradient revealed by clip-path, so -3 dB is always red
+     wherever the bar ends (a width-scaled gradient squashed the colours). */
+  .meter, .tile-fill { height:100%; width:100%; background:var(--meter-grad);
+                       clip-path:inset(0 100% 0 0); transition:clip-path .06s linear; }
   button { padding:16px; font-size:17px; font-weight:700; border:none; border-radius:10px;
-           background:#4a9eff; color:#fff; cursor:pointer; }
+           background:var(--accent-blue); color:var(--mtt-text-on-accent); cursor:pointer; }
   button:disabled { opacity:.5; }
-  .status { font-size:13px; color:#8a8ab0; text-align:center; min-height:18px; }
+  .status { font-size:14px; color:var(--text-dim); text-align:center; min-height:18px; }
   .big-btn { position:sticky; bottom:0; }
-  .tap { background:#00c853; }
+  .tap { background:var(--accent-amber); }
   [hidden] { display:none !important; }
-  .src { color:#6a6a90; font-size:12px; margin-top:6px; min-height:16px; }
-  .src.lost { color:#ffab00; }
-  .meter-db { float:right; color:#8a8ab0; font-variant-numeric:tabular-nums; }
-  .scale { display:flex; justify-content:space-between; color:#5a5a78; font-size:10px; margin-top:3px; }
+  .src { color:var(--text-dim); font-size:12px; margin-top:6px; min-height:16px; }
+  .src.lost { color:var(--accent-amber); }
+  .meter-db { float:right; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+  .scale { display:flex; justify-content:space-between; color:var(--text-dim); font-size:10px; margin-top:3px; }
   /* Big enough to grab with a thumb in the dark at FOH. */
-  input[type=range] { width:100%; height:38px; accent-color:#4a9eff; }
+  input[type=range] { width:100%; height:38px; accent-color:var(--accent-blue); }
+
+  /* ── Channel grid ───────────────────────────────────────────── */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-top:6px; }
+  .tile { display:flex; flex-direction:column; gap:6px; min-height:72px; padding:10px; text-align:left;
+          font-size:14px; font-weight:400; border-radius:8px; background:var(--bg-card);
+          color:var(--text-primary); border:1px solid var(--border); -webkit-tap-highlight-color:transparent; }
+  .tile.sel { background:var(--bg-raised); border:2px solid var(--accent-blue); padding:9px; }
+  .tile-top { display:flex; align-items:center; gap:6px; min-height:20px; }
+  .tile-name { flex:1; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tile-sub { color:var(--text-dim); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile-meter { height:8px; border-radius:3px; overflow:hidden; background:var(--mtt-bg-sunken); }
+  /* #93's Mic'd ON: green fill, near-black label, never anything else. */
+  .on-pill { flex:none; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:800;
+             letter-spacing:.08em; background:var(--accent-green); color:var(--mtt-micd-fg); }
+  .tag { flex:none; padding:1px 6px; border-radius:4px; font-size:10px; letter-spacing:.06em;
+         text-transform:uppercase; color:var(--accent-amber); border:1px solid var(--accent-amber); }
+  .stale-note { color:var(--accent-amber); font-size:12px; margin-top:6px; }
+  /* No meter frame for over a second: the app (or the Wi-Fi) is gone. The
+     tiles keep their last reading, dimmed, rather than dropping to zero —
+     an empty meter would read as "that mic went quiet". */
+  .offline-banner { margin:6px 0 2px; padding:10px 12px; border-radius:8px; font-size:14px; font-weight:700;
+                    color:var(--accent-amber); background:var(--mtt-bg-sunken); border:1px solid var(--accent-amber); }
+  #chan-area.offline .grid, #chan-area.offline details.others { opacity:.4; }
+  details.others { margin-top:10px; }
+  details.others summary { min-height:44px; display:flex; align-items:center; font-size:14px;
+                           color:var(--text-secondary); cursor:pointer; list-style:none; }
+  details.others summary::-webkit-details-marker { display:none; }
+  details.others summary::before { content:'▸'; width:18px; color:var(--text-dim); }
+  details.others[open] summary::before { content:'▾'; }
 </style></head>
 <body>
 <header><h1>🎧 A2 Listen</h1></header>
@@ -785,10 +1061,16 @@ LISTEN_HTML = r"""<!doctype html>
     <label for="sess">Session</label>
     <select id="sess"></select>
   </div>
-  <div>
-    <label for="chan">Channel</label>
-    <select id="chan"></select>
+  <div id="chan-area">
+    <div class="label">Channels</div>
+    <div class="offline-banner" id="offline-banner" hidden>Listen app offline — meters held</div>
+    <div class="grid" id="grid"></div>
     <div class="src" id="chan-note" hidden>Waiting for the channel list from ShowStack…</div>
+    <div class="stale-note" id="stale-note" hidden>Mic'd state stale — can't reach ShowStack. Listening still works.</div>
+    <details class="others" id="others" hidden>
+      <summary id="others-sum">Other channels</summary>
+      <div class="grid" id="others-grid"></div>
+    </details>
   </div>
   <div>
     <label>Level <span id="meter-db" class="meter-db">--</span></label>
@@ -800,7 +1082,7 @@ LISTEN_HTML = r"""<!doctype html>
     <input type="range" id="gain" min="0" max="36" step="3" value="12">
     <div class="src" id="gain-note"></div>
   </div>
-  <div class="status" id="status">Tap Listen to start.</div>
+  <div class="status" id="status">Tap a channel or Listen to start.</div>
   <button id="tap" class="big-btn tap" hidden>🔊 Tap for sound</button>
   <button id="go" class="big-btn">▶︎ Listen</button>
   <audio id="audio" autoplay playsinline></audio>
@@ -844,10 +1126,6 @@ function staleLink() {
   $('status').style.color = '#ffab00';
   $('go').disabled = true;
 }
-function optionText(c) {
-  return 'Ch ' + c.channel + (c.presenter ? ' — ' + c.presenter
-    : (c.rf_number ? ' — RF ' + String(c.rf_number).padStart(2,'0') : ''));
-}
 function sessionText(s) {
   const day = s.day ? s.day.slice(5).replace('-', '/') + ' · ' : '';
   return day + (s.name || 'Session');
@@ -878,56 +1156,206 @@ function renderSessions() {
   const s = currentSession();
   if (s) { sessionId = s.id; sel.value = s.id; }
 }
-function renderChannels() {
-  const sel = $('chan');
-  const rows = currentRows().slice();
-  if (!rows.some(c => +c.channel === channel)) rows.push({channel: channel});
-  rows.sort((a, b) => a.channel - b.channel);
-  const signature = rows.map(optionText).join('|');
-  if (sel.dataset.signature !== signature) {
-    sel.innerHTML = '';
-    rows.forEach(c => {
-      const o = document.createElement('option');
-      o.value = c.channel;
-      o.textContent = optionText(c);
-      sel.appendChild(o);
-    });
-    sel.dataset.signature = signature;
-  }
-  sel.value = channel;
-  $('chan-note').hidden = currentRows().length > 0;
+// ── Channel grid ────────────────────────────────────────────────
+// Main grid: the selected session's mapped slots. "Other channels": every
+// other input on the device, so a live-but-unmapped pack can still be found.
+// Meters arrive as one byte per input (0 = -60 dB, 255 = 0 dBFS) over the data
+// channel; mic'd state rides in the map, pushed whenever ShowStack changes it.
+let inputs = 0, mapStale = false;
+let tileFills = {};                  // channel -> fill element, both grids
+const fillShown = {};                // channel -> last % drawn (skip no-op writes)
+const lastSignal = {};               // channel -> ms of last signal above -50 dB
+const SIGNAL_BYTE = Math.round(10 * 255 / 60);
+const OTHERS_LIVE_MS = 10000;
+let othersTouchedAt = 0;
+
+function setFill(el, pct) {
+  el.style.clipPath = 'inset(0 ' + (100 - pct).toFixed(1) + '% 0 0)';
 }
+function tileFor(c, notInMap) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'tile'; b.dataset.ch = c.channel;
+  const top = document.createElement('div'); top.className = 'tile-top';
+  const nm = document.createElement('span'); nm.className = 'tile-name';
+  nm.textContent = c.presenter || ('Ch ' + c.channel);
+  top.appendChild(nm);
+  if (notInMap) {
+    const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'not in map';
+    top.appendChild(t);
+  }
+  if (c.is_micd) {
+    const on = document.createElement('span'); on.className = 'on-pill'; on.textContent = 'ON';
+    top.appendChild(on);
+  }
+  b.appendChild(top);
+  if (c.presenter || c.rf_number) {
+    const sub = document.createElement('div'); sub.className = 'tile-sub';
+    const bits = [];
+    if (c.rf_number) bits.push('RF ' + String(c.rf_number).padStart(2,'0'));
+    bits.push('Ch ' + c.channel);
+    sub.textContent = bits.join(' · ');
+    b.appendChild(sub);
+  }
+  const m = document.createElement('div'); m.className = 'tile-meter';
+  const f = document.createElement('div'); f.className = 'tile-fill';
+  m.appendChild(f); b.appendChild(m);
+  return b;
+}
+function indexFills() {
+  tileFills = {};
+  document.querySelectorAll('.tile').forEach(t => {
+    tileFills[t.dataset.ch] = t.querySelector('.tile-fill');
+    delete fillShown[t.dataset.ch];
+  });
+}
+function markSelected() {
+  document.querySelectorAll('.tile').forEach(t => t.classList.toggle('sel', +t.dataset.ch === channel));
+}
+function showStale() {
+  $('stale-note').hidden = !mapStale || currentRows().length === 0;
+}
+function setStale(v) { mapStale = v; showStale(); }
+
+function renderGrid() {
+  const grid = $('grid');
+  const rows = currentRows().slice().sort((a, b) => a.channel - b.channel);
+  const mapped = new Set(rows.map(c => +c.channel));
+  // Listening to something outside the map (picked from Other channels, or a
+  // stale link): it goes first, tagged, so what's on air is always visible.
+  const pinned = mapped.has(channel) ? null : channel;
+  const signature = JSON.stringify([pinned, rows.length > 0,
+    rows.map(c => [c.channel, c.presenter || '', c.rf_number || '', !!c.is_micd])]);
+  let changed = false;
+  if (grid.dataset.signature !== signature) {
+    grid.innerHTML = '';
+    if (pinned) grid.appendChild(tileFor({channel: pinned}, rows.length > 0));
+    rows.forEach(c => grid.appendChild(tileFor(c, false)));
+    grid.dataset.signature = signature;
+    changed = true;
+  }
+  $('chan-note').hidden = rows.length > 0;
+  showStale();
+  if (renderOthers(mapped, pinned) || changed) indexFills();
+  markSelected();
+}
+
+function renderOthers(mapped, pinned) {
+  const box = $('others'), og = $('others-grid');
+  const want = [];
+  for (let ch = 1; ch <= inputs; ch++) if (!mapped.has(ch) && ch !== pinned) want.push(ch);
+  box.hidden = want.length === 0;
+  $('others-sum').textContent = 'Other channels (' + want.length + ')';
+  const signature = want.join(',');
+  if (og.dataset.signature === signature) return false;
+  og.innerHTML = '';
+  want.forEach(ch => og.appendChild(tileFor({channel: ch}, false)));
+  og.dataset.signature = signature;
+  sortOthers(true);
+  return true;
+}
+
+// Recently live inputs first (each group in channel order, so tiles don't
+// shuffle among themselves); never re-sorted right under a thumb.
+function sortOthers(force) {
+  const og = $('others-grid');
+  if (!force && (!$('others').open || Date.now() - othersTouchedAt < 1500)) return;
+  const now = Date.now();
+  const tiles = Array.from(og.children);
+  const live = t => (now - (lastSignal[t.dataset.ch] || 0)) < OTHERS_LIVE_MS;
+  const sorted = tiles.slice().sort((a, b) =>
+    (live(b) - live(a)) || (a.dataset.ch - b.dataset.ch));
+  if (sorted.some((t, i) => t !== tiles[i])) sorted.forEach(t => og.appendChild(t));
+}
+setInterval(sortOthers, 3000);
+$('others').addEventListener('toggle', () => {
+  if ($('others').open) sortOthers(true);
+});
+$('others-grid').addEventListener('pointerdown', () => { othersTouchedAt = Date.now(); });
+
+// Meter frames arrive ~10x/sec; more than a second without one means the app
+// or the network went away. Separate from the mic'd-stale note, which is
+// about ShowStack, not this Mac.
+const OFFLINE_MS = 1000;
+let lastMeterAt = 0;                 // 0 = not expecting frames (never started / stopped)
+function setOffline(v) {
+  $('chan-area').classList.toggle('offline', v);
+  $('offline-banner').hidden = !v;
+}
+setInterval(() => {
+  setOffline(lastMeterAt > 0 && Date.now() - lastMeterAt > OFFLINE_MS);
+}, 250);
+
+function updateMeters(bytes) {
+  const now = Date.now();
+  lastMeterAt = now;
+  if (!$('offline-banner').hidden) setOffline(false);
+  const othersOpen = $('others').open;
+  for (let i = 0; i < bytes.length; i++) {
+    const ch = i + 1, v = bytes[i];
+    if (v >= SIGNAL_BYTE) lastSignal[ch] = now;
+    const fill = tileFills[ch];
+    if (!fill) continue;
+    if (!othersOpen && fill.closest('#others-grid')) continue;
+    const pct = Math.round(v / 255 * 1000) / 10;
+    if (fillShown[ch] === pct) continue;
+    fillShown[ch] = pct;
+    setFill(fill, pct);
+  }
+}
+function clearMeters() {
+  Object.keys(tileFills).forEach(ch => { setFill(tileFills[ch], 0); fillShown[ch] = 0; });
+  setFill($('meter'), 0);
+}
+
 function applyChannelLabel() {
   const m = currentRows().find(c => +c.channel === channel);
   name = m ? (m.presenter || '') : '';
   rf = m && m.rf_number ? m.rf_number : '';
   label();
 }
+function applyMap(d) {
+  mapping = (d.channels || []).filter(c => c && c.channel);
+  sessions = (d.sessions || []).filter(s => s && s.channels && s.channels.length);
+  if (typeof d.inputs === 'number' && d.inputs > 0) inputs = d.inputs;
+  if ('stale' in d) mapStale = !!d.stale;
+  renderSessions();
+  renderGrid();
+  label();          // the session name may only now be known
+}
 // The map can be empty at launch (ShowStack unreachable on a show network) and
-// names change during the day, so keep polling rather than loading it once.
+// names change during the day. While connected the companion pushes it over
+// the data channel the moment it changes; this poll only covers the time
+// before Listen is tapped (or after it's stopped).
 async function loadChannels() {
+  if (dc && dc.readyState === 'open') return;
   try {
     const r = await fetch('/api/channels?token=' + encodeURIComponent(token), {cache: 'no-store'});
     if (r.status === 403) { staleLink(); return; }
     if (!r.ok) return;
-    const d = await r.json();
-    mapping = (d.channels || []).filter(c => c && c.channel);
-    sessions = (d.sessions || []).filter(s => s && s.channels && s.channels.length);
+    applyMap(await r.json());
   } catch (e) {}
-  renderSessions();
-  renderChannels();
-  label();          // the session name may only now be known
 }
+renderGrid();
 loadChannels();
 setInterval(loadChannels, 15000);
 
-$('chan').addEventListener('change', e => {
-  channel = parseInt(e.target.value, 10) || channel;
+function selectChannel(ch) {
+  ch = parseInt(ch, 10);
+  if (!ch) return;
+  const changed = ch !== channel;
+  channel = ch;
   // The name/RF in the URL describe the card that was tapped; once the A2
   // switches channels here, the session's map is what's on air.
   applyChannelLabel();
-  if (dc && dc.readyState === 'open') dc.send(JSON.stringify({channel}));
-});
+  renderGrid();
+  if (dc && dc.readyState === 'open') { if (changed) dc.send(JSON.stringify({channel})); }
+  else if (!pc) startListening();     // a tap is a gesture: iOS lets audio start
+  // (while connecting, dc.onopen sends whatever channel is current)
+}
+['grid', 'others-grid'].forEach(id => $(id).addEventListener('click', e => {
+  const t = e.target.closest('.tile');
+  if (t) selectChannel(t.dataset.ch);
+}));
 
 $('sess').addEventListener('change', e => {
   sessionId = e.target.value;
@@ -937,7 +1365,7 @@ $('sess').addEventListener('change', e => {
   const sameRf = rf && rows.find(c => String(c.rf_number) === String(rf));
   if (sameRf) channel = sameRf.channel;
   else if (!rows.some(c => +c.channel === channel) && rows.length) channel = rows[0].channel;
-  renderChannels();
+  renderGrid();
   applyChannelLabel();
   if (dc && dc.readyState === 'open') dc.send(JSON.stringify({channel}));
 });
@@ -1150,19 +1578,32 @@ async function start() {
     $('status').textContent = pc.connectionState;
     if (['failed','disconnected','closed'].includes(pc.connectionState)) {
       pc = null; dc = null;
-      $('meter').style.width = '0%';
+      // Meters are held, not zeroed: the offline banner says why they froze.
       $('go').disabled = false; $('go').textContent = '▶︎ Reconnect';
     }
   };
   dc = pc.createDataChannel('control');
+  dc.binaryType = 'arraybuffer';
   dc.onmessage = ev => {
+    if (typeof ev.data !== 'string') {
+      // Every input's meter, one byte each.
+      if (ev.data instanceof ArrayBuffer) updateMeters(new Uint8Array(ev.data));
+      else if (ev.data && ev.data.arrayBuffer) ev.data.arrayBuffer().then(b => updateMeters(new Uint8Array(b)));
+      return;
+    }
     try {
       const d = JSON.parse(ev.data);
+      if (d.map) { applyMap(d.map); return; }
+      if ('stale' in d) setStale(!!d.stale);
+      if (typeof d.channels === 'number' && d.channels > 0 && d.channels !== inputs) {
+        inputs = d.channels;
+        renderGrid();
+      }
       // Peak on a dBFS scale. The old bar was linear RMS, which read ~20 dB
       // low against the Shure unit on speech.
       var lin = (typeof d.peak === 'number') ? d.peak : d.level;
       if (typeof lin === 'number') {
-        $('meter').style.width = meterPercent(lin).toFixed(1) + '%';
+        setFill($('meter'), meterPercent(lin));
         $('meter-db').textContent = lin > 0.0005
           ? (20 * Math.log10(lin)).toFixed(0) + ' dB' : '-inf';
         watchPlayback(lin);
@@ -1202,7 +1643,9 @@ function stop() {
   if (old) { try { old.close(); } catch (e) {} }
   teardownAudioGraph();
   $('tap').hidden = true;
-  $('meter').style.width = '0%';
+  lastMeterAt = 0;                     // a deliberate stop is not "offline"
+  setOffline(false);
+  clearMeters();
   $('meter-db').textContent = '--';
   $('status').textContent = 'Stopped.';
   $('go').textContent = '▶︎ Listen'; $('go').disabled = false;
@@ -1213,11 +1656,14 @@ $('go').addEventListener('click', () => {
   // for 'connected' left it dead while connecting, and a second click used to
   // open a second peer.
   if (pc) { stop(); return; }
+  startListening();
+});
+function startListening() {
   start().catch(e => {
     $('status').textContent = 'Could not start (' + (e && e.message ? e.message : e) + ')';
     stop();
   });
-});
+}
 // Screen lock / tab backgrounding tears down WebRTC; prompt to reconnect.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
@@ -1411,7 +1857,11 @@ class PairingError(Exception):
     """ShowStack rejected the pairing token."""
 
 
-def fetch_mapping(api, token, verify_tls=True):
+class MappingUnavailable(Exception):
+    """ShowStack could not be reached (or answered with an error)."""
+
+
+def fetch_mapping(api, token, verify_tls=True, timeout=8, strict=False):
     """Authenticate to the show and pull the channel map.
 
     Returns (show, channels, sessions): `channels` is one entry per audio
@@ -1420,23 +1870,30 @@ def fetch_mapping(api, token, verify_tls=True):
 
     On a bad token this raises PairingError; on a network error it warns and
     returns generic labels so the rack still works if ShowStack is briefly
-    unreachable.
+    unreachable. With `strict`, a network/HTTP error raises MappingUnavailable
+    instead, so a poller can tell "unreachable" from "the map is empty".
     """
-    if requests is None:
-        log.warning("'requests' not installed — skipping ShowStack sync.")
+    def unavailable(msg, *args):
+        if strict:
+            raise MappingUnavailable(msg % args)
+        log.warning(msg + " — serving with generic labels.", *args)
         return "", [], []
+
+    if requests is None:
+        return unavailable("'requests' not installed")
     url = api.rstrip("/") + "/audiopatch/api/listen/session/"
     try:
-        r = requests.get(url, params={"token": token}, timeout=8, verify=verify_tls)
+        r = requests.get(url, params={"token": token}, timeout=timeout, verify=verify_tls)
     except Exception as exc:
-        log.warning("Could not reach ShowStack (%s) — serving with generic labels.", exc)
-        return "", [], []
+        return unavailable("Could not reach ShowStack (%s)", exc)
     if r.status_code in (401, 403):
         raise PairingError("ShowStack rejected the pairing token (HTTP %d)." % r.status_code)
     if r.status_code != 200:
-        log.warning("ShowStack returned HTTP %d — serving with generic labels.", r.status_code)
-        return "", [], []
-    data = r.json()
+        return unavailable("ShowStack returned HTTP %d", r.status_code)
+    try:
+        data = r.json()
+    except ValueError:
+        return unavailable("ShowStack sent a response that isn't JSON")
     return (data.get("show", ""), data.get("channels", []),
             data.get("sessions", []))
 
@@ -1467,7 +1924,7 @@ class CompanionServer:
       is reachable on this port.
     """
 
-    def __init__(self, token, api, device_name, channels=None, test_tone=False,
+    def __init__(self, token, api, device_name, channels=None, test_tone=False, simulate=0,
                  host="0.0.0.0", https_port=8443, ssl_context=None,
                  local_port=8480, local_lan_ok=False, ca_profile=None, verify_tls=True,
                  instance=None, client_id=None):
@@ -1485,7 +1942,8 @@ class CompanionServer:
         self.local_lan_ok = local_lan_ok        # CLI --http: whole app on the plain port
         self.ca_profile = ca_profile            # callable -> (bytes, content_type, filename)
         self.verify_tls = verify_tls
-        self.hub = AudioHub(device_name=device_name, channels=channels, test_tone=test_tone)
+        self.hub = AudioHub(device_name=device_name, channels=channels, test_tone=test_tone,
+                            simulate=simulate)
         self.companion = None
         self.loop = None
         self._runner = None
@@ -1493,16 +1951,25 @@ class CompanionServer:
         self._ready = threading.Event()
         self._error = None
         self._heartbeat_task = None
+        self._mapping_task = None
+        # Map fetches get a thread of their own: a hung DNS lookup on a show
+        # network can't then hold a worker the audio device reopen needs.
+        self._mapping_executor = None
 
     # ── pairing / urls ────────────────────────────────────────────
 
     def pair(self):
         """Validate the token and pull the channel map (raises PairingError)."""
-        show, mapping, sessions = fetch_mapping(self.api, self.token,
-                                                verify_tls=self.verify_tls)
+        ok = True
+        try:
+            show, mapping, sessions = fetch_mapping(self.api, self.token,
+                                                    verify_tls=self.verify_tls, strict=True)
+        except MappingUnavailable as exc:
+            log.warning("%s — serving with generic labels.", exc)
+            show, mapping, sessions, ok = "", [], [], False
         self.companion = Companion(token=self.token, hub=self.hub, mapping=mapping,
                                    show_name=show, sessions=sessions,
-                                   extra_status=self._urls)
+                                   extra_status=self._urls, mapping_ok=ok)
         if show:
             log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))
         return show
@@ -1559,7 +2026,7 @@ class CompanionServer:
             # scanning the next QR after the certificate expects to get.
             "step3": (block(3, "Open Listen on the phone",
                             "Scan to open the Listen page — no ShowStack sign-in needed. Pick the "
-                            "channel from the picker at the top.", listen_url)
+                            "channel from the grid of tiles.", listen_url)
                       + block(4, "Optional — open ShowStack too",
                               "Only if this A2 wants the Mic Tracker cards: scan, sign in, and make "
                               "sure this show is the current project. The phone then remembers this "
@@ -1651,16 +2118,20 @@ class CompanionServer:
         # it thread-safely.
         self.hub.start(asyncio.get_running_loop())
         self._heartbeat_task = asyncio.get_running_loop().create_task(self._heartbeat_loop())
+        self._mapping_task = asyncio.get_running_loop().create_task(self._mapping_loop())
 
     # ── heartbeat to ShowStack ────────────────────────────────────
 
     HEARTBEAT_SECONDS = 5
-    # The channel map is pulled again on this cadence: ShowStack is often
-    # unreachable at launch on a show network (and the names change during the
-    # day), and a map that stayed empty leaves the phone's channel picker with
-    # nothing to pick.
-    MAPPING_SECONDS = 60
-    MAPPING_RETRY_SECONDS = 10
+    # The channel map is pulled again on this cadence: it carries mic'd state,
+    # which the phone's grid shows as an ON pill, so a slow poll is a pill
+    # that's a minute late. Names change during the day too, and ShowStack is
+    # often unreachable at launch on a show network.
+    MAPPING_SECONDS = 5
+    # While ShowStack isn't answering: back off rather than hammer it. The
+    # last good map (mic'd state included) is kept the whole time.
+    MAPPING_BACKOFF_SECONDS = (5, 10, 30)
+    MAPPING_TIMEOUT = 3
 
     def _client_ssl(self):
         if not self.verify_tls:
@@ -1684,51 +2155,71 @@ class CompanionServer:
             return resp.status
 
     async def _refresh_mapping(self):
-        """Pull the channel map again; returns True once we have labels.
+        """Pull the channel map again; raises on failure, keeping the old map.
 
-        `fetch_mapping` is blocking (requests), so it runs in a worker thread.
-        A failure keeps the map we already have — audio never depends on it.
+        `fetch_mapping` is blocking (requests), so it runs on the map's own
+        thread with a hard deadline — requests' timeout doesn't cover DNS. A
+        fetch that overruns is abandoned (its thread finishes on its own) and
+        the next one waits for it rather than piling threads up behind it.
         """
         if self.companion is None:
-            return False
+            return
+        if self._mapping_executor is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._mapping_executor = ThreadPoolExecutor(1, thread_name_prefix="listen-map")
+        fut = getattr(self, "_mapping_future", None)
+        if fut is not None and not fut.done():
+            raise MappingUnavailable("the previous request to ShowStack is still hanging")
         loop = asyncio.get_running_loop()
+        self._mapping_future = loop.run_in_executor(
+            self._mapping_executor,
+            lambda: fetch_mapping(self.api, self.token, verify_tls=self.verify_tls,
+                                  timeout=self.MAPPING_TIMEOUT, strict=True))
         try:
-            show, mapping, sessions = await loop.run_in_executor(
-                None, lambda: fetch_mapping(self.api, self.token, verify_tls=self.verify_tls))
-        except PairingError as exc:
-            log.warning("%s — keeping the channel labels we have.", exc)
-            return bool(self.companion.mapping)
-        except Exception as exc:
-            log.warning("Channel map refresh failed (%s) — keeping the labels we have.", exc)
-            return bool(self.companion.mapping)
-        if not mapping and not show:
-            return bool(self.companion.mapping)
+            show, mapping, sessions = await asyncio.wait_for(
+                asyncio.shield(self._mapping_future), self.MAPPING_TIMEOUT + 1)
+        except asyncio.TimeoutError:
+            raise MappingUnavailable("ShowStack took longer than %ds" % (self.MAPPING_TIMEOUT + 1))
         had = len(self.companion.mapping)
-        self.companion.mapping = mapping
-        self.companion.sessions = sessions
-        self.companion.show_name = show or self.companion.show_name
+        self.companion.set_mapping(show, mapping, sessions)
         if not had and mapping:
             log.info("Paired with show: %s (%d channels mapped)", show, len(mapping))
-        return bool(mapping)
+
+    async def _mapping_loop(self):
+        """Keep the map (names + mic'd state) fresh without ever touching audio."""
+        failures = 0
+        try:
+            while True:
+                if failures:
+                    backoff = self.MAPPING_BACKOFF_SECONDS
+                    delay = backoff[min(failures, len(backoff)) - 1]
+                else:
+                    delay = self.MAPPING_SECONDS
+                await asyncio.sleep(delay)
+                try:
+                    await self._refresh_mapping()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:     # MappingUnavailable, PairingError, bad JSON…
+                    failures += 1
+                    if failures == 1:
+                        log.warning("Channel map refresh failed (%s) — keeping the labels "
+                                    "and mic'd state we have; retrying with backoff.", exc)
+                    continue
+                if failures:
+                    log.info("Channel map refresh working again.")
+                failures = 0
+        except asyncio.CancelledError:
+            pass
 
     async def _heartbeat_loop(self):
         """Tell ShowStack what this app is doing, so the Mic Tracker can show it
         in any browser (the page can't reliably reach the Mac directly)."""
         from aiohttp import ClientSession
         warned = False
-        next_mapping = time.monotonic() + self.MAPPING_RETRY_SECONDS
         async with ClientSession() as session:
             try:
                 while True:
-                    if time.monotonic() >= next_mapping:
-                        try:
-                            have = await self._refresh_mapping()
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception:
-                            have = False
-                        next_mapping = time.monotonic() + (
-                            self.MAPPING_SECONDS if have else self.MAPPING_RETRY_SECONDS)
                     try:
                         status = await self._post_heartbeat(
                             session, dict(self.status() or {}, running=True,
@@ -1766,6 +2257,16 @@ class CompanionServer:
             except BaseException:
                 pass
             self._heartbeat_task = None
+        if self._mapping_task is not None:
+            self._mapping_task.cancel()
+            try:
+                await self._mapping_task
+            except BaseException:
+                pass
+            self._mapping_task = None
+        if self._mapping_executor is not None:
+            self._mapping_executor.shutdown(wait=False)
+            self._mapping_executor = None
         if self.companion is not None:
             for pc in list(self.companion.pcs):
                 await pc.close()
@@ -1850,6 +2351,11 @@ def main():
     ap.add_argument("--test-tone", action="store_true",
                     help="Synthesize a tone per channel instead of opening an "
                          "audio device (local testing — no mic/DVS/Dante needed)")
+    ap.add_argument("--simulate", type=int, default=0, metavar="N",
+                    help="Simulate a show on N channels instead of opening an audio "
+                         "device: tones at different levels, pink noise, speech-like "
+                         "bursts, silent channels that come alive over time, and a "
+                         "near-clip last channel (see Simulator)")
     ap.add_argument("--http", action="store_true",
                     help="Serve plain HTTP instead of HTTPS. WebRTC allows this "
                          "on localhost only — use for same-Mac testing, never a phone")
@@ -1862,7 +2368,12 @@ def main():
     if not args.token:
         ap.error("--token is required (get it from Mic Tracker → 🎧 Listen Setup)")
 
-    if args.test_tone:
+    if args.simulate:
+        if args.simulate < 1 or args.simulate > MAX_CHANNEL:
+            ap.error("--simulate takes a channel count from 1 to %d" % MAX_CHANNEL)
+        device_name = None
+        log.info("SIMULATE mode — no audio device (%d synthetic channels)", args.simulate)
+    elif args.test_tone:
         device_name = None
         log.info("TEST TONE mode — no audio device (%d synthetic channels)",
                  args.channels or 8)
@@ -1893,7 +2404,8 @@ def main():
 
     server = CompanionServer(
         token=args.token, api=args.api, device_name=device_name,
-        channels=args.channels, test_tone=args.test_tone, host=args.host,
+        channels=args.channels, test_tone=args.test_tone, simulate=args.simulate,
+        host=args.host,
         # --http keeps the old single-port behaviour on --port.
         https_port=None if args.http else args.port, ssl_context=ssl_ctx,
         local_port=args.port if args.http else args.local_port,
@@ -1910,7 +2422,10 @@ def main():
     # WebRTC); otherwise advertise the LAN IP for phones on the show Wi-Fi.
     url = ("http://localhost:%d" % args.port) if args.http else \
         ("https://%s:%d" % (lan_ip(), args.port))
-    print_qr(url + "/listen")
+    # The phone QR carries the token: without it the page loads but every
+    # connect is refused as "a Listen link for a different show".
+    from urllib.parse import quote
+    print_qr(url + "/listen?token=" + quote(args.token))
     log.info("Serving on %s  —  paste this into Mic Tracker → 🎧 Listen Setup.", url)
     server.run()
 
