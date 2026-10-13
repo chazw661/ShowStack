@@ -6264,7 +6264,8 @@ class PresenterAdminForm(forms.ModelForm):
     headshot_upload = forms.FileField(
         required=False, label='Headshot',
         help_text='JPEG, PNG or WebP, up to 5 MB. Shown on every card this '
-                  'presenter is on, in every session.',
+                  'presenter is on, in every session, unless that card has a '
+                  'session-only photo. Not used for a mic position.',
         widget=forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,image/webp'}),
     )
     clear_headshot = forms.BooleanField(required=False, label='Remove headshot')
@@ -6287,13 +6288,25 @@ class PresenterAdminForm(forms.ModelForm):
             raise forms.ValidationError(str(e))
         return raw
 
+    def clean(self):
+        cleaned = super().clean()
+        # A mic position's photos are per session; a headshot here would be
+        # stored and never shown. Say so rather than accept it silently.
+        if cleaned.get('is_mic_label') and cleaned.get('headshot_upload'):
+            self.add_error('headshot_upload',
+                           'A mic position has no all-sessions photo. Add photos '
+                           'per session on the Mic Tracker card, or untick '
+                           '"Mic position" if this is a person.')
+        return cleaned
+
 
 class PresenterAdmin(BaseEquipmentAdmin):
     form = PresenterAdminForm
     # Here as well as on the form: BaseEquipmentAdmin.get_exclude() returns a
     # list, and a list from the admin replaces the form's Meta.exclude.
     exclude = ['project', 'photo']
-    list_display = ['name', 'has_headshot', 'created_at']
+    list_display = ['name', 'is_mic_label', 'has_headshot', 'created_at']
+    list_filter = ['is_mic_label']
     search_fields = ['name']
     ordering = ['name']
     readonly_fields = ['headshot_preview']
@@ -6329,6 +6342,14 @@ class PresenterAdmin(BaseEquipmentAdmin):
                         obj.project = Project.objects.get(id=request.current_project)
                 except Project.DoesNotExist:
                     pass
+            # Same starting guess as a name typed on the Mic Tracker
+            # (Presenter.resolve): HH13, Q&A 2... start as mic positions.
+            # Editing the presenter afterwards is how to say otherwise; an
+            # all-sessions headshot uploaded with it already says so.
+            from planner.utils.mic_labels import looks_like_mic_label
+            if (not obj.is_mic_label and looks_like_mic_label(obj.name)
+                    and not form.cleaned_data.get('headshot_upload')):
+                obj.is_mic_label = True
         super().save_model(request, obj, form, change)
 
         from planner.models import PresenterPhoto

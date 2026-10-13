@@ -64,7 +64,7 @@ async function updateField(assignmentId, field, value) {
                 // Issue #10: the photo zone follows the newly-assigned presenter
                 if (typeof syncAssignmentPhoto === 'function') {
                     syncAssignmentPhoto(assignmentId, data.photo_url || '', data.active_slot_id || null,
-                                        data.presenter_id || null);
+                                        data.presenter_id || null, !!data.presenter_is_mic_label);
                 }
             }
             
@@ -858,21 +858,119 @@ async function duplicateSession(sessionId) {
 // presenter is on, in every session. These are the only definitions: the
 // page template used to redefine both, and its copies silently won.
 
-/**
- * Trigger the hidden file input for a specific presenter slot.
- * Called by onclick on the .a2-photo-zone in the template.
+/* ── Photo uploads: who the photo is for ─────────────────────────────────
+ * A photo is either this person's for every session (their headshot) or this
+ * session's only (the slot's). Mic positions -- HH13, Q&A 2, A2 OS -- have a
+ * different speaker each session, so for them "every session" is refused by
+ * the server and disabled here, and session-only is the default. A person
+ * defaults to every session. See planner/utils/presenter_photos.py.
  */
-function triggerPhotoForSlot(slotId, assignmentId) {
-    if (!slotId) return;
-    const input = document.getElementById('photo-input-slot-' + slotId);
-    if (input) input.click();
+var PHOTO_SCOPE_ALL = 'all';
+var PHOTO_SCOPE_SESSION = 'session';
+
+/* Ask which scope, next to the zone. Resolves 'all' | 'session', or null if
+   the menu is dismissed (Escape, a click elsewhere). */
+function choosePhotoScope(zone, slotId, assignmentId) {
+    var old = document.getElementById('photo-scope-menu');
+    if (old) old.remove();
+    var st = (typeof MTTSlots !== 'undefined') ? MTTSlots.get(assignmentId, slotId) : {};
+    var person = !!st.presenterId && !st.micLabel;
+    var name = st.presenter || '';
+
+    return new Promise(function (resolve) {
+        var menu = document.createElement('div');
+        menu.id = 'photo-scope-menu';
+        menu.className = 'photo-scope-menu';
+        menu.setAttribute('role', 'menu');
+
+        var title = document.createElement('div');
+        title.className = 'photo-scope-title';
+        title.textContent = 'Use this photo for';
+        menu.appendChild(title);
+
+        function option(scope, label, hint, enabled) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'photo-scope-option';
+            b.dataset.scope = scope;
+            b.setAttribute('role', 'menuitem');
+            b.disabled = !enabled;
+            var l = document.createElement('span');
+            l.className = 'photo-scope-label';
+            l.textContent = label;
+            var h = document.createElement('span');
+            h.className = 'photo-scope-hint';
+            h.textContent = hint;
+            b.appendChild(l);
+            b.appendChild(h);
+            b.addEventListener('click', function (e) { e.stopPropagation(); done(scope); });
+            menu.appendChild(b);
+            return b;
+        }
+
+        var allHint = !st.presenterId ? 'Assign a presenter first'
+            : st.micLabel ? (name + ' is a mic position: photos stay per session')
+            : 'Every card ' + (name || 'this person') + ' is on, every session';
+        var all = option(PHOTO_SCOPE_ALL, 'This person — all sessions', allHint, person);
+        var session = option(PHOTO_SCOPE_SESSION, 'This session only',
+                             'Just this card', true);
+        var preferred = person ? all : session;
+        preferred.classList.add('is-default');
+
+        function done(scope) {
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('mousedown', onOutside, true);
+            menu.remove();
+            resolve(scope);
+        }
+        function onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); done(null); }
+        }
+        function onOutside(e) {
+            if (!menu.contains(e.target)) done(null);
+        }
+
+        document.body.appendChild(menu);
+        var r = zone.getBoundingClientRect();
+        var left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
+        var top = r.bottom + 6;
+        if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 6);
+        menu.style.left = Math.max(8, left) + 'px';
+        menu.style.top = top + 'px';
+        preferred.focus();
+        document.addEventListener('keydown', onKey, true);
+        document.addEventListener('mousedown', onOutside, true);
+    });
+}
+
+/* Paint what an upload changed: every card of the presenter for an
+   all-sessions photo, just this card for a session-only one. */
+function applyPhotoUpload(assignmentId, data) {
+    if (data.scope === PHOTO_SCOPE_SESSION) {
+        MTTSlots.patch(assignmentId, data.slot_id, { photo: data.photo_url });
+    } else {
+        MTTSlots.setPresenterPhoto(data.presenter_id, data.photo_url);
+    }
 }
 
 /**
- * Upload a photo picked on an A2 card.
- * Posts to /audiopatch/api/mic/slot/upload-photo/ with slot_id; the reply
- * carries the presenter id and the headshot URL, and the renderer repaints
- * every slot that presenter holds.
+ * Ask whose photo it is, then open the hidden file input for that slot.
+ * Called by onclick on the .a2-photo-zone in the template.
+ */
+async function triggerPhotoForSlot(slotId, assignmentId) {
+    if (!slotId) return;
+    const input = document.getElementById('photo-input-slot-' + slotId);
+    const zone = document.getElementById('photo-zone-' + assignmentId);
+    if (!input || !zone) return;
+    const scope = await choosePhotoScope(zone, slotId, assignmentId);
+    if (!scope) return;
+    input.dataset.scope = scope;
+    input.click();
+}
+
+/**
+ * Upload a photo picked on an A2 card, with the scope chosen in the menu.
+ * Posts to /audiopatch/api/mic/slot/upload-photo/.
  */
 async function uploadPhotoForSlot(slotId, assignmentId, input) {
     if (!slotId || !input.files || !input.files[0]) return;
@@ -880,6 +978,7 @@ async function uploadPhotoForSlot(slotId, assignmentId, input) {
     const fd = new FormData();
     fd.append('slot_id', slotId);
     fd.append('photo', input.files[0]);
+    if (input.dataset.scope) fd.append('scope', input.dataset.scope);
     // Let the same file be picked again after a failure.
     input.value = '';
 
@@ -893,8 +992,9 @@ async function uploadPhotoForSlot(slotId, assignmentId, input) {
         try { data = await resp.json(); } catch (e) { /* a 404/500 page */ }
 
         if (data.success && data.photo_url) {
-            MTTSlots.setPresenterPhoto(data.presenter_id, data.photo_url);
-            showNotification('Photo saved', 'success');
+            applyPhotoUpload(assignmentId, data);
+            showNotification(data.scope === PHOTO_SCOPE_SESSION
+                ? 'Photo saved for this session' : 'Photo saved for every session', 'success');
         } else {
             showNotification('Photo upload failed: ' + (data.error || ('HTTP ' + resp.status)), 'error');
         }

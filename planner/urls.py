@@ -182,8 +182,10 @@ urlpatterns = [
     path('api/mic/slot/upload-photo/', views.upload_slot_photo, name='upload_slot_photo'),
     # Headshots are served, never inlined: login + project scoped.
     path('api/mic/presenter/<int:presenter_id>/photo/', views.presenter_photo, name='presenter_photo'),
-    # TRANSITIONAL — the old per-slot photo until migrate_slot_photos_to_presenters runs.
-    path('api/mic/slot/<int:slot_id>/legacy-photo/', views.legacy_slot_photo, name='legacy_slot_photo'),
+    # A session-only photo (one slot). legacy-photo/ is the same view under the
+    # name #106 gave it, for trackers still open from before this deploy.
+    path('api/mic/slot/<int:slot_id>/session-photo/', views.slot_photo, name='slot_photo'),
+    path('api/mic/slot/<int:slot_id>/legacy-photo/', views.slot_photo, name='legacy_slot_photo'),
     # Issue #39: server-side fetch of a dragged image URL (CORS workaround).
     path('api/mic/slot/upload-photo-from-url/', views.upload_slot_photo_from_url, name='upload_slot_photo_from_url'),
 
