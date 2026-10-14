@@ -26,17 +26,34 @@ import sys
 import threading
 import uuid
 import webbrowser
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import rumps
 from AppKit import NSApp, NSPasteboard, NSPasteboardTypeString
-from Foundation import NSAppleEventManager, NSObject
+from Foundation import NSAppleEventManager, NSBundle, NSObject
 
 import certs
 import listen_companion as lc
 
-APP_NAME = certs.APP_NAME
-BUNDLE_ID = "io.showstack.listen"
+def _bundle_info(key):
+    try:
+        value = NSBundle.mainBundle().objectForInfoDictionaryKey_(key)
+        return str(value) if value is not None else ""
+    except Exception:
+        return ""
+
+
+# "ShowStack Listen Beta.app" (io.showstack.listen.beta) shares the installed
+# app's certificates and config — so phones already trust it and it starts on
+# the same show — but has its own name, login item and log. Both use the same
+# ports, so only one of the two can run at a time.
+BETA = _bundle_info("CFBundleIdentifier").endswith(".beta")
+APP_NAME = certs.APP_NAME                       # support folder: shared
+DISPLAY_NAME = APP_NAME + (" Beta" if BETA else "")
+BUNDLE_ID = "io.showstack.listen" + (".beta" if BETA else "")
+BUILD = _bundle_info("ShowStackBuild") if BETA else ""
+ICON = "🎧β" if BETA else "🎧"
+DEFAULT_API = "https://showstack.io"
 HTTPS_PORT = 8443
 LOCAL_PORT = 8480
 
@@ -57,7 +74,7 @@ def _fourcc(code):
 # ──────────────────────────────────────────────────────────────────
 
 CONFIG_PATH = os.path.join(certs.support_dir(), "config.json")
-LOG_DIR = os.path.expanduser("~/Library/Logs/%s" % APP_NAME)
+LOG_DIR = os.path.expanduser("~/Library/Logs/%s" % DISPLAY_NAME)
 LOG_PATH = os.path.join(LOG_DIR, "companion.log")
 LAUNCH_AGENT = os.path.expanduser("~/Library/LaunchAgents/%s.plist" % BUNDLE_ID)
 
@@ -140,7 +157,7 @@ def valid_token(token):
 def alert(message, ok=None, cancel=None):
     # Menu bar apps aren't frontmost; bring the dialog forward.
     NSApp.activateIgnoringOtherApps_(True)
-    return rumps.alert(APP_NAME, message, ok=ok, cancel=cancel)
+    return rumps.alert(DISPLAY_NAME, message, ok=ok, cancel=cancel)
 
 
 def show_row(item, text):
@@ -173,7 +190,7 @@ class URLEventHandler(NSObject):
 
 class ListenApp(rumps.App):
     def __init__(self):
-        super().__init__(APP_NAME, title="🎧", quit_button=None)
+        super().__init__(DISPLAY_NAME, title=ICON, quit_button=None)
         self.config = load_config()
         self.server = None
         self.state = "stopped"          # stopped | starting | live | lost | error
@@ -188,15 +205,20 @@ class ListenApp(rumps.App):
         self.phone_item = rumps.MenuItem("Set up a phone…", callback=self.open_phone_setup)
         self.copy_item = rumps.MenuItem("Copy phone Listen address", callback=self.copy_lan_url)
         self.toggle_item = rumps.MenuItem("Start", callback=self.toggle_server)
+        self.pair_item = rumps.MenuItem("Pair with a show…", callback=self.pair_by_token)
         self.login_item = rumps.MenuItem("Open at Login", callback=self.toggle_login)
         self.menu = [
             self.show_item, self.source_item, self.listeners_item, None,
             self.input_menu, None,
             self.phone_item, self.copy_item, None,
-            self.toggle_item, self.login_item,
+            self.toggle_item, self.pair_item, self.login_item,
             rumps.MenuItem("Show Log", callback=self.show_log), None,
-            rumps.MenuItem("Quit %s" % APP_NAME, callback=self.quit_app),
+            rumps.MenuItem("Quit %s" % DISPLAY_NAME, callback=self.quit_app),
         ]
+        if BETA:
+            self.build_item = rumps.MenuItem("Beta %s · build %s" % (lc.__version__, BUILD or "?"))
+            self.menu.insert_before(self.show_item.title, self.build_item)
+            self.build_item.set_callback(None)
         for item in (self.show_item, self.source_item, self.listeners_item):
             item.set_callback(None)
         self.login_item.state = login_item_enabled()
@@ -237,14 +259,15 @@ class ListenApp(rumps.App):
     def start_server(self):
         if not self.config.get("token"):
             alert("Not paired with a show yet.\n\nIn ShowStack open Mic Tracker → "
-                                  "🎧 Listen Setup and click “Start on this Mac”.")
+                  "🎧 Listen Setup and click “Start on this Mac”, or use "
+                  "%s → Pair with a show…" % ICON)
             return
         if not self.config.get("device"):
             device = self._choose_default_device()
             if device is None:
                 self.state, self.error = "error", "Choose an audio input"
                 self.refresh(None)
-                rumps.notification(APP_NAME, "Choose an audio input",
+                rumps.notification(DISPLAY_NAME, "Choose an audio input",
                                    "Pick the input that carries your beltpacks from the 🎧 menu.")
                 return
             self.config["device"] = device
@@ -333,7 +356,7 @@ class ListenApp(rumps.App):
             if self.server is None:
                 self.start_server()
             else:
-                rumps.notification(APP_NAME, "Already running",
+                rumps.notification(DISPLAY_NAME, "Already running",
                                    "Listening for %s" % (self.config.get("show") or "this show"))
             return
 
@@ -356,6 +379,24 @@ class ListenApp(rumps.App):
         self.start_server()
 
     # ── menu actions ─────────────────────────────────────────────
+
+    def pair_by_token(self, _sender):
+        """Pair by pasting the show token — the same path as a Start link."""
+        NSApp.activateIgnoringOtherApps_(True)
+        response = rumps.Window(
+            "Paste the show token from ShowStack → Mic Tracker → 🎧 Listen Setup → "
+            "Advanced (the --token value).",
+            title="%s — pair with a show" % DISPLAY_NAME,
+            default_text="", ok="Pair", cancel="Cancel", dimensions=(320, 24),
+        ).run()
+        token = (response.text or "").strip()
+        if response.clicked != 1 or not token:
+            return
+        if not valid_token(token):
+            alert("That doesn't look like a show token.")
+            return
+        api = self.config.get("api") or DEFAULT_API
+        self.handle_url("showstack-listen://start?" + urlencode({"token": token, "api": api}))
 
     def toggle_server(self, _sender):
         if self.server is not None or self.state == "starting":
@@ -387,7 +428,7 @@ class ListenApp(rumps.App):
         status = self.server.status() if self.server else None
         if status and status.get("lan_url"):
             copy_to_clipboard(status["lan_url"])
-            rumps.notification(APP_NAME, "Copied", status["lan_url"])
+            rumps.notification(DISPLAY_NAME, "Copied", status["lan_url"])
 
     def toggle_login(self, sender):
         set_login_item(not sender.state)
@@ -436,24 +477,24 @@ class ListenApp(rumps.App):
             self.show_item.title = "Not paired — use “Start on this Mac” in ShowStack"
 
         if self.state == "live":
-            self.title = "🎧"
+            self.title = ICON
             show_row(self.source_item, "Source: %s" % status["source"])
             n = status.get("listeners", 0)
             show_row(self.listeners_item, "Listeners: %d" % n)
         elif self.state == "lost":
-            self.title = "🎧⚠︎"
+            self.title = ICON + "⚠︎"
             show_row(self.source_item, "⚠︎ Waiting for “%s”…" % status.get("device"))
             show_row(self.listeners_item, "Listeners: %d" % status.get("listeners", 0))
         elif self.state == "starting":
-            self.title = "🎧…"
+            self.title = ICON + "…"
             show_row(self.source_item, "Starting…")
             show_row(self.listeners_item, "")
         elif self.state == "error":
-            self.title = "🎧⚠︎"
+            self.title = ICON + "⚠︎"
             show_row(self.source_item, "⚠︎ %s" % self.error)
             show_row(self.listeners_item, "")
         else:
-            self.title = "🎧○"
+            self.title = ICON + "○"
             show_row(self.source_item, "Stopped")
             show_row(self.listeners_item, "")
 
@@ -467,7 +508,7 @@ class ListenApp(rumps.App):
 
 def main():
     setup_logging()
-    log.info("%s %s starting", APP_NAME, lc.__version__)
+    log.info("%s %s starting%s", DISPLAY_NAME, lc.__version__, (" (build %s)" % BUILD) if BUILD else "")
     ListenApp().run()
 
 

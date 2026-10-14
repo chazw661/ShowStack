@@ -1,9 +1,21 @@
 # PyInstaller spec for "ShowStack Listen.app" (Issue #74). Build with ./build_app.sh.
 # -*- mode: python ; coding: utf-8 -*-
+#
+# LISTEN_BETA=1 builds "ShowStack Listen Beta.app" (io.showstack.listen.beta)
+# instead: same code, its own name, and no showstack-listen:// handler, so
+# ShowStack's "Start on this Mac" always opens the installed app.
+
+import os
 
 from PyInstaller.utils.hooks import collect_all
 
 import listen_companion
+
+BETA = os.environ.get("LISTEN_BETA") == "1"
+NAME = "ShowStack Listen Beta" if BETA else "ShowStack Listen"
+BUNDLE_ID = "io.showstack.listen.beta" if BETA else "io.showstack.listen"
+# Shown in the beta's menu, so a hotfix can be told from the build it replaces.
+BUILD = os.environ.get("LISTEN_BUILD", "")
 
 datas, binaries, hiddenimports = [], [], []
 # Packages with native libraries / data PyInstaller can miss on its own.
@@ -33,34 +45,39 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="ShowStack Listen",
+    name=NAME,
     console=False,
     argv_emulation=False,   # URL events are handled by the app's own Apple Event handler
     codesign_identity=None,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="ShowStack Listen")
+coll = COLLECT(exe, a.binaries, a.datas, name=NAME)
+
+info_plist = {
+    "CFBundleName": NAME,
+    "CFBundleDisplayName": NAME,
+    "CFBundleShortVersionString": listen_companion.__version__,
+    "CFBundleVersion": listen_companion.__version__,
+    "LSUIElement": True,                     # menu bar only, no Dock icon
+    "LSMinimumSystemVersion": "12.0",
+    "NSHighResolutionCapable": True,
+    # Without this macOS silently feeds the app silence from every input.
+    "NSMicrophoneUsageDescription":
+        "ShowStack Listen captures your audio interface (e.g. Dante Virtual Soundcard) "
+        "so A2s can monitor beltpacks on their phones.",
+}
+if BETA:
+    info_plist["ShowStackBuild"] = BUILD
+else:
+    info_plist["CFBundleURLTypes"] = [{
+        "CFBundleURLName": "io.showstack.listen",
+        "CFBundleURLSchemes": ["showstack-listen"],
+    }]
 
 app = BUNDLE(
     coll,
-    name="ShowStack Listen.app",
+    name=NAME + ".app",
     icon=None,
-    bundle_identifier="io.showstack.listen",
+    bundle_identifier=BUNDLE_ID,
     version=listen_companion.__version__,
-    info_plist={
-        "CFBundleName": "ShowStack Listen",
-        "CFBundleDisplayName": "ShowStack Listen",
-        "CFBundleShortVersionString": listen_companion.__version__,
-        "CFBundleVersion": listen_companion.__version__,
-        "LSUIElement": True,                     # menu bar only, no Dock icon
-        "LSMinimumSystemVersion": "12.0",
-        "NSHighResolutionCapable": True,
-        # Without this macOS silently feeds the app silence from every input.
-        "NSMicrophoneUsageDescription":
-            "ShowStack Listen captures your audio interface (e.g. Dante Virtual Soundcard) "
-            "so A2s can monitor beltpacks on their phones.",
-        "CFBundleURLTypes": [{
-            "CFBundleURLName": "io.showstack.listen",
-            "CFBundleURLSchemes": ["showstack-listen"],
-        }],
-    },
+    info_plist=info_plist,
 )
