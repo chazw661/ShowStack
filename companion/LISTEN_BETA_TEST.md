@@ -117,11 +117,11 @@ maps. With a 16-slot show it's 17–24.
    hear a fast blend, never a tick or pop.
 4. **ON-pill freshness.** Toggle Mic'd on a slot in the Mic Tracker. The pill
    should follow within about 5 s (measured locally at 0.7–5.1 s).
-5. **Other channels.** Open the section. Live inputs come first, silent ones
-   last. A burst channel (4/12/20) moves to the front within 3 s of starting
-   and drops back about 10–13 s after it stops. A late joiner (7/15/23) moves
-   up once its start time passes, and stays. Tiles don't reorder within 1.5 s
-   of a touch on that section (they re-sort every 3 s otherwise).
+5. **Other channels.** Open the section. Tiles stay in channel order and
+   never move. Each has a dot that lights while the input is above −50 dB and
+   goes dark within about 1 s of it stopping. A burst channel (4/12/20) lights
+   for its 6 s and goes dark; a late joiner (7/15/23) lights once its start
+   time passes and stays lit; silent ones (3/8/11/16/19) stay dark.
 6. **Not in map.** Tap a tile under Other channels. It moves to the top of the
    main grid with a **NOT IN MAP** tag.
 7. **Near clip.** Ch 24's meter runs into amber, then red.

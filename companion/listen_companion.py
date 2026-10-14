@@ -1035,6 +1035,10 @@ LISTEN_HTML = r"""<!doctype html>
              letter-spacing:.08em; background:var(--accent-green); color:var(--mtt-micd-fg); }
   .tag { flex:none; padding:1px 6px; border-radius:4px; font-size:10px; letter-spacing:.06em;
          text-transform:uppercase; color:var(--accent-amber); border:1px solid var(--accent-amber); }
+  /* Other channels: lit while the input is above -50 dB. Neutral, not green —
+     green on a tile only ever means Mic'd. */
+  .sig-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--border-bright); }
+  .sig-dot.lit { background:var(--text-primary); box-shadow:0 0 4px var(--text-secondary); }
   .stale-note { color:var(--accent-amber); font-size:12px; margin-top:6px; }
   /* No meter frame for over a second: the app (or the Wi-Fi) is gone. The
      tiles keep their last reading, dimmed, rather than dropping to zero —
@@ -1166,16 +1170,23 @@ let tileFills = {};                  // channel -> fill element, both grids
 const fillShown = {};                // channel -> last % drawn (skip no-op writes)
 const lastSignal = {};               // channel -> ms of last signal above -50 dB
 const SIGNAL_BYTE = Math.round(10 * 255 / 60);
-const OTHERS_LIVE_MS = 10000;
-let othersTouchedAt = 0;
+// Bridges the gaps between syllables (and the odd late frame) so the dot
+// doesn't flicker; it still goes dark within a second of the input stopping.
+const SIGNAL_HOLD_MS = 1000;
+let sigDots = {};                    // channel -> activity dot (Other channels only)
+const dotLit = {};
 
 function setFill(el, pct) {
   el.style.clipPath = 'inset(0 ' + (100 - pct).toFixed(1) + '% 0 0)';
 }
-function tileFor(c, notInMap) {
+function tileFor(c, notInMap, dot) {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'tile'; b.dataset.ch = c.channel;
   const top = document.createElement('div'); top.className = 'tile-top';
+  if (dot) {
+    const d = document.createElement('span'); d.className = 'sig-dot';
+    top.appendChild(d);
+  }
   const nm = document.createElement('span'); nm.className = 'tile-name';
   nm.textContent = c.presenter || ('Ch ' + c.channel);
   top.appendChild(nm);
@@ -1202,11 +1213,14 @@ function tileFor(c, notInMap) {
   return b;
 }
 function indexFills() {
-  tileFills = {};
+  tileFills = {}; sigDots = {};
   document.querySelectorAll('.tile').forEach(t => {
     tileFills[t.dataset.ch] = t.querySelector('.tile-fill');
     delete fillShown[t.dataset.ch];
+    const d = t.querySelector('.sig-dot');
+    if (d) { sigDots[t.dataset.ch] = d; delete dotLit[t.dataset.ch]; }
   });
+  updateDots();
 }
 function markSelected() {
   document.querySelectorAll('.tile').forEach(t => t.classList.toggle('sel', +t.dataset.ch === channel));
@@ -1248,29 +1262,24 @@ function renderOthers(mapped, pinned) {
   const signature = want.join(',');
   if (og.dataset.signature === signature) return false;
   og.innerHTML = '';
-  want.forEach(ch => og.appendChild(tileFor({channel: ch}, false)));
+  // Fixed channel order, so a tile never moves under a thumb; the dot shows
+  // which ones are live.
+  want.forEach(ch => og.appendChild(tileFor({channel: ch}, false, true)));
   og.dataset.signature = signature;
-  sortOthers(true);
   return true;
 }
 
-// Recently live inputs first (each group in channel order, so tiles don't
-// shuffle among themselves); never re-sorted right under a thumb.
-function sortOthers(force) {
-  const og = $('others-grid');
-  if (!force && (!$('others').open || Date.now() - othersTouchedAt < 1500)) return;
+function updateDots() {
+  if (!$('others').open) return;
   const now = Date.now();
-  const tiles = Array.from(og.children);
-  const live = t => (now - (lastSignal[t.dataset.ch] || 0)) < OTHERS_LIVE_MS;
-  const sorted = tiles.slice().sort((a, b) =>
-    (live(b) - live(a)) || (a.dataset.ch - b.dataset.ch));
-  if (sorted.some((t, i) => t !== tiles[i])) sorted.forEach(t => og.appendChild(t));
+  for (const ch in sigDots) {
+    const lit = now - (lastSignal[ch] || 0) < SIGNAL_HOLD_MS;
+    if (dotLit[ch] === lit) continue;
+    dotLit[ch] = lit;
+    sigDots[ch].classList.toggle('lit', lit);
+  }
 }
-setInterval(sortOthers, 3000);
-$('others').addEventListener('toggle', () => {
-  if ($('others').open) sortOthers(true);
-});
-$('others-grid').addEventListener('pointerdown', () => { othersTouchedAt = Date.now(); });
+$('others').addEventListener('toggle', updateDots);
 
 // Meter frames arrive ~10x/sec; more than a second without one means the app
 // or the network went away. Separate from the mic'd-stale note, which is
@@ -1301,9 +1310,12 @@ function updateMeters(bytes) {
     fillShown[ch] = pct;
     setFill(fill, pct);
   }
+  updateDots();
 }
 function clearMeters() {
   Object.keys(tileFills).forEach(ch => { setFill(tileFills[ch], 0); fillShown[ch] = 0; });
+  for (const ch in lastSignal) delete lastSignal[ch];
+  updateDots();
   setFill($('meter'), 0);
 }
 

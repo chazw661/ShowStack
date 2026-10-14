@@ -88,7 +88,8 @@ phones keep trusting it, only the Listen address changes.
   grid — over a data channel with no reconnect, never touching the console
   signal path. Each tile shows the presenter, a live meter and an **ON** pill
   when that mic is mic'd in ShowStack. Inputs that aren't in the show's map are
-  under **Other channels**, recently live ones first.
+  under **Other channels**, in channel order, each with a dot that lights while
+  the input has signal.
 * **Mic'd state stays current.** The app re-reads the channel map from ShowStack
   every 5 s (3 s timeout, backing off to 10 s then 30 s while ShowStack is
   unreachable) and pushes any change to connected phones straight away. If it
@@ -166,7 +167,7 @@ python listen_companion.py --token <SHOW_LISTEN_TOKEN> --api https://showstack.i
 * **A whole fake show:** `--simulate N` plays N channels that each do something
   different — tones at several levels, pink noise, speech-like bursts, silent
   inputs that come alive over time and a near-clip last channel — for checking
-  the channel grid's meters and "recently live first" sort without a console.
+  the channel grid's meters and Other channels' activity dots without a console.
   The pattern is documented on `Simulator` in `listen_companion.py`.
 * **Tests:** `venv/bin/python -m unittest discover -s tests` (headless — no
   audio device or network needed).
