@@ -122,9 +122,9 @@ maps. With a 16-slot show it's 17–24.
 5. **Activity dots / Other channels.** Every tile, mapped or not, has a dot.
    A dot lights while its input is above −50 dB and goes dark within about
    1 s of it stopping. Open Other channels: tiles stay in channel order and
-   never move. A burst channel (4/12/20) lights
-   for its 6 s and goes dark; a late joiner (7/15/23) lights once its start
-   time passes and stays lit; silent ones (3/8/11/16/19) stay dark.
+   never move. A burst channel (4/12/20) lights for its 6 s and goes dark; a
+   late joiner (7/15/23) lights once its start time passes and stays lit;
+   silent ones (3/8/11/16/19) stay dark.
 6. **Not in map.** Tap a tile under Other channels. It moves to the top of the
    main grid with a **NOT IN MAP** tag.
 7. **Near clip.** Ch 24's meter runs into amber, then red.
@@ -137,11 +137,26 @@ maps. With a 16-slot show it's 17–24.
    can't reach ShowStack. Listening still works.** Audio and meters carry on.
    Plug it back in; the note clears within about 30 s (retries back off
    5 → 10 → 30 s).
-10. **Sleep/wake.** Lock the phone for 30 s and unlock it. Audio recovers as in
-    0.3.2, or you get *Tap for sound*.
+10. **Lock and background.** While listening, lock the phone for 30 s: audio
+    keeps playing. Unlock, switch to Messages (or the home screen) for 30 s and
+    come back: audio kept playing throughout. If it ever stops, it recovers on
+    its own or you get *Tap for sound*.
 11. **Lock screen.** While listening, lock the phone. The lock screen shows the
     channel (e.g. *RF 02 — Mark*, *ShowStack Listen*) and it updates when you
-    switch. (Lock-screen pause isn't fixed yet: it stops only briefly.)
+    switch. Pause there doesn't stick; see Known issues.
+12. **Silent mode.** With the ring/silent switch ON (silent), audio plays
+    (iOS 17+). This was broken in 0.3.2 and is fixed here; check it every
+    round. On older iOS the page shows *No sound? Turn off Silent mode.*
+
+### Known issues
+
+- **Lock-screen pause doesn't stick.** Pausing from the lock screen, Control
+  Center or a headphone button stops audio for a moment, then it starts
+  again. To stop listening, use the page's **⏸ Stop** button. (A fix that
+  made pause stick also stopped audio on every app switch, so it was
+  dropped; it's on the after-show list.)
+- **Swiping Safari closed stops audio.** iOS ends the page; reopen it and
+  tap **▶︎ Listen**. Locking the phone or switching apps is fine.
 
 Stop with Ctrl-C.
 
