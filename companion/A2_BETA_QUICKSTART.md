@@ -59,6 +59,18 @@ uses the same certificate. For a new phone, use **🎧β → Set up a phone…**
 
 Phones: reload the Listen page. You're back on the regular app.
 
+The beta saves nothing the regular app can't read, so these two steps are
+enough. On its first launch it also saved a copy of the regular app's
+settings, in `~/Library/Application Support/ShowStack Listen (before beta)`.
+**Only if the regular app won't start or pair after a rollback**, quit both
+apps and put that copy back (Terminal, one line):
+
+```bash
+cd ~/Library/Application\ Support && mv "ShowStack Listen" "ShowStack Listen (beta used)" && ditto "ShowStack Listen (before beta)" "ShowStack Listen"
+```
+
+Then open ShowStack Listen again, and tell Charlie it was needed.
+
 ## 5. Installing a hotfix
 
 Charlie AirDrops a new `ShowStack-Listen-Beta-mac-arm64.zip`; it lands in

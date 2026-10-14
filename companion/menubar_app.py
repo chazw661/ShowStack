@@ -21,6 +21,7 @@ import logging.handlers
 import os
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -92,6 +93,26 @@ def save_config(config):
     with open(tmp, "w") as fh:
         json.dump(config, fh, indent=2)
     os.replace(tmp, CONFIG_PATH)
+
+
+# The beta's first launch copies the shared settings folder (certificates +
+# config) here before touching it, so the installed app's exact state can be
+# put back. Only ever made once; never overwritten.
+BETA_BACKUP_DIR = os.path.expanduser(
+    "~/Library/Application Support/%s (before beta)" % APP_NAME)
+
+
+def backup_settings_before_beta():
+    if not BETA or os.path.exists(BETA_BACKUP_DIR):
+        return
+    src = certs.support_dir()
+    if not any(os.path.exists(os.path.join(src, f)) for f in ("config.json", "ca.pem")):
+        return                          # nothing installed before the beta
+    try:
+        shutil.copytree(src, BETA_BACKUP_DIR)   # copy2: keeps the keys' 0600 mode
+        log.info("Backed up settings to %s", BETA_BACKUP_DIR)
+    except OSError as exc:
+        log.warning("Could not back up settings (%s)", exc)
 
 
 def setup_logging():
@@ -509,6 +530,7 @@ class ListenApp(rumps.App):
 def main():
     setup_logging()
     log.info("%s %s starting%s", DISPLAY_NAME, lc.__version__, (" (build %s)" % BUILD) if BUILD else "")
+    backup_settings_before_beta()       # before ListenApp reads or writes config
     ListenApp().run()
 
 
