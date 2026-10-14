@@ -1,9 +1,10 @@
 # Listen grid Phase 1 — beta test from source
 
 Branch `listen-grid-phase1`, companion **0.4.0**. This round runs from source on
-the MacBook Air. **Do not run `./build_app.sh`.** It rebuilds
+the MacBook Air. **Do not run plain `./build_app.sh`.** It rebuilds
 `companion/dist/ShowStack Listen.app`, and that 0.3.2 build is the rollback
-copy (there is no copy in /Applications on this Mac).
+copy (there is no copy in /Applications on this Mac). The beta app for
+another A2's Mac is built with `LISTEN_BETA=1` into `dist-beta/` instead (§7).
 
 What's new on the phone: a channel grid (name, meter and Mic'd **ON** pill per
 slot), a collapsed **Other channels (N)** section for inputs that aren't in the
@@ -229,3 +230,43 @@ Then run checklist items 1–8 from §2 with real packs, plus:
 - Any click on switching: which two channels, and at what sample rate.
 - How long the ON pill took after a Mic'd toggle (rough seconds).
 - The source build's log if anything looked wrong (the terminal output).
+
+---
+
+## 7. Beta app for another A2's Mac (hotfix loop)
+
+The A2 runs **ShowStack Listen Beta.app**: same code as this branch, signed
+and notarized, on the default ports. It shares his installed app's
+certificate and settings, so his phones and his saved show carry over. His
+instructions are in `A2_BETA_QUICKSTART.md`.
+
+**Rebuild on the Air** (from `companion/`, on the branch, changes committed
+so the build stamp shows a clean commit):
+
+```bash
+cd ~/DjangoProjects/audiopatch/companion
+git pull
+venv/bin/python -m unittest discover -s tests
+LISTEN_BETA=1 SIGN_IDENTITY="Developer ID Application: charles lawson (D7ZDF3V7MU)" \
+    NOTARY_PROFILE=showstack-notary ./build_app.sh
+```
+
+It writes `dist-beta/ShowStack Listen Beta.app` and
+`dist-beta/ShowStack-Listen-Beta-mac-arm64.zip`. `dist/` (the rollback) isn't
+touched. The end of the output should say *Signed + notarized*.
+
+**Send it:** in Finder, open `companion/dist-beta/`, right-click the **zip** →
+**Share → AirDrop** → his Mac. Send the zip, not the .app: the zip carries the
+stapled notarization ticket intact.
+
+**He installs it:** quit 🎧β, unzip, drag into Applications → **Replace**,
+open. The first line of the 🎧β menu shows the build (commit and time) so you
+can both confirm it's the new one.
+
+**Without notarizing** (no network to Apple, or in a hurry): drop
+`NOTARY_PROFILE=…`. It's still Developer ID–signed, but his Mac will block
+the first open: **System Settings → Privacy & Security → Open Anyway**.
+
+Apple Silicon only (`arm64`, built for this Mac's architecture). An Intel Mac
+can't run it.
+
