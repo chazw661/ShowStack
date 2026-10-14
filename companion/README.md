@@ -147,7 +147,9 @@ macOS, so it asks for microphone permission again.
 **Beta build** — `LISTEN_BETA=1` (with the same signing variables) builds
 **ShowStack Listen Beta.app** into `dist-beta/` and leaves `dist/` alone. It
 shares the installed app's certificate and settings, shows 🎧β, has its own
-login item and log, and doesn't register `showstack-listen://`. See
+login item and log, and doesn't register `showstack-listen://`. Its menu has
+**Test signal (simulated 24 ch)** for a home test with no Dante (not saved:
+a relaunch is always live; the menu bar and phones show TEST while it's on). See
 `LISTEN_BETA_TEST.md` §7 and `A2_BETA_QUICKSTART.md`.
 
 Run the menu bar app without building: `python menubar_app.py`.

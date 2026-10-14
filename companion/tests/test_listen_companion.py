@@ -291,6 +291,14 @@ class MapStateTest(unittest.TestCase):
         comp.set_mapping("Show", [{"channel": 1, "is_micd": False}], [])
         self.assertEqual(comp.map_version, v + 1)
 
+    def test_simulated_flag_reaches_the_page(self):
+        # The phone shows a TEST SIGNAL banner from this; live must say False.
+        self.assertIs(make_companion().map_payload()["simulated"], False)
+        hub = lc.AudioHub(device_name=None, simulate=24)
+        comp = lc.Companion(token="t", hub=hub, mapping=[], show_name="Show", sessions=[])
+        self.assertIs(comp.map_payload()["simulated"], True)
+        self.assertEqual(comp.map_payload()["inputs"], 24)
+
     def test_stale_after_30s_without_a_good_fetch(self):
         comp = make_companion()
         now = time.monotonic()

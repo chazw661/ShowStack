@@ -38,7 +38,30 @@ Otherwise:
 **While the beta runs, don't click "Start on this Mac" in ShowStack.** That
 button opens the regular app.
 
-## 3. Check it works
+## Home test (no Dante needed) — do this once before the show
+
+1. **First open** (§1) and **pair** (§2), using any show's token.
+2. **🎧β → Test signal (simulated 24 ch).** The beta plays a fake show
+   instead of the audio input: tones, noise, speech-like bursts, silent
+   channels that come alive, and a near-clip channel 24. While it's on, the
+   menu bar says **🎧β TEST**, the menu says **⚠︎ TEST SIGNAL — not live
+   audio**, and every phone shows an amber **TEST SIGNAL** banner.
+3. **Phone check:** open Listen on the phone. Tap tiles: you hear tones and
+   noise, the meters move, and switching has no click. Toggle Mic'd on a slot
+   in Mic Tracker: its **ON** pill follows within about 5 s.
+4. **Lock and switch apps:** while listening, lock the phone for 30 s, then
+   unlock and go to Messages or the home screen for 30 s. Audio keeps playing
+   throughout. Also check it plays with the ring/silent switch on.
+5. **🎧β → Back to live input.** The TEST marks disappear. (Quitting or
+   relaunching the beta always comes back on live input too.)
+6. **Practise the rollback once** (§4), then quit ShowStack Listen and open
+   the beta again for the show.
+
+The Mac's built-in microphone also works as a live input for a quick check
+(**🎧β → Audio Input → MacBook … Microphone**, allow microphone access). It's
+one channel, so only channel 1 has sound.
+
+## 3. Check it works (at the show)
 
 - The **🎧β** menu shows the show name, **Source: Dante Virtual Soundcard…**
   and **Listeners**.

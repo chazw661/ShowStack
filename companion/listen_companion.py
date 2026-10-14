@@ -816,7 +816,7 @@ class Companion:
     def map_payload(self):
         return {"show": self.show_name, "channels": self.mapping,
                 "sessions": self.sessions, "inputs": self.hub.channels,
-                "stale": self.map_stale}
+                "stale": self.map_stale, "simulated": bool(self.hub.simulate)}
 
     def _check_token(self, request, body=None):
         supplied = request.query.get("token") or (body or {}).get("token") or ""
@@ -940,7 +940,8 @@ class Companion:
                                         "channel": track.channel,
                                         "src": self.hub.source_label,
                                         "channels": self.hub.channels,
-                                        "stale": self.map_stale}))
+                                        "stale": self.map_stale,
+                                        "simulated": bool(self.hub.simulate)}))
                 await asyncio.sleep(interval)
         except Exception:
             pass
@@ -1045,6 +1046,10 @@ LISTEN_HTML = r"""<!doctype html>
      an empty meter would read as "that mic went quiet". */
   .offline-banner { margin:6px 0 2px; padding:10px 12px; border-radius:8px; font-size:14px; font-weight:700;
                     color:var(--accent-amber); background:var(--mtt-bg-sunken); border:1px solid var(--accent-amber); }
+  /* Test signal (--simulate / the beta's menu): impossible to miss, so it
+     can't be left on at a show. */
+  .sim-banner { margin:0 0 4px; padding:10px 12px; border-radius:8px; font-size:15px; font-weight:800;
+                letter-spacing:.04em; color:var(--mtt-text-on-accent); background:var(--accent-amber); }
   #chan-area.offline .grid, #chan-area.offline details.others { opacity:.4; }
   details.others { margin-top:10px; }
   details.others summary { min-height:44px; display:flex; align-items:center; font-size:14px;
@@ -1056,6 +1061,7 @@ LISTEN_HTML = r"""<!doctype html>
 <body>
 <header><h1>🎧 A2 Listen</h1></header>
 <main>
+  <div class="sim-banner" id="sim-banner" hidden>⚠︎ TEST SIGNAL — simulated, not live audio</div>
   <div>
     <div class="who" id="who">Channel —</div>
     <div class="sub" id="sub"></div>
@@ -1342,6 +1348,7 @@ function applyMap(d) {
   sessions = (d.sessions || []).filter(s => s && s.channels && s.channels.length);
   if (typeof d.inputs === 'number' && d.inputs > 0) inputs = d.inputs;
   if ('stale' in d) mapStale = !!d.stale;
+  if ('simulated' in d) $('sim-banner').hidden = !d.simulated;
   renderSessions();
   renderGrid();
   label();          // the session name may only now be known
@@ -1633,6 +1640,7 @@ async function start() {
       const d = JSON.parse(ev.data);
       if (d.map) { applyMap(d.map); return; }
       if ('stale' in d) setStale(!!d.stale);
+      if ('simulated' in d) $('sim-banner').hidden = !d.simulated;
       if (typeof d.channels === 'number' && d.channels > 0 && d.channels !== inputs) {
         inputs = d.channels;
         renderGrid();

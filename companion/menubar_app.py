@@ -55,6 +55,10 @@ BUNDLE_ID = "io.showstack.listen" + (".beta" if BETA else "")
 BUILD = _bundle_info("ShowStackBuild") if BETA else ""
 ICON = "🎧β" if BETA else "🎧"
 DEFAULT_API = "https://showstack.io"
+# Beta only: "Test signal" swaps the input for --simulate's fake show, for a
+# home test with no Dante. Held in memory, never saved, so a relaunch is
+# always back on the real input.
+SIMULATE_CHANNELS = 24
 HTTPS_PORT = 8443
 LOCAL_PORT = 8480
 
@@ -218,6 +222,7 @@ class ListenApp(rumps.App):
         self.error = ""
         self._lock = threading.Lock()
         self._device_names = None
+        self.simulate = 0
 
         self.show_item = rumps.MenuItem("Not paired with a show")
         self.source_item = rumps.MenuItem("")
@@ -227,6 +232,9 @@ class ListenApp(rumps.App):
         self.copy_item = rumps.MenuItem("Copy phone Listen address", callback=self.copy_lan_url)
         self.toggle_item = rumps.MenuItem("Start", callback=self.toggle_server)
         self.pair_item = rumps.MenuItem("Pair with a show…", callback=self.pair_by_token)
+        self.sim_row = rumps.MenuItem("Test signal warning")   # unique key; hidden until on
+        self.sim_item = rumps.MenuItem("Test signal (simulated %d ch)" % SIMULATE_CHANNELS,
+                                       callback=self.toggle_simulate)
         self.login_item = rumps.MenuItem("Open at Login", callback=self.toggle_login)
         self.menu = [
             self.show_item, self.source_item, self.listeners_item, None,
@@ -240,6 +248,9 @@ class ListenApp(rumps.App):
             self.build_item = rumps.MenuItem("Beta %s · build %s" % (lc.__version__, BUILD or "?"))
             self.menu.insert_before(self.show_item.title, self.build_item)
             self.build_item.set_callback(None)
+            self.menu.insert_after(self.build_item.title, self.sim_row)
+            self.sim_row.set_callback(None)
+            self.menu.insert_after(self.input_menu.title, self.sim_item)
         for item in (self.show_item, self.source_item, self.listeners_item):
             item.set_callback(None)
         self.login_item.state = login_item_enabled()
@@ -283,7 +294,7 @@ class ListenApp(rumps.App):
                   "🎧 Listen Setup and click “Start on this Mac”, or use "
                   "%s → Pair with a show…" % ICON)
             return
-        if not self.config.get("device"):
+        if not self.config.get("device") and not self.simulate:
             device = self._choose_default_device()
             if device is None:
                 self.state, self.error = "error", "Choose an audio input"
@@ -311,6 +322,7 @@ class ListenApp(rumps.App):
                 https_port=HTTPS_PORT, ssl_context=ssl_ctx, local_port=LOCAL_PORT,
                 ca_profile=certs.ca_mobileconfig,
                 instance=self.instance_id(), client_id=cfg.get("client_id", ""),
+                simulate=self.simulate,
             )
             try:
                 server.start()
@@ -429,10 +441,20 @@ class ListenApp(rumps.App):
             save_config(self.config)
             self.start_server()
 
+    def toggle_simulate(self, _sender):
+        self.simulate = 0 if self.simulate else SIMULATE_CHANNELS
+        log.info("Test signal %s", "ON (simulated %d ch)" % self.simulate if self.simulate
+                 else "off — back to live input")
+        self.stop_server()
+        self.start_server()
+
     def choose_device(self, sender):
         name = sender.title
         self.config["device"] = name
         save_config(self.config)
+        if self.simulate:               # picking a real input ends the test signal
+            self.toggle_simulate(None)
+            return
         if self.server is not None:
             self.server.set_device(name)
         elif self.config.get("token"):
@@ -518,6 +540,15 @@ class ListenApp(rumps.App):
             self.title = ICON + "○"
             show_row(self.source_item, "Stopped")
             show_row(self.listeners_item, "")
+
+        if self.simulate:
+            # Never mistakable for the real show: marked in the menu bar itself.
+            self.title = self.title + " TEST"
+            show_row(self.sim_row, "⚠︎ TEST SIGNAL — not live audio")
+        else:
+            show_row(self.sim_row, "")
+        self.sim_item.title = ("Back to live input" if self.simulate
+                               else "Test signal (simulated %d ch)" % SIMULATE_CHANNELS)
 
         running = self.server is not None
         self.toggle_item.title = "Stop" if running or self.state == "starting" else "Start"
