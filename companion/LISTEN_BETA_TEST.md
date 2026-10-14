@@ -111,15 +111,18 @@ maps. With a 16-slot show it's 17–24.
    match the Mic Tracker. ON pills match the Mic'd toggles. The Session picker
    still switches sessions.
 2. **Tap to listen.** Tapping any tile starts audio. Tapping another switches
-   with no reconnect.
+   with no reconnect. **With the ring/silent switch ON (silent)**, audio still
+   plays on iOS 17+. On older iOS the page shows *No sound? Turn off Silent
+   mode.* while listening.
 3. **No click on switch.** Use headphones with Boost at +12 dB. Switch back and
    forth between a tone (ch 1) and pink noise (ch 2) a dozen times. You should
    hear a fast blend, never a tick or pop.
 4. **ON-pill freshness.** Toggle Mic'd on a slot in the Mic Tracker. The pill
    should follow within about 5 s (measured locally at 0.7–5.1 s).
-5. **Other channels.** Open the section. Tiles stay in channel order and
-   never move. Each has a dot that lights while the input is above −50 dB and
-   goes dark within about 1 s of it stopping. A burst channel (4/12/20) lights
+5. **Activity dots / Other channels.** Every tile, mapped or not, has a dot.
+   A dot lights while its input is above −50 dB and goes dark within about
+   1 s of it stopping. Open Other channels: tiles stay in channel order and
+   never move. A burst channel (4/12/20) lights
    for its 6 s and goes dark; a late joiner (7/15/23) lights once its start
    time passes and stays lit; silent ones (3/8/11/16/19) stay dark.
 6. **Not in map.** Tap a tile under Other channels. It moves to the top of the
@@ -136,6 +139,9 @@ maps. With a 16-slot show it's 17–24.
    5 → 10 → 30 s).
 10. **Sleep/wake.** Lock the phone for 30 s and unlock it. Audio recovers as in
     0.3.2, or you get *Tap for sound*.
+11. **Lock screen.** While listening, lock the phone. The lock screen shows the
+    channel (e.g. *RF 02 — Mark*, *ShowStack Listen*) and it updates when you
+    switch. (Lock-screen pause isn't fixed yet: it stops only briefly.)
 
 Stop with Ctrl-C.
 

@@ -1035,11 +1035,11 @@ LISTEN_HTML = r"""<!doctype html>
              letter-spacing:.08em; background:var(--accent-green); color:var(--mtt-micd-fg); }
   .tag { flex:none; padding:1px 6px; border-radius:4px; font-size:10px; letter-spacing:.06em;
          text-transform:uppercase; color:var(--accent-amber); border:1px solid var(--accent-amber); }
-  /* Other channels: lit while the input is above -50 dB. Neutral, not green —
-     green on a tile only ever means Mic'd. */
+  /* Lit while the input is above -50 dB. Neutral, not green — green on a
+     tile only ever means Mic'd. */
   .sig-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--border-bright); }
   .sig-dot.lit { background:var(--text-primary); box-shadow:0 0 4px var(--text-secondary); }
-  .stale-note { color:var(--accent-amber); font-size:12px; margin-top:6px; }
+  .stale-note, .silent-note { color:var(--accent-amber); font-size:12px; margin-top:6px; }
   /* No meter frame for over a second: the app (or the Wi-Fi) is gone. The
      tiles keep their last reading, dimmed, rather than dropping to zero —
      an empty meter would read as "that mic went quiet". */
@@ -1087,6 +1087,7 @@ LISTEN_HTML = r"""<!doctype html>
     <div class="src" id="gain-note"></div>
   </div>
   <div class="status" id="status">Tap a channel or Listen to start.</div>
+  <div class="silent-note" id="silent-note" hidden>No sound? Turn off Silent mode.</div>
   <button id="tap" class="big-btn tap" hidden>🔊 Tap for sound</button>
   <button id="go" class="big-btn">▶︎ Listen</button>
   <audio id="audio" autoplay playsinline></audio>
@@ -1112,6 +1113,20 @@ function label() {
   const s = sessions.length > 1 ? currentSession() : null;
   if (s && s.name) bits.push(s.name);
   $('sub').textContent = bits.join('  ·  ');
+  setNowPlaying(s && s.name);
+}
+
+// Lock screen / Control Center: say what's being listened to.
+function setNowPlaying(sessionName) {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+  const head = rf ? 'RF ' + String(rf).padStart(2,'0') : 'Ch ' + channel;
+  const title = name ? head + ' — ' + name : head;
+  const md = navigator.mediaSession.metadata;
+  if (md && md.title === title && md.album === (sessionName || '')) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata(
+      {title, artist: 'ShowStack Listen', album: sessionName || ''});
+  } catch (e) {}
 }
 label();
 
@@ -1173,20 +1188,18 @@ const SIGNAL_BYTE = Math.round(10 * 255 / 60);
 // Bridges the gaps between syllables (and the odd late frame) so the dot
 // doesn't flicker; it still goes dark within a second of the input stopping.
 const SIGNAL_HOLD_MS = 1000;
-let sigDots = {};                    // channel -> activity dot (Other channels only)
+let sigDots = {};                    // channel -> activity dots (both grids)
 const dotLit = {};
 
 function setFill(el, pct) {
   el.style.clipPath = 'inset(0 ' + (100 - pct).toFixed(1) + '% 0 0)';
 }
-function tileFor(c, notInMap, dot) {
+function tileFor(c, notInMap) {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'tile'; b.dataset.ch = c.channel;
   const top = document.createElement('div'); top.className = 'tile-top';
-  if (dot) {
-    const d = document.createElement('span'); d.className = 'sig-dot';
-    top.appendChild(d);
-  }
+  const d = document.createElement('span'); d.className = 'sig-dot';
+  top.appendChild(d);
   const nm = document.createElement('span'); nm.className = 'tile-name';
   nm.textContent = c.presenter || ('Ch ' + c.channel);
   top.appendChild(nm);
@@ -1218,7 +1231,8 @@ function indexFills() {
     tileFills[t.dataset.ch] = t.querySelector('.tile-fill');
     delete fillShown[t.dataset.ch];
     const d = t.querySelector('.sig-dot');
-    if (d) { sigDots[t.dataset.ch] = d; delete dotLit[t.dataset.ch]; }
+    (sigDots[t.dataset.ch] = sigDots[t.dataset.ch] || []).push(d);
+    delete dotLit[t.dataset.ch];
   });
   updateDots();
 }
@@ -1264,22 +1278,20 @@ function renderOthers(mapped, pinned) {
   og.innerHTML = '';
   // Fixed channel order, so a tile never moves under a thumb; the dot shows
   // which ones are live.
-  want.forEach(ch => og.appendChild(tileFor({channel: ch}, false, true)));
+  want.forEach(ch => og.appendChild(tileFor({channel: ch}, false)));
   og.dataset.signature = signature;
   return true;
 }
 
 function updateDots() {
-  if (!$('others').open) return;
   const now = Date.now();
   for (const ch in sigDots) {
     const lit = now - (lastSignal[ch] || 0) < SIGNAL_HOLD_MS;
     if (dotLit[ch] === lit) continue;
     dotLit[ch] = lit;
-    sigDots[ch].classList.toggle('lit', lit);
+    sigDots[ch].forEach(d => d.classList.toggle('lit', lit));
   }
 }
-$('others').addEventListener('toggle', updateDots);
 
 // Meter frames arrive ~10x/sec; more than a second without one means the app
 // or the network went away. Separate from the mic'd-stale note, which is
@@ -1413,7 +1425,19 @@ function localPeak() {
   return p;
 }
 
+// Web Audio on iOS plays as "ambient" sound, which the ring/silent switch
+// mutes — and A2s keep phones on silent during a show. Declaring the page a
+// playback app (iOS 17+) makes it play regardless, like a music app. Older iOS
+// has no way to ask, so the page says what to do instead.
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const HAS_AUDIO_SESSION = !!navigator.audioSession;
+function setPlaybackSession() {
+  try { if (HAS_AUDIO_SESSION) navigator.audioSession.type = 'playback'; } catch (e) {}
+}
+
 function unlockAudio() {
+  setPlaybackSession();                // before any audio starts
   const audio = $('audio');
   remote = new MediaStream();
   audio.srcObject = remote;
@@ -1562,6 +1586,7 @@ function needTap() {
 }
 $('tap').addEventListener('click', async () => {
   // A real gesture: the one moment iOS will always let audio start again.
+  setPlaybackSession();
   try { if (actx && actx.state !== 'running') await actx.resume(); } catch (e) {}
   if (graphOk && !rebuildAudioGraph()) recreateAudioContext();
   else if (!graphOk) buildAudioGraph();
@@ -1574,6 +1599,7 @@ $('tap').addEventListener('click', async () => {
 
 async function start() {
   unlockAudio();                       // must stay before the first await
+  $('silent-note').hidden = !IS_IOS || HAS_AUDIO_SESSION;
   $('go').disabled = true;
   $('tap').hidden = true;
   $('status').textContent = 'Connecting…';
@@ -1655,6 +1681,7 @@ function stop() {
   if (old) { try { old.close(); } catch (e) {} }
   teardownAudioGraph();
   $('tap').hidden = true;
+  $('silent-note').hidden = true;
   lastMeterAt = 0;                     // a deliberate stop is not "offline"
   setOffline(false);
   clearMeters();
