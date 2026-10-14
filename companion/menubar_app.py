@@ -171,6 +171,34 @@ def api_allowed(api):
     return u.scheme in ("http", "https") and host in LOOPBACK_HOSTS
 
 
+def server_label(api):
+    """How a server reads in the menu and dialogs: "showstack.io", "localhost:8000"."""
+    u = urlparse(api or DEFAULT_API)
+    host = (u.hostname or "").lower()
+    if host in ALLOWED_API_HOSTS:
+        return host
+    return "%s:%s" % (host, u.port) if u.port else host
+
+
+def parse_pairing(text):
+    """(token, api) from what was pasted into "Pair with a show…".
+
+    Takes a bare token, a showstack-listen://start link (its api= is the
+    server), or Listen Setup's whole terminal command (--token and --api).
+    api is "" when the paste doesn't name a server. An https Listen page
+    address points at a rack Mac, not at ShowStack, so only its token counts.
+    """
+    text = (text or "").strip()
+    flags = dict(re.findall(r"--(token|api)[\s=]+['\"]?([^\s'\"\\]+)", text))
+    if flags.get("token"):
+        return flags["token"], flags.get("api", "").rstrip("/")
+    if "://" in text:
+        params = {k: v[0] for k, v in parse_qs(urlparse(text).query).items()}
+        api = params.get("api", "") if text.startswith("showstack-listen:") else ""
+        return params.get("token", ""), api.rstrip("/")
+    return text, ""
+
+
 def valid_token(token):
     try:
         uuid.UUID(token)
@@ -223,6 +251,7 @@ class ListenApp(rumps.App):
         self._lock = threading.Lock()
         self._device_names = None
         self.simulate = 0
+        self.pair_api = DEFAULT_API     # server for pasted tokens; memory only
 
         self.show_item = rumps.MenuItem("Not paired with a show")
         self.source_item = rumps.MenuItem("")
@@ -236,11 +265,12 @@ class ListenApp(rumps.App):
         self.sim_item = rumps.MenuItem("Test signal (simulated %d ch)" % SIMULATE_CHANNELS,
                                        callback=self.toggle_simulate)
         self.login_item = rumps.MenuItem("Open at Login", callback=self.toggle_login)
+        self.server_item = rumps.MenuItem("Advanced: server…", callback=self.choose_server)
         self.menu = [
             self.show_item, self.source_item, self.listeners_item, None,
             self.input_menu, None,
             self.phone_item, self.copy_item, None,
-            self.toggle_item, self.pair_item, self.login_item,
+            self.toggle_item, self.pair_item, self.server_item, self.login_item,
             rumps.MenuItem("Show Log", callback=self.show_log), None,
             rumps.MenuItem("Quit %s" % DISPLAY_NAME, callback=self.quit_app),
         ]
@@ -327,7 +357,8 @@ class ListenApp(rumps.App):
             try:
                 server.start()
             except lc.PairingError as exc:
-                self.state, self.error = "error", "Pairing rejected — start again from ShowStack"
+                self.state, self.error = "error", "Pairing rejected by %s — pair again" \
+                    % server_label(cfg["api"])
                 log.warning("%s", exc)
                 return
             except OSError as exc:
@@ -393,12 +424,18 @@ class ListenApp(rumps.App):
                                    "Listening for %s" % (self.config.get("show") or "this show"))
             return
 
+        host = server_label(api)
         try:
-            show, _mapping, _sessions = lc.fetch_mapping(api, token)
+            # strict: an unreachable server must not look like a good pairing.
+            show, _mapping, _sessions = lc.fetch_mapping(api, token, strict=True)
         except lc.PairingError:
-            alert("ShowStack rejected this show's pairing token.")
+            alert("%s rejected this show token.\n\nChecked with %s. If the token "
+                  "is from a different server, use %s → Advanced: server…"
+                  % (host, api, ICON))
             return
-        host = urlparse(api).hostname
+        except lc.MappingUnavailable as exc:
+            alert("Couldn't check the token with %s.\n\n%s" % (host, exc))
+            return
         running = self.server is not None and self.config.get("show")
         message = "Start A2 Listen for “%s” from %s?\n\nThis Mac will stream its audio input " \
                   "to phones that open this show's Listen link." % (show or "this show", host)
@@ -417,19 +454,47 @@ class ListenApp(rumps.App):
         """Pair by pasting the show token — the same path as a Start link."""
         NSApp.activateIgnoringOtherApps_(True)
         response = rumps.Window(
-            "Paste the show token from ShowStack → Mic Tracker → 🎧 Listen Setup → "
-            "Advanced (the --token value).",
+            "Checking with %s.\n\nPaste the show token from ShowStack → Mic Tracker → "
+            "🎧 Listen Setup → Advanced (the --token value, or the whole command). "
+            "For another server, use %s → Advanced: server…"
+            % (server_label(self.pair_api), ICON),
             title="%s — pair with a show" % DISPLAY_NAME,
             default_text="", ok="Pair", cancel="Cancel", dimensions=(320, 24),
         ).run()
-        token = (response.text or "").strip()
-        if response.clicked != 1 or not token:
+        if response.clicked != 1 or not (response.text or "").strip():
             return
+        token, api = parse_pairing(response.text)
         if not valid_token(token):
             alert("That doesn't look like a show token.")
             return
-        api = self.config.get("api") or DEFAULT_API
+        # A paste that names its server wins; a bare token goes to the
+        # chosen server, which is showstack.io unless changed for this run.
+        api = api or self.pair_api
         self.handle_url("showstack-listen://start?" + urlencode({"token": token, "api": api}))
+
+    def choose_server(self, _sender):
+        """Advanced: pair with a local ShowStack. Held in memory only, so the
+        next launch pairs with showstack.io again."""
+        NSApp.activateIgnoringOtherApps_(True)
+        response = rumps.Window(
+            "Server that “Pair with a show…” checks tokens with. Leave it as "
+            "%s for real shows; use e.g. http://127.0.0.1:8000 only for local "
+            "ShowStack development. Back to %s on the next launch."
+            % (server_label(DEFAULT_API), server_label(DEFAULT_API)),
+            title="%s — server" % DISPLAY_NAME,
+            default_text=self.pair_api, ok="Use", cancel="Cancel", dimensions=(320, 24),
+        ).run()
+        if response.clicked != 1:
+            return
+        api = (response.text or "").strip().rstrip("/") or DEFAULT_API
+        if "://" not in api:
+            api = "https://" + api
+        if not api_allowed(api):
+            alert("Only showstack.io or this Mac (localhost / 127.0.0.1) can be used.")
+            return
+        self.pair_api = api
+        log.info("Pairing server: %s", api)
+        self.refresh(None)
 
     def toggle_server(self, _sender):
         if self.server is not None or self.state == "starting":
@@ -512,10 +577,17 @@ class ListenApp(rumps.App):
         if status and self.state in ("live", "lost"):
             self.state = "live" if status.get("source") else "lost"
 
+        self.server_item.title = "Advanced: server…" if self.pair_api == DEFAULT_API \
+            else "Advanced: server — %s" % server_label(self.pair_api)
+        # Name the server when it isn't showstack.io, so a show paired with a
+        # local test server can't pass for the real one.
+        saved = self.config.get("api") or DEFAULT_API
+        where = "" if server_label(saved) == server_label(DEFAULT_API) \
+            else " (%s)" % server_label(saved)
         if self.config.get("show"):
-            self.show_item.title = "Show: %s" % self.config["show"]
+            self.show_item.title = "Show: %s%s" % (self.config["show"], where)
         elif self.config.get("token"):
-            self.show_item.title = "Show: (paired)"
+            self.show_item.title = "Show: (paired)%s" % where
         else:
             self.show_item.title = "Not paired — use “Start on this Mac” in ShowStack"
 

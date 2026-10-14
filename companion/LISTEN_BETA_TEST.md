@@ -55,7 +55,7 @@ venv/bin/pip install -r requirements.txt
 # Only if venv/ is missing:
 #   python3 -m venv venv && venv/bin/pip install -r requirements.txt
 
-# Headless tests — expect "Ran 26 tests ... OK"
+# Headless tests — expect "Ran 32 tests ... OK"
 venv/bin/python -m unittest discover -s tests
 ```
 

@@ -149,7 +149,14 @@ macOS, so it asks for microphone permission again.
 shares the installed app's certificate and settings, shows 🎧β, has its own
 login item and log, and doesn't register `showstack-listen://`. Its menu has
 **Test signal (simulated 24 ch)** for a home test with no Dante (not saved:
-a relaunch is always live; the menu bar and phones show TEST while it's on). See
+a relaunch is always live; the menu bar and phones show TEST while it's on).
+
+**Pair with a show…** checks a pasted token with showstack.io unless the
+paste names its server (a `showstack-listen://` link, or the whole
+`--token … --api …` command). **Advanced: server…** points bare tokens at a
+local ShowStack for development; it's held in memory, so the next launch is
+back on showstack.io. The menu's Show row names the server whenever it isn't
+showstack.io. See
 `LISTEN_BETA_TEST.md` §7 and `A2_BETA_QUICKSTART.md`.
 
 Run the menu bar app without building: `python menubar_app.py`.

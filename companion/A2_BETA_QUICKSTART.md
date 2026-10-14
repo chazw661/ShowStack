@@ -29,11 +29,16 @@ same show by itself, because they share settings. Check that **🎧β** shows
 Otherwise:
 
 1. In ShowStack open **Mic Tracker → 🎧 Listen Setup → Advanced** and copy the
-   show token. It's the value after `--token`.
-2. Choose **🎧β → Pair with a show…**, paste the token, click **Pair**, then
-   **Start**.
+   show token. It's the value after `--token`; copying the whole command
+   works too.
+2. Choose **🎧β → Pair with a show…**. The dialog says **Checking with
+   showstack.io**. Paste, click **Pair**, then **Start**.
 3. Choose **🎧β → Audio Input → Dante Virtual Soundcard** if it isn't already
    ticked.
+
+If it says the token was rejected, the message names the server that
+rejected it. It should say showstack.io. (**🎧β → Advanced: server…** is only
+for Charlie's local testing; leave it alone.)
 
 **While the beta runs, don't click "Start on this Mac" in ShowStack.** That
 button opens the regular app.
