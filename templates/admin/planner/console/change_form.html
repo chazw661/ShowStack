@@ -66,6 +66,11 @@
 </style>
 {% endblock %}
 
+{% block inline_field_sets %}
+{% if patch_free_ports %}{% include "admin/planner/console/_patch_free_ports.html" with devices=patch_free_ports %}{% endif %}
+{{ block.super }}
+{% endblock %}
+
 {% block content %}
 <!-- Spreadsheet Mode Indicator -->
 {% if spreadsheet_mode %}

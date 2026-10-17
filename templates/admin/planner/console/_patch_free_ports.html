@@ -1,0 +1,20 @@
+{% comment %}
+  Free ports on every I/O device in this console's project: a port is free
+  when it has no name and no link. From PortIndex.free_ports.
+{% endcomment %}
+<details class="ss-patch-free module" open>
+  <summary>I/O devices · free ports</summary>
+  {% if devices %}
+  <div class="ss-patch-free-list">
+    {% for d in devices %}
+    <div class="ss-patch-free-row">
+      <a class="ss-patch-free-name" href="{{ d.url }}">{{ d.name }}</a>
+      {% if d.input_total %}<span class="ss-patch-free-side{% if not d.free_inputs %} is-full{% endif %}">{% if d.free_inputs %}<strong>{{ d.free_inputs }}</strong> free input{{ d.free_inputs|pluralize }}: {{ d.input_ranges }}{% else %}inputs full ({{ d.input_total }}){% endif %}</span>{% endif %}
+      {% if d.output_total %}<span class="ss-patch-free-side{% if not d.free_outputs %} is-full{% endif %}">{% if d.free_outputs %}<strong>{{ d.free_outputs }}</strong> free output{{ d.free_outputs|pluralize }}: {{ d.output_ranges }}{% else %}outputs full ({{ d.output_total }}){% endif %}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="ss-patch-free-empty">No I/O devices in this project yet.</p>
+  {% endif %}
+</details>
