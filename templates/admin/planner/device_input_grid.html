@@ -31,13 +31,16 @@
         data-console = the group this row is filed under (one header per
         console), data-bus = the dimmed "Ch <n>" prefix the row shows, and
         label = the whole line, which is what typing filters against.
-        See forms._suggestion.
+        data-ref = the console channel a pick links
+        the port to; the combobox copies it into the port's hidden link_ref
+        field (named by the input's data-link-field). See forms._suggestion.
       {% endcomment %}
       {% if first_form.input_suggestions %}
         <datalist id="device-input-suggestions">
           {% for s in first_form.input_suggestions %}
             <option value="{{ s.value }}" label="{{ s.label }}"
-                    data-console="{{ s.console }}" data-bus="{{ s.bus }}"></option>
+                    data-console="{{ s.console }}" data-bus="{{ s.bus }}"
+                    data-ref="{{ s.ref }}"></option>
           {% endfor %}
         </datalist>
       {% endif %}
