@@ -7,6 +7,7 @@ from django import forms
 from django.forms import modelformset_factory
 from django.contrib.contenttypes.models import ContentType
 from planner.utils import pa_cable_math
+from planner.utils import device_patch
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
 from .models import  ConsoleStereoOutput
@@ -346,12 +347,16 @@ def _numeric_channel_order(field_name):
 SUGGESTION_DOT = '·'  # middle dot between the parts of a suggestion label
 
 
-def _suggestion(console_name, kind, channel, name):
+def _suggestion(console_name, kind, channel, name, ref=''):
     """One combobox suggestion: what to insert, how to group it, what to show.
 
-    ``value`` is all that is ever written into DeviceInput/DeviceOutput
-    .signal_name — picking a suggestion stores the bare source/output name,
-    exactly as typing it by hand would.
+    ``value`` is what is written into DeviceInput/DeviceOutput.signal_name —
+    the bare source/output name. ``ref`` is the console channel it came from
+    ("in:12", "aux:3", "mtx:4"; '' for stereo, which has no link): picking the
+    suggestion puts it in the port's hidden ``link_ref`` field, so the port is
+    saved linked to that channel as well as named after it. Typing the same
+    name by hand carries no ref and saves a name only. See
+    planner/utils/device_patch.py for the rules.
 
     The other three are display and filtering. ``console`` is the group the
     panel files this row under — one sticky header per console — and ``bus`` is
@@ -371,6 +376,7 @@ def _suggestion(console_name, kind, channel, name):
         'console': console,
         'bus': bus,
         'label': sep.join([p for p in (console, bus, name) if p]),
+        'ref': ref,
     }
 
 
@@ -380,9 +386,10 @@ def _device_input_suggestions(project_id):
     Mirrors the Processor Issue #16 pattern: the inline used to render a
     Console Input dropdown FK. We replaced that with a single free-text
     signal_name combobox + datalist, scoped to the current project so
-    names don't leak across shows. Existing rows keep their console_input
-    FK (the device PDF's 'Console Source' column still reads it); new
-    rows just store signal_name.
+    names don't leak across shows. From #95 until the link fix a pick saved
+    the name only; each suggestion now carries its channel's ``ref`` so a pick
+    sets ``console_input`` too (the device PDF's 'Console Source' column and
+    the console page read it).
 
     Each suggestion carries where the name came from — "FOH PM7 · Ch 3 ·
     Kick" — because a bare source name is ambiguous the moment a show runs
@@ -407,12 +414,13 @@ def _device_input_suggestions(project_id):
           .exclude(source='')
           .annotate(_ch_num=_numeric_channel_order('input_ch'))
           .order_by('console__name', '_ch_num'))
-    rows = qs.values_list('console__name', 'input_ch', 'source')
-    for console_name, input_ch, source in rows:
+    rows = qs.values_list('console__name', 'input_ch', 'source', 'pk')
+    for console_name, input_ch, source, pk in rows:
         name = (source or '').strip()
         if not name:
             continue
-        item = _suggestion(console_name, 'Ch', input_ch, name)
+        item = _suggestion(console_name, 'Ch', input_ch, name,
+                           device_patch.input_ref(pk))
         if item['label'] in seen:
             continue
         seen.add(item['label'])
@@ -467,12 +475,14 @@ def _device_output_suggestions(project_id):
         (stereo_qs, 'St', 'stereo_type'),
     )
     for qs, kind, number_field in groups:
-        rows = qs.values_list('console__name', number_field, 'name')
-        for console_name, number, output_name in rows:
+        rows = qs.values_list('console__name', number_field, 'name', 'pk')
+        for console_name, number, output_name, pk in rows:
             name = (output_name or '').strip()
             if not name:
                 continue
-            item = _suggestion(console_name, kind, number, name)
+            # Stereo gets '' -- the generic link only admits aux and matrix.
+            item = _suggestion(console_name, kind, number, name,
+                               device_patch.output_ref(qs.model, pk))
             if item['label'] in seen:
                 continue
             seen.add(item['label'])
@@ -487,7 +497,17 @@ class DeviceInputInlineForm(forms.ModelForm):
     or pick from a datalist sourced from project ConsoleInput.source values
     (see ``_device_input_suggestions``). The HTML datalist is rendered once
     per inline in ``device_input_grid.html``.
+
+    ``link_ref`` is the hidden half of the combobox: picking a suggestion puts
+    that channel's ref in it, typing clears it, and ``save`` turns the pair into
+    ``console_input`` + ``signal_name`` by the rules in
+    planner/utils/device_patch.py. The ref is resolved inside the current
+    project only, and an unresolvable one (another show's channel, or one
+    deleted while the page was open) saves the name without a link rather than
+    raising an error on a field nobody can see.
     """
+
+    link_ref = forms.CharField(required=False, widget=forms.HiddenInput)
 
     class Meta:
         model = DeviceInput
@@ -503,9 +523,32 @@ class DeviceInputInlineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         project_id = kwargs.pop('project_id', None)
         super().__init__(*args, **kwargs)
+        self.project_id = project_id
         self.fields['input_number'].required = False
         self.fields['signal_name'].required = False
         self.input_suggestions = _device_input_suggestions(project_id)
+
+        # A linked port shows its channel's current name. That also covers
+        # rows from the pre-#95 dropdown, which set the link and left the
+        # name blank -- shown blank, a save would read as "cleared".
+        # (DeviceInputInline select_related()s console_input.)
+        channel = self.instance.console_input if self.instance.console_input_id else None
+        if channel is not None:
+            self.initial['link_ref'] = device_patch.input_ref(channel.pk)
+            if (channel.source or '').strip():
+                self.initial['signal_name'] = channel.source.strip()
+        self.fields['signal_name'].widget.attrs['data-link-field'] = self['link_ref'].auto_id
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        channel = device_patch.resolve_input_ref(
+            self.cleaned_data.get('link_ref'), self.project_id)
+        device_patch.apply_input_link(
+            instance, self.cleaned_data.get('signal_name'), channel,
+            initial_name=self.initial.get('signal_name') or '')
+        if commit:
+            instance.save()
+        return instance
 
 
 class DeviceOutputInlineForm(forms.ModelForm):
@@ -519,10 +562,14 @@ class DeviceOutputInlineForm(forms.ModelForm):
     This replaces the old Console Output FK dropdown, which rendered empty
     (and therefore looked locked/read-only) whenever the project had no named
     console outputs — the engineer had nothing to select and no way to type a
-    name (Issue #65). Mirrors ``DeviceInputInlineForm``. Existing rows keep any
-    content_type/object_id GenericFK they already had; downstream consumers
+    name (Issue #65). Mirrors ``DeviceInputInlineForm``, including the hidden
+    ``link_ref``: picking an Aux or Matrix suggestion sets the
+    content_type/object_id generic link as well as the name. Stereo picks are
+    name only -- the generic link does not admit stereo. Downstream consumers
     (P1/Galaxy processor dropdowns, Signal Flow) read ``signal_name`` directly.
     """
+
+    link_ref = forms.CharField(required=False, widget=forms.HiddenInput)
 
     class Meta:
         model = DeviceOutput
@@ -538,9 +585,32 @@ class DeviceOutputInlineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         project_id = kwargs.pop('project_id', None)
         super().__init__(*args, **kwargs)
+        self.project_id = project_id
         self.fields['output_number'].required = False
         self.fields['signal_name'].required = False
         self.output_suggestions = _device_output_suggestions(project_id)
+
+        # Same as inputs: a linked output shows its bus's current name.
+        # DeviceOutputInline prefetches console_output; a link to a bus that
+        # no longer exists resolves to None and is shown as unlinked.
+        bus = self.instance.console_output if self.instance.object_id else None
+        ref = device_patch.output_ref_for(self.instance) if bus is not None else ''
+        if ref:
+            self.initial['link_ref'] = ref
+            if (bus.name or '').strip():
+                self.initial['signal_name'] = bus.name.strip()
+        self.fields['signal_name'].widget.attrs['data-link-field'] = self['link_ref'].auto_id
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        bus = device_patch.resolve_output_ref(
+            self.cleaned_data.get('link_ref'), self.project_id)
+        device_patch.apply_output_link(
+            instance, self.cleaned_data.get('signal_name'), bus,
+            initial_name=self.initial.get('signal_name') or '')
+        if commit:
+            instance.save()
+        return instance
 
 
 

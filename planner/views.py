@@ -9790,12 +9790,14 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
         else:
             return None     # unknown device_type — fall back to project-wide
     elif isinstance(obj, Device):
-        # Inputs — DeviceInputInlineForm (planner/forms.py:384-440) only
-        # binds (input_number, console_input FK) and never writes signal_name,
-        # so on disk signal_name stays '' and the human label lives on
-        # console_input.source. UAT 2026-05-27 — surface that source as the
-        # dropdown label. Precedence: explicit signal_name (legacy/direct
-        # edit) → console_input.source → positional 'Input N' fallback.
+        # Inputs — DeviceInputInlineForm writes signal_name on every save,
+        # and when the name was picked from a console channel it also sets
+        # the console_input link (planner/utils/device_patch.py); a renamed
+        # channel carries its linked ports' names along (planner/signals.py).
+        # Rows from the pre-#95 dropdown can still hold a link with
+        # signal_name '', so console_input.source stays as the fallback.
+        # Precedence: signal_name → console_input.source → positional
+        # 'Input N'.
         for input_number, signal_name, ci_source in (
             DeviceInput.objects
             .filter(device=obj)
@@ -9809,8 +9811,9 @@ def _signal_flow_instance_port_labels(ct_id, oid, edge, q, current_project):
             )
             results.append({'label': label, 'source': 'Device Input'})
 
-        # Outputs — DeviceOutputInlineForm.save() (planner/forms.py:546)
-        # mirrors console_output.name into signal_name on every save, so
+        # Outputs — DeviceOutputInlineForm writes signal_name on every save
+        # (and the aux/matrix generic link when the name was picked), and a
+        # renamed aux/matrix carries its linked outputs' names along, so
         # signal_name is the authoritative on-disk label here. Positional
         # fallback ('Output N') for rows the engineer hasn't routed yet.
         for output_number, signal_name in (DeviceOutput.objects
@@ -9928,12 +9931,11 @@ def signal_flow_label_autocomplete(request):
         #
         # DeviceInput appears TWICE under the same 'Device Input' tag —
         # once for console_input__source, once for signal_name. The
-        # DeviceInputInlineForm (planner/forms.py:384-440) binds the
-        # engineer's pick to the console_input FK and never writes
-        # signal_name, so the production data path leaves signal_name=''
-        # and the visible label lives on the linked ConsoleInput.source.
-        # The signal_name entry stays for legacy / direct-edit rows. The
-        # (val, tag) dedupe below collapses any overlap.
+        # DeviceInputInlineForm writes signal_name on every save (plus the
+        # console_input link when the name was picked from a channel), so
+        # signal_name is the main source; console_input__source covers rows
+        # from the pre-#95 dropdown, which set the link and left the name
+        # ''. The (val, tag) dedupe below collapses any overlap.
         SOURCES = [
             (DeviceInput,      'console_input__source', 'device__project',
              'Device Input'),

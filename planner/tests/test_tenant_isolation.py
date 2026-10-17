@@ -28,7 +28,7 @@ from planner.admin_site import showstack_admin_site
 from planner.models import (
     Amp, AmpLocation, AmpModel, CommBeltPack, CommChannel, CommConfig,
     CommConfigPartyline, CommDeviceModel, CommPosition, CommCrewName, Console,
-    ConsoleImport, ConsoleInput, Device, DiscoveredDevice, Location,
+    ConsoleImport, ConsoleInput, Device, DeviceInput, DiscoveredDevice, Location,
     MicAssignment, MicSession, MonitorSession, Project, ProjectMember,
     ProjectSNMPConfig, ShowDay, SoundvisionPrediction, SystemProcessor,
     UserProfile,
@@ -992,3 +992,41 @@ class InvitedMemberScopingTests(TenantIsolationBase):
             200, resp.status_code,
             'an invited member of project B opened project A\'s COMM config',
         )
+
+
+# ---------------------------------------------------------------------------
+# I/O device port links — a hidden link_ref names a console channel by id
+# ---------------------------------------------------------------------------
+
+class DevicePatchLinkScopingTests(TenantIsolationBase):
+    """The I/O device combobox posts a channel reference ("in:<pk>") in a
+    hidden field. A reference to another tenant's channel must never become a
+    link, and that tenant's channels must never be offered as suggestions."""
+
+    def setUp(self):
+        super().setUp()
+        self.port_a = DeviceInput.objects.create(
+            device=self.device_a, input_number=1, signal_name='')
+
+    def _post_port(self, name, ref):
+        from planner.tests.test_device_patch_link import page_form_data
+        url = reverse('admin:planner_device_change', args=[self.device_a.pk])
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertNoLeak(page, 'I/O device change page')
+        data = page_form_data(page.content.decode())
+        data['inputs-0-signal_name'] = name
+        data['inputs-0-link_ref'] = ref
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.port_a.refresh_from_db()
+
+    def test_other_tenants_channel_reference_is_not_linked(self):
+        b = self.console_input_b
+        self._post_port(b.source, f'in:{b.pk}')
+        self.assertIsNone(self.port_a.console_input_id)
+
+    def test_own_channel_reference_is_linked(self):
+        a = self.console_input_a
+        self._post_port(a.source, f'in:{a.pk}')
+        self.assertEqual(self.port_a.console_input_id, a.pk)

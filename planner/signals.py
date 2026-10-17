@@ -2,9 +2,11 @@ from django.db import IntegrityError
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from .models import (
     UserProfile,
     ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
+    DeviceInput, DeviceOutput,
     MicSession, MicAssignment,
 )
 
@@ -115,3 +117,45 @@ def consolestereooutput_to_manual(sender, instance, **kwargs):
         display = instance.get_stereo_type_display() if instance.stereo_type else ''
         label = display or '(deleted stereo)'
     _convert_orphans_to_manual('stereo', instance.pk, label)
+
+# ──────────────────────────────────────────────────────────────────
+# I/O device port links (planner/utils/device_patch.py)
+# A port linked to a console channel is named after it. When the channel is
+# renamed the port's name follows, so the link holds and every reader of
+# signal_name (PDFs, Signal Flow, processor dropdowns) shows the current name.
+# A rename to blank is ignored: the port keeps its last name rather than
+# looking free. Unlinked ports that merely share the old name are left alone.
+# ──────────────────────────────────────────────────────────────────
+
+@receiver(post_save, sender=ConsoleInput)
+def linked_device_inputs_follow_rename(sender, instance, created, raw=False, **kwargs):
+    name = (instance.source or '').strip()
+    if created or raw or not name:
+        return
+    (DeviceInput.objects
+     .filter(console_input=instance)
+     .exclude(signal_name=name)
+     .update(signal_name=name))
+
+
+@receiver(post_save, sender=ConsoleAuxOutput)
+@receiver(post_save, sender=ConsoleMatrixOutput)
+def linked_device_outputs_follow_rename(sender, instance, created, raw=False, **kwargs):
+    name = (instance.name or '').strip()
+    if created or raw or not name:
+        return
+    (DeviceOutput.objects
+     .filter(content_type=ContentType.objects.get_for_model(sender), object_id=instance.pk)
+     .exclude(signal_name=name)
+     .update(signal_name=name))
+
+
+@receiver(post_delete, sender=ConsoleAuxOutput)
+@receiver(post_delete, sender=ConsoleMatrixOutput)
+def unlink_device_outputs_on_delete(sender, instance, **kwargs):
+    """The generic link has no on_delete, so a deleted bus would leave an
+    object_id pointing at nothing (and, on SQLite, at whatever row reuses the
+    id). Clear it the way SET_NULL clears console_input; the name stays."""
+    (DeviceOutput.objects
+     .filter(content_type=ContentType.objects.get_for_model(sender), object_id=instance.pk)
+     .update(content_type=None, object_id=None))

@@ -49,13 +49,13 @@ class DeviceInputSuggestionTests(TestCase):
         cls.mons = Console.objects.create(project=cls.project, name='Mons PM5')
 
     def test_label_carries_console_channel_and_source(self):
-        ConsoleInput.objects.create(
+        kick = ConsoleInput.objects.create(
             console=self.foh, input_ch='3', source='Kick',
         )
         self.assertEqual(
             _device_input_suggestions(self.project.id),
             [{'value': 'Kick', 'console': 'FOH PM7', 'bus': 'Ch 3',
-              'label': 'FOH PM7 · Ch 3 · Kick'}],
+              'label': 'FOH PM7 · Ch 3 · Kick', 'ref': f'in:{kick.pk}'}],
         )
 
     def test_same_source_on_two_consoles_is_listed_twice(self):
@@ -99,11 +99,11 @@ class DeviceInputSuggestionTests(TestCase):
         )
 
     def test_missing_channel_drops_that_part_of_the_label(self):
-        ConsoleInput.objects.create(console=self.foh, input_ch='', source='Kick')
+        kick = ConsoleInput.objects.create(console=self.foh, input_ch='', source='Kick')
         self.assertEqual(
             _device_input_suggestions(self.project.id),
             [{'value': 'Kick', 'console': 'FOH PM7', 'bus': '',
-              'label': 'FOH PM7 · Kick'}],
+              'label': 'FOH PM7 · Kick', 'ref': f'in:{kick.pk}'}],
         )
 
     def test_console_is_a_separate_grouping_key(self):
@@ -172,13 +172,13 @@ class DeviceOutputSuggestionTests(TestCase):
         )
 
     def test_value_is_the_bare_output_name(self):
-        ConsoleAuxOutput.objects.create(
+        aux = ConsoleAuxOutput.objects.create(
             console=self.foh, aux_number='6', name='Drum Fill',
         )
         self.assertEqual(
             _device_output_suggestions(self.project.id),
             [{'value': 'Drum Fill', 'console': 'FOH PM7', 'bus': 'Aux 6',
-              'label': 'FOH PM7 · Aux 6 · Drum Fill'}],
+              'label': 'FOH PM7 · Aux 6 · Drum Fill', 'ref': f'aux:{aux.pk}'}],
         )
 
     def test_same_name_on_aux_and_matrix_is_listed_twice(self):
