@@ -16,36 +16,95 @@ body.model-console.change-form {
 
 /* --- the column ------------------------------------------------------ *
  *
- * The Patch column is a VIEW, switched by console_patch_toggle.js (the
- * "Hardware | Patch" buttons in each grid's header, remembered per browser).
- * It never adds width: these grids are already measured to the pixel (see
- * surfaces.css), and on main Source is 0px wide at 768-1024 and 99px at
- * 1180 already. So in Patch view the column takes the slot of a 150px select
- * the engineer does not need mid-show, and Source / Name keep exactly the
- * width they had:
+ * Each grid is a size container, so all of this follows the grid's own
+ * width -- the window minus the sidebar, open or collapsed -- not the
+ * viewport's.
+ *
+ * Wide grid: Patch is simply another column, after Source / Name, with
+ * the hardware columns still there, and no switch. The grid's ceiling in
+ * surfaces.css grows by the column (--ss-patch-extra) so Source / Name
+ * keep their cap. A grid is "wide" from the width at which Source / Name
+ * still gets 180px with both columns showing (measured, Chromium and
+ * WebKit; container width, sidebar open = viewport - 381px):
+ *
+ *   inputs  1030px  (viewport 1411)     aux     976px  (viewport 1357)
+ *   matrix   826px  (viewport 1207)     stereo  754px  (viewport 1135)
+ *
+ * Each threshold is the grid's pinned columns + 150 (Patch) + 180 + 2px
+ * of fieldset border, so if a pinned column changes width, so does this.
+ *
+ * Narrower: the column is a VIEW, switched by console_patch_toggle.js
+ * (the "Hardware | Patch" buttons, remembered per browser). In Patch view
+ * it takes the slot of a 150px select the engineer does not need
+ * mid-show, so Source / Name keep exactly the width they had:
  *
  *   inputs   Source Hardware (and its B)     aux      Bus Type
  *   matrix   Mono/Stereo                     stereo   nothing -- it has room
  */
-body:not(.ss-patch-on) .inline-group th.column-patch,
-body:not(.ss-patch-on) .inline-group td.field-patch,
-body.ss-patch-on #consoleinput_set-group th.column-source_hardware,
-body.ss-patch-on #consoleinput_set-group td.field-source_hardware,
-body.ss-patch-on #consoleinput_set-group th.column-source_hardware_b,
-body.ss-patch-on #consoleinput_set-group td.field-source_hardware_b,
-body.ss-patch-on #consoleauxoutput_set-group th.column-bus_type,
-body.ss-patch-on #consoleauxoutput_set-group td.field-bus_type,
-body.ss-patch-on #consolematrixoutput_set-group th.column-mono_stereo,
-body.ss-patch-on #consolematrixoutput_set-group td.field-mono_stereo {
-    display: none !important;
+body.model-console.change-form #consoleinput_set-group,
+body.model-console.change-form #consoleauxoutput_set-group,
+body.model-console.change-form #consolematrixoutput_set-group,
+body.model-console.change-form #consolestereooutput_set-group {
+    container: ss-grid / inline-size;
 }
 
-/* Below 1100px Source is already 0px wide on main (the pinned columns
- * outrun a 1024 iPad's container), so the channel names are invisible
- * there. Patch view is for reading the patch, so at that size it also
- * drops the assignment columns and hands Source / Name the room:
- * Group, DCA and Mute on inputs (168px), Mono/Stereo on aux (150px). */
-@media (max-width: 1100px) {
+@container ss-grid (width >= 1030px) {
+    #consoleinput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consoleinput_set-group .ss-patch-toggle { display: none !important; }
+}
+@container ss-grid (width >= 976px) {
+    #consoleauxoutput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consoleauxoutput_set-group .ss-patch-toggle { display: none !important; }
+}
+@container ss-grid (width >= 826px) {
+    #consolematrixoutput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consolematrixoutput_set-group .ss-patch-toggle { display: none !important; }
+}
+@container ss-grid (width >= 754px) {
+    #consolestereooutput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consolestereooutput_set-group .ss-patch-toggle { display: none !important; }
+}
+
+@container ss-grid (width < 1030px) {
+    body:not(.ss-patch-on) #consoleinput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consoleinput_set-group td.field-patch,
+    body.ss-patch-on #consoleinput_set-group th.column-source_hardware,
+    body.ss-patch-on #consoleinput_set-group td.field-source_hardware,
+    body.ss-patch-on #consoleinput_set-group th.column-source_hardware_b,
+    body.ss-patch-on #consoleinput_set-group td.field-source_hardware_b {
+        display: none !important;
+    }
+}
+@container ss-grid (width < 976px) {
+    body:not(.ss-patch-on) #consoleauxoutput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consoleauxoutput_set-group td.field-patch,
+    body.ss-patch-on #consoleauxoutput_set-group th.column-bus_type,
+    body.ss-patch-on #consoleauxoutput_set-group td.field-bus_type {
+        display: none !important;
+    }
+}
+@container ss-grid (width < 826px) {
+    body:not(.ss-patch-on) #consolematrixoutput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consolematrixoutput_set-group td.field-patch,
+    body.ss-patch-on #consolematrixoutput_set-group th.column-mono_stereo,
+    body.ss-patch-on #consolematrixoutput_set-group td.field-mono_stereo {
+        display: none !important;
+    }
+}
+@container ss-grid (width < 754px) {
+    body:not(.ss-patch-on) #consolestereooutput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consolestereooutput_set-group td.field-patch {
+        display: none !important;
+    }
+}
+
+/* At 719px and under (a 1100px window, sidebar open) Source is already 0px
+ * wide on main (the pinned columns outrun a 1024 iPad's container), so the
+ * channel names are invisible there. Patch view is for reading the patch,
+ * so at that size it also drops the assignment columns and hands Source /
+ * Name the room: Group, DCA and Mute on inputs (168px), Mono/Stereo on aux
+ * (150px). */
+@container ss-grid (width <= 719px) {
     body.ss-patch-on #consoleinput_set-group th.column-group,
     body.ss-patch-on #consoleinput_set-group td.field-group,
     body.ss-patch-on #consoleinput_set-group th.column-dca,
