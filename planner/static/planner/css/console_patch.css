@@ -228,6 +228,11 @@ body.model-console.change-form #consolestereooutput_set-group {
     line-height: 1.2;
     color: var(--text-muted, #8b8f98) !important;
     letter-spacing: 0.02em;
+    /* "ambiguous (FOH Rivage PM7, MON CL5, MON PM5)" outruns 150px; the
+     * full list is in the row's title. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .ss-patch-ambiguous .ss-patch-caption {
     font-style: italic;
@@ -242,7 +247,8 @@ body.model-console.change-form #consolestereooutput_set-group {
     font-style: italic;
 }
 
-/* Conflict: more than one port on one input. Amber, both of them. */
+/* Conflict: more than one port LINKED to one input. Amber, all of them.
+ * Names never make a conflict; an ambiguous name is dimmed (above). */
 .ss-patch-conflict {
     background: var(--ss-patch-amber-bg);
     border-left: 2px solid var(--ss-patch-amber);

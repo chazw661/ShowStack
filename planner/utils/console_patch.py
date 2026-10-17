@@ -8,27 +8,35 @@ in planner/utils/device_patch.py.
 Where a feed comes from, best first:
 
   LINKED     the port's stored link points at this channel (set by picking it
-             on the I/O device page, or by link_device_inputs_by_name).
-  BY_NAME    no link to this console, but the port's name is this channel's
-             name -- a port patched before the link fix, or one side of a
-             FOH/MON split whose link points at the other console.
-  AMBIGUOUS  the port's name fits more than one channel on this console (a
-             duplicate "Spare"), so it is shown on each, marked, and counted
-             on none.
+             on the I/O device page, or by link_device_inputs_by_name). A
+             linked port counts for that channel ONLY: it never shows on
+             another console, whatever its name. Same names on two consoles
+             do not mean a split -- a monitor desk often has its own I/O.
+  BY_NAME    the port has no link, and its name is a channel's name on this
+             console and on no other console in the project, and on exactly
+             one channel here -- typically a port patched before the link fix.
+  AMBIGUOUS  the port has no link and its name fits more than one channel:
+             several on this console (a duplicate "Spare"), or channels on
+             other consoles too (FOH and MON with one channel list). Shown,
+             dimmed, on each channel here it fits, naming the channels or the
+             consoles, and counted on none. Never a conflict.
 
 Inputs have an A and a B source. A port whose name is the channel's Source (B)
-is that channel's B feed, not a second A feed. Two A feeds (or two B feeds) on
-one channel is a CONFLICT and every feed involved is flagged. A link always
-means A: the stored link has no A/B.
+is that channel's B feed. A link always means A: the stored link has no A/B.
+Two or more ports LINKED to one channel is a CONFLICT and each is flagged;
+names alone never make one.
 
-Outputs: a bus feeding several I/O outputs is normal (the same aux to two
-stage boxes), so outputs have no conflicts. Aux and Matrix can be linked;
-Stereo is always by name, because the generic link only admits aux and matrix.
+Outputs follow the same link / name rules. A bus feeding several I/O outputs
+is normal (the same aux to two stage boxes), so outputs have no conflicts. Aux
+and Matrix can be linked; Stereo is always by name, because the generic link
+only admits aux and matrix.
 
-Cost: **two queries per request**, however many channels or consoles -- one for
-every DeviceInput in the project, one for every DeviceOutput -- cached on the
-request by ``PortIndex.for_request``. The channels themselves are the rows the
-Console page's inlines already loaded; nothing here fetches them again.
+Cost, per request, however many channels or consoles: **two queries** -- every
+DeviceInput in the project, every DeviceOutput -- plus, only when an unlinked
+port's name matches a channel on this console, one more per side to see
+whether another console has that name too. At most four. Cached on the
+request by ``PortIndex.for_request``. This console's own channels are the rows
+the Console page's inlines already loaded; nothing here fetches them again.
 """
 
 from dataclasses import dataclass, field
@@ -63,7 +71,8 @@ class Feed:
     how: str
     slot: str = 'A'      # inputs only
     conflict: bool = False
-    others: tuple = ()   # for AMBIGUOUS: labels of every channel the name fits
+    others: tuple = ()   # for AMBIGUOUS: the channels ('ch 90') or consoles it fits
+    across: bool = False # for AMBIGUOUS: ``others`` are consoles, not channels
 
     @property
     def url(self):
@@ -120,6 +129,45 @@ class PortIndex:
                              'console_input__console_id', 'console_input_id'))
         return _ports(rows)
 
+    # -- names on every console ----------------------------------------------
+    #
+    # norm(name) -> {console id: console name}, for every non-template
+    # console in the project. Only read when an unlinked port's name matches
+    # a channel here, so a fully linked show never pays for it.
+
+    @cached_property
+    def input_names(self):
+        rows = (ConsoleInput.objects
+                .filter(console__project_id=self.project_id, console__is_template=False)
+                .values_list('console_id', 'console__name', 'source', 'source_b'))
+        names = {}
+        for console_id, console_name, *values in rows:
+            for value in values:
+                if norm(value):
+                    names.setdefault(norm(value), {})[console_id] = console_name
+        return names
+
+    @cached_property
+    def output_names(self):
+        def q(model):
+            return (model.objects
+                    .filter(console__project_id=self.project_id, console__is_template=False)
+                    .values_list('console_id', 'console__name', 'name')
+                    .order_by())  # a compound query takes no per-part ORDER BY
+        rows = q(ConsoleAuxOutput).union(q(ConsoleMatrixOutput), q(ConsoleStereoOutput),
+                                         all=True)
+        names = {}
+        for console_id, console_name, value in rows:
+            if norm(value):
+                names.setdefault(norm(value), {})[console_id] = console_name
+        return names
+
+    @staticmethod
+    def _other_consoles(names, name, console_id):
+        """Names of the OTHER consoles with a channel called ``name``."""
+        found = names.get(norm(name), {})
+        return sorted((n for cid, n in found.items() if cid != console_id), key=str.casefold)
+
     @cached_property
     def outputs(self):
         rows = (DeviceOutput.objects
@@ -164,6 +212,9 @@ class PortIndex:
     def inputs_for(self, channels):
         """{ConsoleInput pk: Cell} for one console's input rows."""
         channels = [c for c in channels if c.pk]
+        if not channels:
+            return {}
+        console = channels[0].console
         cells = {c.pk: Cell() for c in channels}
         labels = {c.pk: f'ch {c.input_ch}' for c in channels}
         by_name = {}  # name -> {channel pk: slot}; A wins over B on one channel
@@ -173,15 +224,24 @@ class PortIndex:
                     by_name.setdefault(norm(value), {})[c.pk] = slot
 
         for port in self.inputs:
-            # An input link is stored as (console id, channel pk).
-            if port.link and port.link[1] in cells:
-                cells[port.link[1]].feeds.append(Feed(port, LINKED))
+            # An input link is stored as (console id, channel pk). Linked
+            # elsewhere means not here, whatever the name.
+            if port.link:
+                if port.link[1] in cells:
+                    cells[port.link[1]].feeds.append(Feed(port, LINKED))
                 continue
             hits = by_name.get(norm(port.name), {})
-            if len(hits) == 1:
+            if not hits:
+                continue
+            consoles = self._other_consoles(self.input_names, port.name, console.pk)
+            if consoles:
+                others = tuple(sorted([console.name, *consoles], key=str.casefold))
+                for pk, slot in hits.items():
+                    cells[pk].feeds.append(Feed(port, AMBIGUOUS, slot, others=others, across=True))
+            elif len(hits) == 1:
                 (pk, slot), = hits.items()
                 cells[pk].feeds.append(Feed(port, BY_NAME, slot))
-            elif hits:
+            else:
                 others = tuple(labels[pk] for pk in hits)
                 for pk, slot in hits.items():
                     cells[pk].feeds.append(Feed(port, AMBIGUOUS, slot, others=others))
@@ -189,15 +249,18 @@ class PortIndex:
         for cell in cells.values():
             cell.feeds.sort(key=lambda f: (f.slot, _ORDER[f.how], f.port.device_name, f.port.number))
             for slot in ('A', 'B'):
-                counted = [f for f in cell.feeds if f.slot == slot and f.how != AMBIGUOUS]
-                if len(counted) > 1:
-                    for f in counted:
+                linked = [f for f in cell.feeds if f.slot == slot and f.how == LINKED]
+                if len(linked) > 1:
+                    for f in linked:
                         f.conflict = True
         return cells
 
     def outputs_for(self, buses):
         """{(model, pk): Cell} for one console's aux, matrix and stereo rows."""
         buses = [b for b in buses if b.pk]
+        if not buses:
+            return {}
+        console = buses[0].console
         ct = {model: ContentType.objects.get_for_model(model).pk
               for model in (ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput)}
         cells = {(type(b), b.pk): Cell() for b in buses}
@@ -209,13 +272,21 @@ class PortIndex:
                 by_name.setdefault(norm(b.name), []).append((type(b), b.pk))
 
         for port in self.outputs:
-            if port.link in linked:
-                cells[linked[port.link]].feeds.append(Feed(port, LINKED))
+            if port.link:
+                if port.link in linked:
+                    cells[linked[port.link]].feeds.append(Feed(port, LINKED))
                 continue
             hits = by_name.get(norm(port.name), [])
-            if len(hits) == 1:
+            if not hits:
+                continue
+            consoles = self._other_consoles(self.output_names, port.name, console.pk)
+            if consoles:
+                others = tuple(sorted([console.name, *consoles], key=str.casefold))
+                for key in hits:
+                    cells[key].feeds.append(Feed(port, AMBIGUOUS, others=others, across=True))
+            elif len(hits) == 1:
                 cells[hits[0]].feeds.append(Feed(port, BY_NAME))
-            elif hits:
+            else:
                 others = tuple(labels[k] for k in hits)
                 for key in hits:
                     cells[key].feeds.append(Feed(port, AMBIGUOUS, others=others))

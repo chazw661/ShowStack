@@ -1059,3 +1059,17 @@ class ConsolePatchViewScopingTests(TenantIsolationBase):
         response = self.client.get(url)
         self.assertNotEqual(response.status_code, 200)
         self.assertNoLeak(response, 'other tenant console page')
+
+    def test_other_tenants_channel_names_do_not_make_ours_ambiguous(self):
+        # "Ambiguous" names every console with the name; another show's
+        # console must neither count nor be named.
+        from planner.utils.console_patch import BY_NAME, PortIndex
+        ConsoleInput.objects.filter(pk=self.console_input_b.pk).update(
+            source=self.console_input_a.source)
+        DeviceInput.objects.filter(device=self.device_a, input_number=1).update(
+            signal_name=self.console_input_a.source)
+        index = PortIndex(self.project_a.pk)
+        index.register([self.console_input_a])
+        self.assertEqual(index.cell_for(self.console_input_a).feeds[0].how, BY_NAME)
+        url = reverse('admin:planner_console_change', args=[self.console_a.pk])
+        self.assertNoLeak(self.client.get(url), 'console page ambiguous console names')

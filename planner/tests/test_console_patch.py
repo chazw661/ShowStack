@@ -131,11 +131,17 @@ class InputCellTests(PatchBase):
             ('Stage Box B', 1, LINKED, 'A', True),
         ])
 
-    def test_linked_and_by_name_on_one_input_is_a_conflict(self):
+    def test_linked_and_by_name_on_one_input_is_not_a_conflict(self):
+        # Only links make a conflict; a name is not a claim.
         host = self.ch(self.foh, 70, 'Host Mic')
         self.port(self.box_a, 1, 'Host Mic', host)
         self.port(self.box_b, 1, 'Host Mic')
-        self.assertTrue(self.cells(self.foh)['70'].conflict)
+        cell = self.cells(self.foh)['70']
+        self.assertEqual(self.summary(cell), [
+            ('Stage Box A', 1, LINKED, 'A', False),
+            ('Stage Box B', 1, BY_NAME, 'A', False),
+        ])
+        self.assertFalse(cell.conflict)
 
     def test_b_source_is_a_b_feed_not_a_conflict(self):
         lectern = self.ch(self.foh, 25, 'Lectern', source_b='Lectern B')
@@ -167,13 +173,44 @@ class InputCellTests(PatchBase):
         self.assertEqual(cells['90'].feeds[0].how, LINKED)
         self.assertEqual(cells['91'].feeds, [])
 
-    def test_split_shows_by_name_on_the_other_console(self):
+    def test_linked_port_never_shows_on_another_console(self):
+        # Same channel name on MON is not a split: MON may have its own I/O.
         kick_foh = self.ch(self.foh, 1, 'Kick')
         self.ch(self.mon, 1, 'Kick')
         self.port(self.box_a, 1, 'Kick', kick_foh)
         self.assertEqual(self.cells(self.foh)['1'].feeds[0].how, LINKED)
-        self.assertEqual(self.summary(self.cells(self.mon)['1']),
-                         [('Stage Box A', 1, BY_NAME, 'A', False)])
+        self.assertEqual(self.cells(self.mon)['1'].feeds, [])
+
+    def test_unlinked_name_on_two_consoles_is_ambiguous_on_both(self):
+        self.ch(self.foh, 1, 'Kick')
+        self.ch(self.mon, 4, 'Kick')
+        self.port(self.box_b, 1, 'Kick')
+        for console, ch in ((self.foh, '1'), (self.mon, '4')):
+            cell = self.cells(console)[ch]
+            (feed,) = cell.feeds
+            self.assertEqual((feed.how, feed.across, feed.others),
+                             (AMBIGUOUS, True, ('FOH', 'MON')))
+            self.assertFalse(cell.conflict)
+
+    def test_other_consoles_b_name_makes_it_ambiguous_too(self):
+        self.ch(self.foh, 1, 'Lectern B')
+        self.ch(self.mon, 1, 'Lectern', source_b='Lectern B')
+        self.port(self.box_b, 1, 'Lectern B')
+        self.assertEqual(self.cells(self.foh)['1'].feeds[0].how, AMBIGUOUS)
+
+    def test_unlinked_name_only_on_another_console_does_not_show_here(self):
+        self.ch(self.foh, 33, 'Choir 1')
+        self.ch(self.mon, 33, '')
+        self.port(self.box_b, 1, 'Choir 1')
+        self.assertEqual(self.cells(self.foh)['33'].feeds[0].how, BY_NAME)
+        self.assertEqual(self.cells(self.mon)['33'].feeds, [])
+
+    def test_template_console_names_do_not_make_it_ambiguous(self):
+        template = Console.objects.create(project=self.project, name='Tmpl', is_template=True)
+        self.ch(template, 1, 'Kick')
+        self.ch(self.foh, 1, 'Kick')
+        self.port(self.box_b, 1, 'Kick')
+        self.assertEqual(self.cells(self.foh)['1'].feeds[0].how, BY_NAME)
 
     def test_port_numbers_follow_position_like_the_device_page(self):
         kick = self.ch(self.foh, 1, 'Kick')
@@ -210,6 +247,18 @@ class OutputCellTests(PatchBase):
         cells = self.bus_cells(self.foh)
         self.assertEqual(cells['aux1'].feeds[0].how, AMBIGUOUS)
         self.assertEqual(cells['mtx2'].feeds[0].others, ('Aux 1', 'Mtx 2'))
+
+    def test_output_linked_on_another_console_does_not_show_here(self):
+        mon_aux = ConsoleAuxOutput.objects.create(console=self.mon, aux_number='1', name='Drum Wedge')
+        self.out(self.box_a, 1, 'Drum Wedge', mon_aux)
+        self.assertEqual(self.bus_cells(self.foh)['aux1'].feeds, [])
+        self.assertEqual(self.bus_cells(self.mon)['aux1'].feeds[0].how, LINKED)
+
+    def test_unlinked_output_name_on_two_consoles_is_ambiguous(self):
+        ConsoleAuxOutput.objects.create(console=self.mon, aux_number='3', name='Drum Wedge')
+        self.out(self.box_b, 1, 'Drum Wedge')
+        (feed,) = self.bus_cells(self.foh)['aux1'].feeds
+        self.assertEqual((feed.how, feed.others), (AMBIGUOUS, ('FOH', 'MON')))
 
     def test_output_linked_to_another_bus_is_not_matched_by_name(self):
         ConsoleMatrixOutput.objects.create(console=self.foh, matrix_number='2', name='Drum Wedge')
@@ -260,12 +309,19 @@ class ConsolePageTests(PatchBase):
                                r'<span class="ss-patch-dev">Stage Box B</span>'
                                r'<span class="ss-patch-port"> · In 2</span></a>'
                                r'<span class="ss-patch-caption">by name</span>')
+        # A name on two consoles: dimmed, consoles named, not amber.
+        self.ch(self.foh, 4, 'Shared')
+        self.ch(self.mon, 1, 'Shared')
+        self.port(self.box_b, 3, 'Shared')
+        page = self.client.get(self.url(self.foh)).content.decode()
+        self.assertIn('<span class="ss-patch-caption">ambiguous (FOH, MON)</span>', page)
+        self.assertEqual(page.count('ss-patch-conflict'), 2)
         # The view switch and its stylesheet ship with the page.
         self.assertIn('console_patch_toggle.js', page)
         self.assertIn('console_patch.css', page)
         self.assertIn('class="ss-patch-none"', page)
         self.assertIn('I/O devices · free ports', page)
-        self.assertRegex(page, r'<strong>7</strong> free inputs: 2-8')
+        self.assertRegex(page, r'<strong>5</strong> free inputs: 4-8')
 
     def test_add_page_has_no_patch_column(self):
         page = self.client.get(reverse('admin:planner_console_add')).content.decode()
@@ -289,6 +345,26 @@ class ConsolePageTests(PatchBase):
                 index.cell_for(row)
             index.free_ports()
             self.assertIs(PortIndex.for_request(request, self.project.pk), index)
+
+    def test_unlinked_names_cost_at_most_two_more_queries(self):
+        for n in range(1, 97):
+            self.ch(self.foh, n, f'Ch {n}')
+            self.ch(self.mon, n, f'Ch {n}')
+        for n in range(1, 9):
+            self.port(self.box_a, n, f'Ch {n}')       # unlinked, on both consoles
+        aux = ConsoleAuxOutput.objects.create(console=self.foh, aux_number='1', name='A')
+        self.out(self.box_a, 1, 'A')
+        rows = list(self.foh.consoleinput_set.all())
+        for model in (ConsoleStereoOutput, ConsoleAuxOutput, ConsoleMatrixOutput):
+            ContentType.objects.get_for_model(model)
+        request = RequestFactory().get('/')
+        with self.assertNumQueries(4):
+            index = PortIndex.for_request(request, self.project.pk)
+            index.register(rows)
+            index.register([aux])
+            for row in rows + [aux]:
+                index.cell_for(row)
+        self.assertEqual(index.cell_for(rows[0]).feeds[0].how, AMBIGUOUS)
 
     def test_page_query_count_does_not_grow_with_channels(self):
         small = Console.objects.create(project=self.project, name='Small')
