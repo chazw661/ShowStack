@@ -10,12 +10,16 @@ What it builds (replacing any previous copy of the same demo project):
   FOH Rivage PM7   96 inputs, 12 aux, 4 matrix, St L/R/M
   MON CL5          48 inputs -- 1-16 split from Stage Box A, 17-20 from the
                    wireless rack
+  MON PM5          24 inputs, the same band names as FOH 1-24, but its own
+                   I/O: MON Stage Box, no split
   Stage Box A      32 in / 16 out -- ports picked from the suggestion list,
                    so they carry the console_input link
   Stage Box B      32 in / 16 out -- named but NOT linked, which is exactly
                    how the I/O device page saved every pick from #95 until
                    the link fix (the regression the backfill repairs)
   Wireless Rack    16 in / 2 out -- linked to FOH 49-64
+  MON Stage Box    16 in / 8 out -- in 1-8 linked to MON PM5 1-8; in 9-10
+                   named only
 
 Deliberate edge cases, so every display state has something to show:
 
@@ -25,8 +29,15 @@ Deliberate edge cases, so every display state has something to show:
                      named "Spare" -- ambiguous by name
   free-typed name    Stage Box B in 22 "Talkback Mic" and Stage Box A in 30
                      "Playback L (QLab)" match no channel
-  split              Stage Box A in 1-16 feed FOH 1-16 (linked) and MON 1-16
-                     (same names, so by name)
+  split              Stage Box A in 1-16 feed FOH 1-16 (linked) and MON CL5
+                     1-16 (same names). Nothing records a split yet, and a
+                     linked port counts only for the console it is linked to,
+                     so MON CL5 shows these unpatched
+  own I/O, no split  MON PM5 has FOH's channel names but its own stage box.
+                     Its linked ports show on MON PM5 only, never on FOH;
+                     MON Stage Box in 9-10 ("OH L", "OH R", no link) fit FOH,
+                     MON CL5 and MON PM5, so they are ambiguous on all three
+                     and the backfill leaves them for a human
   A/B pair           FOH ch 25 "Lectern" / B "Lectern B": Stage Box A in 25 is
                      the A feed (linked), Stage Box B in 25 the B (by name)
   conflict           Stage Box A in 27 and Stage Box B in 27 are both linked
@@ -114,6 +125,7 @@ class Command(BaseCommand):
 
         foh = Console.objects.create(project=project, name='FOH Rivage PM7')
         mon = Console.objects.create(project=project, name='MON CL5')
+        pm5 = Console.objects.create(project=project, name='MON PM5')
 
         foh_names = {}
         for i, name in enumerate(BAND, 1):
@@ -144,6 +156,11 @@ class Command(BaseCommand):
                 name = ''
             ConsoleInput.objects.create(console=mon, input_ch=str(ch),
                                         dante_number=str(ch), source=name)
+        pm5_ch = {}
+        for ch in range(1, 25):
+            pm5_ch[ch] = ConsoleInput.objects.create(
+                console=pm5, input_ch=str(ch), dante_number=str(ch),
+                source=BAND[ch - 1])
 
         aux = {}
         for n in range(1, 13):
@@ -160,6 +177,7 @@ class Command(BaseCommand):
         box_a = self._device(project, 'Stage Box A', 32, 16)
         box_b = self._device(project, 'Stage Box B', 32, 16)
         rack = self._device(project, 'Wireless Rack', 16, 2)
+        mon_box = self._device(project, 'MON Stage Box', 16, 8)
 
         def link(device, port, channel):
             """A pick from the suggestion list: name AND link."""
@@ -189,6 +207,13 @@ class Command(BaseCommand):
         # Wireless rack: linked straight to FOH 49-64.
         for port in range(1, 17):
             link(rack, port, foh_ch[48 + port])
+
+        # MON PM5's own stage box: picked after the fix (linked to MON PM5,
+        # though FOH has the same names), and two ports from before it.
+        for ch in range(1, 9):
+            link(mon_box, ch, pm5_ch[ch])
+        name_only(mon_box, 9, 'OH L')                     # ambiguous: 3 consoles
+        name_only(mon_box, 10, 'OH R')
 
         # Renamed after linking. .save() rather than .update() so anything
         # listening for a ConsoleInput save sees the rename, as it would from

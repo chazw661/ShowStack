@@ -296,8 +296,11 @@ class BackfillTests(PatchLinkBase):
     def test_dry_run_reports_and_writes_nothing(self):
         output = self.run_cmd()
         self.assertIn('DRY RUN', output)
-        self.assertIn('1 matched, 2 ambiguous, 1 unmatched', output)
-        self.assertIn('AMBIGUOUS Stage Box A In 3 "Vox 1" -> FOH PM7 ch 5, MON CL5 ch 5', output)
+        self.assertIn('1 matched, 2 ambiguous, 0 B input only, 1 unmatched', output)
+        # Listed per device, every candidate named.
+        self.assertIn('    Stage Box A\n'
+                      '      In 2 "Spare" -> FOH PM7 ch 90, FOH PM7 ch 91\n'
+                      '      In 3 "Vox 1" -> FOH PM7 ch 5, MON CL5 ch 5\n', output)
         self.assertFalse(DeviceInput.objects.exclude(console_input=None).exists())
 
     def test_apply_links_only_unique_matches(self):
@@ -306,6 +309,36 @@ class BackfillTests(PatchLinkBase):
         self.assertEqual(self.port(1).signal_name, 'Kick')
         for n in (2, 3, 4):  # duplicate Spare, FOH/MON split, free-typed
             self.assertIsNone(self.port(n).console_input, n)
+
+    def test_a_source_b_name_is_never_linked(self):
+        # ch 7's B is "Lectern B". Alone, a B match is listed, not linked: a
+        # stored link always means the A input.
+        ConsoleInput.objects.create(console=self.foh, input_ch='7',
+                                    source='Lectern', source_b='Lectern B')
+        DeviceInput.objects.filter(pk=self.port(4).pk).update(signal_name='Lectern B')
+        output = self.run_cmd('--apply')
+        self.assertIn('1 B input only', output)
+        self.assertIn('In 4 "Lectern B" -> FOH PM7 ch 7 (B)', output)
+        self.assertIsNone(self.port(4).console_input)
+
+    def test_a_name_on_one_channels_a_and_anothers_b_is_ambiguous(self):
+        # Before, only Source was indexed, so this linked to MON ch 8 -- a
+        # guess: the port may well be FOH ch 7's B feed.
+        ConsoleInput.objects.create(console=self.foh, input_ch='7',
+                                    source='Lectern', source_b='Lectern B')
+        ConsoleInput.objects.create(console=self.mon, input_ch='8', source='Lectern B')
+        DeviceInput.objects.filter(pk=self.port(4).pk).update(signal_name='Lectern B')
+        output = self.run_cmd('--apply')
+        self.assertIn('In 4 "Lectern B" -> FOH PM7 ch 7 (B), MON CL5 ch 8', output)
+        self.assertIsNone(self.port(4).console_input)
+
+    def test_same_name_on_a_monitor_desk_with_its_own_io_is_not_linked(self):
+        # No split involved: MON has its own stage box and happens to use
+        # FOH's channel names. The name alone cannot say which desk.
+        ConsoleInput.objects.create(console=self.mon, input_ch='1', source='Kick')
+        output = self.run_cmd('--apply')
+        self.assertIn('In 1 "kick " -> FOH PM7 ch 1, MON CL5 ch 1', output)
+        self.assertIsNone(self.port(1).console_input)
 
     def test_stale_linked_names_are_refreshed(self):
         DeviceInput.objects.filter(pk=self.port(1).pk).update(
@@ -352,6 +385,27 @@ class SeedPatchDemoTests(TestCase):
         renamed = DeviceInput.objects.get(device__name='Stage Box A', input_number=22,
                                           device__project=project)
         self.assertEqual(renamed.signal_name, 'Vox 3 (Guest)')
+
+    def test_backfill_on_the_seed_guesses_nothing(self):
+        User.objects.create_superuser('seed', 'seed@example.com', 'pw')
+        call_command('seed_patch_demo', stdout=StringIO())
+        project = Project.objects.get(name='Patch Demo (seed)')
+        out = StringIO()
+        call_command('link_device_inputs_by_name', '--project', str(project.pk),
+                     '--apply', stdout=out)
+        output = out.getvalue()
+        # Choir 1-12 are on FOH only: linked. Everything else is left alone.
+        self.assertIn('12 matched, 3 ambiguous, 1 B input only, 2 unmatched', output)
+        self.assertIn('    MON Stage Box\n'
+                      '      In 9 "OH L" -> FOH Rivage PM7 ch 9, MON CL5 ch 9, MON PM5 ch 9\n',
+                      output)
+        mon_box = DeviceInput.objects.filter(device__project=project,
+                                             device__name='MON Stage Box')
+        self.assertFalse(mon_box.filter(input_number__in=[9, 10])
+                         .exclude(console_input=None).exists())
+        self.assertEqual(set(mon_box.exclude(console_input=None)
+                             .values_list('console_input__console__name', flat=True)),
+                         {'MON PM5'})
 
     def test_refuses_anything_but_sqlite(self):
         with mock.patch('planner.management.commands.seed_patch_demo.connection') as conn:
