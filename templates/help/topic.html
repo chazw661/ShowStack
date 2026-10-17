@@ -1,0 +1,24 @@
+{% extends "help/base.html" %}
+{% block title %}{{ topic.title }}{% endblock %}
+{% block content %}
+<div class="top">
+    <div class="top-row">
+        <a class="brand" href="{% url 'help:index' %}">Show<span>Stack</span> Help</a>
+        <a class="close-btn" id="help-close" href="#">Back</a>
+    </div>
+</div>
+<h1>{{ topic.title }}</h1>
+<p class="intro">{{ topic.section }}</p>
+<article class="body">
+    {{ body }}
+</article>
+{% if related %}
+<h2>More in {{ topic.section }}</h2>
+<ul class="related">
+    {% for t in related %}
+    <li><a href="{% url 'help:topic' t.slug %}">{{ t.title }}</a></li>
+    {% endfor %}
+</ul>
+{% endif %}
+<p><a href="{% url 'help:index' %}">All help topics</a></p>
+{% endblock %}

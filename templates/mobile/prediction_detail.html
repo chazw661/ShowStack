@@ -7,6 +7,7 @@
 <header class="mobile-header">
     <a href="{% url 'mobile:predictions_list' project.id %}" class="back-link">←</a>
     <h1 class="header-title">{{ prediction.file_name|truncatechars:18 }}</h1>
+    {% include "mobile/components/help_link.html" %}
     {% if prediction.pdf_file %}
     <a href="{{ prediction.pdf_file.url }}" class="icon-btn" target="_blank" rel="noopener" aria-label="View PDF">📄</a>
     {% else %}

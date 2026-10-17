@@ -164,7 +164,10 @@
         <div class="logo">
             <h1>ShowStack</h1>
         </div>
-        <a href="{% url 'project_invitations' project.id %}" class="btn-back">← Back to Invitations</a>
+        <div style="display:flex;gap:12px;align-items:center;">
+            {% include "help/_help_link.html" %}
+            <a href="{% url 'project_invitations' project.id %}" class="btn-back">← Back to Invitations</a>
+        </div>
     </div>
     
     <div class="container">

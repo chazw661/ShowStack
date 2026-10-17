@@ -7,6 +7,7 @@
 <header class="mobile-header">
     <a href="{% url 'mobile:mic_tracker_days' project.id %}" class="back-link">←</a>
     <h1 class="header-title">{{ day.date|date:"M j" }}</h1>
+    {% include "mobile/components/help_link.html" %}
     <button class="icon-btn" onclick="location.reload()" aria-label="Refresh">⟳</button>
 </header>
 {% endblock %}

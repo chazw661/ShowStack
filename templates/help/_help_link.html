@@ -1,0 +1,25 @@
+{% load help_tags %}{% comment %}
+The Help link for pages that do not extend admin/base_site.html (which has its
+own in the header). New tab on desktop and iPad; on a phone, a plain link --
+see the matching note in admin/base_site.html.
+{% endcomment %}<a class="ss-help-link" href="{% help_href %}" target="_blank" rel="noopener" data-help-link>? Help</a>
+<style>
+.ss-help-link {
+    display: inline-block;
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: inherit !important;
+    font-size: 14px;
+    line-height: 1.4;
+    text-decoration: none !important;
+    white-space: nowrap;
+}
+.ss-help-link:hover, .ss-help-link:focus { border-color: #4a9eff; color: #4a9eff !important; }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (!window.matchMedia('(max-width: 600px)').matches) return;
+    document.querySelectorAll('a.ss-help-link[target]').forEach(function (a) { a.removeAttribute('target'); });
+});
+</script>

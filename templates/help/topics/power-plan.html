@@ -1,0 +1,18 @@
+<p class="help-lede">Estimate the current your amp racks draw on each leg of the power service, and check the legs are balanced.</p>
+
+<h3>Steps</h3>
+<ol>
+  <li>Open <em>Power Distribution Plans</em> in the sidebar and tap <em>Add Power Distribution Plan</em>.</li>
+  <li>Fill in <em>Venue name</em>, <em>Service type</em>, <em>Available amperage per leg</em>, <em>Transient headroom</em> and <em>Safety margin</em>.</li>
+  <li>Under <em>Amplifiers in Power Plan</em>, add a row per group of amps: <em>Amplifier</em>, <em>Quantity</em>, <em>Zone</em>, <em>Duty cycle</em>, <em>Phase assignment</em>. Tap <em>Save</em>.</li>
+  <li>In the plans list, tap <em>View Calculator</em>. Changes to <em>Available Amps/Leg</em>, <em>Transient Headroom</em> or <em>Safety Margin</em> there save straight away.</li>
+</ol>
+
+<h3>Good to know</h3>
+<ul>
+  <li><em>Current/Unit</em> = (idle watts + 1/8-power watts × duty-cycle %) × headroom ÷ (amp profile voltage × power factor).</li>
+  <li><em>Usable Amps/Leg</em> = available × safety margin; each leg's <em>% Used</em> is against that.</li>
+  <li><em>Phase Imbalance</em> = (highest leg − lowest leg) ÷ highest leg. Target under 10%.</li>
+  <li>Auto-Balance deals a row's amps L1, L2, L3 in turn, and every row starts on L1. Many single-amp Auto rows all land on L1, so set those by hand.</li>
+  <li>The plan's voltage is display only; the maths uses each amp profile's voltage.</li>
+</ul>
