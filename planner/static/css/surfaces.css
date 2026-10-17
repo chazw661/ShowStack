@@ -37,7 +37,7 @@
     --ss-col-num: 72px;        /* Dante #, Input Ch, Aux #, Matrix # */
     --ss-col-num-sm: 56px;     /* Group, DCA, Mute, Omni Out */
     --ss-col-port: 46px;       /* Direct Out, Omni In -- one port number */
-    --ss-col-flex-max: 360px;  /* ceiling for the flexible Source / Name column */
+    --ss-col-flex-max: 260px;  /* ceiling for the flexible Source / Name column */
     --ss-grid-max: 1400px;     /* ceiling for an inline grid table overall */
     --ss-col-check: 64px;      /* Multitrack, Delete? */
 
@@ -599,33 +599,40 @@ input[type="radio"]:disabled {
 }
 
 /* Each grid's own ceiling: the sum of its pinned columns plus the cap on
- * the flexible one. Kept per grid because the pinned set differs. */
+ * the flexible one. Kept per grid because the pinned set differs.
+ * --ss-patch-extra is the Console page's Patch column when the grid is wide
+ * enough to show it beside everything else (planner/css/console_patch.css);
+ * 0 otherwise, including on the add page, which has no such column. */
 #consoleinput_set-group table {
     /* dante + input_ch + source_hardware + 3 narrow (group, DCA, mute)
      * + 2 port (direct out, omni in) + multitrack + delete.
      *
      * Item 4 moved Direct Out and Omni In off --ss-col-num-sm, so this sum
      * had to follow them. Left at "5 narrow" the ceiling would stay 16px
-     * wider than the columns beneath it and Source would reach 376px at
-     * 1920 instead of the 360px the cap is for. */
+     * wider than the columns beneath it and Source would reach 16px past
+     * the cap at 1920. */
     max-width: calc((var(--ss-col-num) * 2) + 150px + (var(--ss-col-num-sm) * 3)
                     + (var(--ss-col-port) * 2)
-                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)
+                    + var(--ss-patch-extra, 0px)) !important;
 }
 #consoleauxoutput_set-group table {
     /* dante + aux + mono_stereo + bus_type + omni_out + multitrack + delete */
     max-width: calc((var(--ss-col-num) * 2) + 150px + 150px + var(--ss-col-num-sm)
-                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)
+                    + var(--ss-patch-extra, 0px)) !important;
 }
 #consolematrixoutput_set-group table {
     /* dante + matrix + mono_stereo + omni_out + multitrack + delete */
     max-width: calc((var(--ss-col-num) * 2) + 150px + var(--ss-col-num-sm)
-                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)
+                    + var(--ss-patch-extra, 0px)) !important;
 }
 #consolestereooutput_set-group table {
     /* dante + stereo_type + omni_out + multitrack + delete */
     max-width: calc(var(--ss-col-num) + 150px + var(--ss-col-num-sm)
-                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)) !important;
+                    + 80px + var(--ss-col-check) + var(--ss-col-flex-max)
+                    + var(--ss-patch-extra, 0px)) !important;
 }
 
 /* Safety net only. With the widths below the grids fit their container at

@@ -4,7 +4,8 @@
  * each channel) in place of a 150px select -- Source Hardware on inputs, Bus
  * Type on aux, Mono/Stereo on matrix -- so no grid gets wider. All the hiding
  * is CSS keyed on `body.ss-patch-on` (planner/css/console_patch.css); this only
- * flips the class and draws the buttons.
+ * flips the class and draws the buttons. A grid wide enough to show Patch beside
+ * everything else does so, and the CSS hides its buttons and ignores the class.
  *
  * One state for the whole page, with a switch in every grid that has the
  * column, so it can be flipped wherever the engineer is. Remembered in this
