@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.shortcuts import render, redirect  
+from django.template.loader import render_to_string
 from django.contrib.admin.views.decorators import staff_member_required  
 from django.views.decorators.http import require_POST  
 from django import forms
@@ -724,8 +725,62 @@ admin.site.index_title = "ShowStack Audio Management"
 #-----Console Page----
 
 
-class ConsoleInputInline(admin.TabularInline):
+class PatchColumnMixin:
+    """Read-only "Patch" column on the Console page's channel inlines.
+
+    Shows which I/O device port feeds each input (or is fed by each output),
+    linking to that device's page -- see planner/utils/console_patch.py for
+    what linked / by name / ambiguous / conflict mean. Every inline hands its
+    rows to one per-request PortIndex, so the whole page costs two queries
+    for this however many channels the console has.
+
+    Change page only: on the add page there is no console, so no column.
+    ``patch_after`` is the column it follows.
+    """
+    patch_after = 'name'
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = tuple(super().get_readonly_fields(request, obj))
+        return fields + ('patch',) if obj is not None else fields
+
+    def get_fields(self, request, obj=None):
+        fields = [f for f in super().get_fields(request, obj) if f != 'patch']
+        if obj is not None:
+            at = fields.index(self.patch_after) + 1 if self.patch_after in fields else len(fields)
+            fields.insert(at, 'patch')
+        return fields
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        if obj is None or not obj.project_id:
+            return formset
+        from .utils.console_patch import PortIndex
+        index = PortIndex.for_request(request, obj.project_id)
+
+        class PatchFormSet(formset):
+            def __init__(self, *args, **kw):
+                super().__init__(*args, **kw)
+                rows = [form.instance for form in self.forms if form.instance.pk]
+                for row in rows:
+                    row._ss_patch_index = index
+                index.register(rows)
+
+        return PatchFormSet
+
+    @admin.display(description='Patch')
+    def patch(self, obj):
+        index = getattr(obj, '_ss_patch_index', None)
+        if index is None:
+            return ''
+        return render_to_string('admin/planner/console/_patch_cell.html', {
+            'cell': index.cell_for(obj),
+            'side': 'In' if isinstance(obj, ConsoleInput) else 'Out',
+        })
+
+
+class ConsoleInputInline(PatchColumnMixin, admin.TabularInline):
     model = ConsoleInput
+    patch_after = 'source_b'
     form = ConsoleInputForm
     extra = 0
     can_delete = True
@@ -804,7 +859,7 @@ class ConsoleInputInline(admin.TabularInline):
        
 
 
-class ConsoleAuxOutputInline(admin.TabularInline):
+class ConsoleAuxOutputInline(PatchColumnMixin, admin.TabularInline):
     model = ConsoleAuxOutput
     form = ConsoleAuxOutputForm
     extra = 0
@@ -849,7 +904,7 @@ class ConsoleAuxOutputInline(admin.TabularInline):
         return PrepopulatedFormSet
 
 
-class ConsoleMatrixOutputInline(admin.TabularInline):
+class ConsoleMatrixOutputInline(PatchColumnMixin, admin.TabularInline):
     model = ConsoleMatrixOutput
     form = ConsoleMatrixOutputForm
     extra = 0
@@ -894,7 +949,7 @@ class ConsoleMatrixOutputInline(admin.TabularInline):
 
         return PrepopulatedFormSet
     
-class ConsoleStereoOutputInline(admin.TabularInline):
+class ConsoleStereoOutputInline(PatchColumnMixin, admin.TabularInline):
     model = ConsoleStereoOutput
     form = ConsoleStereoOutputForm
     extra = 3  # Changed from 4 to 3
@@ -988,6 +1043,14 @@ class ConsoleAdmin(BaseEquipmentAdmin):
         if obj is not None:
             extra_context['title'] = str(obj)
             extra_context['subtitle'] = None
+            if obj.project_id:
+                # Free ports on every I/O device in this console's project.
+                # The same per-request index the Patch column reads, so it
+                # adds no queries of its own. Passed as a callable: the
+                # template evaluates it while rendering.
+                from .utils.console_patch import PortIndex
+                index = PortIndex.for_request(request, obj.project_id)
+                extra_context['patch_free_ports'] = index.free_ports
         return super().change_view(request, object_id, form_url, extra_context)
 
     def has_add_permission(self, request):
@@ -1326,11 +1389,13 @@ class ConsoleAdmin(BaseEquipmentAdmin):
             'planner/js/global_nav.js',
             'admin/js/console_autofill.js',
             'admin/js/console_source_hardware.js',
-            'admin/js/console_ab_toggle.js',]
+            'admin/js/console_ab_toggle.js',
+            'planner/js/console_patch_toggle.js',]
         css = {
             'all': ['admin/css/dark_mode.css',
                     'planner/css/custom_admin.css',
                     'planner/css/console_admin.css',
+                    'planner/css/console_patch.css',
                     'admin/css/console_list_buttons.css']  # ADD THIS LINE
         }
 

@@ -1030,3 +1030,32 @@ class DevicePatchLinkScopingTests(TenantIsolationBase):
         a = self.console_input_a
         self._post_port(a.source, f'in:{a.pk}')
         self.assertEqual(self.port_a.console_input_id, a.pk)
+
+
+class ConsolePatchViewScopingTests(TenantIsolationBase):
+    """The Console page's Patch column and free-ports summary read I/O device
+    ports by *name* as well as by link, so a port in another tenant's show
+    named exactly like one of our channels is the case that must not leak."""
+
+    def setUp(self):
+        super().setUp()
+        DeviceInput.objects.create(
+            device=self.device_b, input_number=1,
+            signal_name=self.console_input_a.source)
+        DeviceInput.objects.create(
+            device=self.device_b, input_number=2, signal_name='',
+            console_input=self.console_input_a)  # a cross-tenant link, however it got there
+        DeviceInput.objects.create(device=self.device_a, input_number=1, signal_name='')
+
+    def test_console_page_shows_only_own_devices(self):
+        url = reverse('admin:planner_console_change', args=[self.console_a.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertNoLeak(response, 'console page Patch column / free ports')
+        self.assertIn(self.device_a.name, response.content.decode())
+
+    def test_other_tenants_console_page_is_not_served(self):
+        url = reverse('admin:planner_console_change', args=[self.console_b.pk])
+        response = self.client.get(url)
+        self.assertNotEqual(response.status_code, 200)
+        self.assertNoLeak(response, 'other tenant console page')
