@@ -15,6 +15,13 @@
   those rules can go -- the 8-column grid alignment depends on the first --
   so the panel leaves the clipping context instead.
 
+  An input carrying data-link-field="<id>" has a hidden companion that holds
+  the console channel the name was picked from: a pick writes the option's
+  data-ref into it, and any typing clears it -- so a name the engineer typed
+  saves without a link, however much it looks like a channel name. The server
+  applies the same rule (planner/utils/device_patch.py) in case this did not
+  run. Inputs without the attribute (p1/galaxy) are untouched by it.
+
   Rows are grouped by console: one non-selectable sticky header per console,
   then its channels as "Ch 9 · Wless 9". Options that carry no data-console
   (the p1/galaxy datalists, which are bare names) render as one ungrouped,
@@ -173,6 +180,7 @@
           label: label,
           console: (o.getAttribute('data-console') || '').trim(),
           bus: (o.getAttribute('data-bus') || '').trim(),
+          ref: (o.getAttribute('data-ref') || '').trim(),
           // Filter over the whole label so a typed console name, bus number
           // or signal name all narrow the list. Because the label starts with
           // the console name, typing one keeps that console's group whole --
@@ -213,6 +221,9 @@
     if (!options.length) return;
     input.dataset.comboboxEnhanced = '1';
     var groups = buildGroups(options);
+    var linkField = input.getAttribute('data-link-field')
+      ? document.getElementById(input.getAttribute('data-link-field'))
+      : null;
 
     // Drop the native datalist binding so the browser's built-in dropdown
     // doesn't pop up alongside our custom combobox panel (double-menu bug).
@@ -312,7 +323,7 @@
       }
       li.addEventListener('mousedown', function (e) {
         e.preventDefault();  // keep focus on the input, so blur can't race
-        pick(opt.value);
+        pick(opt);
       });
       parent.appendChild(li);
       rows.push(li);
@@ -357,11 +368,13 @@
       if (openCombo === combo) openCombo = null;
     }
 
-    function pick(value) {
-      // Only the bare signal name is ever written -- the console/channel
-      // prefix is display only, and signal_name stays free text.
-      input.value = value;
+    function pick(opt) {
+      // The bare signal name goes in the field -- the console/channel prefix
+      // is display only. The channel itself goes in the hidden link field,
+      // set AFTER the 'input' event, whose handler clears it.
+      input.value = opt.value;
       input.dispatchEvent(new Event('input', { bubbles: true }));
+      if (linkField) linkField.value = opt.ref || '';
       input.dispatchEvent(new Event('change', { bubbles: true }));
       close();
       input.focus();
@@ -391,7 +404,11 @@
     }
 
     input.addEventListener('focus', function () { render(input.value); });
-    input.addEventListener('input', function () { render(input.value); });
+    input.addEventListener('input', function () {
+      // Typing makes the name free text: it no longer names a channel.
+      if (linkField) linkField.value = '';
+      render(input.value);
+    });
     input.addEventListener('keydown', function (e) {
       // Tab is the grid's own navigation -- never swallow it, just get the
       // panel out of the way before focus lands on the next cell.
@@ -402,7 +419,7 @@
       }
       if (e.key === 'ArrowDown') { setActive(activeIndex + 1); e.preventDefault(); }
       else if (e.key === 'ArrowUp') { setActive(activeIndex - 1); e.preventDefault(); }
-      else if (e.key === 'Enter' && activeIndex >= 0) { pick(rowOpts[activeIndex].value); e.preventDefault(); }
+      else if (e.key === 'Enter' && activeIndex >= 0) { pick(rowOpts[activeIndex]); e.preventDefault(); }
       // Escape closes the panel and keeps what was typed; without
       // preventDefault some browsers also revert the field's value.
       else if (e.key === 'Escape') { close(); e.preventDefault(); }
