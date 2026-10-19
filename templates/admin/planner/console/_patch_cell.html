@@ -1,0 +1,8 @@
+{% comment %}
+  One console row's Patch cell -- see planner/utils/console_patch.py.
+  `cell.feeds` is ordered A before B, then linked, by name, ambiguous.
+  Divs and spans, not <ul>/<li>: base_site.html paints every li with
+  `color: #e0e0e0 !important`, which would flatten the amber conflict colour.
+{% endcomment %}
+{% if not cell.feeds %}<span class="ss-patch-none" title="No I/O device port is patched here">—</span>{% else %}<div class="ss-patch">{% for f in cell.feeds %}<div class="ss-patch-feed ss-patch-{{ f.how }}{% if f.conflict %} ss-patch-conflict{% endif %}"
+     title="{{ f.port.device_name }} · {{ side }} {{ f.port.number }}{% if f.port.name %} “{{ f.port.name }}”{% endif %}{% if f.slot == 'B' %} — B input{% endif %}{% if f.how == 'linked' %} — linked on the device page{% elif f.how == 'by_name' %} — not linked: the port’s name matches this {% if side == 'In' %}channel{% else %}bus{% endif %}{% elif f.across %} — not linked, and the name fits channels on {{ f.others|join:', ' }}: link it on the device page{% else %} — not linked, and the name fits {{ f.others|join:', ' }} on this console: link it on the device page{% endif %}{% if f.conflict %} — CONFLICT: more than one port is linked to this input{% endif %}">{% if f.slot == 'B' %}<span class="ss-patch-tag ss-patch-tag-b">B</span>{% endif %}<a href="{{ f.url }}"><span class="ss-patch-dev">{{ f.port.device_name }}</span><span class="ss-patch-port"> · {{ side }} {{ f.port.number }}</span></a>{% if f.how == 'by_name' %}<span class="ss-patch-caption">by name</span>{% elif f.how == 'ambiguous' %}<span class="ss-patch-caption">ambiguous ({{ f.others|join:', ' }})</span>{% endif %}</div>{% endfor %}</div>{% endif %}

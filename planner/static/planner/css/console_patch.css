@@ -1,0 +1,361 @@
+/* Console page: the read-only Patch column and the free-ports summary.
+ * See planner/utils/console_patch.py for what each state means.
+ *
+ * Tokens are scoped to this page. The touch numbers are the ones #93 set for
+ * controls hit mid-show on an iPad: a 44px target and 14px text. They apply
+ * on a coarse pointer only, so a mouse keeps the compact grid. */
+body.model-console.change-form {
+    --ss-col-patch: 150px;          /* = the 150px select it stands in for */
+    --ss-patch-tap-min: 44px;       /* #93: minimum touch target */
+    --ss-patch-text: 12px;
+    --ss-patch-text-touch: 14px;    /* #93: control text on touch */
+    --ss-patch-tag-text: 10px;
+    --ss-patch-amber: #f5a524;
+    --ss-patch-amber-bg: rgba(245, 165, 36, 0.12);
+}
+
+/* --- the column ------------------------------------------------------ *
+ *
+ * Each grid is a size container, so all of this follows the grid's own
+ * width -- the window minus the sidebar, open or collapsed -- not the
+ * viewport's.
+ *
+ * Wide grid: Patch is simply another column, after Source / Name, with
+ * the hardware columns still there, and no switch. The grid's ceiling in
+ * surfaces.css grows by the column (--ss-patch-extra) so Source / Name
+ * keep their cap. A grid is "wide" from the width at which Source / Name
+ * still gets 180px with both columns showing (measured, Chromium and
+ * WebKit; container width, sidebar open = viewport - 381px):
+ *
+ *   inputs  1030px  (viewport 1411)     aux     976px  (viewport 1357)
+ *   matrix   826px  (viewport 1207)     stereo  754px  (viewport 1135)
+ *
+ * Each threshold is the grid's pinned columns + 150 (Patch) + 180 + 2px
+ * of fieldset border, so if a pinned column changes width, so does this.
+ *
+ * Narrower: the column is a VIEW, switched by console_patch_toggle.js
+ * (the "Hardware | Patch" buttons, remembered per browser). In Patch view
+ * it takes the slot of a 150px select the engineer does not need
+ * mid-show, so Source / Name keep exactly the width they had:
+ *
+ *   inputs   Source Hardware (and its B)     aux      Bus Type
+ *   matrix   Mono/Stereo                     stereo   nothing -- it has room
+ */
+body.model-console.change-form #consoleinput_set-group,
+body.model-console.change-form #consoleauxoutput_set-group,
+body.model-console.change-form #consolematrixoutput_set-group,
+body.model-console.change-form #consolestereooutput_set-group {
+    container: ss-grid / inline-size;
+}
+
+@container ss-grid (width >= 1030px) {
+    #consoleinput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consoleinput_set-group .ss-patch-toggle { display: none !important; }
+}
+@container ss-grid (width >= 976px) {
+    #consoleauxoutput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consoleauxoutput_set-group .ss-patch-toggle { display: none !important; }
+}
+@container ss-grid (width >= 826px) {
+    #consolematrixoutput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consolematrixoutput_set-group .ss-patch-toggle { display: none !important; }
+}
+@container ss-grid (width >= 754px) {
+    #consolestereooutput_set-group table { --ss-patch-extra: var(--ss-col-patch); }
+    #consolestereooutput_set-group .ss-patch-toggle { display: none !important; }
+}
+
+@container ss-grid (width < 1030px) {
+    body:not(.ss-patch-on) #consoleinput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consoleinput_set-group td.field-patch,
+    body.ss-patch-on #consoleinput_set-group th.column-source_hardware,
+    body.ss-patch-on #consoleinput_set-group td.field-source_hardware,
+    body.ss-patch-on #consoleinput_set-group th.column-source_hardware_b,
+    body.ss-patch-on #consoleinput_set-group td.field-source_hardware_b {
+        display: none !important;
+    }
+}
+@container ss-grid (width < 976px) {
+    body:not(.ss-patch-on) #consoleauxoutput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consoleauxoutput_set-group td.field-patch,
+    body.ss-patch-on #consoleauxoutput_set-group th.column-bus_type,
+    body.ss-patch-on #consoleauxoutput_set-group td.field-bus_type {
+        display: none !important;
+    }
+}
+@container ss-grid (width < 826px) {
+    body:not(.ss-patch-on) #consolematrixoutput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consolematrixoutput_set-group td.field-patch,
+    body.ss-patch-on #consolematrixoutput_set-group th.column-mono_stereo,
+    body.ss-patch-on #consolematrixoutput_set-group td.field-mono_stereo {
+        display: none !important;
+    }
+}
+@container ss-grid (width < 754px) {
+    body:not(.ss-patch-on) #consolestereooutput_set-group th.column-patch,
+    body:not(.ss-patch-on) #consolestereooutput_set-group td.field-patch {
+        display: none !important;
+    }
+}
+
+/* At 719px and under (a 1100px window, sidebar open) Source is already 0px
+ * wide on main (the pinned columns outrun a 1024 iPad's container), so the
+ * channel names are invisible there. Patch view is for reading the patch,
+ * so at that size it also drops the assignment columns and hands Source /
+ * Name the room: Group, DCA and Mute on inputs (168px), Mono/Stereo on aux
+ * (150px). */
+@container ss-grid (width <= 719px) {
+    body.ss-patch-on #consoleinput_set-group th.column-group,
+    body.ss-patch-on #consoleinput_set-group td.field-group,
+    body.ss-patch-on #consoleinput_set-group th.column-dca,
+    body.ss-patch-on #consoleinput_set-group td.field-dca,
+    body.ss-patch-on #consoleinput_set-group th.column-mute,
+    body.ss-patch-on #consoleinput_set-group td.field-mute,
+    body.ss-patch-on #consoleauxoutput_set-group th.column-mono_stereo,
+    body.ss-patch-on #consoleauxoutput_set-group td.field-mono_stereo {
+        display: none !important;
+    }
+}
+
+.inline-group table th.column-patch,
+.inline-group table td.field-patch {
+    width: var(--ss-col-patch) !important;
+    min-width: var(--ss-col-patch) !important;
+    max-width: var(--ss-col-patch) !important;
+    box-sizing: border-box !important;
+    padding-left: 6px !important;
+    padding-right: 4px !important;
+    vertical-align: middle !important;
+    position: relative;   /* anchors the touch target below */
+}
+.inline-group table td.field-patch p {
+    /* Django wraps a readonly value in <p>; it has no business adding margin. */
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* --- the toggle -------------------------------------------------------- */
+
+.ss-patch-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0;
+}
+.ss-patch-toggle__label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #eee;
+    margin-right: 2px;
+}
+/* Same look as the A/B input toggle beside it (console_ab_toggle.js). */
+.ss-patch-toggle__btn {
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #2b2b2b;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 4px;
+}
+.ss-patch-toggle__btn.is-active {
+    background: #2a73c4;
+    color: #fff;
+    border-color: #2a73c4;
+}
+.ss-patch-toggle__btn:hover {
+    border-color: #2a73c4;
+}
+
+.ss-patch {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ss-patch-feed {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 4px;
+    min-width: 0;
+    font-size: var(--ss-patch-text);
+    line-height: 1.3;
+    white-space: nowrap;
+}
+/* Only the device name gives way: "Stage Box A · In 12" becomes
+ * "Stage Bo… · In 12", never "Stage Box A · I…". Tags never shrink. The full
+ * line is in the row's title. */
+.ss-patch-feed a {
+    display: inline-flex;
+    /* Basis 0, not auto: the line wraps only for the caption (basis 100%),
+     * never to push the link off the line its B tag is on -- it shrinks and
+     * the device name ellipsises instead. */
+    flex: 1 1 0%;
+    min-width: 0;
+}
+.ss-patch-dev {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ss-patch-port {
+    flex: none;
+    white-space: pre;
+}
+.ss-patch-tag {
+    flex: none;
+    font-size: var(--ss-patch-tag-text);
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--ss-border, #33353b);
+    color: var(--text-muted, #8b8f98) !important;
+    letter-spacing: 0.02em;
+}
+.ss-patch-tag-b {
+    font-weight: 700;
+    color: var(--ss-field-text, #e8e8ea) !important;
+}
+
+/* "by name" / "ambiguous" is a caption on its own line under the link, not
+ * a tag beside it: beside it, at 150px, it left "S… · In 25" -- the device
+ * name is the part that must survive. A single-feed row has the height for a
+ * second line already (45px), so the row does not grow. */
+.ss-patch-caption {
+    flex-basis: 100%;
+    font-size: var(--ss-patch-tag-text);
+    line-height: 1.2;
+    color: var(--text-muted, #8b8f98) !important;
+    letter-spacing: 0.02em;
+    /* "ambiguous (FOH Rivage PM7, MON CL5, MON PM5)" outruns 150px; the
+     * full list is in the row's title. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ss-patch-ambiguous .ss-patch-caption {
+    font-style: italic;
+}
+
+/* By name: the same link, dimmer -- true today, but nothing holds it. */
+.ss-patch-by_name a {
+    opacity: 0.8;
+}
+.ss-patch-ambiguous a {
+    opacity: 0.7;
+    font-style: italic;
+}
+
+/* Conflict: more than one port LINKED to one input. Amber, all of them.
+ * Names never make a conflict; an ambiguous name is dimmed (above). */
+.ss-patch-conflict {
+    background: var(--ss-patch-amber-bg);
+    border-left: 2px solid var(--ss-patch-amber);
+    padding-left: 4px;
+    margin-left: -6px;
+}
+/* Specific enough to beat the admin's own `td a` link colour, and on the
+ * spans too in case anything paints them directly. */
+body.model-console .inline-group td.field-patch .ss-patch-conflict a,
+body.model-console .inline-group td.field-patch .ss-patch-conflict a:visited,
+body.model-console .inline-group td.field-patch .ss-patch-conflict a span {
+    color: var(--ss-patch-amber) !important;
+}
+
+.ss-patch-none {
+    color: var(--text-muted, #8b8f98) !important;
+    opacity: 0.6;
+}
+
+/* --- free ports ------------------------------------------------------ */
+
+.ss-patch-free {
+    margin: 0 0 16px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--ss-border, #33353b);
+    border-radius: 4px;
+    background: var(--ss-raised, #26282d);
+    max-width: var(--ss-grid-max, 1400px);
+    box-sizing: border-box;
+}
+.ss-patch-free summary {
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b8f98);
+}
+.ss-patch-free-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+}
+.ss-patch-free-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 16px;
+    row-gap: 2px;
+    font-size: 13px;
+}
+.ss-patch-free-name {
+    flex: 0 0 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.ss-patch-free-side {
+    color: var(--ss-field-text, #e8e8ea);
+}
+.ss-patch-free-side.is-full {
+    color: var(--text-muted, #8b8f98);
+}
+.ss-patch-free-empty {
+    margin: 8px 0 0 0;
+    color: var(--text-muted, #8b8f98);
+}
+
+/* --- touch (#93) ------------------------------------------------------ */
+
+@media (pointer: coarse) {
+    .ss-patch-feed {
+        font-size: var(--ss-patch-text-touch);
+    }
+    /* A lone feed's link covers the whole cell, so the target is the row's
+     * full height (45px+ here) without the row growing to make room -- #93
+     * held row heights for the same reason. Two feeds (a conflict, an A/B
+     * pair) keep a line each; both have to stay reachable. */
+    .ss-patch-feed:only-child a::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        min-height: var(--ss-patch-tap-min);
+    }
+    /* Two feeds can't both get 44px without doubling the row, so each line
+     * takes the full cell width and its half of the height, gap included. */
+    .ss-patch-feed:not(:only-child) {
+        position: relative;
+    }
+    .ss-patch-feed:not(:only-child) a::after {
+        content: '';
+        position: absolute;
+        inset: -1px -4px -1px -6px;
+    }
+    .ss-patch-toggle__btn {
+        min-height: var(--ss-patch-tap-min);
+        font-size: var(--ss-patch-text-touch);
+    }
+    .ss-patch-free summary,
+    .ss-patch-free-name {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--ss-patch-tap-min);
+    }
+    .ss-patch-free-row {
+        font-size: var(--ss-patch-text-touch);
+    }
+}
