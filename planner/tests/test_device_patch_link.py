@@ -340,6 +340,47 @@ class BackfillTests(PatchLinkBase):
         self.assertIn('In 1 "kick " -> FOH PM7 ch 1, MON CL5 ch 1', output)
         self.assertIsNone(self.port(1).console_input)
 
+    def test_same_name_on_two_boxes_links_neither(self):
+        # Prod, project 84: "GFX AL" on Y001 and on Y002 -- an A/B backup pair
+        # one link per channel cannot express. Linking both is an instant
+        # conflict, so neither is linked; a lone match elsewhere still is.
+        gfx = ConsoleInput.objects.create(console=self.foh, input_ch='45', source='GFX AL')
+        y002 = self.make_device(self.project, 'Y002')
+        DeviceInput.objects.filter(pk=self.port(4).pk).update(signal_name='GFX AL')
+        DeviceInput.objects.filter(pk=self.port(1, y002).pk).update(signal_name='gfx al ')
+        output = self.run_cmd('--apply')
+        self.assertIn('  DUPLICATE PORTS -> FOH PM7 ch 45 "GFX AL":\n'
+                      '      Stage Box A In 4 "GFX AL"\n'
+                      '      Y002 In 1 "gfx al "\n', output)
+        self.assertIn('1 matched, 2 ambiguous, 0 B input only, 0 unmatched, '
+                      '0 linked with a stale name, 2 duplicate ports (not linked)', output)
+        self.assertFalse(DeviceInput.objects.filter(console_input=gfx).exists())
+        self.assertEqual(self.port(1).console_input, self.kick)
+
+    def test_two_inputs_on_one_box_with_the_same_name_link_neither(self):
+        # Prod, project 97: In 2 and In 3 both "L-VT B" -> ch 19.
+        vt = ConsoleInput.objects.create(console=self.foh, input_ch='19', source='L-VT B')
+        for n in (2, 3):
+            DeviceInput.objects.filter(pk=self.port(n).pk).update(signal_name='L-VT B')
+        output = self.run_cmd('--apply')
+        self.assertIn('  DUPLICATE PORTS -> FOH PM7 ch 19 "L-VT B":\n'
+                      '      Stage Box A In 2 "L-VT B"\n'
+                      '      Stage Box A In 3 "L-VT B"\n', output)
+        self.assertFalse(DeviceInput.objects.filter(console_input=vt).exists())
+
+    def test_a_match_on_a_channel_that_already_has_a_port_is_not_linked(self):
+        # Same conflict, one side already in place: the existing link stays,
+        # the new one is not written, and both are listed.
+        y002 = self.make_device(self.project, 'Y002')
+        DeviceInput.objects.filter(pk=self.port(1, y002).pk).update(
+            signal_name='Kick', console_input=self.kick)
+        output = self.run_cmd('--apply')
+        self.assertIn('  DUPLICATE PORTS -> FOH PM7 ch 1 "Kick":\n'
+                      '      Y002 In 1 "Kick" (already linked, left as is)\n'
+                      '      Stage Box A In 1 "kick "\n', output)
+        self.assertIsNone(self.port(1).console_input)
+        self.assertEqual(self.port(1, y002).console_input, self.kick)
+
     def test_stale_linked_names_are_refreshed(self):
         DeviceInput.objects.filter(pk=self.port(1).pk).update(
             console_input=self.kick, signal_name='Kik')
