@@ -125,6 +125,18 @@ class HelpTopicRegistryTests(TestCase):
                 over.append('{} ({} words)'.format(t.slug, n))
         self.assertEqual(over, [], 'Topics over {} words: {}'.format(WORD_LIMIT, over))
 
+    def test_no_topic_ships_with_a_check_marker(self):
+        # [CHECK] marks a claim nobody has verified yet. Resolve it (delete the
+        # marker if the claim is right, fix the text if not) before merging.
+        marked = []
+        for t in TOPICS:
+            source = get_template(t.template).template.source
+            n = max(len(re.findall(r'\[CHECK\]', source, re.IGNORECASE)),
+                    source.count('help-check'))
+            if n:
+                marked.append('{} ({})'.format(t.slug, n))
+        self.assertEqual(marked, [], 'Unresolved [CHECK] markers: {}'.format(marked))
+
 
 # ---------------------------------------------------------------------------
 # 2. Page keys resolve
