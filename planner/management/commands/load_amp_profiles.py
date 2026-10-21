@@ -81,10 +81,10 @@ class Command(BaseCommand):
                 'nominal_voltage': 208,
                 'power_factor': 0.94,
                 'efficiency': 0.92,
-                'channels': 7,
+                'channels': 16,   # was 7; 16 outputs on one SC32 (cf. AmpModel, 0170)
                 'rack_units': 2,
                 'weight_kg': 8.5,
-                'notes': '7 channels, 800W @ 4Ω per channel, touring grade'
+                'notes': '16 channels, 800W @ 4Ω per channel, touring grade'
             },
         ]
 
