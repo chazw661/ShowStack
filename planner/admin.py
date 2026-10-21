@@ -120,21 +120,17 @@ class BaseEquipmentAdmin(BaseAdmin):
                     pass
         super().save_model(request, obj, form, change)    
     
-    def _is_premium_owner(self, request):
-        """Check if user is paid/beta (premium accounts)"""
-        if not hasattr(request.user, 'userprofile'):
-            return False
-        
-        profile = request.user.userprofile
-        # Paid and beta accounts are considered premium
-        return profile.account_type in ['paid', 'beta', 'premium']
-    
-    def _user_has_editor_access(self, request):
-        """Check if user has editor access to ANY project"""
-        return ProjectMember.objects.filter(
-            user=request.user,
-            role='editor'
-        ).exists()
+    def _can_edit_current_project(self, request):
+        """Owner or editor of the CURRENT project.
+
+        The checks this replaces asked about the account (paid/beta) or about
+        any project at all ("an editor somewhere"), so a viewer on project A
+        could add on A because they were an editor on B, or simply because
+        their account was paid. The role on the project being shown is the
+        only one that counts.
+        """
+        project = getattr(request, 'current_project', None)
+        return self._get_user_role_for_project(request, project) in ('owner', 'editor')
     
 
     # ------------------------------------------------------------------
@@ -294,16 +290,10 @@ class BaseEquipmentAdmin(BaseAdmin):
                 ).exists())
     
     def has_add_permission(self, request):
-        """Allow add if user is owner or editor (NOT viewer)"""
+        """Owner or editor of the current project (NOT viewer)."""
         if request.user.is_superuser:
             return True
-        
-        # Premium owners can add
-        if self._is_premium_owner(request):
-            return True
-        
-        # Editors can add (but NOT viewers)
-        return self._user_has_editor_access(request)
+        return self._can_edit_current_project(request)
     
     def has_change_permission(self, request, obj=None):
         """Allow change if user is owner or editor (NOT viewer)"""
@@ -311,8 +301,9 @@ class BaseEquipmentAdmin(BaseAdmin):
             return True
         
         if obj is None:
-            # For changelist view - show if has any editor access
-            return self._is_premium_owner(request) or self._user_has_editor_access(request)
+            # The changelist, including its list_editable fields and the
+            # bulk-edit actions: the current project's role decides.
+            return self._can_edit_current_project(request)
         
         # Check specific object permission
        # Handle both Project and Equipment objects
@@ -331,11 +322,8 @@ class BaseEquipmentAdmin(BaseAdmin):
             return True
         
         if obj is None:
-            return (
-                self._is_premium_owner(request) or 
-                self._user_has_editor_access(request) or
-                ProjectMember.objects.filter(user=request.user, role='owner').exists()
-            )
+            # Bulk "delete selected" on the changelist.
+            return self._can_edit_current_project(request)
         
         # Check specific object permission
         if obj.__class__.__name__ == 'Project':

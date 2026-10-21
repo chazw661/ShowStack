@@ -709,31 +709,11 @@ def mic_tracker_view(request):
             'sessions': sessions
         })
     
-    # CHECK PERMISSIONS - Add this section
-    from planner.models import Project, ProjectMember
-    
-    is_viewer = False
-    if not request.user.is_superuser:
-        # Check if user is viewer for any projects with ShowDays
-        # For simplicity, check if user has ANY viewer memberships
-        viewer_memberships = ProjectMember.objects.filter(
-            user=request.user,
-            role='viewer'
-        )
-        
-        # If user has viewer memberships but no editor/owner roles, they're read-only
-        if viewer_memberships.exists():
-            editor_owner_memberships = ProjectMember.objects.filter(
-                user=request.user,
-                role='editor'
-            ).exists()
-            
-            owns_projects = Project.objects.filter(owner=request.user).exists()
-            
-            # If ONLY viewer (no editor roles or owned projects), set read-only
-            if not editor_owner_memberships and not owns_projects:
-                is_viewer = True
-    
+    # Read-only unless the user may edit THIS project. The old check asked
+    # about every project the user belonged to, so an editor anywhere (or any
+    # project owner) got edit controls on a project they only view.
+    is_viewer = not _can_edit_current_project(request)
+
     # This is inside the mic_tracker_view function
     context = {
         'show_info': show_info,
@@ -775,14 +755,7 @@ def mic_tracker_overview_view(request):
     show_info = MicShowInfo.objects.filter(project=request.current_project).first()
 
     # Read-only gating for the Mic'd toggles — same rule as mic_tracker_view.
-    from planner.models import Project, ProjectMember
-    is_viewer = False
-    if not request.user.is_superuser:
-        if ProjectMember.objects.filter(user=request.user, role='viewer').exists():
-            has_editor = ProjectMember.objects.filter(user=request.user, role='editor').exists()
-            owns_projects = Project.objects.filter(owner=request.user).exists()
-            if not has_editor and not owns_projects:
-                is_viewer = True
+    is_viewer = not _can_edit_current_project(request)
 
     return render(request, 'planner/mic_tracker_overview.html', {
         **_shared_header_context(request),
