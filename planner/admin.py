@@ -548,10 +548,20 @@ class ProjectAdmin(admin.ModelAdmin):
     exclude = []  # We'll set this dynamically
 
 
+    def get_object(self, request, object_id, from_field=None):
+        # invite_link is a readonly-field callable, which Django hands only
+        # the object; it needs the request to know which host to link to.
+        obj = super().get_object(request, object_id, from_field)
+        if obj is not None:
+            obj._request = request
+        return obj
+
     def invite_link(self, obj):
         from django.urls import reverse
-        url = f"/projects/request/{obj.invite_token}/"
-        full_url = f"https://showstack-production.up.railway.app{url}"
+        from planner.utils.public_url import public_url
+        full_url = public_url(
+            reverse('request_access', args=[obj.invite_token]),
+            getattr(obj, '_request', None))
         return mark_safe(f'<input type="text" value="{full_url}" readonly style="width:420px;padding:4px 8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;margin-right:8px;" /> <button onclick="navigator.clipboard.writeText(\'{full_url}\');this.textContent=\'Copied!\';setTimeout(()=>this.textContent=\'Copy\',2000);return false;" style="padding:4px 10px;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer;">Copy</button>')
     invite_link.short_description = "Shareable Access Request Link"
 
