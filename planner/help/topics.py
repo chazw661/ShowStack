@@ -715,17 +715,16 @@ TOPICS = (
         keywords=('mobile', 'phone', '/m/', 'mic tracker', 'sign in', 'search', 'backstage',),
     ),
     Topic(
-        slug='mobile-comm-predictions',
-        title='Check out beltpacks and view predictions on your phone',
+        slug='mobile-predictions',
+        title='View predictions on your phone',
         section='Mobile',
-        summary='View PA arrays on your phone; check beltpacks in and out.',
+        summary='View PA arrays, trims and box angles on your phone.',
         pages=(
             'mobile:project_overview',
             'mobile:predictions_list',
             'mobile:prediction_detail',
-            'mobile:comm_list',
         ),
-        keywords=('mobile', 'predictions', 'soundvision', 'array', 'rigging', 'trim', 'comm', 'beltpack', 'checkout', 'in', 'out',),
+        keywords=('mobile', 'predictions', 'soundvision', 'array', 'rigging', 'trim',),
     ),
 )
 
