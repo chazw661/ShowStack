@@ -122,3 +122,68 @@ class FsiiPartylineLimitTests(FsiiExportBase):
         self.assertEqual(self.export().status_code, 200)
         page = self.client.get(reverse('planner:comm_config_editor', args=[self.config.pk]))
         self.assertNotContains(page, 'Export blocked.')
+
+
+class FsiiFourWirePortOrderTests(FsiiExportBase):
+    """#6: each 4W port's settings land on that port in the exported .cca.
+
+    The base station numbers its 4-wire ports by (interface hwIndex, port
+    hwIndex); the factory devices file labels those slots "4W-Port 1".."4"
+    itself. Each port gets a different function, call signal, label and
+    partyline, so a swap anywhere -- 1<->4 or otherwise -- fails here.
+    """
+
+    SLOTS = {'4w_1': (0, 0), '4w_2': (0, 1), '4w_3': (1, 0), '4w_4': (1, 1)}
+    # Port 1 and Port 4 differ from each other and from 2/3 in every field.
+    SETTINGS = {
+        '4w_1': ('4wire', True),
+        '4w_2': ('4wire-x', False),
+        '4w_3': ('4wire-x', True),
+        '4w_4': ('4wire', False),
+    }
+
+    def setUp(self):
+        super().setUp()
+        for n, (gid, (function, call)) in enumerate(self.SETTINGS.items(), 1):
+            port = self.config.port_assignments.get(port_gid=gid)
+            port.port_function = function
+            port.receive_call_signal = call
+            port.port_label = f'Desk {n}'
+            port.partyline = self.pl(n + 4)
+            port.save()
+
+    def four_wire_slots(self, device):
+        return {(iface['hwIndex'], port['hwIndex']): port
+                for iface in device['audioInterfaces'] if iface['type'] == '4W'
+                for port in iface['ports']}
+
+    def test_the_factory_file_numbers_the_slots_as_the_export_assumes(self):
+        import os
+        from django.conf import settings
+        path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config',
+                            'fsii_factory', 'devices')
+        with open(path) as f:
+            factory = [json.loads(l) for l in f if l.strip()][-1]['val']
+        slots = self.four_wire_slots(factory)
+        for n, gid in enumerate(self.SLOTS, 1):
+            self.assertEqual(slots[self.SLOTS[gid]]['label'], f'4W-Port {n}', gid)
+
+    def test_each_port_keeps_its_own_settings(self):
+        device = unpack(self.export().content)['db/devices'][-1]['val']
+        slots = self.four_wire_slots(device)
+        self.assertEqual(len(slots), 4)
+        for n, (gid, (function, call)) in enumerate(self.SETTINGS.items(), 1):
+            port = slots[self.SLOTS[gid]]
+            self.assertEqual(port['label'], f'Desk {n}', gid)
+            self.assertEqual(port['settings']['pinout'],
+                             'matrix' if function == '4wire-x' else 'panel', gid)
+            self.assertEqual(port['settings']['callSignal'], call, gid)
+            self.assertEqual(port['connections'], {str(n + 4): {'connectionState': 0}}, gid)
+
+    def test_ports_are_written_in_hardware_order(self):
+        device = unpack(self.export().content)['db/devices'][-1]['val']
+        order = [(iface['hwIndex'], port['hwIndex'], port['label'])
+                 for iface in device['audioInterfaces'] if iface['type'] == '4W'
+                 for port in iface['ports']]
+        self.assertEqual(order, [(0, 0, 'Desk 1'), (0, 1, 'Desk 2'),
+                                 (1, 0, 'Desk 3'), (1, 1, 'Desk 4')])
