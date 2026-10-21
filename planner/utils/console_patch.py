@@ -27,9 +27,8 @@ Two or more ports LINKED to one channel is a CONFLICT and each is flagged;
 names alone never make one.
 
 Outputs follow the same link / name rules. A bus feeding several I/O outputs
-is normal (the same aux to two stage boxes), so outputs have no conflicts. Aux
-and Matrix can be linked; Stereo is always by name, because the generic link
-only admits aux and matrix.
+is normal (the same aux to two stage boxes), so outputs have no conflicts. Aux,
+Matrix and Stereo can all be linked.
 
 Cost, per request, however many channels or consoles: **two queries** -- every
 DeviceInput in the project, every DeviceOutput -- plus, only when an unlinked

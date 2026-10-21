@@ -352,7 +352,7 @@ def _suggestion(console_name, kind, channel, name, ref=''):
 
     ``value`` is what is written into DeviceInput/DeviceOutput.signal_name —
     the bare source/output name. ``ref`` is the console channel it came from
-    ("in:12", "aux:3", "mtx:4"; '' for stereo, which has no link): picking the
+    ("in:12", "aux:3", "mtx:4", "st:7"): picking the
     suggestion puts it in the port's hidden ``link_ref`` field, so the port is
     saved linked to that channel as well as named after it. Typing the same
     name by hand carries no ref and saves a name only. See
@@ -480,7 +480,6 @@ def _device_output_suggestions(project_id):
             name = (output_name or '').strip()
             if not name:
                 continue
-            # Stereo gets '' -- the generic link only admits aux and matrix.
             item = _suggestion(console_name, kind, number, name,
                                device_patch.output_ref(qs.model, pk))
             if item['label'] in seen:
@@ -563,9 +562,8 @@ class DeviceOutputInlineForm(forms.ModelForm):
     (and therefore looked locked/read-only) whenever the project had no named
     console outputs — the engineer had nothing to select and no way to type a
     name (Issue #65). Mirrors ``DeviceInputInlineForm``, including the hidden
-    ``link_ref``: picking an Aux or Matrix suggestion sets the
-    content_type/object_id generic link as well as the name. Stereo picks are
-    name only -- the generic link does not admit stereo. Downstream consumers
+    ``link_ref``: picking an Aux, Matrix or Stereo suggestion sets the
+    content_type/object_id generic link as well as the name. Downstream consumers
     (P1/Galaxy processor dropdowns, Signal Flow) read ``signal_name`` directly.
     """
 

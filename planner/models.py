@@ -1766,7 +1766,8 @@ class DeviceOutput(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        limit_choices_to={'model__in': ('consoleauxoutput', 'consolematrixoutput')}
+        limit_choices_to={'model__in': ('consoleauxoutput', 'consolematrixoutput',
+                                    'consolestereooutput')}
     )
     object_id = models.PositiveIntegerField(null=True, blank=True)
     console_output = GenericForeignKey('content_type', 'object_id')
