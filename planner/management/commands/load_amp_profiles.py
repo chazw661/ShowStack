@@ -3,7 +3,7 @@ from planner.models import AmplifierProfile
 
 
 class Command(BaseCommand):
-    help = 'Load L\'Acoustics amplifier profiles into the database'
+    help = 'Load L-Acoustics amplifier profiles into the database'
     
     def add_arguments(self, parser):
         parser.add_argument(
@@ -27,7 +27,7 @@ class Command(BaseCommand):
         
         amplifiers = [
             {
-                'manufacturer': "L'Acoustics",
+                'manufacturer': "L-Acoustics",
                 'model': 'LA8',
                 'idle_power_watts': 190,
                 'rated_power_watts': 1100,
@@ -42,7 +42,7 @@ class Command(BaseCommand):
                 'notes': '4 channels, 2200W @ 8Ω per channel pair'
             },
             {
-                'manufacturer': "L'Acoustics",
+                'manufacturer': "L-Acoustics",
                 'model': 'LA4X',
                 'idle_power_watts': 140,
                 'rated_power_watts': 500,
@@ -57,7 +57,7 @@ class Command(BaseCommand):
                 'notes': '4 channels, 1000W @ 8Ω per channel, 1RU'
             },
             {
-                'manufacturer': "L'Acoustics",
+                'manufacturer': "L-Acoustics",
                 'model': 'LA12X',
                 'idle_power_watts': 240,
                 'rated_power_watts': 1500,
