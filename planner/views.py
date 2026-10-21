@@ -5158,7 +5158,26 @@ def create_session(request):
 # ─────────────────────────────────────────────────────────────
 # COMM Config — Create
 # ─────────────────────────────────────────────────────────────
+def _edit_rights_required(view):
+    """JSON 403 unless the user may edit the CURRENT project.
+
+    Every COMM Config write endpoint scoped its lookup to the current project
+    (so another tenant's rows 404) but never asked about the role ON it, so a
+    viewer could add, rename and delete partylines, roles, ports and whole
+    configs with a fetch() -- the page only hid the buttons. The check is
+    _can_edit_current_project, the per-project rule (owner, editor or
+    superuser), resolved when the request arrives.
+    """
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not _can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
 @require_POST
+@_edit_rights_required
 def comm_config_create(request):
     try:
         data = _json.loads(request.body)
@@ -5335,6 +5354,7 @@ def _seed_factory_defaults(config):
 # COMM Config — Partyline CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_update_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5358,6 +5378,7 @@ def comm_config_update_partyline(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_add_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5393,6 +5414,7 @@ def comm_config_add_partyline(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5420,6 +5442,7 @@ def comm_config_delete_partyline(request):
 # COMM Config — Keyset update
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_update_keyset(request):
     try:
         data = _json.loads(request.body)
@@ -5464,6 +5487,7 @@ def comm_config_update_keyset(request):
 # COMM Config — Role update
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_update_role(request):
     try:
         data = _json.loads(request.body)
@@ -5488,6 +5512,7 @@ def comm_config_update_role(request):
 # COMM Config — Role delete
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_delete_role(request):
     try:
         data = _json.loads(request.body)
@@ -5512,6 +5537,7 @@ def comm_config_delete_role(request):
 # COMM Config — Add Role
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_role(request):
     try:
         data = _json.loads(request.body)
@@ -5582,6 +5608,7 @@ def comm_config_role_chips(request):
 # This endpoint only assigns an existing port to a partyline.
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_assign_port(request):
     try:
         data = _json.loads(request.body)
@@ -5628,6 +5655,7 @@ _SETTINGS_ALLOWED_FIELDS = {
 }
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_setting(request):
     try:
         data = _json.loads(request.body)
@@ -5662,6 +5690,7 @@ def comm_config_update_setting(request):
 # COMM Config — Delete Config
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_delete(request):
     try:
         data = _json.loads(request.body)
@@ -6691,6 +6720,7 @@ def audio_checklist_delete_template(request):
 # COMM Config — Dante Channel CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6717,6 +6747,7 @@ def comm_config_add_dante(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6743,6 +6774,7 @@ def comm_config_update_dante(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6759,6 +6791,7 @@ def comm_config_delete_dante(request):
 # COMM Config — Session CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_session(request):
     try:
         data = _json.loads(request.body)
@@ -6782,6 +6815,7 @@ def comm_config_add_session(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_session(request):
     try:
         data = _json.loads(request.body)
@@ -6815,6 +6849,7 @@ def comm_config_update_session(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_session(request):
     try:
         data = _json.loads(request.body)
@@ -6837,6 +6872,7 @@ def comm_config_delete_session(request):
 # COMM Config — Roleset CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -6863,6 +6899,7 @@ def comm_config_add_roleset(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -6880,6 +6917,7 @@ def comm_config_update_roleset(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -6896,6 +6934,7 @@ def comm_config_delete_roleset(request):
 # COMM Config — Crew Name CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_crew_name(request):
     try:
         data = _json.loads(request.body)
@@ -6914,6 +6953,7 @@ def comm_config_add_crew_name(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_crew_name(request):
     try:
         data = _json.loads(request.body)
@@ -6999,13 +7039,20 @@ def dashboard_stats(request):
 
 
 @login_required
+@_edit_rights_required
 def comm_config_update_lan(request):
     import json
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     data = json.loads(request.body)
     from planner.models import CommConfigNetworkPort
-    lan = CommConfigNetworkPort.objects.get(id=data['lan_id'])
+    # Scoped: this fetched by id alone, so any signed-in user could rewrite
+    # another tenant's base-station IP, gateway and Dante settings.
+    lan = CommConfigNetworkPort.objects.filter(
+        id=data.get('lan_id'), config__project=_scoped_project(request),
+    ).first()
+    if lan is None:
+        return JsonResponse({'error': 'Not found'}, status=404)
     allowed = {'mode', 'static_ip', 'netmask', 'gateway', 'dns1', 'dns2', 'traffic_type', 'ptp_follower_mode', 'dante_redundancy'}
     for field, value in data.items():
         if field in allowed:
@@ -7018,6 +7065,7 @@ def comm_config_update_lan(request):
 # ─────────────────────────────────────────────────────────────
 @login_required
 @require_POST
+@_edit_rights_required
 def comm_config_save_as_template(request):
     import json as _j
     try:
@@ -7134,6 +7182,7 @@ def comm_config_list_templates(request):
 
 @login_required
 @require_POST
+@_edit_rights_required
 def comm_config_load_template(request):
     import json as _j
     try:
