@@ -62,6 +62,13 @@ class Port:
     number: int          # 1-based position on the device, as its page and PDF number it
     name: str
     link: tuple | None   # inputs: (console id, channel pk); outputs: (content type id, pk)
+    pk: int = 0          # the DeviceInput / DeviceOutput row
+
+    @property
+    def free(self):
+        """Free = no name and no link. The one definition, used by the
+        free-ports block and by the picker on the Console page."""
+        return not self.name and not self.link
 
 
 @dataclass
@@ -100,9 +107,9 @@ def _ports(rows):
     """Number each device's ports by position, the way its page does."""
     ports = []
     for _, device_rows in groupby(rows, key=lambda r: r[0]):
-        for number, (device_id, device_name, name, ct_id, pk) in enumerate(device_rows, 1):
+        for number, (device_id, device_name, name, ct_id, pk, row_pk) in enumerate(device_rows, 1):
             ports.append(Port(device_id, device_name, number, (name or '').strip(),
-                              (ct_id, pk) if pk else None))
+                              (ct_id, pk) if pk else None, row_pk))
     return ports
 
 
@@ -125,7 +132,7 @@ class PortIndex:
                 .filter(device__project_id=self.project_id, input_number__isnull=False)
                 .order_by('device__name', 'device_id', 'input_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
-                             'console_input__console_id', 'console_input_id'))
+                             'console_input__console_id', 'console_input_id', 'pk'))
         return _ports(rows)
 
     # -- names on every console ----------------------------------------------
@@ -173,7 +180,7 @@ class PortIndex:
                 .filter(device__project_id=self.project_id, output_number__isnull=False)
                 .order_by('device__name', 'device_id', 'output_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
-                             'content_type_id', 'object_id'))
+                             'content_type_id', 'object_id', 'pk'))
         return _ports(rows)
 
     # -- console rows -----------------------------------------------------
@@ -305,7 +312,7 @@ class PortIndex:
                     'inputs': [], 'outputs': [], 'input_total': 0, 'output_total': 0,
                 })
                 d[side[:-1] + '_total'] += 1
-                if not port.name and not port.link:
+                if port.free:
                     d[side].append(port.number)
         summaries = []
         for d in sorted(devices.values(), key=lambda d: (d['name'].casefold(), d['id'])):

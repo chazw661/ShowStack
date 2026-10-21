@@ -186,7 +186,8 @@ body.model-console.change-form #consolestereooutput_set-group {
 /* Only the device name gives way: "Stage Box A · In 12" becomes
  * "Stage Bo… · In 12", never "Stage Box A · I…". Tags never shrink. The full
  * line is in the row's title. */
-.ss-patch-feed a {
+.ss-patch-feed a,
+.ss-patch-feed .ss-patch-link {
     display: inline-flex;
     /* Basis 0, not auto: the line wraps only for the caption (basis 100%),
      * never to push the link off the line its B tag is on -- it shrinks and
@@ -239,10 +240,12 @@ body.model-console.change-form #consolestereooutput_set-group {
 }
 
 /* By name: the same link, dimmer -- true today, but nothing holds it. */
-.ss-patch-by_name a {
+.ss-patch-by_name a,
+.ss-patch-by_name .ss-patch-link {
     opacity: 0.8;
 }
-.ss-patch-ambiguous a {
+.ss-patch-ambiguous a,
+.ss-patch-ambiguous .ss-patch-link {
     opacity: 0.7;
     font-style: italic;
 }
@@ -259,7 +262,8 @@ body.model-console.change-form #consolestereooutput_set-group {
  * spans too in case anything paints them directly. */
 body.model-console .inline-group td.field-patch .ss-patch-conflict a,
 body.model-console .inline-group td.field-patch .ss-patch-conflict a:visited,
-body.model-console .inline-group td.field-patch .ss-patch-conflict a span {
+body.model-console .inline-group td.field-patch .ss-patch-conflict a span,
+body.model-console .inline-group td.field-patch .ss-patch-conflict .ss-patch-link span {
     color: var(--ss-patch-amber) !important;
 }
 
@@ -359,3 +363,254 @@ body.model-console .inline-group td.field-patch .ss-patch-conflict a span {
         font-size: var(--ss-patch-text-touch);
     }
 }
+
+/* --- patching from here (owner / editor) ------------------------------ *
+ *
+ * The cell is one button (console_patch_picker.js). It keeps the read-only
+ * cell's look -- same feeds, same 150px -- and its ::after covers the whole
+ * cell, so the target is the row's full height on any pointer and the row
+ * does not grow. Viewers get the read-only cell, with no button. */
+.ss-patch-edit {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.ss-patch-edit::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 3px;
+}
+.ss-patch-edit:hover::after,
+.ss-patch-edit:focus-visible::after {
+    outline: 1px solid #2a73c4;
+    outline-offset: -2px;
+}
+.ss-patch-edit .ss-patch-link {
+    color: var(--ss-link, #6cb6ff);
+}
+.ss-patch-edit .ss-patch-none {
+    color: var(--ss-link, #6cb6ff) !important;
+    opacity: 0.75;
+}
+/* The read-only overlay rules above are for links; the button has its own. */
+.ss-patch-edit .ss-patch-feed a::after,
+.ss-patch-edit .ss-patch-feed .ss-patch-link::after {
+    content: none !important;
+}
+td.field-patch .ss-pp-flash::after,
+.ss-pp-flash .ss-patch-edit::after {
+    animation: ss-pp-flash 1.2s ease-out;
+}
+@keyframes ss-pp-flash {
+    from { background: rgba(42, 115, 196, 0.45); }
+    to   { background: transparent; }
+}
+
+/* --- the picker panel -------------------------------------------------- *
+ *
+ * On <body>, outside the console form. A centred sheet that fits every iPad
+ * size in either orientation (768-1366 wide) and a phone: 560px or the
+ * window less a 16px gutter, never taller than the window less 32px; its
+ * body scrolls, the header does not. Every control is 44px tall (#93). */
+html.ss-pp-open,
+html.ss-pp-open body {
+    overflow: hidden;
+}
+.ss-pp-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.55);
+    box-sizing: border-box;
+}
+.ss-pp-backdrop[hidden] {
+    display: none;
+}
+.ss-pp {
+    --ss-pp-tap: 44px;
+    display: flex;
+    flex-direction: column;
+    width: min(560px, 100%);
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    background: var(--ss-raised, #26282d);
+    color: var(--ss-field-text, #e8e8ea);
+    border: 1px solid var(--ss-border, #33353b);
+    border-radius: 8px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    font-size: 14px;
+    overflow: hidden;
+}
+.ss-pp.is-busy .ss-pp-body {
+    opacity: 0.6;
+    pointer-events: none;
+}
+.ss-pp-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 4px 4px 16px;
+    border-bottom: 1px solid var(--ss-border, #33353b);
+}
+.ss-pp-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 15px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ss-pp-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 8px 16px 16px;
+}
+.ss-pp-msg {
+    margin: 8px 16px 0;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background: rgba(42, 115, 196, 0.15);
+    border-left: 3px solid #2a73c4;
+}
+.ss-pp-msg.is-warn  { background: var(--ss-patch-amber-bg, rgba(245,165,36,.12)); border-color: var(--ss-patch-amber, #f5a524); }
+.ss-pp-msg.is-error { background: rgba(229, 72, 77, 0.15); border-color: #e5484d; }
+.ss-pp-msg.is-ok    { background: rgba(48, 164, 108, 0.15); border-color: #30a46c; }
+.ss-pp-msg[hidden] { display: none; }
+.ss-pp-h {
+    margin: 12px 0 6px !important;
+    padding: 0 !important;
+    background: none !important;
+    font-size: 11px !important;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b8f98) !important;
+}
+.ss-pp-empty,
+.ss-pp-loading {
+    margin: 4px 0;
+    color: var(--text-muted, #8b8f98);
+}
+.ss-pp-note {
+    font-size: 12px;
+    color: var(--text-muted, #8b8f98);
+}
+
+.ss-pp-btn {
+    min-height: var(--ss-pp-tap);
+    min-width: var(--ss-pp-tap);
+    padding: 0 14px;
+    border: 1px solid #555;
+    border-radius: 6px;
+    background: #2b2b2b;
+    color: #e8e8ea;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+.ss-pp-btn:hover:not(:disabled) { border-color: #2a73c4; }
+.ss-pp-btn:disabled { cursor: default; }
+.ss-pp-close {
+    padding: 0;
+    font-size: 24px;
+    line-height: 1;
+    border-color: transparent;
+    background: none;
+}
+.ss-pp-primary { background: #2a73c4; border-color: #2a73c4; color: #fff; }
+.ss-pp-warn    { border-color: var(--ss-patch-amber, #f5a524); color: var(--ss-patch-amber, #f5a524); }
+.ss-pp-unpatch { flex: none; }
+
+.ss-pp-feed {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--ss-border, #33353b);
+}
+.ss-pp-feed-text { flex: 1 1 auto; min-width: 0; }
+.ss-pp-feed-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--ss-pp-tap);
+    overflow-wrap: anywhere;
+}
+.ss-pp-feed.is-conflict .ss-pp-feed-link { color: var(--ss-patch-amber, #f5a524) !important; }
+.ss-pp-feed.is-ambiguous .ss-pp-feed-link { font-style: italic; opacity: 0.75; }
+
+.ss-pp-device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ss-pp-device {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+}
+.ss-pp-device-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-pp-device-free { flex: none; color: var(--text-muted, #8b8f98); }
+.ss-pp-device.is-full .ss-pp-device-name { opacity: 0.6; }
+
+.ss-pp-ports-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+.ss-pp-ports-head .ss-pp-h { margin: 0 !important; }
+.ss-pp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+}
+.ss-pp-port {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 4px;
+    min-height: 48px;
+}
+.ss-pp-port-n { font-weight: 700; font-size: 15px; }
+.ss-pp-port-name {
+    max-width: 100%;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ss-pp-port.is-free { border-color: #2a73c4; }
+.ss-pp-port.is-used { opacity: 0.45; background: transparent; }
+.ss-pp-port.is-mine { opacity: 1; border-color: #30a46c; color: #30a46c; }
+
+.ss-pp-choice-text { margin: 12px 0 8px; }
+.ss-pp-choice-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ss-pp-choice + .ss-pp-note,
+.ss-pp-choice .ss-pp-note { margin-top: 8px; }

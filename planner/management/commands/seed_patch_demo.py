@@ -44,9 +44,21 @@ Deliberate edge cases, so every display state has something to show:
                      to FOH ch 70 "Host Mic"
   unpatched          FOH 72-89 are named with no port; 92-96 are blank
   outputs            Aux 1-8 -> Stage Box A out 1-8 (linked), Aux 1 also ->
-                     Stage Box A out 9; St L/R -> Stage Box B out 1-2 (stereo
-                     has no link, so by name); Mtx 1 linked, Mtx 2 by name;
+                     Stage Box A out 9; St L -> Stage Box B out 1 (linked),
+                     St R -> out 2 (by name); Mtx 1 linked, Mtx 2 by name;
                      Stage Box B out 5 "Comms Feed" free-typed
+  free ports         for patching from the Console page -- Stage Box A in
+                     26, 28-29, 31-32 / out 10-16; Stage Box B in 13-19, 21,
+                     23-24, 26, 28-32 / out 6-16; MON Stage Box in 11-16 /
+                     out 1-8; Wireless Rack out 1-2
+
+Two local logins for the Console page's picker (Phase B), password = name:
+
+  demo-editor        editor on the demo show: every Patch cell opens the picker
+  demo-viewer        viewer on it: the same cells, read-only
+
+Both hold the console / I/O device model permissions every invited user has
+in prod (the global Editor group's), so only their role on this show decides.
 
 Usage::
 
@@ -54,15 +66,19 @@ Usage::
     python manage.py seed_patch_demo --user charlie
 """
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 
 from planner.models import (
     Console, ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput,
-    ConsoleStereoOutput, Device, DeviceInput, DeviceOutput, Project,
+    ConsoleStereoOutput, Device, DeviceInput, DeviceOutput, Project, ProjectMember,
 )
+
+DEMO_LOGINS = {'demo-editor': 'editor', 'demo-viewer': 'viewer'}
+CONSOLE_MODELS = ('console', 'consoleinput', 'consoleauxoutput', 'consolematrixoutput',
+                  'consolestereooutput', 'device', 'deviceinput', 'deviceoutput')
 
 PROJECT_NAME = 'Patch Demo (seed)'
 
@@ -110,10 +126,13 @@ class Command(BaseCommand):
         with transaction.atomic():
             replaced = Project.objects.filter(owner=user, name=PROJECT_NAME).delete()[0]
             project = self._build(user)
+            self._logins(project, user)
 
         self.stdout.write(self.style.SUCCESS(
             f'{"Replaced" if replaced else "Created"} "{PROJECT_NAME}" '
             f'(project id {project.pk}) owned by {user.username}.'))
+        self.stdout.write('Logins (password = username): '
+                          + ', '.join(f'{u} ({r})' for u, r in DEMO_LOGINS.items()))
         self.stdout.write('Select it in the project switcher, then open '
                           'Consoles -> FOH Rivage PM7.')
 
@@ -171,8 +190,9 @@ class Command(BaseCommand):
         for n, name in enumerate(MATRIX, 1):
             mtx[n] = ConsoleMatrixOutput.objects.create(
                 console=foh, matrix_number=str(n), name=name, mono_stereo='Mono')
+        stereo = {}
         for st, name in (('L', 'PA Left'), ('R', 'PA Right'), ('M', 'Sub')):
-            ConsoleStereoOutput.objects.create(console=foh, stereo_type=st, name=name)
+            stereo[st] = ConsoleStereoOutput.objects.create(console=foh, stereo_type=st, name=name)
 
         box_a = self._device(project, 'Stage Box A', 32, 16)
         box_b = self._device(project, 'Stage Box B', 32, 16)
@@ -224,6 +244,7 @@ class Command(BaseCommand):
 
         aux_ct = ContentType.objects.get_for_model(ConsoleAuxOutput)
         mtx_ct = ContentType.objects.get_for_model(ConsoleMatrixOutput)
+        st_ct = ContentType.objects.get_for_model(ConsoleStereoOutput)
 
         def out(device, port, name, ct=None, obj=None):
             DeviceOutput.objects.filter(device=device, output_number=port).update(
@@ -233,12 +254,27 @@ class Command(BaseCommand):
         for n in range(1, 9):
             out(box_a, n, AUX[n - 1], aux_ct, aux[n])
         out(box_a, 9, AUX[0], aux_ct, aux[1])            # one aux, two outputs
-        out(box_b, 1, 'PA Left')                          # stereo: name only
-        out(box_b, 2, 'PA Right')
+        out(box_b, 1, 'PA Left', st_ct, stereo['L'])      # stereo, linked
+        out(box_b, 2, 'PA Right')                         # stereo, by name
         out(box_b, 3, 'Lobby', mtx_ct, mtx[1])
         out(box_b, 4, 'Front Fill')                       # matrix, by name
         out(box_b, 5, 'Comms Feed')                       # free-typed
         return project
+
+    @staticmethod
+    def _logins(project, owner):
+        """demo-editor / demo-viewer, re-created on every run (local only)."""
+        perms = Permission.objects.filter(content_type__app_label='planner',
+                                          content_type__model__in=CONSOLE_MODELS)
+        for username, role in DEMO_LOGINS.items():
+            user, _ = User.objects.get_or_create(username=username)
+            user.is_staff = True
+            user.set_password(username)
+            user.save()
+            user.user_permissions.add(*perms)
+            ProjectMember.objects.update_or_create(
+                user=user, project=project,
+                defaults={'role': role, 'invited_by': owner})
 
     @staticmethod
     def _device(project, name, ins, outs):
