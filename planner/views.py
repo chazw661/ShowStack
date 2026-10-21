@@ -2593,6 +2593,7 @@ def comm_config_view(request, config_id=None):
                 'all_roles': all_roles if config_id else [],
                 'current_project': current_project,
                 'crew_names': CommCrewName.objects.filter(project=current_project).order_by('name') if current_project else [],
+                'fsii_out_of_range': _fsii_partylines_out_of_range(config),
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
             }
 
@@ -5184,6 +5185,22 @@ def comm_config_create(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+# The FreeSpeak II export writes partylines into the factory `connections`
+# file (planner/data/comm_config/fsii_factory), which holds channels 1-12 and
+# no others. A partyline numbered above 12 had its name dropped without a word
+# and every key or port routed to it pointed at a channel the base station
+# does not have -- so a FreeSpeak config may only use channels 1-12.
+FSII_PARTYLINE_CHANNELS = range(1, 13)
+
+
+def _fsii_partylines_out_of_range(config):
+    """Partylines a FreeSpeak II export cannot carry ([] for Arcadia)."""
+    if config is None or config.device_type != 'freespeak':
+        return []
+    return [pl for pl in config.partylines.order_by('channel_number')
+            if pl.channel_number not in FSII_PARTYLINE_CHANNELS]
+
+
 def _seed_freespeak_defaults(config):
     """Populate a new FreeSpeak config with 12 default channels and ports."""
     for ch in range(1, 13):
@@ -5350,6 +5367,16 @@ def comm_config_add_partyline(request):
         # Next available channel number
         existing = config.partylines.values_list('channel_number', flat=True)
         next_ch = max(existing, default=0) + 1
+        if config.device_type == 'freespeak':
+            # Lowest free channel in 1-12, so deleting CH 5 and adding one
+            # gives CH 5 back rather than CH 13.
+            free = [ch for ch in FSII_PARTYLINE_CHANNELS if ch not in set(existing)]
+            if not free:
+                return JsonResponse({'error': (
+                    'FreeSpeak II has 12 partylines (CH 1-12) and this config '
+                    'uses all of them. Rename one instead of adding another.'
+                )}, status=400)
+            next_ch = free[0]
         pl = CommConfigPartyline.objects.create(
             config=config,
             channel_number=next_ch,
@@ -7189,6 +7216,18 @@ def comm_config_export_freespeak(request, config_id):
     config = get_object_or_404(
         CommConfig, id=config_id, project=_scoped_project(request),
     )
+    out_of_range = _fsii_partylines_out_of_range(config)
+    if out_of_range:
+        # Refuse rather than export a file that silently loses these.
+        from django.utils.html import format_html, format_html_join
+        return HttpResponse(format_html(
+            '<p>Not exported: FreeSpeak II has partylines CH 1-12 only, and '
+            'this config also has {}.</p><p>Delete them on the Partylines tab, '
+            'then export again.</p><p><a href="{}">Back to {}</a></p>',
+            format_html_join(', ', 'CH {} "{}"',
+                             ((pl.channel_number, pl.label) for pl in out_of_range)),
+            reverse('planner:comm_config_editor', args=[config.id]), config.name,
+        ), status=409)
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config', 'fsii_factory')
 
     if not os.path.exists(factory_path):
