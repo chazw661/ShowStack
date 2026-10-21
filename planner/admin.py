@@ -628,6 +628,54 @@ class ProjectAdmin(admin.ModelAdmin):
         if hasattr(request.user, 'userprofile'):
             return request.user.userprofile.account_type in ['paid', 'beta', 'premium']
         return False
+
+    # View/change/delete used Django's model permissions, which only the
+    # global Editor/Viewer groups carry -- and only people who have accepted
+    # an invitation are in those. So a paid owner who had never been invited
+    # anywhere got a 403 from the Admin Panel button on their own project.
+    # The role on the project decides instead; get_queryset already limits
+    # the list to projects the user owns or belongs to.
+
+    def _role(self, request, project):
+        if project.owner_id == request.user.id:
+            return 'owner'
+        return (ProjectMember.objects.filter(user=request.user, project=project)
+                .values_list('role', flat=True).first())
+
+    def _has_any_project(self, request):
+        if not request.user.is_authenticated:
+            return False
+        return Project.objects.filter(
+            Q(owner=request.user) | Q(projectmember__user=request.user)).exists()
+
+    def has_module_permission(self, request):
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        return self._has_any_project(request) or self.has_add_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return self.has_module_permission(request)
+        return self._role(request, obj) is not None
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return self._has_any_project(request)
+        return self._role(request, obj) in ('owner', 'editor')
+
+    def has_delete_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return (request.user.is_authenticated
+                    and Project.objects.filter(owner=request.user).exists())
+        return obj.owner_id == request.user.id
     
     def save_model(self, request, obj, form, change):
         """Set owner to current user if creating"""
@@ -6757,24 +6805,32 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
 
 
 
+    # AmplifierProfile is ONE catalogue shared by every account -- it has no
+    # project or owner -- and every Power Distribution Plan's current draw is
+    # computed from it. These hooks used Django's model permissions, which
+    # only the global Editor/Viewer groups carry, so:
+    #   * an owner who had never accepted an invitation could not see the
+    #     list, or pick an amp in a power plan (the amplifier autocomplete
+    #     asks this admin for view permission); and
+    #   * anyone who had accepted an EDITOR invitation on any show could
+    #     rewrite a figure for every other customer.
+    # Everyone with admin access may read it; only a superuser may change it.
+
+    def has_module_permission(self, request):
+        return self.admin_site.has_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self.admin_site.has_permission(request)
+
     def has_add_permission(self, request):
-        """Only editors and owners can add"""
-        if request.user.is_superuser:
-            return True
-        return super().has_add_permission(request)
-    
+        return request.user.is_superuser
+
     def has_change_permission(self, request, obj=None):
-        """Only editors and owners can edit"""
-        if request.user.is_superuser:
-            return True
-        return super().has_change_permission(request, obj)
-    
+        return request.user.is_superuser
+
     def has_delete_permission(self, request, obj=None):
-        """Only editors and owners can delete"""
-        if request.user.is_superuser:
-            return True
-        return super().has_delete_permission(request, obj)
-    
+        return request.user.is_superuser
+
     class Media:
         css = {
             'all': ('admin/css/amplifier_profile_buttons.css',)

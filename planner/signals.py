@@ -4,7 +4,7 @@ from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from .models import (
-    UserProfile,
+    Project, UserProfile,
     ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
     DeviceInput, DeviceOutput,
     MicSession, MicAssignment,
@@ -32,6 +32,40 @@ def ensure_user_profile(sender, instance, created, **kwargs):
         except IntegrityError:
             # Another signal fired first and created it - just fetch it
             profile = UserProfile.objects.get(user=instance)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Admin access for everyone who owns, or may create, a project
+#
+# Every equipment page, "+ Create New Project" and the Admin Panel button
+# live in the admin, which needs is_staff (as do the 49
+# @staff_member_required views). Accepting an invitation sets it
+# (accounts.views.accept_invitation); nothing set it for a paid or beta
+# account, or for the owner of a project, so an owner who had never been
+# invited anywhere was turned away from their own show. Only ever granted
+# here, never taken away: is_active is the switch for shutting an account.
+# Migration 0202 does the same for accounts that already exist.
+# ──────────────────────────────────────────────────────────────────
+
+STAFF_ACCOUNT_TYPES = ('paid', 'beta')
+
+
+def _grant_staff(user):
+    if user is not None and user.is_active and not user.is_staff:
+        # .update(), not .save(): no User post_save round trip.
+        User.objects.filter(pk=user.pk).update(is_staff=True)
+        user.is_staff = True
+
+
+@receiver(post_save, sender=UserProfile)
+def staff_for_paid_accounts(sender, instance, **kwargs):
+    if instance.account_type in STAFF_ACCOUNT_TYPES:
+        _grant_staff(instance.user)
+
+
+@receiver(post_save, sender=Project)
+def staff_for_project_owners(sender, instance, **kwargs):
+    _grant_staff(instance.owner)
 
 
 # ──────────────────────────────────────────────────────────────────

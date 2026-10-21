@@ -297,7 +297,7 @@
         </div>
         <div class="header-right">
             <a href="{% url 'dashboard' %}" class="btn-back">← Back to Dashboard</a>
-            {% if is_owner and user.is_staff %}
+            {% if is_owner %}
             <a href="/admin/planner/project/{{ project.id }}/change/" class="btn-admin">Admin Panel</a>
             {% endif %}
             {% if can_invite %}
@@ -394,7 +394,7 @@
             <div class="equipment-placeholder">
                 <p><strong>Equipment management coming soon!</strong></p>
                 <p>This is where you'll manage consoles, devices, amplifiers, cables, and all show equipment.</p>
-                {% if is_owner and user.is_staff %}
+                {% if is_owner %}
                 <p style="margin-top: 20px;">For now, use the <a href="/admin/planner/project/{{ project.id }}/change/" style="color: #4a9eff;">Admin Panel</a> to manage equipment.</p>
                 {% endif %}
             </div>
