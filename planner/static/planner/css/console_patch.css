@@ -491,6 +491,7 @@ html.ss-pp-open body {
 .ss-pp-msg.is-error { background: rgba(229, 72, 77, 0.15); border-color: #e5484d; }
 .ss-pp-msg.is-ok    { background: rgba(48, 164, 108, 0.15); border-color: #30a46c; }
 .ss-pp-msg[hidden] { display: none; }
+.ss-pp-info { margin: 12px 0 0; font-size: 13px; }
 .ss-pp-h {
     margin: 12px 0 6px !important;
     padding: 0 !important;

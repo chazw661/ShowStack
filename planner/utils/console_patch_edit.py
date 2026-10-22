@@ -3,9 +3,16 @@
 Phase A (planner/utils/console_patch.py) shows what feeds each channel. This
 is the write side: tap a channel's Patch cell, choose an I/O device and a free
 port, and the port is linked to the channel. Nothing new about what a link IS:
-every write goes through ``device_patch.apply_input_link`` /
-``apply_output_link``, the same rules the I/O device page saves with, so a port
-patched here is stored exactly as if it had been picked on the device page.
+every write goes through planner/utils/device_patch.py -- ``link_input_port`` /
+``link_output_port`` to patch, ``apply_input_link`` / ``apply_output_link`` to
+free a port -- so a port patched here is stored exactly as if its channel had
+been picked on the I/O device page.
+
+An unnamed channel can be patched. The port takes the name the engineer sees
+on this page: a name typed into the row and not yet saved (the request carries
+it; the console form is never submitted), else the saved name, else blank.
+Saving the page later moves the saved name onto the port (planner/signals.py),
+so port and channel agree either way.
 
 What can be patched:
 
@@ -13,7 +20,8 @@ What can be patched:
     (a port named after the channel's Source (B)), shown but not editable here.
   * Outputs: Aux, Matrix and Stereo.
   * Only I/O devices in the console's project, and only FREE ports (no name,
-    no link -- ``Port.free``). A used port is shown with its name, dimmed.
+    no link -- ``Port.free``; a linked port with a blank name is used). A used
+    port is shown with its name, dimmed.
 
 The current patch of a channel is its A feeds that are LINKED or BY NAME.
 Ambiguous names fit several channels and belong to none, so they are never
@@ -209,18 +217,40 @@ def picker(channel, index):
 
 # -- writing -----------------------------------------------------------------
 
-def _apply_link(row, name, channel):
+NAME_MAX = DeviceInput._meta.get_field('signal_name').max_length
+
+
+def _save(row):
     if isinstance(row, DeviceInput):
-        device_patch.apply_input_link(row, name, channel)
         row.save(update_fields=['signal_name', 'console_input'])
     else:
-        device_patch.apply_output_link(row, name, channel)
         row.save(update_fields=['signal_name', 'content_type', 'object_id'])
 
 
-def apply(kind, channel_pk, project, *, action, port_pk, state, mode=''):
+def _unlink(row):
+    if isinstance(row, DeviceInput):
+        device_patch.apply_input_link(row, '', None)
+    else:
+        device_patch.apply_output_link(row, '', None)
+    _save(row)
+
+
+def _link(row, channel, name):
+    if isinstance(row, DeviceInput):
+        device_patch.link_input_port(row, channel, name)
+    else:
+        device_patch.link_output_port(row, channel, name)
+    _save(row)
+
+
+def apply(kind, channel_pk, project, *, action, port_pk, state, mode='', name=''):
     """Patch ``port_pk`` to the channel, or unpatch it. Atomic; raises
-    PatchError (nothing written) when refused."""
+    PatchError (nothing written) when refused. ``name`` is the channel's name
+    as typed on the page and not yet saved, if any (see above)."""
+    name = (name or '').strip()
+    if len(name) > NAME_MAX:
+        raise PatchError(400, 'name_too_long',
+                         f'A port name is at most {NAME_MAX} characters.')
     with transaction.atomic():
         channel = load_channel(kind, channel_pk, project, lock=True)
         if channel is None:
@@ -246,7 +276,7 @@ def apply(kind, channel_pk, project, *, action, port_pk, state, mode=''):
         if action == 'unpatch':
             if port.pk not in {f.port.pk for f in current}:
                 raise PatchError(409, 'stale', 'That port is not patched here any more.')
-            _apply_link(row, '', None)
+            _unlink(row)
             return
 
         if action != 'patch':
@@ -255,11 +285,6 @@ def apply(kind, channel_pk, project, *, action, port_pk, state, mode=''):
             raise PatchError(409, 'port_taken',
                              f'{port.device_name} {"In" if is_input(channel) else "Out"} '
                              f'{port.number} was patched since you opened this. Pick another.')
-        name = channel_name(channel)
-        if not name:
-            raise PatchError(422, 'unnamed',
-                             f'{channel_label(channel)} has no saved name. A port takes its '
-                             f'channel\'s name: name it, save the page, then patch.')
         if current and mode not in (REPLACE, ADD):
             raise PatchError(400, 'choose', 'Choose Replace or Add.')
 
@@ -270,8 +295,8 @@ def apply(kind, channel_pk, project, *, action, port_pk, state, mode=''):
             old = (rows_model.objects.select_for_update(of=('self',))
                    .filter(pk__in=[f.port.pk for f in current], device__project=project))
             for old_row in old:
-                _apply_link(old_row, '', None)
-        _apply_link(row, name, channel)
+                _unlink(old_row)
+        _link(row, channel, name or channel_name(channel))
 
 
 def response_payload(kind, channel_pk, project, channel=None):

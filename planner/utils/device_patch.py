@@ -15,7 +15,12 @@ later "patch from the console page" all agree:
     name. A name edited to something else is a free-typed name.
   * Renaming the channel moves the port's name with it (planner/signals.py),
     so the link holds and every reader of ``signal_name`` shows the current
-    channel name.
+    channel name -- including blank -> a name.
+  * Patching from the Console page (``link_input_port`` / ``link_output_port``)
+    links the port whatever the channel's name, even none: the port takes the
+    name the engineer sees on that page, saved or not, and a blank one is
+    filled when the channel is named and saved. A linked port with a blank name
+    is still used, not free.
 
 A link is written as a short reference string -- ``in:<pk>``, ``aux:<pk>``,
 ``mtx:<pk>``, ``st:<pk>`` -- which is what the combobox carries in a hidden field. It is
@@ -92,10 +97,11 @@ def link_holds(posted_name, channel_name, initial_name):
     Yes when it is the linked channel's current name, or when the engineer did
     not touch the field (which covers a channel renamed to blank: the port
     shows its last name, and leaving it alone must not silently unlink it).
-    A blank name never holds -- clearing the field clears both.
+    A blank name holds only when it was blank already (a port patched to an
+    unnamed channel, left alone); clearing a name clears both.
     """
     if not norm(posted_name):
-        return False
+        return not norm(initial_name)
     return norm(posted_name) in {norm(channel_name), norm(initial_name)} - {''}
 
 
@@ -112,6 +118,21 @@ def apply_input_link(device_input, posted_name, channel, initial_name=''):
     else:
         device_input.console_input = None
         device_input.signal_name = name
+
+
+def link_input_port(device_input, channel, name=''):
+    """Link ``device_input`` to ``channel`` from the Console page. ``name`` is
+    the channel's name as that page shows it (typed and not yet saved, or
+    saved) and may be blank. Does not save."""
+    device_input.console_input = channel
+    device_input.signal_name = (name or '').strip()
+
+
+def link_output_port(device_output, bus, name=''):
+    """Output counterpart of ``link_input_port``. Does not save."""
+    device_output.content_type = ContentType.objects.get_for_model(type(bus))
+    device_output.object_id = bus.pk
+    device_output.signal_name = (name or '').strip()
 
 
 def apply_output_link(device_output, posted_name, bus, initial_name=''):

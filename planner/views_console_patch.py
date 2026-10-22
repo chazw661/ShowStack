@@ -3,12 +3,12 @@
 GET  -> the picker for one channel (devices, ports, current patch, ``state``)
 POST -> patch or unpatch a port, JSON body
         {"action": "patch"|"unpatch", "port": <pk>, "state": "...",
-         "mode": "replace"|"add"}
+         "mode": "replace"|"add", "name": "<typed in the row, unsaved>"}
 
 Both answer with the channel's fresh cell and the free-ports block so the page
 can swap exactly those two in place -- the console form is never submitted, so
 unsaved edits elsewhere on the page survive. A refused write (409 stale/taken,
-422 unnamed, ...) carries the same fresh state, and nothing was written.
+400 choose, ...) carries the same fresh state, and nothing was written.
 
 Owner / editor of the CURRENT project only (``_can_edit_current_project``, the
 check #121 standardises); a viewer gets 403 before anything is read. The
@@ -48,10 +48,11 @@ def console_patch(request, kind, pk):
     try:
         edit.apply(kind, pk, project,
                    action=body.get('action'), port_pk=port_pk,
-                   state=str(body.get('state') or ''), mode=body.get('mode') or '')
+                   state=str(body.get('state') or ''), mode=body.get('mode') or '',
+                   name=str(body.get('name') or ''))
     except edit.PatchError as err:
         payload = {'error': err.code, 'message': err.message}
-        if err.status in (409, 422, 400):
+        if err.status in (409, 400):
             payload.update(edit.response_payload(kind, pk, project))
         return JsonResponse(payload, status=err.status)
     payload = edit.response_payload(kind, pk, project)

@@ -212,7 +212,31 @@
 
     function send(action, port, mode) {
         say('');
-        request('POST', { action: action, port: port, mode: mode || '', state: ctx.data.state });
+        request('POST', { action: action, port: port, mode: mode || '', state: ctx.data.state,
+                          name: rowName() || '' });
+    }
+
+    // The channel's name as typed in its row right now, saved or not (null if
+    // the row has no name field). A patch sends it so the port takes the name
+    // the engineer sees; the console form itself is never submitted.
+    function rowName() {
+        var tr = ctx.host.closest('tr');
+        var field = tr && tr.querySelector(ctx.data.kind === 'in'
+            ? 'input[name$="-source"]' : 'input[name$="-name"]');
+        return field ? field.value.trim() : null;
+    }
+
+    function nameNote(d) {
+        var typed = rowName(), saved = d.channel.name;
+        if (typed === null) typed = saved;
+        if (!typed) {
+            return d.channel.label + ' is unnamed — the port will take its name when you save.';
+        }
+        if (typed !== saved) {
+            return d.channel.label + ' is “' + typed + '” here but not saved yet — the port ' +
+                'takes that name now, and stays in step when you save.';
+        }
+        return '';
     }
 
     // -- rendering ------------------------------------------------------------
@@ -225,6 +249,8 @@
             (d.channel.name ? ' · ' + d.channel.name : '');
         var body = panel.body;
         body.textContent = '';
+        var note = nameNote(d);
+        if (note) body.appendChild(el('p', 'ss-pp-msg ss-pp-info', note));
         body.appendChild(renderCurrent(d));
         if (ctx.pending) {
             body.appendChild(renderChoice(d, ctx.pending));

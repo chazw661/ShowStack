@@ -111,11 +111,11 @@ class PickerFixture:
         self.assertEqual(r.status_code, 200, r.content)
         return r.json()
 
-    def post(self, channel, port, action='patch', mode='', state=None):
+    def post(self, channel, port, action='patch', mode='', state=None, name=''):
         if state is None:
             state = self.picker(channel)['state']
         return self.client.post(self.url(channel), json.dumps(
-            {'action': action, 'port': port.pk, 'mode': mode, 'state': state}),
+            {'action': action, 'port': port.pk, 'mode': mode, 'state': state, 'name': name}),
             content_type='application/json')
 
     def link(self, port, channel):
@@ -212,11 +212,114 @@ class PatchTests(PickerBase):
         self.assertEqual(r.json()['error'], 'port_taken')
         self.assertEqual(self.snapshot(), before)
 
-    def test_unnamed_channel_is_refused(self):
-        before = self.snapshot()
+
+
+class UnnamedChannelTests(PickerBase):
+    """An unnamed channel can be patched: the link is stored, the port takes
+    the name the page shows (typed and unsaved, else saved, else blank), and
+    saving a name later fills the port."""
+
+    def setUp(self):
+        super().setUp()
+        self.blank_aux = ConsoleAuxOutput.objects.create(console=self.foh, aux_number='2', name='')
+
+    def test_unnamed_input_is_linked_with_a_blank_name(self):
         r = self.post(self.blank, self.inport(1))
-        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.status_code, 200, r.content)
+        port = self.inport(1)
+        self.assertEqual((port.console_input, port.signal_name), (self.blank, ''))
+        self.assertIn('Stage Box A</span><span class="ss-patch-port"> · In 1', r.json()['cell_html'])
+
+    def test_unnamed_bus_is_linked_with_a_blank_name(self):
+        self.assertEqual(self.post(self.blank_aux, self.out(1)).status_code, 200)
+        self.assertEqual((self.out(1).console_output, self.out(1).signal_name),
+                         (self.blank_aux, ''))
+
+    def test_naming_and_saving_the_channel_later_fills_the_port(self):
+        """The rename propagation covers blank -> a name."""
+        self.post(self.blank, self.inport(1))
+        self.post(self.blank_aux, self.out(1))
+        self.blank.source = 'Spare Vox'
+        self.blank.save()
+        self.blank_aux.name = 'Sidefill'
+        self.blank_aux.save()
+        self.assertEqual((self.inport(1).console_input, self.inport(1).signal_name),
+                         (self.blank, 'Spare Vox'))
+        self.assertEqual((self.out(1).console_output, self.out(1).signal_name),
+                         (self.blank_aux, 'Sidefill'))
+
+    def test_a_typed_unsaved_name_names_the_port_and_leaves_the_channel(self):
+        r = self.post(self.blank, self.inport(1), name='  Spare Vox ')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((self.inport(1).console_input, self.inport(1).signal_name),
+                         (self.blank, 'Spare Vox'))
+        self.blank.refresh_from_db()
+        self.assertEqual(self.blank.source, '')   # the console form was not saved
+        # Saving the page with that name: they agree, and the link holds.
+        self.blank.source = 'Spare Vox'
+        self.blank.save()
+        self.assertEqual((self.inport(1).console_input, self.inport(1).signal_name),
+                         (self.blank, 'Spare Vox'))
+
+    def test_a_typed_rename_of_a_named_channel_is_used_too(self):
+        self.post(self.kick, self.inport(1), name='Kick In')
+        self.assertEqual((self.inport(1).console_input, self.inport(1).signal_name),
+                         (self.kick, 'Kick In'))
+        self.kick.refresh_from_db()
+        self.assertEqual(self.kick.source, 'Kick')
+
+    def test_a_blank_typed_name_falls_back_to_the_saved_one(self):
+        self.post(self.kick, self.inport(1), name='')
+        self.assertEqual(self.inport(1).signal_name, 'Kick')
+
+    def test_a_name_too_long_for_a_port_is_refused(self):
+        before = self.snapshot()
+        r = self.post(self.blank, self.inport(1), name='x' * 101)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['error'], 'name_too_long')
         self.assertEqual(self.snapshot(), before)
+
+    def test_a_linked_port_with_a_blank_name_is_used_not_free(self):
+        self.post(self.blank, self.inport(1))
+        data = self.picker(self.kick)
+        box = data['devices'][0]
+        port1 = next(p for p in box['ports'] if p['number'] == 1)
+        self.assertEqual((port1['free'], port1['linked'], port1['name']), (False, True, ''))
+        self.assertEqual(box['free'], 7)
+        self.assertIn('<strong>7</strong> free inputs', data['free_html'])
+        self.assertIn('2-8', data['free_html'])
+        # And it cannot be patched to another channel.
+        before = self.snapshot()
+        r = self.post(self.kick, self.inport(1))
+        self.assertEqual((r.status_code, r.json()['error']), (409, 'port_taken'))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_unpatch_an_unnamed_channel(self):
+        self.post(self.blank, self.inport(1))
+        self.assertEqual(self.post(self.blank, self.inport(1), action='unpatch').status_code, 200)
+        self.assertEqual((self.inport(1).console_input, self.inport(1).signal_name), (None, ''))
+
+    def test_device_page_keeps_the_link_of_a_blank_named_port(self):
+        """Saving the device page with that row untouched (blank name, link
+        still in the hidden field) must not silently unlink it; clearing a
+        name that was there still clears both."""
+        self.post(self.blank, self.inport(1))
+        page = DeviceInputInlineForm(instance=self.inport(1), project_id=self.project.pk)
+        form = DeviceInputInlineForm(
+            data={'input_number': 1, 'signal_name': '', 'link_ref': page.initial['link_ref']},
+            instance=self.inport(1), project_id=self.project.pk, initial=page.initial)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.assertEqual(self.inport(1).console_input, self.blank)
+
+        self.post(self.kick, self.inport(2))
+        page = DeviceInputInlineForm(instance=self.inport(2), project_id=self.project.pk)
+        form = DeviceInputInlineForm(
+            data={'input_number': 2, 'signal_name': '', 'link_ref': page.initial['link_ref']},
+            instance=self.inport(2), project_id=self.project.pk)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.assertEqual((self.inport(2).console_input, self.inport(2).signal_name), (None, ''))
 
 
 class ReplaceAddTests(PickerBase):

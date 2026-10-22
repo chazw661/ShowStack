@@ -24,6 +24,10 @@ logged in as an editor of the show:
     message, and writes nothing
   * Unpatch frees the port
 
+and an unnamed channel: the panel says so (a note, not an error), a name
+typed in the row and not saved names the port, and saving the page after
+leaves port and channel agreeing;
+
 and, as a viewer, the cells are read-only links with no picker.
 """
 
@@ -34,7 +38,7 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
 from django.urls import reverse
 
-from planner.models import DeviceInput
+from planner.models import ConsoleInput, DeviceInput
 from planner.tests.test_console_patch_picker import PickerFixture
 
 try:
@@ -208,3 +212,44 @@ class PickerBrowserTests(PickerFixture, StaticLiveServerTestCase):
                 self.assertGreater(page.locator('td.field-patch a').count(), 0)
                 page.locator('td.field-patch a').first.tap()
                 page.wait_for_url('**/device/**')
+
+    def test_unnamed_channel_typed_name_patch_then_save(self):
+        """Ch 3 has no saved name. The panel says so (informational); typing a
+        name and patching names the port without saving the page; saving the
+        page afterwards leaves port and channel agreeing, still linked."""
+        for browser in BROWSERS:
+            with self.subTest(browser=browser):
+                ConsoleInput.objects.filter(pk=self.blank.pk).update(source='')
+                DeviceInput.objects.filter(device__project=self.project).update(
+                    signal_name='', console_input=None)
+                page = self.open_page(browser, (1180, 820), self.owner)
+                cell = self.cell(page, self.blank)
+                source = page.locator('tr', has=cell).locator('input[name$="-source"]')
+
+                cell.tap()
+                page.wait_for_selector('.ss-pp-device')
+                self.assertIn('Ch 3 is unnamed — the port will take its name when you save.',
+                              page.locator('.ss-pp-info').inner_text())
+                self.assertEqual(page.locator('.ss-pp-msg.is-error:visible').count(), 0)
+                page.locator('.ss-pp-close').tap()
+                self.wait_closed(page)
+
+                source.fill('Spare Vox')
+                cell.tap()
+                page.wait_for_selector('.ss-pp-device')
+                self.assertIn('not saved yet', page.locator('.ss-pp-info').inner_text())
+                page.locator('.ss-pp-device', has_text='Stage Box A').tap()
+                page.locator('.ss-pp-port.is-free', has_text='1').first.tap()
+                self.wait_closed(page)
+                port = self.inport(1)
+                self.assertEqual((port.console_input_id, port.signal_name),
+                                 (self.blank.pk, 'Spare Vox'))
+                self.assertEqual(ConsoleInput.objects.get(pk=self.blank.pk).source, '')
+                self.assertEqual(source.input_value(), 'Spare Vox')
+
+                with page.expect_navigation():
+                    page.locator('input[name="_continue"]').click()
+                port = self.inport(1)
+                self.assertEqual(ConsoleInput.objects.get(pk=self.blank.pk).source, 'Spare Vox')
+                self.assertEqual((port.console_input_id, port.signal_name),
+                                 (self.blank.pk, 'Spare Vox'))
