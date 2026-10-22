@@ -12,6 +12,9 @@ Where a feed comes from, best first:
              linked port counts for that channel ONLY: it never shows on
              another console, whatever its name. Same names on two consoles
              do not mean a split -- a monitor desk often has its own I/O.
+             If the port's name is not the channel's SAVED name (patched from
+             the Console page with a typed name, page never saved) the feed
+             is flagged ``unsaved`` -- "name not saved" in the cell.
   BY_NAME    the port has no link, and its name is a channel's name on this
              console and on no other console in the project, and on exactly
              one channel here -- typically a port patched before the link fix.
@@ -49,7 +52,7 @@ from planner.models import (
     ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput, ConsoleStereoOutput,
     DeviceInput, DeviceOutput,
 )
-from planner.utils.device_patch import norm
+from planner.utils.device_patch import name_not_saved, norm
 
 LINKED, BY_NAME, AMBIGUOUS = 'linked', 'by_name', 'ambiguous'
 _ORDER = {LINKED: 0, BY_NAME: 1, AMBIGUOUS: 2}
@@ -79,6 +82,8 @@ class Feed:
     conflict: bool = False
     others: tuple = ()   # for AMBIGUOUS: the channels ('ch 90') or consoles it fits
     across: bool = False # for AMBIGUOUS: ``others`` are consoles, not channels
+    unsaved: bool = False  # LINKED, but the port's name is not the channel's
+    saved_name: str = ''   # saved name (device_patch.name_not_saved)
 
     @property
     def url(self):
@@ -222,6 +227,7 @@ class PortIndex:
             return {}
         console = channels[0].console
         cells = {c.pk: Cell() for c in channels}
+        saved = {c.pk: c.source for c in channels}
         labels = {c.pk: f'ch {c.input_ch}' for c in channels}
         by_name = {}  # name -> {channel pk: slot}; A wins over B on one channel
         for c in channels:
@@ -234,7 +240,7 @@ class PortIndex:
             # elsewhere means not here, whatever the name.
             if port.link:
                 if port.link[1] in cells:
-                    cells[port.link[1]].feeds.append(Feed(port, LINKED))
+                    cells[port.link[1]].feeds.append(_linked(port, saved[port.link[1]]))
                 continue
             hits = by_name.get(norm(port.name), {})
             if not hits:
@@ -271,6 +277,7 @@ class PortIndex:
               for model in (ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput)}
         cells = {(type(b), b.pk): Cell() for b in buses}
         linked = {(ct[type(b)], b.pk): (type(b), b.pk) for b in buses}
+        saved = {(type(b), b.pk): b.name for b in buses}
         labels = {(type(b), b.pk): _bus_label(b) for b in buses}
         by_name = {}
         for b in buses:
@@ -280,7 +287,8 @@ class PortIndex:
         for port in self.outputs:
             if port.link:
                 if port.link in linked:
-                    cells[linked[port.link]].feeds.append(Feed(port, LINKED))
+                    key = linked[port.link]
+                    cells[key].feeds.append(_linked(port, saved[key]))
                 continue
             hits = by_name.get(norm(port.name), [])
             if not hits:
@@ -325,6 +333,12 @@ class PortIndex:
                 'output_ranges': compress(d['outputs']),
             })
         return summaries
+
+
+def _linked(port, channel_name):
+    unsaved = name_not_saved(port.name, channel_name)
+    return Feed(port, LINKED, unsaved=unsaved,
+                saved_name=(channel_name or '').strip() if unsaved else '')
 
 
 def _bus_label(bus):

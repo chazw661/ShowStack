@@ -91,6 +91,18 @@ def resolve_output_ref(ref, project_id):
     return model.objects.filter(pk=pk, console__project_id=project_id).first()
 
 
+def name_not_saved(port_name, channel_name):
+    """Is a LINKED port named something other than its channel's saved name?
+
+    Normally impossible -- a channel's save moves its name onto its ports --
+    so it means the port was patched from the Console page with a name typed
+    there and the page was never saved (or the channel was since saved blank).
+    A blank port name is not a mismatch: it is waiting for the channel's name.
+    The Console page's Patch cell and the I/O device page both flag it.
+    """
+    return bool(norm(port_name)) and norm(port_name) != norm(channel_name)
+
+
 def link_holds(posted_name, channel_name, initial_name):
     """Does a posted name keep its link?
 

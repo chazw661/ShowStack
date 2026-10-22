@@ -238,6 +238,10 @@ body.model-console.change-form #consolestereooutput_set-group {
 .ss-patch-ambiguous .ss-patch-caption {
     font-style: italic;
 }
+/* Linked, but the port carries a name the console has not saved. */
+.ss-patch-caption.ss-patch-unsaved {
+    color: var(--ss-patch-amber, #f5a524) !important;
+}
 
 /* By name: the same link, dimmer -- true today, but nothing holds it. */
 .ss-patch-by_name a,

@@ -8,6 +8,7 @@ from django.forms import modelformset_factory
 from django.contrib.contenttypes.models import ContentType
 from planner.utils import pa_cable_math
 from planner.utils import device_patch
+from planner.utils.console_patch import _bus_label
 from .models import Device, ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput
 from .models import P1Output
 from .models import  ConsoleStereoOutput
@@ -489,6 +490,29 @@ def _device_output_suggestions(project_id):
     return suggestions
 
 
+def _show_link(form, channel_name, label):
+    """How a linked port's name box reads on the I/O device page.
+
+    * Blank port name, named channel: the pre-#95 dropdown set the link and
+      left the name blank. Show the channel's name -- shown blank, a save
+      would read as "cleared".
+    * Blank port name, unnamed channel (patched from the Console page before
+      the channel was named): a placeholder says what it is linked to.
+    * A name that is not the channel's saved name (device_patch.name_not_saved:
+      typed on the Console page, page never saved): shown as stored, with a
+      "name not saved" note under it.
+    """
+    port_name = (form.instance.signal_name or '').strip()
+    channel_name = (channel_name or '').strip()
+    if not port_name and channel_name:
+        form.initial['signal_name'] = channel_name
+    elif not port_name:
+        form.fields['signal_name'].widget.attrs['placeholder'] = f'linked to {label} (unnamed)'
+    elif device_patch.name_not_saved(port_name, channel_name):
+        form.link_note = (f'name not saved — {label} is saved as “{channel_name}”'
+                          if channel_name else f'name not saved — {label} is unnamed')
+
+
 class DeviceInputInlineForm(forms.ModelForm):
     """Inline form for I/O Device Inputs.
 
@@ -527,15 +551,12 @@ class DeviceInputInlineForm(forms.ModelForm):
         self.fields['signal_name'].required = False
         self.input_suggestions = _device_input_suggestions(project_id)
 
-        # A linked port shows its channel's current name. That also covers
-        # rows from the pre-#95 dropdown, which set the link and left the
-        # name blank -- shown blank, a save would read as "cleared".
-        # (DeviceInputInline select_related()s console_input.)
+        # (DeviceInputInline select_related()s console_input and its console.)
         channel = self.instance.console_input if self.instance.console_input_id else None
+        self.link_note = ''
         if channel is not None:
             self.initial['link_ref'] = device_patch.input_ref(channel.pk)
-            if (channel.source or '').strip():
-                self.initial['signal_name'] = channel.source.strip()
+            _show_link(self, channel.source, f'{channel.console.name} Ch {channel.input_ch}')
         self.fields['signal_name'].widget.attrs['data-link-field'] = self['link_ref'].auto_id
 
     def save(self, commit=True):
@@ -588,15 +609,15 @@ class DeviceOutputInlineForm(forms.ModelForm):
         self.fields['signal_name'].required = False
         self.output_suggestions = _device_output_suggestions(project_id)
 
-        # Same as inputs: a linked output shows its bus's current name.
-        # DeviceOutputInline prefetches console_output; a link to a bus that
-        # no longer exists resolves to None and is shown as unlinked.
+        # Same as inputs. DeviceOutputInline prefetches console_output and its
+        # console; a link to a bus that no longer exists resolves to None and
+        # is shown as unlinked.
         bus = self.instance.console_output if self.instance.object_id else None
         ref = device_patch.output_ref_for(self.instance) if bus is not None else ''
+        self.link_note = ''
         if ref:
             self.initial['link_ref'] = ref
-            if (bus.name or '').strip():
-                self.initial['signal_name'] = bus.name.strip()
+            _show_link(self, bus.name, f'{bus.console.name} {_bus_label(bus)}')
         self.fields['signal_name'].widget.attrs['data-link-field'] = self['link_ref'].auto_id
 
     def save(self, commit=True):

@@ -25,8 +25,9 @@ logged in as an editor of the show:
   * Unpatch frees the port
 
 and an unnamed channel: the panel says so (a note, not an error), a name
-typed in the row and not saved names the port, and saving the page after
-leaves port and channel agreeing;
+typed in the row and not saved names the port (the cell says "name not
+saved", and leaving the page asks first), and saving the page after leaves
+port and channel agreeing;
 
 and, as a viewer, the cells are read-only links with no picker.
 """
@@ -246,10 +247,51 @@ class PickerBrowserTests(PickerFixture, StaticLiveServerTestCase):
                                  (self.blank.pk, 'Spare Vox'))
                 self.assertEqual(ConsoleInput.objects.get(pk=self.blank.pk).source, '')
                 self.assertEqual(source.input_value(), 'Spare Vox')
+                self.assertIn('name not saved', cell.inner_text())
 
+                # Leaving now asks first (and staying keeps everything).
+                dialogs = []
+                page.on('dialog', lambda d: (dialogs.append(d.type), d.dismiss()))
+                url = page.url
+                self.try_to_leave(page)
+                self.assertEqual(dialogs, ['beforeunload'])
+                self.assertEqual(page.url, url)
+                self.assertEqual(source.input_value(), 'Spare Vox')
+
+                # Saving does not ask, and leaves port and channel agreeing.
                 with page.expect_navigation():
                     page.locator('input[name="_continue"]').click()
+                self.assertEqual(dialogs, ['beforeunload'])
                 port = self.inport(1)
                 self.assertEqual(ConsoleInput.objects.get(pk=self.blank.pk).source, 'Spare Vox')
                 self.assertEqual((port.console_input_id, port.signal_name),
                                  (self.blank.pk, 'Spare Vox'))
+                page.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+                self.assertNotIn('name not saved', self.cell(page, self.blank).inner_text())
+
+    def try_to_leave(self, page):
+        page.evaluate("setTimeout(() => { location.href = '/admin/'; }, 0)")
+        page.wait_for_timeout(1500)
+
+    def test_leaving_asks_only_while_a_patched_name_is_unsaved(self):
+        """Typed, patched, then typed back to the saved name: nothing is
+        unsaved, so leaving does not ask."""
+        for browser in BROWSERS:
+            with self.subTest(browser=browser):
+                DeviceInput.objects.filter(device__project=self.project).update(
+                    signal_name='', console_input=None)
+                page = self.open_page(browser, (1180, 820), self.owner)
+                cell = self.cell(page, self.kick)
+                source = page.locator('tr', has=cell).locator('input[name$="-source"]')
+                source.fill('Kick In')
+                cell.tap()
+                page.locator('.ss-pp-device', has_text='Stage Box A').tap()
+                page.locator('.ss-pp-port.is-free', has_text='1').first.tap()
+                self.wait_closed(page)
+                self.assertEqual(self.inport(1).signal_name, 'Kick In')
+                source.fill('Kick')
+                dialogs = []
+                page.on('dialog', lambda d: (dialogs.append(d.type), d.dismiss()))
+                self.try_to_leave(page)
+                self.assertEqual(dialogs, [])
+                self.assertTrue(page.url.endswith('/admin/'), page.url)

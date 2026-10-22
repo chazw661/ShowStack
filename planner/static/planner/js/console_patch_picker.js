@@ -16,6 +16,11 @@
  * state back and the server refuses (409) if the channel changed meanwhile.
  * Opening the picker refreshes the cell too, so a stale row corrects itself
  * the moment it is touched.
+ *
+ * A patch carries the channel's name as typed in its row, saved or not. If
+ * that name is not saved yet, leaving the page while it is still unsaved
+ * asks first (beforeunload): the port has the typed name, and only saving
+ * the page puts it on the channel too.
  */
 (function () {
     'use strict';
@@ -23,6 +28,8 @@
     var panel = null;      // {root, dialog, body, msg}
     var ctx = null;        // {btn, host, url, data, device, pending, busy}
     var lastFocus = null;
+    var typedNames = [];   // Source / Name fields a patch took an unsaved name from
+    var submitting = false;
 
     function csrfToken() {
         var input = document.querySelector('input[name=csrfmiddlewaretoken]');
@@ -186,6 +193,11 @@
         if (data.state) ctx.data = data;
 
         if (status === 200 && method === 'POST') {
+            var field = rowField();
+            if (payload.action === 'patch' && payload.name && field && unsavedTyped(field) &&
+                typedNames.indexOf(field) < 0) {
+                typedNames.push(field);
+            }
             flash(ctx.host);
             if (payload.action === 'patch') { closePanel(); return; }
             ctx.pending = null;
@@ -216,14 +228,23 @@
                           name: rowName() || '' });
     }
 
+    // The row's Source (inputs) or Name (buses) field, or null.
+    function rowField() {
+        var tr = ctx.host.closest('tr');
+        return tr && tr.querySelector(ctx.data.kind === 'in'
+            ? 'input[name$="-source"]' : 'input[name$="-name"]');
+    }
+
     // The channel's name as typed in its row right now, saved or not (null if
     // the row has no name field). A patch sends it so the port takes the name
     // the engineer sees; the console form itself is never submitted.
     function rowName() {
-        var tr = ctx.host.closest('tr');
-        var field = tr && tr.querySelector(ctx.data.kind === 'in'
-            ? 'input[name$="-source"]' : 'input[name$="-name"]');
+        var field = rowField();
         return field ? field.value.trim() : null;
+    }
+
+    function unsavedTyped(field) {
+        return field.isConnected && field.value.trim() !== field.defaultValue.trim();
     }
 
     function nameNote(d) {
@@ -287,6 +308,8 @@
             if (f.slot === 'B') notes.push('B input — by name, edit it on the device page');
             else if (f.how === 'by_name') notes.push('by name, not linked');
             else if (f.how === 'ambiguous') notes.push('ambiguous (' + f.others.join(', ') + ') — not this channel’s');
+            if (f.unsaved) notes.push('name not saved: the port is “' + f.port_name + '”, the channel’s saved name is ' +
+                (f.saved_name ? '“' + f.saved_name + '”' : 'blank'));
             if (f.conflict) notes.push('CONFLICT: more than one port linked');
             if (f.lock) notes.push(f.lock);
             if (notes.length) text.appendChild(el('div', 'ss-pp-note', notes.join(' · ')));
@@ -389,6 +412,14 @@
         }
         return sec;
     }
+
+    // Saving the page is the way out, not a reason to ask.
+    document.addEventListener('submit', function () { submitting = true; }, true);
+    window.addEventListener('beforeunload', function (e) {
+        if (submitting || !typedNames.some(unsavedTyped)) return;
+        e.preventDefault();
+        e.returnValue = '';   // Safari and older Chrome need it set
+    });
 
     // One listener for the page: cells are swapped in and out, so bind high.
     document.addEventListener('click', function (e) {

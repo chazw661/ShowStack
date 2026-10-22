@@ -1521,7 +1521,7 @@ class DeviceInputInline(BaseEquipmentInline):
         console_input is joined because each form shows its linked channel's
         current name -- one query for the grid, not one per port."""
         qs = super().get_queryset(request)
-        return qs.select_related('console_input').order_by('input_number')
+        return qs.select_related('console_input__console').order_by('input_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
@@ -1566,7 +1566,7 @@ class DeviceOutputInline(BaseEquipmentInline):
         console_output (the aux/matrix generic link) is prefetched for the
         same reason inputs join console_input."""
         qs = super().get_queryset(request)
-        return qs.prefetch_related('console_output').order_by('output_number')
+        return qs.prefetch_related('console_output__console').order_by('output_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need

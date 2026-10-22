@@ -19,6 +19,14 @@
     box-sizing: border-box;
     text-align: left;   /* a signal name, not a number */
   }
+  /* A linked port whose name the console has not saved (forms._show_link). */
+  .device-output-cell .ss-link-note {
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: left;
+    color: #f5a524;
+  }
 </style>
 
 <div class="js-inline-admin-formset inline-group">
@@ -67,6 +75,7 @@
                   </div>
 
                   {{ form.signal_name }}
+                  {% if form.link_note %}<div class="ss-link-note">{{ form.link_note }}</div>{% endif %}
                 </td>
               {% endfor %}
             </tr>

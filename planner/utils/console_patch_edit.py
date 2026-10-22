@@ -181,6 +181,7 @@ def picker(channel, index):
             'port': f.port.pk, 'device': f.port.device_name, 'number': f.port.number,
             'url': f.url, 'how': f.how, 'slot': f.slot, 'conflict': f.conflict,
             'others': list(f.others), 'lock': lock,
+            'unsaved': f.unsaved, 'port_name': f.port.name, 'saved_name': f.saved_name,
             'can_unpatch': f.port.pk in current and not lock,
         })
 

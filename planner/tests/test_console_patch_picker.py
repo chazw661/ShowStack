@@ -322,6 +322,115 @@ class UnnamedChannelTests(PickerBase):
         self.assertEqual((self.inport(2).console_input, self.inport(2).signal_name), (None, ''))
 
 
+class NameNotSavedTests(PickerBase):
+    """A linked port whose name is not its channel's saved name -- patched
+    with a typed name and the console page never saved -- is flagged in the
+    Patch cell, in the picker, and on the I/O device page. An unnamed
+    channel's blank port gets a placeholder on the device page instead."""
+
+    def setUp(self):
+        super().setUp()
+        self.blank_aux = ConsoleAuxOutput.objects.create(console=self.foh, aux_number='2', name='')
+
+    def device_page(self, device=None):
+        r = self.client.get(reverse('admin:planner_device_change', args=[(device or self.box).pk]))
+        self.assertEqual(r.status_code, 200)
+        return r.content.decode()
+
+    def test_cell_flags_a_typed_name_until_the_channel_is_saved(self):
+        r = self.post(self.blank, self.inport(1), name='Spare Vox')
+        self.assertIn('name not saved', r.json()['cell_html'])
+        feed, = self.picker(self.blank)['feeds']
+        self.assertEqual((feed['unsaved'], feed['port_name'], feed['saved_name']),
+                         (True, 'Spare Vox', ''))
+        self.blank.source = 'Spare Vox'
+        self.blank.save()
+        data = self.picker(self.blank)
+        self.assertNotIn('name not saved', data['cell_html'])
+        self.assertFalse(data['feeds'][0]['unsaved'])
+
+    def test_cell_flags_a_typed_rename_with_the_saved_name(self):
+        self.post(self.kick, self.inport(1), name='Kick In')
+        data = self.picker(self.kick)
+        self.assertEqual(data['feeds'][0]['saved_name'], 'Kick')
+        self.assertIn('saved name is “Kick”', data['cell_html'])
+        self.assertIn('name not saved', data['cell_html'])
+
+    def test_bus_is_flagged_too(self):
+        self.post(self.blank_aux, self.out(1), name='Sidefill')
+        self.assertIn('name not saved', self.picker(self.blank_aux)['cell_html'])
+
+    def test_no_flag_when_names_agree_or_the_port_is_blank(self):
+        self.post(self.kick, self.inport(1))
+        self.post(self.blank, self.inport(2))
+        self.assertNotIn('name not saved', self.picker(self.kick)['cell_html'])
+        self.assertNotIn('name not saved', self.picker(self.blank)['cell_html'])
+
+    def test_read_only_cell_is_flagged(self):
+        self.post(self.kick, self.inport(1), name='Kick In')
+        viewer = self.member('viewer', 'viewer')
+        self.as_user(viewer, self.project)
+        page = self.client.get(reverse('admin:planner_console_change', args=[self.foh.pk]))
+        html = page.content.decode()
+        self.assertNotIn('ss-patch-edit', html)
+        self.assertIn('ss-patch-unsaved', html)
+
+    def test_device_page_placeholder_for_an_unnamed_channel(self):
+        self.post(self.blank, self.inport(1))
+        self.post(self.blank_aux, self.out(1))
+        page = self.device_page()
+        self.assertIn('placeholder="linked to FOH Ch 3 (unnamed)"', page)
+        self.assertIn('placeholder="linked to FOH Aux 2 (unnamed)"', page)
+        self.assertNotIn('ss-link-note">', page)
+
+    def test_device_page_notes_a_name_not_saved(self):
+        self.post(self.kick, self.inport(1), name='Kick In')
+        self.post(self.blank, self.inport(2), name='Spare Vox')
+        self.post(self.blank_aux, self.out(1), name='Sidefill')
+        page = self.device_page()
+        self.assertIn('value="Kick In"', page)   # shown as stored, not as the channel
+        self.assertIn('name not saved — FOH Ch 1 is saved as “Kick”', page)
+        self.assertIn('name not saved — FOH Ch 3 is unnamed', page)
+        self.assertIn('name not saved — FOH Aux 2 is unnamed', page)
+
+    def test_device_page_has_no_note_once_saved(self):
+        self.post(self.kick, self.inport(1))
+        self.post(self.blank, self.inport(2), name='Spare Vox')
+        self.blank.source = 'Spare Vox'
+        self.blank.save()
+        page = self.device_page()
+        self.assertNotIn('name not saved', page)
+        self.assertNotIn('linked to', page)
+
+    def test_device_page_save_leaves_a_flagged_port_alone(self):
+        """Untouched on the device page, the row has not changed, so saving
+        the page (which saves changed rows only) keeps its name and link."""
+        self.post(self.kick, self.inport(1), name='Kick In')
+        page = DeviceInputInlineForm(instance=self.inport(1), project_id=self.project.pk)
+        self.assertEqual(page.initial.get('signal_name', self.inport(1).signal_name), 'Kick In')
+        form = DeviceInputInlineForm(
+            data={'input_number': 1, 'signal_name': 'Kick In',
+                  'link_ref': page.initial['link_ref']},
+            instance=self.inport(1), project_id=self.project.pk)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.has_changed())
+
+    def test_device_page_queries_do_not_grow_with_linked_ports(self):
+        def count():
+            with CaptureQueriesContext(connection) as q:
+                self.device_page()
+            return len(q)
+        # One of each bus type first: each linked type is one more prefetch.
+        self.post(self.kick, self.inport(1))
+        for n, bus in ((1, self.aux), (2, self.mtx), (3, self.st_l)):
+            self.post(bus, self.out(n))
+        few = count()
+        for n, ch in ((2, self.snare), (3, self.blank), (4, self.blank)):
+            DeviceInput.objects.filter(pk=self.inport(n).pk).update(console_input=ch)
+        self.post(self.blank_aux, self.out(4), name='Sidefill')
+        self.assertEqual(count(), few)
+
+
 class ReplaceAddTests(PickerBase):
 
     def setUp(self):
