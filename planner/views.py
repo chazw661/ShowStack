@@ -709,31 +709,11 @@ def mic_tracker_view(request):
             'sessions': sessions
         })
     
-    # CHECK PERMISSIONS - Add this section
-    from planner.models import Project, ProjectMember
-    
-    is_viewer = False
-    if not request.user.is_superuser:
-        # Check if user is viewer for any projects with ShowDays
-        # For simplicity, check if user has ANY viewer memberships
-        viewer_memberships = ProjectMember.objects.filter(
-            user=request.user,
-            role='viewer'
-        )
-        
-        # If user has viewer memberships but no editor/owner roles, they're read-only
-        if viewer_memberships.exists():
-            editor_owner_memberships = ProjectMember.objects.filter(
-                user=request.user,
-                role='editor'
-            ).exists()
-            
-            owns_projects = Project.objects.filter(owner=request.user).exists()
-            
-            # If ONLY viewer (no editor roles or owned projects), set read-only
-            if not editor_owner_memberships and not owns_projects:
-                is_viewer = True
-    
+    # Read-only unless the user may edit THIS project. The old check asked
+    # about every project the user belonged to, so an editor anywhere (or any
+    # project owner) got edit controls on a project they only view.
+    is_viewer = not _can_edit_current_project(request)
+
     # This is inside the mic_tracker_view function
     context = {
         'show_info': show_info,
@@ -775,14 +755,7 @@ def mic_tracker_overview_view(request):
     show_info = MicShowInfo.objects.filter(project=request.current_project).first()
 
     # Read-only gating for the Mic'd toggles — same rule as mic_tracker_view.
-    from planner.models import Project, ProjectMember
-    is_viewer = False
-    if not request.user.is_superuser:
-        if ProjectMember.objects.filter(user=request.user, role='viewer').exists():
-            has_editor = ProjectMember.objects.filter(user=request.user, role='editor').exists()
-            owns_projects = Project.objects.filter(owner=request.user).exists()
-            if not has_editor and not owns_projects:
-                is_viewer = True
+    is_viewer = not _can_edit_current_project(request)
 
     return render(request, 'planner/mic_tracker_overview.html', {
         **_shared_header_context(request),
@@ -2620,6 +2593,7 @@ def comm_config_view(request, config_id=None):
                 'all_roles': all_roles if config_id else [],
                 'current_project': current_project,
                 'crew_names': CommCrewName.objects.filter(project=current_project).order_by('name') if current_project else [],
+                'fsii_out_of_range': _fsii_partylines_out_of_range(config),
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
             }
 
@@ -5184,7 +5158,26 @@ def create_session(request):
 # ─────────────────────────────────────────────────────────────
 # COMM Config — Create
 # ─────────────────────────────────────────────────────────────
+def _edit_rights_required(view):
+    """JSON 403 unless the user may edit the CURRENT project.
+
+    Every COMM Config write endpoint scoped its lookup to the current project
+    (so another tenant's rows 404) but never asked about the role ON it, so a
+    viewer could add, rename and delete partylines, roles, ports and whole
+    configs with a fetch() -- the page only hid the buttons. The check is
+    _can_edit_current_project, the per-project rule (owner, editor or
+    superuser), resolved when the request arrives.
+    """
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not _can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
 @require_POST
+@_edit_rights_required
 def comm_config_create(request):
     try:
         data = _json.loads(request.body)
@@ -5209,6 +5202,22 @@ def comm_config_create(request):
         return JsonResponse({'ok': True, 'config_id': config.id})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# The FreeSpeak II export writes partylines into the factory `connections`
+# file (planner/data/comm_config/fsii_factory), which holds channels 1-12 and
+# no others. A partyline numbered above 12 had its name dropped without a word
+# and every key or port routed to it pointed at a channel the base station
+# does not have -- so a FreeSpeak config may only use channels 1-12.
+FSII_PARTYLINE_CHANNELS = range(1, 13)
+
+
+def _fsii_partylines_out_of_range(config):
+    """Partylines a FreeSpeak II export cannot carry ([] for Arcadia)."""
+    if config is None or config.device_type != 'freespeak':
+        return []
+    return [pl for pl in config.partylines.order_by('channel_number')
+            if pl.channel_number not in FSII_PARTYLINE_CHANNELS]
 
 
 def _seed_freespeak_defaults(config):
@@ -5345,6 +5354,7 @@ def _seed_factory_defaults(config):
 # COMM Config — Partyline CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_update_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5368,6 +5378,7 @@ def comm_config_update_partyline(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_add_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5377,6 +5388,16 @@ def comm_config_add_partyline(request):
         # Next available channel number
         existing = config.partylines.values_list('channel_number', flat=True)
         next_ch = max(existing, default=0) + 1
+        if config.device_type == 'freespeak':
+            # Lowest free channel in 1-12, so deleting CH 5 and adding one
+            # gives CH 5 back rather than CH 13.
+            free = [ch for ch in FSII_PARTYLINE_CHANNELS if ch not in set(existing)]
+            if not free:
+                return JsonResponse({'error': (
+                    'FreeSpeak II has 12 partylines (CH 1-12) and this config '
+                    'uses all of them. Rename one instead of adding another.'
+                )}, status=400)
+            next_ch = free[0]
         pl = CommConfigPartyline.objects.create(
             config=config,
             channel_number=next_ch,
@@ -5393,6 +5414,7 @@ def comm_config_add_partyline(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5420,6 +5442,7 @@ def comm_config_delete_partyline(request):
 # COMM Config — Keyset update
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_update_keyset(request):
     try:
         data = _json.loads(request.body)
@@ -5464,6 +5487,7 @@ def comm_config_update_keyset(request):
 # COMM Config — Role update
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_update_role(request):
     try:
         data = _json.loads(request.body)
@@ -5488,6 +5512,7 @@ def comm_config_update_role(request):
 # COMM Config — Role delete
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_delete_role(request):
     try:
         data = _json.loads(request.body)
@@ -5512,6 +5537,7 @@ def comm_config_delete_role(request):
 # COMM Config — Add Role
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_role(request):
     try:
         data = _json.loads(request.body)
@@ -5582,6 +5608,7 @@ def comm_config_role_chips(request):
 # This endpoint only assigns an existing port to a partyline.
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_assign_port(request):
     try:
         data = _json.loads(request.body)
@@ -5628,6 +5655,7 @@ _SETTINGS_ALLOWED_FIELDS = {
 }
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_setting(request):
     try:
         data = _json.loads(request.body)
@@ -5662,6 +5690,7 @@ def comm_config_update_setting(request):
 # COMM Config — Delete Config
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_delete(request):
     try:
         data = _json.loads(request.body)
@@ -6691,6 +6720,7 @@ def audio_checklist_delete_template(request):
 # COMM Config — Dante Channel CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6717,6 +6747,7 @@ def comm_config_add_dante(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6743,6 +6774,7 @@ def comm_config_update_dante(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6759,6 +6791,7 @@ def comm_config_delete_dante(request):
 # COMM Config — Session CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_session(request):
     try:
         data = _json.loads(request.body)
@@ -6782,6 +6815,7 @@ def comm_config_add_session(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_session(request):
     try:
         data = _json.loads(request.body)
@@ -6815,6 +6849,7 @@ def comm_config_update_session(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_session(request):
     try:
         data = _json.loads(request.body)
@@ -6837,6 +6872,7 @@ def comm_config_delete_session(request):
 # COMM Config — Roleset CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -6863,6 +6899,7 @@ def comm_config_add_roleset(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_update_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -6880,6 +6917,7 @@ def comm_config_update_roleset(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -6896,6 +6934,7 @@ def comm_config_delete_roleset(request):
 # COMM Config — Crew Name CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
+@_edit_rights_required
 def comm_config_add_crew_name(request):
     try:
         data = _json.loads(request.body)
@@ -6914,6 +6953,7 @@ def comm_config_add_crew_name(request):
 
 
 @require_POST
+@_edit_rights_required
 def comm_config_delete_crew_name(request):
     try:
         data = _json.loads(request.body)
@@ -6999,13 +7039,20 @@ def dashboard_stats(request):
 
 
 @login_required
+@_edit_rights_required
 def comm_config_update_lan(request):
     import json
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     data = json.loads(request.body)
     from planner.models import CommConfigNetworkPort
-    lan = CommConfigNetworkPort.objects.get(id=data['lan_id'])
+    # Scoped: this fetched by id alone, so any signed-in user could rewrite
+    # another tenant's base-station IP, gateway and Dante settings.
+    lan = CommConfigNetworkPort.objects.filter(
+        id=data.get('lan_id'), config__project=_scoped_project(request),
+    ).first()
+    if lan is None:
+        return JsonResponse({'error': 'Not found'}, status=404)
     allowed = {'mode', 'static_ip', 'netmask', 'gateway', 'dns1', 'dns2', 'traffic_type', 'ptp_follower_mode', 'dante_redundancy'}
     for field, value in data.items():
         if field in allowed:
@@ -7018,6 +7065,7 @@ def comm_config_update_lan(request):
 # ─────────────────────────────────────────────────────────────
 @login_required
 @require_POST
+@_edit_rights_required
 def comm_config_save_as_template(request):
     import json as _j
     try:
@@ -7134,6 +7182,7 @@ def comm_config_list_templates(request):
 
 @login_required
 @require_POST
+@_edit_rights_required
 def comm_config_load_template(request):
     import json as _j
     try:
@@ -7216,6 +7265,18 @@ def comm_config_export_freespeak(request, config_id):
     config = get_object_or_404(
         CommConfig, id=config_id, project=_scoped_project(request),
     )
+    out_of_range = _fsii_partylines_out_of_range(config)
+    if out_of_range:
+        # Refuse rather than export a file that silently loses these.
+        from django.utils.html import format_html, format_html_join
+        return HttpResponse(format_html(
+            '<p>Not exported: FreeSpeak II has partylines CH 1-12 only, and '
+            'this config also has {}.</p><p>Delete them on the Partylines tab, '
+            'then export again.</p><p><a href="{}">Back to {}</a></p>',
+            format_html_join(', ', 'CH {} "{}"',
+                             ((pl.channel_number, pl.label) for pl in out_of_range)),
+            reverse('planner:comm_config_editor', args=[config.id]), config.name,
+        ), status=409)
     factory_path = os.path.join(settings.BASE_DIR, 'planner', 'data', 'comm_config', 'fsii_factory')
 
     if not os.path.exists(factory_path):

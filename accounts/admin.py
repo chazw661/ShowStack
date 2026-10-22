@@ -27,7 +27,50 @@ class ProjectMemberInline(admin.TabularInline):
 
 
 
-class ProjectMemberAdmin(BaseEquipmentAdmin):
+def _owner_team_access(request):
+    """Team pages (members, invitations): superusers and project owners.
+
+    This asked for account_type == 'premium', which is not one of
+    UserProfile.ACCOUNT_TYPES (super_user / beta / paid / free), so no owner
+    ever saw these sections -- only superusers did. Owning a project is the
+    rule, whatever the account type.
+    """
+    if not request.user.is_authenticated:
+        return False
+    if request.user.is_superuser:
+        return True
+    return Project.objects.filter(owner=request.user).exists()
+
+
+class _OwnerManagesTeam:
+    """Only the CURRENT project's owner changes who is on its team.
+
+    BaseEquipmentAdmin lets editors write; for membership and invitations
+    that would let an editor promote themselves or invite people, which the
+    Manage Team page (accounts.views.project_detail) reserves for the owner.
+    get_queryset (BaseEquipmentAdmin) already limits rows to the current
+    project.
+    """
+
+    def _owns_current(self, request):
+        project = getattr(request, 'current_project', None)
+        return request.user.is_superuser or (
+            project is not None and project.owner_id == request.user.id)
+
+    def has_view_permission(self, request, obj=None):
+        return self._owns_current(request)
+
+    def has_add_permission(self, request):
+        return self._owns_current(request) and super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._owns_current(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._owns_current(request)
+
+
+class ProjectMemberAdmin(_OwnerManagesTeam, BaseEquipmentAdmin):
     list_display = ['project', 'user', 'role', 'invited_by', 'invited_at']
     list_filter = ['role', 'invited_at']
     search_fields = ['project__name', 'user__username', 'user__email']
@@ -38,19 +81,7 @@ class ProjectMemberAdmin(BaseEquipmentAdmin):
         }
 
     def has_module_permission(self, request):
-        """Only show Projects section to premium users who own projects"""
-        if request.user.is_superuser:
-            return True
-        
-        # Must be premium AND own at least one project
-        if not hasattr(request.user, 'userprofile'):
-            return False
-        
-        from planner.models import Project
-        is_premium = request.user.userprofile.account_type == 'premium'
-        owns_projects = Project.objects.filter(owner=request.user).exists()
-        
-        return is_premium and owns_projects
+        return _owner_team_access(request)
     
     def get_queryset(self, request):
         """Memberships of the current project.
@@ -70,7 +101,7 @@ class ProjectMemberAdmin(BaseEquipmentAdmin):
 
 
 
-class InvitationAdmin(BaseEquipmentAdmin):
+class InvitationAdmin(_OwnerManagesTeam, BaseEquipmentAdmin):
     list_display = ['email', 'project', 'role', 'status', 'invited_by', 'invited_at']
     list_filter = ['status', 'role', 'invited_at']
     search_fields = ['email', 'project__name']
@@ -92,19 +123,7 @@ class InvitationAdmin(BaseEquipmentAdmin):
         return False
 
     def has_module_permission(self, request):
-        """Only show Projects section to premium users who own projects"""
-        if request.user.is_superuser:
-            return True
-        
-        # Must be premium AND own at least one project
-        if not hasattr(request.user, 'userprofile'):
-            return False
-        
-        from planner.models import Project
-        is_premium = request.user.userprofile.account_type == 'premium'
-        owns_projects = Project.objects.filter(owner=request.user).exists()
-        
-        return is_premium and owns_projects
+        return _owner_team_access(request)
     
     def get_queryset(self, request):
         """Invitations for the current project.

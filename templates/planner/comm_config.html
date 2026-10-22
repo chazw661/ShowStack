@@ -221,6 +221,15 @@
     gap: 12px;
     margin-bottom: 16px;
   }
+  .cc-fsii-limit {
+    background: #3a1414;
+    border: 1px solid #a33;
+    color: #f2d0d0;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 0.85rem;
+  }
   .cc-pl-card {
     background: #12122a;
     border: 1px solid #2a2a4a;
@@ -674,7 +683,11 @@
       <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
       <button class="cc-btn cc-btn-secondary" onclick="openSaveTemplateModal({{ config.id }})">💾 Save as Template</button>
       {% if config.device_type == 'freespeak' %}
+      {% if fsii_out_of_range %}
+      <button class="cc-btn cc-btn-success" disabled title="FreeSpeak II has partylines CH 1-12 only: see the Partylines tab">⬇ Export .cca</button>
+      {% else %}
       <button class="cc-btn cc-btn-success" onclick="window.location.href='{% url 'planner:comm_config_export_freespeak' config.id %}'">⬇ Export .cca</button>
+      {% endif %}
       {% else %}
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       {% endif %}
@@ -693,6 +706,14 @@
 
   <!-- ── PARTYLINES PANEL ── -->
   <div class="cc-tab-panel active" id="panel-partylines">
+    {% if fsii_out_of_range %}
+    <div class="cc-fsii-limit" role="alert">
+      <strong>Export blocked.</strong> FreeSpeak II has partylines CH 1&ndash;12 only.
+      This config also has
+      {% for pl in fsii_out_of_range %}CH {{ pl.channel_number }} &ldquo;{{ pl.label }}&rdquo;{% if not forloop.last %}, {% endif %}{% endfor %}.
+      Delete {% if fsii_out_of_range|length == 1 %}it{% else %}them{% endif %} (any keys or ports on {% if fsii_out_of_range|length == 1 %}it{% else %}them{% endif %} are cleared) to export.
+    </div>
+    {% endif %}
     <div class="cc-partyline-grid" id="partylineGrid">
       {% for pl in partylines %}
       <div class="cc-pl-card" data-pl-id="{{ pl.id }}">
@@ -1317,6 +1338,7 @@ function addPartyline(configId) {
     body: JSON.stringify({ config_id: configId })
   }).then(r => r.json()).then(data => {
     if (data.ok) { sessionStorage.setItem('ccActiveTab','partylines'); location.reload(); }
+    else if (data.error) { alert(data.error); }
   });
 }
 

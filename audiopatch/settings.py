@@ -27,6 +27,12 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
+# The public address for links people are given to keep or pass on (the
+# project's shareable access-request link). The app also answers on its
+# *.railway.app host, and a link built from that host would outlive a move off
+# Railway and show crew an address they do not recognise.
+SITE_URL = config('SITE_URL', default='https://showstack.io').rstrip('/')
+
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1', 
