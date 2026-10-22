@@ -105,6 +105,17 @@
             if (e.key === 'Escape' && !root.hidden) { e.preventDefault(); closePanel(); }
         });
         document.body.appendChild(root);
+        // console_patch.css is not hashed under runserver, so a browser can keep
+        // Phase A's copy, which has no panel rules: the panel then lands unstyled
+        // at the foot of the page and a tap seems to do nothing. Pin it on screen
+        // anyway, and say why.
+        if (getComputedStyle(root).position !== 'fixed') {
+            console.warn('console_patch.css is out of date (cached copy?): reload ignoring cache.');
+            [[root, 'position:fixed;inset:0;z-index:2000;overflow:auto;padding:16px;' +
+                    'background:rgba(0,0,0,.6)'],
+             [dialog, 'max-width:560px;margin:0 auto;padding:12px;background:#1e1e1e;color:#eee']
+            ].forEach(function (pair) { pair[0].style.cssText = pair[1]; });
+        }
         panel = { root: root, dialog: dialog, title: title, body: body, msg: msg };
         return panel;
     }
