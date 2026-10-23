@@ -1,19 +1,20 @@
-<p class="help-lede">See which stage box port feeds each channel, and where each mix goes, from the console page.</p>
+<p class="help-lede">Patch stage box ports from the console page, and see what feeds each channel.</p>
 
 <h3>Steps</h3>
 <ol>
-  <li>Open <em>Consoles</em> in the sidebar, open a console and open one of its grids.</li>
-  <li>On a wide screen, <em>Patch</em> is a column after <em>Source (B)</em> on inputs and after <em>Name</em> on outputs. On a narrower screen, such as an iPad, press <em>Patch</em> next to <em>Show:</em> above the grid; <em>Hardware</em> switches back. This browser remembers your choice.</li>
-  <li>Tap a device name to open that device.</li>
-  <li>For spare ports, check <em>I/O devices · free ports</em> above the grids.</li>
+  <li>Open a console and a grid. On an iPad, press <em>Patch</em> next to <em>Show:</em> to see the <em>Patch</em> column.</li>
+  <li>Tap a channel's <em>Patch</em> cell (<em>+ Patch</em> when empty).</li>
+  <li>Under <em>Choose an I/O device</em>, tap a device; each shows its free ports.</li>
+  <li>Tap a free port. Used ports are dimmed, with their name.</li>
+  <li>Already patched? Choose <em>Replace with</em> …, or <em>Add as second (conflict)</em> on inputs, <em>Add — feed both</em> on outputs.</li>
+  <li>To unpatch, tap the cell and press <em>Unpatch</em>.</li>
 </ol>
 
 <h3>Good to know</h3>
 <ul>
-  <li>A plain "Stage Left · In 12" means linked: the port was picked from the list on the device page.</li>
-  <li><em>by name</em>: not linked, but the port's name matches this channel only. Pick it on the device page to make the link.</li>
-  <li><em>ambiguous (…)</em>: the name fits several channels or consoles, so it counts for none. Link it on the device page.</li>
-  <li><em>B</em>: the port's name matches <em>Source (B)</em>.</li>
-  <li>Amber: two or more ports are linked to one input. Outputs never go amber.</li>
-  <li><em>—</em> means nothing is patched. This column is read-only; patch on the device page.</li>
+  <li>Same as patching on the I/O device page; use either.</li>
+  <li>Inputs patch the A <em>Source</em> only. Aux, matrix and stereo outputs can be patched.</li>
+  <li>Unnamed channel: the port takes its name when you name it and save. Typed but not saved: the port takes it now; until you save, the cell shows amber <em>name not saved</em> and leaving asks first.</li>
+  <li><em>by name</em>: not linked, but the name fits only this channel. <em>ambiguous (…)</em>: fits several, counts for none. Amber: two ports linked to one input.</li>
+  <li>Spare ports: <em>I/O devices · free ports</em>. Viewers see the patch read-only.</li>
 </ul>

@@ -279,13 +279,13 @@ TOPICS = (
     ),
     Topic(
         slug='console-patch-column',
-        title='Read the Patch column on a console',
+        title='Patch from the console page',
         section='Consoles & I/O',
-        summary='See which stage box port feeds each channel, plus free ports.',
+        summary="Tap a channel's Patch cell to patch, replace or unpatch a stage box port.",
         pages=(
             'admin:planner_console_changelist',
         ),
-        keywords=('patch', 'stage box', 'by name', 'ambiguous', 'conflict', 'amber', 'free ports', 'linked',),
+        keywords=('patch', 'unpatch', 'replace', 'stage box', 'by name', 'ambiguous', 'conflict', 'amber', 'free ports', 'linked', 'name not saved',),
     ),
     Topic(
         slug='console-rivage-export',
@@ -313,7 +313,7 @@ TOPICS = (
         slug='source-hardware',
         title='Add your own source hardware names',
         section='Consoles & I/O',
-        summary='Add a mic or DI model to the console Source hardware dropdown.',
+        summary='Add a mic or DI model to the console Source Hardware dropdown.',
         pages=(
             'admin:planner_console_changelist',
             'admin:planner_sourcehardwareoption_changelist',
@@ -482,9 +482,9 @@ TOPICS = (
     ),
     Topic(
         slug='power-amp-profiles',
-        title='Add an amplifier power profile',
+        title='Look up amplifier power profiles',
         section='Amps & PA',
-        summary="Enter an amp model's power figures for the power calculator.",
+        summary='The shared, read-only catalogue of amp power figures.',
         pages=(
             'admin:planner_amplifierprofile_changelist',
         ),

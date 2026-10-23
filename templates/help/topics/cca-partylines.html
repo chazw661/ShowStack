@@ -4,7 +4,7 @@
 <ol>
   <li>Open a config in COMM Config. The <em>Partylines</em> tab opens first.</li>
   <li>Click a channel card's name, type a new one (e.g. "Show Call") and press Enter. It saves when you leave the field.</li>
-  <li>Click <em>+ Add Partyline</em> for another channel. It takes the next number and a <em>PL</em> name you can rename.</li>
+  <li>Click <em>+ Add Partyline</em> for another channel. It takes the next free number and a <em>PL</em> name you can rename.</li>
   <li>Click <em>✕</em> on a card to delete that partyline.</li>
 </ol>
 
@@ -14,5 +14,6 @@
   <li>A new name shows up straight away in every key and port dropdown.</li>
   <li>Tick <em>HelixNet</em> on a partyline to offer it to HelixNet roles. HelixNet beltpacks, stations and remotes only list ticked partylines.</li>
   <li>Deleting a partyline leaves any key or port that used it <em>— Unassigned —</em>.</li>
-  <li><strong>FreeSpeak II: keep to twelve partylines.</strong> The export only renames the base station's twelve channels. A partyline you add past twelve isn't created in the file, and any key or port routed to it points at a channel the base station doesn't have.</li>
+  <li><strong>FreeSpeak II has twelve partylines, CH 1–12.</strong> A new one takes the lowest free channel, and adding a thirteenth is refused. Rename one instead.</li>
+  <li>An older FreeSpeak II config with a partyline past CH 12 shows <em>Export blocked</em> on this tab until you delete it. Keys and ports on it are cleared.</li>
 </ul>
