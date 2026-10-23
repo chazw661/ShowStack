@@ -198,3 +198,73 @@ class CommConfigRoleTests(TestCase):
                                    {'lan_id': lan.id, 'static_ip': '10.0.0.5'}).status_code, 200)
         lan.refresh_from_db()
         self.assertEqual(lan.static_ip, '10.0.0.5')
+
+
+class CommConfigPageRenderingTests(CommConfigRoleTests):
+    """The page offers a viewer no edit controls: the panels are one disabled
+    fieldset (values shown, nothing changeable, add/delete buttons hidden),
+    and New / Templates / Save as Template / Delete are not rendered. Export
+    stays. Editors and owners see the page as before."""
+
+    def page(self, config=None):
+        url = (reverse('planner:comm_config_editor', args=[config.pk]) if config
+               else reverse('planner:comm_config'))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    EDIT_ONLY = ('onclick="deleteConfig(', 'onclick="openSaveTemplateModal(')
+    LIST_EDIT_ONLY = ('onclick="createConfig(\'arcadia\')"', 'onclick="openLoadTemplateModal()"')
+
+    def assert_editable(self):
+        page = self.page(self.config_a)
+        self.assertIn('<fieldset class="cc-panels">', page)
+        self.assertNotIn('<p class="cc-readonly-note"', page)
+        for control in self.EDIT_ONLY:
+            self.assertIn(control, page)
+        self.assertIn('onclick="exportCca(', page)
+        listing = self.page()
+        for control in self.LIST_EDIT_ONLY:
+            self.assertIn(control, listing)
+
+    def test_viewer_sees_it_read_only_with_export(self):
+        self.member(self.project_a, 'viewer')
+        self.member(self.project_b, 'editor')   # editor elsewhere changes nothing here
+        self.use(self.project_a)
+        page = self.page(self.config_a)
+        self.assertIn('<fieldset class="cc-panels" disabled>', page)
+        self.assertIn('<p class="cc-readonly-note"', page)
+        for control in self.EDIT_ONLY:
+            self.assertNotIn(control, page)
+        self.assertIn('onclick="exportCca(', page)
+        # The panels' controls are all inside the disabled fieldset.
+        start, end = page.index('<fieldset class="cc-panels"'), page.index('</fieldset>')
+        self.assertIn('class="cc-pl-name"', page[start:end])
+        self.assertNotIn('class="cc-pl-name"', page[:start] + page[end:])
+        listing = self.page()
+        for control in self.LIST_EDIT_ONLY:
+            self.assertNotIn(control, listing)
+        self.assertIn('Comms A', listing)
+
+    def test_viewer_can_export_a_freespeak_config(self):
+        config = make_config(self.project_a, 'FSII')
+        config.device_type = 'freespeak'
+        config.save()
+        self.member(self.project_a, 'viewer')
+        self.use(self.project_a)
+        page = self.page(config)
+        self.assertIn(reverse('planner:comm_config_export_freespeak', args=[config.pk]), page)
+        self.assertIn('<fieldset class="cc-panels" disabled>', page)
+
+    def test_editor_sees_the_edit_controls(self):
+        self.member(self.project_a, 'editor')
+        self.member(self.project_b, 'viewer')   # viewer elsewhere changes nothing here
+        self.use(self.project_a)
+        self.assert_editable()
+
+    def test_owner_sees_the_edit_controls(self):
+        self.client.force_login(self.project_a.owner)
+        self.project_a.owner.is_staff = True
+        self.project_a.owner.save()
+        self.use(self.project_a)
+        self.assert_editable()

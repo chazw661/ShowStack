@@ -2595,6 +2595,9 @@ def comm_config_view(request, config_id=None):
                 'crew_names': CommCrewName.objects.filter(project=current_project).order_by('name') if current_project else [],
                 'fsii_out_of_range': _fsii_partylines_out_of_range(config),
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
+                # Viewers get the page read-only (export still works); the
+                # writes themselves are refused by _edit_rights_required.
+                'can_edit': _can_edit_current_project(request),
             }
 
             return render(request, 'planner/comm_config.html', context)                                     

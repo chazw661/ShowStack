@@ -603,6 +603,31 @@
 
   /* ── CSRF token ── */
   .cc-csrf { display: none; }
+
+  /* ── Viewers: read-only (comm_config_view's can_edit) ──
+     The panels sit in one <fieldset>, disabled for a viewer: every input,
+     select and checkbox shows its value but cannot change, and the add /
+     delete buttons inside are hidden. The server refuses the writes anyway
+     (_edit_rights_required); this is so a viewer is not offered them. */
+  .cc-panels { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .cc-panels:disabled button { display: none !important; }
+  /* Disabled text is dimmed by the browser (Safari via text-fill-color);
+     a viewer still needs to read every value. */
+  .cc-panels:disabled input,
+  .cc-panels:disabled select {
+    cursor: default;
+    opacity: 1;
+    color: #d0d0d0 !important;
+    -webkit-text-fill-color: #d0d0d0;
+  }
+  .cc-readonly-note {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-left: 3px solid #4a9eff;
+    background: rgba(74, 158, 255, 0.1);
+    color: #c0c0c0;
+    font-size: 0.85rem;
+  }
 </style>
 {% endblock %}
 
@@ -617,6 +642,7 @@
     <div class="cc-header-actions">
 
 
+      {% if can_edit %}
       <button class="cc-btn cc-btn-secondary" onclick="openLoadTemplateModal()">📂 Templates</button>
       <!-- New Config dropdown -->
       <div class="cc-dropdown">
@@ -636,6 +662,7 @@
           </div>
         </div>
       </div>
+      {% endif %}
     </div>
   </div>
 
@@ -666,7 +693,7 @@
   <div class="cc-empty-state">
     <div class="cc-empty-icon">📡</div>
     <p>No configurations yet for this project.</p>
-    <p style="font-size:0.85rem">Click <strong>+ New Configuration</strong> to create your first Arcadia config.</p>
+    {% if can_edit %}<p style="font-size:0.85rem">Click <strong>+ New Configuration</strong> to create your first Arcadia config.</p>{% endif %}
   </div>
   {% endif %}
 
@@ -681,7 +708,7 @@
     </h2>
     <div style="display:flex;gap:8px;">
       <a class="cc-btn cc-btn-secondary" href="/admin/planner/commcrewname/" target="_blank" style="text-decoration:none;">👥 Crew Names</a>
-      <button class="cc-btn cc-btn-secondary" onclick="openSaveTemplateModal({{ config.id }})">💾 Save as Template</button>
+      {% if can_edit %}<button class="cc-btn cc-btn-secondary" onclick="openSaveTemplateModal({{ config.id }})">💾 Save as Template</button>{% endif %}
       {% if config.device_type == 'freespeak' %}
       {% if fsii_out_of_range %}
       <button class="cc-btn cc-btn-success" disabled title="FreeSpeak II has partylines CH 1-12 only: see the Partylines tab">⬇ Export .cca</button>
@@ -691,7 +718,7 @@
       {% else %}
       <button class="cc-btn cc-btn-success" onclick="exportCca({{ config.id }})">⬇ Export .cca</button>
       {% endif %}
-      <button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>
+      {% if can_edit %}<button class="cc-btn cc-btn-danger" onclick="deleteConfig({{ config.id }})">🗑 Delete</button>{% endif %}
     </div>
   </div>
 
@@ -703,6 +730,11 @@
     <div class="cc-tab" data-panel="roles">Roles</div>
     <div class="cc-tab" data-panel="ports">Ports</div>
   </div>
+
+  {% if not can_edit %}
+  <p class="cc-readonly-note">Read-only: you are a viewer on this project. You can look through the config and export it, not change it.</p>
+  {% endif %}
+  <fieldset class="cc-panels"{% if not can_edit %} disabled{% endif %}>
 
   <!-- ── PARTYLINES PANEL ── -->
   <div class="cc-tab-panel active" id="panel-partylines">
@@ -1023,7 +1055,7 @@
     </div>
     {% endif %}{# /freespeak dante hide #}
 
-
+  </fieldset>{# /cc-panels #}
 
 {% endif %}{# end editor view #}
 
