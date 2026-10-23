@@ -12,6 +12,9 @@ Where a feed comes from, best first:
              linked port counts for that channel ONLY: it never shows on
              another console, whatever its name. Same names on two consoles
              do not mean a split -- a monitor desk often has its own I/O.
+             If the port's name is not the channel's SAVED name (patched from
+             the Console page with a typed name, page never saved) the feed
+             is flagged ``unsaved`` -- "name not saved" in the cell.
   BY_NAME    the port has no link, and its name is a channel's name on this
              console and on no other console in the project, and on exactly
              one channel here -- typically a port patched before the link fix.
@@ -27,9 +30,8 @@ Two or more ports LINKED to one channel is a CONFLICT and each is flagged;
 names alone never make one.
 
 Outputs follow the same link / name rules. A bus feeding several I/O outputs
-is normal (the same aux to two stage boxes), so outputs have no conflicts. Aux
-and Matrix can be linked; Stereo is always by name, because the generic link
-only admits aux and matrix.
+is normal (the same aux to two stage boxes), so outputs have no conflicts. Aux,
+Matrix and Stereo can all be linked.
 
 Cost, per request, however many channels or consoles: **two queries** -- every
 DeviceInput in the project, every DeviceOutput -- plus, only when an unlinked
@@ -50,7 +52,7 @@ from planner.models import (
     ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput, ConsoleStereoOutput,
     DeviceInput, DeviceOutput,
 )
-from planner.utils.device_patch import norm
+from planner.utils.device_patch import name_not_saved, norm
 
 LINKED, BY_NAME, AMBIGUOUS = 'linked', 'by_name', 'ambiguous'
 _ORDER = {LINKED: 0, BY_NAME: 1, AMBIGUOUS: 2}
@@ -63,6 +65,13 @@ class Port:
     number: int          # 1-based position on the device, as its page and PDF number it
     name: str
     link: tuple | None   # inputs: (console id, channel pk); outputs: (content type id, pk)
+    pk: int = 0          # the DeviceInput / DeviceOutput row
+
+    @property
+    def free(self):
+        """Free = no name and no link. The one definition, used by the
+        free-ports block and by the picker on the Console page."""
+        return not self.name and not self.link
 
 
 @dataclass
@@ -73,6 +82,8 @@ class Feed:
     conflict: bool = False
     others: tuple = ()   # for AMBIGUOUS: the channels ('ch 90') or consoles it fits
     across: bool = False # for AMBIGUOUS: ``others`` are consoles, not channels
+    unsaved: bool = False  # LINKED, but the port's name is not the channel's
+    saved_name: str = ''   # saved name (device_patch.name_not_saved)
 
     @property
     def url(self):
@@ -101,9 +112,9 @@ def _ports(rows):
     """Number each device's ports by position, the way its page does."""
     ports = []
     for _, device_rows in groupby(rows, key=lambda r: r[0]):
-        for number, (device_id, device_name, name, ct_id, pk) in enumerate(device_rows, 1):
+        for number, (device_id, device_name, name, ct_id, pk, row_pk) in enumerate(device_rows, 1):
             ports.append(Port(device_id, device_name, number, (name or '').strip(),
-                              (ct_id, pk) if pk else None))
+                              (ct_id, pk) if pk else None, row_pk))
     return ports
 
 
@@ -126,7 +137,7 @@ class PortIndex:
                 .filter(device__project_id=self.project_id, input_number__isnull=False)
                 .order_by('device__name', 'device_id', 'input_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
-                             'console_input__console_id', 'console_input_id'))
+                             'console_input__console_id', 'console_input_id', 'pk'))
         return _ports(rows)
 
     # -- names on every console ----------------------------------------------
@@ -174,7 +185,7 @@ class PortIndex:
                 .filter(device__project_id=self.project_id, output_number__isnull=False)
                 .order_by('device__name', 'device_id', 'output_number', 'pk')
                 .values_list('device_id', 'device__name', 'signal_name',
-                             'content_type_id', 'object_id'))
+                             'content_type_id', 'object_id', 'pk'))
         return _ports(rows)
 
     # -- console rows -----------------------------------------------------
@@ -216,6 +227,7 @@ class PortIndex:
             return {}
         console = channels[0].console
         cells = {c.pk: Cell() for c in channels}
+        saved = {c.pk: c.source for c in channels}
         labels = {c.pk: f'ch {c.input_ch}' for c in channels}
         by_name = {}  # name -> {channel pk: slot}; A wins over B on one channel
         for c in channels:
@@ -228,7 +240,7 @@ class PortIndex:
             # elsewhere means not here, whatever the name.
             if port.link:
                 if port.link[1] in cells:
-                    cells[port.link[1]].feeds.append(Feed(port, LINKED))
+                    cells[port.link[1]].feeds.append(_linked(port, saved[port.link[1]]))
                 continue
             hits = by_name.get(norm(port.name), {})
             if not hits:
@@ -265,6 +277,7 @@ class PortIndex:
               for model in (ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput)}
         cells = {(type(b), b.pk): Cell() for b in buses}
         linked = {(ct[type(b)], b.pk): (type(b), b.pk) for b in buses}
+        saved = {(type(b), b.pk): b.name for b in buses}
         labels = {(type(b), b.pk): _bus_label(b) for b in buses}
         by_name = {}
         for b in buses:
@@ -274,7 +287,8 @@ class PortIndex:
         for port in self.outputs:
             if port.link:
                 if port.link in linked:
-                    cells[linked[port.link]].feeds.append(Feed(port, LINKED))
+                    key = linked[port.link]
+                    cells[key].feeds.append(_linked(port, saved[key]))
                 continue
             hits = by_name.get(norm(port.name), [])
             if not hits:
@@ -306,7 +320,7 @@ class PortIndex:
                     'inputs': [], 'outputs': [], 'input_total': 0, 'output_total': 0,
                 })
                 d[side[:-1] + '_total'] += 1
-                if not port.name and not port.link:
+                if port.free:
                     d[side].append(port.number)
         summaries = []
         for d in sorted(devices.values(), key=lambda d: (d['name'].casefold(), d['id'])):
@@ -319,6 +333,12 @@ class PortIndex:
                 'output_ranges': compress(d['outputs']),
             })
         return summaries
+
+
+def _linked(port, channel_name):
+    unsaved = name_not_saved(port.name, channel_name)
+    return Feed(port, LINKED, unsaved=unsaved,
+                saved_name=(channel_name or '').strip() if unsaved else '')
 
 
 def _bus_label(bus):

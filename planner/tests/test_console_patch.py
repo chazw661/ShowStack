@@ -301,13 +301,14 @@ class ConsolePageTests(PatchBase):
         self.port(self.box_b, 2, 'Lectern B')
         page = self.client.get(self.url(self.foh)).content.decode()
         self.assertIn('<th class="column-patch', page)
-        device_url = reverse('admin:planner_device_change', args=[self.box_a.pk])
-        self.assertIn(f'<a href="{device_url}"><span class="ss-patch-dev">Stage Box A</span>'
-                      f'<span class="ss-patch-port"> · In 1</span></a>', page)
+        # A superuser can patch, so each cell is the picker's button and the
+        # feeds are text (the read-only cell is in test_console_patch_picker).
+        self.assertIn('<span class="ss-patch-link"><span class="ss-patch-dev">Stage Box A</span>'
+                      '<span class="ss-patch-port"> · In 1</span></span>', page)
         self.assertEqual(page.count('ss-patch-conflict'), 2)
-        self.assertRegex(page, r'ss-patch-tag-b">B</span><a [^>]*>'
+        self.assertRegex(page, r'ss-patch-tag-b">B</span><span class="ss-patch-link">'
                                r'<span class="ss-patch-dev">Stage Box B</span>'
-                               r'<span class="ss-patch-port"> · In 2</span></a>'
+                               r'<span class="ss-patch-port"> · In 2</span></span>'
                                r'<span class="ss-patch-caption">by name</span>')
         # A name on two consoles: dimmed, consoles named, not amber.
         self.ch(self.foh, 4, 'Shared')

@@ -64,7 +64,7 @@ class PatchLinkBase(TestCase):
         self.snare = ConsoleInput.objects.create(console=self.foh, input_ch='2', source='Snare')
         self.aux = ConsoleAuxOutput.objects.create(console=self.foh, aux_number='1', name='Drum Wedge')
         self.mtx = ConsoleMatrixOutput.objects.create(console=self.foh, matrix_number='1', name='Lobby')
-        ConsoleStereoOutput.objects.create(console=self.foh, stereo_type='L', name='PA Left')
+        self.st_l = ConsoleStereoOutput.objects.create(console=self.foh, stereo_type='L', name='PA Left')
         self.box = self.make_device(self.project, 'Stage Box A')
 
         self.client.force_login(self.user)
@@ -122,8 +122,7 @@ class SuggestionRefTests(PatchLinkBase):
         self.assertIn(f'data-ref="in:{self.kick.pk}"', html)
         self.assertIn(f'data-ref="aux:{self.aux.pk}"', html)
         self.assertIn(f'data-ref="mtx:{self.mtx.pk}"', html)
-        # Stereo has no link to carry.
-        self.assertRegex(html, r'value="PA Left"[^>]*data-ref=""')
+        self.assertIn(f'data-ref="st:{self.st_l.pk}"', html)
         # Each signal-name box names its own hidden link field.
         self.assertIn('data-link-field="id_inputs-0-link_ref"', html)
         self.assertIn('data-link-field="id_outputs-0-link_ref"', html)
@@ -206,7 +205,12 @@ class OutputLinkTests(PatchLinkBase):
         self.submit(outputs={1: ('Lobby', f'mtx:{self.mtx.pk}')})
         self.assertEqual(self.out(1).console_output, self.mtx)
 
-    def test_stereo_is_name_only(self):
+    def test_picking_a_stereo_bus_sets_the_generic_link(self):
+        self.submit(outputs={1: ('PA Left', f'st:{self.st_l.pk}')})
+        self.assertEqual(self.out(1).console_output, self.st_l)
+        self.assertEqual(self.out(1).signal_name, 'PA Left')
+
+    def test_typed_stereo_name_is_name_only(self):
         self.submit(outputs={1: ('PA Left', '')})
         self.assertIsNone(self.out(1).content_type)
         self.assertEqual(self.out(1).signal_name, 'PA Left')
@@ -267,6 +271,17 @@ class RenameAndDeleteTests(PatchLinkBase):
         self.assertIsNone(out.content_type_id)
         self.assertIsNone(out.object_id)
         self.assertEqual(out.signal_name, 'Drum Wedge')
+
+    def test_renaming_and_deleting_a_stereo_bus_follow_its_link(self):
+        DeviceOutput.objects.filter(pk=self.out(2).pk).update(
+            content_type=ContentType.objects.get_for_model(ConsoleStereoOutput),
+            object_id=self.st_l.pk, signal_name='PA Left')
+        self.st_l.name = 'Main L'
+        self.st_l.save()
+        self.assertEqual(self.out(2).signal_name, 'Main L')
+        self.st_l.delete()
+        self.assertIsNone(self.out(2).object_id)
+        self.assertEqual(self.out(2).signal_name, 'Main L')
 
     def test_unlinked_ports_with_the_old_name_are_not_renamed(self):
         DeviceInput.objects.filter(pk=self.port(2).pk).update(signal_name='Kick')

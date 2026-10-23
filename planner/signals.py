@@ -174,6 +174,7 @@ def linked_device_inputs_follow_rename(sender, instance, created, raw=False, **k
 
 @receiver(post_save, sender=ConsoleAuxOutput)
 @receiver(post_save, sender=ConsoleMatrixOutput)
+@receiver(post_save, sender=ConsoleStereoOutput)
 def linked_device_outputs_follow_rename(sender, instance, created, raw=False, **kwargs):
     name = (instance.name or '').strip()
     if created or raw or not name:
@@ -186,6 +187,7 @@ def linked_device_outputs_follow_rename(sender, instance, created, raw=False, **
 
 @receiver(post_delete, sender=ConsoleAuxOutput)
 @receiver(post_delete, sender=ConsoleMatrixOutput)
+@receiver(post_delete, sender=ConsoleStereoOutput)
 def unlink_device_outputs_on_delete(sender, instance, **kwargs):
     """The generic link has no on_delete, so a deleted bus would leave an
     object_id pointing at nothing (and, on SQLite, at whatever row reuses the

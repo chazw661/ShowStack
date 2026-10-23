@@ -782,6 +782,11 @@ class PatchColumnMixin:
 
     Change page only: on the add page there is no console, so no column.
     ``patch_after`` is the column it follows.
+
+    For the current project's owner or an editor each cell is also a button
+    that opens the picker (planner/utils/console_patch_edit.py,
+    console_patch_picker.js); a viewer gets the read-only cell. Decided once
+    per request, from the same per-project role check the JSON endpoints use.
     """
     patch_after = 'name'
 
@@ -802,6 +807,11 @@ class PatchColumnMixin:
             return formset
         from .utils.console_patch import PortIndex
         index = PortIndex.for_request(request, obj.project_id)
+        if not hasattr(index, 'editable'):
+            from planner.views import _can_edit_current_project
+            current = getattr(request, 'current_project', None)
+            index.editable = (current is not None and current.pk == obj.project_id
+                              and _can_edit_current_project(request))
 
         class PatchFormSet(formset):
             def __init__(self, *args, **kw):
@@ -818,8 +828,12 @@ class PatchColumnMixin:
         index = getattr(obj, '_ss_patch_index', None)
         if index is None:
             return ''
+        cell = index.cell_for(obj)
+        if getattr(index, 'editable', False):
+            from .utils.console_patch_edit import render_cell
+            return render_cell(obj, cell, editable=True)
         return render_to_string('admin/planner/console/_patch_cell.html', {
-            'cell': index.cell_for(obj),
+            'cell': cell,
             'side': 'In' if isinstance(obj, ConsoleInput) else 'Out',
         })
 
@@ -1436,7 +1450,8 @@ class ConsoleAdmin(BaseEquipmentAdmin):
             'admin/js/console_autofill.js',
             'admin/js/console_source_hardware.js',
             'admin/js/console_ab_toggle.js',
-            'planner/js/console_patch_toggle.js',]
+            'planner/js/console_patch_toggle.js',
+            'planner/js/console_patch_picker.js',]
         css = {
             'all': ['admin/css/dark_mode.css',
                     'planner/css/custom_admin.css',
@@ -1506,7 +1521,7 @@ class DeviceInputInline(BaseEquipmentInline):
         console_input is joined because each form shows its linked channel's
         current name -- one query for the grid, not one per port."""
         qs = super().get_queryset(request)
-        return qs.select_related('console_input').order_by('input_number')
+        return qs.select_related('console_input__console').order_by('input_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need
@@ -1551,7 +1566,7 @@ class DeviceOutputInline(BaseEquipmentInline):
         console_output (the aux/matrix generic link) is prefetched for the
         same reason inputs join console_input."""
         qs = super().get_queryset(request)
-        return qs.prefetch_related('console_output').order_by('output_number')
+        return qs.prefetch_related('console_output__console').order_by('output_number')
     
     def get_formset(self, request, obj=None, **kwargs):
         # Calculate how many extra forms we need

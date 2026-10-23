@@ -8,6 +8,7 @@ from planner.utils.pdf_exports.system_report import export_system_report
 from .views import populate_amp_models_view
 from . import views_monitor
 from . import views_listen
+from . import views_console_patch
 
 from .views import (
      audio_checklist_view,
@@ -32,6 +33,7 @@ urlpatterns = [
    
      #-----Consoles
     path("consoles/<int:console_id>/", views.console_detail, name="console_detail"),
+    path("console-patch/<str:kind>/<int:pk>/", views_console_patch.console_patch, name="console_patch"),
     path('source-hardware-options/add/', views.add_source_hardware_option, name='add_source_hardware_option'),
     
     # P1 Processor URLs

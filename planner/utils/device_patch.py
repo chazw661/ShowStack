@@ -3,7 +3,7 @@
 A port carries two things: ``signal_name`` (text, always shown) and a link to
 the console channel it feeds -- ``DeviceInput.console_input`` for inputs, the
 ``content_type``/``object_id`` generic link for outputs, which can point at an
-Aux or a Matrix and nothing else.
+Aux, a Matrix or a Stereo bus and nothing else.
 
 The rules, in one place so the I/O device page, the backfill command and any
 later "patch from the console page" all agree:
@@ -15,10 +15,15 @@ later "patch from the console page" all agree:
     name. A name edited to something else is a free-typed name.
   * Renaming the channel moves the port's name with it (planner/signals.py),
     so the link holds and every reader of ``signal_name`` shows the current
-    channel name.
+    channel name -- including blank -> a name.
+  * Patching from the Console page (``link_input_port`` / ``link_output_port``)
+    links the port whatever the channel's name, even none: the port takes the
+    name the engineer sees on that page, saved or not, and a blank one is
+    filled when the channel is named and saved. A linked port with a blank name
+    is still used, not free.
 
 A link is written as a short reference string -- ``in:<pk>``, ``aux:<pk>``,
-``mtx:<pk>`` -- which is what the combobox carries in a hidden field. It is
+``mtx:<pk>``, ``st:<pk>`` -- which is what the combobox carries in a hidden field. It is
 always resolved inside one project: a reference to another project's channel,
 or to a channel deleted since the page loaded, resolves to nothing and the port
 keeps its name without a link. It never raises, because the hidden field is
@@ -27,10 +32,13 @@ not something the engineer can see or correct.
 
 from django.contrib.contenttypes.models import ContentType
 
-from planner.models import ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput
+from planner.models import (
+    ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput, ConsoleStereoOutput,
+)
 
 INPUT_PREFIX = 'in'
-OUTPUT_MODELS = {'aux': ConsoleAuxOutput, 'mtx': ConsoleMatrixOutput}
+OUTPUT_MODELS = {'aux': ConsoleAuxOutput, 'mtx': ConsoleMatrixOutput,
+                 'st': ConsoleStereoOutput}
 
 
 def norm(name):
@@ -43,8 +51,8 @@ def input_ref(console_input_id):
 
 
 def output_ref(model, pk):
-    """``aux:12`` / ``mtx:3`` for a linkable bus; '' for anything else
-    (stereo has no link -- the generic FK only admits aux and matrix)."""
+    """``aux:12`` / ``mtx:3`` / ``st:7`` for a linkable bus; '' for anything
+    else."""
     for prefix, linked in OUTPUT_MODELS.items():
         if model is linked:
             return f'{prefix}:{pk}' if pk else ''
@@ -75,12 +83,24 @@ def resolve_input_ref(ref, project_id):
 
 
 def resolve_output_ref(ref, project_id):
-    """The project's Aux/Matrix a reference names, or None."""
+    """The project's Aux/Matrix/Stereo bus a reference names, or None."""
     prefix, pk = _split(ref)
     model = OUTPUT_MODELS.get(prefix)
     if model is None or pk is None or not project_id:
         return None
     return model.objects.filter(pk=pk, console__project_id=project_id).first()
+
+
+def name_not_saved(port_name, channel_name):
+    """Is a LINKED port named something other than its channel's saved name?
+
+    Normally impossible -- a channel's save moves its name onto its ports --
+    so it means the port was patched from the Console page with a name typed
+    there and the page was never saved (or the channel was since saved blank).
+    A blank port name is not a mismatch: it is waiting for the channel's name.
+    The Console page's Patch cell and the I/O device page both flag it.
+    """
+    return bool(norm(port_name)) and norm(port_name) != norm(channel_name)
 
 
 def link_holds(posted_name, channel_name, initial_name):
@@ -89,10 +109,11 @@ def link_holds(posted_name, channel_name, initial_name):
     Yes when it is the linked channel's current name, or when the engineer did
     not touch the field (which covers a channel renamed to blank: the port
     shows its last name, and leaving it alone must not silently unlink it).
-    A blank name never holds -- clearing the field clears both.
+    A blank name holds only when it was blank already (a port patched to an
+    unnamed channel, left alone); clearing a name clears both.
     """
     if not norm(posted_name):
-        return False
+        return not norm(initial_name)
     return norm(posted_name) in {norm(channel_name), norm(initial_name)} - {''}
 
 
@@ -111,9 +132,24 @@ def apply_input_link(device_input, posted_name, channel, initial_name=''):
         device_input.signal_name = name
 
 
+def link_input_port(device_input, channel, name=''):
+    """Link ``device_input`` to ``channel`` from the Console page. ``name`` is
+    the channel's name as that page shows it (typed and not yet saved, or
+    saved) and may be blank. Does not save."""
+    device_input.console_input = channel
+    device_input.signal_name = (name or '').strip()
+
+
+def link_output_port(device_output, bus, name=''):
+    """Output counterpart of ``link_input_port``. Does not save."""
+    device_output.content_type = ContentType.objects.get_for_model(type(bus))
+    device_output.object_id = bus.pk
+    device_output.signal_name = (name or '').strip()
+
+
 def apply_output_link(device_output, posted_name, bus, initial_name=''):
     """Output counterpart of ``apply_input_link``; ``bus`` is a resolved
-    ConsoleAuxOutput/ConsoleMatrixOutput or None. Does not save."""
+    ConsoleAuxOutput/ConsoleMatrixOutput/ConsoleStereoOutput or None. Does not save."""
     name = (posted_name or '').strip()
     if bus is not None and link_holds(name, bus.name, initial_name):
         device_output.content_type = ContentType.objects.get_for_model(type(bus))
