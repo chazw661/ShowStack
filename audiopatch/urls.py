@@ -62,6 +62,9 @@ urlpatterns = [
 
     path('m/', include('planner.mobile_urls')),
 
+    # In-app help. Login-only (LoginRequiredMiddleware); never shows project data.
+    path('help/', include('planner.help.urls')),
+
     
     ]
 

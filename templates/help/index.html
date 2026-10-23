@@ -1,0 +1,69 @@
+{% extends "help/base.html" %}
+{% block title %}Help{% endblock %}
+{% block content %}
+<div class="top">
+    <div class="top-row">
+        <a class="brand" href="{% url 'help:index' %}">Show<span>Stack</span> Help</a>
+        <a class="close-btn" id="help-close" href="#">Back</a>
+    </div>
+    <input class="search" id="help-search" type="search" placeholder="Search help — e.g. rivage, beltpack, MIC'D"
+           aria-label="Search help" autocomplete="off">
+</div>
+
+{% if here %}
+<section class="here" id="help-here">
+    <h2>On this page</h2>
+    {% for entry in here %}
+        {% include "help/_topic_entry.html" with entry=entry prefix="here-" open=forloop.first %}
+    {% endfor %}
+</section>
+{% endif %}
+
+{% for section in sections %}
+<section class="help-section">
+    <h2>{{ section.name }}</h2>
+    {% for entry in section.entries %}
+        {% include "help/_topic_entry.html" with entry=entry prefix="" open=False %}
+    {% endfor %}
+</section>
+{% endfor %}
+<p class="empty" id="help-empty">No help topics match that search.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var input = document.getElementById('help-search');
+    var here = document.getElementById('help-here');
+    var sections = document.querySelectorAll('.help-section');
+    var empty = document.getElementById('help-empty');
+    var topics = document.querySelectorAll('.help-section .topic');
+    // Search titles, summaries, keywords and the full text of each topic.
+    topics.forEach(function (t) {
+        t.dataset.text = (t.dataset.search + ' ' + t.querySelector('.topic-body').textContent).toLowerCase();
+    });
+    function apply() {
+        var words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+        var shown = 0;
+        topics.forEach(function (t) {
+            var hit = words.every(function (w) { return t.dataset.text.indexOf(w) !== -1; });
+            t.hidden = !hit;
+            if (hit) shown++;
+        });
+        sections.forEach(function (s) {
+            s.hidden = !s.querySelector('.topic:not([hidden])');
+        });
+        if (here) here.hidden = words.length > 0;
+        // A handful of hits: open them, so the answer is on screen.
+        topics.forEach(function (t) { if (words.length) t.open = !t.hidden && shown <= 3; });
+        empty.style.display = shown ? 'none' : 'block';
+    }
+    input.addEventListener('input', apply);
+    // /help/#slug opens that topic.
+    if (location.hash) {
+        var t = document.getElementById(location.hash.slice(1));
+        if (t && t.tagName === 'DETAILS') { t.open = true; t.scrollIntoView(); }
+    }
+})();
+</script>
+{% endblock %}

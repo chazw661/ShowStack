@@ -302,6 +302,7 @@
                 <strong>{{ user.get_full_name|default:user.username }}</strong>
             </div>
             <a href="{% url 'dashboard' %}" class="btn-back">← Back to Dashboard</a>
+            {% include "help/_help_link.html" %}
         </div>
     </div>
 

@@ -1,0 +1,25 @@
+<p class="help-lede">Bring in a whole cable schedule from a spreadsheet instead of typing each run.</p>
+
+<h3>Steps</h3>
+<ol>
+  <li>In <em>PA Cable Entries</em>, tap <em>Import CSV</em>.</li>
+  <li>Tap <em>Download sample CSV</em> and fill it in. The columns are <em>Label</em>, <em>Destination</em>, <em>Count</em>, <em>Cable</em>, <em>Length</em>, <em>Notes</em>, <em>Drawing Ref</em>, <em>Fan Outs</em>, <em>Extensions</em> and <em>Couplers</em>.</li>
+  <li>Choose the file under <em>Select CSV file:</em> and tap <em>Import PA Cables</em>.</li>
+  <li>A message gives the number imported, any new zones and up to eight row problems.</li>
+</ol>
+
+<h3>Formats</h3>
+<ul>
+  <li>Cable: a code or name, e.g. <em>NL_4</em> or <em>NL 4</em>. The import page lists them all.</li>
+  <li>Fan Outs: <em>NL4_Y x2; NL8_Y x1</em></li>
+  <li>Extensions: <em>NL4_Y: NL4 25 x1</em>. The length must be 25, 50, 100 or 150.</li>
+  <li>Couplers: <em>NL4_COUPLER x1</em></li>
+</ul>
+
+<h3>Good to know</h3>
+<ul>
+  <li>Every row needs a Label and a Cable. A blank Count imports as 1 and a blank Length as 0.</li>
+  <li>New labels become zones. Labels longer than 20 characters are cut short.</li>
+  <li>Imports add rows and never replace them. Importing the same file twice doubles your runs.</li>
+  <li>A bad row is skipped and the rest still import.</li>
+</ul>

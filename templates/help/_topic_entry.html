@@ -1,0 +1,11 @@
+<details class="topic" id="{{ prefix }}{{ entry.topic.slug }}"{% if open %} open{% endif %}
+         data-search="{{ entry.topic.title|lower }} {{ entry.topic.summary|lower }} {{ entry.topic.keywords|join:' '|lower }} {{ entry.topic.section|lower }}">
+    <summary>
+        <span class="topic-title">{{ entry.topic.title }}</span>
+        <span class="topic-summary">{{ entry.topic.summary }}</span>
+    </summary>
+    <div class="topic-body body">
+        {{ entry.body }}
+        <p class="permalink"><a href="{% url 'help:topic' entry.topic.slug %}">Link to this topic</a></p>
+    </div>
+</details>

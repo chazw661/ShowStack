@@ -214,6 +214,7 @@
         <div class="header-right">
             <a href="{% url 'dashboard' %}" class="btn-back">← Back to Dashboard</a>
             <a href="{% url 'invite_user' project.id %}" class="btn-invite">+ Invite User</a>
+            {% include "help/_help_link.html" %}
         </div>
     </div>
     

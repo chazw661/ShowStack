@@ -297,6 +297,7 @@
         </div>
         <div class="header-right">
             <a href="{% url 'dashboard' %}" class="btn-back">← Back to Dashboard</a>
+            {% include "help/_help_link.html" %}
             {% if is_owner %}
             <a href="/admin/planner/project/{{ project.id }}/change/" class="btn-admin">Admin Panel</a>
             {% endif %}
