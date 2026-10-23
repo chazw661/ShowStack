@@ -15,7 +15,8 @@ later "patch from the console page" all agree:
     name. A name edited to something else is a free-typed name.
   * Renaming the channel moves the port's name with it (planner/signals.py),
     so the link holds and every reader of ``signal_name`` shows the current
-    channel name -- including blank -> a name.
+    channel name -- including blank -> a name. Saving the Console page also
+    runs ``sync_port_names``, which covers what the rename cannot see.
   * Patching from the Console page (``link_input_port`` / ``link_output_port``)
     links the port whatever the channel's name, even none: the port takes the
     name the engineer sees on that page, saved or not, and a blank one is
@@ -34,6 +35,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from planner.models import (
     ConsoleAuxOutput, ConsoleInput, ConsoleMatrixOutput, ConsoleStereoOutput,
+    DeviceInput, DeviceOutput,
 )
 
 INPUT_PREFIX = 'in'
@@ -101,6 +103,48 @@ def name_not_saved(port_name, channel_name):
     The Console page's Patch cell and the I/O device page both flag it.
     """
     return bool(norm(port_name)) and norm(port_name) != norm(channel_name)
+
+
+def sync_port_names(console):
+    """After the Console page is saved: every port linked to one of its
+    channels takes that channel's saved name, blank included.
+
+    The rename signal (planner/signals.py) only runs for a row that was saved,
+    and Django saves only rows that changed. A port patched with a name typed
+    on the page (``link_input_port``) whose row was then typed back to its
+    saved name -- or, unnamed, cleared again -- has no changed row, so nothing
+    else would ever correct it, and its cell would say "name not saved" for
+    good. Only ports ``name_not_saved`` flags are written. Returns how many.
+    """
+    fixed = 0
+
+    def write(model, targets):
+        nonlocal fixed
+        by_name = {}
+        for pk, name in targets:
+            by_name.setdefault(name, []).append(pk)
+        for name, pks in by_name.items():
+            fixed += model.objects.filter(pk__in=pks).update(signal_name=name)
+
+    write(DeviceInput, [
+        (pk, (source or '').strip())
+        for pk, name, source in DeviceInput.objects
+        .filter(console_input__console=console)
+        .values_list('pk', 'signal_name', 'console_input__source')
+        if name_not_saved(name, source)])
+
+    for model in OUTPUT_MODELS.values():
+        names = dict(model.objects.filter(console=console).values_list('pk', 'name'))
+        if not names:
+            continue
+        write(DeviceOutput, [
+            (pk, (names[object_id] or '').strip())
+            for pk, name, object_id in DeviceOutput.objects
+            .filter(content_type=ContentType.objects.get_for_model(model),
+                    object_id__in=names)
+            .values_list('pk', 'signal_name', 'object_id')
+            if name_not_saved(name, names[object_id])])
+    return fixed
 
 
 def link_holds(posted_name, channel_name, initial_name):

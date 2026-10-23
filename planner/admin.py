@@ -1507,6 +1507,15 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                     obj.project = Project.objects.get(id=project_id)
         super().save_model(request, obj, form, change)
 
+    def save_related(self, request, form, formsets, change):
+        """After the rows are saved, ports linked to this console's channels
+        take their channel's saved name -- including a name the Patch picker
+        used while it was typed and unsaved, then typed back before saving
+        (device_patch.sync_port_names)."""
+        super().save_related(request, form, formsets, change)
+        from .utils.device_patch import sync_port_names
+        sync_port_names(form.instance)
+
 # ========== Device Admin ==========
 
 
