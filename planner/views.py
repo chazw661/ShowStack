@@ -138,14 +138,13 @@ def console_detail(request, console_id):
 @login_required
 @require_POST
 def add_source_hardware_option(request):
-    from .models import SourceHardwareOption, Project, ProjectMember
+    from .models import SourceHardwareOption
 
-    user = request.user
-    if not user.is_superuser:
-        owns_project = Project.objects.filter(owner=user).exists()
-        is_editor = ProjectMember.objects.filter(user=user, role='editor').exists()
-        if not (owns_project or is_editor):
-            return JsonResponse({'error': 'Permission denied.'}, status=403)
+    # Adding to the shared list: owner / editor of the current project.
+    # Renaming, reordering and deleting are superuser-only, in the admin (see
+    # SourceHardwareOptionAdmin; per-account lists are issue #124).
+    if not _can_edit_current_project(request):
+        return JsonResponse({'error': 'Read-only access.'}, status=403)
 
     label = (request.POST.get('label') or '').strip()
     if not label:
