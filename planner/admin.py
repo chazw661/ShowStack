@@ -847,18 +847,9 @@ class ConsoleInputInline(PatchColumnMixin, admin.TabularInline):
     classes = ['collapse']
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        from django.db.models import Case, When, IntegerField, Value
-        from django.db.models.functions import Cast
-        # Safe cast - non-numeric input_ch values sort to end
-        return qs.annotate(
-            input_ch_int=Case(
-                When(input_ch__regex=r'^\d+$',
-                     then=Cast('input_ch', IntegerField())),
-                default=Value(99999),
-                output_field=IntegerField()
-            )
-        ).order_by('input_ch_int', 'input_ch')
+        # Numbers as numbers, then "ST 7" etc. -- the console PDF uses the same rule.
+        from .utils.console_order import by_channel_number
+        return by_channel_number(super().get_queryset(request), 'input_ch')
 
     def get_extra(self, request, obj=None, **kwargs):
         """Return 144 for new consoles, 0 for existing"""
@@ -931,12 +922,8 @@ class ConsoleAuxOutputInline(PatchColumnMixin, admin.TabularInline):
     classes = ['collapse']
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        from django.db.models.functions import Cast
-        from django.db.models import IntegerField
-        return qs.annotate(
-            aux_num_int=Cast('aux_number', IntegerField())
-        ).order_by('aux_num_int')
+        from .utils.console_order import by_channel_number
+        return by_channel_number(super().get_queryset(request), 'aux_number')
     
 
 
@@ -977,12 +964,8 @@ class ConsoleMatrixOutputInline(PatchColumnMixin, admin.TabularInline):
 
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        from django.db.models.functions import Cast
-        from django.db.models import IntegerField
-        return qs.annotate(
-            matrix_num_int=Cast('matrix_number', IntegerField())
-        ).order_by('matrix_num_int')
+        from .utils.console_order import by_channel_number
+        return by_channel_number(super().get_queryset(request), 'matrix_number')
     
 
     def get_extra(self, request, obj=None, **kwargs):

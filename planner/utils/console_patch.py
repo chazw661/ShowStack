@@ -335,6 +335,25 @@ class PortIndex:
         return summaries
 
 
+def feed_label(feed, side):
+    """One feed as plain text, the way its Patch cell reads on the Console
+    page: "B: Stage Box A · In 3 — by name". ``side`` is 'In' or 'Out'. The
+    caption is the cell's (name not saved / by name / ambiguous (...)), and a
+    conflict, amber on the page, says so. The console PDF prints these."""
+    text = f'{feed.port.device_name} · {side} {feed.port.number}'
+    if feed.slot == 'B':
+        text = 'B: ' + text
+    if feed.unsaved:
+        text += ' — name not saved'
+    elif feed.how == BY_NAME:
+        text += ' — by name'
+    elif feed.how == AMBIGUOUS:
+        text += f' — ambiguous ({", ".join(feed.others)})'
+    if feed.conflict:
+        text += ' — CONFLICT'
+    return text
+
+
 def _linked(port, channel_name):
     unsaved = name_not_saved(port.name, channel_name)
     return Feed(port, LINKED, unsaved=unsaved,
