@@ -871,6 +871,8 @@ class ConsoleInputInline(PatchColumnMixin, admin.TabularInline):
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
         from planner.models import SourceHardwareOption
+        from planner.views import _can_edit_current_project
+        can_add = _can_edit_current_project(request)
 
         class PrepopulatedFormSet(formset):
             def __init__(self, *args, **kwargs):
@@ -892,10 +894,12 @@ class ConsoleInputInline(PatchColumnMixin, admin.TabularInline):
                         choices = list(base_choices)
                         if current and current not in source_hardware_options:
                             choices.append((current, current))
+                        # "+ Add new…" adds to the shared list: owner / editor
+                        # of the current project (SourceHardwareOptionAdmin).
                         form.fields[hw_field].choices = (
                             [('', '---------')]
                             + choices
-                            + [('__add_new__', '+ Add new…')]
+                            + ([('__add_new__', '+ Add new…')] if can_add else [])
                         )
 
                 for index, form in enumerate(self.forms):
@@ -1502,6 +1506,15 @@ class ConsoleAdmin(BaseEquipmentAdmin):
                     from .models import Project
                     obj.project = Project.objects.get(id=project_id)
         super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        """After the rows are saved, ports linked to this console's channels
+        take their channel's saved name -- including a name the Patch picker
+        used while it was typed and unsaved, then typed back before saving
+        (device_patch.sync_port_names)."""
+        super().save_related(request, form, formsets, change)
+        from .utils.device_patch import sync_port_names
+        sync_port_names(form.instance)
 
 # ========== Device Admin ==========
 
@@ -7804,6 +7817,10 @@ class MultitrackTemplateAdmin(BaseEquipmentAdmin):
 from planner.admin_site import showstack_admin_site
 
 
+# Where an option added by a non-superuser lands: the end of the list.
+ADDED_SOURCE_HARDWARE_ORDER = 9999
+
+
 class SourceHardwareOptionAdmin(BaseAdmin):
     list_display = ['label', 'sort_order']
     list_editable = ['sort_order']
@@ -7813,31 +7830,42 @@ class SourceHardwareOptionAdmin(BaseAdmin):
     class Media:
         js = ['admin/js/source_hardware_back_button.js']
 
+    # One list shared by every account (no project or owner). Owning or
+    # editing ANY show used to grant every write, so one customer could rename
+    # or delete another's options. Now:
+    #   * read: everyone with admin access;
+    #   * add: an owner or editor of the CURRENT project (the console page's
+    #     "+ Add new…", views.add_source_hardware_option, and here) -- a new
+    #     option goes to the end of the list;
+    #   * rename, reorder, delete: superusers only.
+    # Inputs store the label as text (ConsoleInput.source_hardware is a
+    # CharField, no FK), so none of this ever changes an existing show.
+    # Per-account lists: issue #124.
+
     def has_module_permission(self, request):
         return request.user.is_authenticated
 
     def has_view_permission(self, request, obj=None):
         return request.user.is_authenticated
 
-    def _user_can_edit(self, request):
-        if request.user.is_superuser:
-            return True
-        if not request.user.is_authenticated:
-            return False
-        if Project.objects.filter(owner=request.user).exists():
-            return True
-        return ProjectMember.objects.filter(
-            user=request.user, role='editor'
-        ).exists()
-
     def has_add_permission(self, request):
-        return self._user_can_edit(request)
+        from planner.views import _can_edit_current_project
+        return _can_edit_current_project(request)
 
     def has_change_permission(self, request, obj=None):
-        return self._user_can_edit(request)
+        return request.user.is_superuser
 
     def has_delete_permission(self, request, obj=None):
-        return self._user_can_edit(request)
+        return request.user.is_superuser
+
+    def get_fields(self, request, obj=None):
+        # Choosing a position is reordering: superusers only.
+        return ['label', 'sort_order'] if request.user.is_superuser else ['label']
+
+    def save_model(self, request, obj, form, change):
+        if not change and not request.user.is_superuser:
+            obj.sort_order = ADDED_SOURCE_HARDWARE_ORDER
+        super().save_model(request, obj, form, change)
 
 
 # Register all equipment admin classes

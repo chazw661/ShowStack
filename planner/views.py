@@ -138,14 +138,13 @@ def console_detail(request, console_id):
 @login_required
 @require_POST
 def add_source_hardware_option(request):
-    from .models import SourceHardwareOption, Project, ProjectMember
+    from .models import SourceHardwareOption
 
-    user = request.user
-    if not user.is_superuser:
-        owns_project = Project.objects.filter(owner=user).exists()
-        is_editor = ProjectMember.objects.filter(user=user, role='editor').exists()
-        if not (owns_project or is_editor):
-            return JsonResponse({'error': 'Permission denied.'}, status=403)
+    # Adding to the shared list: owner / editor of the current project.
+    # Renaming, reordering and deleting are superuser-only, in the admin (see
+    # SourceHardwareOptionAdmin; per-account lists are issue #124).
+    if not _can_edit_current_project(request):
+        return JsonResponse({'error': 'Read-only access.'}, status=403)
 
     label = (request.POST.get('label') or '').strip()
     if not label:
@@ -2595,6 +2594,9 @@ def comm_config_view(request, config_id=None):
                 'crew_names': CommCrewName.objects.filter(project=current_project).order_by('name') if current_project else [],
                 'fsii_out_of_range': _fsii_partylines_out_of_range(config),
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
+                # Viewers get the page read-only (export still works); the
+                # writes themselves are refused by _edit_rights_required.
+                'can_edit': _can_edit_current_project(request),
             }
 
             return render(request, 'planner/comm_config.html', context)                                     
