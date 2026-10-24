@@ -17,6 +17,7 @@ from django import forms
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q, Max
 from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment, CabinetModel, CabinetSection
+from .models import AmplifierLoadRating, AmplifierVoltageFactor
 from django.db.models import Sum 
 from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
@@ -1765,7 +1766,7 @@ class AmpModelAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Model Information', {
-            'fields': ('manufacturer', 'model_name', 'channel_count')
+            'fields': ('manufacturer', 'model_name', 'channel_count', 'power_profile')
         }),
         ('Input Configuration', {
             'fields': ('has_analog_inputs', 'has_aes_inputs', 'has_avb_inputs'),
@@ -1777,7 +1778,15 @@ class AmpModelAdmin(admin.ModelAdmin):
         }),
     )
 
-
+    def get_readonly_fields(self, request, obj=None):
+        # AmpModel is shared by every account, and power_profile decides which
+        # mains-draw table every amp of this model is planned with. The other
+        # fields still follow the model permissions below; this one is
+        # superuser-only, like the AmplifierProfile figures it points at.
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            readonly.append('power_profile')
+        return readonly
 
     def has_add_permission(self, request):
         """Only editors and owners can add"""
@@ -6836,7 +6845,25 @@ class CabinetModelAdmin(SuperuserCatalogueMixin, admin.ModelAdmin):
         return ', '.join(parts) or '-'
 
 
+class AmplifierLoadRatingInline(SuperuserCatalogueMixin, admin.TabularInline):
+    model = AmplifierLoadRating
+    extra = 0
+    fields = ['condition', 'load_ohms', 'mains_voltage', 'current_amps',
+              'current_is_upper_bound', 'power_watts', 'channels_driven',
+              'verified', 'source', 'source_url']
+    verbose_name_plural = 'Mains draw per load (as published)'
+
+
+class AmplifierVoltageFactorInline(SuperuserCatalogueMixin, admin.TabularInline):
+    model = AmplifierVoltageFactor
+    extra = 0
+    fields = ['mains_voltage', 'current_multiplier', 'verified', 'source']
+    verbose_name_plural = 'Mains current multiplier vs 230 V'
+
+
 class AmplifierProfileAdmin(admin.ModelAdmin):
+    inlines = [AmplifierLoadRatingInline, AmplifierVoltageFactorInline]
+
     list_display = [
         'manufacturer', 'model', 'channels', 'rated_power_watts', 
         'nominal_voltage', 'rack_units'

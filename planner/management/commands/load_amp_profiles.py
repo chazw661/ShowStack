@@ -1,5 +1,97 @@
+"""Seed the Amplifier Profile catalogue and its cited mains-draw tables.
+
+Two parts, with different redeploy rules:
+
+* The profile rows themselves (the legacy single-figure fields the current
+  calculator reads) load only into an empty table, or with --force, as before.
+* The per-load mains-draw tables (AmplifierLoadRating) and voltage factors
+  (AmplifierVoltageFactor) are created whenever a row is missing, so they
+  reach a database whose profiles already exist; --force resets them to the
+  values below. A superuser's edit to an existing row survives a redeploy.
+
+All draw tables are as printed in the L-Acoustics manuals: 230 V, all
+channels driven, mains current and power. The power factor is not published.
+Each row cites document, version and page; LA4X rows are unverified (the only
+copy available was a garbled text extraction).
+
+Finally each profile is linked to the rack view's AmpModel of the same name,
+where an L-Acoustics AmpModel has no profile yet.
+"""
+
+import re
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand
-from planner.models import AmplifierProfile
+from django.db import transaction
+
+from planner.models import (
+    AmpModel, AmplifierLoadRating, AmplifierProfile, AmplifierVoltageFactor,
+)
+
+SOURCES = {
+    'LA8': ("L-Acoustics LA8 user manual (EN) v5.0, p.16",
+            'https://hire.on-productions.co.uk/uploads/docs/LA8_UM_EN_5_705.0.pdf', True),
+    'LA4X': ("L-Acoustics LA4X user manual (EN) v4.0, p.15 -- verify: transcribed "
+             "from a garbled text extraction",
+             'https://www.manualslib.com/manual/1135781/L-Acoustics-La4x.html?page=15', False),
+    'LA12X': ("L-Acoustics LA12X user manual (EN) v1.0, p.18",
+              'https://www.promusic.cz/sites/default/files/product/field_files/la12x_um_en.pdf', True),
+    'LA7.16i': ("L-Acoustics LA7.16i owner's manual v5.0, pp.24-25",
+                'https://www.bestecaudio.com/wp/wp-content/uploads/LA7.16i_OM_JP-5-0.pdf', True),
+}
+
+# model -> [(condition, load_ohms or None, amps, '<' bound, watts, channels_driven)]
+# load_ohms None = not load-dependent (standby, idle, single-column tables).
+LOAD_RATINGS = {
+    'LA8': [
+        ('standby', None, '0.1', True, 12, None),
+        ('idle', None, '0.5', False, 115, None),
+        ('eighth', 8, '10', False, 1300, None),
+        ('eighth', 4, '11', False, 1500, None),
+        ('third', 8, '15', False, 1950, None),
+        ('third', 4, '22', False, 3100, None),
+    ],
+    'LA4X': [
+        ('standby', None, '0.1', True, 11, None),
+        ('idle', None, '0.26', False, 60, None),
+        ('eighth', None, '3', False, 750, None),
+        ('third', None, '7', False, 1600, None),
+    ],
+    'LA12X': [
+        ('standby', None, '0.6', False, 10, None),
+        ('idle', None, '1', False, 160, None),
+        ('eighth', 8, '4.8', False, 1050, None),
+        ('eighth', 4, '8.1', False, 1850, None),
+        ('eighth', '2.7', '11.5', False, 2400, None),
+        ('third', 8, '10.5', False, 2300, None),
+        ('third', 4, '19', False, 4200, None),
+        ('third', '2.7', '26', False, 5500, None),
+    ],
+    'LA7.16i': [
+        ('standby', None, '0.8', False, 18, None),
+        ('idle', None, '1.0', False, 138, None),
+        ('eighth', 16, '6.7', False, 1500, None),
+        ('eighth', 8, '11.2', False, 2500, None),
+        ('eighth', 4, '13', False, 2900, None),
+        ('third', 16, '16.9', False, 3800, None),
+        # Footnoted in the manual: measured with 11 and 10 channels driven.
+        ('third', 8, '18.6', False, 4200, 11),
+        ('third', 4, '19.2', False, 4300, 10),
+    ],
+}
+
+# Mains current at V relative to 230 V. 1.15 @ 200 V and 2.3 @ 100 V for
+# every model; 1.9 @ 120 V except LA8 (2.0) and LA7.16 (1.92).
+VOLTAGE_FACTORS = {
+    model: {200: '1.15', 120: at_120, 100: '2.3'}
+    for model, at_120 in (('LA8', '2.0'), ('LA4X', '1.9'), ('LA12X', '1.9'),
+                          ('LA7.16i', '1.92'))
+}
+VOLTAGE_FACTOR_NOTE = "; current multiplier vs 230 V (page not recorded)"
+
+
+def _dec(value):
+    return None if value is None else Decimal(str(value))
 
 
 class Command(BaseCommand):
@@ -13,6 +105,12 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        self._load_profiles(options)
+        with transaction.atomic():
+            self._load_ratings(force=options['force'])
+        self._link_amp_models()
+
+    def _load_profiles(self, options):
         # Check if profiles already exist
         existing_count = AmplifierProfile.objects.count()
         
@@ -114,3 +212,59 @@ class Command(BaseCommand):
                 f'\nSummary: {created_count} created, {updated_count} updated'
             )
         )
+
+    def _upsert(self, model, lookup, values, force):
+        row, created = model.objects.get_or_create(**lookup, defaults=values)
+        if not created and force:
+            for field, value in values.items():
+                setattr(row, field, value)
+            row.save()
+        return created
+
+    def _load_ratings(self, force):
+        created = 0
+        for model_name, rows in LOAD_RATINGS.items():
+            profile = AmplifierProfile.objects.filter(
+                manufacturer='L-Acoustics', model=model_name).first()
+            if profile is None:
+                self.stdout.write(self.style.WARNING(
+                    f'No {model_name} profile; its load ratings were skipped'))
+                continue
+            source, url, verified = SOURCES[model_name]
+            for condition, ohms, amps, bound, watts, driven in rows:
+                created += self._upsert(
+                    AmplifierLoadRating,
+                    {'profile': profile, 'condition': condition,
+                     'load_ohms': _dec(ohms), 'mains_voltage': 230},
+                    {'current_amps': _dec(amps), 'current_is_upper_bound': bound,
+                     'power_watts': watts, 'channels_driven': driven,
+                     'source': source, 'source_url': url, 'verified': verified},
+                    force,
+                )
+            for volts, factor in VOLTAGE_FACTORS[model_name].items():
+                created += self._upsert(
+                    AmplifierVoltageFactor,
+                    {'profile': profile, 'mains_voltage': volts},
+                    {'current_multiplier': _dec(factor),
+                     'source': source + VOLTAGE_FACTOR_NOTE, 'verified': verified},
+                    force,
+                )
+        self.stdout.write(self.style.SUCCESS(
+            f'Load ratings / voltage factors: {created} created'))
+
+    def _link_amp_models(self):
+        """Point each L-Acoustics AmpModel without a profile at the profile of
+        the same model name. Manufacturer spellings vary in existing rows
+        ("L-Acoustics", "Lacoustics", "L'Acoustics"), so compare letters only;
+        anything else ("LA8-2") is left for a superuser to set by hand."""
+        linked = 0
+        profiles = {p.model.lower(): p for p in AmplifierProfile.objects.all()}
+        for amp_model in AmpModel.objects.filter(power_profile__isnull=True):
+            if re.sub(r'[^a-z]', '', amp_model.manufacturer.lower()) != 'lacoustics':
+                continue
+            profile = profiles.get(amp_model.model_name.strip().lower())
+            if profile is not None:
+                amp_model.power_profile = profile
+                amp_model.save(update_fields=['power_profile'])
+                linked += 1
+        self.stdout.write(self.style.SUCCESS(f'Amp models linked to a profile: {linked}'))
