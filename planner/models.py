@@ -1905,7 +1905,16 @@ class AmpModel(models.Model):
         default=0,
         choices=[(0, 'None'), (1, '1 SC32')]
     )
-    
+
+    # The power figures for this model. The rack view's AmpModel and the power
+    # plan's AmplifierProfile are separate catalogues; this is what lets an amp
+    # in a rack resolve to its mains-draw table.
+    power_profile = models.ForeignKey(
+        'AmplifierProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='amp_models',
+        help_text="Amplifier Profile holding this model's power figures",
+    )
+
     class Meta:
         verbose_name = "Amp Model Template"
         verbose_name_plural = "Amp Model Templates"  # Child - End of tree
@@ -4525,6 +4534,179 @@ class AmplifierProfile(models.Model):
             'current_amps': round(current, 1),
             'breaker_size': math.ceil(current * 1.25 / 10) * 10  # Next standard breaker size
         }
+
+
+class AmplifierLoadRating(models.Model):
+    """One row of a manufacturer's mains-draw table for an amplifier.
+
+    L-Acoustics publishes draw per load impedance (all channels driven, at
+    230 V) for 1/8 power (pink noise) and 1/3 power, plus load-independent
+    standby and idle rows. Both the mains current and the power are stored as
+    printed -- they are not derived from each other, because the power factor
+    is not published.
+
+    ``load_ohms`` is empty for a row that does not depend on the load:
+    standby, idle, and tables that print a single column.
+    """
+    CONDITION_CHOICES = [
+        ('standby', 'Standby'),
+        ('idle', 'Idle'),
+        ('eighth', '1/8 power (pink noise)'),
+        ('third', '1/3 power'),
+    ]
+
+    profile = models.ForeignKey(AmplifierProfile, on_delete=models.CASCADE,
+                                related_name='load_ratings')
+    condition = models.CharField(max_length=10, choices=CONDITION_CHOICES)
+    load_ohms = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True,
+        help_text="Load per channel; blank when the figure does not depend on the load",
+    )
+    mains_voltage = models.IntegerField(default=230)
+    current_amps = models.DecimalField(max_digits=5, decimal_places=2)
+    current_is_upper_bound = models.BooleanField(
+        default=False, help_text="The table prints '< x A' rather than a value",
+    )
+    power_watts = models.IntegerField()
+    channels_driven = models.IntegerField(
+        null=True, blank=True,
+        help_text="Blank = all channels; set when the table footnotes fewer",
+    )
+    source = models.CharField(max_length=300, help_text="Document, version and page")
+    source_url = models.URLField(max_length=500, blank=True, default='')
+    verified = models.BooleanField(
+        default=True, help_text="Untick when the figure could not be checked against the source",
+    )
+
+    class Meta:
+        verbose_name = "Amplifier Load Rating"
+        verbose_name_plural = "Amplifier Load Ratings"
+        # Seeded in table order (standby, idle, 1/8, 1/3; high load to low).
+        ordering = ['profile', 'mains_voltage', 'id']
+        constraints = [
+            # Two partial constraints rather than one: a plain unique
+            # constraint treats every NULL load_ohms as distinct, which would
+            # let a second "idle" row in.
+            models.UniqueConstraint(
+                fields=['profile', 'condition', 'load_ohms', 'mains_voltage'],
+                condition=models.Q(load_ohms__isnull=False),
+                name='unique_amp_load_rating_per_load',
+            ),
+            models.UniqueConstraint(
+                fields=['profile', 'condition', 'mains_voltage'],
+                condition=models.Q(load_ohms__isnull=True),
+                name='unique_amp_load_rating_any_load',
+            ),
+        ]
+
+    def __str__(self):
+        load = f" @ {self.load_ohms.normalize():f} Ω" if self.load_ohms is not None else ''
+        lt = '<' if self.current_is_upper_bound else ''
+        return (f"{self.profile.model} {self.get_condition_display()}{load}: "
+                f"{lt}{self.current_amps.normalize():f} A / {self.power_watts} W "
+                f"@ {self.mains_voltage} V")
+
+
+class AmplifierVoltageFactor(models.Model):
+    """Mains-current multiplier for a supply voltage other than the one the
+    load ratings were published at (230 V): current at V = current at 230 V
+    x ``current_multiplier``. Power is unchanged."""
+    profile = models.ForeignKey(AmplifierProfile, on_delete=models.CASCADE,
+                                related_name='voltage_factors')
+    mains_voltage = models.IntegerField()
+    current_multiplier = models.DecimalField(max_digits=4, decimal_places=2)
+    source = models.CharField(max_length=300)
+    verified = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Amplifier Voltage Factor"
+        verbose_name_plural = "Amplifier Voltage Factors"
+        ordering = ['profile', '-mains_voltage']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'mains_voltage'],
+                                    name='unique_amp_voltage_factor'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.model} @ {self.mains_voltage} V: x{self.current_multiplier}"
+
+
+class CabinetModel(models.Model):
+    """A loudspeaker enclosure type: the catalogue engineers pick from when
+    they say what is on an amp output.
+
+    One catalogue shared by every account, edited by superusers only (like
+    AmplifierProfile). The parsed Soundvision ``SpeakerCabinet`` rows are
+    instances in a prediction; this is the type they can later be matched
+    against through ``soundvision_names``.
+    """
+    manufacturer = models.CharField(max_length=100, default='L-Acoustics')
+    model = models.CharField(max_length=100)
+    soundvision_names = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text="Comma-separated names Soundvision uses for this enclosure "
+                  "(e.g. 'KARA II'), for matching parsed predictions later",
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Untick to hide from the cabinet picker",
+    )
+    source = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text="Where the sections and impedances come from (document, version, page)",
+    )
+    notes = models.TextField(blank=True, default='')
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Cabinet Model"
+        verbose_name_plural = "Cabinet Models"  # Child
+        ordering = ['sort_order', 'manufacturer', 'model']
+        constraints = [
+            models.UniqueConstraint(fields=['manufacturer', 'model'],
+                                    name='unique_cabinet_model'),
+        ]
+
+    def __str__(self):
+        return self.model
+
+    @property
+    def is_multiway(self):
+        # len(.all()) rather than .count() so a prefetch is used when present.
+        return len(self.sections.all()) > 1
+
+
+class CabinetSection(models.Model):
+    """One amplifier-driven section of a cabinet: what an amp output carries.
+
+    A passive enclosure has a single 'Full range' section. An active one has a
+    section per output channel of its preset (Kara II: LF, HF; K2: LF, MF,
+    HF). The engineer assigns a section, not a cabinet, to each output, so
+    "Kara II · LF x3" on one output is three LF sections in parallel.
+    """
+    cabinet = models.ForeignKey(CabinetModel, on_delete=models.CASCADE,
+                                related_name='sections')
+    name = models.CharField(max_length=20, help_text="e.g. LF, MF, HF, SB, Full range")
+    nominal_impedance_ohms = models.DecimalField(max_digits=4, decimal_places=1)
+    verified = models.BooleanField(
+        default=True,
+        help_text="Unticked when the impedance is inferred rather than "
+                  "stated for this section in the cited source",
+    )
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Cabinet Section"
+        verbose_name_plural = "Cabinet Sections"
+        ordering = ['cabinet', 'sort_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['cabinet', 'name'],
+                                    name='unique_cabinet_section_name'),
+        ]
+
+    def __str__(self):
+        if not self.cabinet.is_multiway:
+            return self.cabinet.model
+        return f"{self.cabinet.model} · {self.name}"
 
 
 class PowerDistributionPlan(models.Model):

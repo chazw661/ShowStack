@@ -16,7 +16,8 @@ from django.views.decorators.http import require_POST
 from django import forms
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q, Max
-from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment
+from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment, CabinetModel, CabinetSection
+from .models import AmplifierLoadRating, AmplifierVoltageFactor
 from django.db.models import Sum 
 from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
@@ -1767,7 +1768,7 @@ class AmpModelAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Model Information', {
-            'fields': ('manufacturer', 'model_name', 'channel_count')
+            'fields': ('manufacturer', 'model_name', 'channel_count', 'power_profile')
         }),
         ('Input Configuration', {
             'fields': ('has_analog_inputs', 'has_aes_inputs', 'has_avb_inputs'),
@@ -1779,7 +1780,15 @@ class AmpModelAdmin(admin.ModelAdmin):
         }),
     )
 
-
+    def get_readonly_fields(self, request, obj=None):
+        # AmpModel is shared by every account, and power_profile decides which
+        # mains-draw table every amp of this model is planned with. The other
+        # fields still follow the model permissions below; this one is
+        # superuser-only, like the AmplifierProfile figures it points at.
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            readonly.append('power_profile')
+        return readonly
 
     def has_add_permission(self, request):
         """Only editors and owners can add"""
@@ -6791,7 +6800,76 @@ urlpatterns = [
 #--------Power Estimator---------
 
 
+class SuperuserCatalogueMixin:
+    """Read for everyone with admin access, write for superusers only.
+
+    For the catalogues shared by every account (no project, no owner), where
+    an editor on one show must not be able to change a figure for every other
+    customer. Same rule AmplifierProfileAdmin spells out below.
+    """
+
+    def has_module_permission(self, request):
+        return self.admin_site.has_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self.admin_site.has_permission(request)
+
+    def has_add_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
+class CabinetSectionInline(SuperuserCatalogueMixin, admin.TabularInline):
+    model = CabinetSection
+    extra = 0
+    fields = ['name', 'nominal_impedance_ohms', 'verified', 'sort_order']
+
+
+class CabinetModelAdmin(SuperuserCatalogueMixin, admin.ModelAdmin):
+    list_display = ['model', 'manufacturer', 'sections_summary', 'is_active', 'source']
+    list_filter = ['manufacturer', 'is_active']
+    search_fields = ['manufacturer', 'model', 'soundvision_names']
+    ordering = ['sort_order', 'manufacturer', 'model']
+    fields = ['manufacturer', 'model', 'soundvision_names', 'is_active',
+              'sort_order', 'source', 'notes']
+    inlines = [CabinetSectionInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('sections')
+
+    @admin.display(description='Sections (nominal impedance)')
+    def sections_summary(self, obj):
+        parts = []
+        for s in obj.sections.all():
+            mark = '' if s.verified else ' (unverified)'
+            parts.append(f"{s.name} {s.nominal_impedance_ohms.normalize():f} \u03a9{mark}")
+        return ', '.join(parts) or '-'
+
+
+class AmplifierLoadRatingInline(SuperuserCatalogueMixin, admin.TabularInline):
+    model = AmplifierLoadRating
+    extra = 0
+    fields = ['condition', 'load_ohms', 'mains_voltage', 'current_amps',
+              'current_is_upper_bound', 'power_watts', 'channels_driven',
+              'verified', 'source', 'source_url']
+    verbose_name_plural = 'Mains draw per load (as published)'
+
+
+class AmplifierVoltageFactorInline(SuperuserCatalogueMixin, admin.TabularInline):
+    model = AmplifierVoltageFactor
+    extra = 0
+    fields = ['mains_voltage', 'current_multiplier', 'verified', 'source']
+    verbose_name_plural = 'Mains current multiplier vs 230 V'
+
+
 class AmplifierProfileAdmin(admin.ModelAdmin):
+    inlines = [AmplifierLoadRatingInline, AmplifierVoltageFactorInline]
+
     list_display = [
         'manufacturer', 'model', 'channels', 'rated_power_watts', 
         'nominal_voltage', 'rack_units'
@@ -7884,6 +7962,7 @@ showstack_admin_site.register(MicAssignment, MicAssignmentAdmin)
 showstack_admin_site.register(MicGroup, MicGroupAdmin)
 showstack_admin_site.register(MicShowInfo, MicShowInfoAdmin)
 showstack_admin_site.register(AmplifierProfile, AmplifierProfileAdmin)
+showstack_admin_site.register(CabinetModel, CabinetModelAdmin)
 showstack_admin_site.register(PowerDistributionPlan, PowerDistributionPlanAdmin)
 showstack_admin_site.register(AmplifierAssignment, AmplifierAssignmentAdmin)
 showstack_admin_site.register(AudioChecklist, AudioChecklistAdmin)  
