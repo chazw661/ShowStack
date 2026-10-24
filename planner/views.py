@@ -3809,13 +3809,56 @@ def amp_channel_inline_update(request, channel_id):
     if not project:
         return JsonResponse({'success': False, 'error': 'No project'}, status=400)
     channel = get_object_or_404(AmpChannel, id=channel_id, amp__project=project)
+    if not _can_edit_current_project(request):
+        return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
     field = request.POST.get('field', '')
+    if field in _INLINE_CABINET_FIELDS:
+        return _amp_channel_cabinet_update(channel, field, request.POST.get('value', ''))
     if field not in _INLINE_CHANNEL_FIELDS:
         return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
     value = request.POST.get('value', '')
     setattr(channel, field, value)
     channel.save(update_fields=[field])
     return JsonResponse({'success': True})
+
+
+_INLINE_CABINET_FIELDS = {'cabinet_section', 'cabinet_quantity'}
+MAX_CABINETS_PER_OUTPUT = 24
+
+
+def _amp_channel_cabinet_update(channel, field, value):
+    """Set an output's cabinet section (blank clears it) or how many are in
+    parallel, and send back what the rack card shows for it."""
+    from .models import CabinetSection
+    value = (value or '').strip()
+    if field == 'cabinet_section':
+        if not value:
+            channel.cabinet_section = None
+        else:
+            try:
+                channel.cabinet_section = CabinetSection.objects.select_related(
+                    'cabinet').get(id=int(value), cabinet__is_active=True)
+            except (ValueError, CabinetSection.DoesNotExist):
+                return JsonResponse({'success': False, 'error': 'Unknown cabinet'}, status=400)
+    else:
+        try:
+            quantity = int(value)
+        except ValueError:
+            quantity = 0
+        if not 1 <= quantity <= MAX_CABINETS_PER_OUTPUT:
+            return JsonResponse({
+                'success': False,
+                'error': f'Quantity must be 1-{MAX_CABINETS_PER_OUTPUT}',
+            }, status=400)
+        channel.cabinet_quantity = quantity
+    channel.save(update_fields=[field])
+    load = channel.cabinet_load
+    return JsonResponse({
+        'success': True,
+        'label': load.label,
+        'warning': load.warning,
+        'warning_text': load.warning_text,
+    })
 
 
 @require_POST

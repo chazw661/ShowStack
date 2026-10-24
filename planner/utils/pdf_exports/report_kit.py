@@ -26,6 +26,7 @@ from reportlab.pdfgen import canvas as pdfcanvas
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 # ---------------------------------------------------------------------------
 # Page + palette
@@ -448,6 +449,49 @@ def _amp_outputs(amp):
     return flow or [Paragraph('No outputs', _AMP_P['val'])]
 
 
+AMP_CABINETS_PER_ROW = 4
+AMP_WARN = colors.HexColor('#9a6700')      # "No cabinet"
+AMP_ERROR = colors.HexColor('#b42318')     # load below the amp's minimum
+
+
+def amp_cabinets_table(channels):
+    """The cabinets on each output, four outputs to a row:
+    "Out 1  Kara II · LF ×3 → 2.67 Ω (2.7 Ω)", with the rack view's warning
+    under any output that has nothing assigned or too low a load."""
+    from planner.utils.cabinet_load import BELOW_MINIMUM
+    P = _AMP_P
+    cells = []
+    for c in channels:
+        load = c.cabinet_load
+        text = f'<b>Out {c.channel_number}</b>&nbsp;&nbsp;{escape(load.label)}'
+        if load.warning:
+            colour = (AMP_ERROR if load.warning == BELOW_MINIMUM else AMP_WARN).hexval()[2:]
+            text += f'<br/><font color="#{colour}"><b>{escape(load.warning_text)}</b></font>'
+        cells.append(Paragraph(text, P['val']))
+    if not cells:
+        return None
+    width = sum(_AMP_COLS) - 12
+    rows = [cells[i:i + AMP_CABINETS_PER_ROW]
+            for i in range(0, len(cells), AMP_CABINETS_PER_ROW)]
+    rows[-1] += [''] * (AMP_CABINETS_PER_ROW - len(rows[-1]))
+    title = Table([[Paragraph('CABINETS PER OUTPUT', P['hdr'])]], colWidths=[width],
+                  hAlign='LEFT')
+    title.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), NAVY),
+        ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    t = Table(rows, colWidths=[width / AMP_CABINETS_PER_ROW] * AMP_CABINETS_PER_ROW,
+              hAlign='LEFT')
+    t.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.4, HAIRLINE),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2), ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4), ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return [title, t]
+
+
 def amp_card(amp):
     """One amp front-panel card matching the rack-view module."""
     channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
@@ -457,11 +501,19 @@ def amp_card(amp):
         f'<font color="#ffe066"><b>{amp.name}</b></font>'
         + (f'&nbsp;&nbsp;<font color="#c9d6e3" size="8">{model_str}</font>' if model_str else ''),
         _AMP_P['name'])
-    card = Table(
-        [[header, '', ''],
-         [_amp_inputs_table(channels), _amp_middle(amp, channels), _amp_outputs(amp)]],
-        colWidths=_AMP_COLS, hAlign='LEFT')
-    card.setStyle(TableStyle([
+    return amp_card_table(header, amp, channels, _amp_inputs_table, _amp_middle,
+                          _amp_outputs)
+
+
+def amp_card_table(header, amp, channels, inputs, middle, outputs):
+    """The card frame: header, the three front-panel columns, and the cabinets
+    row. The Complete System Report passes its own column builders."""
+    rows = [[header, '', ''],
+            [inputs(channels), middle(amp, channels), outputs(amp)]]
+    cabinets = amp_cabinets_table(channels)
+    if cabinets:
+        rows.append([cabinets, '', ''])
+    style = [
         ('SPAN', (0, 0), (2, 0)),
         ('BACKGROUND', (0, 0), (2, 0), NAVY),
         ('TOPPADDING', (0, 0), (2, 0), 6), ('BOTTOMPADDING', (0, 0), (2, 0), 6),
@@ -471,6 +523,14 @@ def amp_card(amp):
         ('LINEAFTER', (0, 1), (1, 1), 0.5, colors.HexColor('#c9d2db')),
         ('TOPPADDING', (0, 1), (-1, 1), 6), ('BOTTOMPADDING', (0, 1), (-1, 1), 6),
         ('LEFTPADDING', (0, 1), (-1, 1), 6), ('RIGHTPADDING', (0, 1), (-1, 1), 6),
-    ]))
+    ]
+    if cabinets:
+        style += [
+            ('SPAN', (0, 2), (2, 2)),
+            ('LINEABOVE', (0, 2), (-1, 2), 0.5, colors.HexColor('#c9d2db')),
+            ('TOPPADDING', (0, 2), (-1, 2), 4), ('BOTTOMPADDING', (0, 2), (-1, 2), 6),
+            ('LEFTPADDING', (0, 2), (-1, 2), 6), ('RIGHTPADDING', (0, 2), (-1, 2), 6),
+        ]
+    card = Table(rows, colWidths=_AMP_COLS, hAlign='LEFT')
+    card.setStyle(TableStyle(style))
     return card
-

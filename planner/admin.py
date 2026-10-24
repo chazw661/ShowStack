@@ -1790,23 +1790,29 @@ class AmpModelAdmin(admin.ModelAdmin):
             readonly.append('power_profile')
         return readonly
 
+    # AmpModel is one catalogue shared by every account, so the model
+    # permissions an editor holds through the global Editor group used to let
+    # an editor on any show rename or delete a model other shows' amps use.
+    # Same rule as SourceHardwareOptionAdmin:
+    #   * read: everyone with admin access;
+    #   * add: an owner or editor of the CURRENT project;
+    #   * change, delete: superusers only.
+
+    def has_module_permission(self, request):
+        return request.user.is_authenticated
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_authenticated
+
     def has_add_permission(self, request):
-        """Only editors and owners can add"""
-        if request.user.is_superuser:
-            return True
-        return super().has_add_permission(request)
-    
+        from planner.views import _can_edit_current_project
+        return _can_edit_current_project(request)
+
     def has_change_permission(self, request, obj=None):
-        """Only editors and owners can edit"""
-        if request.user.is_superuser:
-            return True
-        return super().has_change_permission(request, obj)
-    
+        return request.user.is_superuser
+
     def has_delete_permission(self, request, obj=None):
-        """Only editors and owners can delete"""
-        if request.user.is_superuser:
-            return True
-        return super().has_delete_permission(request, obj)
+        return request.user.is_superuser
 
 
 class AmpChannelInlineForm(forms.ModelForm):
@@ -2177,8 +2183,9 @@ class AmpAdmin(BaseEquipmentAdmin):
             for loc in locations:
                 amps = list(
                     Amp.objects.filter(location=loc, project=request.current_project)
-                    .select_related('amp_model')
-                    .prefetch_related('channels')
+                    .select_related('amp_model__power_profile')
+                    .prefetch_related('channels__cabinet_section__cabinet__sections',
+                                      'amp_model__power_profile__load_ratings')
                     .order_by('sort_order', 'name')
                 )
                 dividers = list(
@@ -2202,6 +2209,8 @@ class AmpAdmin(BaseEquipmentAdmin):
                     # filled in.
                     avb_unused_count = 0
                     for ch in channels:
+                        ch.amp = amp  # prefetched rows; cabinet_load reads the model
+                        ch.load = ch.cabinet_load
                         ch.avb_unused = not (
                             (ch.avb_stream or '').strip()
                             or (ch.analog_input or '').strip()
@@ -2281,6 +2290,14 @@ class AmpAdmin(BaseEquipmentAdmin):
                 AmpModel.objects.all().order_by('manufacturer', 'model_name')
             )
             extra_context['has_grouped_layout'] = True
+            # Per-output cabinet picker: every section of the active
+            # catalogue, in catalogue order. Viewers see the assignment as text.
+            from .models import CabinetModel
+            extra_context['cabinet_choices'] = list(
+                CabinetModel.objects.filter(is_active=True).prefetch_related('sections')
+            )
+            from planner.views import _can_edit_current_project
+            extra_context['can_edit'] = _can_edit_current_project(request)
 
             # Issue #43: surface processor output labels as datalist
             # suggestions on the amp's Analogue / AES / AVB input fields.
@@ -6891,6 +6908,10 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
         }),
         ('Electrical Specifications', {
             'fields': ('nominal_voltage', 'power_factor', 'efficiency')
+        }),
+        ('Output Load', {
+            'fields': ('min_load_ohms', 'min_load_source'),
+            'description': 'An amp output whose cabinets come to less than this is flagged on the amp module.',
         }),
         ('Additional Information', {
             'fields': ('notes',),

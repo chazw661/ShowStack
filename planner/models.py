@@ -281,7 +281,11 @@ class Project(models.Model):
                         channel_setting=channel.channel_setting,
                         avb_stream=channel.avb_stream,
                         aes_input=channel.aes_input,
-                        analog_input=channel.analog_input
+                        analog_input=channel.analog_input,
+                        # The catalogue is shared, so the copy points at
+                        # the same section.
+                        cabinet_section_id=channel.cabinet_section_id,
+                        cabinet_quantity=channel.cabinet_quantity,
                     )
                 
                
@@ -2221,7 +2225,21 @@ class AmpChannel(models.Model):
         verbose_name="Analog Input",
         help_text="Analog input assignment"
     )
-    
+
+    # What is plugged into this output: one cabinet section (from the shared
+    # catalogue) and how many of it are in parallel. The power plan reads
+    # these; only the amp module writes them. PROTECT: a catalogue row in use
+    # on a show cannot be deleted out from under it.
+    cabinet_section = models.ForeignKey(
+        'CabinetSection', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='amp_channels',
+        verbose_name="Cabinet",
+    )
+    cabinet_quantity = models.PositiveSmallIntegerField(
+        default=1, validators=[MinValueValidator(1)],
+        verbose_name="Cabinets in parallel",
+    )
+
     class Meta:
         verbose_name = "Amp Channel"
         verbose_name_plural = "Amp Channels"
@@ -2246,6 +2264,12 @@ class AmpChannel(models.Model):
     
     def __str__(self):
         return f"{self.amp.name} - Ch{self.channel_number}"
+
+    @property
+    def cabinet_load(self):
+        """The load on this output (planner.utils.cabinet_load.OutputLoad)."""
+        from planner.utils.cabinet_load import output_load
+        return output_load(self)
 
 
 
@@ -4489,6 +4513,15 @@ class AmplifierProfile(models.Model):
     rack_units = models.IntegerField(default=2)
     weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     
+    # Lowest load one output may drive. An output whose cabinets come to
+    # less is flagged on the amp module.
+    min_load_ohms = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True,
+        verbose_name="Minimum load (Ω)",
+        help_text="Lowest load per output",
+    )
+    min_load_source = models.CharField(max_length=300, blank=True)
+
     # Additional info
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -4503,6 +4536,39 @@ class AmplifierProfile(models.Model):
     def __str__(self):
         return f"{self.manufacturer} {self.model}"
     
+    # The voltage the load ratings are published at.
+    REFERENCE_VOLTAGE = 230
+    DERIVED_VOLTAGE_SOURCE = "derived: L-Acoustics multipliers are the 230 V ratio"
+
+    def voltage_factor(self, voltage):
+        """(multiplier, source) for mains current at ``voltage``: current at
+        V = current at 230 V x multiplier.
+
+        A multiplier the manual publishes for this model at this voltage
+        (AmplifierVoltageFactor, e.g. LA8 x2.0 at 120 V) is used as printed.
+        Any other voltage gets 230 / V -- the published multipliers are that
+        ratio (1.15 at 200 V, 2.3 at 100 V) -- so 208 V, the plan default,
+        is x1.1058.
+        """
+        voltage = int(voltage)
+        if voltage <= 0:
+            raise ValueError(f"mains voltage must be positive, not {voltage}")
+        if voltage == self.REFERENCE_VOLTAGE:
+            return Decimal(1), f"published at {self.REFERENCE_VOLTAGE} V"
+        published = self.voltage_factors.filter(mains_voltage=voltage).first()
+        if published is not None:
+            return published.current_multiplier, published.source
+        ratio = (Decimal(self.REFERENCE_VOLTAGE) / Decimal(voltage)).quantize(Decimal('0.0001'))
+        return ratio, self.DERIVED_VOLTAGE_SOURCE
+
+    def published_loads(self):
+        """The load impedances this model's draw table has a column for,
+        lowest first (empty for a table that does not depend on load)."""
+        return sorted({
+            r.load_ohms for r in self.load_ratings.all()
+            if r.load_ohms is not None and r.mains_voltage == self.REFERENCE_VOLTAGE
+        })
+
     def calculate_current(self, duty_cycle='heavy_music', transient_factor=1.5):
         """Calculate current draw based on duty cycle and transient requirements"""
         duty_multipliers = {

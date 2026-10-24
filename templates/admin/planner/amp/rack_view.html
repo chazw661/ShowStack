@@ -135,7 +135,7 @@
         padding: 2px 10px;
         border-radius: 10px;
     }
-    .rack-location-body { display: none; }
+    .rack-location-body { display: none; container: rack / inline-size; }
     .rack-location-body.open { display: block; }
 
     /* ── Amp card (front-panel layout) ─────────────────────────── */
@@ -157,7 +157,27 @@
         border-right: 1px solid var(--ss-border);
         padding: 6px;
     }
-    .amp-card-section:last-child { border-right: none; }
+    .amp-card-section:last-child,
+    .amp-card-outputs { border-right: none; }
+
+    /* The three fixed columns need ~1000px. Narrower (an iPad, or the admin
+       sidebar open) the outputs drop under inputs + IP/preset, then
+       everything stacks. Sized on the space the cards get, not the screen. */
+    @container rack (max-width: 1000px) {
+        .amp-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        .amp-card-outputs {
+            grid-column: 1 / -1;
+            border-top: 1px solid var(--ss-border);
+        }
+        .amp-card-middle { border-right: none; }
+    }
+    @container rack (max-width: 640px) {
+        .amp-card { grid-template-columns: minmax(0, 1fr); }
+        .amp-card-section {
+            border-right: none;
+            border-top: 1px solid var(--ss-border);
+        }
+    }
 
     .amp-card-header {
         grid-column: 1 / -1;
@@ -479,6 +499,120 @@
         font-style: italic;
         font-size: 11px;
         text-align: center;
+    }
+
+    /* ── Bottom strip: what is on each output ──────────────────── */
+    /* One cell per output, as many per row as fit, so the strip works from
+       a 16-output LA7.16i on a desktop down to an iPad in portrait. */
+    .amp-card-cabinets {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--ss-border);
+        padding: 6px;
+    }
+    .amp-cabinet-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 6px;
+        margin-top: 6px;
+    }
+    .amp-cabinet-cell {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 4px 6px;
+        padding: 5px 6px;
+        background: var(--ss-surface);
+        border: 1px solid var(--ss-border);
+        border-radius: var(--ss-field-radius);
+    }
+    .amp-cabinet-out {
+        font-size: 9px;
+        color: #9ab;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+    select.amp-cabinet-select {
+        width: 100% !important;
+        min-width: 0;
+        padding: 3px 4px !important;
+        font-size: 11px !important;
+        border: 1px solid var(--ss-field-border) !important;
+        border-radius: var(--ss-field-radius) !important;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+    }
+    select.amp-cabinet-select option {
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+    }
+    .amp-cabinet-qty { display: flex; align-items: center; }
+    .amp-qty-btn {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        background: var(--ss-raised);
+        border: 1px solid var(--ss-field-border);
+        color: var(--ss-field-text) !important;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .amp-qty-btn:first-child { border-radius: var(--ss-field-radius) 0 0 var(--ss-field-radius); }
+    .amp-qty-btn:last-child { border-radius: 0 var(--ss-field-radius) var(--ss-field-radius) 0; }
+    input.amp-qty-input {
+        width: 34px !important;
+        height: 24px;
+        padding: 0 !important;
+        margin: 0 !important;
+        text-align: center;
+        font-size: 12px !important;
+        background: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+        border: 1px solid var(--ss-field-border) !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-radius: 0 !important;
+        -moz-appearance: textfield;
+    }
+    input.amp-qty-input::-webkit-inner-spin-button,
+    input.amp-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .amp-cabinet-summary {
+        grid-column: 1 / -1;
+        font-size: 11px;
+        color: var(--ss-field-text);
+        min-height: 14px;
+    }
+    .amp-cabinet-summary:empty { display: none; }
+    .amp-cabinet-chip {
+        grid-column: 1 / -1;
+        justify-self: start;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 1px 7px;
+        border-radius: 9px;
+        color: #f0c674;
+        background: rgba(232, 176, 74, 0.14);
+        border: 1px solid #7a5a22;
+    }
+    .amp-cabinet-chip.below_minimum {
+        color: #ff8a8a;
+        background: rgba(255, 82, 82, 0.14);
+        border-color: #8c3a3a;
+    }
+    .amp-cabinet-chip[hidden] { display: none; }
+    .amp-cabinet-cell.saving { box-shadow: inset 0 0 0 1px #7a5a22; }
+    .amp-cabinet-cell.saved { box-shadow: inset 0 0 0 1px #2f6f68; }
+    .amp-cabinet-cell.error { box-shadow: inset 0 0 0 1px #8c3a3a; }
+    /* Fingers, not a mouse (iPad): 44px targets. */
+    @media (pointer: coarse) {
+        .amp-cabinet-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+        select.amp-cabinet-select { min-height: 44px; font-size: 14px !important; }
+        .amp-qty-btn { width: 44px; height: 44px; font-size: 20px; }
+        input.amp-qty-input { width: 44px !important; height: 44px; font-size: 15px !important; }
+        .amp-cabinet-summary { font-size: 13px; }
+        .amp-cabinet-chip { font-size: 12px; padding: 3px 9px; }
     }
 
     /* ── Dividers ─────────────────────────────────────────────── */
@@ -848,8 +982,7 @@
                 </div>
 
                 {# ── Right: Outputs ─────────────────────────── #}
-                {# ── Right: Outputs ─────────────────────────── #}
-                <div class="amp-card-section">
+                <div class="amp-card-section amp-card-outputs">
                     {% if card.cacom_rows %}
                     <div class="amp-output-block">
                         <div class="amp-output-title">CaCom Out</div>
@@ -909,6 +1042,45 @@
                         </table>
                     </div>
                     {% endif %}
+                </div>
+
+                {# ── Bottom: the cabinets on each output ──────── #}
+                <div class="amp-card-cabinets">
+                    <div class="amp-output-title">Cabinets per output</div>
+                    <div class="amp-cabinet-grid">
+                        {% for ch in card.channels %}
+                        <div class="amp-cabinet-cell" data-channel-id="{{ ch.pk }}">
+                            <span class="amp-cabinet-out">Out {{ ch.channel_number }}</span>
+                            {% if can_edit %}
+                            <select class="amp-cabinet-select"
+                                    data-channel-id="{{ ch.pk }}"
+                                    data-field="cabinet_section"
+                                    aria-label="Output {{ ch.channel_number }} cabinet">
+                                <option value="">— none —</option>
+                                {% for cab in cabinet_choices %}{% for sec in cab.sections.all %}
+                                <option value="{{ sec.pk }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
+                                {% endfor %}{% endfor %}
+                                {% if ch.cabinet_section and not ch.cabinet_section.cabinet.is_active %}
+                                <option value="{{ ch.cabinet_section_id }}" selected>{{ ch.cabinet_section }} (retired)</option>
+                                {% endif %}
+                            </select>
+                            <div class="amp-cabinet-qty">
+                                <button type="button" class="amp-qty-btn" data-step="-1"
+                                        aria-label="One fewer on output {{ ch.channel_number }}">−</button>
+                                <input type="number" class="amp-qty-input" inputmode="numeric"
+                                       min="1" max="24" value="{{ ch.cabinet_quantity }}"
+                                       data-channel-id="{{ ch.pk }}"
+                                       data-field="cabinet_quantity"
+                                       aria-label="Cabinets in parallel on output {{ ch.channel_number }}">
+                                <button type="button" class="amp-qty-btn" data-step="1"
+                                        aria-label="One more on output {{ ch.channel_number }}">+</button>
+                            </div>
+                            {% endif %}
+                            <span class="amp-cabinet-summary">{{ ch.load.label }}</span>
+                            <span class="amp-cabinet-chip {{ ch.load.warning }}"{% if not ch.load.warning %} hidden{% endif %}>{{ ch.load.warning_text }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
             {% endwith %}
@@ -1278,8 +1450,71 @@
         });
     }
 
+    // ───── Cabinets per output ─────
+    // The response carries the new summary ("Kara II · LF ×3 → 2.67 Ω
+    // (2.7 Ω)") and warning, so the cell updates without a reload.
+    function saveCabinet(el) {
+        var cell = el.closest('.amp-cabinet-cell');
+        cell.classList.remove('saving', 'saved', 'error');
+        cell.classList.add('saving');
+        postForm('/audiopatch/api/amp-channel/' + el.dataset.channelId + '/inline-update/',
+                 { field: el.dataset.field, value: el.value })
+            .then(function (r) {
+                cell.classList.remove('saving');
+                if (!r.success) {
+                    cell.classList.add('error');
+                    console.warn('Save failed:', r.error);
+                    return;
+                }
+                el.dataset.saved = el.value;
+                cell.querySelector('.amp-cabinet-summary').textContent = r.label;
+                var chip = cell.querySelector('.amp-cabinet-chip');
+                chip.className = 'amp-cabinet-chip ' + (r.warning || '');
+                chip.textContent = r.warning_text;
+                chip.hidden = !r.warning;
+                cell.classList.add('saved');
+                setTimeout(function () { cell.classList.remove('saved'); }, 600);
+            })
+            .catch(function (err) {
+                cell.classList.remove('saving');
+                cell.classList.add('error');
+                console.error(err);
+            });
+    }
+
+    function bindCabinets() {
+        document.querySelectorAll('.amp-cabinet-select').forEach(function (sel) {
+            sel.addEventListener('change', function () { saveCabinet(sel); });
+        });
+        document.querySelectorAll('.amp-qty-input').forEach(function (inp) {
+            inp.dataset.saved = inp.value;
+            inp.addEventListener('change', function () {
+                var n = parseInt(inp.value, 10);
+                if (isNaN(n) || n < 1) n = 1;
+                if (n > 24) n = 24;
+                inp.value = n;
+                if (inp.value !== inp.dataset.saved) saveCabinet(inp);
+            });
+        });
+        document.querySelectorAll('.amp-qty-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var inp = btn.parentNode.querySelector('.amp-qty-input');
+                var n = (parseInt(inp.value, 10) || 1) + parseInt(btn.dataset.step, 10);
+                if (n < 1 || n > 24) return;
+                inp.value = n;
+                // Several quick taps send one save, so saves cannot land
+                // out of order.
+                clearTimeout(inp._saveTimer);
+                inp._saveTimer = setTimeout(function () {
+                    if (inp.value !== inp.dataset.saved) saveCabinet(inp);
+                }, 400);
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         bindAutosave();
+        bindCabinets();
         bindDividerLabelAutosave();
         bindAvbToggles();
         var search = document.getElementById('rack-search');
