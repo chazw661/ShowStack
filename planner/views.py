@@ -2602,39 +2602,74 @@ def comm_config_view(request, config_id=None):
             return render(request, 'planner/comm_config.html', context)                                     
 
 
+def _edit_rights_required(view):
+    """JSON 403 unless the user may edit the CURRENT project.
+
+    Every COMM Config write endpoint scoped its lookup to the current project
+    (so another tenant's rows 404) but never asked about the role ON it, so a
+    viewer could add, rename and delete partylines, roles, ports and whole
+    configs with a fetch() -- the page only hid the buttons. The check is
+    _can_edit_current_project, the per-project rule (owner, editor or
+    superuser), resolved when the request arrives.
+
+    Defined here, above the power-plan endpoints, because a decorator has to
+    exist by the time the function it wraps is defined.
+    """
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not _can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+# Power distribution: every plan and assignment lookup goes through these two.
+# They used to be get_object_or_404(Model, id=...) alone, so any logged-in
+# user could read or rewrite another tenant's plan by editing the id in the
+# URL. _scoped_project() is None for a missing or inaccessible project, which
+# matches no row (project is non-null), so both fail closed to a 404.
+
+def _power_plan_or_404(request, plan_id):
+    return get_object_or_404(
+        PowerDistributionPlan, id=plan_id, project=_scoped_project(request),
+    )
+
+
+def _power_assignment_or_404(request, assignment_id):
+    return get_object_or_404(
+        AmplifierAssignment.objects.select_related('distribution_plan', 'amplifier'),
+        id=assignment_id,
+        distribution_plan__project=_scoped_project(request),
+    )
+
+
 @login_required
 def power_distribution_calculator(request, plan_id=None):
-    """Main power distribution calculator view"""
-    
+    """Main power distribution calculator view.
+
+    With no plan id this opens the current project's most recent plan (for one
+    show day when ?show_day= is given). It used to fall back to
+    PowerDistributionPlan.objects.first() -- the oldest-sorted plan of ANY
+    tenant -- and to create plans with no project, which the non-null FK
+    refused. With no plan in the project there is nothing to show, so send the
+    engineer to the admin to create one rather than creating rows on a GET.
+    """
     if plan_id:
-        plan = get_object_or_404(PowerDistributionPlan, id=plan_id)
+        plan = _power_plan_or_404(request, plan_id)
     else:
-        # Create new plan or get most recent
+        project = _scoped_project(request)
+        if project is None:
+            raise Http404("No project selected")
+        plans = PowerDistributionPlan.objects.filter(project=project)
         show_day_id = request.GET.get('show_day')
         if show_day_id:
-            show_day = get_object_or_404(ShowDay, id=show_day_id)
-            plan, created = PowerDistributionPlan.objects.get_or_create(
-                show_day=show_day,
-                defaults={
-                    'venue_name': show_day.name,
-                    'created_by': request.user
-                }
-            )
-        else:
-            plan = PowerDistributionPlan.objects.first()
-            if not plan:
-                # Create a default plan
-                show_day = ShowDay.objects.first()
-                if show_day:
-                    plan = PowerDistributionPlan.objects.create(
-                        show_day=show_day,
-                        venue_name=show_day.name,
-                        created_by=request.user
-                    )
-                else:
-                    messages.warning(request, "Please create a ShowDay first")
-                    return redirect('admin:planner_showday_add')
-    
+            show_day = get_object_or_404(ShowDay, id=show_day_id, project=project)
+            plans = plans.filter(show_day=show_day)
+        plan = plans.order_by('-created_at').first()
+        if plan is None:
+            messages.info(request, "Create a power distribution plan for this project first.")
+            return redirect('admin:planner_powerdistributionplan_add')
+
     # Get all amplifier profiles
     amplifier_profiles = AmplifierProfile.objects.all()
     
@@ -2747,9 +2782,10 @@ def calculate_phase_distribution(plan):
 
 @login_required
 @require_http_methods(["POST"])
+@_edit_rights_required
 def update_plan_settings(request, plan_id):
     """AJAX endpoint to update plan settings"""
-    plan = get_object_or_404(PowerDistributionPlan, id=plan_id)
+    plan = _power_plan_or_404(request, plan_id)
     
     try:
         data = json.loads(request.body)
@@ -2806,9 +2842,10 @@ def update_plan_settings(request, plan_id):
 
 @login_required
 @require_http_methods(["POST"])
+@_edit_rights_required
 def add_amplifier_assignment(request, plan_id):
     """AJAX endpoint to add amplifier assignment"""
-    plan = get_object_or_404(PowerDistributionPlan, id=plan_id)
+    plan = _power_plan_or_404(request, plan_id)
     
     try:
         data = json.loads(request.body)
@@ -2863,74 +2900,83 @@ def add_amplifier_assignment(request, plan_id):
 
 @login_required
 @require_http_methods(["POST"])
+@_edit_rights_required
 def update_amplifier_assignment(request, assignment_id):
-    """AJAX endpoint to update amplifier assignment"""
-    assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
-    
+    """Update an existing amplifier assignment.
+
+    This and get_amplifier_assignment were each defined three and two times
+    over; Python kept the last copy, so only that one ever ran. It is the one
+    kept here. The lookup sits outside the try because the blanket
+    ``except Exception`` would turn its Http404 into a 400.
+    """
+    assignment = _power_assignment_or_404(request, assignment_id)
     try:
         data = json.loads(request.body)
-        
-        # Update assignment fields
-        if 'quantity' in data:
-            assignment.quantity = int(data['quantity'])
-        if 'zone' in data:
-            assignment.zone = data['zone']
-        if 'position' in data:
-            assignment.position = data['position']
-        if 'duty_cycle' in data:
-            assignment.duty_cycle = data['duty_cycle']
-        if 'phase_assignment' in data:
-            assignment.phase_assignment = data['phase_assignment']
-        
+
+        # Update the fields
+        assignment.quantity = int(data.get('quantity', assignment.quantity))
+        assignment.zone = data.get('zone', assignment.zone)
+        assignment.position = data.get('position', assignment.position)
+        assignment.duty_cycle = data.get('duty_cycle', assignment.duty_cycle)
+        assignment.phase_assignment = data.get('phase_assignment', assignment.phase_assignment)
+
         assignment.save()
-        
+
         # Get updated phase distribution
-        phase_loads = calculate_phase_distribution(assignment.distribution_plan)
-        
+        plan = assignment.distribution_plan
+        phase_loads = calculate_phase_distribution(plan)
+
         return JsonResponse({
             'success': True,
-            'current_per_unit': float(assignment.calculated_current_per_unit),
-            'total_current': float(assignment.calculated_total_current),
-            'phase_loads': phase_loads
+            'assignment': {
+                'id': assignment.id,
+                'quantity': assignment.quantity,
+                'zone': assignment.zone,
+                'position': assignment.position,
+                'duty_cycle': assignment.get_duty_cycle_display(),
+                'phase_assignment': assignment.phase_assignment,
+                'current_per_unit': float(assignment.calculated_current_per_unit),
+                'total_current': float(assignment.calculated_total_current),
+            },
+            'phase_loads': {
+                'L1': float(phase_loads.get('L1', 0)),
+                'L2': float(phase_loads.get('L2', 0)),
+                'L3': float(phase_loads.get('L3', 0)),
+            }
         })
-        
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
 @login_required
 @require_http_methods(["DELETE"])
+@_edit_rights_required
 def delete_amplifier_assignment(request, assignment_id):
     """AJAX endpoint to delete amplifier assignment"""
-    assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
+    assignment = _power_assignment_or_404(request, assignment_id)
     plan = assignment.distribution_plan
-    
+
     try:
         assignment.delete()
-        
+
         # Get updated phase distribution
         phase_loads = calculate_phase_distribution(plan)
-        
+
         return JsonResponse({
             'success': True,
             'phase_loads': phase_loads
         })
-        
+
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
-    
-
-
-
 
 
 @login_required
 @require_http_methods(["GET"])
 def get_amplifier_assignment(request, assignment_id):
     """Get details of a specific amplifier assignment for editing"""
+    assignment = _power_assignment_or_404(request, assignment_id)
     try:
-        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
-        
         return JsonResponse({
             'success': True,
             'assignment': {
@@ -2947,124 +2993,6 @@ def get_amplifier_assignment(request, assignment_id):
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-
-@login_required
-@require_http_methods(["POST"])
-def update_amplifier_assignment(request, assignment_id):
-    """Update an existing amplifier assignment"""
-    try:
-        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
-        data = json.loads(request.body)
-        
-        # Update the fields
-        assignment.quantity = int(data.get('quantity', assignment.quantity))
-        assignment.zone = data.get('zone', assignment.zone)
-        assignment.position = data.get('position', assignment.position)
-        assignment.duty_cycle = data.get('duty_cycle', assignment.duty_cycle)
-        assignment.phase_assignment = data.get('phase_assignment', assignment.phase_assignment)
-        
-        assignment.save()
-        
-        # Get updated phase distribution
-        plan = assignment.distribution_plan
-        phase_loads = calculate_phase_distribution(plan)
-        
-        return JsonResponse({
-            'success': True,
-            'assignment': {
-                'id': assignment.id,
-                'quantity': assignment.quantity,
-                'zone': assignment.zone,
-                'position': assignment.position,
-                'duty_cycle': assignment.get_duty_cycle_display(),
-                'phase_assignment': assignment.phase_assignment,
-                'current_per_unit': float(assignment.calculated_current_per_unit),
-                'total_current': float(assignment.calculated_total_current),
-            },
-            'phase_loads': {
-                'L1': float(phase_loads.get('L1', 0)),
-                'L2': float(phase_loads.get('L2', 0)),
-                'L3': float(phase_loads.get('L3', 0)),
-            }
-        })
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)    
-    
-
-# Add these two view functions to planner/views.py
-
-
-
-
-
-@login_required
-@require_http_methods(["GET"])
-def get_amplifier_assignment(request, assignment_id):
-    """Get details of a specific amplifier assignment for editing"""
-    try:
-        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
-        
-        return JsonResponse({
-            'success': True,
-            'assignment': {
-                'id': assignment.id,
-                'amplifier': str(assignment.amplifier),
-                'quantity': assignment.quantity,
-                'zone': assignment.zone,
-                'position': assignment.position,
-                'duty_cycle': assignment.duty_cycle,
-                'phase_assignment': assignment.phase_assignment,
-                'current_per_unit': float(assignment.calculated_current_per_unit),
-                'total_current': float(assignment.calculated_total_current),
-            }
-        })
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
-
-
-@login_required
-@require_http_methods(["POST"])
-def update_amplifier_assignment(request, assignment_id):
-    """Update an existing amplifier assignment"""
-    try:
-        assignment = get_object_or_404(AmplifierAssignment, id=assignment_id)
-        data = json.loads(request.body)
-        
-        # Update the fields
-        assignment.quantity = int(data.get('quantity', assignment.quantity))
-        assignment.zone = data.get('zone', assignment.zone)
-        assignment.position = data.get('position', assignment.position)
-        assignment.duty_cycle = data.get('duty_cycle', assignment.duty_cycle)
-        assignment.phase_assignment = data.get('phase_assignment', assignment.phase_assignment)
-        
-        assignment.save()
-        
-        # Get updated phase distribution
-        plan = assignment.distribution_plan
-        phase_loads = calculate_phase_distribution(plan)
-        
-        return JsonResponse({
-            'success': True,
-            'assignment': {
-                'id': assignment.id,
-                'quantity': assignment.quantity,
-                'zone': assignment.zone,
-                'position': assignment.position,
-                'duty_cycle': assignment.get_duty_cycle_display(),
-                'phase_assignment': assignment.phase_assignment,
-                'current_per_unit': float(assignment.calculated_current_per_unit),
-                'total_current': float(assignment.calculated_total_current),
-            },
-            'phase_loads': {
-                'L1': float(phase_loads.get('L1', 0)),
-                'L2': float(phase_loads.get('L2', 0)),
-                'L3': float(phase_loads.get('L3', 0)),
-            }
-        })
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)    
-    
 
 
     #-----Audio Checklist-----
@@ -5160,24 +5088,6 @@ def create_session(request):
 # ─────────────────────────────────────────────────────────────
 # COMM Config — Create
 # ─────────────────────────────────────────────────────────────
-def _edit_rights_required(view):
-    """JSON 403 unless the user may edit the CURRENT project.
-
-    Every COMM Config write endpoint scoped its lookup to the current project
-    (so another tenant's rows 404) but never asked about the role ON it, so a
-    viewer could add, rename and delete partylines, roles, ports and whole
-    configs with a fetch() -- the page only hid the buttons. The check is
-    _can_edit_current_project, the per-project rule (owner, editor or
-    superuser), resolved when the request arrives.
-    """
-    @wraps(view)
-    def wrapped(request, *args, **kwargs):
-        if not _can_edit_current_project(request):
-            return JsonResponse({'error': 'Read-only access.'}, status=403)
-        return view(request, *args, **kwargs)
-    return wrapped
-
-
 @require_POST
 @_edit_rights_required
 def comm_config_create(request):

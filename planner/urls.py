@@ -212,8 +212,6 @@ urlpatterns = [
      path('power-distribution/<int:plan_id>/', views.power_distribution_calculator, name='power_distribution_calculator_detail'),
      path('power-distribution/assignment/<int:assignment_id>/', views.get_amplifier_assignment, name='get_amplifier_assignment'),
      path('power-distribution/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
-      path('power-distribution/assignment/<int:assignment_id>/', views.get_amplifier_assignment, name='get_amplifier_assignment'),
-      path('power-distribution/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
      
     
 
