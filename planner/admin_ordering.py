@@ -48,6 +48,7 @@ def ordered_get_app_list(request, app_label=None):
         'amplifierassignment',# Child of Power Distribution Plans
         'ampmodel',           # Child of Amplifier Assignments 
         'amplifierprofile',   # Child of Amplifier Profiles
+        'cabinetmodel',       # Shared catalogue; superuser-edited
         'p1input',            # Child of P1 Processor
         'p1output',           # Child of P1 Processor
         'galaxyinput',        # Child of Galaxy Processor
@@ -145,6 +146,7 @@ def ordered_get_app_list(request, app_label=None):
         'powerdistributionplan': 25,
         'amplifierassignment': 25.5,
         'amplifierprofile': 25.6,
+        'cabinetmodel': 25.7,
 
     
         

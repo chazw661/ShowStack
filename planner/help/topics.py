@@ -491,6 +491,16 @@ TOPICS = (
         keywords=('amplifier profile', 'amp power', 'idle watts', 'rated power', 'power factor', 'LA12X', 'LA8', 'LA4X', 'LA7.16i',),
     ),
     Topic(
+        slug='power-cabinet-models',
+        title='Look up cabinet models and impedances',
+        section='Amps & PA',
+        summary='The shared, read-only catalogue of loudspeaker cabinets, their sections and nominal impedance.',
+        pages=(
+            'admin:planner_cabinetmodel_changelist',
+        ),
+        keywords=('cabinet', 'cabinet model', 'speaker', 'enclosure', 'impedance', 'ohm', 'section', 'LF', 'HF', 'Kara II', 'K2', 'KS28', 'A10', 'passive', 'active',),
+    ),
+    Topic(
         slug='soundvision-upload',
         title='Upload a Soundvision prediction PDF',
         section='Amps & PA',

@@ -4527,6 +4527,84 @@ class AmplifierProfile(models.Model):
         }
 
 
+class CabinetModel(models.Model):
+    """A loudspeaker enclosure type: the catalogue engineers pick from when
+    they say what is on an amp output.
+
+    One catalogue shared by every account, edited by superusers only (like
+    AmplifierProfile). The parsed Soundvision ``SpeakerCabinet`` rows are
+    instances in a prediction; this is the type they can later be matched
+    against through ``soundvision_names``.
+    """
+    manufacturer = models.CharField(max_length=100, default='L-Acoustics')
+    model = models.CharField(max_length=100)
+    soundvision_names = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text="Comma-separated names Soundvision uses for this enclosure "
+                  "(e.g. 'KARA II'), for matching parsed predictions later",
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Untick to hide from the cabinet picker",
+    )
+    source = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text="Where the sections and impedances come from (document, version, page)",
+    )
+    notes = models.TextField(blank=True, default='')
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Cabinet Model"
+        verbose_name_plural = "Cabinet Models"  # Child
+        ordering = ['sort_order', 'manufacturer', 'model']
+        constraints = [
+            models.UniqueConstraint(fields=['manufacturer', 'model'],
+                                    name='unique_cabinet_model'),
+        ]
+
+    def __str__(self):
+        return self.model
+
+    @property
+    def is_multiway(self):
+        # len(.all()) rather than .count() so a prefetch is used when present.
+        return len(self.sections.all()) > 1
+
+
+class CabinetSection(models.Model):
+    """One amplifier-driven section of a cabinet: what an amp output carries.
+
+    A passive enclosure has a single 'Full range' section. An active one has a
+    section per output channel of its preset (Kara II: LF, HF; K2: LF, MF,
+    HF). The engineer assigns a section, not a cabinet, to each output, so
+    "Kara II · LF x3" on one output is three LF sections in parallel.
+    """
+    cabinet = models.ForeignKey(CabinetModel, on_delete=models.CASCADE,
+                                related_name='sections')
+    name = models.CharField(max_length=20, help_text="e.g. LF, MF, HF, SB, Full range")
+    nominal_impedance_ohms = models.DecimalField(max_digits=4, decimal_places=1)
+    verified = models.BooleanField(
+        default=True,
+        help_text="Unticked when the impedance is inferred rather than "
+                  "stated for this section in the cited source",
+    )
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Cabinet Section"
+        verbose_name_plural = "Cabinet Sections"
+        ordering = ['cabinet', 'sort_order', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['cabinet', 'name'],
+                                    name='unique_cabinet_section_name'),
+        ]
+
+    def __str__(self):
+        if not self.cabinet.is_multiway:
+            return self.cabinet.model
+        return f"{self.cabinet.model} · {self.name}"
+
+
 class PowerDistributionPlan(models.Model):
     """Main power distribution planning for a show"""
     project = models.ForeignKey('Project', on_delete=models.CASCADE) 
