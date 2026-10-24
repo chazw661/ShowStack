@@ -1322,7 +1322,7 @@ def toggle_day_collapse(request):
         if not day_id:
             return JsonResponse({'success': False, 'error': 'No day_id provided'})
         
-        day = ShowDay.objects.get(id=day_id)
+        day = ShowDay.objects.get(id=day_id, project=_scoped_project(request))
         day.is_collapsed = not day.is_collapsed
         day.save()
         
@@ -1527,7 +1527,9 @@ def add_shared_presenter(request):
                 'error': 'Presenter name cannot be empty'
             })
         
-        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment = MicAssignment.objects.get(
+            id=assignment_id, session__day__project=_scoped_project(request),
+        )
 
         # The assignment knows its own project, so take it from there rather
         # than from a session key that may be stale or unset — a shared
@@ -1595,7 +1597,9 @@ def remove_shared_presenter(request):
                 'error': 'Missing presenter name'
             })
         
-        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment = MicAssignment.objects.get(
+            id=assignment_id, session__day__project=_scoped_project(request),
+        )
         
         # Check if there are any shared presenters
         if not assignment.shared_presenters.exists():
@@ -1658,7 +1662,9 @@ def dmic_and_rotate(request):
                 'error': 'Missing assignment ID'
             })
         
-        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment = MicAssignment.objects.get(
+            id=assignment_id, session__day__project=_scoped_project(request),
+        )
         
         # Get current presenter name before any changes
         current_name = assignment.get_current_presenter_name()
@@ -1718,7 +1724,9 @@ def reset_presenter_rotation(request):
                 'error': 'Missing assignment ID'
             })
         
-        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment = MicAssignment.objects.get(
+            id=assignment_id, session__day__project=_scoped_project(request),
+        )
         assignment.reset_presenter_rotation()
         
         return JsonResponse({
@@ -1784,7 +1792,9 @@ def dmic_and_rotate(request):
                 'error': 'Missing assignment ID'
             })
         
-        assignment = MicAssignment.objects.get(id=assignment_id)
+        assignment = MicAssignment.objects.get(
+            id=assignment_id, session__day__project=_scoped_project(request),
+        )
         
         # Store previous presenter for notification
         previous_presenter = assignment.current_presenter
@@ -3093,10 +3103,11 @@ def upload_prediction(request):
         return JsonResponse({'error': 'Show day is required'}, status=400)
     
     try:
-        show_day = ShowDay.objects.get(pk=show_day_id)
+        show_day = ShowDay.objects.get(pk=show_day_id, project=_scoped_project(request))
         
         # Create prediction object
         prediction = SoundvisionPrediction.objects.create(
+            project=show_day.project,
             show_day=show_day,
             file_name=pdf_file.name,
             pdf_file=pdf_file
@@ -3113,6 +3124,8 @@ def upload_prediction(request):
             'redirect': f'/planner/predictions/{prediction.id}/'
         })
         
+    except ShowDay.DoesNotExist:
+        return JsonResponse({'error': 'Show day not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -3449,6 +3462,9 @@ def ip_address_report(request):
     return render(request, 'admin/planner/ip_address_report.html', context)
 
 
+IP_FIELDS = ('ip_address', 'primary_ip_address', 'secondary_ip_address')
+
+
 @staff_member_required
 @require_http_methods(["POST"])
 def save_ip_address(request):
@@ -3490,15 +3506,16 @@ def save_ip_address(request):
         
         # Get the object
         try:
-            obj = model.objects.get(id=object_id)
+            obj = model.objects.get(id=object_id, project=_scoped_project(request))
         except model.DoesNotExist:
             return JsonResponse({
                 'success': False,
                 'error': f'{model_name} with id {object_id} not found'
             }, status=404)
         
-        # Validate field name
-        if not hasattr(obj, field_name):
+        # Validate field name. hasattr() alone let a caller set ANY attribute
+        # -- name, project_id -- through an endpoint meant for IP addresses.
+        if field_name not in IP_FIELDS or not hasattr(obj, field_name):
             return JsonResponse({
                 'success': False,
                 'error': f'Invalid field: {field_name}'
@@ -5044,7 +5061,7 @@ def create_session(request):
         if not (1 <= num_mics <= 100):
             return JsonResponse({'success': False, 'error': 'Mic count must be between 1 and 100.'})
 
-        day = ShowDay.objects.get(id=day_id)
+        day = ShowDay.objects.get(id=day_id, project=_scoped_project(request))
 
         # Determine order (append after existing sessions)
         order = day.sessions.count()
@@ -6663,7 +6680,9 @@ def comm_config_add_dante(request):
 def comm_config_update_dante(request):
     try:
         data = _json.loads(request.body)
-        ch = CommConfigDanteChannel.objects.get(id=data['channel_id'])
+        ch = CommConfigDanteChannel.objects.get(
+            id=data['channel_id'], config__project=_scoped_project(request),
+        )
         if 'label' in data:
             ch.label = data['label']
         if 'partyline_id' in data:
@@ -6690,7 +6709,9 @@ def comm_config_update_dante(request):
 def comm_config_delete_dante(request):
     try:
         data = _json.loads(request.body)
-        ch = CommConfigDanteChannel.objects.get(id=data['channel_id'])
+        ch = CommConfigDanteChannel.objects.get(
+            id=data['channel_id'], config__project=_scoped_project(request),
+        )
         ch.delete()
         return JsonResponse({'ok': True})
     except CommConfigDanteChannel.DoesNotExist:
@@ -6738,7 +6759,11 @@ def comm_config_update_session(request):
             session.label = data['label']
         if 'roleset' in data:
             rs_id = data['roleset']
-            session.roleset = CommConfigRoleset.objects.get(id=rs_id) if rs_id else None
+            session.roleset = (
+                CommConfigRoleset.objects.get(
+                    id=rs_id, config__project=_scoped_project(request),
+                ) if rs_id else None
+            )
         if 'default_role' in data:
             role_id = data['default_role']
             session.default_role = (
@@ -6815,7 +6840,9 @@ def comm_config_add_roleset(request):
 def comm_config_update_roleset(request):
     try:
         data = _json.loads(request.body)
-        rs = CommConfigRoleset.objects.get(id=data['roleset_id'])
+        rs = CommConfigRoleset.objects.get(
+            id=data['roleset_id'], config__project=_scoped_project(request),
+        )
         if 'label' in data:
             rs.label = data['label']
         if 'addressable' in data:
@@ -6833,7 +6860,9 @@ def comm_config_update_roleset(request):
 def comm_config_delete_roleset(request):
     try:
         data = _json.loads(request.body)
-        rs = CommConfigRoleset.objects.get(id=data['roleset_id'])
+        rs = CommConfigRoleset.objects.get(
+            id=data['roleset_id'], config__project=_scoped_project(request),
+        )
         rs.delete()
         return JsonResponse({'ok': True})
     except CommConfigRoleset.DoesNotExist:

@@ -9,7 +9,7 @@ from django.urls import reverse, path
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
-from django.shortcuts import render, redirect  
+from django.shortcuts import get_object_or_404, render, redirect
 from django.template.loader import render_to_string
 from django.contrib.admin.views.decorators import staff_member_required  
 from django.views.decorators.http import require_POST  
@@ -1428,7 +1428,9 @@ class ConsoleAdmin(BaseEquipmentAdmin):
     def export_yamaha_view(self, request, pk):
         """View to handle Yamaha CSV export"""
         from .utils.yamaha_export import export_yamaha_csvs
-        console = Console.objects.get(pk=pk)
+        # self.get_queryset is scoped to the current project; the bare
+        # Console.objects.get(pk=pk) served any tenant's console to any staff user.
+        console = get_object_or_404(self.get_queryset(request), pk=pk)
         return export_yamaha_csvs(console)
     
     class Media:
@@ -2518,7 +2520,7 @@ class AmpAdmin(BaseEquipmentAdmin):
             
             if color and amp_ids:
                 # Reconstruct the queryset from the IDs
-                amps = Amp.objects.filter(id__in=amp_ids)
+                amps = self.get_queryset(request).filter(id__in=amp_ids)
                 count = amps.update(color=color)
                 self.message_user(request, f'Color {color} assigned to {count} amp(s).', messages.SUCCESS)
                 return HttpResponseRedirect(request.get_full_path())
@@ -2979,7 +2981,9 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
         if 'system_processor' in request.GET:
             try:
                 sp_id = request.GET['system_processor']
-                sp = SystemProcessor.objects.get(pk=sp_id)
+                sp = SystemProcessor.objects.get(
+                    pk=sp_id, project=getattr(request, 'current_project', None),
+                )
                 extra_context['subtitle'] = f'For System Processor: {sp.name}'
             except (SystemProcessor.DoesNotExist, ValueError):
                 pass
@@ -3265,7 +3269,9 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
         if 'system_processor' in request.GET:
             try:
                 sp_id = request.GET['system_processor']
-                sp = SystemProcessor.objects.get(pk=sp_id)
+                sp = SystemProcessor.objects.get(
+                    pk=sp_id, project=getattr(request, 'current_project', None),
+                )
                 extra_context['subtitle'] = f'For System Processor: {sp.name}'
             except (SystemProcessor.DoesNotExist, ValueError):
                 pass
