@@ -3822,6 +3822,9 @@ def amp_channel_inline_update(request, channel_id):
     if field not in _INLINE_CHANNEL_FIELDS:
         return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
     value = request.POST.get('value', '')
+    if field == 'channel_setting' and value not in dict(AmpChannel.CHANNEL_SETTING_CHOICES):
+        # The CH block only sends whole settings ("LF_B") or '' to clear.
+        return JsonResponse({'success': False, 'error': 'Unknown channel setting'}, status=400)
     setattr(channel, field, value)
     channel.save(update_fields=[field])
     return JsonResponse({'success': True})

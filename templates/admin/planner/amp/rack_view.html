@@ -617,7 +617,8 @@
     /* Fingers, not a mouse (iPad): 44px targets. */
     @media (pointer: coarse) {
         .amp-cabinet-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-        select.amp-cabinet-select { min-height: 44px; font-size: 14px !important; }
+        /* height, not min-height: Safari ignores min-height on a native select. */
+        select.amp-cabinet-select { height: 44px; font-size: 14px !important; }
         .amp-qty-btn { width: 44px; height: 44px; font-size: 20px; }
         input.amp-qty-input { width: 44px !important; height: 44px; font-size: 15px !important; }
         .amp-cabinet-summary { font-size: 13px; }
@@ -689,6 +690,7 @@
     /* ── Add Amp form per location group ──────────────────────── */
     .add-amp-row {
         display: flex;
+        flex-wrap: wrap;  /* "+ Add Divider" ran off an iPad in portrait */
         gap: 8px;
         align-items: center;
         padding: 10px 6px;
@@ -1078,12 +1080,12 @@
                                 {% for heading, cabinets in cabinet_groups %}
                                 <optgroup label="{{ heading }}">
                                 {% for cab in cabinets %}{% for sec in cab.sections.all %}
-                                <option value="{{ sec.pk }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
+                                <option value="{{ sec.pk }}" data-zone="{{ sec.routing_zone }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
                                 {% endfor %}{% endfor %}
                                 </optgroup>
                                 {% endfor %}
                                 {% if ch.cabinet_section and not ch.cabinet_section.cabinet.is_active %}
-                                <option value="{{ ch.cabinet_section_id }}" selected>{{ ch.cabinet_section }} (retired)</option>
+                                <option value="{{ ch.cabinet_section_id }}" data-zone="{{ ch.cabinet_section.routing_zone }}" data-label="{{ ch.cabinet_section }}" selected>{{ ch.cabinet_section }} (retired)</option>
                                 {% endif %}
                             </select>
                             <div class="amp-cabinet-qty">
@@ -1102,6 +1104,8 @@
                             {% endif %}
                             <span class="amp-cabinet-summary">{{ ch.load.label }}</span>
                             <span class="amp-cabinet-chip {{ ch.load.warning }}"{% if not ch.load.warning %} hidden{% endif %}>{{ ch.load.warning_text }}</span>
+                            {# CH-block zone vs this cabinet's (CH 1 set LF_B, cabinet Kara II · HF). Display only. #}
+                            <span class="amp-cabinet-chip amp-routing-mismatch" data-channel-number="{{ ch.channel_number }}"{% if not ch.routing_mismatch %} hidden{% endif %}>{{ ch.routing_mismatch }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -1531,6 +1535,7 @@
                 cell._saved = { cabinet_section: String(r.cabinet_section),
                                 cabinet_quantity: String(r.cabinet_quantity) };
                 showCabinetSummary(cell, r);
+                refreshRoutingNote(cell);
                 if (cell._again || !sameValues(cabinetValues(cell), cell._saved)) {
                     saveCabinet(cell);
                     return;
@@ -1562,6 +1567,36 @@
         if (isNaN(n) || n < 1) n = 1;
         if (n > 24) n = 24;
         inp.value = n;
+    }
+
+    // Mirrors AmpChannel.routing_mismatch: the CH block's zone against the
+    // saved cabinet section's. Display only; neither value is touched.
+    function refreshRoutingNote(cell) {
+        var note = cell.querySelector('.amp-routing-mismatch');
+        if (!note) return;
+        var setting = document.querySelector(
+            '.amp-channel-setting-select[data-channel-id="' + cell.dataset.channelId + '"]');
+        var zone = setting ? setting.value.split('_')[0] : '';
+        var opt = cell._saved && cell._saved.cabinet_section
+            ? cell.querySelector('.amp-cabinet-select option[value="' + cell._saved.cabinet_section + '"]')
+            : null;
+        var implied = (opt && opt.dataset.zone) || '';
+        var text = (zone && implied && zone !== implied)
+            ? 'CH ' + note.dataset.channelNumber + ' is routed ' + zone
+              + ', cabinet is ' + (opt.dataset.label || opt.textContent)
+            : '';
+        note.textContent = text;
+        note.hidden = !text;
+    }
+
+    function bindRoutingNotes() {
+        document.querySelectorAll('.amp-channel-setting-select').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                var cell = document.querySelector(
+                    '.amp-cabinet-cell[data-channel-id="' + sel.dataset.channelId + '"]');
+                if (cell) refreshRoutingNote(cell);
+            });
+        });
     }
 
     function bindCabinets() {
@@ -1654,6 +1689,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         bindAutosave();
         bindCabinets();
+        bindRoutingNotes();
         bindDividerLabelAutosave();
         bindAvbToggles();
         var search = document.getElementById('rack-search');
