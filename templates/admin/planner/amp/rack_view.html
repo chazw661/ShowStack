@@ -509,6 +509,15 @@
         border-top: 1px solid var(--ss-border);
         padding: 6px;
     }
+    .amp-cabinets-head {
+        display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+    }
+    .amp-cabinets-head .amp-output-title { margin-bottom: 0; }
+    a.amp-cabinets-help { font-size: 11px; color: #8fb8b2 !important; text-decoration: underline; }
+    .amp-cabinets-nopower {
+        font-size: 11px; color: #c9a45c; border: 1px solid #7a5a22;
+        border-radius: 999px; padding: 1px 8px;
+    }
     .amp-cabinet-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -1046,20 +1055,33 @@
 
                 {# ── Bottom: the cabinets on each output ──────── #}
                 <div class="amp-card-cabinets">
-                    <div class="amp-output-title">Cabinets per output</div>
+                    <div class="amp-cabinets-head">
+                        <div class="amp-output-title">Cabinets per output — used for the power estimate</div>
+                        <a class="amp-cabinets-help" href="{% url 'help:topic' 'power-amp-profiles' %}"
+                           target="_blank" rel="noopener">How power is worked out</a>
+                        {% if not card.amp.amp_model.power_profile_id %}
+                        <span class="amp-cabinets-nopower">No power figures for this model</span>
+                        {% endif %}
+                    </div>
                     <div class="amp-cabinet-grid">
                         {% for ch in card.channels %}
                         <div class="amp-cabinet-cell" data-channel-id="{{ ch.pk }}">
                             <span class="amp-cabinet-out">Out {{ ch.channel_number }}</span>
                             {% if can_edit %}
-                            <select class="amp-cabinet-select"
+                            <select class="amp-cabinet-select" autocomplete="off"
                                     data-channel-id="{{ ch.pk }}"
                                     data-field="cabinet_section"
+                                    data-saved="{{ ch.cabinet_section_id|default_if_none:'' }}"
                                     aria-label="Output {{ ch.channel_number }} cabinet">
                                 <option value="">— none —</option>
-                                {% for cab in cabinet_choices %}{% for sec in cab.sections.all %}
+                                {# Option text starts with the model, so typing "ka" on a focused picker jumps to Kara. #}
+                                {% for heading, cabinets in cabinet_groups %}
+                                <optgroup label="{{ heading }}">
+                                {% for cab in cabinets %}{% for sec in cab.sections.all %}
                                 <option value="{{ sec.pk }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
                                 {% endfor %}{% endfor %}
+                                </optgroup>
+                                {% endfor %}
                                 {% if ch.cabinet_section and not ch.cabinet_section.cabinet.is_active %}
                                 <option value="{{ ch.cabinet_section_id }}" selected>{{ ch.cabinet_section }} (retired)</option>
                                 {% endif %}
@@ -1068,7 +1090,9 @@
                                 <button type="button" class="amp-qty-btn" data-step="-1"
                                         aria-label="One fewer on output {{ ch.channel_number }}">−</button>
                                 <input type="number" class="amp-qty-input" inputmode="numeric"
+                                       autocomplete="off"
                                        min="1" max="24" value="{{ ch.cabinet_quantity }}"
+                                       data-saved="{{ ch.cabinet_quantity }}"
                                        data-channel-id="{{ ch.pk }}"
                                        data-field="cabinet_quantity"
                                        aria-label="Cabinets in parallel on output {{ ch.channel_number }}">
@@ -1451,64 +1475,179 @@
     }
 
     // ───── Cabinets per output ─────
-    // The response carries the new summary ("Kara II · LF ×3 → 2.67 Ω
-    // (2.7 Ω)") and warning, so the cell updates without a reload.
-    function saveCabinet(el) {
-        var cell = el.closest('.amp-cabinet-cell');
+    // Each output saves its section and quantity together, one request at a
+    // time. The reply echoes what was stored plus the summary for it
+    // ("Kara II · LF ×3 → 2.67 Ω (2.7 Ω)"). If the controls changed while a
+    // save was in flight, the next save goes out as soon as it lands, so the
+    // summary on screen always describes the values in the controls.
+    var CABINET_URL = '/audiopatch/api/amp-channel/';
+
+    function cabinetValues(cell) {
+        return {
+            cabinet_section: cell.querySelector('.amp-cabinet-select').value,
+            cabinet_quantity: cell.querySelector('.amp-qty-input').value,
+        };
+    }
+
+    function sameValues(a, b) {
+        return String(a.cabinet_section) === String(b.cabinet_section)
+            && String(a.cabinet_quantity) === String(b.cabinet_quantity);
+    }
+
+    function setCabinetState(cell, state) {
         cell.classList.remove('saving', 'saved', 'error');
-        cell.classList.add('saving');
-        postForm('/audiopatch/api/amp-channel/' + el.dataset.channelId + '/inline-update/',
-                 { field: el.dataset.field, value: el.value })
+        if (state) cell.classList.add(state);
+    }
+
+    function showCabinetSummary(cell, r) {
+        cell.querySelector('.amp-cabinet-summary').textContent = r.label;
+        var chip = cell.querySelector('.amp-cabinet-chip');
+        chip.className = 'amp-cabinet-chip ' + (r.warning || '');
+        chip.textContent = r.warning_text;
+        chip.hidden = !r.warning;
+    }
+
+    function saveCabinet(cell) {
+        clearTimeout(cell._saveTimer);
+        if (cell._inFlight) { cell._again = true; return; }
+        var sent = cabinetValues(cell);
+        if (sameValues(sent, cell._saved)) { setCabinetState(cell, null); return; }
+        cell._inFlight = true;
+        cell._again = false;
+        setCabinetState(cell, 'saving');
+        postForm(CABINET_URL + cell.dataset.channelId + '/inline-update/',
+                 { field: 'cabinet', cabinet_section: sent.cabinet_section,
+                   cabinet_quantity: sent.cabinet_quantity })
             .then(function (r) {
-                cell.classList.remove('saving');
+                cell._inFlight = false;
                 if (!r.success) {
-                    cell.classList.add('error');
+                    // Put the controls back to what is stored, so they
+                    // never disagree with the summary.
+                    restoreCabinet(cell);
+                    setCabinetState(cell, 'error');
                     console.warn('Save failed:', r.error);
                     return;
                 }
-                el.dataset.saved = el.value;
-                cell.querySelector('.amp-cabinet-summary').textContent = r.label;
-                var chip = cell.querySelector('.amp-cabinet-chip');
-                chip.className = 'amp-cabinet-chip ' + (r.warning || '');
-                chip.textContent = r.warning_text;
-                chip.hidden = !r.warning;
-                cell.classList.add('saved');
+                cell._saved = { cabinet_section: String(r.cabinet_section),
+                                cabinet_quantity: String(r.cabinet_quantity) };
+                showCabinetSummary(cell, r);
+                if (cell._again || !sameValues(cabinetValues(cell), cell._saved)) {
+                    saveCabinet(cell);
+                    return;
+                }
+                setCabinetState(cell, 'saved');
                 setTimeout(function () { cell.classList.remove('saved'); }, 600);
             })
             .catch(function (err) {
-                cell.classList.remove('saving');
-                cell.classList.add('error');
+                cell._inFlight = false;
+                restoreCabinet(cell);
+                setCabinetState(cell, 'error');
                 console.error(err);
             });
     }
 
+    function restoreCabinet(cell) {
+        cell.querySelector('.amp-cabinet-select').value = cell._saved.cabinet_section;
+        cell.querySelector('.amp-qty-input').value = cell._saved.cabinet_quantity;
+    }
+
+    function queueCabinetSave(cell, delay) {
+        clearTimeout(cell._saveTimer);
+        setCabinetState(cell, 'saving');
+        cell._saveTimer = setTimeout(function () { saveCabinet(cell); }, delay);
+    }
+
+    function clampQty(inp) {
+        var n = parseInt(inp.value, 10);
+        if (isNaN(n) || n < 1) n = 1;
+        if (n > 24) n = 24;
+        inp.value = n;
+    }
+
     function bindCabinets() {
-        document.querySelectorAll('.amp-cabinet-select').forEach(function (sel) {
-            sel.addEventListener('change', function () { saveCabinet(sel); });
-        });
-        document.querySelectorAll('.amp-qty-input').forEach(function (inp) {
-            inp.dataset.saved = inp.value;
-            inp.addEventListener('change', function () {
-                var n = parseInt(inp.value, 10);
-                if (isNaN(n) || n < 1) n = 1;
-                if (n > 24) n = 24;
-                inp.value = n;
-                if (inp.value !== inp.dataset.saved) saveCabinet(inp);
+        document.querySelectorAll('.amp-cabinet-cell').forEach(function (cell) {
+            var sel = cell.querySelector('.amp-cabinet-select');
+            var inp = cell.querySelector('.amp-qty-input');
+            if (!sel || !inp) return;  // read-only card
+            // What the server rendered. The fields carry autocomplete="off",
+            // so a reload can't swap in values the browser remembered.
+            cell._saved = { cabinet_section: sel.dataset.saved,
+                            cabinet_quantity: inp.dataset.saved };
+            sel.value = cell._saved.cabinet_section;
+            inp.value = cell._saved.cabinet_quantity;
+            sel.addEventListener('change', function () { saveCabinet(cell); });
+            // Typed numbers save after a short pause, not only on blur.
+            inp.addEventListener('input', function () {
+                if (inp.value !== '') queueCabinetSave(cell, 600);
+            });
+            inp.addEventListener('change', function () { clampQty(inp); saveCabinet(cell); });
+            cell.querySelectorAll('.amp-qty-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var n = (parseInt(inp.value, 10) || 1) + parseInt(btn.dataset.step, 10);
+                    if (n < 1 || n > 24) return;
+                    inp.value = n;
+                    // Saves straight away; taps made while one is in flight
+                    // go out together in the next save.
+                    saveCabinet(cell);
+                });
             });
         });
-        document.querySelectorAll('.amp-qty-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var inp = btn.parentNode.querySelector('.amp-qty-input');
-                var n = (parseInt(inp.value, 10) || 1) + parseInt(btn.dataset.step, 10);
-                if (n < 1 || n > 24) return;
-                inp.value = n;
-                // Several quick taps send one save, so saves cannot land
-                // out of order.
-                clearTimeout(inp._saveTimer);
-                inp._saveTimer = setTimeout(function () {
-                    if (inp.value !== inp.dataset.saved) saveCabinet(inp);
-                }, 400);
+        resumePendingCabinets();
+        // A save still pending when the page is left can land after the next
+        // page has already read the old row. So: ask first, and if the page
+        // is left anyway, send it with keepalive AND note it for this tab, so
+        // the next load puts the values back and saves them again.
+        window.addEventListener('beforeunload', function (e) {
+            if (pendingCabinetCells().length) { e.preventDefault(); e.returnValue = ''; }
+        });
+        window.addEventListener('pagehide', function () {
+            var pending = {};
+            pendingCabinetCells().forEach(function (cell) {
+                var v = cabinetValues(cell);
+                pending[cell.dataset.channelId] = { v: v, t: Date.now() };
+                var fd = new FormData();
+                fd.append('field', 'cabinet');
+                fd.append('cabinet_section', v.cabinet_section);
+                fd.append('cabinet_quantity', v.cabinet_quantity);
+                fetch(CABINET_URL + cell.dataset.channelId + '/inline-update/', {
+                    method: 'POST', body: fd, keepalive: true, credentials: 'same-origin',
+                    headers: { 'X-CSRFToken': getCSRF(), 'X-Requested-With': 'XMLHttpRequest' },
+                });
             });
+            try {
+                if (Object.keys(pending).length) {
+                    sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+                }
+            } catch (e) { /* storage blocked: the keepalive save still goes */ }
+        });
+    }
+
+    var PENDING_KEY = 'ss.ampCabinetPending';
+
+    function pendingCabinetCells() {
+        return Array.prototype.filter.call(
+            document.querySelectorAll('.amp-cabinet-cell'), function (cell) {
+                return cell._saved && (cell._inFlight
+                    || !sameValues(cabinetValues(cell), cell._saved));
+            });
+    }
+
+    // Values this tab was still saving when it last left the page. Only
+    // recent ones: a note left behind by a crash shouldn't surface later.
+    function resumePendingCabinets() {
+        var pending;
+        try {
+            pending = JSON.parse(sessionStorage.getItem(PENDING_KEY) || '{}');
+            sessionStorage.removeItem(PENDING_KEY);
+        } catch (e) { return; }
+        Object.keys(pending).forEach(function (channelId) {
+            var entry = pending[channelId];
+            if (!entry || Date.now() - entry.t > 30000) return;
+            var cell = document.querySelector('.amp-cabinet-cell[data-channel-id="' + channelId + '"]');
+            if (!cell || !cell._saved || sameValues(entry.v, cell._saved)) return;
+            cell.querySelector('.amp-cabinet-select').value = entry.v.cabinet_section;
+            cell.querySelector('.amp-qty-input').value = entry.v.cabinet_quantity;
+            saveCabinet(cell);
         });
     }
 

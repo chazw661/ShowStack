@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>{{ label }}</title></head>
+<body>
+<p>Using {{ label }}…</p>
+{{ value|json_script:"use-existing-value" }}
+{{ label|json_script:"use-existing-label" }}
+<script>
+// Select the existing model in the amp form that opened this popup. Django's
+// own popup response would add the row as a new <option>, which would list
+// the model twice, so this selects the option already there.
+(function () {
+    var value = String(JSON.parse(document.getElementById('use-existing-value').textContent));
+    var label = JSON.parse(document.getElementById('use-existing-label').textContent);
+    var opener = window.opener;
+    if (!opener) { window.location = '..'; return; }
+    var elem = opener.document.getElementById(window.name.replace(/__\d+$/, ''));
+    if (elem && elem.nodeName.toUpperCase() === 'SELECT') {
+        var option = Array.prototype.find.call(elem.options, function (o) { return o.value === value; });
+        if (!option) {
+            option = new opener.Option(label, value);
+            elem.add(option);
+        }
+        elem.value = value;
+        elem.dispatchEvent(new Event('change', { bubbles: true }));
+    } else if (elem) {
+        elem.value = value;
+    }
+    window.close();
+})();
+</script>
+</body>
+</html>

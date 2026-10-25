@@ -1760,7 +1760,37 @@ class DeviceAdmin(BaseEquipmentAdmin):
 from .models import AmpModel, Amp, AmpChannel
 
 
+class AmpModelAdminForm(forms.ModelForm):
+    """Refuses a model that is already in the shared catalogue under another
+    spelling ("LA LA12X", "l-acoustics la 12x"), and offers that row instead.
+    ``use_existing_url`` is set by AmpModelAdmin.get_form, so the offer works
+    both on the plain add page and in the "+" popup from an amp's form."""
+    use_existing_url = None
+
+    class Meta:
+        model = AmpModel
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        manufacturer = cleaned.get('manufacturer')
+        model_name = cleaned.get('model_name')
+        if manufacturer and model_name:
+            from planner.utils.amp_models import find_existing
+            matches = find_existing(manufacturer, model_name, exclude_pk=self.instance.pk)
+            if matches:
+                existing = matches[0]
+                raise forms.ValidationError(format_html(
+                    '{} is already in the catalogue as <strong>{}</strong>. '
+                    '<a class="button" href="{}">Use {}</a>',
+                    f'{manufacturer} {model_name}', existing,
+                    self.use_existing_url(existing), existing,
+                ), code='duplicate_amp_model')
+        return cleaned
+
+
 class AmpModelAdmin(admin.ModelAdmin):
+    form = AmpModelAdminForm
     list_display = ('manufacturer', 'model_name', 'channel_count', 
                    'nl4_connector_count', 'cacom_output_count')
     list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count', 'nl8_connector_count')
@@ -1807,6 +1837,36 @@ class AmpModelAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         from planner.views import _can_edit_current_project
         return _can_edit_current_project(request)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        from django.contrib.admin.options import IS_POPUP_VAR
+        popup = IS_POPUP_VAR in request.GET or IS_POPUP_VAR in request.POST
+
+        def use_existing_url(existing):
+            if popup:
+                return reverse('admin:planner_ampmodel_use_existing', args=[existing.pk])
+            return reverse('admin:planner_ampmodel_change', args=[existing.pk])
+        form.use_existing_url = staticmethod(use_existing_url)
+        return form
+
+    def get_urls(self):
+        return [
+            path('<int:pk>/use-existing/',
+                 self.admin_site.admin_view(self.use_existing_view),
+                 name='planner_ampmodel_use_existing'),
+        ] + super().get_urls()
+
+    def use_existing_view(self, request, pk):
+        """From the "+" popup on an amp's model picker: pick the existing
+        catalogue row in the amp form behind it and close the popup, as if it
+        had just been added."""
+        existing = get_object_or_404(AmpModel, pk=pk)
+        if not self.has_view_permission(request, existing):
+            raise PermissionDenied
+        return render(request, 'admin/planner/ampmodel/use_existing_popup.html', {
+            'value': existing.pk, 'label': str(existing),
+        })
 
     def has_change_permission(self, request, obj=None):
         return request.user.is_superuser
@@ -2291,9 +2351,10 @@ class AmpAdmin(BaseEquipmentAdmin):
             )
             extra_context['has_grouped_layout'] = True
             # Per-output cabinet picker: every section of the active
-            # catalogue, in catalogue order. Viewers see the assignment as text.
+            # catalogue under its heading (Line source, Coaxial, ...), in
+            # catalogue order. Viewers see the assignment as text.
             from .models import CabinetModel
-            extra_context['cabinet_choices'] = list(
+            extra_context['cabinet_groups'] = CabinetModel.picker_groups(
                 CabinetModel.objects.filter(is_active=True).prefetch_related('sections')
             )
             from planner.views import _can_edit_current_project
@@ -6848,11 +6909,11 @@ class CabinetSectionInline(SuperuserCatalogueMixin, admin.TabularInline):
 
 
 class CabinetModelAdmin(SuperuserCatalogueMixin, admin.ModelAdmin):
-    list_display = ['model', 'manufacturer', 'sections_summary', 'is_active', 'source']
-    list_filter = ['manufacturer', 'is_active']
+    list_display = ['model', 'manufacturer', 'category', 'sections_summary', 'is_active', 'source']
+    list_filter = ['manufacturer', 'category', 'is_active']
     search_fields = ['manufacturer', 'model', 'soundvision_names']
     ordering = ['sort_order', 'manufacturer', 'model']
-    fields = ['manufacturer', 'model', 'soundvision_names', 'is_active',
+    fields = ['manufacturer', 'model', 'category', 'soundvision_names', 'is_active',
               'sort_order', 'source', 'notes']
     inlines = [CabinetSectionInline]
 

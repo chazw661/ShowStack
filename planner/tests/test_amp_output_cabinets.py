@@ -427,3 +427,246 @@ class AmpModelCatalogueTests(Fixture):
                              {'post': 'yes'})
         self.assertEqual(302, r.status_code)
         self.assertFalse(AmpModel.objects.filter(pk=unused.pk).exists())
+
+
+class CabinetSaveAgreementTests(Fixture):
+    """Charlie's #129 test: the quantity box read 3 while the summary still
+    said ×2. The page now sends section and quantity together, and the reply
+    echoes what was stored, so the two can't disagree."""
+
+    def setUp(self):
+        super().setUp()
+        self.ch = self.channel(self.la12x, 2)
+        self.url = reverse('planner:amp_channel_inline_update', args=[self.ch.pk])
+        self.kara_hf = section('Kara II', 'HF')
+        self.use(self.owner)
+
+    def save(self, sec, quantity):
+        return self.client.post(self.url, {
+            'field': 'cabinet', 'cabinet_section': sec, 'cabinet_quantity': quantity})
+
+    def test_both_fields_save_together_and_are_echoed(self):
+        r = self.save(self.kara_hf.pk, '3')
+        self.assertEqual(200, r.status_code, r.content)
+        body = r.json()
+        self.assertEqual((self.kara_hf.pk, 3), (body['cabinet_section'], body['cabinet_quantity']))
+        self.assertEqual('Kara II · HF ×3 → 2.67 Ω (2.7 Ω)', body['label'])
+        self.ch.refresh_from_db()
+        self.assertEqual((self.kara_hf, 3), (self.ch.cabinet_section, self.ch.cabinet_quantity))
+
+    def test_the_summary_after_a_reload_matches_the_box(self):
+        self.save(self.kara_hf.pk, '3')
+        page = self.client.get(reverse('admin:planner_amp_changelist')).content.decode()
+        self.assertIn('Kara II · HF ×3 → 2.67 Ω (2.7 Ω)', page)
+        self.assertIn('value="3"\n                                       data-saved="3"', page)
+
+    def test_a_single_field_reply_reads_the_other_field_from_the_database(self):
+        # The old race: a quantity save that loaded the row before a section
+        # save landed described the old section. The reply is now re-read.
+        self.save(self.kara_hf.pk, '2')
+        AmpChannel.objects.filter(pk=self.ch.pk).update(cabinet_quantity=3)
+        r = self.client.post(self.url, {'field': 'cabinet_section', 'value': self.kara_hf.pk})
+        self.assertEqual('Kara II · HF ×3 → 2.67 Ω (2.7 Ω)', r.json()['label'])
+
+    def test_a_bad_quantity_saves_neither_field(self):
+        r = self.save(self.kara_hf.pk, '0')
+        self.assertEqual(400, r.status_code)
+        self.ch.refresh_from_db()
+        self.assertEqual((None, 1), (self.ch.cabinet_section, self.ch.cabinet_quantity))
+
+    def test_resending_a_retired_section_the_output_already_has_is_fine(self):
+        self.save(self.kara_hf.pk, '1')
+        CabinetModel.objects.filter(model='Kara II').update(is_active=False)
+        r = self.save(self.kara_hf.pk, '2')
+        self.assertEqual(200, r.status_code, r.content)
+        other = section('K2', 'LF')
+        CabinetModel.objects.filter(model='K2').update(is_active=False)
+        self.assertEqual(400, self.save(other.pk, '2').status_code)
+
+    def test_viewer_is_refused(self):
+        viewer = staff('viewer')
+        self.join(viewer, self.project, 'viewer')
+        self.use(viewer)
+        self.assertEqual(403, self.save(self.kara_hf.pk, '3').status_code)
+
+    def test_fields_opt_out_of_browser_form_restore(self):
+        page = self.client.get(reverse('admin:planner_amp_changelist'))
+        self.assertContains(page, '<select class="amp-cabinet-select" autocomplete="off"', count=4)
+        self.assertContains(page, 'autocomplete="off"\n                                       min="1" max="24"',
+                            count=4)
+
+
+class CabinetStripLabelTests(Fixture):
+
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('admin:planner_amp_changelist')
+        self.use(self.owner)
+
+    def test_heading_and_help_link(self):
+        page = self.client.get(self.url)
+        self.assertContains(page, 'Cabinets per output — used for the power estimate')
+        self.assertContains(page, reverse('help:topic', args=['power-amp-profiles']))
+
+    def test_model_without_power_figures_says_so(self):
+        page = self.client.get(self.url)
+        self.assertNotContains(page, 'No power figures for this model')
+        bare = AmpModel.objects.create(manufacturer='Powersoft', model_name='X4', channel_count=4)
+        location = AmpLocation.objects.get(project=self.project, name='HL')
+        Amp.objects.create(project=self.project, location=location, amp_model=bare, name='PS')
+        page = self.client.get(self.url)
+        self.assertContains(page, 'No power figures for this model', count=1)
+
+    def test_picker_is_grouped_under_headings(self):
+        page = self.client.get(self.url).content.decode()
+        headings = ['Line source', 'Constant curvature', 'Coaxial', 'Colinear', 'Subwoofer']
+        positions = [page.index(f'<optgroup label="{h}">') for h in headings]
+        self.assertEqual(sorted(positions), positions)
+        line = page[positions[0]:positions[1]]
+        for label in ('Kara · LF', 'Kara · HF', 'Kiva', 'Kara II · LF'):
+            self.assertIn(f'>{label}</option>', line)
+        subs = page[positions[4]:page.index('</optgroup>', positions[4])]
+        self.assertIn('>KS28</option>', subs)
+        self.assertIn('>K1-SB</option>', subs)
+
+
+class LegacyCabinetTests(TestCase):
+
+    def setUp(self):
+        seed()
+
+    def test_kara_and_kiva_are_seeded_with_their_source(self):
+        kara = CabinetModel.objects.get(model='Kara')
+        self.assertEqual([('LF', Decimal('8.0')), ('HF', Decimal('8.0'))],
+                         [(s.name, s.nominal_impedance_ohms) for s in kara.sections.all()])
+        self.assertIn('p.57', kara.source)
+        kiva = CabinetModel.objects.get(model='Kiva')
+        self.assertEqual([('Full range', Decimal('8.0'))],
+                         [(s.name, s.nominal_impedance_ohms) for s in kiva.sections.all()])
+        self.assertIn('p.59', kiva.source)
+        self.assertIn('p.118', kiva.source)
+        self.assertEqual(CabinetModel.LINE_SOURCE, kiva.category)
+
+    def test_every_seeded_cabinet_has_a_heading(self):
+        self.assertFalse(CabinetModel.objects.filter(category='').exists())
+
+    def test_headings_fill_old_rows_but_keep_a_superusers_choice(self):
+        CabinetModel.objects.filter(model='KS28').update(category='')
+        CabinetModel.objects.filter(model='Syva').update(category=CabinetModel.LINE_SOURCE)
+        seed()
+        self.assertEqual(CabinetModel.SUBWOOFER, CabinetModel.objects.get(model='KS28').category)
+        self.assertEqual(CabinetModel.LINE_SOURCE, CabinetModel.objects.get(model='Syva').category)
+
+
+class AmpModelDuplicateTests(Fixture):
+    """Adding "LA LA12X" when "L-Acoustics LA12X" exists offers the existing
+    row instead."""
+
+    def setUp(self):
+        super().setUp()
+        self.add = reverse('admin:planner_ampmodel_add')
+        self.use(self.owner)
+
+    def form(self, manufacturer, model_name):
+        return {'manufacturer': manufacturer, 'model_name': model_name, 'channel_count': 4,
+                'nl4_connector_count': 0, 'nl8_connector_count': 0,
+                'cacom_output_count': 0, 'sc32_connector_count': 0,
+                'has_analog_inputs': 'on'}
+
+    def test_spelling_variants_are_one_model(self):
+        from planner.utils.amp_models import model_key
+        key = model_key('L-Acoustics', 'LA12X')
+        for variant in (('LA', 'LA12X'), ('l acoustics', 'la-12x'), ("L'Acoustics", 'LA 12X'),
+                        ('Lacoustics', 'la12x')):
+            self.assertEqual(key, model_key(*variant), variant)
+        self.assertNotEqual(key, model_key('L-Acoustics', 'LA12'))
+        self.assertNotEqual(key, model_key('Powersoft', 'LA12X'))
+
+    def test_add_offers_the_existing_model(self):
+        before = AmpModel.objects.count()
+        r = self.client.post(self.add, self.form('LA', 'la-12x'))
+        self.assertEqual(200, r.status_code)
+        self.assertEqual(before, AmpModel.objects.count())
+        existing = self.models['LA12X']
+        self.assertContains(r, 'already in the catalogue as <strong>L-Acoustics LA12X</strong>')
+        self.assertContains(r, reverse('admin:planner_ampmodel_change', args=[existing.pk]))
+
+    def test_the_popup_offer_picks_the_existing_model_in_the_amp_form(self):
+        r = self.client.post(self.add + '?_popup=1', dict(self.form('LA', 'LA12X'), _popup='1'))
+        existing = self.models['LA12X']
+        use = reverse('admin:planner_ampmodel_use_existing', args=[existing.pk])
+        self.assertContains(r, use)
+        r = self.client.get(use)
+        self.assertEqual(200, r.status_code)
+        self.assertContains(r, f'<script id="use-existing-value" type="application/json">{existing.pk}</script>',
+                            html=False)
+
+    def test_a_new_model_still_adds(self):
+        r = self.client.post(self.add, self.form('L-Acoustics', 'LA2Xi'))
+        self.assertEqual(302, r.status_code)
+        self.assertTrue(AmpModel.objects.filter(model_name='LA2Xi').exists())
+
+
+class MergeAmpModelsTests(TestCase):
+
+    def setUp(self):
+        seed()
+        self.owner = User.objects.create_user('o')
+        self.project = Project.objects.create(name='Show', owner=self.owner)
+        self.location = AmpLocation.objects.create(project=self.project, name='HL')
+        full = dict(channel_count=4, has_aes_inputs=True, has_avb_inputs=True,
+                    nl4_connector_count=2, cacom_output_count=1)
+        self.linked = AmpModel.objects.create(manufacturer='L-Acoustics', model_name='LA12X', **full)
+        seed()  # links it to the LA12X profile
+        self.linked.refresh_from_db()
+        self.copy = AmpModel.objects.create(manufacturer='L-Acoustics', model_name='LA12X',
+                                            channel_count=4)
+        self.abbrev = AmpModel.objects.create(manufacturer='LA', model_name='LA12X', channel_count=4)
+        # More amps on the unlinked copies than on the linked row: the
+        # profile still decides the survivor.
+        self.amps = [self.amp(self.copy, 'A'), self.amp(self.copy, 'B'), self.amp(self.abbrev, 'C')]
+        self.solo = AmpModel.objects.create(manufacturer='Powersoft', model_name='X8', channel_count=8)
+
+    def amp(self, model, name):
+        return Amp.objects.create(project=self.project, location=self.location,
+                                  amp_model=model, name=name)
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command('merge_amp_models', *args, stdout=out)
+        return out.getvalue()
+
+    def test_dry_run_lists_the_group_and_writes_nothing(self):
+        self.assertIsNotNone(self.linked.power_profile_id)
+        out = self.run_command()
+        self.assertIn('DRY RUN', out)
+        self.assertIn(f'keep    #{self.linked.pk} "L-Acoustics LA12X"', out)
+        self.assertIn(f'merge   #{self.copy.pk}', out)
+        self.assertIn(f'merge   #{self.abbrev.pk} "LA LA12X"', out)
+        self.assertIn('3 amps move, 2 rows deleted', out)
+        self.assertNotIn('X8', out)
+        self.assertEqual(4, AmpModel.objects.count())
+        self.assertEqual(2, Amp.objects.filter(amp_model=self.copy).count())
+
+    def test_apply_moves_the_amps_then_deletes_the_extras(self):
+        out = self.run_command('--apply')
+        self.assertIn('3 amps moved, 2 rows deleted', out)
+        self.assertEqual({self.linked.pk, self.solo.pk}, set(AmpModel.objects.values_list('pk', flat=True)))
+        for amp in self.amps:
+            amp.refresh_from_db()
+            self.assertEqual(self.linked.pk, amp.amp_model_id)
+            self.assertEqual(4, amp.channels.count())
+        self.assertIn('No duplicate amp models', self.run_command())
+
+    def test_a_group_that_would_lose_outputs_is_skipped(self):
+        AmpModel.objects.filter(pk=self.abbrev.pk).update(sc32_connector_count=1)
+        out = self.run_command('--apply')
+        self.assertIn('SKIPPED', out)
+        self.assertIn('sc32 connector count', out)
+        self.assertEqual(4, AmpModel.objects.count())
+
+    def test_a_different_channel_count_is_skipped(self):
+        AmpModel.objects.filter(pk=self.copy.pk).update(channel_count=8)
+        out = self.run_command('--apply')
+        self.assertIn('SKIPPED', out)
+        self.assertEqual(4, AmpModel.objects.count())

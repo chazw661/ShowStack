@@ -4720,6 +4720,23 @@ class CabinetModel(models.Model):
         max_length=200, blank=True, default='',
         help_text="Where the sections and impedances come from (document, version, page)",
     )
+    # The headings the cabinet picker groups by, in picker order.
+    LINE_SOURCE = 'line_source'
+    CONSTANT_CURVATURE = 'constant_curvature'
+    COAXIAL = 'coaxial'
+    COLINEAR = 'colinear'
+    SUBWOOFER = 'subwoofer'
+    CATEGORY_CHOICES = [
+        (LINE_SOURCE, 'Line source'),
+        (CONSTANT_CURVATURE, 'Constant curvature'),
+        (COAXIAL, 'Coaxial'),
+        (COLINEAR, 'Colinear'),
+        (SUBWOOFER, 'Subwoofer'),
+    ]
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, blank=True, default='',
+        help_text="Heading this enclosure is listed under in the cabinet picker",
+    )
     notes = models.TextField(blank=True, default='')
     sort_order = models.IntegerField(default=0)
 
@@ -4739,6 +4756,18 @@ class CabinetModel(models.Model):
     def is_multiway(self):
         # len(.all()) rather than .count() so a prefetch is used when present.
         return len(self.sections.all()) > 1
+
+    @classmethod
+    def picker_groups(cls, cabinets):
+        """[(heading, [cabinets])] in CATEGORY_CHOICES order, keeping the
+        given order within each heading. Uncategorised cabinets come last
+        under "Other"."""
+        order = [key for key, _ in cls.CATEGORY_CHOICES] + ['']
+        labels = dict(cls.CATEGORY_CHOICES, **{'': 'Other'})
+        grouped = {key: [] for key in order}
+        for cabinet in cabinets:
+            grouped.setdefault(cabinet.category, []).append(cabinet)
+        return [(labels.get(key, key), grouped[key]) for key in grouped if grouped[key]]
 
 
 class CabinetSection(models.Model):

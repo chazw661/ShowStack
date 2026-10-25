@@ -3812,8 +3812,13 @@ def amp_channel_inline_update(request, channel_id):
     if not _can_edit_current_project(request):
         return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
     field = request.POST.get('field', '')
+    if field == 'cabinet':
+        return _amp_channel_cabinet_update(channel, {
+            'cabinet_section': request.POST.get('cabinet_section', ''),
+            'cabinet_quantity': request.POST.get('cabinet_quantity', ''),
+        })
     if field in _INLINE_CABINET_FIELDS:
-        return _amp_channel_cabinet_update(channel, field, request.POST.get('value', ''))
+        return _amp_channel_cabinet_update(channel, {field: request.POST.get('value', '')})
     if field not in _INLINE_CHANNEL_FIELDS:
         return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
     value = request.POST.get('value', '')
@@ -3826,12 +3831,17 @@ _INLINE_CABINET_FIELDS = {'cabinet_section', 'cabinet_quantity'}
 MAX_CABINETS_PER_OUTPUT = 24
 
 
-def _amp_channel_cabinet_update(channel, field, value):
-    """Set an output's cabinet section (blank clears it) or how many are in
-    parallel, and send back what the rack card shows for it."""
+def _amp_channel_cabinet_update(channel, values):
+    """Set an output's cabinet section (blank clears it) and/or how many are
+    in parallel, and send back what the rack card shows for it.
+
+    The rack page sends both fields together, so the summary in the reply is
+    always worked out from the values the page is showing. The reply also
+    echoes what was stored, and the page keeps re-sending until the two
+    agree, so a slow reply can never leave a stale summary on screen."""
     from .models import CabinetSection
-    value = (value or '').strip()
-    if field == 'cabinet_section':
+    if 'cabinet_section' in values:
+        value = (values['cabinet_section'] or '').strip()
         if not value:
             channel.cabinet_section = None
         else:
@@ -3839,10 +3849,12 @@ def _amp_channel_cabinet_update(channel, field, value):
                 channel.cabinet_section = CabinetSection.objects.select_related(
                     'cabinet').get(id=int(value), cabinet__is_active=True)
             except (ValueError, CabinetSection.DoesNotExist):
-                return JsonResponse({'success': False, 'error': 'Unknown cabinet'}, status=400)
-    else:
+                if not (value.isdigit() and int(value) == channel.cabinet_section_id):
+                    return JsonResponse({'success': False, 'error': 'Unknown cabinet'}, status=400)
+                # Re-sending the retired section an output already has is fine.
+    if 'cabinet_quantity' in values:
         try:
-            quantity = int(value)
+            quantity = int((values['cabinet_quantity'] or '').strip())
         except ValueError:
             quantity = 0
         if not 1 <= quantity <= MAX_CABINETS_PER_OUTPUT:
@@ -3851,10 +3863,17 @@ def _amp_channel_cabinet_update(channel, field, value):
                 'error': f'Quantity must be 1-{MAX_CABINETS_PER_OUTPUT}',
             }, status=400)
         channel.cabinet_quantity = quantity
-    channel.save(update_fields=[field])
+    channel.save(update_fields=list(values))
+    # Re-read, so a field this request didn't send is the stored value and
+    # not whatever it was when this request loaded the row.
+    channel = AmpChannel.objects.select_related(
+        'cabinet_section__cabinet', 'amp__amp_model__power_profile',
+    ).get(pk=channel.pk)
     load = channel.cabinet_load
     return JsonResponse({
         'success': True,
+        'cabinet_section': channel.cabinet_section_id or '',
+        'cabinet_quantity': channel.cabinet_quantity,
         'label': load.label,
         'warning': load.warning,
         'warning_text': load.warning_text,
