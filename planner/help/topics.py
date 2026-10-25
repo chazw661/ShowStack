@@ -384,6 +384,16 @@ TOPICS = (
         keywords=('amp channel', 'avb', 'aes', 'analogue', 'channel setting', 'nl4', 'cacom', 'sc32', 'zone', 'sub',),
     ),
     Topic(
+        slug='amps-output-cabinets',
+        title='Say which cabinets are on each amp output',
+        section='Amps & PA',
+        summary='Pick a cabinet section and how many are in parallel on each output, and check the load.',
+        pages=(
+            'admin:planner_amp_changelist',
+        ),
+        keywords=('cabinet', 'speaker', 'output', 'load', 'impedance', 'ohm', 'parallel', 'quantity', 'minimum', 'Kara II', 'KS28', 'power plan',),
+    ),
+    Topic(
         slug='amps-rack-dividers',
         title='Split the rack with dividers',
         section='Amps & PA',

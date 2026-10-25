@@ -56,10 +56,10 @@ class SeedFiguresTests(TestCase):
         for model in ('KS28', 'SB28', 'K1-SB', 'SB6i'):
             self.assertEqual(Decimal(4), sections(model)[0][1], model)
 
-    def test_only_l2_is_marked_unverified(self):
+    def test_only_l2_and_the_derived_kiva_are_marked_unverified(self):
         unverified = set(CabinetSection.objects.filter(verified=False)
                          .values_list('cabinet__model', flat=True))
-        self.assertEqual({'L2 / L2D'}, unverified)
+        self.assertEqual({'L2 / L2D', 'Kiva'}, unverified)
 
     def test_section_label(self):
         kara_lf = CabinetSection.objects.get(cabinet__model='Kara II', name='LF')

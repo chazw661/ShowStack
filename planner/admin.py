@@ -1760,7 +1760,37 @@ class DeviceAdmin(BaseEquipmentAdmin):
 from .models import AmpModel, Amp, AmpChannel
 
 
+class AmpModelAdminForm(forms.ModelForm):
+    """Refuses a model that is already in the shared catalogue under another
+    spelling ("LA LA12X", "l-acoustics la 12x"), and offers that row instead.
+    ``use_existing_url`` is set by AmpModelAdmin.get_form, so the offer works
+    both on the plain add page and in the "+" popup from an amp's form."""
+    use_existing_url = None
+
+    class Meta:
+        model = AmpModel
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        manufacturer = cleaned.get('manufacturer')
+        model_name = cleaned.get('model_name')
+        if manufacturer and model_name:
+            from planner.utils.amp_models import find_existing
+            matches = find_existing(manufacturer, model_name, exclude_pk=self.instance.pk)
+            if matches:
+                existing = matches[0]
+                raise forms.ValidationError(format_html(
+                    '{} is already in the catalogue as <strong>{}</strong>. '
+                    '<a class="button" href="{}">Use {}</a>',
+                    f'{manufacturer} {model_name}', existing,
+                    self.use_existing_url(existing), existing,
+                ), code='duplicate_amp_model')
+        return cleaned
+
+
 class AmpModelAdmin(admin.ModelAdmin):
+    form = AmpModelAdminForm
     list_display = ('manufacturer', 'model_name', 'channel_count', 
                    'nl4_connector_count', 'cacom_output_count')
     list_filter = ('manufacturer', 'channel_count', 'nl4_connector_count', 'nl8_connector_count')
@@ -1790,23 +1820,59 @@ class AmpModelAdmin(admin.ModelAdmin):
             readonly.append('power_profile')
         return readonly
 
+    # AmpModel is one catalogue shared by every account, so the model
+    # permissions an editor holds through the global Editor group used to let
+    # an editor on any show rename or delete a model other shows' amps use.
+    # Same rule as SourceHardwareOptionAdmin:
+    #   * read: everyone with admin access;
+    #   * add: an owner or editor of the CURRENT project;
+    #   * change, delete: superusers only.
+
+    def has_module_permission(self, request):
+        return request.user.is_authenticated
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_authenticated
+
     def has_add_permission(self, request):
-        """Only editors and owners can add"""
-        if request.user.is_superuser:
-            return True
-        return super().has_add_permission(request)
-    
+        from planner.views import _can_edit_current_project
+        return _can_edit_current_project(request)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        from django.contrib.admin.options import IS_POPUP_VAR
+        popup = IS_POPUP_VAR in request.GET or IS_POPUP_VAR in request.POST
+
+        def use_existing_url(existing):
+            if popup:
+                return reverse('admin:planner_ampmodel_use_existing', args=[existing.pk])
+            return reverse('admin:planner_ampmodel_change', args=[existing.pk])
+        form.use_existing_url = staticmethod(use_existing_url)
+        return form
+
+    def get_urls(self):
+        return [
+            path('<int:pk>/use-existing/',
+                 self.admin_site.admin_view(self.use_existing_view),
+                 name='planner_ampmodel_use_existing'),
+        ] + super().get_urls()
+
+    def use_existing_view(self, request, pk):
+        """From the "+" popup on an amp's model picker: pick the existing
+        catalogue row in the amp form behind it and close the popup, as if it
+        had just been added."""
+        existing = get_object_or_404(AmpModel, pk=pk)
+        if not self.has_view_permission(request, existing):
+            raise PermissionDenied
+        return render(request, 'admin/planner/ampmodel/use_existing_popup.html', {
+            'value': existing.pk, 'label': str(existing),
+        })
+
     def has_change_permission(self, request, obj=None):
-        """Only editors and owners can edit"""
-        if request.user.is_superuser:
-            return True
-        return super().has_change_permission(request, obj)
-    
+        return request.user.is_superuser
+
     def has_delete_permission(self, request, obj=None):
-        """Only editors and owners can delete"""
-        if request.user.is_superuser:
-            return True
-        return super().has_delete_permission(request, obj)
+        return request.user.is_superuser
 
 
 class AmpChannelInlineForm(forms.ModelForm):
@@ -2177,8 +2243,9 @@ class AmpAdmin(BaseEquipmentAdmin):
             for loc in locations:
                 amps = list(
                     Amp.objects.filter(location=loc, project=request.current_project)
-                    .select_related('amp_model')
-                    .prefetch_related('channels')
+                    .select_related('amp_model__power_profile')
+                    .prefetch_related('channels__cabinet_section__cabinet__sections',
+                                      'amp_model__power_profile__load_ratings')
                     .order_by('sort_order', 'name')
                 )
                 dividers = list(
@@ -2202,6 +2269,8 @@ class AmpAdmin(BaseEquipmentAdmin):
                     # filled in.
                     avb_unused_count = 0
                     for ch in channels:
+                        ch.amp = amp  # prefetched rows; cabinet_load reads the model
+                        ch.load = ch.cabinet_load
                         ch.avb_unused = not (
                             (ch.avb_stream or '').strip()
                             or (ch.analog_input or '').strip()
@@ -2281,6 +2350,15 @@ class AmpAdmin(BaseEquipmentAdmin):
                 AmpModel.objects.all().order_by('manufacturer', 'model_name')
             )
             extra_context['has_grouped_layout'] = True
+            # Per-output cabinet picker: every section of the active
+            # catalogue under its heading (Line source, Coaxial, ...), in
+            # catalogue order. Viewers see the assignment as text.
+            from .models import CabinetModel
+            extra_context['cabinet_groups'] = CabinetModel.picker_groups(
+                CabinetModel.objects.filter(is_active=True).prefetch_related('sections')
+            )
+            from planner.views import _can_edit_current_project
+            extra_context['can_edit'] = _can_edit_current_project(request)
 
             # Issue #43: surface processor output labels as datalist
             # suggestions on the amp's Analogue / AES / AVB input fields.
@@ -6831,11 +6909,11 @@ class CabinetSectionInline(SuperuserCatalogueMixin, admin.TabularInline):
 
 
 class CabinetModelAdmin(SuperuserCatalogueMixin, admin.ModelAdmin):
-    list_display = ['model', 'manufacturer', 'sections_summary', 'is_active', 'source']
-    list_filter = ['manufacturer', 'is_active']
+    list_display = ['model', 'manufacturer', 'category', 'sections_summary', 'is_active', 'source']
+    list_filter = ['manufacturer', 'category', 'is_active']
     search_fields = ['manufacturer', 'model', 'soundvision_names']
     ordering = ['sort_order', 'manufacturer', 'model']
-    fields = ['manufacturer', 'model', 'soundvision_names', 'is_active',
+    fields = ['manufacturer', 'model', 'category', 'soundvision_names', 'is_active',
               'sort_order', 'source', 'notes']
     inlines = [CabinetSectionInline]
 
@@ -6891,6 +6969,10 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
         }),
         ('Electrical Specifications', {
             'fields': ('nominal_voltage', 'power_factor', 'efficiency')
+        }),
+        ('Output Load', {
+            'fields': ('min_load_ohms', 'min_load_source'),
+            'description': 'An amp output whose cabinets come to less than this is flagged on the amp module.',
         }),
         ('Additional Information', {
             'fields': ('notes',),

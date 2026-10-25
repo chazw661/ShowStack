@@ -27,6 +27,7 @@ import io
 
 from .pdf_styles import LANDSCAPE_PAGE, MARGIN
 from planner.utils import pa_cable_math
+from planner.utils.pdf_exports.report_kit import amp_card_table
 
 # ---------------------------------------------------------------------------
 # Palette - a restrained, professional scheme built around the ShowStack blue.
@@ -836,29 +837,16 @@ def _amp_card(amp):
         + (f'&nbsp;&nbsp;<font color="#c9d6e3" size="8">{model_str}</font>' if model_str else ''),
         _AMP_P['name'])
 
-    card = Table(
-        [[header, '', ''],
-         [_amp_inputs_table(channels), _amp_middle(amp, channels), _amp_outputs(amp)]],
-        colWidths=_AMP_COLS, hAlign='LEFT')
-    card.setStyle(TableStyle([
-        ('SPAN', (0, 0), (2, 0)),
-        ('BACKGROUND', (0, 0), (2, 0), NAVY),
-        ('TOPPADDING', (0, 0), (2, 0), 6), ('BOTTOMPADDING', (0, 0), (2, 0), 6),
-        ('LEFTPADDING', (0, 0), (2, 0), 10),
-        ('VALIGN', (0, 1), (-1, 1), 'TOP'),
-        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor('#8a97a6')),
-        ('LINEAFTER', (0, 1), (1, 1), 0.5, colors.HexColor('#c9d2db')),
-        ('TOPPADDING', (0, 1), (-1, 1), 6), ('BOTTOMPADDING', (0, 1), (-1, 1), 6),
-        ('LEFTPADDING', (0, 1), (-1, 1), 6), ('RIGHTPADDING', (0, 1), (-1, 1), 6),
-    ]))
-    return card
+    return amp_card_table(header, amp, channels, _amp_inputs_table, _amp_middle,
+                          _amp_outputs)
 
 
 def _section_amplifiers(project, styles, Amp):
     story = [_section_banner("4", "Amplifiers", styles), Spacer(1, 0.12 * inch)]
     amps = (Amp.objects.filter(project=project)
-            .select_related('location', 'amp_model')
-            .prefetch_related('channels')
+            .select_related('location', 'amp_model__power_profile')
+            .prefetch_related('channels__cabinet_section__cabinet__sections',
+                              'amp_model__power_profile__load_ratings')
             .order_by('location__sort_order', 'location__name', 'sort_order', 'name'))
 
     if not amps.exists():

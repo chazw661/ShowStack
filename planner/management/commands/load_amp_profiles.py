@@ -4,10 +4,11 @@ Two parts, with different redeploy rules:
 
 * The profile rows themselves (the legacy single-figure fields the current
   calculator reads) load only into an empty table, or with --force, as before.
-* The per-load mains-draw tables (AmplifierLoadRating) and voltage factors
-  (AmplifierVoltageFactor) are created whenever a row is missing, so they
-  reach a database whose profiles already exist; --force resets them to the
-  values below. A superuser's edit to an existing row survives a redeploy.
+* The per-load mains-draw tables (AmplifierLoadRating), voltage factors
+  (AmplifierVoltageFactor) and each profile's minimum load per output are
+  created whenever missing, so they reach a database whose profiles already
+  exist; --force resets them to the values below. A superuser's edit to an
+  existing row survives a redeploy.
 
 All draw tables are as printed in the L-Acoustics manuals: 230 V, all
 channels driven, mains current and power. The power factor is not published.
@@ -88,6 +89,23 @@ VOLTAGE_FACTORS = {
                           ('LA7.16i', '1.92'))
 }
 VOLTAGE_FACTOR_NOTE = "; current multiplier vs 230 V (page not recorded)"
+
+# Lowest load per output. The Preset Guide's drive-capacity tables give the
+# most enclosures each model may drive in parallel on one output; with the
+# total-impedance table (p.118) that is the lowest load it is rated for.
+GUIDE = "L-Acoustics Preset Guide owner's manual (EN) v25.0"
+MIN_LOADS = {
+    'LA8': ('2.7', f"{GUIDE} p.120: up to 3 x 8 ohm enclosures per output "
+                   "(2.7 ohm, p.118)"),
+    'LA4X': ('4', f"{GUIDE} p.119: up to 2 x 8 ohm or 4 x 16 ohm enclosures "
+                  "per output (4 ohm, p.118)"),
+    'LA12X': ('2.7', f"{GUIDE} p.119: up to 3 x 8 ohm or 6 x 16 ohm enclosures "
+                     "per output (2.7 ohm, p.118); LA12X UM v1.0 p.18 publishes "
+                     "draw down to 2.7 ohm"),
+    'LA7.16i': ('4', f"{GUIDE} p.119: up to 4 x X4i (16 ohm) per output "
+                     "(4 ohm, p.118); LA7.16i OM v5.0 pp.24-25 publishes draw "
+                     "down to 4 ohm"),
+}
 
 
 def _dec(value):
@@ -251,6 +269,19 @@ class Command(BaseCommand):
                 )
         self.stdout.write(self.style.SUCCESS(
             f'Load ratings / voltage factors: {created} created'))
+        self._load_min_loads(force)
+
+    def _load_min_loads(self, force):
+        """Fill each profile's minimum load where it is empty (all of them
+        with --force), so a superuser's value survives a redeploy."""
+        filled = 0
+        for model_name, (ohms, source) in MIN_LOADS.items():
+            profiles = AmplifierProfile.objects.filter(
+                manufacturer='L-Acoustics', model=model_name)
+            if not force:
+                profiles = profiles.filter(min_load_ohms__isnull=True)
+            filled += profiles.update(min_load_ohms=_dec(ohms), min_load_source=source)
+        self.stdout.write(self.style.SUCCESS(f'Minimum loads filled: {filled}'))
 
     def _link_amp_models(self):
         """Point each L-Acoustics AmpModel without a profile at the profile of
