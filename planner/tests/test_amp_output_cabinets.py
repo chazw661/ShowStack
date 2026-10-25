@@ -670,3 +670,89 @@ class MergeAmpModelsTests(TestCase):
         out = self.run_command('--apply')
         self.assertIn('SKIPPED', out)
         self.assertEqual(4, AmpModel.objects.count())
+
+
+class KivaDerivedTests(TestCase):
+
+    def test_kiva_is_8_ohm_derived_with_its_reasoning(self):
+        seed()
+        kiva = CabinetModel.objects.get(model='Kiva')
+        sec = kiva.sections.get()
+        self.assertEqual((Decimal('8.0'), False), (sec.nominal_impedance_ohms, sec.verified))
+        self.assertIn('derived', kiva.source)
+        self.assertIn('8 Ω per Preset Guide default rule; consistent with the p.120 drive '
+                      'limit of 3 per output and field practice (3 Kiva per channel)', kiva.notes)
+        self.assertTrue(CabinetModel.objects.get(model='Kara').sections.get(name='LF').verified)
+
+
+class CopySuffixTests(Fixture):
+    """"Lacoustics LA8-2" is an LA8."""
+
+    def test_a_copy_number_is_not_part_of_the_model(self):
+        from planner.utils.amp_models import model_key
+        la8 = model_key('L-Acoustics', 'LA8')
+        for variant in ('LA8-2', 'LA8 2', 'LA8 (2)', 'LA8_3', 'LA8 #2'):
+            self.assertEqual(la8, model_key('Lacoustics', variant), variant)
+        # Real model numbers stay whole.
+        self.assertNotEqual(model_key('Meyer Sound', 'Galileo'), model_key('Meyer Sound', 'Galileo 616'))
+        self.assertNotEqual(model_key('d&b', 'D'), model_key('d&b', 'D80'))
+        self.assertNotEqual(la8, model_key('L-Acoustics', 'LA12X'))
+
+    def test_adding_la8_2_offers_the_la8(self):
+        self.use(self.owner)
+        r = self.client.post(reverse('admin:planner_ampmodel_add'), {
+            'manufacturer': 'Lacoustics', 'model_name': 'LA8-2', 'channel_count': 4,
+            'nl4_connector_count': 0, 'nl8_connector_count': 0, 'cacom_output_count': 0,
+            'sc32_connector_count': 0, 'has_analog_inputs': 'on'})
+        self.assertContains(r, 'already in the catalogue as <strong>L-Acoustics LA8</strong>')
+        self.assertFalse(AmpModel.objects.filter(model_name='LA8-2').exists())
+
+
+class MergeAliasTests(TestCase):
+
+    def setUp(self):
+        seed()
+        owner = User.objects.create_user('o')
+        project = Project.objects.create(name='Show', owner=owner)
+        self.location = AmpLocation.objects.create(project=project, name='HL')
+        self.project = project
+        self.la8_profile = AmplifierProfile.objects.get(model='LA8')
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command('merge_amp_models', *args, stdout=out)
+        return out.getvalue()
+
+    def test_la8_2_pair_becomes_l_acoustics_la8_with_its_figures(self):
+        a = AmpModel.objects.create(manufacturer='Lacoustics', model_name='LA8-2', channel_count=4)
+        b = AmpModel.objects.create(manufacturer='Lacoustics', model_name='LA8-2', channel_count=4,
+                                    has_aes_inputs=True)
+        amp = Amp.objects.create(project=self.project, location=self.location, amp_model=a, name='A')
+        out = self.run_command()
+        self.assertIn(f'keep    #{a.pk}', out)   # it has the amp
+        self.assertIn(f'merge   #{b.pk}', out)
+        self.assertIn(f'rename  #{a.pk} to "L-Acoustics LA8"', out)
+        self.assertIn(f'link    #{a.pk} to profile L-Acoustics LA8', out)
+        a.refresh_from_db()
+        self.assertEqual(('Lacoustics', 'LA8-2', None), (a.manufacturer, a.model_name, a.power_profile_id))
+
+        out = self.run_command('--apply')
+        self.assertIn('1 renamed, 1 linked to a profile', out)
+        a.refresh_from_db()
+        self.assertEqual(('L-Acoustics', 'LA8', self.la8_profile.pk),
+                         (a.manufacturer, a.model_name, a.power_profile_id))
+        self.assertFalse(AmpModel.objects.filter(pk=b.pk).exists())
+        amp.refresh_from_db()
+        self.assertEqual(a.pk, amp.amp_model_id)
+        self.assertIn('No duplicate amp models', self.run_command())
+
+    def test_a_lone_alias_is_renamed_and_linked_too(self):
+        lone = AmpModel.objects.create(manufacturer='Lacoustics', model_name='LA8-2', channel_count=4)
+        self.run_command('--apply')
+        lone.refresh_from_db()
+        self.assertEqual(('L-Acoustics', 'LA8', self.la8_profile.pk),
+                         (lone.manufacturer, lone.model_name, lone.power_profile_id))
+
+    def test_a_model_without_a_profile_is_not_touched(self):
+        AmpModel.objects.create(manufacturer='Powersoft', model_name='X8', channel_count=8)
+        self.assertIn('No duplicate amp models', self.run_command())

@@ -15,6 +15,10 @@ For each group of duplicates:
             oldest.
   EXTRAS    every amp on them is moved to the survivor, then they are
             deleted.
+  ALIAS     when the model has a power profile, the survivor takes the
+            profile's name and is linked to it. "Lacoustics LA8-2" (the
+            "-2" is a copy number, see model_key) becomes "L-Acoustics LA8"
+            with the LA8 figures. This applies to a lone misspelt row too.
   SKIPPED   groups where moving would take something away: an extra with
             amps on it has a different channel count, or an input or
             connector the survivor lacks, or the rows point at different
@@ -71,7 +75,7 @@ class Command(BaseCommand):
             return
 
         self.stdout.write('APPLYING' if apply else 'DRY RUN: nothing will be written. Add --apply to merge.')
-        merged = moved = deleted = 0
+        merged = moved = deleted = renamed = linked = 0
         skipped = []
         for group in groups:
             self.stdout.write('')
@@ -79,6 +83,10 @@ class Command(BaseCommand):
             self.stdout.write(f'  keep    {_describe(group.survivor, group.amp_counts)}')
             for extra in group.extras:
                 self.stdout.write(f'  merge   {_describe(extra, group.amp_counts)}')
+            if group.rename_to:
+                self.stdout.write(f'  rename  #{group.survivor.pk} to "{" ".join(group.rename_to)}"')
+            if group.link_profile:
+                self.stdout.write(f'  link    #{group.survivor.pk} to profile {group.profile}')
             if not group.can_merge:
                 self.stdout.write(self.style.WARNING(
                     f'  SKIPPED: {"; ".join(group.problems)}'))
@@ -96,18 +104,31 @@ class Command(BaseCommand):
                 for extra in group.extras:
                     extra.delete()
                     deleted += 1
+                survivor = group.survivor
+                if group.rename_to:
+                    survivor.manufacturer, survivor.model_name = group.rename_to
+                    renamed += 1
+                if group.link_profile:
+                    survivor.power_profile = group.profile
+                    linked += 1
+                if group.rename_to or group.link_profile:
+                    survivor.save(update_fields=['manufacturer', 'model_name', 'power_profile'])
             merged += 1
 
         self.stdout.write('')
         if apply:
             self.stdout.write(self.style.SUCCESS(
-                f'Merged {merged} groups: {moved} amps moved, {deleted} rows deleted.'))
+                f'Merged {merged} groups: {moved} amps moved, {deleted} rows deleted, '
+                f'{renamed} renamed, {linked} linked to a profile.'))
         else:
             total = sum(g.amps_to_move for g in groups if g.can_merge)
             rows = sum(len(g.extras) for g in groups if g.can_merge)
+            ok = [g for g in groups if g.can_merge]
             self.stdout.write(
-                f'Would merge {len(groups) - len(skipped)} groups: '
-                f'{total} amps moved, {rows} rows deleted.')
+                f'Would merge {len(ok)} groups: '
+                f'{total} amps moved, {rows} rows deleted, '
+                f'{sum(1 for g in ok if g.rename_to)} renamed, '
+                f'{sum(1 for g in ok if g.link_profile)} linked to a profile.')
         if skipped:
             self.stdout.write(self.style.WARNING(
                 f'{len(skipped)} groups skipped; fix them by hand and re-run.'))

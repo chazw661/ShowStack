@@ -37,10 +37,19 @@ def _squash(text):
     return re.sub(r'[^a-z0-9]', '', (text or '').lower())
 
 
+# A single digit after a separator at the end of a model name is a copy
+# number someone typed to get past a name already taken, not part of the
+# model: "LA8-2" is an LA8, "Spare (2)" is Spare. One digit only, so real
+# names such as "Galileo 616" or "D80" are left alone.
+COPY_SUFFIX = re.compile(r'[\s\-_#(]+\d\)?\s*$')
+
+
 def model_key(manufacturer, model_name):
-    """("L-Acoustics", "LA 12X") and ("la", "la12x") give the same key."""
+    """("L-Acoustics", "LA 12X"), ("la", "la12x") and ("Lacoustics",
+    "LA12X-2") give the same key."""
     maker = _squash(manufacturer)
-    return MANUFACTURER_ALIASES.get(maker, maker), _squash(model_name)
+    model = COPY_SUFFIX.sub('', (model_name or '').strip())
+    return MANUFACTURER_ALIASES.get(maker, maker), _squash(model)
 
 
 def find_existing(manufacturer, model_name, exclude_pk=None):
@@ -70,6 +79,15 @@ class DuplicateGroup:
     amp_counts: dict
     problems: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    # The power profile of this model, when the survivor isn't named after
+    # it ("Lacoustics LA8-2") or isn't linked to it yet.
+    profile: object = None
+    rename_to: tuple = None
+    link_profile: bool = False
+
+    @property
+    def has_work(self):
+        return bool(self.extras or self.rename_to or self.link_profile)
 
     @property
     def amps_to_move(self):
@@ -81,9 +99,12 @@ class DuplicateGroup:
 
 
 def duplicate_groups():
-    """Every set of two or more AmpModel rows that are one model."""
+    """Every set of two or more AmpModel rows that are one model, plus any
+    single row that is a misspelt alias of a model with a power profile
+    ("Lacoustics LA8-2" for the LA8), with what to rename and link."""
     from django.db.models import Count
-    from planner.models import AmpModel
+    from planner.models import AmplifierProfile, AmpModel
+    profiles = {model_key(p.manufacturer, p.model): p for p in AmplifierProfile.objects.all()}
     rows = list(AmpModel.objects.select_related('power_profile')
                 .annotate(n_amps=Count('amp')).order_by('pk'))
     by_key = {}
@@ -92,15 +113,22 @@ def duplicate_groups():
 
     groups = []
     for key, members in by_key.items():
-        if len(members) < 2:
-            continue
+        profile = profiles.get(key)
         counts = {m.pk: m.n_amps for m in members}
         members.sort(key=lambda m: _survivor_rank(m, counts))
         survivor, extras = members[0], members[1:]
         problems, notes = [], []
-        profiles = {m.power_profile_id for m in members} - {None}
-        if len(profiles) > 1:
+        linked = {m.power_profile_id for m in members} - {None}
+        if len(linked) > 1 or (profile and linked - {profile.pk}):
             problems.append('linked to different power profiles')
+        rename_to = link = None
+        if profile is not None:
+            canonical = (profile.manufacturer, profile.model)
+            if (survivor.manufacturer, survivor.model_name) != canonical:
+                rename_to = canonical
+            link = survivor.power_profile_id is None
+        if not extras and not rename_to and not link:
+            continue
         for extra in extras:
             if not counts[extra.pk]:
                 continue  # no amps move, so nothing can change for anyone
@@ -114,5 +142,7 @@ def duplicate_groups():
                     problems.append(f'#{extra.pk} has {label} {mine}, #{survivor.pk} has {theirs}')
                 else:
                     notes.append(f'amps from #{extra.pk} gain {label} ({mine} -> {theirs})')
-        groups.append(DuplicateGroup(key, survivor, extras, counts, problems, notes))
+        groups.append(DuplicateGroup(key, survivor, extras, counts, problems, notes,
+                                     profile=profile, rename_to=rename_to,
+                                     link_profile=bool(link)))
     return groups

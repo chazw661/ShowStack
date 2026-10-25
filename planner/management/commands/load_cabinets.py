@@ -17,7 +17,8 @@ version 25.0, distributed October 29, 2024.
   and SB6i.
 
 ``verified=False`` marks an impedance the guide does not state for that
-section (it falls back to the general 8 ohm rule for a multi-module enclosure).
+section: L2's sections fall back to the general 8 ohm rule for a multi-module
+enclosure, and the original Kiva's 8 ohm is derived (DERIVED_NOTES).
 
 Runs on every deploy (railway.json). Without --force it only creates rows
 that are missing, so a superuser's edits in the admin survive a redeploy;
@@ -49,12 +50,11 @@ CABINETS = [
     ('K2', 'K2', 50, [('LF', 8, True), ('MF', 8, True), ('HF', 16, True)], LINE),
     ('K3', 'K3', 53, [('LF', 8, True), ('HF', 8, True)], LINE),
     ('Kara II', 'KARA II', 56, [('LF', 8, True), ('HF', 8, True)], LINE),
-    # The original Kara and Kiva: legacy, still widely rented. 8 ohm under
-    # p.118's general rule (neither is a listed exception), which p.120's
-    # LA12X capacity of 3 per output (8/3 = 2.7 ohm minimum) agrees with.
+    # The original Kara and Kiva: legacy, still widely rented. Kiva's 8 ohm
+    # is derived, not stated: see DERIVED_NOTES.
     ('Kara', 'KARA', 57, [('LF', 8, True), ('HF', 8, True)], LINE),
     ('Kiva II', 'KIVA II', 58, [('Full range', 16, True)], LINE),
-    ('Kiva', 'KIVA', 59, [('Full range', 8, True)], LINE),
+    ('Kiva', 'KIVA', 59, [('Full range', 8, False)], LINE),
     # Constant curvature WST
     ('ARCS Wide/Focus', 'ARCS', 67, [('Full range', 8, True)], CONSTANT),
     ('A10 Wide/Focus', 'A10', 68, [('Full range', 8, True)], CONSTANT),
@@ -86,8 +86,20 @@ CABINETS = [
 ]
 
 
-def source_for(page):
-    return f"{GUIDE}: sections p.{page}, impedance p.{IMPEDANCE_PAGE}"
+# Why an impedance marked unverified is what it is. Goes in the cabinet's
+# notes, and its source says the impedance is derived.
+DERIVED_NOTES = {
+    'Kiva': ("Impedance derived: 8 \u03a9 per Preset Guide default rule; consistent "
+             "with the p.120 drive limit of 3 per output and field practice "
+             "(3 Kiva per channel)."),
+}
+
+
+def source_for(page, model=None):
+    source = f"{GUIDE}: sections p.{page}, impedance p.{IMPEDANCE_PAGE}"
+    if model in DERIVED_NOTES:
+        source += " (derived, see notes)"
+    return source
 
 
 class Command(BaseCommand):
@@ -106,7 +118,8 @@ class Command(BaseCommand):
         for order, (model, sv_names, page, sections, category) in enumerate(CABINETS, start=1):
             values = {
                 'soundvision_names': sv_names,
-                'source': source_for(page),
+                'source': source_for(page, model),
+                'notes': DERIVED_NOTES.get(model, ''),
                 'sort_order': order * 10,
                 'category': category,
             }
