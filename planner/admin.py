@@ -7052,11 +7052,13 @@ class AmplifierAssignmentInline(admin.TabularInline):
     extra = 1
     can_delete = False  # Disable the checkbox
     fields = [
-        'amplifier', 'quantity', 'zone', 'position', 
-        'duty_cycle', 'phase_assignment', 
+        'amplifier', 'quantity', 'zone', 'position',
+        'programme', 'load_ohms', 'phase_assignment',
         'calculated_current_per_unit', 'calculated_total_current', 'delete_link'
     ]
     readonly_fields = ['calculated_current_per_unit', 'calculated_total_current', 'delete_link']
+    verbose_name_plural = ('Amplifiers in Power Plan — current is an estimate from '
+                           'manufacturer data, including the plan\'s transient headroom')
     autocomplete_fields = ['amplifier']
 
     def delete_link(self, obj):
@@ -7091,8 +7093,9 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             'fields': ('service_type', 'available_amperage_per_leg')
         }),
         ('Safety Settings', {
-            'fields': ('transient_headroom', 'safety_margin'),
-            'description': 'Transient headroom accounts for audio peaks. Safety margin is the derating factor.'
+            'fields': ('transient_headroom', 'safety_margin', 'power_factor'),
+            'description': 'Transient headroom accounts for audio peaks. Safety margin is the derating factor. '
+                           'The power factor is an assumption, used only for amps whose current is not published.'
         }),
         ('Additional Information', {
             'fields': ('notes', 'created_by'),
@@ -7117,7 +7120,7 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             total=Sum('calculated_total_current')
         )['total'] or 0
         return f"{total:.1f}A"
-    get_total_current.short_description = 'Total Current'
+    get_total_current.short_description = 'Total current (estimate)'
     
     def view_calculator_button(self, obj):
         """Add button to view calculator in list display"""
@@ -7176,7 +7179,7 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             total=Sum('calculated_total_current')
         )['total'] or 0
         return f"{total:.1f}A"
-    get_total_current.short_description = 'Total Current'
+    get_total_current.short_description = 'Total current (estimate)'
     
     def view_calculator_button(self, obj):
         """Add button to view calculator in list display"""
@@ -7257,9 +7260,7 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             total_amps += assignment.quantity
             total_current += current
             
-            # Calculate power
-            power_details = assignment.get_power_details()
-            total_power += power_details['total']['peak_watts']
+            total_power += (assignment.calculated_watts_per_unit or 0) * assignment.quantity
         
         # Auto-balance AUTO assignments
         auto_current = phase_totals['AUTO']
@@ -7299,7 +7300,7 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
                     <span style="font-size: 24px; color: #4a9eff;">{total_current:.1f}A</span>
                 </div>
                 <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
-                    <strong>Peak Power:</strong><br>
+                    <strong>Power at programme level:</strong><br>
                     <span style="font-size: 24px; color: #4a9eff;">{total_power/1000:.1f}kW</span>
                 </div>
             </div>
@@ -7411,8 +7412,8 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
 class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
     project_scoped_fks = {'distribution_plan': 'project'}
     list_display = [
-        'distribution_plan', 'zone', 'amplifier', 'quantity', 
-        'duty_cycle', 'phase_assignment', 'calculated_total_current'
+        'distribution_plan', 'zone', 'amplifier', 'quantity',
+        'programme', 'phase_assignment', 'calculated_total_current'
     ]
 
 

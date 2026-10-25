@@ -488,7 +488,7 @@ TOPICS = (
             'planner:power_distribution_calculator',
             'planner:power_distribution_calculator_detail',
         ),
-        keywords=('power', 'power distribution', 'calculator', 'phase', 'leg', 'amps per leg', 'imbalance', 'duty cycle', 'headroom', 'safety margin', '3-phase',),
+        keywords=('power', 'power distribution', 'calculator', 'phase', 'leg', 'amps per leg', 'imbalance', 'programme', '1/8 power', '1/3 power', 'estimate', 'power factor', 'headroom', 'safety margin', '3-phase',),
     ),
     Topic(
         slug='power-amp-profiles',
