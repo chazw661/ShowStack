@@ -3898,6 +3898,9 @@ def _amp_channel_cabinet_update(channel, values):
         'label': load.label,
         'warning': load.warning,
         'warning_text': load.warning_text,
+        # Per output only where the amp has a table: an amp with none says
+        # it once, in the strip heading.
+        'note': load.note if profile is not None and profile.has_drive_table else '',
         'drive_warnings': amp_drive_warnings(profile, siblings),
     })
 

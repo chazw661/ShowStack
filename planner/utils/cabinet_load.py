@@ -10,7 +10,9 @@ An output is flagged when nothing is assigned, or against the amp's drive
 capacity (Preset Guide v25.0 pp.119-120, CabinetDriveCapacity): a cabinet the
 amp does not drive, or more in parallel than one output takes. Where the
 drive table has no cell for the amp and cabinet (the LA8, a cabinet the table
-does not list), the load is checked against the amp's minimum instead. Loads
+does not list), the load is checked against the amp's minimum instead, and
+the output says so ("No published drive limit for LA8, impedance check
+only") rather than passing silently. Loads
 are compared at the 0.1 ohm the manuals print, so 8/3 (2.67) counts as the
 2.7 ohm minimum and is not below it. The table takes precedence because it
 allows 4 ohm Syva Low and SB6i in parallel (p.118), below the minimum.
@@ -57,6 +59,8 @@ class OutputLoad:
     min_ohms: Optional[Decimal] = None
     amp_name: str = ''
     max_per_output: Optional[int] = None
+    # The amp has a profile but the drive table has no cell for this cabinet.
+    no_drive_limit: bool = False
     warning: str = ''
 
     @property
@@ -70,6 +74,12 @@ class OutputLoad:
                 and format_ohms(self.published_ohms) != format_ohms(self.ohms)):
             text += f" ({format_ohms(self.published_ohms)} Ω)"
         return text
+
+    @property
+    def note(self):
+        if self.no_drive_limit:
+            return f'No published drive limit for {self.amp_name}, impedance check only'
+        return ''
 
     @property
     def warning_text(self):
@@ -109,9 +119,12 @@ def output_load(channel):
                 load.warning = NOT_DRIVEN
             elif quantity > capacity.per_output:
                 load.warning = OVER_PER_OUTPUT
-        elif (load.min_ohms is not None
-                and ohms.quantize(Decimal('0.1'), ROUND_HALF_UP) < load.min_ohms):
-            load.warning = BELOW_MINIMUM
+            # A cell that allows this quantity overrides the minimum load.
+        else:
+            load.no_drive_limit = True
+            if (load.min_ohms is not None
+                    and ohms.quantize(Decimal('0.1'), ROUND_HALF_UP) < load.min_ohms):
+                load.warning = BELOW_MINIMUM
     return load
 
 

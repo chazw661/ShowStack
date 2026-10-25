@@ -4588,6 +4588,11 @@ class AmplifierProfile(models.Model):
                 return row
         return None
 
+    @property
+    def has_drive_table(self):
+        """Any drive-capacity rows at all. Reads ``drive_capacities.all()``."""
+        return bool(self.drive_capacities.all())
+
     def drives(self, cabinet_id):
         """False only when the drive table says this amp does not drive the
         cabinet ("—"); a cabinet the table does not list is allowed."""

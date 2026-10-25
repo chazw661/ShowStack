@@ -614,6 +614,8 @@
         border-color: #8c3a3a;
     }
     .amp-cabinet-chip[hidden] { display: none; }
+    .amp-cabinet-note { grid-column: 1 / -1; font-size: 10px; color: #9aa7b4; font-style: italic; }
+    .amp-cabinet-note[hidden] { display: none; }
     .amp-drive-totals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
     .amp-drive-totals[hidden] { display: none; }
     .amp-cabinet-cell.saving { box-shadow: inset 0 0 0 1px #7a5a22; }
@@ -1068,6 +1070,8 @@
                            target="_blank" rel="noopener">How power is worked out</a>
                         {% if not card.amp.amp_model.power_profile_id %}
                         <span class="amp-cabinets-nopower">No power figures for this model</span>
+                        {% elif not card.amp.amp_model.power_profile.has_drive_table %}
+                        <span class="amp-cabinets-nopower">No published drive limits for {{ card.amp.amp_model.power_profile.model }}, impedance check only</span>
                         {% endif %}
                     </div>
                     <div class="amp-cabinet-grid">
@@ -1109,6 +1113,12 @@
                             {% endif %}
                             <span class="amp-cabinet-summary">{{ ch.load.label }}</span>
                             <span class="amp-cabinet-chip {{ ch.load.warning }}"{% if not ch.load.warning %} hidden{% endif %}>{{ ch.load.warning_text }}</span>
+                            {# An amp with no drive table says so once, in the heading. #}
+                            {% if card.amp.amp_model.power_profile.has_drive_table and ch.load.note %}
+                            <span class="amp-cabinet-note">{{ ch.load.note }}</span>
+                            {% else %}
+                            <span class="amp-cabinet-note" hidden></span>
+                            {% endif %}
                             {# CH-block zone vs this cabinet's (CH 1 set LF_B, cabinet Kara II · HF). Display only. #}
                             <span class="amp-cabinet-chip amp-routing-mismatch" data-channel-number="{{ ch.channel_number }}"{% if not ch.routing_mismatch %} hidden{% endif %}>{{ ch.routing_mismatch }}</span>
                         </div>
@@ -1518,6 +1528,11 @@
         chip.className = 'amp-cabinet-chip ' + (r.warning || '');
         chip.textContent = r.warning_text;
         chip.hidden = !r.warning;
+        var note = cell.querySelector('.amp-cabinet-note');
+        if (note) {
+            note.textContent = r.note || '';
+            note.hidden = !r.note;
+        }
         // The per-amp totals depend on every output, so the reply carries
         // them for the whole amp.
         var totals = cell.closest('.amp-card-cabinets').querySelector('.amp-drive-totals');

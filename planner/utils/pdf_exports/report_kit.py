@@ -470,6 +470,8 @@ def amp_cabinets_table(channels, amp=None):
         if load.warning:
             colour = (AMP_ERROR if load.warning in ERRORS else AMP_WARN).hexval()[2:]
             text += f'<br/><font color="#{colour}"><b>{escape(load.warning_text)}</b></font>'
+        if load.note:
+            text += f'<br/><font color="#{AMP_WARN.hexval()[2:]}">{escape(load.note)}</font>'
         if c.routing_mismatch:
             text += (f'<br/><font color="#{AMP_WARN.hexval()[2:]}">'
                      f'<b>{escape(c.routing_mismatch)}</b></font>')
