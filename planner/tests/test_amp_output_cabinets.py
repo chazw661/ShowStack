@@ -185,7 +185,8 @@ class OutputLoadTests(Fixture):
     def test_minimum_loads_are_seeded_with_a_source(self):
         mins = {p.model: p.min_load_ohms for p in AmplifierProfile.objects.all()}
         self.assertEqual({'LA8': Decimal('2.7'), 'LA4X': Decimal(4),
-                          'LA12X': Decimal('2.7'), 'LA7.16i': Decimal(4)}, mins)
+                          'LA12X': Decimal('2.7'), 'LA7.16i': Decimal(4),
+                          'LA7.16': Decimal(4)}, mins)
         for p in AmplifierProfile.objects.all():
             self.assertIn('Preset Guide', p.min_load_source)
 

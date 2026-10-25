@@ -4541,6 +4541,15 @@ class AmplifierProfile(models.Model):
     )
     min_load_source = models.CharField(max_length=300, blank=True)
 
+    # Set when these figures are not the model's own published ones (the
+    # LA7.16's are copied from the LA7.16i). The profile's name then carries
+    # "(provisional)" everywhere it is shown, and the power plan prints this.
+    figures_status = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text="Blank for published figures. Otherwise why they are "
+                  "provisional, e.g. 'provisional: copied from LA7.16i'",
+    )
+
     # Additional info
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -4553,7 +4562,12 @@ class AmplifierProfile(models.Model):
        
         
     def __str__(self):
-        return f"{self.manufacturer} {self.model}"
+        name = f"{self.manufacturer} {self.model}"
+        return f"{name} (provisional)" if self.is_provisional else name
+
+    @property
+    def is_provisional(self):
+        return bool(self.figures_status)
     
     # The voltage the load ratings are published at.
     REFERENCE_VOLTAGE = 230

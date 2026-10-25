@@ -2700,8 +2700,16 @@ def power_distribution_calculator(request, plan_id=None):
         except Exception:
             pass
 
+    from planner.utils.amp_models import amps_without_power_profile
+    excluded_count, excluded_models = amps_without_power_profile(plan.project)
+    provisional = sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
+                         key=str)
+
     context = {
         'plan': plan,
+        'excluded_count': excluded_count,
+        'excluded_models': excluded_models,
+        'provisional_profiles': provisional,
         'amplifier_profiles': amplifier_profiles,
         'assignments': assignments,
         'phase_loads': phase_loads,

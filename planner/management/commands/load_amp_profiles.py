@@ -28,6 +28,7 @@ from django.db import transaction
 from planner.models import (
     AmpModel, AmplifierLoadRating, AmplifierProfile, AmplifierVoltageFactor,
 )
+from planner.utils import provisional_profiles
 
 SOURCES = {
     'LA8': ("L-Acoustics LA8 user manual (EN) v5.0, p.16",
@@ -133,6 +134,11 @@ class Command(BaseCommand):
         self._load_profiles(options)
         with transaction.atomic():
             self._load_ratings(force=options['force'])
+            # The LA7.16 (touring) profile: a provisional copy of the
+            # LA7.16i's figures. Migration 0212 does this on a database that
+            # already had the LA7.16i; this covers one seeded after it.
+            provisional_profiles.apply(AmpModel, AmplifierProfile,
+                                       AmplifierLoadRating, AmplifierVoltageFactor)
         self._link_amp_models()
 
     def _load_profiles(self, options):

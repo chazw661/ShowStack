@@ -69,7 +69,8 @@ class ManufacturerSpellingTests(TestCase):
         call_command('load_amp_profiles', stdout=StringIO())
         self.assertEqual(set(AmplifierProfile.objects.values_list('manufacturer', flat=True)),
                          {'L-Acoustics'})
-        self.assertEqual(AmplifierProfile.objects.count(), 4)
+        # LA4X, LA8, LA12X, LA7.16i, and the touring LA7.16 (provisional).
+        self.assertEqual(AmplifierProfile.objects.count(), 5)
 
     def test_0204_renames_and_touches_nothing_else(self):
         old = [profile(manufacturer="L'Acoustics", model='LA8', channels=4),

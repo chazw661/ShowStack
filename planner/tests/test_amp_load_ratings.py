@@ -70,8 +70,9 @@ class SeededFiguresTests(TestCase):
         self.assertFalse(la4x.filter(verified=True).exists())
         self.assertFalse(AmplifierVoltageFactor.objects.filter(
             profile__model='LA4X', verified=True).exists())
+        # The LA7.16's are unverified too: a provisional copy of the LA7.16i's.
         self.assertEqual(
-            {'LA4X'},
+            {'LA4X', 'LA7.16'},
             set(AmplifierLoadRating.objects.filter(verified=False)
                 .values_list('profile__model', flat=True)))
 
@@ -108,8 +109,9 @@ class RedeployTests(TestCase):
         AmplifierLoadRating.objects.all().delete()
         AmplifierVoltageFactor.objects.all().delete()
         load()
-        self.assertEqual(26, AmplifierLoadRating.objects.count())
-        self.assertEqual(12, AmplifierVoltageFactor.objects.count())
+        # 26 published + the LA7.16's provisional copy of the LA7.16i's 8.
+        self.assertEqual(34, AmplifierLoadRating.objects.count())
+        self.assertEqual(15, AmplifierVoltageFactor.objects.count())
 
     def test_an_edit_survives_and_force_resets(self):
         load()
@@ -122,7 +124,7 @@ class RedeployTests(TestCase):
         load('--force')
         r.refresh_from_db()
         self.assertEqual(160, r.power_watts)
-        self.assertEqual(26, AmplifierLoadRating.objects.count())
+        self.assertEqual(34, AmplifierLoadRating.objects.count())
 
 
 class AmpModelLinkTests(TestCase):

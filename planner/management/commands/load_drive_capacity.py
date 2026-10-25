@@ -8,7 +8,9 @@ amp does not drive that enclosure.
 * Per output: enclosures in parallel for a passive cabinet, sections in
   parallel for an active one (footnote *).
 * Total: enclosures per amplified controller.
-* The LA7.16(i) column is stored on the LA7.16i profile. Its footnote b
+* The LA7.16(i) column covers both amps, so it is stored on the LA7.16i
+  profile and on the touring LA7.16's (whose power figures are provisional;
+  these limits are published for it). Its footnote b
   goes in each of its rows' note.
 * LA8: v25.0 has no LA8 column. Its cells come from the v22.0 guide's
   separate "Enclosure drive capacity per LA4 / LA8" table, pp.110-111
@@ -33,8 +35,9 @@ from planner.models import AmplifierProfile, CabinetDriveCapacity, CabinetModel
 
 GUIDE = "L-Acoustics Preset Guide owner's manual (EN) v25.0"
 
-# Guide column -> AmplifierProfile.model
-AMPS = ['LA4X', 'LA7.16i', 'LA12X']
+# Guide column -> the AmplifierProfile models it is stored on.
+COLUMNS = [('LA4X',), ('LA7.16i', 'LA7.16'), ('LA12X',)]
+AMPS = [model for column in COLUMNS for model in column]
 
 NOTE_B = ("b: given for nominal use, all channels at full power. Same signal "
           "on all outputs: never exceed these numbers, whatever the Power "
@@ -160,7 +163,7 @@ LA8_TABLE = [
 
 
 def note_for(amp, guide_row):
-    if amp == 'LA7.16i':
+    if amp in ('LA7.16i', 'LA7.16'):
         return NOTE_B
     if amp == 'LA12X' and guide_row == 'Syva Low':
         return NOTE_C
@@ -196,11 +199,12 @@ class Command(BaseCommand):
             if cabinet is None:
                 skipped.append(guide_row)
                 continue
-            for amp, cell in zip(AMPS, amp_cells):
-                if amp in profiles:
-                    cells.append((profiles[amp], cabinet,
-                                  self._values(cell, guide_row, note_for(amp, guide_row),
-                                               f"{GUIDE}, p.{page}")))
+            for column, cell in zip(COLUMNS, amp_cells):
+                for amp in column:
+                    if amp in profiles:
+                        cells.append((profiles[amp], cabinet,
+                                      self._values(cell, guide_row, note_for(amp, guide_row),
+                                                   f"{GUIDE}, p.{page}")))
         for guide_row, model, page, cell, note in LA8_TABLE:
             cabinet = cabinets.get(model) if model else None
             if la8 is not None and cabinet is not None:
