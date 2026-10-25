@@ -59,8 +59,28 @@ class MismatchRuleTests(Base):
 
     def test_note_text(self):
         self.assertEqual('CH 1 is routed LF, cabinet is Kara II · HF', self.ch1.routing_mismatch)
-        self.ch1.cabinet_section = section('Kiva')
-        self.assertEqual('CH 1 is routed LF, cabinet is Kiva', self.ch1.routing_mismatch)
+        self.ch1.cabinet_section = section('KS28')
+        self.assertEqual('CH 1 is routed LF, cabinet is KS28', self.ch1.routing_mismatch)
+
+    def test_only_real_conflicts(self):
+        from planner.models import routing_zones_conflict
+        zones = ('PA', 'LF', 'HF', 'SB', '')
+        for routed in zones:
+            for implied in zones:
+                expected = (routed not in ('PA', '') and implied not in ('PA', '')
+                            and routed != implied)
+                self.assertEqual(expected, routing_zones_conflict(routed, implied),
+                                 (routed, implied))
+
+    def test_pa_is_neutral_both_ways(self):
+        self.ch1.cabinet_section = section('Kiva')                       # implies PA
+        for setting in ('LF_B', 'HF_A', 'SB_C', 'PA_D'):
+            self.ch1.channel_setting = setting
+            self.assertEqual('', self.ch1.routing_mismatch, setting)
+        self.ch1.channel_setting = 'PA_A'                                # routed PA
+        for sec in (section('Kara II', 'LF'), section('Kara II', 'HF'), section('KS28')):
+            self.ch1.cabinet_section = sec
+            self.assertEqual('', self.ch1.routing_mismatch, str(sec))
 
     def test_no_note_when_they_agree_or_either_side_is_empty(self):
         self.assertEqual('', self.ch2.routing_mismatch)                  # agree
@@ -108,6 +128,25 @@ class RackCardTests(Base):
         self.client.post(url, {'field': 'channel_setting', 'value': 'HF_D'})
         self.ch1.refresh_from_db()
         self.assertEqual((section('KS28'), 'HF_D'), (self.ch1.cabinet_section, self.ch1.channel_setting))
+
+    def test_pa_never_warns_on_the_card(self):
+        AmpChannel.objects.filter(pk=self.ch1.pk).update(channel_setting='PA_A')
+        AmpChannel.objects.filter(pk=self.ch2.pk).update(
+            cabinet_section=section('Kiva'), channel_setting='LF_C')
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        self.assertNotIn('is routed', page.replace("' is routed '", ''))
+        self.assertEqual(4, page.count('amp-routing-mismatch" data-channel-number="'))
+
+    def test_cells_carry_what_the_note_is_worked_out_from(self):
+        # Used for viewers, who have no cabinet picker to read.
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        self.assertIn(f'<div class="amp-cabinet-cell" data-channel-id="{self.ch1.pk}"\n'
+                      '                             data-section-zone="HF"\n'
+                      '                             data-section-label="Kara II · HF"\n'
+                      '                             data-routed-zone="LF">', page)
+        self.assertIn("routed === 'PA' || implied === 'PA'", page)
 
     def test_ipad_css(self):
         self.use(self.owner)
@@ -172,6 +211,18 @@ class PdfTests(Base):
         self.assertEqual(kit.AMP_WARN.hexval(), frag.textColor.hexval())
         for cell in cells[1:]:
             self.assertNotIn('is routed', cell.text)
+
+    def test_pdf_row_follows_the_same_rules(self):
+        from planner.utils.pdf_exports import report_kit as kit
+        AmpChannel.objects.filter(pk=self.ch1.pk).update(channel_setting='PA_A')   # PA: neutral
+        AmpChannel.objects.filter(pk=self.ch2.pk).update(channel_setting='LF_A')   # LF vs SB
+        AmpChannel.objects.filter(pk=self.ch3.pk).update(cabinet_section=section('Kiva'))  # HF vs PA
+        _title, table = kit.amp_cabinets_table(self.channels())
+        cells = [c.text for row in table._cellvalues for c in row if c]
+        self.assertNotIn('is routed', cells[0])
+        self.assertIn('CH 2 is routed LF, cabinet is KS28', cells[1])
+        self.assertNotIn('is routed', cells[2])
+        self.assertNotIn('is routed', cells[3])
 
     def test_both_pdfs_build(self):
         from planner.utils.pdf_exports.amplifier_pdf import export_all_amps_pdf
