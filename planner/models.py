@@ -4,7 +4,7 @@ from django.core.validators import MinValueValidator
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 import math
 import os
 from django import forms
@@ -557,6 +557,7 @@ class Project(models.Model):
                     available_amperage_per_leg=power_plan.available_amperage_per_leg,
                     transient_headroom=power_plan.transient_headroom,
                     safety_margin=power_plan.safety_margin,
+                    power_factor=power_plan.power_factor,
                     notes=power_plan.notes
                 )
                 
@@ -569,9 +570,8 @@ class Project(models.Model):
                         zone=assignment.zone,
                         position=assignment.position,
                         phase_assignment=assignment.phase_assignment,
-                        duty_cycle=assignment.duty_cycle,
-                        calculated_current_per_unit=assignment.calculated_current_per_unit,
-                        calculated_total_current=assignment.calculated_total_current,
+                        programme=assignment.programme,
+                        load_ohms=assignment.load_ohms,
                         notes=assignment.notes
                     )
             
@@ -929,6 +929,7 @@ YAMAHA_COLOR_CHOICES = [
 # those colors via the swatch picker fall through to D-04 step 2
 # (source.color) or step 3 (None → omit Farb).
 from .utils.reaper_export import YAMAHA_TO_HEX as _YAMAHA_TO_HEX
+from .utils.power_estimate import PROGRAMME_CHOICES as POWER_PROGRAMME_CHOICES
 _HEX_TO_YAMAHA_NAME = {
     hex_val.lower(): name
     for name, hex_val in _YAMAHA_TO_HEX.items()
@@ -4581,18 +4582,10 @@ class AmplifierProfile(models.Model):
         (AmplifierVoltageFactor, e.g. LA8 x2.0 at 120 V) is used as printed.
         Any other voltage gets 230 / V -- the published multipliers are that
         ratio (1.15 at 200 V, 2.3 at 100 V) -- so 208 V, the plan default,
-        is x1.1058.
+        is x1.1058. See planner.utils.power_estimate.
         """
-        voltage = int(voltage)
-        if voltage <= 0:
-            raise ValueError(f"mains voltage must be positive, not {voltage}")
-        if voltage == self.REFERENCE_VOLTAGE:
-            return Decimal(1), f"published at {self.REFERENCE_VOLTAGE} V"
-        published = self.voltage_factors.filter(mains_voltage=voltage).first()
-        if published is not None:
-            return published.current_multiplier, published.source
-        ratio = (Decimal(self.REFERENCE_VOLTAGE) / Decimal(voltage)).quantize(Decimal('0.0001'))
-        return ratio, self.DERIVED_VOLTAGE_SOURCE
+        from planner.utils.power_estimate import voltage_multiplier
+        return voltage_multiplier(self, voltage)
 
     def drive_capacity(self, cabinet_id):
         """This model's CabinetDriveCapacity row for a cabinet, or None.
@@ -4620,38 +4613,6 @@ class AmplifierProfile(models.Model):
             r.load_ohms for r in self.load_ratings.all()
             if r.load_ohms is not None and r.mains_voltage == self.REFERENCE_VOLTAGE
         })
-
-    def calculate_current(self, duty_cycle='heavy_music', transient_factor=1.5):
-        """Calculate current draw based on duty cycle and transient requirements"""
-        duty_multipliers = {
-            'speech': 0.20,
-            'light_music': 0.35,
-            'heavy_music': 0.50,
-            'edm_concert': 0.70,
-            'test_tone': 1.00
-        }
-        
-        # Base calculation on 1/8 power (pink noise standard)
-        base_draw = self.rated_power_watts
-        
-        # Apply duty cycle
-        operational_draw = base_draw * duty_multipliers.get(duty_cycle, 0.50)
-        
-        # Add idle power (always present)
-        total_draw = self.idle_power_watts + operational_draw
-        
-        # Apply transient headroom
-        peak_capable_draw = total_draw * transient_factor
-        
-        # Convert to current (amps)
-        current = peak_capable_draw / (self.nominal_voltage * float(self.power_factor))
-        
-        return {
-            'continuous_watts': total_draw,
-            'peak_watts': peak_capable_draw,
-            'current_amps': round(current, 1),
-            'breaker_size': math.ceil(current * 1.25 / 10) * 10  # Next standard breaker size
-        }
 
 
 class AmplifierLoadRating(models.Model):
@@ -4950,6 +4911,13 @@ class PowerDistributionPlan(models.Model):
         max_digits=3, decimal_places=2, default=0.80,
         help_text="Derating factor (0.8 = use only 80% of available)"
     )
+    # An assumption, shown as one: only amps whose manufacturer publishes
+    # watts but not current need it (current = W / (V x PF)).
+    power_factor = models.DecimalField(
+        max_digits=3, decimal_places=2, default=Decimal('0.95'),
+        help_text="Assumed power factor, used only where an amp's current "
+                  "is not published (current = watts / (volts x PF))",
+    )
     
     # Additional info
     notes = models.TextField(blank=True)
@@ -4976,13 +4944,8 @@ class PowerDistributionPlan(models.Model):
     
     def get_voltage(self):
         """Extract voltage from service type"""
-        if '208' in self.service_type:
-            return 208
-        elif '240' in self.service_type:
-            return 240
-        elif '120' in self.service_type:
-            return 120
-        return 208  # default
+        from planner.utils.power_estimate import plan_voltage
+        return plan_voltage(self.service_type)
 
 
 class AmplifierAssignment(models.Model):
@@ -5019,20 +4982,22 @@ class AmplifierAssignment(models.Model):
         default='AUTO'
     )
     
-    # Operating mode
-    DUTY_CYCLES = [
-        ('speech', 'Speech/Vocal (20% duty)'),
-        ('light_music', 'Light Music (35% duty)'),
-        ('heavy_music', 'Heavy Music (50% duty)'),
-        ('edm_concert', 'EDM/Concert (70% duty)'),
-        ('test_tone', 'Test/Alignment (100% duty)'),
-    ]
-    duty_cycle = models.CharField(
-        max_length=50, 
-        choices=DUTY_CYCLES,
-        default='heavy_music'
+    # Programme level: which published figure the amp draws at. The 1/8
+    # and 1/3 power rows already are programme levels, so there is no duty
+    # factor on top of them (planner.utils.power_estimate).
+    PROGRAMME_CHOICES = POWER_PROGRAMME_CHOICES
+    programme = models.CharField(
+        max_length=10, choices=PROGRAMME_CHOICES, default='normal',
     )
-    
+    # Hand-added rows have no cabinets to read, so the row says what load
+    # each channel carries. Blank = the lowest load the amp's table
+    # publishes, which draws the most.
+    load_ohms = models.DecimalField(
+        max_digits=4, decimal_places=1, null=True, blank=True,
+        verbose_name="Load per channel (Ω)",
+        help_text="Blank = the lowest published load (highest draw)",
+    )
+
     # Calculated values (cached for performance)
     calculated_current_per_unit = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True,
@@ -5041,6 +5006,10 @@ class AmplifierAssignment(models.Model):
     calculated_total_current = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True,
         help_text="Total current draw for all units"
+    )
+    calculated_watts_per_unit = models.IntegerField(
+        null=True, blank=True,
+        help_text="Estimated power per amplifier at the programme level",
     )
     
     # Additional info
@@ -5057,32 +5026,56 @@ class AmplifierAssignment(models.Model):
     def __str__(self):
         return f"{self.zone} - {self.amplifier} x{self.quantity}"
     
+    def estimate(self):
+        """The Draw for one amplifier on this row (before headroom), or None
+        without a profile. planner.utils.power_estimate."""
+        from planner.utils.power_estimate import estimate, uniform_channel_loads
+        plan = self.distribution_plan
+        return estimate(self.amplifier, self.programme,
+                        uniform_channel_loads(self.amplifier, self.load_ohms),
+                        plan.get_voltage(), plan.power_factor)
+
+    @property
+    def assumed_load_ohms(self):
+        from planner.utils.power_estimate import assumed_load
+        return assumed_load(self.amplifier, self.load_ohms)
+
     def save(self, *args, **kwargs):
-        """Recalculate current draw on save"""
-        calc = self.amplifier.calculate_current(
-            duty_cycle=self.duty_cycle,
-            transient_factor=float(self.distribution_plan.transient_headroom)
-        )
-        self.calculated_current_per_unit = calc['current_amps']
-        self.calculated_total_current = calc['current_amps'] * self.quantity
+        """Recalculate current draw on save: the estimate per amplifier,
+        times the plan's transient headroom."""
+        draw = self.estimate()
+        headroom = Decimal(self.distribution_plan.transient_headroom)
+        per_unit = ((draw.current * headroom).quantize(Decimal('0.01'), ROUND_HALF_UP)
+                    if draw else Decimal(0))
+        self.calculated_current_per_unit = per_unit
+        self.calculated_total_current = per_unit * self.quantity
+        self.calculated_watts_per_unit = draw.watts if draw else None
         super().save(*args, **kwargs)
-    
+
     def get_power_details(self):
-        """Get detailed power calculations"""
-        calc = self.amplifier.calculate_current(
-            duty_cycle=self.duty_cycle,
-            transient_factor=float(self.distribution_plan.transient_headroom)
-        )
-        return {
-            'per_unit': calc,
-            'total': {
-                'continuous_watts': calc['continuous_watts'] * self.quantity,
-                'peak_watts': calc['peak_watts'] * self.quantity,
-                'current_amps': calc['current_amps'] * self.quantity,
-                'breaker_size': math.ceil(calc['current_amps'] * self.quantity * 1.25 / 10) * 10
-            }
+        """Per unit and total: estimated current (before and with headroom),
+        watts, and the breaker the total would need at 125%."""
+        draw = self.estimate()
+        headroom = float(self.distribution_plan.transient_headroom)
+        current = float(draw.current) if draw else 0.0
+        watts = draw.watts if draw else 0
+        per_unit = {
+            'current_amps': current,
+            'design_current_amps': round(current * headroom, 2),
+            'watts': watts,
+            'notes': draw.notes if draw else [],
+            'basis': draw.basis if draw else '',
         }
-    
+        total_design = per_unit['design_current_amps'] * self.quantity
+        return {
+            'per_unit': per_unit,
+            'total': {
+                'current_amps': round(current * self.quantity, 2),
+                'design_current_amps': round(total_design, 2),
+                'watts': watts * self.quantity,
+                'breaker_size': math.ceil(total_design * 1.25 / 10) * 10,
+            },
+        }
 
 
     #-------Audio Checklist----

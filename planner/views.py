@@ -2693,12 +2693,13 @@ def power_distribution_calculator(request, plan_id=None):
     
     # Calculate totals server-side to avoid template JS errors
     total_amps_count = sum(a.quantity for a in assignments)
-    total_peak_power = 0
+    total_watts = sum((a.calculated_watts_per_unit or 0) * a.quantity for a in assignments)
+    # Per row: the estimate's basis and notes (voltage multiplier, footnoted
+    # figures, assumed power factor) for the table.
     for a in assignments:
-        try:
-            total_peak_power += a.get_power_details()['total']['peak_watts']
-        except Exception:
-            pass
+        a.draw = a.estimate()
+    voltage = plan.get_voltage()
+    from planner.utils.power_estimate import ESTIMATE_LABEL, FROM_WATTS
 
     from planner.utils.amp_models import amps_without_power_profile
     excluded_count, excluded_models = amps_without_power_profile(plan.project)
@@ -2713,10 +2714,13 @@ def power_distribution_calculator(request, plan_id=None):
         'amplifier_profiles': amplifier_profiles,
         'assignments': assignments,
         'phase_loads': phase_loads,
-        'duty_cycles': AmplifierAssignment.DUTY_CYCLES,
+        'programmes': AmplifierAssignment.PROGRAMME_CHOICES,
         'service_types': PowerDistributionPlan.SERVICE_TYPES,
         'total_amps_count': total_amps_count,
-        'total_peak_power_kw': round(total_peak_power / 1000, 1),
+        'total_power_kw': round(total_watts / 1000, 1),
+        'estimate_label': ESTIMATE_LABEL,
+        'voltage': voltage,
+        'uses_power_factor': any(a.draw and a.draw.basis == FROM_WATTS for a in assignments),
     }
     
     return render(request, 'planner/power_distribution_calculator.html', context)
@@ -2817,6 +2821,12 @@ def update_plan_settings(request, plan_id):
             plan.transient_headroom = Decimal(str(data['transient_headroom']))
         if 'safety_margin' in data:
             plan.safety_margin = Decimal(str(data['safety_margin']))
+        if 'power_factor' in data:
+            power_factor = Decimal(str(data['power_factor']))
+            if not Decimal('0.5') <= power_factor <= Decimal('1'):
+                return JsonResponse({'success': False,
+                                     'error': 'Power factor must be 0.5-1.0'}, status=400)
+            plan.power_factor = power_factor
         if 'venue_name' in data:
             plan.venue_name = data['venue_name']
         
@@ -2858,6 +2868,24 @@ def update_plan_settings(request, plan_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+def _programme(value):
+    """A programme level the model knows, or ValueError (the callers turn it
+    into a 400)."""
+    if value not in dict(AmplifierAssignment.PROGRAMME_CHOICES):
+        raise ValueError(f'Unknown programme {value!r}')
+    return value
+
+
+def _load_ohms(value):
+    """Blank -> None (the lowest published load); else 0.5-64 ohm."""
+    if value in (None, ''):
+        return None
+    load = Decimal(str(value))
+    if not Decimal('0.5') <= load <= Decimal('64'):
+        raise ValueError('Load per channel must be 0.5-64 ohm')
+    return load
+
+
 @login_required
 @require_http_methods(["POST"])
 @_edit_rights_required
@@ -2876,7 +2904,8 @@ def add_amplifier_assignment(request, plan_id):
             quantity=int(data.get('quantity', 1)),
             zone=data.get('zone', 'FOH'),
             position=data.get('position', ''),
-            duty_cycle=data.get('duty_cycle', 'heavy_music'),
+            programme=_programme(data.get('programme', 'normal')),
+            load_ohms=_load_ohms(data.get('load_ohms')),
             phase_assignment='AUTO'  # Let it auto-balance
         )
         
@@ -2895,15 +2924,11 @@ def add_amplifier_assignment(request, plan_id):
                 'quantity': assignment.quantity,
                 'zone': assignment.zone,
                 'position': assignment.position,
-                'duty_cycle': assignment.get_duty_cycle_display(),
+                'programme': assignment.get_programme_display(),
                 'phase': assignment.phase_assignment,
                 'current_per_unit': float(assignment.calculated_current_per_unit),
                 'total_current': float(assignment.calculated_total_current),
-                'power_details': {
-                    'continuous_watts': float(power_details.get('continuous_watts', 0)),
-                    'peak_watts': float(power_details.get('peak_watts', 0)),
-                    'current_amps': float(power_details.get('current_amps', 0)),
-                } if power_details else {}
+                'power_details': power_details['per_unit'],
             },
             'phase_loads': {
                 'L1': float(phase_loads.get('L1', 0)),
@@ -2935,7 +2960,10 @@ def update_amplifier_assignment(request, assignment_id):
         assignment.quantity = int(data.get('quantity', assignment.quantity))
         assignment.zone = data.get('zone', assignment.zone)
         assignment.position = data.get('position', assignment.position)
-        assignment.duty_cycle = data.get('duty_cycle', assignment.duty_cycle)
+        if 'programme' in data:
+            assignment.programme = _programme(data['programme'])
+        if 'load_ohms' in data:
+            assignment.load_ohms = _load_ohms(data['load_ohms'])
         assignment.phase_assignment = data.get('phase_assignment', assignment.phase_assignment)
 
         assignment.save()
@@ -2951,7 +2979,7 @@ def update_amplifier_assignment(request, assignment_id):
                 'quantity': assignment.quantity,
                 'zone': assignment.zone,
                 'position': assignment.position,
-                'duty_cycle': assignment.get_duty_cycle_display(),
+                'programme': assignment.get_programme_display(),
                 'phase_assignment': assignment.phase_assignment,
                 'current_per_unit': float(assignment.calculated_current_per_unit),
                 'total_current': float(assignment.calculated_total_current),
@@ -3003,7 +3031,8 @@ def get_amplifier_assignment(request, assignment_id):
                 'quantity': assignment.quantity,
                 'zone': assignment.zone,
                 'position': assignment.position,
-                'duty_cycle': assignment.duty_cycle,
+                'programme': assignment.programme,
+                'load_ohms': str(assignment.load_ohms) if assignment.load_ohms is not None else '',
                 'phase_assignment': assignment.phase_assignment,
                 'current_per_unit': float(assignment.calculated_current_per_unit),
                 'total_current': float(assignment.calculated_total_current),

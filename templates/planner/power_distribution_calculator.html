@@ -306,6 +306,9 @@
         
         .plan-warning { border-left: 4px solid #ff5252; color: #ffb3b3; }
         .plan-provisional { border-left: 4px solid #e8b04a; color: #f0c674; font-size: 13px; }
+        .estimate-banner { font-size: 13px; color: #c9d6e3; line-height: 1.5; }
+        .estimate-notes td { font-size: 11px; color: #9aa7b4; font-style: italic; padding-top: 0; }
+        .assumed, .field-hint { font-size: 11px; color: #9aa7b4; }
 
         .stat-label {
             font-size: 12px;
@@ -332,6 +335,14 @@
 </div>
 
         
+        <div class="panel estimate-banner">
+            <strong>{{ estimate_label }}.</strong>
+            Every current and power figure on this page is worked out from the amplifier
+            manufacturer's published draw (230&nbsp;V, all channels driven), converted to
+            {{ voltage }}&nbsp;V. Normal programme uses the 1/8-power figure, heavy the 1/3-power
+            figure; currents include the transient headroom below.
+        </div>
+
         {% if excluded_count %}
         <div class="panel plan-warning">
             <strong>{{ excluded_count }} amp{{ excluded_count|pluralize }} excluded from totals:</strong>
@@ -382,6 +393,13 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label for="power-factor">Power Factor (assumed)</label>
+                    <input type="number" id="power-factor" min="0.5" max="1" step="0.01"
+                           value="{{ plan.power_factor }}" onchange="updatePlanSettings()">
+                    <div class="field-hint">Used only for amps whose current isn't published
+                        {% if uses_power_factor %}(this plan has some){% else %}(none in this plan){% endif %}.</div>
+                </div>
+                <div class="form-group">
                     <label>Usable Amps/Leg</label>
                     <input type="text" value="{{ plan.get_usable_amperage }}A" readonly style="background: #222;">
                 </div>
@@ -428,7 +446,7 @@
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-value">{{ phase_loads.total_current|floatformat:0 }}A</div>
-                    <div class="stat-label">Total Current</div>
+                    <div class="stat-label">Total Current (estimate)</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value">{{ assignments|length }}</div>
@@ -439,8 +457,8 @@
                     <div class="stat-label">Total Amplifiers</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="total-power">{{ total_peak_power_kw }}kW</div>
-                    <div class="stat-label">Peak Power</div>
+                    <div class="stat-value" id="total-power">{{ total_power_kw }}kW</div>
+                    <div class="stat-label">Power at Programme Level (estimate)</div>
                 </div>
             </div>
         </div>
@@ -456,11 +474,11 @@
                         <th>Position</th>
                         <th>Amplifier</th>
                         <th>Qty</th>
-                        <th>Duty Cycle</th>
+                        <th>Programme</th>
+                        <th>Load / Channel</th>
                         <th>Phase</th>
-                        <th>Current/Unit</th>
-                        <th>Total Current</th>
-                        
+                        <th>Current/Unit (estimate)</th>
+                        <th>Total Current (estimate)</th>
                     </tr>
                 </thead>
                 <tbody id="assignments-tbody">
@@ -470,13 +488,17 @@
                         <td>{{ assignment.position|default:"-" }}</td>
                         <td>{{ assignment.amplifier }}</td>
                         <td>{{ assignment.quantity }}</td>
-                        <td>{{ assignment.get_duty_cycle_display }}</td>
+                        <td>{{ assignment.get_programme_display }}</td>
+                        <td>{% if assignment.assumed_load_ohms is not None %}{{ assignment.assumed_load_ohms|floatformat:"-1" }} Ω{% if assignment.load_ohms is None %} <span class="assumed">(lowest published)</span>{% endif %}{% else %}—{% endif %}</td>
                         <td>{{ assignment.phase_assignment }}</td>
                         <td>{{ assignment.calculated_current_per_unit|floatformat:1 }}A</td>
                         <td><strong>{{ assignment.calculated_total_current|floatformat:1 }}A</strong></td>
-                        <td>
-                            
                     </tr>
+                    {% if assignment.draw.notes %}
+                    <tr class="estimate-notes">
+                        <td colspan="9">{{ estimate_label }}: {{ assignment.draw.notes|join:"; " }}</td>
+                    </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -521,15 +543,20 @@
                 <input type="text" id="edit-position" placeholder="e.g., Stage Left, Tower 1">
             </div>
             
-            <div class="form-group">
-                <label for="edit-duty">Duty Cycle</label>
-                <select id="edit-duty">
-                    <option value="speech">Speech/Vocal (20% duty)</option>
-                    <option value="light_music">Light Music (35% duty)</option>
-                    <option value="heavy_music">Heavy Music (50% duty)</option>
-                    <option value="edm_concert">EDM/Concert (70% duty)</option>
-                    <option value="test_tone">Test/Alignment (100% duty)</option>
-                </select>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label for="edit-programme">Programme</label>
+                    <select id="edit-programme">
+                        {% for value, label in programmes %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-load">Load per channel (Ω)</label>
+                    <input type="number" id="edit-load" min="0.5" max="64" step="0.1"
+                           placeholder="lowest published">
+                </div>
             </div>
             
             <div class="form-group">
@@ -559,6 +586,7 @@
                 available_amperage_per_leg: document.getElementById('available-amps').value,
                 transient_headroom: document.getElementById('transient-headroom').value,
                 safety_margin: document.getElementById('safety-margin').value,
+                power_factor: document.getElementById('power-factor').value,
             };
             
             fetch(`/audiopatch/api/power/plan/${planId}/update/`, {
@@ -648,7 +676,8 @@
                         document.getElementById('edit-quantity').value = data.assignment.quantity;
                         document.getElementById('edit-zone').value = data.assignment.zone;
                         document.getElementById('edit-position').value = data.assignment.position || '';
-                        document.getElementById('edit-duty').value = data.assignment.duty_cycle;
+                        document.getElementById('edit-programme').value = data.assignment.programme;
+                        document.getElementById('edit-load').value = data.assignment.load_ohms;
                         document.getElementById('edit-phase').value = data.assignment.phase_assignment;
                         
                         // Show the amplifier info (read-only)
@@ -676,7 +705,8 @@
                 quantity: parseInt(document.getElementById('edit-quantity').value),
                 zone: document.getElementById('edit-zone').value,
                 position: document.getElementById('edit-position').value,
-                duty_cycle: document.getElementById('edit-duty').value,
+                programme: document.getElementById('edit-programme').value,
+                load_ohms: document.getElementById('edit-load').value,
                 phase_assignment: document.getElementById('edit-phase').value
             };
             

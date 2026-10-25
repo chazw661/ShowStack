@@ -3,7 +3,7 @@
 <h3>Steps</h3>
 <ol>
   <li>In the sidebar, open <em>Power Distribution Plans</em>, then <em>Amplifier Profiles</em>, to see the catalogue.</li>
-  <li>Tap a profile to read its <em>Channels</em>, <em>Rack units</em>, power figures, <em>Nominal voltage</em> and <em>Power factor</em>.</li>
+  <li>Tap a profile to read its <em>Channels</em>, <em>Rack units</em>, power figures, and per-load mains draw.</li>
   <li>To use one, pick it in the <em>Amplifier</em> column of a power plan.</li>
 </ol>
 
@@ -11,8 +11,8 @@
 <ul>
   <li>The catalogue holds the L-Acoustics LA4X, LA8, LA12X and LA7.16i.</li>
   <li>It's read-only. You can't add or edit profiles yet.</li>
-  <li>Each profile also lists its mains draw per load, as published in the L-Acoustics manual. These figures are at 230&nbsp;V with all channels driven. Standby, idle, 1/8 and 1/3 power, in amps and watts, with the source page. LA4X figures are unverified.</li>
+  <li>Each profile lists its mains draw per load as published: 230&nbsp;V, all channels driven, standby to 1/3 power, in amps and watts, with the source page. LA4X figures are unverified.</li>
   <li>At other voltages, current is the 230&nbsp;V figure &times; 230 &divide; the voltage, unless the manual prints its own multiplier (LA8: &times;2.0 at 120&nbsp;V).</li>
-  <li>The calculator doesn't use the per-load figures yet. Until then, check its results against the datasheet before you rely on a plan.</li>
-  <li>The calculator uses only idle and rated (1/8 power) watts, nominal voltage and power factor.</li>
+  <li>Power plans use these figures: 1/8 power for normal programme, 1/3 for heavy. With mixed loads, each channel adds its share above idle.</li>
+  <li>A profile without per-load figures falls back to its watts, at the plan's assumed power factor.</li>
 </ul>
