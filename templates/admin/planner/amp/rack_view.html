@@ -1171,7 +1171,10 @@
                     </div>
                     <div class="amp-cabinet-grid">
                         {% for ch in card.channels %}
-                        <div class="amp-cabinet-cell" data-channel-id="{{ ch.pk }}">
+                        <div class="amp-cabinet-cell" data-channel-id="{{ ch.pk }}"
+                             data-section-zone="{{ ch.cabinet_section.routing_zone|default:'' }}"
+                             data-section-label="{{ ch.cabinet_section|default:'' }}"
+                             data-routed-zone="{{ ch.routing_zone }}">
                             <span class="amp-cabinet-out">Out {{ ch.channel_number }}</span>
                             {% if can_edit %}
                             <select class="amp-cabinet-select" autocomplete="off"
@@ -1672,6 +1675,7 @@
                     // Put the controls back to what is stored, so they
                     // never disagree with the summary.
                     restoreCabinet(cell);
+                    refreshRoutingNote(cell);
                     setCabinetState(cell, 'error');
                     console.warn('Save failed:', r.error);
                     return;
@@ -1690,6 +1694,7 @@
             .catch(function (err) {
                 cell._inFlight = false;
                 restoreCabinet(cell);
+                refreshRoutingNote(cell);
                 setCabinetState(cell, 'error');
                 console.error(err);
             });
@@ -1713,34 +1718,58 @@
         inp.value = n;
     }
 
-    // Mirrors AmpChannel.routing_mismatch: the CH block's zone against the
-    // saved cabinet section's. Display only; neither value is touched.
+    // Mirrors AmpChannel.routing_mismatch / routing_zones_conflict. Reads the
+    // controls as they stand, so it follows either dropdown at once, before
+    // any save lands. Display only; neither value is touched.
+    function zonesConflict(routed, implied) {
+        if (!routed || !implied || routed === 'PA' || implied === 'PA') return false;
+        return routed !== implied;
+    }
+
     function refreshRoutingNote(cell) {
         var note = cell.querySelector('.amp-routing-mismatch');
         if (!note) return;
         var setting = document.querySelector(
             '.amp-channel-setting-select[data-channel-id="' + cell.dataset.channelId + '"]');
-        var zone = setting ? setting.value.split('_')[0] : '';
-        var opt = cell._saved && cell._saved.cabinet_section
-            ? cell.querySelector('.amp-cabinet-select option[value="' + cell._saved.cabinet_section + '"]')
-            : null;
-        var implied = (opt && opt.dataset.zone) || '';
-        var text = (zone && implied && zone !== implied)
-            ? 'CH ' + note.dataset.channelNumber + ' is routed ' + zone
-              + ', cabinet is ' + (opt.dataset.label || opt.textContent)
+        var zone = setting ? setting.value.split('_')[0] : (cell.dataset.routedZone || '');
+        var implied = cell.dataset.sectionZone || '';
+        var label = cell.dataset.sectionLabel || '';
+        var picker = cell.querySelector('.amp-cabinet-select');
+        if (picker) {
+            var opt = picker.value ? picker.selectedOptions[0] : null;
+            implied = (opt && opt.dataset.zone) || '';
+            label = opt ? (opt.dataset.label || opt.textContent.trim()) : '';
+        }
+        var text = zonesConflict(zone, implied)
+            ? 'CH ' + note.dataset.channelNumber + ' is routed ' + zone + ', cabinet is ' + label
             : '';
         note.textContent = text;
         note.hidden = !text;
     }
 
+    function cabinetCellFor(channelId) {
+        return document.querySelector('.amp-cabinet-cell[data-channel-id="' + channelId + '"]');
+    }
+
     function bindRoutingNotes() {
         document.querySelectorAll('.amp-channel-setting-select').forEach(function (sel) {
-            sel.addEventListener('change', function () {
-                var cell = document.querySelector(
-                    '.amp-cabinet-cell[data-channel-id="' + sel.dataset.channelId + '"]');
-                if (cell) refreshRoutingNote(cell);
+            ['input', 'change'].forEach(function (type) {
+                sel.addEventListener(type, function () {
+                    var cell = cabinetCellFor(sel.dataset.channelId);
+                    if (cell) refreshRoutingNote(cell);
+                });
             });
         });
+        document.querySelectorAll('.amp-cabinet-select').forEach(function (sel) {
+            ['input', 'change'].forEach(function (type) {
+                sel.addEventListener(type, function () {
+                    refreshRoutingNote(sel.closest('.amp-cabinet-cell'));
+                });
+            });
+        });
+        // On load too: the controls may not be what the server rendered
+        // (a pending save re-applied, the browser restoring a field).
+        document.querySelectorAll('.amp-cabinet-cell').forEach(refreshRoutingNote);
     }
 
     function bindCabinets() {
