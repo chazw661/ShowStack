@@ -17,7 +17,7 @@ from django import forms
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q, Max
 from .models import AmplifierProfile, PowerDistributionPlan, AmplifierAssignment, CabinetModel, CabinetSection
-from .models import AmplifierLoadRating, AmplifierVoltageFactor
+from .models import AmplifierLoadRating, AmplifierVoltageFactor, CabinetDriveCapacity
 from django.db.models import Sum 
 from .models import SoundvisionPrediction, SpeakerArray, SpeakerCabinet
 from django.contrib.admin import AdminSite
@@ -2239,13 +2239,36 @@ class AmpAdmin(BaseEquipmentAdmin):
                 amp_count=Count('amps')
             ).order_by('sort_order', 'name')
             
+            # Per-output cabinet picker: every section of the active
+            # catalogue under its heading (Line source, Coaxial, ...), in
+            # catalogue order, less the cabinets the amp's drive table says
+            # it does not drive. Viewers see the assignment as text.
+            from .models import CabinetModel
+            from planner.utils.cabinet_load import amp_drive_note, amp_drive_warnings
+            catalogue = list(
+                CabinetModel.objects.filter(is_active=True).prefetch_related('sections')
+            )
+            groups_by_profile = {}
+
+            def cabinet_groups_for(profile):
+                key = profile.pk if profile is not None else None
+                if key not in groups_by_profile:
+                    offered = [c for c in catalogue
+                               if profile is None or profile.drives(c.pk)]
+                    groups_by_profile[key] = (
+                        CabinetModel.picker_groups(offered),
+                        {s.pk for c in offered for s in c.sections.all()},
+                    )
+                return groups_by_profile[key]
+
             active_locations = []
             for loc in locations:
                 amps = list(
                     Amp.objects.filter(location=loc, project=request.current_project)
                     .select_related('amp_model__power_profile')
                     .prefetch_related('channels__cabinet_section__cabinet__sections',
-                                      'amp_model__power_profile__load_ratings')
+                                      'amp_model__power_profile__load_ratings',
+                                      'amp_model__power_profile__drive_capacities')
                     .order_by('sort_order', 'name')
                 )
                 dividers = list(
@@ -2267,10 +2290,20 @@ class AmpAdmin(BaseEquipmentAdmin):
                     # Label, so "unused" has to mean both are empty -- keying
                     # off avb_stream alone would hide analogue labels that are
                     # filled in.
+                    profile = model.power_profile if model else None
+                    cabinet_groups, offered_sections = cabinet_groups_for(profile)
                     avb_unused_count = 0
                     for ch in channels:
                         ch.amp = amp  # prefetched rows; cabinet_load reads the model
                         ch.load = ch.cabinet_load
+                        # An assignment the picker no longer lists (retired
+                        # cabinet, or one this amp does not drive) stays
+                        # selectable so the page shows what is stored.
+                        if ch.cabinet_section_id and ch.cabinet_section_id not in offered_sections:
+                            ch.cabinet_unlisted = (
+                                'retired' if not ch.cabinet_section.cabinet.is_active
+                                else f'not driven by {profile.model}'
+                            )
                         ch.avb_unused = not (
                             (ch.avb_stream or '').strip()
                             or (ch.analog_input or '').strip()
@@ -2316,6 +2349,9 @@ class AmpAdmin(BaseEquipmentAdmin):
                         'sc32_rows': sc32_rows,
                         'has_nl4': has_nl4,
                         'avb_unused_count': avb_unused_count,
+                        'cabinet_groups': cabinet_groups,
+                        'drive_warnings': amp_drive_warnings(profile, channels),
+                        'drive_note': amp_drive_note(model),
                     })
                 # Items list — for divider rendering anchored to amp index.
                 items_order = []
@@ -2350,13 +2386,6 @@ class AmpAdmin(BaseEquipmentAdmin):
                 AmpModel.objects.all().order_by('manufacturer', 'model_name')
             )
             extra_context['has_grouped_layout'] = True
-            # Per-output cabinet picker: every section of the active
-            # catalogue under its heading (Line source, Coaxial, ...), in
-            # catalogue order. Viewers see the assignment as text.
-            from .models import CabinetModel
-            extra_context['cabinet_groups'] = CabinetModel.picker_groups(
-                CabinetModel.objects.filter(is_active=True).prefetch_related('sections')
-            )
             from planner.views import _can_edit_current_project
             extra_context['can_edit'] = _can_edit_current_project(request)
 
@@ -6945,8 +6974,19 @@ class AmplifierVoltageFactorInline(SuperuserCatalogueMixin, admin.TabularInline)
     verbose_name_plural = 'Mains current multiplier vs 230 V'
 
 
+class CabinetDriveCapacityInline(SuperuserCatalogueMixin, admin.TabularInline):
+    model = CabinetDriveCapacity
+    extra = 0
+    fields = ['cabinet', 'per_output', 'per_amp', 'guide_row', 'note', 'source']
+    verbose_name_plural = 'Drive capacity per cabinet (blank = not driven)'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('cabinet')
+
+
 class AmplifierProfileAdmin(admin.ModelAdmin):
-    inlines = [AmplifierLoadRatingInline, AmplifierVoltageFactorInline]
+    inlines = [AmplifierLoadRatingInline, AmplifierVoltageFactorInline,
+               CabinetDriveCapacityInline]
 
     list_display = [
         'manufacturer', 'model', 'channels', 'rated_power_watts', 

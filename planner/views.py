@@ -3849,12 +3849,26 @@ def _amp_channel_cabinet_update(channel, values):
             channel.cabinet_section = None
         else:
             try:
-                channel.cabinet_section = CabinetSection.objects.select_related(
+                section = CabinetSection.objects.select_related(
                     'cabinet').get(id=int(value), cabinet__is_active=True)
             except (ValueError, CabinetSection.DoesNotExist):
+                section = None
                 if not (value.isdigit() and int(value) == channel.cabinet_section_id):
                     return JsonResponse({'success': False, 'error': 'Unknown cabinet'}, status=400)
                 # Re-sending the retired section an output already has is fine.
+            if section is not None and section.pk != channel.cabinet_section_id:
+                # The picker leaves out cabinets the amp's drive table says it
+                # does not drive; the server holds the same line. One the
+                # output already has (the amp model changed) can be re-sent.
+                model = channel.amp.amp_model
+                profile = model.power_profile if model else None
+                if profile is not None and not profile.drives(section.cabinet_id):
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'{profile.model} does not drive {section.cabinet}',
+                    }, status=400)
+            if section is not None:
+                channel.cabinet_section = section
     if 'cabinet_quantity' in values:
         try:
             quantity = int((values['cabinet_quantity'] or '').strip())
@@ -3873,6 +3887,10 @@ def _amp_channel_cabinet_update(channel, values):
         'cabinet_section__cabinet', 'amp__amp_model__power_profile',
     ).get(pk=channel.pk)
     load = channel.cabinet_load
+    from planner.utils.cabinet_load import amp_drive_warnings
+    model = channel.amp.amp_model
+    profile = model.power_profile if model else None
+    siblings = channel.amp.channels.select_related('cabinet_section__cabinet')
     return JsonResponse({
         'success': True,
         'cabinet_section': channel.cabinet_section_id or '',
@@ -3880,6 +3898,10 @@ def _amp_channel_cabinet_update(channel, values):
         'label': load.label,
         'warning': load.warning,
         'warning_text': load.warning_text,
+        # Per output only where the amp has a table: an amp with none says
+        # it once, in the strip heading.
+        'note': load.note if profile is not None and profile.has_drive_table else '',
+        'drive_warnings': amp_drive_warnings(profile, siblings),
     })
 
 

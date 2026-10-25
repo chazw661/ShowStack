@@ -846,7 +846,8 @@ def _section_amplifiers(project, styles, Amp):
     amps = (Amp.objects.filter(project=project)
             .select_related('location', 'amp_model__power_profile')
             .prefetch_related('channels__cabinet_section__cabinet__sections',
-                              'amp_model__power_profile__load_ratings')
+                              'amp_model__power_profile__load_ratings',
+                              'amp_model__power_profile__drive_capacities')
             .order_by('location__sort_order', 'location__name', 'sort_order', 'name'))
 
     if not amps.exists():

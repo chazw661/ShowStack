@@ -3,16 +3,16 @@
 <h3>Steps</h3>
 <ol>
   <li>Open <em>Amplifier Assignments</em> and find the amp.</li>
-  <li>In <em>Cabinets per output</em>, pick the section on an output, for example <em>Kara II · LF</em>. Typing the first letters jumps to one. <em>— none —</em> clears it.</li>
+  <li>In <em>Cabinets per output</em>, pick a section, for example <em>Kara II · LF</em>. The list shows only cabinets that amp can drive.</li>
   <li>Use <em>−</em> and <em>+</em> to set how many are in parallel.</li>
-  <li>Read the line underneath, for example <em>Kara II · LF ×3 → 2.67&nbsp;&Omega; (2.7&nbsp;&Omega;)</em>. That's the impedance divided by the number in parallel; the bracket is the nearest published load.</li>
+  <li>Read the line underneath: <em>Kara II · LF ×3 → 2.67&nbsp;&Omega; (2.7&nbsp;&Omega;)</em>. The bracket is the nearest published load.</li>
 </ol>
 
-<h3>Good to know</h3>
+<h3>Warnings</h3>
 <ul>
-  <li><em>No cabinet</em> means nothing is assigned yet.</li>
-  <li><em>Below … minimum</em> means the load is under the output's rating: 2.7&nbsp;&Omega; on LA12X and LA8, 4&nbsp;&Omega; on LA4X and LA7.16i.</li>
-  <li><em>No power figures for this model</em> means the amp isn't counted in power estimates yet.</li>
-  <li>Routing (e.g. <em>LF_B</em>) is set in the <em>Ch</em> block mid-card, not here. An amber note such as <em>CH 1 is routed LF, cabinet is Kara II · HF</em> means they disagree; nothing changes on its own.</li>
-  <li>Cabinets and notes print on the amplifier PDF and the Complete System Report. Viewers can't change them.</li>
+  <li><em>Over N per output</em> or a red line such as <em>Kara II: 8 on this amp, max 6</em>: more than the L-Acoustics Preset Guide's drive-capacity table allows (v25.0; LA8 from v22.0).</li>
+  <li><em>… does not drive this</em>: the amp model changed and can't drive that cabinet.</li>
+  <li><em>No published drive limit … impedance check only</em>: the table has no figure for that cabinet on that amp, so only <em>Below … minimum</em> can flag it.</li>
+  <li><em>No cabinet</em>: nothing assigned yet.</li>
+  <li>An amber <em>CH 1 is routed LF, cabinet is Kara II · HF</em> means the <em>Ch</em> block disagrees; nothing changes on its own.</li>
 </ul>

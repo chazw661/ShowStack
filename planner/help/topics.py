@@ -391,7 +391,7 @@ TOPICS = (
         pages=(
             'admin:planner_amp_changelist',
         ),
-        keywords=('cabinet', 'speaker', 'output', 'load', 'impedance', 'ohm', 'parallel', 'quantity', 'minimum', 'Kara II', 'KS28', 'power plan',),
+        keywords=('cabinet', 'speaker', 'output', 'load', 'impedance', 'ohm', 'parallel', 'quantity', 'minimum', 'Kara II', 'KS28', 'power plan', 'drive capacity', 'per output', 'total',),
     ),
     Topic(
         slug='amps-rack-dividers',
