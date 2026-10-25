@@ -2286,6 +2286,19 @@ class AmpChannel(models.Model):
         return self.channel_setting.partition('_')[2]
 
     @property
+    def routing_mismatch(self):
+        """'tag says LF, cabinet is HF' when the stored tag's zone isn't the
+        one the output's cabinet section implies; '' otherwise, including a
+        section with no zone of its own (MF, LC). Only reported: the tag is
+        the engineer's and is never changed to match."""
+        if not self.channel_setting or self.cabinet_section is None:
+            return ''
+        implied = self.cabinet_section.routing_zone
+        if not implied or implied == self.routing_zone:
+            return ''
+        return f'tag says {self.routing_zone}, cabinet is {implied}'
+
+    @property
     def suggested_routing_zone(self):
         """The zone the rack card pre-selects when no tag is stored yet: the
         one the output's cabinet section implies (Kara II · LF -> LF). Shown

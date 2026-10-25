@@ -163,3 +163,74 @@ class TagStillPrintsTests(Fixture):
             texts = table_texts(module._amp_middle(self.la12x, channels))
             self.assertIn('SB_D', texts, module.__name__)
             self.assertIn('2', texts, module.__name__)
+
+
+class TagMismatchTests(Fixture):
+    """A stored tag whose zone isn't the cabinet's gets an amber chip; the
+    tag itself is never changed."""
+
+    def setUp(self):
+        super().setUp()
+        self.ch = self.assign(self.channel(self.la12x), section('Kara II', 'HF'), 1)
+        AmpChannel.objects.filter(pk=self.ch.pk).update(channel_setting='LF_B')
+        self.ch.refresh_from_db()
+        self.url = reverse('admin:planner_amp_changelist')
+
+    def test_when_it_is_reported(self):
+        self.assertEqual('tag says LF, cabinet is HF', self.ch.routing_mismatch)
+        self.ch.cabinet_section = section('Kara II', 'LF')
+        self.assertEqual('', self.ch.routing_mismatch)            # agrees
+        self.ch.cabinet_section = section('K1', 'MF')
+        self.assertEqual('', self.ch.routing_mismatch)            # MF implies nothing
+        self.ch.cabinet_section = None
+        self.assertEqual('', self.ch.routing_mismatch)            # no cabinet
+        self.ch.cabinet_section = section('Kiva')
+        self.assertEqual('tag says LF, cabinet is PA', self.ch.routing_mismatch)
+        self.ch.channel_setting = ''
+        self.assertEqual('', self.ch.routing_mismatch)            # no tag
+
+    def test_chip_in_the_cell_and_the_tag_is_left_alone(self):
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        self.assertIn('<span class="amp-cabinet-chip amp-tag-mismatch">tag says LF, cabinet is HF</span>',
+                      page)
+        self.assertEqual(3, page.count('<span class="amp-cabinet-chip amp-tag-mismatch" hidden>'))
+        self.ch.refresh_from_db()
+        self.assertEqual('LF_B', self.ch.channel_setting)
+
+    def test_viewer_sees_the_chip_too(self):
+        viewer = staff('viewer')
+        self.join(viewer, self.project, 'viewer')
+        self.use(viewer)
+        self.assertContains(self.client.get(self.url), 'tag says LF, cabinet is HF')
+
+    def test_a_cabinet_change_keeps_the_tag(self):
+        self.use(self.owner)
+        url = reverse('planner:amp_channel_inline_update', args=[self.ch.pk])
+        self.client.post(url, {'field': 'cabinet', 'cabinet_section': section('KS28').pk,
+                               'cabinet_quantity': '1'})
+        self.ch.refresh_from_db()
+        self.assertEqual('LF_B', self.ch.channel_setting)
+        self.assertEqual('tag says LF, cabinet is SB', self.ch.routing_mismatch)
+
+    def test_pdf_row_carries_it_in_amber(self):
+        from planner.utils.pdf_exports import report_kit as kit
+        channels = sorted(self.la12x.channels.all(), key=lambda c: c.channel_number)
+        _title, table = kit.amp_cabinets_table(channels)
+        first = table._cellvalues[0][0].text
+        self.assertIn('Kara II · HF ×1', first)
+        self.assertIn('tag says LF, cabinet is HF', first)
+        cell_xml = table._cellvalues[0][0].frags  # rendered fragments carry the colour
+        amber = [f for f in cell_xml if 'tag says' in f.text]
+        self.assertTrue(amber)
+        self.assertEqual(kit.AMP_WARN.hexval(), amber[0].textColor.hexval())
+        for row in table._cellvalues:
+            for cell in row[1:] if row is table._cellvalues[0] else row:
+                if cell:
+                    self.assertNotIn('tag says', cell.text)
+
+    def test_system_report_card_builds_with_it(self):
+        from planner.utils.pdf_exports.report_kit import styles
+        from planner.utils.pdf_exports.system_report import _section_amplifiers
+        from planner.models import Amp
+        self.assertTrue(_section_amplifiers(self.project, styles(), Amp))

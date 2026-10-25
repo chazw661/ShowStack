@@ -1101,6 +1101,8 @@
                             {% endif %}
                             <span class="amp-cabinet-summary">{{ ch.load.label }}</span>
                             <span class="amp-cabinet-chip {{ ch.load.warning }}"{% if not ch.load.warning %} hidden{% endif %}>{{ ch.load.warning_text }}</span>
+                            {# Stored tag's zone vs the cabinet's (Kara II · HF tagged LF_B). Reported, never auto-fixed. #}
+                            <span class="amp-cabinet-chip amp-tag-mismatch"{% if not ch.routing_mismatch %} hidden{% endif %}>{{ ch.routing_mismatch }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -1530,6 +1532,7 @@
                 cell._saved = { cabinet_section: String(r.cabinet_section),
                                 cabinet_quantity: String(r.cabinet_quantity) };
                 showCabinetSummary(cell, r);
+                refreshMismatch(cell);
                 if (cell._again || !sameValues(cabinetValues(cell), cell._saved)) {
                     saveCabinet(cell);
                     return;
@@ -1643,6 +1646,23 @@
         hint.hidden = !incomplete;
     }
 
+    // Mirrors AmpChannel.routing_mismatch, from the stored tag and the
+    // saved section, so it changes only once a save has landed.
+    function refreshMismatch(cell) {
+        var chip = cell.querySelector('.amp-tag-mismatch');
+        var tag = cell.querySelector('.amp-tag');
+        if (!chip || !tag || !cell._saved) return;
+        var saved = tag.dataset.saved;
+        var opt = cell.querySelector('.amp-cabinet-select option[value="'
+                                     + cell._saved.cabinet_section + '"]');
+        var implied = (cell._saved.cabinet_section && opt && opt.dataset.zone) || '';
+        var zone = saved.split('_')[0];
+        var text = (saved && implied && implied !== zone)
+            ? 'tag says ' + zone + ', cabinet is ' + implied : '';
+        chip.textContent = text;
+        chip.hidden = !text;
+    }
+
     function suggestZone(cell) {
         var tag = cell.querySelector('.amp-tag');
         if (!tag || tag.dataset.saved) return;  // a stored tag is kept
@@ -1668,6 +1688,7 @@
                     return;
                 }
                 tag.dataset.saved = value;
+                refreshMismatch(tag.closest('.amp-cabinet-cell'));
                 tag.classList.add('saved');
                 setTimeout(function () { tag.classList.remove('saved'); }, 600);
             })

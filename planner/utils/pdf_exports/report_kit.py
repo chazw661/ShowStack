@@ -456,8 +456,9 @@ AMP_ERROR = colors.HexColor('#b42318')     # load below the amp's minimum
 
 def amp_cabinets_table(channels):
     """The cabinets on each output, four outputs to a row:
-    "Out 1  Kara II · LF ×3 → 2.67 Ω (2.7 Ω)", with the rack view's warning
-    under any output that has nothing assigned or too low a load."""
+    "Out 1  Kara II · LF ×3 → 2.67 Ω (2.7 Ω)", with the rack view's warnings
+    under any output that has nothing assigned, too low a load, or a routing
+    tag whose zone disagrees with the cabinet."""
     from planner.utils.cabinet_load import BELOW_MINIMUM
     P = _AMP_P
     cells = []
@@ -467,6 +468,9 @@ def amp_cabinets_table(channels):
         if load.warning:
             colour = (AMP_ERROR if load.warning == BELOW_MINIMUM else AMP_WARN).hexval()[2:]
             text += f'<br/><font color="#{colour}"><b>{escape(load.warning_text)}</b></font>'
+        if c.routing_mismatch:
+            text += (f'<br/><font color="#{AMP_WARN.hexval()[2:]}">'
+                     f'<b>{escape(c.routing_mismatch)}</b></font>')
         cells.append(Paragraph(text, P['val']))
     if not cells:
         return None
