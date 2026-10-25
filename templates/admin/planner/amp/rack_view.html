@@ -1070,8 +1070,9 @@
                            target="_blank" rel="noopener">How power is worked out</a>
                         {% if not card.amp.amp_model.power_profile_id %}
                         <span class="amp-cabinets-nopower">No power figures for this model</span>
-                        {% elif not card.amp.amp_model.power_profile.has_drive_table %}
-                        <span class="amp-cabinets-nopower">No published drive limits for {{ card.amp.amp_model.power_profile.model }}, impedance check only</span>
+                        {% endif %}
+                        {% if card.drive_note %}
+                        <span class="amp-cabinets-nopower">{{ card.drive_note }}</span>
                         {% endif %}
                     </div>
                     <div class="amp-cabinet-grid">
@@ -1114,7 +1115,7 @@
                             <span class="amp-cabinet-summary">{{ ch.load.label }}</span>
                             <span class="amp-cabinet-chip {{ ch.load.warning }}"{% if not ch.load.warning %} hidden{% endif %}>{{ ch.load.warning_text }}</span>
                             {# An amp with no drive table says so once, in the heading. #}
-                            {% if card.amp.amp_model.power_profile.has_drive_table and ch.load.note %}
+                            {% if not card.drive_note and ch.load.note %}
                             <span class="amp-cabinet-note">{{ ch.load.note }}</span>
                             {% else %}
                             <span class="amp-cabinet-note" hidden></span>

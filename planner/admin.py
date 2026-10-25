@@ -2244,7 +2244,7 @@ class AmpAdmin(BaseEquipmentAdmin):
             # catalogue order, less the cabinets the amp's drive table says
             # it does not drive. Viewers see the assignment as text.
             from .models import CabinetModel
-            from planner.utils.cabinet_load import amp_drive_warnings
+            from planner.utils.cabinet_load import amp_drive_note, amp_drive_warnings
             catalogue = list(
                 CabinetModel.objects.filter(is_active=True).prefetch_related('sections')
             )
@@ -2351,6 +2351,7 @@ class AmpAdmin(BaseEquipmentAdmin):
                         'avb_unused_count': avb_unused_count,
                         'cabinet_groups': cabinet_groups,
                         'drive_warnings': amp_drive_warnings(profile, channels),
+                        'drive_note': amp_drive_note(model),
                     })
                 # Items list — for divider rendering anchored to amp index.
                 items_order = []

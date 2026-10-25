@@ -128,6 +128,25 @@ def output_load(channel):
     return load
 
 
+def amp_drive_note(amp_model):
+    """The cabinet strip's one-line note for an amp whose cabinets the drive
+    table can't check at all: no power profile, or a profile with no drive
+    rows. '' when the amp has a table (cells it lacks are noted per output).
+
+    "impedance check only" when the profile has a minimum load to check
+    against; "no load check" when nothing is checked."""
+    profile = amp_model.power_profile if amp_model is not None else None
+    if profile is not None and profile.has_drive_table:
+        return ''
+    if profile is not None:
+        name = profile.model
+    else:
+        name = amp_model.model_name if amp_model is not None else 'this amp'
+    checked = profile is not None and profile.min_load_ohms is not None
+    return (f'No published drive limits for {name}, '
+            f'{"impedance check only" if checked else "no load check"}')
+
+
 def enclosures_per_cabinet(channels):
     """{cabinet: enclosures} on one amp. A passive cabinet counts its
     quantities across outputs. An active one counts the most of any one

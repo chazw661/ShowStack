@@ -461,8 +461,11 @@ def amp_cabinets_table(channels, amp=None):
     drive, too many in parallel or too low a load, or a CH-block routing zone
     that disagrees with the cabinet. The drive table's per-amp totals go on a
     line under the outputs."""
-    from planner.utils.cabinet_load import ERRORS, amp_drive_warnings
+    from planner.utils.cabinet_load import ERRORS, amp_drive_note, amp_drive_warnings
     P = _AMP_P
+    model = amp.amp_model if amp is not None else None
+    # An amp the table can't check at all says so once, under the outputs.
+    amp_note = amp_drive_note(model) if amp is not None else ''
     cells = []
     for c in channels:
         load = c.cabinet_load
@@ -470,7 +473,7 @@ def amp_cabinets_table(channels, amp=None):
         if load.warning:
             colour = (AMP_ERROR if load.warning in ERRORS else AMP_WARN).hexval()[2:]
             text += f'<br/><font color="#{colour}"><b>{escape(load.warning_text)}</b></font>'
-        if load.note:
+        if load.note and not amp_note:
             text += f'<br/><font color="#{AMP_WARN.hexval()[2:]}">{escape(load.note)}</font>'
         if c.routing_mismatch:
             text += (f'<br/><font color="#{AMP_WARN.hexval()[2:]}">'
@@ -482,9 +485,12 @@ def amp_cabinets_table(channels, amp=None):
     rows = [cells[i:i + AMP_CABINETS_PER_ROW]
             for i in range(0, len(cells), AMP_CABINETS_PER_ROW)]
     rows[-1] += [''] * (AMP_CABINETS_PER_ROW - len(rows[-1]))
-    model = amp.amp_model if amp is not None else None
     totals = amp_drive_warnings(model.power_profile if model else None, channels)
     spans = []
+    if amp_note:
+        rows.append([Paragraph(f'<font color="#{AMP_WARN.hexval()[2:]}">{escape(amp_note)}</font>',
+                               P['val'])] + [''] * (AMP_CABINETS_PER_ROW - 1))
+        spans.append(('SPAN', (0, len(rows) - 1), (-1, len(rows) - 1)))
     if totals:
         text = '&nbsp;&nbsp;·&nbsp;&nbsp;'.join(escape(w) for w in totals)
         rows.append([Paragraph(f'<font color="#{AMP_ERROR.hexval()[2:]}"><b>{text}</b></font>',

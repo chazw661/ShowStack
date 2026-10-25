@@ -6,6 +6,7 @@ Run with::
         --settings=audiopatch.test_settings
 """
 
+import re
 from io import StringIO
 
 from django.core.management import call_command
@@ -14,10 +15,10 @@ from django.urls import reverse
 from planner.management.commands.load_amp_profiles import (
     MIN_LOADS, SUPERSEDED_MIN_LOAD_SOURCES,
 )
-from planner.models import Amp, AmplifierProfile, CabinetDriveCapacity
+from planner.models import Amp, AmpModel, AmplifierProfile, CabinetDriveCapacity
 from planner.tests.test_amp_output_cabinets import Fixture, section
 from planner.utils.cabinet_load import (
-    BELOW_MINIMUM, NOT_DRIVEN, OVER_PER_OUTPUT, amp_drive_warnings,
+    BELOW_MINIMUM, NOT_DRIVEN, OVER_PER_OUTPUT, amp_drive_note, amp_drive_warnings,
 )
 from planner.utils.pdf_exports import report_kit as kit
 
@@ -26,6 +27,13 @@ def load_drive_capacity(*args):
     out = StringIO()
     call_command('load_drive_capacity', *args, stdout=out)
     return out.getvalue()
+
+
+def offered(page, sec):
+    """How many cabinet pickers on the page list ``sec``. Counted inside the
+    pickers only: other selects on the rack page share the id numbers."""
+    pickers = re.findall(r'<select class="amp-cabinet-select".*?</select>', page, re.S)
+    return sum(f'<option value="{sec.pk}"' in p for p in pickers)
 
 
 def cell(amp, cabinet):
@@ -258,15 +266,13 @@ class RackPickerTests(DriveFixture):
         return self.client.get(reverse('admin:planner_amp_changelist'))
 
     def test_picker_lists_only_cabinets_the_amp_drives(self):
-        ks28 = section('KS28')
         page = self.page().content.decode()
         # KS28 on the LA12X's 4 outputs only: not on the LA4X (v25.0) or
         # the LA8 (v22.0).
-        self.assertEqual(4, page.count(f'<option value="{ks28.pk}"'))
-        kara = section('Kara II', 'LF')
-        self.assertEqual(12, page.count(f'<option value="{kara.pk}"'))
+        self.assertEqual(4, offered(page, section('KS28')))
+        self.assertEqual(12, offered(page, section('Kara II', 'LF')))
         # Not in the LA8 table: offered, with the impedance-only note.
-        self.assertEqual(12, page.count(f'<option value="{section("SB6i").pk}"'))
+        self.assertEqual(12, offered(page, section('SB6i')))
 
     def test_impedance_only_note_on_the_output(self):
         self.assign(self.channel(self.la8), section('SB6i'), 1)
@@ -310,3 +316,57 @@ class PdfTests(DriveFixture):
         self.assign(self.channel(self.la12x), section('Kara II', 'LF'), 4)
         r = export_all_amps_pdf(self.project)
         self.assertTrue(r.content.startswith(b'%PDF'))
+
+
+class UncheckedAmpTests(DriveFixture):
+    """An amp the drive table can't check at all says so: no power profile,
+    or a profile with no drive rows. Drive capacity hangs off the profile,
+    not the AmpModel name."""
+
+    def setUp(self):
+        super().setUp()
+        self.models['Test Amp'] = AmpModel.objects.create(
+            manufacturer='Acme', model_name='Test Amp', channel_count=4)
+        self.test_amp = self.amp(self.project, 'Test Amp', 'Amp 9')
+        self.assign(self.channel(self.test_amp), section('X6i'), 1)
+
+    def page(self):
+        self.use(self.owner)
+        return self.client.get(reverse('admin:planner_amp_changelist'))
+
+    def test_no_profile(self):
+        note = 'No published drive limits for Test Amp, no load check'
+        self.assertEqual(note, amp_drive_note(self.fetch(self.test_amp).amp_model))
+        page = self.page()
+        self.assertContains(page, note, count=1)
+        self.assertContains(page, 'No power figures for this model', count=1)
+
+    def test_profile_with_rows_restricts_by_profile_not_name(self):
+        AmpModel.objects.filter(pk=self.models['Test Amp'].pk).update(
+            power_profile=AmplifierProfile.objects.get(model='LA4X'))
+        self.assertEqual('', amp_drive_note(self.fetch(self.test_amp).amp_model))
+        page = self.page().content.decode()
+        self.assertNotIn('No published drive limits for', page)
+        # K1 is not driven by an LA4X: not offered on the Test Amp or the
+        # LA4X, only on the LA12X and the LA8 (v22.0: 2 / 2).
+        self.assertEqual(8, offered(page, section('K1', 'LF')))
+
+    def test_profile_without_rows(self):
+        bare = AmplifierProfile.objects.create(
+            manufacturer='Acme', model='TA-1', idle_power_watts=50, rated_power_watts=500,
+            peak_power_watts=900, max_power_watts=2000)
+        AmpModel.objects.filter(pk=self.models['Test Amp'].pk).update(power_profile=bare)
+        model = self.fetch(self.test_amp).amp_model
+        self.assertEqual('No published drive limits for TA-1, no load check', amp_drive_note(model))
+        AmplifierProfile.objects.filter(pk=bare.pk).update(min_load_ohms=4)
+        model = self.fetch(self.test_amp).amp_model
+        self.assertEqual('No published drive limits for TA-1, impedance check only',
+                         amp_drive_note(model))
+
+    def test_pdf_says_it_once(self):
+        amp = self.fetch(self.test_amp)
+        channels = sorted(amp.channels.all(), key=lambda c: c.channel_number)
+        _title, table = kit.amp_cabinets_table(channels, amp)
+        texts = [c.text for row in table._cellvalues for c in row if c]
+        joined = ' '.join(texts)
+        self.assertEqual(1, joined.count('No published drive limits for Test Amp, no load check'))
