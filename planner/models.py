@@ -2184,6 +2184,20 @@ class Amp(models.Model):
         return f"{self.name} - {self.amp_model}"
 
 
+# The rack card's routing note (rack_view.html's zonesConflict) follows the
+# same rule.
+def routing_zones_conflict(routed, implied):
+    """True for a real routing conflict between the CH block's zone and the
+    zone a cabinet section implies: LF vs HF, HF vs SB, LF vs SB and so on.
+    Empty on either side is no conflict (no routing set, no cabinet, or a
+    section with no zone of its own such as MF). PA is neutral: a PA channel
+    can feed anything and a full-range box can sit on any zone, so PA never
+    conflicts."""
+    if not routed or not implied or 'PA' in (routed, implied):
+        return False
+    return routed != implied
+
+
 class AmpChannel(models.Model):
     """Individual channel within an amplifier"""
     amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
@@ -2279,14 +2293,12 @@ class AmpChannel(models.Model):
     @property
     def routing_mismatch(self):
         """'CH 1 is routed LF, cabinet is Kara II · HF' when the CH block's
-        zone isn't the one this output's cabinet section implies. '' when
-        either side is empty (no setting, no cabinet, or a section with no
-        zone of its own, such as MF). Display only: neither value is ever
-        changed to match."""
+        zone and the one this output's cabinet section implies are a real
+        conflict (routing_zones_conflict). '' otherwise. Display only:
+        neither value is ever changed to match."""
         if not self.channel_setting or self.cabinet_section is None:
             return ''
-        implied = self.cabinet_section.routing_zone
-        if not implied or implied == self.routing_zone:
+        if not routing_zones_conflict(self.routing_zone, self.cabinet_section.routing_zone):
             return ''
         return f'CH {self.channel_number} is routed {self.routing_zone}, cabinet is {self.cabinet_section}'
 
