@@ -1,3 +1,4 @@
+import itertools
 from django.db import models
 from django.db.models import CheckConstraint, UniqueConstraint, Q
 from django.core.validators import MinValueValidator
@@ -2191,11 +2192,14 @@ class AmpChannel(models.Model):
     channel_name = models.CharField(max_length=100, blank=True, default="")
 
     # Issue #30: per-channel speaker-zone routing label that lived in the
-    # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.).
+    # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.): a zone and a slot.
+    ROUTING_ZONES = ('PA', 'LF', 'HF', 'SB')
+    ROUTING_SLOTS = ('A', 'B', 'C', 'D')
+    # (product(), not a nested comprehension: a comprehension's inner loop
+    # can't see names defined in the class body.)
     CHANNEL_SETTING_CHOICES = [('', '---------')] + [
         (f'{zone}_{slot}', f'{zone}_{slot}')
-        for zone in ('PA', 'LF', 'HF', 'SB')
-        for slot in ('A', 'B', 'C', 'D')
+        for zone, slot in itertools.product(ROUTING_ZONES, ROUTING_SLOTS)
     ]
     channel_setting = models.CharField(
         max_length=20, blank=True, default='',
@@ -2270,6 +2274,25 @@ class AmpChannel(models.Model):
         """The load on this output (planner.utils.cabinet_load.OutputLoad)."""
         from planner.utils.cabinet_load import output_load
         return output_load(self)
+
+    @property
+    def routing_zone(self):
+        """'LF' from 'LF_B'; '' with no tag."""
+        return self.channel_setting.partition('_')[0]
+
+    @property
+    def routing_slot(self):
+        """'B' from 'LF_B'; '' with no tag."""
+        return self.channel_setting.partition('_')[2]
+
+    @property
+    def suggested_routing_zone(self):
+        """The zone the rack card pre-selects when no tag is stored yet: the
+        one the output's cabinet section implies (Kara II · LF -> LF). Shown
+        only; nothing is saved until a slot is picked too."""
+        if self.channel_setting or self.cabinet_section is None:
+            return ''
+        return self.cabinet_section.routing_zone
 
 
 
@@ -4797,6 +4820,15 @@ class CabinetSection(models.Model):
             models.UniqueConstraint(fields=['cabinet', 'name'],
                                     name='unique_cabinet_section_name'),
         ]
+
+    # The routing-tag zone (AmpChannel.ROUTING_ZONES) a section implies. PA
+    # is the preset guide's channel for a passive full-range enclosure; MF
+    # and LC have no zone of their own, so they suggest nothing.
+    ROUTING_ZONE_BY_SECTION = {'LF': 'LF', 'HF': 'HF', 'SB': 'SB', 'Full range': 'PA'}
+
+    @property
+    def routing_zone(self):
+        return self.ROUTING_ZONE_BY_SECTION.get(self.name, '')
 
     def __str__(self):
         if not self.cabinet.is_multiway:

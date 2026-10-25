@@ -413,54 +413,6 @@
         border-color: #8c3a3a;
     }
 
-    /* Issue #30 v2: per-channel setting dropdowns in a single horizontal
-       row under Preset. Each cell stacks its 'CH N' label above the select. */
-    .amp-channel-settings {
-        display: flex;
-        flex-direction: row;
-        gap: 6px;
-        margin-top: 6px;
-    }
-    .amp-channel-setting-row {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 2px;
-        flex: 1 1 0;
-        min-width: 0;
-    }
-    .amp-channel-setting-label {
-        font-size: 9px;
-        color: #9ab;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: bold;
-        text-align: center;
-    }
-    /* These carried background-color: #ffffff over the shared .amp-cell-input
-       rule, so the four CH selects stayed bright white after everything around
-       them went dark. They use the same field tokens as every other select
-       now; only the centring is specific to them. */
-    select.amp-channel-setting-select {
-        width: 100% !important;
-        padding: 2px 4px !important;
-        font-size: 11px !important;
-        border: 1px solid var(--ss-field-border) !important;
-        border-radius: var(--ss-field-radius) !important;
-        background-color: var(--ss-field-bg) !important;
-        color: var(--ss-field-text) !important;
-        text-align: center !important;
-        text-align-last: center !important;
-    }
-    select.amp-channel-setting-select:hover {
-        border-color: var(--ss-field-border-hover) !important;
-    }
-    select.amp-channel-setting-select option {
-        text-align: center;
-        background-color: var(--ss-field-bg) !important;
-        color: var(--ss-field-text) !important;
-    }
-
     /* ── Right: outputs ──────────────────────────────────────── */
     .amp-output-block { margin-bottom: 8px; }
     /* CaCom Out / SC32 Out / NL4 Out were solid #c03a3a -- red reads as an
@@ -611,17 +563,56 @@
         border-color: #8c3a3a;
     }
     .amp-cabinet-chip[hidden] { display: none; }
+    /* Routing tag row: zone + slot under the cabinet picker. */
+    .amp-tag {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .amp-tag-label, .amp-tag-text {
+        font-size: 9px;
+        color: #9ab;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: bold;
+    }
+    .amp-tag-text { grid-column: 1 / -1; font-size: 11px; text-transform: none; }
+    .amp-tag select {
+        width: auto !important;
+        min-width: 52px;
+        padding: 2px 4px !important;
+        font-size: 11px !important;
+        border: 1px solid var(--ss-field-border) !important;
+        border-radius: var(--ss-field-radius) !important;
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+    }
+    .amp-tag select option {
+        background-color: var(--ss-field-bg) !important;
+        color: var(--ss-field-text) !important;
+    }
+    .amp-tag-hint { font-size: 10px; color: #f0c674; }
+    .amp-tag-hint[hidden] { display: none; }
+    .amp-tag.incomplete .amp-tag-slot { border-color: #7a5a22 !important; }
+    .amp-tag.saving select { border-color: #7a5a22 !important; }
+    .amp-tag.saved select { border-color: #2f6f68 !important; }
+    .amp-tag.error select { border-color: #8c3a3a !important; }
     .amp-cabinet-cell.saving { box-shadow: inset 0 0 0 1px #7a5a22; }
     .amp-cabinet-cell.saved { box-shadow: inset 0 0 0 1px #2f6f68; }
     .amp-cabinet-cell.error { box-shadow: inset 0 0 0 1px #8c3a3a; }
     /* Fingers, not a mouse (iPad): 44px targets. */
     @media (pointer: coarse) {
         .amp-cabinet-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-        select.amp-cabinet-select { min-height: 44px; font-size: 14px !important; }
+        /* height, not min-height: Safari ignores min-height on a native select. */
+        select.amp-cabinet-select { height: 44px; font-size: 14px !important; }
         .amp-qty-btn { width: 44px; height: 44px; font-size: 20px; }
         input.amp-qty-input { width: 44px !important; height: 44px; font-size: 15px !important; }
         .amp-cabinet-summary { font-size: 13px; }
         .amp-cabinet-chip { font-size: 12px; padding: 3px 9px; }
+        .amp-tag select { height: 44px; min-width: 64px; font-size: 14px !important; }
+        .amp-tag-label { font-size: 11px; }
+        .amp-tag-hint { font-size: 12px; }
     }
 
     /* ── Dividers ─────────────────────────────────────────────── */
@@ -689,6 +680,7 @@
     /* ── Add Amp form per location group ──────────────────────── */
     .add-amp-row {
         display: flex;
+        flex-wrap: wrap;  /* "+ Add Divider" ran off an iPad in portrait */
         gap: 8px;
         align-items: center;
         padding: 10px 6px;
@@ -955,7 +947,7 @@
                     </table>
                 </div>
 
-                {# ── Middle: IP + PRESET + per-channel settings (#30) ── #}
+                {# ── Middle: IP + PRESET (the #30 routing tags moved into each output's cell) ── #}
                 <div class="amp-card-section amp-card-middle">
                     <div class="pill">
                         <span class="label">IP Address</span>
@@ -973,20 +965,6 @@
                                data-field="preset"
                                autocomplete="off"
                                class="amp-pill-input">
-                    </div>
-                    <div class="amp-channel-settings">
-                        {% for ch in card.channels %}
-                        <div class="amp-channel-setting-row">
-                            <span class="amp-channel-setting-label">Ch {{ ch.channel_number }}</span>
-                            <select class="amp-cell-input amp-channel-setting-select"
-                                    data-channel-id="{{ ch.pk }}"
-                                    data-field="channel_setting">
-                                {% for val, lbl in ch.CHANNEL_SETTING_CHOICES %}
-                                <option value="{{ val }}"{% if ch.channel_setting == val %} selected{% endif %}>{{ lbl }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endfor %}
                     </div>
                 </div>
 
@@ -1078,12 +1056,12 @@
                                 {% for heading, cabinets in cabinet_groups %}
                                 <optgroup label="{{ heading }}">
                                 {% for cab in cabinets %}{% for sec in cab.sections.all %}
-                                <option value="{{ sec.pk }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
+                                <option value="{{ sec.pk }}" data-zone="{{ sec.routing_zone }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
                                 {% endfor %}{% endfor %}
                                 </optgroup>
                                 {% endfor %}
                                 {% if ch.cabinet_section and not ch.cabinet_section.cabinet.is_active %}
-                                <option value="{{ ch.cabinet_section_id }}" selected>{{ ch.cabinet_section }} (retired)</option>
+                                <option value="{{ ch.cabinet_section_id }}" data-zone="{{ ch.cabinet_section.routing_zone }}" selected>{{ ch.cabinet_section }} (retired)</option>
                                 {% endif %}
                             </select>
                             <div class="amp-cabinet-qty">
@@ -1099,6 +1077,27 @@
                                 <button type="button" class="amp-qty-btn" data-step="1"
                                         aria-label="One more on output {{ ch.channel_number }}">+</button>
                             </div>
+                            {# Routing tag (#30): zone + slot, saved once both are picked. #}
+                            <div class="amp-tag" data-channel-id="{{ ch.pk }}" data-saved="{{ ch.channel_setting }}">
+                                <span class="amp-tag-label">Tag</span>
+                                <select class="amp-tag-zone" autocomplete="off"
+                                        aria-label="Output {{ ch.channel_number }} routing zone">
+                                    <option value="">—</option>
+                                    {% for zone in ch.ROUTING_ZONES %}
+                                    <option value="{{ zone }}"{% if ch.routing_zone == zone or ch.suggested_routing_zone == zone %} selected{% endif %}>{{ zone }}</option>
+                                    {% endfor %}
+                                </select>
+                                <select class="amp-tag-slot" autocomplete="off"
+                                        aria-label="Output {{ ch.channel_number }} routing slot">
+                                    <option value="">—</option>
+                                    {% for slot in ch.ROUTING_SLOTS %}
+                                    <option value="{{ slot }}"{% if ch.routing_slot == slot %} selected{% endif %}>{{ slot }}</option>
+                                    {% endfor %}
+                                </select>
+                                <span class="amp-tag-hint"{% if not ch.suggested_routing_zone %} hidden{% endif %}>pick a slot</span>
+                            </div>
+                            {% elif ch.channel_setting %}
+                            <span class="amp-tag-text">Tag {{ ch.get_channel_setting_display }}</span>
                             {% endif %}
                             <span class="amp-cabinet-summary">{{ ch.load.label }}</span>
                             <span class="amp-cabinet-chip {{ ch.load.warning }}"{% if not ch.load.warning %} hidden{% endif %}>{{ ch.load.warning_text }}</span>
@@ -1575,7 +1574,7 @@
                             cabinet_quantity: inp.dataset.saved };
             sel.value = cell._saved.cabinet_section;
             inp.value = cell._saved.cabinet_quantity;
-            sel.addEventListener('change', function () { saveCabinet(cell); });
+            sel.addEventListener('change', function () { saveCabinet(cell); suggestZone(cell); });
             // Typed numbers save after a short pause, not only on blur.
             inp.addEventListener('input', function () {
                 if (inp.value !== '') queueCabinetSave(cell, 600);
@@ -1622,6 +1621,77 @@
         });
     }
 
+    // ───── Routing tag (zone + slot) ─────
+    // Stored as one value ("LF_B"), so it saves only once both halves are
+    // picked, or both are cleared. With no tag stored yet, the zone follows
+    // the cabinet section (Kara II · LF -> LF) until a slot is chosen.
+    function tagValue(tag) {
+        var zone = tag.querySelector('.amp-tag-zone').value;
+        var slot = tag.querySelector('.amp-tag-slot').value;
+        if (zone && slot) return zone + '_' + slot;
+        if (!zone && !slot) return '';
+        return null;  // half picked
+    }
+
+    function refreshTagHint(tag) {
+        var zone = tag.querySelector('.amp-tag-zone').value;
+        var slot = tag.querySelector('.amp-tag-slot').value;
+        var incomplete = Boolean(zone) !== Boolean(slot);
+        tag.classList.toggle('incomplete', incomplete);
+        var hint = tag.querySelector('.amp-tag-hint');
+        hint.textContent = zone ? 'pick a slot' : 'pick a zone';
+        hint.hidden = !incomplete;
+    }
+
+    function suggestZone(cell) {
+        var tag = cell.querySelector('.amp-tag');
+        if (!tag || tag.dataset.saved) return;  // a stored tag is kept
+        if (tag.querySelector('.amp-tag-slot').value) return;  // user is mid-pick
+        var opt = cell.querySelector('.amp-cabinet-select').selectedOptions[0];
+        tag.querySelector('.amp-tag-zone').value = (opt && opt.dataset.zone) || '';
+        refreshTagHint(tag);
+    }
+
+    function saveTag(tag) {
+        var value = tagValue(tag);
+        refreshTagHint(tag);
+        if (value === null || value === tag.dataset.saved) return;
+        tag.classList.remove('saved', 'error');
+        tag.classList.add('saving');
+        postForm(CABINET_URL + tag.dataset.channelId + '/inline-update/',
+                 { field: 'channel_setting', value: value })
+            .then(function (r) {
+                tag.classList.remove('saving');
+                if (!r.success) {
+                    tag.classList.add('error');
+                    console.warn('Save failed:', r.error);
+                    return;
+                }
+                tag.dataset.saved = value;
+                tag.classList.add('saved');
+                setTimeout(function () { tag.classList.remove('saved'); }, 600);
+            })
+            .catch(function (err) {
+                tag.classList.remove('saving');
+                tag.classList.add('error');
+                console.error(err);
+            });
+    }
+
+    function bindRoutingTags() {
+        document.querySelectorAll('.amp-tag').forEach(function (tag) {
+            var zone = tag.querySelector('.amp-tag-zone');
+            var slot = tag.querySelector('.amp-tag-slot');
+            // "—" for the zone clears the whole tag.
+            zone.addEventListener('change', function () {
+                if (!zone.value) slot.value = '';
+                saveTag(tag);
+            });
+            slot.addEventListener('change', function () { saveTag(tag); });
+            refreshTagHint(tag);
+        });
+    }
+
     var PENDING_KEY = 'ss.ampCabinetPending';
 
     function pendingCabinetCells() {
@@ -1654,6 +1724,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         bindAutosave();
         bindCabinets();
+        bindRoutingTags();
         bindDividerLabelAutosave();
         bindAvbToggles();
         var search = document.getElementById('rack-search');

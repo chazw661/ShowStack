@@ -284,7 +284,7 @@ class RackViewTests(Fixture):
         self.assertContains(page, 'Below 2.7 Ω minimum')
         self.assertContains(page, 'No cabinet', count=2)
         kara_lf = section('Kara II', 'LF')
-        self.assertContains(page, f'<option value="{kara_lf.pk}" selected>Kara II · LF</option>',
+        self.assertContains(page, f'<option value="{kara_lf.pk}" data-zone="LF" selected>Kara II · LF</option>',
                             html=True)
 
     def test_viewer_reads_but_gets_no_controls(self):
