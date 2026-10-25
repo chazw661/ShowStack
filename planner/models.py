@@ -4580,6 +4580,20 @@ class AmplifierProfile(models.Model):
         ratio = (Decimal(self.REFERENCE_VOLTAGE) / Decimal(voltage)).quantize(Decimal('0.0001'))
         return ratio, self.DERIVED_VOLTAGE_SOURCE
 
+    def drive_capacity(self, cabinet_id):
+        """This model's CabinetDriveCapacity row for a cabinet, or None.
+        Reads ``drive_capacities.all()`` so a prefetch is used."""
+        for row in self.drive_capacities.all():
+            if row.cabinet_id == cabinet_id:
+                return row
+        return None
+
+    def drives(self, cabinet_id):
+        """False only when the drive table says this amp does not drive the
+        cabinet ("—"); a cabinet the table does not list is allowed."""
+        row = self.drive_capacity(cabinet_id)
+        return row is None or row.is_supported
+
     def published_loads(self):
         """The load impedances this model's draw table has a column for,
         lowest first (empty for a table that does not depend on load)."""
@@ -4830,6 +4844,62 @@ class CabinetSection(models.Model):
         if not self.cabinet.is_multiway:
             return self.cabinet.model
         return f"{self.cabinet.model} · {self.name}"
+
+
+class CabinetDriveCapacity(models.Model):
+    """How many of a cabinet one amplifier model may drive: one cell of the
+    Preset Guide's "Enclosure drive capacity per amplified controller" table
+    (v25.0 pp.119-120).
+
+    ``per_output`` is the number in parallel on one output -- enclosures for
+    a passive cabinet, sections for an active one (footnote *), so it applies
+    to each section of an active cabinet. ``per_amp`` is the "total" column:
+    enclosures per amplified controller. Both blank is the guide's "—": the
+    amp does not drive this cabinet, and the amp module leaves it out of the
+    picker for that amp.
+
+    An amp whose profile has no rows at all (the LA8 is not in the v25.0
+    table) is not restricted, and a cabinet with no row on an amp that has a
+    table is offered without a check.
+    """
+    profile = models.ForeignKey(AmplifierProfile, on_delete=models.CASCADE,
+                                related_name='drive_capacities')
+    cabinet = models.ForeignKey(CabinetModel, on_delete=models.CASCADE,
+                                related_name='drive_capacities')
+    per_output = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Most in parallel on one output (sections, for an active "
+                  "cabinet). Blank = this amp does not drive the cabinet",
+    )
+    per_amp = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Most enclosures on the whole amp. Blank = not driven",
+    )
+    guide_row = models.CharField(
+        max_length=60, blank=True, default='',
+        help_text="The row as the guide names it (e.g. 'Kiva / Kilo')",
+    )
+    note = models.CharField(max_length=300, blank=True, default='',
+                            help_text="A footnote that applies to this cell")
+    source = models.CharField(max_length=200, help_text="Document, version and page")
+
+    class Meta:
+        verbose_name = "Cabinet Drive Capacity"
+        verbose_name_plural = "Cabinet Drive Capacities"
+        ordering = ['profile', 'cabinet__sort_order']
+        constraints = [
+            models.UniqueConstraint(fields=['profile', 'cabinet'],
+                                    name='unique_cabinet_drive_capacity'),
+        ]
+
+    @property
+    def is_supported(self):
+        return self.per_output is not None
+
+    def __str__(self):
+        if not self.is_supported:
+            return f"{self.profile.model} · {self.cabinet}: not driven"
+        return f"{self.profile.model} · {self.cabinet}: {self.per_output} / {self.per_amp}"
 
 
 class PowerDistributionPlan(models.Model):

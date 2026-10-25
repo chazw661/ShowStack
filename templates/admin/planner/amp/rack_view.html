@@ -605,12 +605,17 @@
         background: rgba(232, 176, 74, 0.14);
         border: 1px solid #7a5a22;
     }
-    .amp-cabinet-chip.below_minimum {
+    .amp-cabinet-chip.below_minimum,
+    .amp-cabinet-chip.not_driven,
+    .amp-cabinet-chip.over_per_output,
+    .amp-cabinet-chip.over_per_amp {
         color: #ff8a8a;
         background: rgba(255, 82, 82, 0.14);
         border-color: #8c3a3a;
     }
     .amp-cabinet-chip[hidden] { display: none; }
+    .amp-drive-totals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .amp-drive-totals[hidden] { display: none; }
     .amp-cabinet-cell.saving { box-shadow: inset 0 0 0 1px #7a5a22; }
     .amp-cabinet-cell.saved { box-shadow: inset 0 0 0 1px #2f6f68; }
     .amp-cabinet-cell.error { box-shadow: inset 0 0 0 1px #8c3a3a; }
@@ -1077,15 +1082,15 @@
                                     aria-label="Output {{ ch.channel_number }} cabinet">
                                 <option value="">— none —</option>
                                 {# Option text starts with the model, so typing "ka" on a focused picker jumps to Kara. #}
-                                {% for heading, cabinets in cabinet_groups %}
+                                {% for heading, cabinets in card.cabinet_groups %}
                                 <optgroup label="{{ heading }}">
                                 {% for cab in cabinets %}{% for sec in cab.sections.all %}
                                 <option value="{{ sec.pk }}" data-zone="{{ sec.routing_zone }}"{% if ch.cabinet_section_id == sec.pk %} selected{% endif %}>{{ sec }}</option>
                                 {% endfor %}{% endfor %}
                                 </optgroup>
                                 {% endfor %}
-                                {% if ch.cabinet_section and not ch.cabinet_section.cabinet.is_active %}
-                                <option value="{{ ch.cabinet_section_id }}" data-zone="{{ ch.cabinet_section.routing_zone }}" data-label="{{ ch.cabinet_section }}" selected>{{ ch.cabinet_section }} (retired)</option>
+                                {% if ch.cabinet_unlisted %}
+                                <option value="{{ ch.cabinet_section_id }}" data-zone="{{ ch.cabinet_section.routing_zone }}" data-label="{{ ch.cabinet_section }}" selected>{{ ch.cabinet_section }} ({{ ch.cabinet_unlisted }})</option>
                                 {% endif %}
                             </select>
                             <div class="amp-cabinet-qty">
@@ -1108,6 +1113,10 @@
                             <span class="amp-cabinet-chip amp-routing-mismatch" data-channel-number="{{ ch.channel_number }}"{% if not ch.routing_mismatch %} hidden{% endif %}>{{ ch.routing_mismatch }}</span>
                         </div>
                         {% endfor %}
+                    </div>
+                    {# Drive table's per-amp totals (Preset Guide pp.119-120). #}
+                    <div class="amp-drive-totals"{% if not card.drive_warnings %} hidden{% endif %}>
+                        {% for w in card.drive_warnings %}<span class="amp-cabinet-chip over_per_amp">{{ w }}</span>{% endfor %}
                     </div>
                 </div>
             </div>
@@ -1509,6 +1518,19 @@
         chip.className = 'amp-cabinet-chip ' + (r.warning || '');
         chip.textContent = r.warning_text;
         chip.hidden = !r.warning;
+        // The per-amp totals depend on every output, so the reply carries
+        // them for the whole amp.
+        var totals = cell.closest('.amp-card-cabinets').querySelector('.amp-drive-totals');
+        if (totals && r.drive_warnings) {
+            totals.textContent = '';
+            r.drive_warnings.forEach(function (w) {
+                var span = document.createElement('span');
+                span.className = 'amp-cabinet-chip over_per_amp';
+                span.textContent = w;
+                totals.appendChild(span);
+            });
+            totals.hidden = !r.drive_warnings.length;
+        }
     }
 
     function saveCabinet(cell) {

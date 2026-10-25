@@ -95,8 +95,10 @@ VOLTAGE_FACTOR_NOTE = "; current multiplier vs 230 V (page not recorded)"
 # total-impedance table (p.118) that is the lowest load it is rated for.
 GUIDE = "L-Acoustics Preset Guide owner's manual (EN) v25.0"
 MIN_LOADS = {
-    'LA8': ('2.7', f"{GUIDE} p.120: up to 3 x 8 ohm enclosures per output "
-                   "(2.7 ohm, p.118)"),
+    # The v25.0 drive-capacity table (pp.119-120) has no LA8 column, so this
+    # is not from it: 2.7 ohm (3 x 8 ohm, p.118) as for the LA12X.
+    'LA8': ('2.7', f"Assumed: {GUIDE} pp.119-120 has no LA8 column; 2.7 ohm "
+                   "(3 x 8 ohm, p.118) as for the LA12X -- check the LA8 manual"),
     'LA4X': ('4', f"{GUIDE} p.119: up to 2 x 8 ohm or 4 x 16 ohm enclosures "
                   "per output (4 ohm, p.118)"),
     'LA12X': ('2.7', f"{GUIDE} p.119: up to 3 x 8 ohm or 6 x 16 ohm enclosures "
@@ -110,6 +112,12 @@ MIN_LOADS = {
 
 def _dec(value):
     return None if value is None else Decimal(str(value))
+
+
+# Citations shipped before and since corrected; replaced where still stored.
+SUPERSEDED_MIN_LOAD_SOURCES = {
+    'LA8': f"{GUIDE} p.120: up to 3 x 8 ohm enclosures per output (2.7 ohm, p.118)",
+}
 
 
 class Command(BaseCommand):
@@ -281,6 +289,12 @@ class Command(BaseCommand):
             if not force:
                 profiles = profiles.filter(min_load_ohms__isnull=True)
             filled += profiles.update(min_load_ohms=_dec(ohms), min_load_source=source)
+        # Correct a citation seeded wrongly, leaving the value alone.
+        for model_name, old_source in SUPERSEDED_MIN_LOAD_SOURCES.items():
+            AmplifierProfile.objects.filter(
+                manufacturer='L-Acoustics', model=model_name,
+                min_load_source=old_source,
+            ).update(min_load_source=MIN_LOADS[model_name][1])
         self.stdout.write(self.style.SUCCESS(f'Minimum loads filled: {filled}'))
 
     def _link_amp_models(self):
