@@ -218,9 +218,22 @@ class MigrationTests(PlanFixture):
         return importlib.import_module('planner.migrations.0213_power_plan_per_load')
 
     def test_mapping(self):
-        self.assertEqual({'speech': 'normal', 'light_music': 'normal', 'heavy_music': 'heavy',
+        self.assertEqual({'speech': 'normal', 'light_music': 'normal', 'heavy_music': 'normal',
                           'edm_concert': 'heavy', 'test_tone': 'heavy'},
                          self.migration().FORWARD)
+
+    def test_default_headroom_is_25_percent(self):
+        plan = PowerDistributionPlan.objects.create(project=self.project, venue_name='New')
+        self.assertEqual(D('1.25'), plan.transient_headroom)
+        self.use(self.owner)
+        page = self.client.get(reverse('planner:power_distribution_calculator_detail',
+                                       args=[plan.pk]))
+        self.assertContains(page, '<option value="1.25" selected>25% (default)</option>')
+        # A stored value off the list still shows, selected.
+        PowerDistributionPlan.objects.filter(pk=plan.pk).update(transient_headroom=D('1.40'))
+        page = self.client.get(reverse('planner:power_distribution_calculator_detail',
+                                       args=[plan.pk]))
+        self.assertContains(page, '<option value="1.40" selected>1.40×</option>')
 
     def test_recompute_overwrites_stale_figures(self):
         from django.apps import apps

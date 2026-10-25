@@ -2719,11 +2719,19 @@ def power_distribution_calculator(request, plan_id=None):
         'total_amps_count': total_amps_count,
         'total_power_kw': round(total_watts / 1000, 1),
         'estimate_label': ESTIMATE_LABEL,
+        # Compared as "1.25"-style strings: a Decimal 1.30 never equals the
+        # float 1.3 a template literal gives, so 30% was never shown selected.
+        'headroom_choices': HEADROOM_CHOICES,
+        'headroom_values': [v for v, _ in HEADROOM_CHOICES],
         'voltage': voltage,
         'uses_power_factor': any(a.draw and a.draw.basis == FROM_WATTS for a in assignments),
     }
     
     return render(request, 'planner/power_distribution_calculator.html', context)
+
+
+HEADROOM_CHOICES = [('1.25', '25% (default)'), ('1.30', '30%'), ('1.50', '50%'),
+                    ('1.75', '75%'), ('2.00', '100%')]
 
 
 def calculate_phase_distribution(plan):

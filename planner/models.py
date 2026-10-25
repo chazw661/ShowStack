@@ -4904,8 +4904,9 @@ class PowerDistributionPlan(models.Model):
     
     # Safety factors
     transient_headroom = models.DecimalField(
-        max_digits=3, decimal_places=2, default=1.50,
-        help_text="Multiplier for transient peaks (1.5 = 50% headroom)"
+        max_digits=3, decimal_places=2, default=Decimal('1.25'),
+        help_text="Multiplier on the estimated current for transient peaks "
+                  "(1.25 = 25%, matching 80% continuous breaker loading)",
     )
     safety_margin = models.DecimalField(
         max_digits=3, decimal_places=2, default=0.80,

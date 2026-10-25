@@ -5,9 +5,13 @@ Schema:
 * AmplifierAssignment.duty_cycle (speech / light / heavy / EDM / test tone,
   a multiplier on the 1/8-power figure) becomes ``programme`` (idle /
   normal = 1/8 power / heavy = 1/3 power). Old values map:
-      speech, light_music              -> normal
-      heavy_music, edm_concert, test_tone -> heavy
-  Reversing maps normal -> light_music, heavy -> heavy_music, idle -> speech.
+      speech, light_music, heavy_music -> normal
+      edm_concert, test_tone           -> heavy
+  heavy_music was the old default, so most rows become normal; heavy stays
+  an explicit choice. Reversing maps normal -> heavy_music (the old
+  default), heavy -> edm_concert, idle -> speech.
+* PowerDistributionPlan.transient_headroom defaults to 1.25 (25%, the 80%
+  continuous breaker loading) instead of 1.5. Existing plans keep theirs.
 * AmplifierAssignment.load_ohms (blank = lowest published load) and
   calculated_watts_per_unit.
 
@@ -22,10 +26,10 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import migrations, models
 
 FORWARD = {
-    'speech': 'normal', 'light_music': 'normal',
-    'heavy_music': 'heavy', 'edm_concert': 'heavy', 'test_tone': 'heavy',
+    'speech': 'normal', 'light_music': 'normal', 'heavy_music': 'normal',
+    'edm_concert': 'heavy', 'test_tone': 'heavy',
 }
-BACKWARD = {'normal': 'light_music', 'heavy': 'heavy_music', 'idle': 'speech'}
+BACKWARD = {'normal': 'heavy_music', 'heavy': 'edm_concert', 'idle': 'speech'}
 
 
 def map_forward(apps, schema_editor):
@@ -66,6 +70,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterField(
+            model_name='powerdistributionplan',
+            name='transient_headroom',
+            field=models.DecimalField(
+                decimal_places=2, default=Decimal('1.25'), max_digits=3,
+                help_text='Multiplier on the estimated current for transient peaks '
+                          '(1.25 = 25%, matching 80% continuous breaker loading)'),
+        ),
         migrations.AddField(
             model_name='powerdistributionplan',
             name='power_factor',
