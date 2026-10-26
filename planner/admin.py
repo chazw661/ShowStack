@@ -2341,6 +2341,10 @@ class AmpAdmin(BaseEquipmentAdmin):
                         'cacom_rows': cacom_rows,
                         'sc32_rows': sc32_rows,
                         'has_nl4': has_nl4,
+                        # More than four channels: the CH block wraps into rows
+                        # and offers the role only (AmpChannel.role_only_routing).
+                        'role_only_routing': bool(
+                            model and model.channel_count > AmpChannel.ROLE_AND_INPUT_MAX_CHANNELS),
                         'avb_unused_count': avb_unused_count,
                         'cabinet_groups': cabinet_groups,
                         'drive_warnings': amp_drive_warnings(profile, channels),

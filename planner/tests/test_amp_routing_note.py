@@ -10,7 +10,7 @@ Run with::
 
 from django.urls import reverse
 
-from planner.models import Amp, AmpChannel
+from planner.models import Amp, AmpChannel, AmpModel
 from planner.tests.test_amp_output_cabinets import Fixture, section, staff
 
 
@@ -179,3 +179,164 @@ class PdfTests(Base):
         from planner.utils.pdf_exports.system_report import _section_amplifiers
         self.assertTrue(export_all_amps_pdf(self.project).content.startswith(b'%PDF'))
         self.assertTrue(_section_amplifiers(self.project, styles(), Amp))
+
+
+class WideAmpBase(Fixture):
+    """An LA7.16 (16 channels) beside the fixture's LA12X (4)."""
+
+    def setUp(self):
+        super().setUp()
+        self.models['LA7.16'] = AmpModel.objects.create(
+            manufacturer='L-Acoustics', model_name='LA7.16', channel_count=16)
+        self.la716 = self.amp(self.project, 'LA7.16', name='Amp 16')
+        self.url = reverse('admin:planner_amp_changelist')
+
+    def set(self, amp, n, setting):
+        ch = self.channel(amp, n)
+        AmpChannel.objects.filter(pk=ch.pk).update(channel_setting=setting)
+        return AmpChannel.objects.get(pk=ch.pk)
+
+    def post(self, ch, value):
+        return self.client.post(reverse('planner:amp_channel_inline_update', args=[ch.pk]),
+                                {'field': 'channel_setting', 'value': value})
+
+
+class RoleOnlyChoicesTests(WideAmpBase):
+
+    def test_wide_amp_offers_the_role_only(self):
+        ch = self.channel(self.la716, 9)
+        self.assertTrue(ch.role_only_routing)
+        self.assertEqual(['', 'PA', 'LF', 'HF', 'SB'], [v for v, _ in ch.channel_setting_choices])
+
+    def test_four_channel_amp_keeps_role_and_input(self):
+        ch = self.channel(self.la12x)
+        self.assertFalse(ch.role_only_routing)
+        self.assertEqual([''] + [f'{z}_{s}' for z in ('PA', 'LF', 'HF', 'SB') for s in 'ABCD'],
+                         [v for v, _ in ch.channel_setting_choices])
+
+    def test_a_stored_value_outside_the_list_stays_visible(self):
+        # e.g. the amp's model was changed after the value was set
+        ch = self.set(self.la716, 3, 'PA_B')
+        self.assertEqual(('PA_B', 'PA_B'), ch.channel_setting_choices[-1])
+        self.assertEqual(('LF', 'LF'), self.set(self.la12x, 1, 'LF').channel_setting_choices[-1])
+
+    def test_pdfs_print_a_role_only_value(self):
+        self.assertEqual('SB', self.set(self.la716, 1, 'SB').get_channel_setting_display())
+
+
+class RoleOnlySaveTests(WideAmpBase):
+
+    def test_role_saves_and_survives_a_reload(self):
+        self.use(self.owner)
+        ch = self.channel(self.la716, 12)
+        self.assertEqual(200, self.post(ch, 'PA').status_code)
+        ch.refresh_from_db()
+        self.assertEqual('PA', ch.channel_setting)
+        page = self.client.get(self.url).content.decode()
+        select = page[page.index(f'data-channel-id="{ch.pk}"\n                data-field="channel_setting"'):]
+        select = select[:select.index('</select>')]
+        self.assertIn('title="PA"', select)
+        self.assertIn('<option value="PA" selected>PA</option>', select)
+
+    def test_wide_amp_refuses_a_suffix_and_four_channel_refuses_role_only(self):
+        self.use(self.owner)
+        wide, four = self.channel(self.la716, 2), self.channel(self.la12x, 2)
+        self.assertEqual(400, self.post(wide, 'PA_B').status_code)
+        self.assertEqual(400, self.post(four, 'PA').status_code)
+        self.assertEqual(200, self.post(four, 'PA_B').status_code)
+        wide.refresh_from_db()
+        four.refresh_from_db()
+        self.assertEqual(('', 'PA_B'), (wide.channel_setting, four.channel_setting))
+
+    def test_clear_still_works(self):
+        self.use(self.owner)
+        ch = self.set(self.la716, 1, 'HF')
+        self.assertEqual(200, self.post(ch, '').status_code)
+        ch.refresh_from_db()
+        self.assertEqual('', ch.channel_setting)
+
+
+class WideCardTests(WideAmpBase):
+
+    def test_wide_amp_wraps_and_four_channel_amp_does_not(self):
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        self.assertEqual(1, page.count('<div class="amp-channel-settings amp-channel-settings-wrap">'))
+        self.assertEqual(1, page.count('<div class="amp-channel-settings">'))
+        self.assertEqual(20, page.count('data-field="channel_setting"'))
+        wide = page[page.index('amp-channel-settings-wrap">'):]
+        wide = wide[:wide.index('amp-card-cabinets')]
+        self.assertEqual(16, wide.count('title="No routing"'))
+        self.assertNotIn('PA_A', wide)
+        self.assertIn('<span class="amp-channel-setting-label">Ch 16</span>', wide)
+
+    def test_wide_block_gets_the_full_card_width(self):
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        routing = page.index('<div class="amp-card-routing">')
+        self.assertLess(page.index('amp-card-outputs'), routing)
+        self.assertLess(routing, page.index('amp-channel-settings-wrap"'))
+        self.assertIn('Channel routing — role only; inputs are routed in LA Network Manager', page)
+        self.assertEqual(1, page.count('<div class="amp-card-routing">'))
+        self.assertIn('.amp-card-routing,\n    .amp-card-cabinets {\n        grid-column: 1 / -1;', page)
+        self.assertNotIn('Issue #30: the CH-block routing selects', page)  # template comment
+
+    def test_wrap_css(self):
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        rule = page[page.index('.amp-channel-settings-wrap {'):]
+        self.assertIn('minmax(max(72px, calc((100% - 7 * 6px) / 8)), 1fr)', rule[:rule.index('}')])
+        self.assertIn('.amp-channel-settings-wrap select.amp-channel-setting-select {\n'
+                      '            height: 44px;', page)
+
+
+class RoleOnlyMismatchTests(WideAmpBase):
+
+    def route(self, n, sec, setting):
+        ch = self.assign(self.channel(self.la716, n), sec, 1)
+        AmpChannel.objects.filter(pk=ch.pk).update(channel_setting=setting)
+        return AmpChannel.objects.get(pk=ch.pk)
+
+    def test_role_only_tag_against_the_cabinet(self):
+        self.assertEqual('LF', self.route(3, section('Kara II', 'HF'), 'LF').routing_zone)
+        self.assertEqual('CH 3 is routed LF, cabinet is Kara II · HF',
+                         self.route(3, section('Kara II', 'HF'), 'LF').routing_mismatch)
+        self.assertEqual('CH 14 is routed SB, cabinet is Kara II · LF',
+                         self.route(14, section('Kara II', 'LF'), 'SB').routing_mismatch)
+        self.assertEqual('', self.route(5, section('KS28'), 'SB').routing_mismatch)
+        self.assertEqual('', self.route(6, section('K1', 'MF'), 'HF').routing_mismatch)
+        self.assertEqual('', self.route(7, section('KS28'), '').routing_mismatch)
+
+    def test_note_on_the_rack_card(self):
+        self.route(11, section('Kara II', 'HF'), 'LF')
+        self.route(12, section('Kara II', 'HF'), 'HF')
+        self.use(self.owner)
+        page = self.client.get(self.url).content.decode()
+        self.assertIn('<span class="amp-cabinet-chip amp-routing-mismatch" data-channel-number="11">'
+                      'CH 11 is routed LF, cabinet is Kara II · HF</span>', page)
+        self.assertIn('amp-routing-mismatch" data-channel-number="12" hidden>', page)
+
+    def test_pdf_cabinets_row_carries_the_note(self):
+        from planner.utils.pdf_exports import report_kit as kit
+        self.route(11, section('Kara II', 'HF'), 'LF')
+        amp = Amp.objects.prefetch_related('channels').get(pk=self.la716.pk)
+        _title, table = kit.amp_cabinets_table(sorted(amp.channels.all(), key=lambda c: c.channel_number))
+        texts = ' '.join(c.text for row in table._cellvalues for c in row if c)
+        self.assertIn('CH 11 is routed LF, cabinet is Kara II · HF', texts)
+
+
+class StripInputSuffixTests(WideAmpBase):
+
+    def test_converts_wide_amps_only_reports_the_count_and_is_idempotent(self):
+        from planner.utils.channel_routing import strip_input_suffix
+        self.set(self.la716, 1, 'PA_B')
+        self.set(self.la716, 2, 'SB_D')
+        self.set(self.la716, 3, 'HF')
+        self.set(self.la12x, 1, 'PA_B')
+        no_model = Amp.objects.create(project=self.project, location=self.la12x.location, name='Bare')
+        self.assertEqual(2, strip_input_suffix(AmpChannel))
+        self.assertEqual(['PA', 'SB', 'HF', ''],
+                         [self.channel(self.la716, n).channel_setting for n in (1, 2, 3, 4)])
+        self.assertEqual('PA_B', self.channel(self.la12x, 1).channel_setting)
+        self.assertFalse(no_model.channels.exists())
+        self.assertEqual(0, strip_input_suffix(AmpChannel))

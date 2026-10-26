@@ -2192,12 +2192,18 @@ class AmpChannel(models.Model):
     channel_name = models.CharField(max_length=100, blank=True, default="")
 
     # Issue #30: per-channel speaker-zone routing label that lived in the
-    # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.).
-    CHANNEL_SETTING_CHOICES = [('', '---------')] + [
+    # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.). A 4-channel amp records
+    # role + input (A-D). An amp with more channels (LA7.16) records the role
+    # only: its input routing is done in LA Network Manager.
+    ROUTING_ROLES = ('PA', 'LF', 'HF', 'SB')
+    ROLE_AND_INPUT_CHOICES = [('', '---------')] + [
         (f'{zone}_{slot}', f'{zone}_{slot}')
-        for zone in ('PA', 'LF', 'HF', 'SB')
+        for zone in ROUTING_ROLES
         for slot in ('A', 'B', 'C', 'D')
     ]
+    ROLE_ONLY_CHOICES = [('', '---------')] + [(zone, zone) for zone in ROUTING_ROLES]
+    CHANNEL_SETTING_CHOICES = ROLE_AND_INPUT_CHOICES + ROLE_ONLY_CHOICES[1:]
+    ROLE_AND_INPUT_MAX_CHANNELS = 4
     channel_setting = models.CharField(
         max_length=20, blank=True, default='',
         choices=CHANNEL_SETTING_CHOICES,
@@ -2273,8 +2279,26 @@ class AmpChannel(models.Model):
         return output_load(self)
 
     @property
+    def role_only_routing(self):
+        """True on an amp with more than four channels: the CH block records
+        the role (PA/LF/HF/SB) without an A-D input. An amp with no model
+        keeps role + input, as before."""
+        model = self.amp.amp_model
+        return model is not None and model.channel_count > self.ROLE_AND_INPUT_MAX_CHANNELS
+
+    @property
+    def channel_setting_choices(self):
+        """What this channel's CH select offers. A stored value outside the
+        list (the amp's model changed) is kept as the last option, so the page
+        shows what is saved instead of a blank."""
+        choices = self.ROLE_ONLY_CHOICES if self.role_only_routing else self.ROLE_AND_INPUT_CHOICES
+        if self.channel_setting and self.channel_setting not in dict(choices):
+            choices = choices + [(self.channel_setting, self.channel_setting)]
+        return choices
+
+    @property
     def routing_zone(self):
-        """'LF' from the CH block's 'LF_B'; '' with no setting."""
+        """'LF' from the CH block's 'LF_B' or 'LF'; '' with no setting."""
         return self.channel_setting.partition('_')[0]
 
     @property
