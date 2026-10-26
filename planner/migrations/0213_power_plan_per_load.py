@@ -11,7 +11,10 @@ Schema:
   an explicit choice. Reversing maps normal -> heavy_music (the old
   default), heavy -> edm_concert, idle -> speech.
 * PowerDistributionPlan.transient_headroom defaults to 1.25 (25%, the 80%
-  continuous breaker loading) instead of 1.5. Existing plans keep theirs.
+  continuous breaker loading) instead of 1.5. Existing plans still at the
+  old default (exactly 1.50) move to 1.25; any other stored value is kept.
+  1.50 was the default, so a plan someone set to 50% on purpose cannot be
+  told apart and moves too. Not reversed: roll back from a backup.
 * AmplifierAssignment.load_ohms (blank = lowest published load) and
   calculated_watts_per_unit.
 
@@ -42,6 +45,16 @@ def map_backward(apps, schema_editor):
     Assignment = apps.get_model('planner', 'AmplifierAssignment')
     for new, old in BACKWARD.items():
         Assignment.objects.filter(programme=new).update(duty_cycle=old)
+
+
+OLD_DEFAULT_HEADROOM = Decimal('1.50')
+NEW_DEFAULT_HEADROOM = Decimal('1.25')
+
+
+def headroom_to_new_default(apps, schema_editor):
+    Plan = apps.get_model('planner', 'PowerDistributionPlan')
+    Plan.objects.filter(transient_headroom=OLD_DEFAULT_HEADROOM).update(
+        transient_headroom=NEW_DEFAULT_HEADROOM)
 
 
 def recompute(apps, schema_editor):
@@ -112,5 +125,7 @@ class Migration(migrations.Migration):
                 blank=True, null=True,
                 help_text='Estimated power per amplifier at the programme level'),
         ),
+        # Before the recompute, so cached currents use the new headroom.
+        migrations.RunPython(headroom_to_new_default, migrations.RunPython.noop),
         migrations.RunPython(recompute, migrations.RunPython.noop),
     ]

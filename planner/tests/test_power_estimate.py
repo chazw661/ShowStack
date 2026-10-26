@@ -235,6 +235,23 @@ class MigrationTests(PlanFixture):
                                        args=[plan.pk]))
         self.assertContains(page, '<option value="1.40" selected>1.40×</option>')
 
+    def test_old_default_headroom_moves_to_25_percent(self):
+        from django.apps import apps
+        kept = PowerDistributionPlan.objects.create(
+            project=self.project, venue_name='Chosen', transient_headroom=D('1.30'))
+        self.migration().headroom_to_new_default(apps, None)
+        self.migration().recompute(apps, None)
+        self.plan.refresh_from_db()
+        kept.refresh_from_db()
+        self.assertEqual((D('1.25'), D('1.30')), (self.plan.transient_headroom,
+                                                  kept.transient_headroom))
+        # 28.75 A x 1.25 = 35.9375, half up
+        self.row.refresh_from_db()
+        self.assertEqual(D('35.94'), self.row.calculated_current_per_unit)
+        self.migration().headroom_to_new_default(apps, None)  # twice: same result
+        self.plan.refresh_from_db()
+        self.assertEqual(D('1.25'), self.plan.transient_headroom)
+
     def test_recompute_overwrites_stale_figures(self):
         from django.apps import apps
         AmplifierAssignment.objects.filter(pk=self.row.pk).update(
