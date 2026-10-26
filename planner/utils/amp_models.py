@@ -44,22 +44,43 @@ def _squash(text):
 COPY_SUFFIX = re.compile(r'[\s\-_#(]+\d\)?\s*$')
 
 
-def model_key(manufacturer, model_name):
-    """("L-Acoustics", "LA 12X"), ("la", "la12x") and ("Lacoustics",
-    "LA12X-2") give the same key."""
+def _exact_key(manufacturer, model_name):
     maker = _squash(manufacturer)
     model = COPY_SUFFIX.sub('', (model_name or '').strip())
     return MANUFACTURER_ALIASES.get(maker, maker), _squash(model)
+
+
+def model_key(manufacturer, model_name):
+    """("L-Acoustics", "LA 12X"), ("la", "la12x") and ("Lacoustics",
+    "LA12X-2") give the same key."""
+    return _exact_key(manufacturer, model_name)
+
+
+# Different products that a looser model_key could fold together. Each keeps
+# a group of its own whatever model_key says, so they are never offered as
+# the same model nor merged. Keys as _exact_key gives them.
+NEVER_MERGED = {
+    # LA7.16: touring, 16 outputs on one SC32. LA7.16i: install. Different
+    # amps with different power figures.
+    ('lacoustics', 'la716'),
+    ('lacoustics', 'la716i'),
+}
+
+
+def group_key(manufacturer, model_name):
+    """What rows are grouped by: model_key, split for NEVER_MERGED."""
+    exact = _exact_key(manufacturer, model_name)
+    return model_key(manufacturer, model_name), exact if exact in NEVER_MERGED else None
 
 
 def find_existing(manufacturer, model_name, exclude_pk=None):
     """The AmpModel rows that are this model under another spelling, the
     one to use first."""
     from planner.models import AmpModel
-    key = model_key(manufacturer, model_name)
+    key = group_key(manufacturer, model_name)
     rows = AmpModel.objects.exclude(pk=exclude_pk) if exclude_pk else AmpModel.objects.all()
     matches = [m for m in rows.select_related('power_profile')
-               if model_key(m.manufacturer, m.model_name) == key]
+               if group_key(m.manufacturer, m.model_name) == key]
     return sorted(matches, key=_survivor_rank)
 
 
@@ -104,16 +125,16 @@ def duplicate_groups():
     ("Lacoustics LA8-2" for the LA8), with what to rename and link."""
     from django.db.models import Count
     from planner.models import AmplifierProfile, AmpModel
-    profiles = {model_key(p.manufacturer, p.model): p for p in AmplifierProfile.objects.all()}
+    profiles = {group_key(p.manufacturer, p.model): p for p in AmplifierProfile.objects.all()}
     rows = list(AmpModel.objects.select_related('power_profile')
                 .annotate(n_amps=Count('amp')).order_by('pk'))
     by_key = {}
     for m in rows:
-        by_key.setdefault(model_key(m.manufacturer, m.model_name), []).append(m)
+        by_key.setdefault(group_key(m.manufacturer, m.model_name), []).append(m)
 
     groups = []
-    for key, members in by_key.items():
-        profile = profiles.get(key)
+    for (key, _guard), members in by_key.items():
+        profile = profiles.get((key, _guard))
         counts = {m.pk: m.n_amps for m in members}
         members.sort(key=lambda m: _survivor_rank(m, counts))
         survivor, extras = members[0], members[1:]
@@ -146,3 +167,17 @@ def duplicate_groups():
                                      profile=profile, rename_to=rename_to,
                                      link_profile=bool(link)))
     return groups
+
+
+def amps_without_power_profile(project):
+    """(count, ['Test Amp ×2', 'No model ×1']) for the project's rack amps
+    whose model has no power profile: they have no figures, so no plan can
+    count them, and the plan says so rather than leaving them out silently."""
+    from collections import Counter
+    from django.db.models import Q
+    from planner.models import Amp
+    amps = (Amp.objects.filter(project=project)
+            .filter(Q(amp_model__isnull=True) | Q(amp_model__power_profile__isnull=True))
+            .select_related('amp_model'))
+    counts = Counter(str(a.amp_model) if a.amp_model_id else 'No model' for a in amps)
+    return sum(counts.values()), [f'{name} ×{n}' for name, n in sorted(counts.items())]

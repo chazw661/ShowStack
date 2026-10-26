@@ -64,9 +64,10 @@ class DriveFixture(Fixture):
 class SeedTests(DriveFixture):
 
     def test_every_catalogue_cabinet_on_each_amp_in_the_table(self):
-        # 31 catalogue cabinets x LA4X, LA7.16i, LA12X from v25.0, plus the
-        # 26 the v22.0 LA8 table lists (not X6i, X8i, Soka, L2, SB6i).
-        self.assertEqual(93, CabinetDriveCapacity.objects.exclude(profile__model='LA8').count())
+        # 31 catalogue cabinets x LA4X, LA7.16i, LA7.16 (the same "LA7.16(i)"
+        # column) and LA12X from v25.0, plus the 26 the v22.0 LA8 table
+        # lists (not X6i, X8i, Soka, L2, SB6i).
+        self.assertEqual(124, CabinetDriveCapacity.objects.exclude(profile__model='LA8').count())
         la8 = CabinetDriveCapacity.objects.filter(profile__model='LA8')
         self.assertEqual(26, la8.count())
         self.assertFalse(la8.filter(cabinet__model__in=[

@@ -304,6 +304,9 @@
             color: #4a9eff;
         }
         
+        .plan-warning { border-left: 4px solid #ff5252; color: #ffb3b3; }
+        .plan-provisional { border-left: 4px solid #e8b04a; color: #f0c674; font-size: 13px; }
+
         .stat-label {
             font-size: 12px;
             color: #888;
@@ -329,6 +332,22 @@
 </div>
 
         
+        {% if excluded_count %}
+        <div class="panel plan-warning">
+            <strong>{{ excluded_count }} amp{{ excluded_count|pluralize }} excluded from totals:</strong>
+            {{ excluded_models|join:", " }}.
+            No power profile, so no figures to count. Link the amp model to a power profile
+            (superuser), or add the draw here by hand.
+        </div>
+        {% endif %}
+        {% if provisional_profiles %}
+        <div class="panel plan-provisional">
+            {% for p in provisional_profiles %}
+            <div><strong>{{ p }}:</strong> {{ p.figures_status }}.</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <!-- Service Configuration Panel -->
         <div class="panel">
             <h2 class="panel-title">Service Configuration</h2>

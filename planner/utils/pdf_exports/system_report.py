@@ -24,6 +24,7 @@ from reportlab.lib.enums import TA_CENTER
 from django.http import HttpResponse
 from datetime import datetime
 import io
+from xml.sax.saxutils import escape
 
 from .pdf_styles import LANDSCAPE_PAGE, MARGIN
 from planner.utils import pa_cable_math
@@ -997,6 +998,8 @@ def _section_power(project, styles, PowerDistributionPlan):
         story.append(PageBreak())
         return story
 
+    from planner.utils.amp_models import amps_without_power_profile
+    excluded_count, excluded_models = amps_without_power_profile(project)
     for plan in plans:
         heading = Paragraph(f"Venue: {plan.venue_name}", styles['sub'])
         assignments = plan.amplifier_assignments.all().order_by('phase_assignment', 'position')
@@ -1017,6 +1020,15 @@ def _section_power(project, styles, PowerDistributionPlan):
             story += _table_block([heading, table], len(rows), n_headings=1)
         else:
             story.append(_keep([heading, Paragraph("No amplifier assignments.", styles['empty'])]))
+        for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
+                              key=str):
+            story.append(Paragraph(f"{escape(str(profile))}: {escape(profile.figures_status)}.",
+                                   styles['meta']))
+        if excluded_count:
+            story.append(Paragraph(
+                f"<b>{excluded_count} amp{'s' if excluded_count != 1 else ''} excluded from "
+                f"totals:</b> {escape(', '.join(excluded_models))} (no power profile).",
+                styles['meta']))
         story.append(Spacer(1, 0.2 * inch))
 
     story.append(PageBreak())
