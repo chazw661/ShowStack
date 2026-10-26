@@ -460,6 +460,24 @@
         background-color: var(--ss-field-bg) !important;
         color: var(--ss-field-text) !important;
     }
+    /* More than four channels (LA7.16): sixteen in one row left each select
+       ~40px, too narrow to show its value. They get the card's full width
+       (.amp-card-routing) and wrap: eight per row when there is room, fewer
+       when there isn't, never narrower than a value. */
+    .amp-channel-settings-wrap {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(max(72px, calc((100% - 7 * 6px) / 8)), 1fr));
+    }
+    @media (pointer: coarse) {
+        .amp-channel-settings-wrap {
+            grid-template-columns: repeat(auto-fill, minmax(max(100px, calc((100% - 7 * 6px) / 8)), 1fr));
+        }
+        /* height, not min-height: Safari ignores min-height on a native select. */
+        .amp-channel-settings-wrap select.amp-channel-setting-select {
+            height: 44px;
+            font-size: 14px !important;
+        }
+    }
 
     /* ── Right: outputs ──────────────────────────────────────── */
     .amp-output-block { margin-bottom: 8px; }
@@ -504,6 +522,7 @@
     /* ── Bottom strip: what is on each output ──────────────────── */
     /* One cell per output, as many per row as fit, so the strip works from
        a 16-output LA7.16i on a desktop down to an iPad in portrait. */
+    .amp-card-routing,
     .amp-card-cabinets {
         grid-column: 1 / -1;
         border-top: 1px solid var(--ss-border);
@@ -983,20 +1002,7 @@
                                autocomplete="off"
                                class="amp-pill-input">
                     </div>
-                    <div class="amp-channel-settings">
-                        {% for ch in card.channels %}
-                        <div class="amp-channel-setting-row">
-                            <span class="amp-channel-setting-label">Ch {{ ch.channel_number }}</span>
-                            <select class="amp-cell-input amp-channel-setting-select"
-                                    data-channel-id="{{ ch.pk }}"
-                                    data-field="channel_setting">
-                                {% for val, lbl in ch.CHANNEL_SETTING_CHOICES %}
-                                <option value="{{ val }}"{% if ch.channel_setting == val %} selected{% endif %}>{{ lbl }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endfor %}
-                    </div>
+                    {% if not card.role_only_routing %}{% include "admin/planner/amp/_channel_settings.html" %}{% endif %}
                 </div>
 
                 {# ── Right: Outputs ─────────────────────────── #}
@@ -1063,6 +1069,13 @@
                 </div>
 
                 {# ── Bottom: the cabinets on each output ──────── #}
+                {% if card.role_only_routing %}
+                {# More than four channels: sixteen selects need the card's full width. #}
+                <div class="amp-card-routing">
+                    <div class="amp-output-title">Channel routing — role only; inputs are routed in LA Network Manager</div>
+                    {% include "admin/planner/amp/_channel_settings.html" %}
+                </div>
+                {% endif %}
                 <div class="amp-card-cabinets">
                     <div class="amp-cabinets-head">
                         <div class="amp-output-title">Cabinets per output — used for the power estimate</div>
@@ -1314,6 +1327,15 @@
         var target = pill || el;
         target.classList.remove('saving', 'saved', 'error');
         if (cls) target.classList.add(cls);
+    }
+
+    // The CH selects' tooltip carries the full value, as rendered.
+    function bindChannelSettingTitles() {
+        document.querySelectorAll('.amp-channel-setting-select').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                sel.title = sel.value ? sel.options[sel.selectedIndex].text : 'No routing';
+            });
+        });
     }
 
     // ───── Collapse / expand location groups ─────
@@ -1728,6 +1750,7 @@
         bindAutosave();
         bindCabinets();
         bindRoutingNotes();
+        bindChannelSettingTitles();
         bindDividerLabelAutosave();
         bindAvbToggles();
         var search = document.getElementById('rack-search');

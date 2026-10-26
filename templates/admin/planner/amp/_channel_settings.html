@@ -1,0 +1,17 @@
+{% comment %}Issue #30: the CH-block routing selects. 4-channel amps show them under
+Preset; wider amps (role only) in a full-width row above the cabinets.{% endcomment %}
+<div class="amp-channel-settings{% if card.role_only_routing %} amp-channel-settings-wrap{% endif %}">
+    {% for ch in card.channels %}
+    <div class="amp-channel-setting-row">
+        <span class="amp-channel-setting-label">Ch {{ ch.channel_number }}</span>
+        <select class="amp-cell-input amp-channel-setting-select"
+                data-channel-id="{{ ch.pk }}"
+                data-field="channel_setting"
+                title="{{ ch.channel_setting|default:'No routing' }}">
+            {% for val, lbl in ch.channel_setting_choices %}
+            <option value="{{ val }}"{% if ch.channel_setting == val %} selected{% endif %}>{{ lbl }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endfor %}
+</div>
