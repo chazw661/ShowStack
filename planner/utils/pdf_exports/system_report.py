@@ -998,6 +998,7 @@ def _section_power(project, styles, PowerDistributionPlan):
         story.append(PageBreak())
         return story
 
+    from planner.utils.power_estimate import ESTIMATE_LABEL
     from planner.utils.amp_models import amps_without_power_profile
     excluded_count, excluded_models = amps_without_power_profile(project)
     for plan in plans:
@@ -1010,14 +1011,21 @@ def _section_power(project, styles, PowerDistributionPlan):
                 str(a.position) if a.position else '',
                 str(a.amplifier) if a.amplifier else '',
                 str(a.quantity) if a.quantity else '1',
+                a.get_programme_display().split(' (')[0],
                 f"{a.calculated_current_per_unit:.1f}A" if a.calculated_current_per_unit else '',
                 f"{a.calculated_total_current:.1f}A" if a.calculated_total_current else '',
             ])
-        headers = ['Phase', 'Position', 'Amplifier', 'Qty', 'Current/Unit', 'Total Current']
-        widths = [w * inch for w in (0.9, 0.9, 3.2, 0.7, 1.3, 1.3)]
+        headers = ['Phase', 'Position', 'Amplifier', 'Qty', 'Programme',
+                   'Current/Unit*', 'Total Current*']
+        widths = [w * inch for w in (0.7, 0.9, 2.5, 0.5, 1.2, 1.1, 1.1)]
         table = _data_table(headers, rows, widths)
         if table:
             story += _table_block([heading, table], len(rows), n_headings=1)
+            story.append(Paragraph(
+                f"* {ESTIMATE_LABEL}: published draw at 230 V converted to "
+                f"{plan.get_voltage()} V, including {int((plan.transient_headroom - 1) * 100)}% "
+                f"transient headroom. Power factor {plan.power_factor} is assumed, and used "
+                f"only where an amp's current is not published.", styles['meta']))
         else:
             story.append(_keep([heading, Paragraph("No amplifier assignments.", styles['empty'])]))
         for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
