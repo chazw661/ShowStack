@@ -74,6 +74,64 @@ from .models import DanteConsoleConfig, DanteDeviceConfig, DanteSubscription
 
 
 
+# How each admin model without its own `project` field reaches one: the ORM
+# path from it to its Project. `BaseEquipmentAdmin.get_queryset` filters on
+# it and the object permission checks follow it (see `project_of`).
+#
+# A model that is neither keyed here nor carrying a direct `project` field
+# used to fall through to `qs.filter(project_id=...)` and raise FieldError --
+# an HTTP 500 on that changelist, which is how MultitrackTemplate,
+# ConsoleImport and MicGroup were broken -- and its change view read
+# `obj.project` and raised AttributeError, which is how AmplifierAssignment's
+# was. Both now fail closed instead. Adding such a model to the admin means
+# adding it here; see `OWNER_SCOPED_PATHS` for the exceptions.
+CHILD_PROJECT_PATHS = {
+    'PAFanOut': 'cable_schedule__project',
+    'MicSession': 'day__project',
+    'MicAssignment': 'session__day__project',
+    'MicGroup': 'session__day__project',
+    # 'Presenter': REMOVED - now has direct project FK ✓
+    # 'MicShowInfo': REMOVED - now has direct project OneToOneField ✓
+    'SpeakerArray': 'prediction__project',
+    'SpeakerCabinet': 'array__prediction__project',
+    'AmplifierAssignment': 'distribution_plan__project',
+    'P1Processor': 'system_processor__project',
+    'GalaxyProcessor': 'system_processor__project',
+    'P1Input': 'p1_processor__system_processor__project',
+    'P1Output': 'p1_processor__system_processor__project',
+    'GalaxyInput': 'galaxy_processor__system_processor__project',
+    'GalaxyOutput': 'galaxy_processor__system_processor__project',
+    'ConsoleImport': 'console__project',
+    # Network Health Monitor children reach their project via device.
+    'PollResult': 'device__project',
+    'DeviceEvent': 'device__project',
+    'SwitchPortSnapshot': 'device__project',
+}
+
+# Models with no project at all, scoped by their owner instead.
+# MultitrackTemplate is a personal template library keyed on created_by, so
+# "the current project" is not the right question for it -- but "anyone's
+# templates" is definitely the wrong answer, which is what the FieldError-ing
+# fall-through used to produce once the crash was fixed naively.
+OWNER_SCOPED_PATHS = {
+    'MultitrackTemplate': 'created_by',
+    # Lives outside every project; see planner.tenancy.owned_templates.
+    'ShowTemplate': 'owner',
+}
+
+
+def project_of(obj):
+    """The Project `obj` belongs to, through its real relation, or None."""
+    if isinstance(obj, Project):
+        return obj
+    path = CHILD_PROJECT_PATHS.get(type(obj).__name__, 'project')
+    for attr in path.split('__'):
+        obj = getattr(obj, attr, None)
+        if obj is None:
+            return None
+    return obj
+
+
 class BaseAdmin(admin.ModelAdmin):
     """Common base for ShowStack ModelAdmins.
 
@@ -102,7 +160,15 @@ class BaseEquipmentAdmin(BaseAdmin):
             return member.role  # 'editor' or 'viewer'
         except ProjectMember.DoesNotExist:
             return None
-        
+
+    def _get_user_role_for_object(self, request, obj):
+        """The user's role on `obj`'s project; 'owner' for the owner of an
+        owner-scoped object (a personal template), else None."""
+        owner_field = OWNER_SCOPED_PATHS.get(type(obj).__name__)
+        if owner_field:
+            owned = getattr(obj, f'{owner_field}_id') == request.user.id
+            return 'owner' if owned else None
+        return self._get_user_role_for_project(request, project_of(obj))
 
 
 
@@ -191,62 +257,19 @@ class BaseEquipmentAdmin(BaseAdmin):
         
         current_project_id = request.current_project.id
         
-        # Map child models to the ORM path from them to their project.
-        #
-        # A model that is neither keyed here nor carrying a direct `project`
-        # field falls through to `qs.filter(project_id=...)` below and raises
-        # FieldError -- an HTTP 500 on that changelist, which is how
-        # MultitrackTemplate, ConsoleImport and MicGroup were broken. Adding a
-        # model to the admin means adding it here; see `MODELS_WITHOUT_PROJECT`
-        # for the one deliberate exception.
-        child_model_paths = {
-            'PAFanOut': 'cable_schedule__project_id',
-            'MicSession': 'day__project_id',
-            'MicAssignment': 'session__day__project_id',
-            'MicGroup': 'session__day__project_id',
-            # 'Presenter': REMOVED - now has direct project FK ✓
-            # 'MicShowInfo': REMOVED - now has direct project OneToOneField ✓
-            'SpeakerArray': 'prediction__project_id',
-            'SpeakerCabinet': 'array__prediction__project_id',
-            'AmplifierAssignment': 'distribution_plan__project_id',
-            'P1Processor': 'system_processor__project_id',
-            'GalaxyProcessor': 'system_processor__project_id',
-            'P1Input': 'p1_processor__system_processor__project_id',
-            'P1Output': 'p1_processor__system_processor__project_id',
-            'GalaxyInput': 'galaxy_processor__system_processor__project_id',
-            'GalaxyOutput': 'galaxy_processor__system_processor__project_id',
-            'ConsoleImport': 'console__project_id',
-            # Network Health Monitor children reach their project via device.
-            'PollResult': 'device__project_id',
-            'DeviceEvent': 'device__project_id',
-            'SwitchPortSnapshot': 'device__project_id',
-        }
-
-        # Models with no project at all, scoped by their owner instead.
-        # MultitrackTemplate is a personal template library keyed on
-        # created_by, so "the current project" is not the right question for
-        # it -- but "anyone's templates" is definitely the wrong answer, which
-        # is what the FieldError-ing fall-through used to produce once the
-        # crash was fixed naively.
-        owner_scoped_paths = {
-            'MultitrackTemplate': 'created_by',
-            # Lives outside every project; see planner.tenancy.owned_templates.
-            'ShowTemplate': 'owner',
-        }
-
         # Get the model name
         model_name = self.model.__name__
 
         # If this is a child model, filter through parent
-        if model_name in child_model_paths:
-            filter_path = child_model_paths[model_name]
+        if model_name in CHILD_PROJECT_PATHS:
+            filter_path = f'{CHILD_PROJECT_PATHS[model_name]}_id'
             filter_kwargs = {filter_path: current_project_id}
             return qs.filter(**filter_kwargs)
 
-        if model_name in owner_scoped_paths:
+        if model_name in OWNER_SCOPED_PATHS:
             if request.user.is_superuser:
                 return qs
-            return qs.filter(**{owner_scoped_paths[model_name]: request.user})
+            return qs.filter(**{OWNER_SCOPED_PATHS[model_name]: request.user})
 
         # Otherwise, filter directly by project_id -- but only if the model
         # actually has one. It used to filter unconditionally, so a model that
@@ -283,12 +306,8 @@ class BaseEquipmentAdmin(BaseAdmin):
         if obj is None:
             return self.has_module_permission(request)
         
-        # Check if user owns or is member of this project
-        return (obj.project.owner == request.user or 
-                ProjectMember.objects.filter(
-                    user=request.user, 
-                    project=obj.project
-                ).exists())
+        # Owner or any member (viewers included) of the object's project.
+        return self._get_user_role_for_object(request, obj) is not None
     
     def has_add_permission(self, request):
         """Owner or editor of the current project (NOT viewer)."""
@@ -306,15 +325,7 @@ class BaseEquipmentAdmin(BaseAdmin):
             # bulk-edit actions: the current project's role decides.
             return self._can_edit_current_project(request)
         
-        # Check specific object permission
-       # Handle both Project and Equipment objects
-        if obj.__class__.__name__ == 'Project':
-            project = obj
-        elif obj.__class__.__name__ == 'MicSession':
-            project = obj.day.project
-        else:
-            project = obj.project
-        role = self._get_user_role_for_project(request, project)
+        role = self._get_user_role_for_object(request, obj)
         return role in ['owner', 'editor']  # Viewers can't edit
     
     def has_delete_permission(self, request, obj=None):
@@ -326,25 +337,7 @@ class BaseEquipmentAdmin(BaseAdmin):
             # Bulk "delete selected" on the changelist.
             return self._can_edit_current_project(request)
         
-        # Check specific object permission
-        if obj.__class__.__name__ == 'Project':
-            project = obj
-        elif obj.__class__.__name__ == 'MicSession':
-            project = obj.day.project
-        elif obj.__class__.__name__ == 'MicAssignment':
-            project = obj.session.day.project
-        elif obj.__class__.__name__ == 'MicGroup':
-            project = obj.session.day.project
-        elif hasattr(obj, 'project'):
-            project = obj.project
-        elif hasattr(obj, 'array'):  # SpeakerCabinet
-            project = obj.array.prediction.project
-        elif hasattr(obj, 'prediction'):  # SpeakerArray
-            project = obj.prediction.project
-        else:
-            project = None
-
-        role = self._get_user_role_for_project(request, project)
+        role = self._get_user_role_for_object(request, obj)
         return role in ['owner', 'editor']
     
 
@@ -697,16 +690,16 @@ class BaseEquipmentInline(admin.TabularInline):
         if obj is None:
             return False
         
-        # Check if owner
-        try:
-            if obj.project.owner == request.user:
-                return False
-        except:
+        # Check if owner. `obj` is the parent; a MicSession has no `project`
+        # of its own, and the bare except that used to swallow that here
+        # treated every member, viewers included, as able to edit.
+        project = project_of(obj)
+        if project is None or project.owner == request.user:
             return False
         
         # Check if viewer
         try:
-            member = ProjectMember.objects.get(user=request.user, project=obj.project)
+            member = ProjectMember.objects.get(user=request.user, project=project)
             return member.role == 'viewer'
         except ProjectMember.DoesNotExist:
             return True
@@ -8158,7 +8151,7 @@ showstack_admin_site.register(CommConfig, CommConfigAdmin)
 #
 # Each now subclasses BaseEquipmentAdmin, whose get_queryset scopes to
 # request.current_project. The three child models reach their project through
-# `device`, which BaseEquipmentAdmin resolves via its child_model_paths map
+# `device`, which BaseEquipmentAdmin resolves via CHILD_PROJECT_PATHS
 # (extended below for them).
 #
 # `list_filter` entries naming `project` or `session` are gone: Django's
