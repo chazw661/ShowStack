@@ -1002,38 +1002,72 @@ def _section_power(project, styles, PowerDistributionPlan):
     from planner.utils.amp_models import amps_without_power_profile
     from planner.views import calculate_phase_distribution
     excluded_count, excluded_models = amps_without_power_profile(project)
+    from planner.utils import power_plan_generator as generator
     for plan in plans:
         heading = Paragraph(f"Venue: {plan.venue_name}", styles['sub'])
-        assignments = plan.amplifier_assignments.all().order_by('phase_assignment', 'position')
-        rows = []
+        assignments = list(plan.amplifier_assignments.select_related('amplifier', 'source_amp')
+                           .order_by('phase_assignment', 'position'))
+        legs = plan.legs
+        warning = generator.three_phase_warning(plan, assignments)
+        # Above the table, kept with it: the service line and any 3-phase warning.
+        intro = [Paragraph(
+            f"Service: {escape(plan.get_service_type_display())}"
+            + (f" · generated from the amp module {plan.generated_at:%Y-%m-%d}"
+               if plan.is_generated else ''), styles['meta'])]
+        if warning:
+            intro.append(Paragraph(f"<b>Warning: {escape(warning)}.</b>", styles['meta']))
+        rows, row_notes = [], []
         for a in assignments:
+            phase = a.phase_assignment or ''
+            if a.generated:
+                status = generator.leg_status(a, legs)
+                phase += {generator.AUTO: ' (auto)', generator.SET: ' (set)',
+                          generator.NOT_ON_SERVICE: ' (auto*)'}[status]
+                if status == generator.NOT_ON_SERVICE:
+                    row_notes.append(f"{a.position}: set to {a.amp_leg} on the amp, not on this "
+                                     f"service; balanced")
+                row_notes += [f"{a.position}: {note}" for note in generator.row_loads(a)[1]]
+            programme = (plan.get_programme_display() if a.generated
+                         else a.get_programme_display()).split(' (')[0]
             rows.append([
-                a.phase_assignment or '',
+                phase,
                 str(a.position) if a.position else '',
                 str(a.amplifier) if a.amplifier else '',
                 str(a.quantity) if a.quantity else '1',
-                a.get_programme_display().split(' (')[0],
+                programme,
                 f"{a.calculated_current_per_unit:.1f}A" if a.calculated_current_per_unit else '',
                 f"{a.calculated_total_current:.1f}A" if a.calculated_total_current else '',
             ])
+        phase_loads = calculate_phase_distribution(plan)
+        if plan.other_electronics_watts:
+            per_leg = phase_loads['allowance']['current_per_leg']
+            rows.append([
+                'each leg', '', f"{generator.ALLOWANCE_LABEL}: {plan.other_electronics_watts} W",
+                '', '', f"{per_leg:.1f}A", f"{per_leg:.1f}A/leg",
+            ])
         headers = ['Phase', 'Position', 'Amplifier', 'Qty', 'Programme',
                    'Current/Unit*', 'Total Current*']
-        widths = [w * inch for w in (0.7, 0.9, 2.5, 0.5, 1.2, 1.1, 1.1)]
-        table = _data_table(headers, rows, widths)
+        widths = [w * inch for w in (0.8, 0.9, 2.4, 0.5, 1.2, 1.1, 1.1)]
+        table = _data_table(headers, rows, widths) if assignments else None
         if table:
-            story += _table_block([heading, table], len(rows), n_headings=1)
-            legs = calculate_phase_distribution(plan)['phases']
+            story += _table_block([heading] + intro + [table], len(rows),
+                                  n_headings=1 + len(intro))
             story.append(Paragraph(
                 "<b>Per leg:</b> " + " · ".join(
-                    f"{name} {legs[name]['total_current']:.1f}A" for name in ('L1', 'L2', 'L3')),
+                    f"{name} {leg['total_current']:.1f}A"
+                    for name, leg in phase_loads['phases'].items()),
                 styles['meta']))
+            for note in row_notes:
+                story.append(Paragraph(escape(note), styles['meta']))
             story.append(Paragraph(
                 f"* {ESTIMATE_LABEL}: published watts / ({plan.get_phase_to_neutral_voltage()} V "
                 f"phase-to-neutral × power factor {plan.power_factor}, assumed), including "
-                f"{int((plan.transient_headroom - 1) * 100)}% transient headroom. "
-                f"Service: {escape(plan.get_service_type_display())}.", styles['meta']))
+                f"{int((plan.transient_headroom - 1) * 100)}% transient headroom"
+                + ("; the other-electronics allowance has none" if plan.other_electronics_watts
+                   else '') + ".", styles['meta']))
         else:
-            story.append(_keep([heading, Paragraph("No amplifier assignments.", styles['empty'])]))
+            story.append(_keep([heading] + intro
+                               + [Paragraph("No amplifier assignments.", styles['empty'])]))
         for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
                               key=str):
             story.append(Paragraph(f"{escape(str(profile))}: {escape(profile.figures_status)}.",

@@ -109,7 +109,8 @@ class PlanFixture(Fixture):
     def setUp(self):
         super().setUp()
         self.plan = PowerDistributionPlan.objects.create(
-            project=self.project, venue_name='Hall', transient_headroom=D('1.5'))
+            project=self.project, venue_name='Hall', transient_headroom=D('1.5'),
+            other_electronics_watts=0)
         self.row = AmplifierAssignment.objects.create(
             distribution_plan=self.plan, amplifier=profile('LA12X'), quantity=3, zone='FOH',
             programme=HEAVY)
