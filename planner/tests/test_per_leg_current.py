@@ -37,7 +37,8 @@ class VoltageTableTests(TestCase):
     def test_phase_to_neutral(self):
         self.assertEqual({
             '3phase_4wire_208': 120, '3phase_5wire_208': 120, '3phase_4wire_240': 240,
-            '3phase_5wire_400': 230, 'single_phase_120': 120, 'single_phase_240': 240,
+            '3phase_5wire_400': 230, 'split_phase_120_240': 120,
+            'single_phase_120': 120, 'single_phase_240': 240,
         }, {key: phase_to_neutral_voltage(key) for key, _ in PowerDistributionPlan.SERVICE_TYPES})
 
     def test_service_voltage(self):
@@ -53,6 +54,8 @@ class VoltageTableTests(TestCase):
 class PlanFixture(Fixture):
 
     def plan(self, service='3phase_4wire_208', **kwargs):
+        # No other-electronics allowance: these are the amps' figures alone.
+        kwargs.setdefault('other_electronics_watts', 0)
         return PowerDistributionPlan.objects.create(
             project=self.project, venue_name='Hall', service_type=service, **kwargs)
 

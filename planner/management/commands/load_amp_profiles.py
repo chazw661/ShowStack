@@ -168,6 +168,8 @@ class Command(BaseCommand):
                 'channels': 4,
                 'rack_units': 2,
                 'weight_kg': 11.5,
+                # A plan on split- or single-phase warns; only the LA4X runs without 3-phase distro.
+                'needs_three_phase': True,
                 'notes': '4 channels, 2200W @ 8Ω per channel pair'
             },
             {
@@ -183,6 +185,7 @@ class Command(BaseCommand):
                 'channels': 4,
                 'rack_units': 1,
                 'weight_kg': 6.6,
+                'needs_three_phase': False,
                 'notes': '4 channels, 1000W @ 8Ω per channel, 1RU'
             },
             {
@@ -198,6 +201,7 @@ class Command(BaseCommand):
                 'channels': 4,
                 'rack_units': 2,
                 'weight_kg': 15.9,
+                'needs_three_phase': True,
                 'notes': '4 channels, 3300W @ 2.7Ω per channel, flagship model'
             },
             {
@@ -213,6 +217,7 @@ class Command(BaseCommand):
                 'channels': 16,   # was 7; 16 outputs on one SC32 (cf. AmpModel, 0170)
                 'rack_units': 2,
                 'weight_kg': 8.5,
+                'needs_three_phase': True,
                 'notes': '16 channels, 800W @ 4Ω per channel, touring grade'
             },
         ]

@@ -24,6 +24,7 @@
         flex-wrap: wrap;
     }
     .rack-toolbar h1 { margin: 0; font-size: 22px; color: #e0e0e0; }
+    .power-plan-stale { color: #f0c674; }
     .rack-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     /* Secondary (the default): outlined, no fill. Locations and
        Collapse / Expand All are both secondary, so the toolbar has exactly
@@ -841,6 +842,15 @@
     {% if request.current_project %}
     <div class="rack-actions">
         <a class="rack-btn primary" href="{% url 'planner:all_amps_pdf_export' %}">Export to PDF</a>
+        {% if power_plan %}
+        <a class="rack-btn" id="open-power-plan" href="{% url 'planner:power_distribution_calculator_detail' power_plan.pk %}"
+           {% if power_plan_stale %}title="Amps or cabinets changed since generated: open the plan to regenerate"{% endif %}>Open power plan{% if power_plan_stale %} <span class="power-plan-stale">· changed since generated</span>{% endif %}</a>
+        {% elif can_generate_power_plan %}
+        <form method="post" action="{% url 'planner:generate_power_plan' %}" style="display: inline; margin: 0;">
+            {% csrf_token %}
+            <button type="submit" class="rack-btn" id="generate-power-plan">Generate power plan</button>
+        </form>
+        {% endif %}
         <button type="button" class="rack-btn" onclick="openLocationsModal()">Locations</button>
         <button type="button" class="rack-btn" onclick="collapseAll()">Collapse / Expand All</button>
     </div>
@@ -992,6 +1002,16 @@
                                data-amp-id="{{ card.amp.pk }}"
                                data-field="ip_address"
                                class="amp-pill-input">
+                    </div>
+                    <div class="pill">
+                        <span class="label">Leg</span>
+                        <select data-amp-id="{{ card.amp.pk }}" data-field="leg"
+                                class="amp-pill-input amp-leg-select"
+                                title="Mains leg. Auto = balanced by the generated power plan; a leg set here is kept.">
+                            {% for value, label in card.leg_choices %}
+                            <option value="{{ value }}"{% if card.amp.leg == value %} selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="pill">
                         <span class="label">Preset</span>
