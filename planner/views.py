@@ -2699,7 +2699,7 @@ def power_distribution_calculator(request, plan_id=None):
     for a in assignments:
         a.draw = a.estimate()
     voltage = plan.get_voltage()
-    from planner.utils.power_estimate import ESTIMATE_LABEL, FROM_WATTS
+    from planner.utils.power_estimate import ESTIMATE_LABEL
 
     from planner.utils.amp_models import amps_without_power_profile
     excluded_count, excluded_models = amps_without_power_profile(plan.project)
@@ -2724,7 +2724,7 @@ def power_distribution_calculator(request, plan_id=None):
         'headroom_choices': HEADROOM_CHOICES,
         'headroom_values': [v for v, _ in HEADROOM_CHOICES],
         'voltage': voltage,
-        'uses_power_factor': any(a.draw and a.draw.basis == FROM_WATTS for a in assignments),
+        'phase_to_neutral': plan.get_phase_to_neutral_voltage(),
     }
     
     return render(request, 'planner/power_distribution_calculator.html', context)
