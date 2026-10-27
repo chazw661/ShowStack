@@ -580,6 +580,7 @@ class Project(models.Model):
                         generated=assignment.generated,
                         source_amp=amp_map.get(assignment.source_amp_id),
                         amp_leg=assignment.amp_leg,
+                        amp_spare=assignment.amp_spare,
                         notes=assignment.notes
                     )
                 if power_plan.is_generated:
@@ -5115,6 +5116,9 @@ class AmplifierAssignment(models.Model):
     # The amp's leg when the row was generated ('' = auto). Rebalancing reads
     # this, not the amp, so an edit on the amp waits for Regenerate.
     amp_leg = models.CharField(max_length=2, blank=True, default='', editable=False)
+    # Whether the amp was a spare when the row was generated. The row's figures,
+    # note and programme read this, so toggling the amp waits for Regenerate.
+    amp_spare = models.BooleanField(default=False, editable=False)
 
     # Calculated values (cached for performance)
     calculated_current_per_unit = models.DecimalField(
@@ -5168,8 +5172,8 @@ class AmplifierAssignment(models.Model):
 
     @property
     def is_spare(self):
-        return self.generated and self.source_amp is not None \
-            and self.source_amp.in_plan == Amp.SPARE
+        """A spare as generated (amp_spare), not as the amp is now."""
+        return self.generated and self.amp_spare
 
     @property
     def effective_programme(self):

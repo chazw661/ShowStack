@@ -284,6 +284,49 @@ class SpareTests(GeneratorFixture):
         self.assertNotIn(f'Amp 1: {generator.SPARE_NOTE}', text)
         self.assertIn('Idle', text)
 
+    def test_a_toggle_waits_for_regenerate(self):
+        plan = self.generate()
+        before = self.rows(plan)['Amp 2']
+        Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.SPARE)
+        plan.programme = HEAVY  # a settings change re-saves every row
+        plan.save()
+        generator.recompute(plan)
+        row = self.rows(plan)['Amp 2']
+        heavy = plan_estimate(row.amplifier, HEAVY, amp_channel_loads(self.amp2),
+                              '3phase_4wire_208', D('0.95')).watts
+        # The row is still the amp in use, as generated...
+        self.assertEqual((False, HEAVY, heavy),
+                         (row.is_spare, row.effective_programme, row.calculated_watts_per_unit))
+        self.assertNotIn(generator.SPARE_NOTE, generator.row_loads(row)[1])
+        self.assertNotEqual(before.calculated_watts_per_unit, heavy)  # (recomputed at heavy)
+        self.use(self.owner)
+        url = reverse('planner:power_distribution_calculator_detail', args=[plan.pk])
+        page = self.client.get(url)
+        self.assertNotContains(page, generator.SPARE_NOTE)
+        self.assertNotContains(page, 'Idle (no signal)</td>')
+        # ...and the banner says the racks have changed.
+        self.assertContains(page, generator.STALE_MESSAGE)
+        self.assertTrue(generator.is_stale(plan))
+
+        generator.regenerate(plan)
+        row = self.rows(plan)['Amp 2']
+        idle = self.idle(row)
+        self.assertEqual((True, IDLE, idle.watts),
+                         (row.is_spare, row.effective_programme, row.calculated_watts_per_unit))
+        self.assertEqual((idle.current * plan.transient_headroom).quantize(D('0.01')),
+                         row.calculated_current_per_unit)
+        page = self.client.get(url)
+        self.assertContains(page, generator.SPARE_NOTE, count=1)
+        self.assertContains(page, '<td>Idle (no signal)</td>', count=1)
+        self.assertNotContains(page, generator.STALE_MESSAGE)
+
+        # And back: in use again only on Regenerate.
+        Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.IN_USE)
+        generator.recompute(plan)
+        self.assertTrue(self.rows(plan)['Amp 2'].is_spare)
+        generator.regenerate(plan)
+        self.assertFalse(self.rows(plan)['Amp 2'].is_spare)
+
     def test_amps_in_use_hash_as_before(self):
         # Plans generated before spares existed must not all turn stale.
         import hashlib
@@ -585,7 +628,7 @@ class AmpModuleTests(GeneratorFixture):
             head = next(h for h in heads if f'id="amp-leg-{amp.pk}"' in h)
             # last things on the line, after the title and notes: In plan, then Leg
             self.assertRegex(head, r'(?s)Cabinets per output.*class="amp-plan-controls"'
-                                   r'.*In plan.*data-field="in_plan".*Leg.*data-field="leg"'
+                                   r'.*data-field="in_plan".*Leg.*data-field="leg"'
                                    r'.*</select>\s*</div>\s*</div>\s*</div>\s*$')
         self.assertFalse(any('data-field="leg"' in m or 'data-field="in_plan"' in m
                              for m in middles))
@@ -600,7 +643,7 @@ class AmpModuleTests(GeneratorFixture):
         self.assertNotContains(page, 'data-field="in_plan"')
         heads, _ = self.heads(page)
         self.assertEqual([('Spare', 'L2'), ('In use', 'Auto')], [
-            re.search(r'(?s)In plan</span>\s*<span class="amp-leg-value">([\w ]+)<.*'
+            re.search(r'(?s)amp-in-plan-value">([\w ]+)<.*'
                       r'Leg</span>\s*<span class="amp-leg-value">(\w+)<', h).groups()
             for h in heads])
 
