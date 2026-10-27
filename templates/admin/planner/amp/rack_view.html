@@ -540,17 +540,20 @@
     }
     /* Pushed to the right end of the heading line; if the line wraps it
        drops under the heading and stays right-aligned. */
-    .amp-leg {
+    .amp-plan-controls {
         margin-left: auto;
-        display: flex; align-items: center; gap: 6px;
+        display: flex; align-items: center; gap: 12px;
         align-self: center;
+    }
+    .amp-leg {
+        display: flex; align-items: center; gap: 6px;
         border-radius: var(--ss-field-radius);
     }
     .amp-leg-label {
         font-size: 10px; font-weight: bold; letter-spacing: 0.5px;
         text-transform: uppercase; color: var(--text-muted) !important;
     }
-    /* Wide enough for "Auto"; a leg the service lacks widens it to show why. */
+    /* Wide enough for "Auto" / "In use"; a leg the service lacks widens it to show why. */
     select.amp-leg-select {
         width: auto !important; min-width: 70px;
         padding: 2px 4px !important; margin: 0 !important;
@@ -1123,7 +1126,22 @@
                         {% if card.drive_note %}
                         <span class="amp-cabinets-nopower">{{ card.drive_note }}</span>
                         {% endif %}
-                        {# Mains leg, at the right of the heading on every amp (4 or 16 outputs). #}
+                        {# In plan and mains leg, at the right of the heading on every amp (4 or 16 outputs). #}
+                        <div class="amp-plan-controls">
+                        <div class="amp-leg" title="Spare: racked and powered but carries no programme; the generated power plan counts it at idle.">
+                            {% if can_edit %}
+                            <label class="amp-leg-label" for="amp-in-plan-{{ card.amp.pk }}">In plan</label>
+                            <select id="amp-in-plan-{{ card.amp.pk }}" data-amp-id="{{ card.amp.pk }}" data-field="in_plan"
+                                    class="amp-pill-input amp-leg-select" autocomplete="off">
+                                {% for value, label in card.amp.IN_PLAN_CHOICES %}
+                                <option value="{{ value }}"{% if card.amp.in_plan == value %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <span class="amp-leg-label">In plan</span>
+                            <span class="amp-leg-value">{{ card.amp.get_in_plan_display }}</span>
+                            {% endif %}
+                        </div>
                         <div class="amp-leg" title="Mains leg. Auto = balanced by the generated power plan; a leg set here is kept.">
                             {% if can_edit %}
                             <label class="amp-leg-label" for="amp-leg-{{ card.amp.pk }}">Leg</label>
@@ -1137,6 +1155,7 @@
                             <span class="amp-leg-label">Leg</span>
                             {% for value, label in card.leg_choices %}{% if card.amp.leg == value %}<span class="amp-leg-value">{{ label }}</span>{% endif %}{% endfor %}
                             {% endif %}
+                        </div>
                         </div>
                     </div>
                     <div class="amp-cabinet-grid">

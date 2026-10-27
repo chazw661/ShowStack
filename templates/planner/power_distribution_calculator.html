@@ -535,7 +535,7 @@
                         <td>{{ assignment.position|default:"-" }}</td>
                         <td>{{ assignment.amplifier }}</td>
                         <td>{{ assignment.quantity }}</td>
-                        <td>{{ assignment.get_programme_display }}</td>
+                        <td>{{ assignment.get_effective_programme_display }}</td>
                         <td>{% if assignment.assumed_load_ohms is not None %}{{ assignment.assumed_load_ohms|floatformat:"-1" }} Ω{% if assignment.load_ohms is None %} <span class="assumed">(lowest published)</span>{% endif %}{% else %}—{% endif %}</td>
                         <td>{{ assignment.phase_assignment }}{% if assignment.leg_status == 'auto' %} <span class="leg-status">(auto)</span>{% elif assignment.leg_status == 'set' %} <span class="leg-status">(set on amp)</span>{% elif assignment.leg_status == 'not_on_service' %} <span class="leg-status flagged">(set to {{ assignment.amp_leg }} on amp; not on this service, balanced)</span>{% endif %}</td>
                         <td>{{ assignment.calculated_current_per_unit|floatformat:1 }}A</td>

@@ -21,7 +21,7 @@ from planner.models import (
 from planner.tests.test_amp_output_cabinets import Fixture, section, staff
 from planner.utils import power_plan_generator as generator
 from planner.utils.power_estimate import (
-    HEAVY, NORMAL, amp_channel_loads, plan_estimate, uniform_channel_loads,
+    HEAVY, IDLE, NORMAL, amp_channel_loads, plan_estimate, uniform_channel_loads,
 )
 from planner.utils.power_plan_generator import Item, balance
 
@@ -214,6 +214,110 @@ def generator_phases(plan):
     return calculate_phase_distribution(plan)['phases']
 
 
+class SpareTests(GeneratorFixture):
+    """A spare amp is counted at its profile's idle draw; nothing else is."""
+
+    def idle(self, row):
+        return plan_estimate(row.amplifier, IDLE, [], '3phase_4wire_208', D('0.95'))
+
+    def test_a_spare_is_counted_at_idle(self):
+        Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.SPARE)
+        plan = self.generate()
+        rows = self.rows(plan)
+        spare, in_use = rows['Amp 2'], rows['Amp 1']
+        idle = self.idle(spare)
+        self.assertEqual((IDLE, idle.watts), (spare.effective_programme,
+                                              spare.calculated_watts_per_unit))
+        self.assertLess(idle.watts, self.watts(self.amp2))  # four KS28 at 1/8 power
+        expected = (idle.current * plan.transient_headroom).quantize(D('0.01'))
+        self.assertEqual(expected, spare.calculated_current_per_unit)
+        self.assertEqual([generator.SPARE_NOTE], generator.row_loads(spare)[1])
+        # The amp in use is untouched.
+        self.assertEqual((NORMAL, self.watts(self.la12x)),
+                         (in_use.effective_programme, in_use.calculated_watts_per_unit))
+
+    def test_a_spare_ignores_the_plan_programme(self):
+        Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.SPARE)
+        plan = self.generate()
+        plan.programme = HEAVY
+        plan.save()
+        generator.recompute(plan)
+        spare = self.rows(plan)['Amp 2']
+        self.assertEqual(self.idle(spare).watts, spare.calculated_watts_per_unit)
+
+    def test_a_spare_with_no_cabinets_is_idle(self):
+        bare = self.amp(self.project, 'LA12X', name='Bare')
+        Amp.objects.filter(pk=bare.pk).update(in_plan=Amp.SPARE)
+        row = self.rows(self.generate())['Bare']
+        self.assertEqual(self.idle(row).watts, row.calculated_watts_per_unit)
+        self.assertEqual([generator.SPARE_NOTE], generator.row_loads(row)[1])
+
+    def test_no_cabinets_in_use_stays_the_worst_case(self):
+        # Missing data is never idle: only the toggle makes an amp idle.
+        self.amp(self.project, 'LA12X', name='Bare')
+        row = self.rows(self.generate())['Bare']
+        worst = plan_estimate(row.amplifier, NORMAL, uniform_channel_loads(row.amplifier, None),
+                              '3phase_4wire_208', D('0.95'))
+        self.assertEqual((NORMAL, worst.watts),
+                         (row.effective_programme, row.calculated_watts_per_unit))
+        self.assertGreater(worst.watts, self.idle(row).watts)
+        self.assertNotIn(generator.SPARE_NOTE, generator.row_loads(row)[1])
+
+    def test_hand_built_rows_have_no_spare(self):
+        plan = PowerDistributionPlan.objects.create(project=self.project, venue_name='Hand')
+        row = AmplifierAssignment.objects.create(
+            distribution_plan=plan, amplifier=AmplifierProfile.objects.get(model='LA8'), quantity=1,
+            zone='FOH', programme=HEAVY, phase_assignment='L1')
+        Amp.objects.filter(project=self.project).update(in_plan=Amp.SPARE)
+        self.assertEqual((False, HEAVY), (row.is_spare, row.effective_programme))
+
+    def test_the_page_and_the_pdf_say_so(self):
+        Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.SPARE)
+        plan = self.generate()
+        self.use(self.owner)
+        page = self.client.get(reverse('planner:power_distribution_calculator_detail',
+                                       args=[plan.pk]))
+        self.assertContains(page, generator.SPARE_NOTE, count=1)
+        self.assertContains(page, '<td>Idle (no signal)</td>', count=1)
+        text = pdf_text(self.project)
+        self.assertIn(f'Amp 2: {generator.SPARE_NOTE}', text)
+        self.assertNotIn(f'Amp 1: {generator.SPARE_NOTE}', text)
+        self.assertIn('Idle', text)
+
+    def test_amps_in_use_hash_as_before(self):
+        # Plans generated before spares existed must not all turn stale.
+        import hashlib
+        import json
+        amps = generator.project_amps(self.project)
+        before = hashlib.sha256(json.dumps([[
+            a.pk, a.name, a.location_id, a.location.name, a.location.sort_order, a.sort_order,
+            a.amp_model.power_profile_id, a.leg,
+            [[c.channel_number, c.cabinet_section_id, c.cabinet_quantity]
+             for c in sorted(a.channels.all(), key=lambda c: c.channel_number)],
+        ] for a in amps]).encode()).hexdigest()
+        self.assertEqual(before, generator.fingerprint(self.project))
+
+    def test_inline_toggle(self):
+        self.use(self.owner)
+        url = reverse('planner:amp_inline_update', args=[self.amp2.pk])
+        self.assertEqual(Amp.IN_USE, Amp.objects.get(pk=self.amp2.pk).in_plan)
+        self.assertEqual(200, self.client.post(url, {'field': 'in_plan',
+                                                     'value': 'spare'}).status_code)
+        self.assertEqual(Amp.SPARE, Amp.objects.get(pk=self.amp2.pk).in_plan)
+        self.assertEqual(400, self.client.post(url, {'field': 'in_plan',
+                                                     'value': 'idle'}).status_code)
+        self.assertEqual(Amp.SPARE, Amp.objects.get(pk=self.amp2.pk).in_plan)
+
+    def test_duplicate_project_keeps_spares(self):
+        Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.SPARE)
+        self.generate()
+        copy = self.project.duplicate(new_name='Copy')
+        self.assertEqual(Amp.SPARE, Amp.objects.get(project=copy, name='Amp 2').in_plan)
+        plan = PowerDistributionPlan.objects.get(project=copy)
+        self.assertFalse(generator.is_stale(plan))
+        self.assertTrue(self.rows(plan)['Amp 2'].is_spare)
+
+
 class RegenerateTests(GeneratorFixture):
 
     def test_stale_until_regenerated(self):
@@ -222,6 +326,8 @@ class RegenerateTests(GeneratorFixture):
         for change in (
             lambda: self.assign(self.channel(self.la12x, 2), section('KS28'), 1),
             lambda: Amp.objects.filter(pk=self.la12x.pk).update(leg='L1'),
+            lambda: Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.SPARE),
+            lambda: Amp.objects.filter(pk=self.amp2.pk).update(in_plan=Amp.IN_USE),
             lambda: Amp.objects.filter(pk=self.amp2.pk).update(name='Renamed'),
             lambda: self.amp(self.project, 'LA4X', name='New'),
             lambda: Amp.objects.filter(name='New').delete(),
@@ -466,7 +572,7 @@ class AmpModuleTests(GeneratorFixture):
                            html, re.S),
                 re.findall(r'amp-card-middle">(.*?)Right: Outputs', html, re.S))
 
-    def test_leg_sits_at_the_end_of_the_cabinets_heading(self):
+    def test_in_plan_and_leg_sit_at_the_end_of_the_cabinets_heading(self):
         model = AmpModel.objects.create(manufacturer='L-Acoustics', model_name='LA7.16i',
                                         channel_count=16)
         location = self.la12x.location
@@ -477,21 +583,26 @@ class AmpModuleTests(GeneratorFixture):
         self.assertEqual(3, len(heads))
         for amp in (self.la12x, self.amp2, wide):  # 4 and 16 outputs alike
             head = next(h for h in heads if f'id="amp-leg-{amp.pk}"' in h)
-            # last thing on the line, after the title and notes
-            self.assertRegex(head, r'(?s)Cabinets per output.*class="amp-leg".*data-field="leg"'
-                                   r'.*</select>\s*</div>\s*</div>\s*$')
-        self.assertFalse(any('data-field="leg"' in m for m in middles))
+            # last things on the line, after the title and notes: In plan, then Leg
+            self.assertRegex(head, r'(?s)Cabinets per output.*class="amp-plan-controls"'
+                                   r'.*In plan.*data-field="in_plan".*Leg.*data-field="leg"'
+                                   r'.*</select>\s*</div>\s*</div>\s*</div>\s*$')
+        self.assertFalse(any('data-field="leg"' in m or 'data-field="in_plan"' in m
+                             for m in middles))
 
-    def test_viewer_sees_the_leg_read_only(self):
-        Amp.objects.filter(pk=self.la12x.pk).update(leg='L2')
+    def test_viewer_sees_in_plan_and_leg_read_only(self):
+        Amp.objects.filter(pk=self.la12x.pk).update(leg='L2', in_plan=Amp.SPARE)
         viewer = staff('viewer')
         self.join(viewer, self.project, 'viewer')
         self.use(viewer)
         page = self.client.get(reverse('admin:planner_amp_changelist'))
         self.assertNotContains(page, 'data-field="leg"')
+        self.assertNotContains(page, 'data-field="in_plan"')
         heads, _ = self.heads(page)
-        self.assertEqual(['L2', 'Auto'], [re.search(r'amp-leg-value">(\w+)<', h).group(1)
-                                         for h in heads])
+        self.assertEqual([('Spare', 'L2'), ('In use', 'Auto')], [
+            re.search(r'(?s)In plan</span>\s*<span class="amp-leg-value">([\w ]+)<.*'
+                      r'Leg</span>\s*<span class="amp-leg-value">(\w+)<', h).groups()
+            for h in heads])
 
     def test_duplicate_project(self):
         Amp.objects.filter(pk=self.la12x.pk).update(leg='L3')
