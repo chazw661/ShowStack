@@ -1,13 +1,16 @@
 """Who may change an Amp field from the rack page (amp_inline_update).
 
 Owners and editors of the current project may; viewers get 403 on every
-field; someone outside the project can't reach the amp at all.
+field, and the rack page shows them every field read-only; someone outside
+the project can't reach the amp at all.
 
 Run with::
 
     python manage.py test planner.tests.test_amp_inline_update_rights \\
         --settings=audiopatch.test_settings
 """
+
+import re
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -70,3 +73,46 @@ class AmpInlineUpdateRightsTests(Fixture):
         before = self.amp_row()
         self.assertEqual(400, self.post('name', 'Hijack').status_code)
         self.assertEqual(before, self.amp_row())
+
+
+class RackPageReadOnlyTests(Fixture):
+    """What the rack page renders: every inline field (name, channel labels,
+    IP, Preset, CH selects, output patch) is readonly/disabled for a viewer
+    and editable for an owner or editor."""
+
+    def fields(self, user):
+        self.use(user)
+        page = self.client.get(reverse('admin:planner_amp_changelist'))
+        self.assertEqual(200, page.status_code)
+        tags = re.findall(r'<(?:input|select)\b[^>]*class="amp-(?:cell|pill)-input[^>]*>',
+                          page.content.decode(), re.S)
+        return {re.search(r'data-field="([^"]+)"', t).group(1): t for t in tags}
+
+    def assert_editable(self, fields):
+        for name in ('name', 'ip_address', 'preset', 'channel_setting', 'avb_stream'):
+            self.assertIn(name, fields)
+        for name, tag in fields.items():
+            self.assertNotRegex(tag, r'\b(readonly|disabled)\b', name)
+
+    def test_owner_gets_editable_fields(self):
+        self.assert_editable(self.fields(self.owner))
+
+    def test_editor_gets_editable_fields(self):
+        editor = staff('editor')
+        self.join(editor, self.project, 'editor')
+        self.assert_editable(self.fields(editor))
+
+    def test_viewer_gets_read_only_fields(self):
+        viewer = staff('viewer')
+        self.join(viewer, self.project, 'viewer')
+        self.join(viewer, self.other, 'editor')  # the role HERE decides
+        fields = self.fields(viewer)
+        for name in ('name', 'ip_address', 'preset', 'channel_setting', 'avb_stream',
+                     'analog_input', 'aes_input'):
+            self.assertIn(name, fields)
+        for name, tag in fields.items():
+            if tag.startswith('<select'):
+                self.assertRegex(tag, r'\bdisabled\b', name)
+            else:
+                self.assertRegex(tag, r'\breadonly\b', name)
+        self.assertNotIn('leg', fields)  # shown as text, not a select
