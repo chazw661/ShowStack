@@ -538,6 +538,31 @@
         font-size: 11px; color: #c9a45c; border: 1px solid #7a5a22;
         border-radius: 999px; padding: 1px 8px;
     }
+    /* Pushed to the right end of the heading line; if the line wraps it
+       drops under the heading and stays right-aligned. */
+    .amp-leg {
+        margin-left: auto;
+        display: flex; align-items: center; gap: 6px;
+        align-self: center;
+        border-radius: var(--ss-field-radius);
+    }
+    .amp-leg-label {
+        font-size: 10px; font-weight: bold; letter-spacing: 0.5px;
+        text-transform: uppercase; color: var(--text-muted) !important;
+    }
+    /* Wide enough for "Auto"; a leg the service lacks widens it to show why. */
+    select.amp-leg-select {
+        width: auto !important; min-width: 70px;
+        padding: 2px 4px !important; margin: 0 !important;
+        font-size: 12px !important; font-weight: bold;
+        background: var(--ss-surface) !important; color: var(--ss-field-text) !important;
+        border: 1px solid var(--ss-border) !important;
+        border-radius: var(--ss-field-radius);
+    }
+    .amp-leg-value { font-size: 12px; font-weight: bold; color: var(--ss-field-text); }
+    .amp-leg.saving select { border-color: #7a5a22 !important; }
+    .amp-leg.saved select { border-color: #2f6f68 !important; }
+    .amp-leg.error select { border-color: #8c3a3a !important; }
     .amp-cabinet-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -646,6 +671,7 @@
         .amp-cabinet-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
         /* height, not min-height: Safari ignores min-height on a native select. */
         select.amp-cabinet-select { height: 44px; font-size: 14px !important; }
+        select.amp-leg-select { height: 44px; min-width: 80px; font-size: 14px !important; }
         .amp-qty-btn { width: 44px; height: 44px; font-size: 20px; }
         input.amp-qty-input { width: 44px !important; height: 44px; font-size: 15px !important; }
         .amp-cabinet-summary { font-size: 13px; }
@@ -1004,16 +1030,6 @@
                                class="amp-pill-input">
                     </div>
                     <div class="pill">
-                        <span class="label">Leg</span>
-                        <select data-amp-id="{{ card.amp.pk }}" data-field="leg"
-                                class="amp-pill-input amp-leg-select"
-                                title="Mains leg. Auto = balanced by the generated power plan; a leg set here is kept.">
-                            {% for value, label in card.leg_choices %}
-                            <option value="{{ value }}"{% if card.amp.leg == value %} selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="pill">
                         <span class="label">Preset</span>
                         <input type="text" list="amp-preset-options"
                                value="{{ card.amp.preset|default:'' }}"
@@ -1107,6 +1123,21 @@
                         {% if card.drive_note %}
                         <span class="amp-cabinets-nopower">{{ card.drive_note }}</span>
                         {% endif %}
+                        {# Mains leg, at the right of the heading on every amp (4 or 16 outputs). #}
+                        <div class="amp-leg" title="Mains leg. Auto = balanced by the generated power plan; a leg set here is kept.">
+                            {% if can_edit %}
+                            <label class="amp-leg-label" for="amp-leg-{{ card.amp.pk }}">Leg</label>
+                            <select id="amp-leg-{{ card.amp.pk }}" data-amp-id="{{ card.amp.pk }}" data-field="leg"
+                                    class="amp-pill-input amp-leg-select" autocomplete="off">
+                                {% for value, label in card.leg_choices %}
+                                <option value="{{ value }}"{% if card.amp.leg == value %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <span class="amp-leg-label">Leg</span>
+                            {% for value, label in card.leg_choices %}{% if card.amp.leg == value %}<span class="amp-leg-value">{{ label }}</span>{% endif %}{% endfor %}
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="amp-cabinet-grid">
                         {% for ch in card.channels %}
@@ -1343,7 +1374,7 @@
 
     function flashState(el, cls) {
         // Status class lives on the pill div for pill inputs (so background shows).
-        var pill = el.closest('.pill');
+        var pill = el.closest('.pill, .amp-leg');
         var target = pill || el;
         target.classList.remove('saving', 'saved', 'error');
         if (cls) target.classList.add(cls);

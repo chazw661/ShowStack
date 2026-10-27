@@ -7,6 +7,7 @@ Run with::
 """
 
 import json
+import re
 from decimal import Decimal
 
 from django.apps import apps as live_apps
@@ -15,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from planner.models import (
-    Amp, AmplifierAssignment, AmplifierProfile, AmpLocation, PowerDistributionPlan,
+    Amp, AmplifierAssignment, AmplifierProfile, AmpLocation, AmpModel, PowerDistributionPlan,
 )
 from planner.tests.test_amp_output_cabinets import Fixture, section, staff
 from planner.utils import power_plan_generator as generator
@@ -457,6 +458,40 @@ class AmpModuleTests(GeneratorFixture):
         Amp.objects.filter(pk=self.amp2.pk).update(leg='L3')
         page = self.client.get(reverse('admin:planner_amp_changelist'))
         self.assertContains(page, 'L3 (not on this service)', count=1)
+
+    def heads(self, page):
+        """Each amp card's cabinets heading line, and its middle column."""
+        html = page.content.decode()
+        return (re.findall(r'<div class="amp-cabinets-head">(.*?)<div class="amp-cabinet-grid">',
+                           html, re.S),
+                re.findall(r'amp-card-middle">(.*?)Right: Outputs', html, re.S))
+
+    def test_leg_sits_at_the_end_of_the_cabinets_heading(self):
+        model = AmpModel.objects.create(manufacturer='L-Acoustics', model_name='LA7.16i',
+                                        channel_count=16)
+        location = self.la12x.location
+        wide = Amp.objects.create(project=self.project, location=location, amp_model=model,
+                                  name='Amp 16')
+        self.use(self.owner)
+        heads, middles = self.heads(self.client.get(reverse('admin:planner_amp_changelist')))
+        self.assertEqual(3, len(heads))
+        for amp in (self.la12x, self.amp2, wide):  # 4 and 16 outputs alike
+            head = next(h for h in heads if f'id="amp-leg-{amp.pk}"' in h)
+            # last thing on the line, after the title and notes
+            self.assertRegex(head, r'(?s)Cabinets per output.*class="amp-leg".*data-field="leg"'
+                                   r'.*</select>\s*</div>\s*</div>\s*$')
+        self.assertFalse(any('data-field="leg"' in m for m in middles))
+
+    def test_viewer_sees_the_leg_read_only(self):
+        Amp.objects.filter(pk=self.la12x.pk).update(leg='L2')
+        viewer = staff('viewer')
+        self.join(viewer, self.project, 'viewer')
+        self.use(viewer)
+        page = self.client.get(reverse('admin:planner_amp_changelist'))
+        self.assertNotContains(page, 'data-field="leg"')
+        heads, _ = self.heads(page)
+        self.assertEqual(['L2', 'Auto'], [re.search(r'amp-leg-value">(\w+)<', h).group(1)
+                                         for h in heads])
 
     def test_duplicate_project(self):
         Amp.objects.filter(pk=self.la12x.pk).update(leg='L3')
