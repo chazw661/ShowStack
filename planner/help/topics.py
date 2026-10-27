@@ -491,6 +491,17 @@ TOPICS = (
         keywords=('power', 'power distribution', 'calculator', 'phase', 'leg', 'amps per leg', 'imbalance', 'programme', '1/8 power', '1/3 power', 'estimate', 'power factor', 'headroom', 'safety margin', '3-phase',),
     ),
     Topic(
+        slug='power-plan-generate',
+        title='Generate a power plan from the amp module',
+        section='Amps & PA',
+        summary='One click: a plan with a row per amp, on its real cabinets, legs balanced.',
+        pages=(
+            'admin:planner_amp_changelist',
+            'planner:power_distribution_calculator_detail',
+        ),
+        keywords=('generate power plan', 'regenerate', 'leg', 'L1', 'L2', 'L3', 'auto', 'balance', 'split-phase', 'single-phase', '3-phase distro', 'other audio electronics', 'allowance', 'worst case',),
+    ),
+    Topic(
         slug='power-amp-profiles',
         title='Look up amplifier power profiles',
         section='Amps & PA',

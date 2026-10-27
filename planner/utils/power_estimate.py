@@ -23,7 +23,7 @@ Fallback for a profile with no draw table: its legacy watts (idle, rated =
 
 Power plans (plan_estimate) use the watts only. Each amp sits between one leg
 and neutral, so a leg's current is the watts on it / (phase-to-neutral
-voltage x the plan's assumed power factor): 120 V on 208Y/120 and 120/240,
+voltage x the plan's assumed power factor): 120 V on 208Y/120 and 120/240 split-phase,
 230 V on 230/400, the service voltage on single-phase. The published current
 above stays for anything that needs the draw at the amp's own terminals.
 
@@ -62,6 +62,7 @@ SERVICE_VOLTAGES = {
     '3phase_5wire_208': (208, 120),
     '3phase_4wire_240': (240, 240),
     '3phase_5wire_400': (400, 230),
+    'split_phase_120_240': (240, 120),
     'single_phase_120': (120, 120),
     'single_phase_240': (240, 240),
 }
@@ -78,6 +79,20 @@ def phase_to_neutral_voltage(service_type):
     """The voltage one leg's current is worked out at: 120 on 208Y/120, 230
     on 230/400, the service voltage on single-phase."""
     return SERVICE_VOLTAGES.get(service_type, SERVICE_VOLTAGES[DEFAULT_SERVICE])[1]
+
+
+def service_legs(service_type):
+    """The legs a service has: L1-L3 on 3-phase, L1-L2 on split-phase, L1 on
+    single-phase."""
+    if (service_type or DEFAULT_SERVICE).startswith('3phase'):
+        return ['L1', 'L2', 'L3']
+    if service_type.startswith('split_phase'):
+        return ['L1', 'L2']
+    return ['L1']
+
+
+def is_three_phase(service_type):
+    return len(service_legs(service_type)) == 3
 
 
 def leg_current(watts, voltage, power_factor):

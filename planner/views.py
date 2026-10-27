@@ -2683,10 +2683,14 @@ def power_distribution_calculator(request, plan_id=None):
     # Get all amplifier profiles
     amplifier_profiles = AmplifierProfile.objects.all()
     
-    # Get assignments for this plan
+    # Get assignments for this plan. A generated plan lists its rows in rack
+    # order (they were created in it); one built by hand by zone, as before.
     assignments = AmplifierAssignment.objects.filter(
         distribution_plan=plan
-    ).select_related('amplifier').order_by('zone', 'position')
+    ).select_related('amplifier', 'source_amp').prefetch_related(
+        'source_amp__channels__cabinet_section', 'amplifier__load_ratings',
+        'amplifier__voltage_factors',
+    ).order_by(*(('-generated', 'id') if plan.is_generated else ('zone', 'position')))
     
     # Calculate phase distribution
     phase_loads = calculate_phase_distribution(plan)
@@ -2696,8 +2700,11 @@ def power_distribution_calculator(request, plan_id=None):
     total_watts = sum((a.calculated_watts_per_unit or 0) * a.quantity for a in assignments)
     # Per row: the estimate's basis and notes (voltage multiplier, footnoted
     # figures, assumed power factor) for the table.
+    from planner.utils import power_plan_generator as generator
+    legs = plan.legs
     for a in assignments:
         a.draw = a.estimate()
+        a.leg_status = generator.leg_status(a, legs) if a.generated else ''
     voltage = plan.get_voltage()
     from planner.utils.power_estimate import ESTIMATE_LABEL
 
@@ -2725,6 +2732,11 @@ def power_distribution_calculator(request, plan_id=None):
         'headroom_values': [v for v, _ in HEADROOM_CHOICES],
         'voltage': voltage,
         'phase_to_neutral': plan.get_phase_to_neutral_voltage(),
+        'three_phase_warning': generator.three_phase_warning(plan, assignments),
+        'is_stale': generator.is_stale(plan),
+        'stale_message': generator.STALE_MESSAGE,
+        'allowance_label': generator.ALLOWANCE_LABEL,
+        'can_edit': _can_edit_current_project(request),
     }
     
     return render(request, 'planner/power_distribution_calculator.html', context)
@@ -2737,21 +2749,19 @@ HEADROOM_CHOICES = [('1.25', '25% (default)'), ('1.30', '30%'), ('1.50', '50%'),
 def calculate_phase_distribution(plan):
     """Calculate the current distribution across phases"""
     assignments = plan.amplifier_assignments.all()
-    
-    # Initialize phase tracking
-    phases = {
-        'L1': {'assignments': [], 'total_current': 0},
-        'L2': {'assignments': [], 'total_current': 0},
-        'L3': {'assignments': [], 'total_current': 0},
-    }
-    
-    # Auto-balance assignments marked as AUTO
+
+    # The service's legs on a generated plan (L1-L3 / L1-L2 / L1); L1-L3 on
+    # a plan built by hand, as before.
+    legs = plan.legs
+    phases = {leg: {'assignments': [], 'total_current': 0} for leg in legs}
+
+    # Auto-balance assignments marked as AUTO, or on a leg the service lacks
     auto_assignments = []
     
     for assignment in assignments:
-        if assignment.phase_assignment == 'AUTO':
+        if assignment.phase_assignment not in phases:
             auto_assignments.append(assignment)
-        elif assignment.phase_assignment in phases:
+        else:
             phases[assignment.phase_assignment]['assignments'].append(assignment)
             phases[assignment.phase_assignment]['total_current'] += float(
                 assignment.calculated_total_current or 0
@@ -2764,12 +2774,11 @@ def calculate_phase_distribution(plan):
         quantity = assignment.quantity or 1
         
         # Track how many amps go to each phase for this assignment
-        assignment._phase_distribution = {'L1': 0, 'L2': 0, 'L3': 0}
+        assignment._phase_distribution = {leg: 0 for leg in legs}
         
         # Simple round-robin distribution for THIS line only
-        phase_order = ['L1', 'L2', 'L3']
         for i in range(quantity):
-            phase = phase_order[i % 3]  # Round-robin: 0->L1, 1->L2, 2->L3, 3->L1, etc.
+            phase = legs[i % len(legs)]  # Round-robin: 0->L1, 1->L2, 2->L3, 3->L1, etc.
             phases[phase]['total_current'] += current_per_unit
             assignment._phase_distribution[phase] += 1
         
@@ -2779,6 +2788,12 @@ def calculate_phase_distribution(plan):
         
         # Add to L1's assignments list for display
         phases['L1']['assignments'].append(assignment)
+
+    # Other audio electronics: the same on every leg, no transient headroom.
+    from planner.utils.power_plan_generator import allowance
+    allowance_watts, allowance_current = allowance(plan)
+    for phase_data in phases.values():
+        phase_data['total_current'] += float(allowance_current)
 
     # Calculate summary statistics
     total_current = sum(p['total_current'] for p in phases.values())
@@ -2807,6 +2822,11 @@ def calculate_phase_distribution(plan):
         'total_current': round(total_current, 1),
         'usable_amperage': usable_amperage,
         'available_amperage': plan.available_amperage_per_leg,
+        'allowance': {
+            'watts': plan.other_electronics_watts,
+            'watts_per_leg': float(allowance_watts),
+            'current_per_leg': float(allowance_current),
+        },
     }
 
 
@@ -2822,7 +2842,19 @@ def update_plan_settings(request, plan_id):
         
         # Update plan fields
         if 'service_type' in data:
+            if data['service_type'] not in dict(PowerDistributionPlan.SERVICE_TYPES):
+                return JsonResponse({'success': False, 'error': 'Unknown service type'},
+                                    status=400)
             plan.service_type = data['service_type']
+        if 'programme' in data:
+            plan.programme = _programme(data['programme'])
+        if 'other_electronics_watts' in data:
+            watts = int(data['other_electronics_watts'] or 0)
+            if not 0 <= watts <= 100000:
+                return JsonResponse({'success': False,
+                                     'error': 'Other audio electronics must be 0-100000 W'},
+                                    status=400)
+            plan.other_electronics_watts = watts
         if 'available_amperage_per_leg' in data:
             plan.available_amperage_per_leg = int(data['available_amperage_per_leg'])
         if 'transient_headroom' in data:
@@ -2840,9 +2872,10 @@ def update_plan_settings(request, plan_id):
         
         plan.save()
         
-        # Recalculate all assignments with new settings
-        for assignment in plan.amplifier_assignments.all():
-            assignment.save()  # This triggers recalculation in the model's save method
+        # Recalculate all assignments with new settings; a generated plan
+        # also rebalances (the programme or the service may have changed).
+        from planner.utils.power_plan_generator import recompute
+        recompute(plan)
         
         # Get updated phase distribution. The full phase_loads dict carries
         # AmplifierAssignment model instances inside phases[L].assignments,
@@ -2949,6 +2982,49 @@ def add_amplifier_assignment(request, plan_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+GENERATED_ROW_MESSAGE = ('This row comes from the amp module: change the amp there, '
+                         'then Regenerate the plan.')
+
+
+def _generated_row_refused():
+    return JsonResponse({'success': False, 'error': GENERATED_ROW_MESSAGE}, status=400)
+
+
+@login_required
+@require_POST
+def generate_power_plan(request):
+    """The amp module's "Generate power plan": build the current project's
+    generated plan, or open it if there is one."""
+    project = _scoped_project(request)
+    if project is None:
+        raise Http404("No project selected")
+    from planner.utils import power_plan_generator as generator
+    plan = generator.generated_plan(project)
+    if plan is None:
+        if not _can_edit_current_project(request):
+            messages.error(request, "Read-only access: you can't generate a power plan.")
+            return redirect('admin:planner_amp_changelist')
+        plan, _ = generator.generate(project, user=request.user)
+    return redirect('planner:power_distribution_calculator_detail', plan_id=plan.pk)
+
+
+@login_required
+@require_POST
+def regenerate_power_plan(request, plan_id):
+    """Rebuild a generated plan's amp rows from the racks as they are now,
+    keeping hand-set legs, the plan's settings and rows added by hand."""
+    plan = _power_plan_or_404(request, plan_id)
+    if not plan.is_generated:
+        raise Http404("Not a generated plan")
+    if not _can_edit_current_project(request):
+        messages.error(request, "Read-only access: you can't regenerate this plan.")
+    else:
+        from planner.utils import power_plan_generator as generator
+        generator.regenerate(plan)
+        messages.success(request, "Power plan regenerated from the amp module.")
+    return redirect('planner:power_distribution_calculator_detail', plan_id=plan.pk)
+
+
 @login_required
 @require_http_methods(["POST"])
 @_edit_rights_required
@@ -2961,6 +3037,8 @@ def update_amplifier_assignment(request, assignment_id):
     ``except Exception`` would turn its Http404 into a 400.
     """
     assignment = _power_assignment_or_404(request, assignment_id)
+    if assignment.generated:
+        return _generated_row_refused()
     try:
         data = json.loads(request.body)
 
@@ -3008,6 +3086,8 @@ def update_amplifier_assignment(request, assignment_id):
 def delete_amplifier_assignment(request, assignment_id):
     """AJAX endpoint to delete amplifier assignment"""
     assignment = _power_assignment_or_404(request, assignment_id)
+    if assignment.generated:
+        return _generated_row_refused()
     plan = assignment.distribution_plan
 
     try:
@@ -3810,6 +3890,7 @@ _INLINE_AMP_FIELDS = (
     | {f'cacom_{c}_ch{n}' for c in (1, 2, 3, 4) for n in (1, 2, 3, 4)}
     | {f'sc32_ch{n}' for n in range(1, 17)}
 )
+_INLINE_AMP_FIELDS |= {'leg'}
 _INLINE_CHANNEL_FIELDS = {'channel_name', 'avb_stream', 'aes_input', 'analog_input', 'channel_setting'}
 
 
@@ -3841,6 +3922,8 @@ def amp_inline_update(request, amp_id):
     value = request.POST.get('value', '')
     if field == 'ip_address':
         value = value.strip() or None
+    if field == 'leg' and value not in dict(Amp.LEG_CHOICES):
+        return JsonResponse({'success': False, 'error': f'Unknown leg {value!r}'}, status=400)
     setattr(amp, field, value)
     try:
         amp.save(update_fields=[field])

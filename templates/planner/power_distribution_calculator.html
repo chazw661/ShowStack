@@ -309,6 +309,13 @@
         .estimate-banner { font-size: 13px; color: #c9d6e3; line-height: 1.5; }
         .estimate-notes td { font-size: 11px; color: #9aa7b4; font-style: italic; padding-top: 0; }
         .assumed, .field-hint { font-size: 11px; color: #9aa7b4; }
+        .plan-generated { border-left: 4px solid #4a9eff; font-size: 13px; color: #c9d6e3;
+                          display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .plan-generated .stale { color: #f0c674; font-weight: bold; }
+        .plan-messages div { margin-bottom: 6px; }
+        .leg-status { font-size: 11px; color: #9aa7b4; }
+        .leg-status.flagged { color: #f0c674; }
+        tr.allowance-row td { color: #c9d6e3; font-style: italic; }
 
         .stat-label {
             font-size: 12px;
@@ -335,6 +342,33 @@
 </div>
 
         
+        {% if messages %}
+        <div class="panel plan-messages">
+            {% for message in messages %}<div>{{ message }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        {% if three_phase_warning %}
+        <div class="panel plan-warning" id="three-phase-warning">
+            <strong>{{ three_phase_warning }}.</strong>
+            This plan is on {{ plan.get_service_type_display }}.
+        </div>
+        {% endif %}
+
+        {% if plan.is_generated %}
+        <div class="panel plan-generated">
+            <span>Generated from the amp module {{ plan.generated_at|date:"Y-m-d H:i" }}.
+                Legs set on an amp are kept; the rest are balanced.</span>
+            {% if is_stale %}<span class="stale" id="stale-notice">{{ stale_message }}.</span>{% endif %}
+            {% if can_edit %}
+            <form method="post" action="{% url 'planner:regenerate_power_plan' plan.id %}" style="margin: 0;">
+                {% csrf_token %}
+                <button type="submit" class="btn">Regenerate</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <div class="panel estimate-banner">
             <strong>{{ estimate_label }}.</strong>
             Every power figure on this page is the amplifier manufacturer's published draw
@@ -370,8 +404,12 @@
                            onchange="updatePlanSettings()">
                 </div>
                 <div class="form-group">
-                    <label>Service</label>
-                    <input type="text" value="{{ plan.get_service_type_display }}" readonly style="background: #222;">
+                    <label for="service-type">Service</label>
+                    <select id="service-type" onchange="updatePlanSettings()">
+                        {% for value, label in service_types %}
+                        <option value="{{ value }}"{% if plan.service_type == value %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Phase-to-Neutral Voltage</label>
@@ -410,6 +448,22 @@
                     <label>Usable Amps/Leg</label>
                     <input type="text" value="{{ plan.get_usable_amperage }}A" readonly style="background: #222;">
                 </div>
+                {% if plan.is_generated %}
+                <div class="form-group">
+                    <label for="plan-programme">Programme (amp rows)</label>
+                    <select id="plan-programme" onchange="updatePlanSettings()">
+                        {% for value, label in programmes %}
+                        <option value="{{ value }}"{% if plan.programme == value %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="form-group">
+                    <label for="other-electronics">{{ allowance_label }} (W)</label>
+                    <input type="number" id="other-electronics" min="0" max="100000" step="100"
+                           value="{{ plan.other_electronics_watts }}" onchange="updatePlanSettings()">
+                    <div class="field-hint">Spread evenly across {{ phase_loads.phases|length }} leg{{ phase_loads.phases|length|pluralize }}.</div>
+                </div>
             </div>
         </div>
         
@@ -417,30 +471,16 @@
         <div class="panel">
             <h2 class="panel-title">Phase Distribution Summary</h2>
             <div class="grid-3">
+                {% for name, leg in phase_loads.phases.items %}
                 <div class="phase-display">
-                    <div class="phase-label">L1</div>
-                    <div class="phase-current" id="l1-current">{{ phase_loads.phases.L1.current_rounded }}A</div>
-                    <div class="phase-percentage">{{ phase_loads.phases.L1.percentage|floatformat:1 }}% Used</div>
+                    <div class="phase-label">{{ name }}</div>
+                    <div class="phase-current" id="{{ name|lower }}-current">{{ leg.current_rounded }}A</div>
+                    <div class="phase-percentage">{{ leg.percentage|floatformat:1 }}% Used</div>
                     <div class="phase-bar">
-                        <div class="phase-bar-fill" id="l1-bar" style="width: {{ phase_loads.phases.L1.percentage }}%"></div>
+                        <div class="phase-bar-fill" id="{{ name|lower }}-bar" style="width: {{ leg.percentage }}%"></div>
                     </div>
                 </div>
-                <div class="phase-display">
-                    <div class="phase-label">L2</div>
-                    <div class="phase-current" id="l2-current">{{ phase_loads.phases.L2.current_rounded }}A</div>
-                    <div class="phase-percentage">{{ phase_loads.phases.L2.percentage|floatformat:1 }}% Used</div>
-                    <div class="phase-bar">
-                        <div class="phase-bar-fill" id="l2-bar" style="width: {{ phase_loads.phases.L2.percentage }}%"></div>
-                    </div>
-                </div>
-                <div class="phase-display">
-                    <div class="phase-label">L3</div>
-                    <div class="phase-current" id="l3-current">{{ phase_loads.phases.L3.current_rounded }}A</div>
-                    <div class="phase-percentage">{{ phase_loads.phases.L3.percentage|floatformat:1 }}% Used</div>
-                    <div class="phase-bar">
-                        <div class="phase-bar-fill" id="l3-bar" style="width: {{ phase_loads.phases.L3.percentage }}%"></div>
-                    </div>
-                </div>
+                {% endfor %}
             </div>
             
             <div class="imbalance-indicator">
@@ -497,7 +537,7 @@
                         <td>{{ assignment.quantity }}</td>
                         <td>{{ assignment.get_programme_display }}</td>
                         <td>{% if assignment.assumed_load_ohms is not None %}{{ assignment.assumed_load_ohms|floatformat:"-1" }} Ω{% if assignment.load_ohms is None %} <span class="assumed">(lowest published)</span>{% endif %}{% else %}—{% endif %}</td>
-                        <td>{{ assignment.phase_assignment }}</td>
+                        <td>{{ assignment.phase_assignment }}{% if assignment.leg_status == 'auto' %} <span class="leg-status">(auto)</span>{% elif assignment.leg_status == 'set' %} <span class="leg-status">(set on amp)</span>{% elif assignment.leg_status == 'not_on_service' %} <span class="leg-status flagged">(set to {{ assignment.amp_leg }} on amp; not on this service, balanced)</span>{% endif %}</td>
                         <td>{{ assignment.calculated_current_per_unit|floatformat:1 }}A</td>
                         <td><strong>{{ assignment.calculated_total_current|floatformat:1 }}A</strong></td>
                     </tr>
@@ -507,6 +547,14 @@
                     </tr>
                     {% endif %}
                     {% endfor %}
+                    {% if plan.other_electronics_watts %}
+                    <tr class="allowance-row">
+                        <td colspan="6">{{ allowance_label }}: {{ plan.other_electronics_watts }} W, {{ phase_loads.allowance.watts_per_leg|floatformat:0 }} W per leg</td>
+                        <td>each leg</td>
+                        <td>{{ phase_loads.allowance.current_per_leg|floatformat:1 }}A</td>
+                        <td><strong>{{ phase_loads.allowance.current_per_leg|floatformat:1 }}A</strong> per leg</td>
+                    </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>
@@ -594,7 +642,11 @@
                 transient_headroom: document.getElementById('transient-headroom').value,
                 safety_margin: document.getElementById('safety-margin').value,
                 power_factor: document.getElementById('power-factor').value,
+                service_type: document.getElementById('service-type').value,
+                other_electronics_watts: document.getElementById('other-electronics').value,
             };
+            const programme = document.getElementById('plan-programme');
+            if (programme) data.programme = programme.value;
             
             fetch(`/audiopatch/api/power/plan/${planId}/update/`, {
                 method: 'POST',
@@ -627,15 +679,13 @@
         
         // Update phase display
         function updatePhaseDisplay(phaseLoads) {
-            // Update current values
-            document.getElementById('l1-current').textContent = phaseLoads.phases.L1.current_rounded + 'A';
-            document.getElementById('l2-current').textContent = phaseLoads.phases.L2.current_rounded + 'A';
-            document.getElementById('l3-current').textContent = phaseLoads.phases.L3.current_rounded + 'A';
-            
-            // Update progress bars
-            updatePhaseBar('l1-bar', phaseLoads.phases.L1.percentage);
-            updatePhaseBar('l2-bar', phaseLoads.phases.L2.percentage);
-            updatePhaseBar('l3-bar', phaseLoads.phases.L3.percentage);
+            // Only the legs the service has (L1-L3, L1-L2 or L1)
+            Object.keys(phaseLoads.phases).forEach(function (name) {
+                const current = document.getElementById(name.toLowerCase() + '-current');
+                if (!current) return;  // the service changed; the reload redraws
+                current.textContent = phaseLoads.phases[name].current_rounded + 'A';
+                updatePhaseBar(name.toLowerCase() + '-bar', phaseLoads.phases[name].percentage);
+            });
         }
         
         function updatePhaseBar(barId, percentage) {

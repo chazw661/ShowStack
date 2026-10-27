@@ -219,6 +219,7 @@ class Project(models.Model):
                     amp_model=amp.amp_model,
                     name=amp.name,
                     ip_address=amp.ip_address,
+                    leg=amp.leg,
                     color=amp.color,
                     sort_order=amp.sort_order,
                     nl4_a_pair_1=amp.nl4_a_pair_1,
@@ -558,6 +559,9 @@ class Project(models.Model):
                     transient_headroom=power_plan.transient_headroom,
                     safety_margin=power_plan.safety_margin,
                     power_factor=power_plan.power_factor,
+                    programme=power_plan.programme,
+                    other_electronics_watts=power_plan.other_electronics_watts,
+                    generated_at=power_plan.generated_at,
                     notes=power_plan.notes
                 )
                 
@@ -572,8 +576,19 @@ class Project(models.Model):
                         phase_assignment=assignment.phase_assignment,
                         programme=assignment.programme,
                         load_ohms=assignment.load_ohms,
+                        generated=assignment.generated,
+                        source_amp=amp_map.get(assignment.source_amp_id),
+                        amp_leg=assignment.amp_leg,
                         notes=assignment.notes
                     )
+                if power_plan.is_generated:
+                    # The copy's amps are new rows, so its fingerprint is
+                    # worked out again: up to date in the copy exactly when
+                    # the plan was up to date here.
+                    from planner.utils.power_plan_generator import fingerprint, is_stale
+                    new_power_plan.source_fingerprint = (
+                        'changed' if is_stale(power_plan) else fingerprint(new_project))
+                    new_power_plan.save(update_fields=['source_fingerprint'])
             
             # 9. Duplicate System Processors (P1 and Galaxy)
             processor_map = {}
@@ -1948,6 +1963,14 @@ class Amp(models.Model):
         blank=True,
         default='',
         help_text="Preset name loaded on this amp (e.g., 'KS28 SUB', 'K2 MAIN')"
+    )
+
+    # The mains leg this amp is on. Blank = auto: a generated power plan
+    # balances it. A leg set here is never moved by the plan.
+    LEG_CHOICES = [('', 'Auto'), ('L1', 'L1'), ('L2', 'L2'), ('L3', 'L3')]
+    leg = models.CharField(
+        max_length=2, blank=True, default='', choices=LEG_CHOICES,
+        help_text="Mains leg; blank = balanced by the generated power plan",
     )
 
     color = models.CharField(
@@ -4575,6 +4598,13 @@ class AmplifierProfile(models.Model):
                   "provisional, e.g. 'provisional: copied from LA7.16i'",
     )
 
+    # A plan on a split- or single-phase service warns when any of its amps
+    # has this set. Set per profile, not by name, so other brands can be.
+    needs_three_phase = models.BooleanField(
+        default=False, verbose_name="Needs 3-phase distro",
+        help_text="Power plans on a split- or single-phase service warn about this amp",
+    )
+
     # Additional info
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -4917,6 +4947,7 @@ class PowerDistributionPlan(models.Model):
         ('3phase_5wire_208', '3-Phase 5-Wire 208V'),
         ('3phase_4wire_240', '3-Phase 4-Wire 240/415V'),
         ('3phase_5wire_400', '3-Phase 5-Wire 230/400V'),
+        ('split_phase_120_240', 'Split-Phase 120/240V'),
         ('single_phase_120', 'Single Phase 120V'),
         ('single_phase_240', 'Single Phase 240V'),
     ]
@@ -4945,6 +4976,24 @@ class PowerDistributionPlan(models.Model):
                   "(phase-to-neutral volts x PF)",
     )
     
+    # Generated plans (planner.utils.power_plan_generator): one per project,
+    # built from the amp module. Null = a plan built by hand.
+    generated_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # What the rows were built from; the page compares it with the racks now.
+    source_fingerprint = models.CharField(max_length=64, blank=True, default='', editable=False)
+    # The programme level of a generated plan's amp rows. Hand-added rows
+    # keep their own.
+    programme = models.CharField(
+        max_length=10, choices=POWER_PROGRAMME_CHOICES, default='normal',
+        help_text="Programme level of the rows generated from the amp module",
+    )
+    # Consoles, processors and playback: one allowance, spread evenly across
+    # the service's legs at the phase-to-neutral voltage. 0 = none.
+    other_electronics_watts = models.PositiveIntegerField(
+        default=2000, verbose_name="Other audio electronics (W)",
+        help_text="Consoles, processors, playback; spread evenly across the legs",
+    )
+
     # Additional info
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -4960,6 +5009,23 @@ class PowerDistributionPlan(models.Model):
         verbose_name = "Power Distribution Plan"
         verbose_name_plural = "Power Distribution Plans"  # PARENT
         ordering = ['-created_at']  # or ['id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project'], condition=models.Q(generated_at__isnull=False),
+                name='one_generated_power_plan_per_project',
+            ),
+        ]
+
+    @property
+    def is_generated(self):
+        return self.generated_at is not None
+
+    @property
+    def legs(self):
+        """The legs this plan's service has: L1-L3, L1-L2 or L1. A plan built
+        by hand keeps L1-L3 whatever its service, as before."""
+        from planner.utils.power_estimate import service_legs
+        return service_legs(self.service_type) if self.is_generated else ['L1', 'L2', 'L3']
         
     def __str__(self):
         return f"{self.venue_name} Power Plan" if self.venue_name else f"Power Plan {self.pk}"
@@ -5029,6 +5095,17 @@ class AmplifierAssignment(models.Model):
         help_text="Blank = the lowest published load (highest draw)",
     )
 
+    # Rows a generated plan built from the amp module: one per rack amp.
+    # Regenerate replaces them; rows added by hand (generated=False) stay.
+    generated = models.BooleanField(default=False, editable=False)
+    source_amp = models.ForeignKey(
+        'Amp', on_delete=models.SET_NULL, null=True, blank=True, editable=False,
+        related_name='power_plan_rows',
+    )
+    # The amp's leg when the row was generated ('' = auto). Rebalancing reads
+    # this, not the amp, so an edit on the amp waits for Regenerate.
+    amp_leg = models.CharField(max_length=2, blank=True, default='', editable=False)
+
     # Calculated values (cached for performance)
     calculated_current_per_unit = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True,
@@ -5060,9 +5137,20 @@ class AmplifierAssignment(models.Model):
     def estimate(self):
         """The Draw for one amplifier on this row (before headroom), or None
         without a profile: its watts, and the current they make on one leg at
-        the plan's phase-to-neutral voltage. planner.utils.power_estimate."""
+        the plan's phase-to-neutral voltage. planner.utils.power_estimate.
+
+        A generated row reads its amp's cabinets at the plan's programme
+        level (planner.utils.power_plan_generator.row_loads)."""
         from planner.utils.power_estimate import plan_estimate, uniform_channel_loads
         plan = self.distribution_plan
+        if self.generated:
+            from planner.utils.power_plan_generator import row_loads
+            loads, notes = row_loads(self)
+            draw = plan_estimate(self.amplifier, plan.programme, loads,
+                                 plan.service_type, plan.power_factor)
+            if draw is not None:
+                draw.notes = notes + draw.notes
+            return draw
         return plan_estimate(self.amplifier, self.programme,
                              uniform_channel_loads(self.amplifier, self.load_ohms),
                              plan.service_type, plan.power_factor)

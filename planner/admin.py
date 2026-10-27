@@ -2377,6 +2377,21 @@ class AmpAdmin(BaseEquipmentAdmin):
 
             all_locations = list(locations)
             from .models import AmpModel, P1Output, GalaxyOutput
+            # Phase C: the project's generated power plan, if any. The Leg
+            # select offers the legs of its service (L1-L3 before there is one);
+            # a stored leg outside them stays listed so the card shows it.
+            from planner.utils import power_plan_generator as generator
+            from planner.views import _can_edit_current_project
+            power_plan = generator.generated_plan(request.current_project)
+            legs = power_plan.legs if power_plan else ['L1', 'L2', 'L3']
+            for group in active_locations:
+                for card in group['cards']:
+                    leg = card['amp'].leg
+                    card['leg_choices'] = [('', 'Auto')] + [(l, l) for l in legs] + (
+                        [(leg, f'{leg} (not on this service)')] if leg and leg not in legs else [])
+            extra_context['power_plan'] = power_plan
+            extra_context['power_plan_stale'] = bool(power_plan) and generator.is_stale(power_plan)
+            extra_context['can_generate_power_plan'] = _can_edit_current_project(request)
             extra_context['grouped_amps'] = active_locations
             extra_context['all_locations'] = all_locations
             extra_context['all_amp_models'] = list(
@@ -2488,7 +2503,7 @@ class AmpAdmin(BaseEquipmentAdmin):
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
             ('Basic Information', {
-                'fields': ('location', 'amp_model', 'name', 'ip_address', 'preset', 'color')
+                'fields': ('location', 'amp_model', 'name', 'ip_address', 'preset', 'leg', 'color')
             }),
         ]
         
@@ -7005,7 +7020,9 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
             'description': 'Power values in watts. Rated power is 1/8 power (pink noise), typical for calculations.'
         }),
         ('Electrical Specifications', {
-            'fields': ('nominal_voltage', 'power_factor', 'efficiency')
+            'fields': ('nominal_voltage', 'power_factor', 'efficiency', 'needs_three_phase'),
+            'description': 'Needs 3-phase distro: a power plan on a split- or single-phase '
+                           'service warns about this amp (it does not block).',
         }),
         ('Output Load', {
             'fields': ('min_load_ohms', 'min_load_source'),
@@ -7051,8 +7068,24 @@ class AmplifierProfileAdmin(admin.ModelAdmin):
         }
 
 
+class AmplifierAssignmentInlineForm(forms.ModelForm):
+    """A row generated from the amp module is read-only here: Regenerate
+    would overwrite an edit."""
+
+    class Meta:
+        model = AmplifierAssignment
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.generated:
+            for field in self.fields.values():
+                field.disabled = True
+
+
 class AmplifierAssignmentInline(admin.TabularInline):
     model = AmplifierAssignment
+    form = AmplifierAssignmentInlineForm
     extra = 1
     can_delete = False  # Disable the checkbox
     fields = [
@@ -7067,6 +7100,8 @@ class AmplifierAssignmentInline(admin.TabularInline):
     autocomplete_fields = ['amplifier']
 
     def delete_link(self, obj):
+        if obj.pk and obj.generated:
+            return "From amp module"
         if obj.pk:
             url = reverse('admin:planner_amplifierassignment_delete', args=[obj.pk])
             return format_html(
@@ -7095,7 +7130,14 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         }),
 
         ('Electrical Service', {
-            'fields': ('service_type', 'phase_to_neutral_voltage', 'available_amperage_per_leg')
+            'fields': ('service_type', 'phase_to_neutral_voltage', 'available_amperage_per_leg',
+                       'other_electronics_watts')
+        }),
+        ('Generated from the amp module', {
+            'fields': ('generated_at', 'programme'),
+            'description': 'Set on plans made with "Generate power plan" in the amp module. '
+                           'Their amp rows come from the racks: change the amps there and '
+                           'Regenerate from the plan page.',
         }),
         ('Safety Settings', {
             'fields': ('transient_headroom', 'safety_margin', 'power_factor'),
@@ -7113,7 +7155,14 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
     
     # Remove get_summary_html from readonly_fields since it's not a real field
     readonly_fields = ['created_by', 'created_at', 'updated_at', 'get_total_current',
-                       'phase_to_neutral_voltage']
+                       'phase_to_neutral_voltage', 'generated_at']
+
+    def save_related(self, request, form, formsets, change):
+        """Rows cache their current at the plan's settings: re-save them all
+        after a change here, and rebalance a generated plan's legs."""
+        super().save_related(request, form, formsets, change)
+        from planner.utils.power_plan_generator import recompute
+        recompute(form.instance)
     
     inlines = [AmplifierAssignmentInline]
 
@@ -7439,7 +7488,12 @@ class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
         return super().has_add_permission(request)
     
     def has_change_permission(self, request, obj=None):
-        """Only editors and owners can edit"""
+        """Only editors and owners can edit. A row generated from the amp
+        module is view-only: Regenerate would overwrite an edit. (Delete
+        stays allowed -- Regenerate brings the row back, and refusing it
+        would stop the admin deleting a generated plan.)"""
+        if obj is not None and obj.generated:
+            return False
         if request.user.is_superuser:
             return True
         return super().has_change_permission(request, obj)
