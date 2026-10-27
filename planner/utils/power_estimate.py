@@ -19,8 +19,13 @@ Published path (AmplifierLoadRating rows at 230 V, all channels driven):
   the manual prints for that voltage, else 230 / V. Power is unchanged.
 
 Fallback for a profile with no draw table: its legacy watts (idle, rated =
-1/8, peak = 1/3) at the plan's power factor, current = W / (V x PF). That is
-the only place the power factor is used; the page lists it as an assumption.
+1/8, peak = 1/3) at the plan's power factor, current = W / (V x PF).
+
+Power plans (plan_estimate) use the watts only. Each amp sits between one leg
+and neutral, so a leg's current is the watts on it / (phase-to-neutral
+voltage x the plan's assumed power factor): 120 V on 208Y/120 and 120/240,
+230 V on 230/400, the service voltage on single-phase. The published current
+above stays for anything that needs the draw at the amp's own terminals.
 
 No model methods are called, so data migrations can pass historical models.
 """
@@ -48,12 +53,36 @@ LEGACY_WATTS = {IDLE: 'idle_power_watts', NORMAL: 'rated_power_watts', HEAVY: 'p
 PUBLISHED, FROM_WATTS = 'published', 'watts'
 
 
+# Per service type: (service voltage, phase-to-neutral voltage). One amp sits
+# between a leg and neutral, so a leg's current is its watts at the
+# phase-to-neutral voltage: 120 V on 208Y/120, 230 V on 230/400. Single-phase
+# has one voltage. "3-Phase 4-Wire 240V" is 240/415 wye.
+SERVICE_VOLTAGES = {
+    '3phase_4wire_208': (208, 120),
+    '3phase_5wire_208': (208, 120),
+    '3phase_4wire_240': (240, 240),
+    '3phase_5wire_400': (400, 230),
+    'single_phase_120': (120, 120),
+    'single_phase_240': (240, 240),
+}
+DEFAULT_SERVICE = '3phase_4wire_208'
+
+
 def plan_voltage(service_type):
-    """208 / 240 / 120 from a PowerDistributionPlan service type."""
-    for volts in ('208', '240', '120'):
-        if volts in (service_type or ''):
-            return int(volts)
-    return 208
+    """The service voltage of a PowerDistributionPlan service type (208 for
+    208Y/120). Unknown types read as the default service."""
+    return SERVICE_VOLTAGES.get(service_type, SERVICE_VOLTAGES[DEFAULT_SERVICE])[0]
+
+
+def phase_to_neutral_voltage(service_type):
+    """The voltage one leg's current is worked out at: 120 on 208Y/120, 230
+    on 230/400, the service voltage on single-phase."""
+    return SERVICE_VOLTAGES.get(service_type, SERVICE_VOLTAGES[DEFAULT_SERVICE])[1]
+
+
+def leg_current(watts, voltage, power_factor):
+    """Current on one leg: watts / (phase-to-neutral volts x PF)."""
+    return _q(Decimal(watts) / (Decimal(voltage) * Decimal(power_factor)))
 
 
 def voltage_multiplier(profile, voltage):
@@ -180,3 +209,21 @@ def amp_channel_loads(amp):
             loads.append(Decimal(section.nominal_impedance_ohms)
                          / max(int(ch.cabinet_quantity or 1), 1))
     return loads
+
+
+def plan_estimate(profile, programme, channel_loads, service_type, power_factor):
+    """The Draw a power plan row uses: the estimated watts, and the current
+    they make on one leg -- watts / (phase-to-neutral volts x PF). The
+    published current is not used: it is the current at the amp's terminals
+    for a given supply voltage, and summing it per leg at 208 V understated a
+    208Y/120 leg by 208/120. None when there is no profile."""
+    draw = estimate(profile, programme, channel_loads, REFERENCE_VOLTAGE, power_factor)
+    if draw is None:
+        return None
+    notes = draw.notes
+    if draw.basis == FROM_WATTS:
+        notes = [f'{profile.model}: no published draw table, legacy '
+                 f'{LEVEL_NAME[programme]} figure of {draw.watts} W']
+    volts = phase_to_neutral_voltage(service_type)
+    return Draw(current=leg_current(draw.watts, volts, power_factor), watts=draw.watts,
+                basis=draw.basis, notes=notes)

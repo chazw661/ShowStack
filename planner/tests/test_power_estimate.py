@@ -118,27 +118,32 @@ class PlanFixture(Fixture):
 class AssignmentTests(PlanFixture):
 
     def test_cached_figures(self):
-        # 1/3 at 2.7 ohm: 26 A x 1.1058 = 28.75 at 208 V, x 1.5 headroom.
-        self.assertEqual(D('43.13'), self.row.calculated_current_per_unit)
-        self.assertEqual(D('129.39'), self.row.calculated_total_current)
+        # 1/3 at 2.7 ohm: 5500 W / (120 V phase-to-neutral x PF 0.95) = 48.25 A,
+        # x 1.5 headroom = 72.375, half up.
+        self.assertEqual(D('72.38'), self.row.calculated_current_per_unit)
+        self.assertEqual(D('217.14'), self.row.calculated_total_current)
         self.assertEqual(5500, self.row.calculated_watts_per_unit)
 
     def test_load_and_programme_change_the_figure(self):
         self.row.load_ohms = D(8)
         self.row.programme = NORMAL
         self.row.save()
-        # 4.8 A x 1.1058 = 5.31; x 1.5 = 7.965, half up
-        self.assertEqual(D('7.97'), self.row.calculated_current_per_unit)
+        # 1/8 at 8 ohm: 1050 W / (120 x 0.95) = 9.21 A; x 1.5 = 13.815, half up
+        self.assertEqual(1050, self.row.calculated_watts_per_unit)
+        self.assertEqual(D('13.82'), self.row.calculated_current_per_unit)
 
     def test_no_duty_factor_on_top(self):
         details = self.row.get_power_details()
-        self.assertEqual(28.75, details['per_unit']['current_amps'])
-        self.assertEqual(round(28.75 * 1.5, 2), details['per_unit']['design_current_amps'])
+        self.assertEqual(48.25, details['per_unit']['current_amps'])
+        self.assertEqual(round(48.25 * 1.5, 2), details['per_unit']['design_current_amps'])
 
     def test_duplicate_keeps_the_settings(self):
         self.row.load_ohms = D(4)
         self.row.save()
         PowerDistributionPlan.objects.filter(pk=self.plan.pk).update(power_factor=D('0.9'))
+        # The power factor is in every current now: re-save at the new one.
+        self.row = AmplifierAssignment.objects.get(pk=self.row.pk)
+        self.row.save()
         copy = self.project.duplicate(new_name='Copy')
         row = AmplifierAssignment.objects.get(distribution_plan__project=copy)
         self.assertEqual((HEAVY, D(4), D('0.90')),
@@ -168,7 +173,9 @@ class CalculatorPageTests(PlanFixture):
         self.assertContains(page, 'Power Factor (assumed)')
         self.assertContains(page, 'Heavy programme (1/3 power)')
         self.assertContains(page, '(lowest published)')
-        self.assertContains(page, '×1.1058 for 208 V')
+        self.assertContains(page, 'Phase-to-Neutral Voltage')
+        self.assertContains(page, 'value="120V"')
+        self.assertNotContains(page, '×1.1058')  # the published current is not used
         self.assertContains(page, '16.5kW')  # 5500 W x 3
         self.assertNotContains(page, 'Duty')
 
@@ -203,7 +210,8 @@ class CalculatorPageTests(PlanFixture):
         story = _section_power(self.project, styles(), PowerDistributionPlan)
         text = ' '.join(getattr(f, 'text', '') for f in story)
         self.assertIn(ESTIMATE_LABEL, text)
-        self.assertIn('208 V', text)
+        self.assertIn('120 V phase-to-neutral', text)
+        self.assertIn('L1 72.4A', text)  # one row of three on the AUTO round-robin
 
 
 class MigrationTests(PlanFixture):
@@ -245,9 +253,10 @@ class MigrationTests(PlanFixture):
         kept.refresh_from_db()
         self.assertEqual((D('1.25'), D('1.30')), (self.plan.transient_headroom,
                                                   kept.transient_headroom))
-        # 28.75 A x 1.25 = 35.9375, half up
+        # Run on the live models, whose save() recomputes on the current rule
+        # (0215): 48.25 A x 1.25 = 60.3125, half up.
         self.row.refresh_from_db()
-        self.assertEqual(D('35.94'), self.row.calculated_current_per_unit)
+        self.assertEqual(D('60.31'), self.row.calculated_current_per_unit)
         self.migration().headroom_to_new_default(apps, None)  # twice: same result
         self.plan.refresh_from_db()
         self.assertEqual(D('1.25'), self.plan.transient_headroom)
@@ -259,9 +268,10 @@ class MigrationTests(PlanFixture):
             calculated_watts_per_unit=None)
         self.migration().recompute(apps, None)
         self.row.refresh_from_db()
-        self.assertEqual((D('43.13'), D('129.39'), 5500),
+        # Live models: save() recomputes on the current rule (0215).
+        self.assertEqual((D('72.38'), D('217.14'), 5500),
                          (self.row.calculated_current_per_unit, self.row.calculated_total_current,
                           self.row.calculated_watts_per_unit))
         self.migration().recompute(apps, None)  # twice: same result
         self.row.refresh_from_db()
-        self.assertEqual(D('129.39'), self.row.calculated_total_current)
+        self.assertEqual(D('217.14'), self.row.calculated_total_current)

@@ -7062,7 +7062,8 @@ class AmplifierAssignmentInline(admin.TabularInline):
     ]
     readonly_fields = ['calculated_current_per_unit', 'calculated_total_current', 'delete_link']
     verbose_name_plural = ('Amplifiers in Power Plan — current is an estimate from '
-                           'manufacturer data, including the plan\'s transient headroom')
+                           'manufacturer watts at the phase-to-neutral voltage, including '
+                           'the plan\'s transient headroom')
     autocomplete_fields = ['amplifier']
 
     def delete_link(self, obj):
@@ -7094,12 +7095,13 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         }),
 
         ('Electrical Service', {
-            'fields': ('service_type', 'available_amperage_per_leg')
+            'fields': ('service_type', 'phase_to_neutral_voltage', 'available_amperage_per_leg')
         }),
         ('Safety Settings', {
             'fields': ('transient_headroom', 'safety_margin', 'power_factor'),
             'description': 'Transient headroom accounts for audio peaks. Safety margin is the derating factor. '
-                           'The power factor is an assumption, used only for amps whose current is not published.'
+                           'The power factor is an assumption: current on a leg = watts / '
+                           '(phase-to-neutral volts x PF).'
         }),
         ('Additional Information', {
             'fields': ('notes', 'created_by'),
@@ -7110,9 +7112,16 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
     exclude = ['project', 'show_day']
     
     # Remove get_summary_html from readonly_fields since it's not a real field
-    readonly_fields = ['created_by', 'created_at', 'updated_at', 'get_total_current']
+    readonly_fields = ['created_by', 'created_at', 'updated_at', 'get_total_current',
+                       'phase_to_neutral_voltage']
     
     inlines = [AmplifierAssignmentInline]
+
+    def phase_to_neutral_voltage(self, obj):
+        """The voltage each leg's current is worked out at."""
+        from planner.utils.power_estimate import phase_to_neutral_voltage
+        return f"{phase_to_neutral_voltage(obj.service_type if obj else None)} V"
+    phase_to_neutral_voltage.short_description = 'Phase-to-neutral voltage'
     
 
     
@@ -7361,7 +7370,8 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
             <div style="margin-top: 10px; font-size: 12px; color: #888;">
                 Available: {obj.available_amperage_per_leg}A per leg<br>
                 Usable (with {int(obj.safety_margin*100)}% margin): {usable}A per leg<br>
-                Transient Headroom: {int((obj.transient_headroom-1)*100)}%
+                Transient Headroom: {int((obj.transient_headroom-1)*100)}%<br>
+                Current per leg at {obj.get_phase_to_neutral_voltage()} V phase-to-neutral, power factor {obj.power_factor}
             </div>
         </div>
         """

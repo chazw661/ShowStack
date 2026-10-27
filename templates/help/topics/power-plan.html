@@ -10,9 +10,9 @@
 
 <h3>Good to know</h3>
 <ul>
-  <li>Every figure is an estimate from manufacturer data: the published draw at 230&nbsp;V, converted to the plan's voltage, times the headroom.</li>
+  <li>Every figure is an estimate from manufacturer data: a leg's current is the published watts on it ÷ (phase-to-neutral voltage × power factor), times the headroom. The calculator shows the voltage used, e.g. 120&nbsp;V on 208Y/120.</li>
   <li><em>Normal</em> uses the 1/8-power figure, <em>Heavy</em> the 1/3-power figure. No duty cycle is applied on top.</li>
   <li>A blank load per channel means the lowest load the amp publishes, which draws the most.</li>
-  <li>The power factor is an assumption, used only for amps whose current isn't published.</li>
+  <li>The power factor is assumed (0.95 by default).</li>
   <li><em>Usable Amps/Leg</em> = available × safety margin. <em>Phase Imbalance</em> = (highest − lowest leg) ÷ highest; target under 10%.</li>
 </ul>

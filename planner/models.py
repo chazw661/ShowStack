@@ -4915,7 +4915,8 @@ class PowerDistributionPlan(models.Model):
     SERVICE_TYPES = [
         ('3phase_4wire_208', '3-Phase 4-Wire 208V'),
         ('3phase_5wire_208', '3-Phase 5-Wire 208V'),
-        ('3phase_4wire_240', '3-Phase 4-Wire 240V'),
+        ('3phase_4wire_240', '3-Phase 4-Wire 240/415V'),
+        ('3phase_5wire_400', '3-Phase 5-Wire 230/400V'),
         ('single_phase_120', 'Single Phase 120V'),
         ('single_phase_240', 'Single Phase 240V'),
     ]
@@ -4936,12 +4937,12 @@ class PowerDistributionPlan(models.Model):
         max_digits=3, decimal_places=2, default=0.80,
         help_text="Derating factor (0.8 = use only 80% of available)"
     )
-    # An assumption, shown as one: only amps whose manufacturer publishes
-    # watts but not current need it (current = W / (V x PF)).
+    # An assumption, shown as one: every current on the plan is the
+    # estimated watts / (phase-to-neutral volts x PF).
     power_factor = models.DecimalField(
         max_digits=3, decimal_places=2, default=Decimal('0.95'),
-        help_text="Assumed power factor, used only where an amp's current "
-                  "is not published (current = watts / (volts x PF))",
+        help_text="Assumed power factor: current on a leg = watts / "
+                  "(phase-to-neutral volts x PF)",
     )
     
     # Additional info
@@ -4971,6 +4972,11 @@ class PowerDistributionPlan(models.Model):
         """Extract voltage from service type"""
         from planner.utils.power_estimate import plan_voltage
         return plan_voltage(self.service_type)
+
+    def get_phase_to_neutral_voltage(self):
+        """The voltage a leg's current is worked out at (120 on 208Y/120)."""
+        from planner.utils.power_estimate import phase_to_neutral_voltage
+        return phase_to_neutral_voltage(self.service_type)
 
 
 class AmplifierAssignment(models.Model):
@@ -5053,12 +5059,13 @@ class AmplifierAssignment(models.Model):
     
     def estimate(self):
         """The Draw for one amplifier on this row (before headroom), or None
-        without a profile. planner.utils.power_estimate."""
-        from planner.utils.power_estimate import estimate, uniform_channel_loads
+        without a profile: its watts, and the current they make on one leg at
+        the plan's phase-to-neutral voltage. planner.utils.power_estimate."""
+        from planner.utils.power_estimate import plan_estimate, uniform_channel_loads
         plan = self.distribution_plan
-        return estimate(self.amplifier, self.programme,
-                        uniform_channel_loads(self.amplifier, self.load_ohms),
-                        plan.get_voltage(), plan.power_factor)
+        return plan_estimate(self.amplifier, self.programme,
+                             uniform_channel_loads(self.amplifier, self.load_ohms),
+                             plan.service_type, plan.power_factor)
 
     @property
     def assumed_load_ohms(self):

@@ -1000,6 +1000,7 @@ def _section_power(project, styles, PowerDistributionPlan):
 
     from planner.utils.power_estimate import ESTIMATE_LABEL
     from planner.utils.amp_models import amps_without_power_profile
+    from planner.views import calculate_phase_distribution
     excluded_count, excluded_models = amps_without_power_profile(project)
     for plan in plans:
         heading = Paragraph(f"Venue: {plan.venue_name}", styles['sub'])
@@ -1021,11 +1022,16 @@ def _section_power(project, styles, PowerDistributionPlan):
         table = _data_table(headers, rows, widths)
         if table:
             story += _table_block([heading, table], len(rows), n_headings=1)
+            legs = calculate_phase_distribution(plan)['phases']
             story.append(Paragraph(
-                f"* {ESTIMATE_LABEL}: published draw at 230 V converted to "
-                f"{plan.get_voltage()} V, including {int((plan.transient_headroom - 1) * 100)}% "
-                f"transient headroom. Power factor {plan.power_factor} is assumed, and used "
-                f"only where an amp's current is not published.", styles['meta']))
+                "<b>Per leg:</b> " + " · ".join(
+                    f"{name} {legs[name]['total_current']:.1f}A" for name in ('L1', 'L2', 'L3')),
+                styles['meta']))
+            story.append(Paragraph(
+                f"* {ESTIMATE_LABEL}: published watts / ({plan.get_phase_to_neutral_voltage()} V "
+                f"phase-to-neutral × power factor {plan.power_factor}, assumed), including "
+                f"{int((plan.transient_headroom - 1) * 100)}% transient headroom. "
+                f"Service: {escape(plan.get_service_type_display())}.", styles['meta']))
         else:
             story.append(_keep([heading, Paragraph("No amplifier assignments.", styles['empty'])]))
         for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
