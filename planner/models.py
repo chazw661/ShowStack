@@ -5190,7 +5190,11 @@ class AmplifierAssignment(models.Model):
 
     @property
     def assumed_load_ohms(self):
+        """The per-channel load the row is worked out at, or None (shown as
+        "—") for a spare: it is counted at idle, so no load applies."""
         from planner.utils.power_estimate import assumed_load
+        if self.is_spare:
+            return None
         return assumed_load(self.amplifier, self.load_ohms)
 
     def save(self, *args, **kwargs):
