@@ -7,7 +7,7 @@ Preset; wider amps (role only) in a full-width row above the cabinets.{% endcomm
         <select class="amp-cell-input amp-channel-setting-select"
                 data-channel-id="{{ ch.pk }}"
                 data-field="channel_setting"
-                title="{{ ch.channel_setting|default:'No routing' }}">
+                title="{{ ch.channel_setting|default:'No routing' }}"{% if not can_edit %} disabled{% endif %}>
             {% for val, lbl in ch.channel_setting_choices %}
             <option value="{{ val }}"{% if ch.channel_setting == val %} selected{% endif %}>{{ lbl }}</option>
             {% endfor %}

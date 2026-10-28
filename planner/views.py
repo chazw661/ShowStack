@@ -3913,6 +3913,9 @@ def amp_inline_update(request, amp_id):
     if not project:
         return JsonResponse({'success': False, 'error': 'No project'}, status=400)
     amp = get_object_or_404(Amp, id=amp_id, project=project)
+    # Before the field check, so a viewer is refused whatever field is sent.
+    if not _can_edit_current_project(request):
+        return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
     field = request.POST.get('field', '')
     if field not in _INLINE_AMP_FIELDS:
         return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
