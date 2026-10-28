@@ -120,17 +120,19 @@ class TableLayoutTests(PdfFixture):
 
 class LegFigureTests(PdfFixture):
 
-    def test_expected_load_has_no_headroom_and_no_allowance(self):
+    def test_expected_load_has_the_allowance_but_no_headroom(self):
         loads = calculate_phase_distribution(self.plan)
         allowance = float(generator.allowance(self.plan)[1])
         for name, leg in loads['phases'].items():
             rows = [r for r in self.plan.amplifier_assignments.all() if r.phase_assignment == name]
             watts = sum(r.calculated_watts_per_unit * r.quantity for r in rows)
-            self.assertAlmostEqual(watts / (120 * 0.95), leg['expected_current'], delta=0.02)
+            self.assertGreater(allowance, 0)
+            self.assertAlmostEqual(watts / (120 * 0.95) + allowance, leg['expected_current'],
+                                   delta=0.02)
             size_for = sum(float(r.calculated_total_current) for r in rows) + allowance
             self.assertAlmostEqual(size_for, leg['total_current'], places=6)
-            # headroom on top of expected, then the allowance
-            self.assertAlmostEqual(leg['expected_current'] * 1.25 + allowance,
+            # headroom on the amps only: size for = (expected - allowance) x 1.25 + allowance
+            self.assertAlmostEqual((leg['expected_current'] - allowance) * 1.25 + allowance,
                                    leg['total_current'], delta=0.05)
 
     def test_hand_built_auto_rows_split_both_figures_alike(self):
@@ -152,9 +154,10 @@ class LegFigureTests(PdfFixture):
             f"{n} {l['expected_current']:.1f}A" for n, l in loads.items()), text)
         self.assertIn('<b>Size for:</b> ' + ' · '.join(
             f"{n} {l['total_current']:.1f}A" for n, l in loads.items()), text)
-        self.assertIn("Expected load is the amps' estimated draw at programme level. Size for "
-                      "adds 25% transient headroom to that, plus the other-electronics "
-                      "allowance: size the distro and breakers for this figure.", text)
+        self.assertIn("Expected load is the amps' estimated draw at programme level plus the "
+                      "other-electronics allowance. Size for adds 25% transient headroom to "
+                      "the amps (not to the allowance): size the distro and breakers for this "
+                      "figure.", text)
         self.assertNotIn('Per leg:', text)
 
     def test_footnote_wording(self):
@@ -166,6 +169,9 @@ class LegFigureTests(PdfFixture):
         self.plan.save()
         text = ' '.join(getattr(f, 'text', '') for f in self.story())
         self.assertNotIn('other-electronics allowance', text)
+        self.assertIn("Expected load is the amps' estimated draw at programme level. Size for "
+                      "adds 25% transient headroom: size the distro and breakers for this "
+                      "figure.", text)
 
     def test_the_page_shows_both_on_every_leg_card(self):
         self.use(self.owner)

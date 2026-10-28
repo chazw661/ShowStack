@@ -2751,9 +2751,9 @@ def calculate_phase_distribution(plan):
     """Calculate the current distribution across phases.
 
     Two figures per leg. 'expected_current' is the expected load: the amps'
-    estimated draw, no transient headroom and no allowance. 'total_current'
-    is what to size the leg for: the amps with headroom (the cached row
-    figures), plus the other-electronics allowance."""
+    estimated draw plus the other-electronics allowance, no transient
+    headroom. 'total_current' is what to size the leg for: the amps with
+    headroom (the cached row figures), plus the allowance."""
     from planner.utils.power_estimate import leg_current
     assignments = plan.amplifier_assignments.all()
     volts, pf = plan.get_phase_to_neutral_voltage(), plan.power_factor
@@ -2809,6 +2809,7 @@ def calculate_phase_distribution(plan):
     allowance_watts, allowance_current = allowance(plan)
     for phase_data in phases.values():
         phase_data['total_current'] += float(allowance_current)
+        phase_data['expected_current'] += float(allowance_current)
 
     # Calculate summary statistics
     total_current = sum(p['total_current'] for p in phases.values())

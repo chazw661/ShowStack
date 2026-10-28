@@ -235,10 +235,14 @@ def allowance(plan):
 def leg_figures_note(plan):
     """The one line under the per-leg figures, on the page and in the PDF."""
     headroom = int(round((plan.transient_headroom - 1) * 100))
+    if plan.other_electronics_watts:
+        return ("Expected load is the amps' estimated draw at programme level plus the "
+                "other-electronics allowance. Size for adds "
+                f"{headroom}% transient headroom to the amps (not to the allowance): "
+                "size the distro and breakers for this figure.")
     return ("Expected load is the amps' estimated draw at programme level. "
-            f"Size for adds {headroom}% transient headroom to that"
-            + (", plus the other-electronics allowance" if plan.other_electronics_watts else '')
-            + ": size the distro and breakers for this figure.")
+            f"Size for adds {headroom}% transient headroom: "
+            "size the distro and breakers for this figure.")
 
 
 def three_phase_warning(plan, assignments):
