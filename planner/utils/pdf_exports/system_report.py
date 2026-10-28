@@ -82,7 +82,7 @@ class NumberedCanvas(pdfcanvas.Canvas):
     def _draw_footer(self, total):
         page = self._pageNumber
         # Cover page (page 1) stays clean - no footer chrome.
-        if page == 1:
+        if page < self._footer_from_page:
             return
         self.saveState()
         width = self._pagesize[0]
@@ -100,6 +100,7 @@ class NumberedCanvas(pdfcanvas.Canvas):
 
     # project name is injected via a class attribute set per-build
     _report_project_name = ''
+    _footer_from_page = 2
 
 
 class SystemReportDoc(SimpleDocTemplate):
@@ -1073,72 +1074,134 @@ def _section_power(project, styles, PowerDistributionPlan):
         story.append(PageBreak())
         return story
 
-    from planner.utils.power_estimate import ESTIMATE_LABEL
     from planner.utils.amp_models import amps_without_power_profile
-    from planner.views import calculate_phase_distribution
-    excluded_count, excluded_models = amps_without_power_profile(project)
-    from planner.utils import power_plan_generator as generator
+    excluded = amps_without_power_profile(project)
     for plan in plans:
-        heading = Paragraph(f"Venue: {plan.venue_name}", styles['sub'])
-        assignments = list(plan.amplifier_assignments.select_related('amplifier', 'source_amp')
-                           .order_by('phase_assignment', 'position'))
-        legs = plan.legs
-        warning = generator.three_phase_warning(plan, assignments)
-        # Above the table, kept with it: the service line and any 3-phase warning.
-        intro = [Paragraph(
-            f"Service: {escape(plan.get_service_type_display())}"
-            + (f" · generated from the amp module {plan.generated_at:%Y-%m-%d}"
-               if plan.is_generated else ''), styles['meta'])]
-        if warning:
-            intro.append(Paragraph(f"<b>Warning: {escape(warning)}.</b>", styles['meta']))
-        brands = sorted({a.amplifier.manufacturer for a in assignments if a.amplifier})
-        table, n_rows = _power_table(plan, assignments, legs, brands)
-        phase_loads = calculate_phase_distribution(plan)
-        if table:
-            if len(brands) > 1:
-                models = {}
-                for a in assignments:
-                    if a.amplifier:
-                        models.setdefault(a.amplifier.manufacturer, set()).add(a.amplifier.model)
-                legend = [Paragraph("Amplifiers: " + "; ".join(
-                    f"{escape(', '.join(sorted(models[b])))} — {escape(b)}" for b in brands),
-                    styles['meta'])]
-            else:
-                legend = []
-            story += _table_block([heading] + intro + [table], n_rows,
-                                  n_headings=1 + len(intro))
-            leg_items = phase_loads['phases'].items()
-            story += legend + [
-                Paragraph("<b>Expected load:</b> " + " · ".join(
-                    f"{name} {leg['expected_current']:.1f}A" for name, leg in leg_items),
-                    styles['meta']),
-                Paragraph("<b>Size for:</b> " + " · ".join(
-                    f"{name} {leg['total_current']:.1f}A" for name, leg in leg_items),
-                    styles['meta']),
-                Paragraph(escape(generator.leg_figures_note(plan)), styles['meta']),
-                Paragraph(
-                    f"* {ESTIMATE_LABEL}: published watts / ({plan.get_phase_to_neutral_voltage()} V "
-                    f"phase-to-neutral × power factor {plan.power_factor}, assumed), including "
-                    f"{int((plan.transient_headroom - 1) * 100)}% transient headroom."
-                    + (" Headroom is not applied to the other-electronics allowance."
-                       if plan.other_electronics_watts else ''), styles['meta']),
-            ]
-        else:
-            story.append(_keep([heading] + intro
-                               + [Paragraph("No amplifier assignments.", styles['empty'])]))
-        for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
-                              key=str):
-            story.append(Paragraph(f"{escape(str(profile))}: {escape(profile.figures_status)}.",
-                                   styles['meta']))
-        if excluded_count:
-            story.append(Paragraph(
-                f"<b>{excluded_count} amp{'s' if excluded_count != 1 else ''} excluded from "
-                f"totals:</b> {escape(', '.join(excluded_models))} (no power profile).",
-                styles['meta']))
-        story.append(Spacer(1, 0.2 * inch))
+        story += _power_plan(plan, styles, excluded)
 
     story.append(PageBreak())
     return story
+
+
+def _power_plan(plan, styles, excluded, heading=True):
+    """One plan as section 7 shows it: the table, row notes, per-leg Expected
+    load / Size for, the footnote. Also the body of the standalone power plan
+    PDF, which passes heading=False: its own header already gives the venue
+    and service, so the "Venue:" heading and service line are left out."""
+    from planner.utils.power_estimate import ESTIMATE_LABEL
+    from planner.views import calculate_phase_distribution
+    from planner.utils import power_plan_generator as generator
+    excluded_count, excluded_models = excluded
+    story = []
+    assignments = list(plan.amplifier_assignments.select_related('amplifier', 'source_amp')
+                       .order_by('phase_assignment', 'position'))
+    legs = plan.legs
+    warning = generator.three_phase_warning(plan, assignments)
+    # Above the table, kept with it: the heading, the service line and any
+    # 3-phase warning.
+    intro = []
+    if heading:
+        intro += [
+            Paragraph(f"Venue: {escape(plan.venue_name)}", styles['sub']),
+            Paragraph(
+                f"Service: {escape(plan.get_service_type_display())}"
+                + (f" · generated from the amp module {plan.generated_at:%Y-%m-%d}"
+                   if plan.is_generated else ''), styles['meta']),
+        ]
+    if warning:
+        intro.append(Paragraph(f"<b>Warning: {escape(warning)}.</b>", styles['meta']))
+    brands = sorted({a.amplifier.manufacturer for a in assignments if a.amplifier})
+    table, n_rows = _power_table(plan, assignments, legs, brands)
+    phase_loads = calculate_phase_distribution(plan)
+    if table:
+        if len(brands) > 1:
+            models = {}
+            for a in assignments:
+                if a.amplifier:
+                    models.setdefault(a.amplifier.manufacturer, set()).add(a.amplifier.model)
+            legend = [Paragraph("Amplifiers: " + "; ".join(
+                f"{escape(', '.join(sorted(models[b])))} — {escape(b)}" for b in brands),
+                styles['meta'])]
+        else:
+            legend = []
+        story += _table_block(intro + [table], n_rows, n_headings=len(intro))
+        leg_items = phase_loads['phases'].items()
+        story += legend + [
+            Paragraph("<b>Expected load:</b> " + " · ".join(
+                f"{name} {leg['expected_current']:.1f}A" for name, leg in leg_items),
+                styles['meta']),
+            Paragraph("<b>Size for:</b> " + " · ".join(
+                f"{name} {leg['total_current']:.1f}A" for name, leg in leg_items),
+                styles['meta']),
+            Paragraph(escape(generator.leg_figures_note(plan)), styles['meta']),
+            Paragraph(
+                f"* {ESTIMATE_LABEL}: published watts / ({plan.get_phase_to_neutral_voltage()} V "
+                f"phase-to-neutral × power factor {plan.power_factor}, assumed), including "
+                f"{int((plan.transient_headroom - 1) * 100)}% transient headroom."
+                + (" Headroom is not applied to the other-electronics allowance."
+                   if plan.other_electronics_watts else ''), styles['meta']),
+        ]
+    else:
+        story.append(_keep(intro + [Paragraph("No amplifier assignments.", styles['empty'])]))
+    for profile in sorted({a.amplifier for a in assignments if a.amplifier.is_provisional},
+                          key=str):
+        story.append(Paragraph(f"{escape(str(profile))}: {escape(profile.figures_status)}.",
+                               styles['meta']))
+    if excluded_count:
+        story.append(Paragraph(
+            f"<b>{excluded_count} amp{'s' if excluded_count != 1 else ''} excluded from "
+            f"totals:</b> {escape(', '.join(excluded_models))} (no power profile).",
+            styles['meta']))
+    story.append(Spacer(1, 0.2 * inch))
+    return story
+
+
+# ===========================================================================
+# Standalone power plan PDF
+# ===========================================================================
+def export_power_plan_pdf(plan):
+    """One power plan on its own: project, venue, date and service, then the
+    plan exactly as the system report's power section renders it
+    (_power_plan). Saved as "<Project> - Power Plan.pdf"."""
+    from django.utils.http import content_disposition_header
+    from planner.utils.amp_models import amps_without_power_profile
+    project = plan.project
+    styles = _styles()
+    title = ParagraphStyle('PlanTitle', fontSize=20, textColor=NAVY, fontName='Helvetica-Bold',
+                           leading=24, spaceAfter=2)
+    # The show day's date; a plan with none says when it was printed.
+    if plan.show_day_id and plan.show_day.date:
+        date_label, date = 'Date', f"{plan.show_day.date:%B %d, %Y}"
+    else:
+        date_label, date = 'Printed', f"{datetime.now():%B %d, %Y}"
+    story = [
+        Paragraph(f"{escape(project.name)} &nbsp;·&nbsp; Power Plan", title),
+        HRFlowable(width='100%', thickness=2, color=BLUE, spaceBefore=4, spaceAfter=6),
+        Paragraph(f"<b>Venue:</b> {escape(plan.venue_name or project.name)}"
+                  f" &nbsp;&nbsp; <b>{date_label}:</b> {date}"
+                  f" &nbsp;&nbsp; <b>Service:</b> {escape(plan.get_service_type_display())}"
+                  + (f" &nbsp;&nbsp; Generated from the amp module {plan.generated_at:%Y-%m-%d}"
+                     if plan.is_generated else ''), styles['meta']),
+        Spacer(1, 0.12 * inch),
+    ]
+    story += _power_plan(plan, styles, amps_without_power_profile(project), heading=False)
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=LANDSCAPE_PAGE,
+        rightMargin=MARGIN, leftMargin=MARGIN,
+        topMargin=MARGIN, bottomMargin=0.6 * inch,
+        title=f"{project.name} - Power Plan",
+    )
+    # A canvas class per build: the footer carries this project's name on
+    # every page (there is no cover page here).
+    canvas = type('PowerPlanCanvas', (NumberedCanvas,),
+                  {'_report_project_name': project.name, '_footer_from_page': 1})
+    doc.build(story, canvasmaker=canvas)
+    response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+    response['Content-Disposition'] = content_disposition_header(
+        True, f"{project.name} - Power Plan.pdf")
+    return response
 
 
 # ===========================================================================

@@ -3045,6 +3045,13 @@ def regenerate_power_plan(request, plan_id):
 
 
 @login_required
+def power_plan_pdf(request, plan_id):
+    """The plan on its own as a PDF download. Viewers may download it."""
+    from planner.utils.pdf_exports.system_report import export_power_plan_pdf
+    return export_power_plan_pdf(_power_plan_or_404(request, plan_id))
+
+
+@login_required
 def power_plan_amps(request, plan_id):
     """The amp module (rack page) for a plan's own project. The rack page
     shows the session's current project, which another tab may have changed

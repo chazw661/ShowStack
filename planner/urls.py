@@ -220,6 +220,7 @@ urlpatterns = [
      path('power-distribution/generate/', views.generate_power_plan, name='generate_power_plan'),
      path('power-distribution/<int:plan_id>/regenerate/', views.regenerate_power_plan, name='regenerate_power_plan'),
      path('power-distribution/<int:plan_id>/amps/', views.power_plan_amps, name='power_plan_amps'),
+     path('power-distribution/<int:plan_id>/pdf/', views.power_plan_pdf, name='power_plan_pdf'),
      path('api/power/plan/<int:plan_id>/add-amp/', views.add_amplifier_assignment, name='add_amplifier_assignment'),
      path('api/power/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
      path('api/power/assignment/<int:assignment_id>/delete/', views.delete_amplifier_assignment, name='delete_amplifier_assignment'),
