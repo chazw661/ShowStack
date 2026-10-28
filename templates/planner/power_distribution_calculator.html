@@ -37,6 +37,12 @@
             font-size: 24px;
             margin-bottom: 10px;
         }
+
+        .header-title { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+                        margin-bottom: 10px; }
+        .header-title h1 { margin-bottom: 0; }
+        .amps-link { color: #4a9eff; text-decoration: none; font-size: 14px; }
+        .amps-link:hover { text-decoration: underline; }
         
         .header-info {
             display: flex;
@@ -335,7 +341,10 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Power Distribution Calculator</h1>
+            <div class="header-title">
+                <h1>Power Distribution Calculator</h1>
+                <a href="{% url 'planner:power_plan_amps' plan.id %}" class="amps-link" id="amps-link">← Amplifiers</a>
+            </div>
             <div class="header-info">
                 {% if plan.show_day %}<span><strong>Show:</strong> {{ plan.show_day }}</span>{% endif %}
                 <span><strong>Venue:</strong> {{ plan.venue_name|default:plan.project.name }}</span>
@@ -367,6 +376,7 @@
         <div class="panel plan-generated">
             <span>Generated from the amp module {{ plan.generated_at|date:"Y-m-d H:i" }}.
                 Legs set on an amp are kept; the rest are balanced.</span>
+            <a href="{% url 'planner:power_plan_amps' plan.id %}" class="amps-link" id="banner-amps-link">Open amps</a>
             {% if is_stale %}<span class="stale" id="stale-notice">{{ stale_message }}.</span>{% endif %}
             {% if can_edit %}
             <form method="post" action="{% url 'planner:regenerate_power_plan' plan.id %}" style="margin: 0;">

@@ -2,6 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import render, get_object_or_404, redirect
 from planner.tenancy import current_project_or_none as _scoped_project
 from planner.tenancy import scope_queryset
+from planner.tenancy import can_access_project
 from planner.utils.presenter_photos import PhotoIndex, photo_url_for_slot
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest, Http404
@@ -3041,6 +3042,20 @@ def regenerate_power_plan(request, plan_id):
         generator.regenerate(plan)
         messages.success(request, "Power plan regenerated from the amp module.")
     return redirect('planner:power_distribution_calculator_detail', plan_id=plan.pk)
+
+
+@login_required
+def power_plan_amps(request, plan_id):
+    """The amp module (rack page) for a plan's own project. The rack page
+    shows the session's current project, which another tab may have changed
+    since this plan page loaded, so switch to the plan's project first (as
+    the project switcher does). A plan in a project the user can't reach is
+    a 404."""
+    plan = get_object_or_404(PowerDistributionPlan.objects.select_related('project'), id=plan_id)
+    if not can_access_project(request.user, plan.project):
+        raise Http404("No such plan")
+    request.session['current_project_id'] = plan.project_id
+    return redirect('admin:planner_amp_changelist')
 
 
 @login_required
