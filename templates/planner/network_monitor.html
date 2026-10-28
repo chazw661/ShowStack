@@ -1461,6 +1461,7 @@
       <div class="nhm-empty-body">
         Run the monitor agent on a laptop connected to your show network. The agent scans for devices and pushes status updates to this dashboard.
       </div>
+      {% if can_edit %}
       <div class="nhm-empty-code-block">
         <div class="nhm-empty-code-label">Run on show laptop:</div>
         <code class="nhm-empty-code" id="nhm-agent-cmd">python manage.py run_monitor --api-key {{ agent_api_key }} --scan --server https://showstack.io</code>
@@ -1469,6 +1470,9 @@
       <div class="nhm-empty-note">
         The API key is unique to this project. The agent needs <code>icmplib</code> and <code>netifaces</code> installed.
       </div>
+      {% else %}
+      <div class="nhm-empty-note">The project's owner or an editor starts the agent.</div>
+      {% endif %}
     </div>
 
     {% else %}

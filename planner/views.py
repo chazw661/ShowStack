@@ -1,8 +1,11 @@
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.shortcuts import render, get_object_or_404, redirect
 from planner.tenancy import current_project_or_none as _scoped_project
 from planner.tenancy import scope_queryset
-from planner.tenancy import can_access_project
+from planner.tenancy import (
+    can_access_project, can_edit_current_project, edit_rights_required,
+    edit_rights_required_page,
+)
 from planner.utils.presenter_photos import PhotoIndex, photo_url_for_slot
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest, Http404
@@ -93,6 +96,9 @@ def console_detail(request, console_id):
     console = get_object_or_404(
         Console, pk=console_id, project=_scoped_project(request),
     )
+    # Saving the formset is a write.
+    if request.method == "POST" and not _can_edit_current_project(request):
+        raise PermissionDenied("Read-only access.")
 
     InputFormSet = modelformset_factory(
         ConsoleInput,
@@ -409,9 +415,11 @@ from .models import CommBeltPack, CommChannel, CommPosition, CommCrewName
 def get_next_bp_number(request):
     """Get the next available belt pack number for a specific system type"""
     system_type = request.GET.get('system_type', 'WIRELESS')
-    max_bp = CommBeltPack.objects.filter(
+    # This project's packs only: the max across every project leaked
+    # another show's numbering and skipped numbers here.
+    max_bp = scope_queryset(request, CommBeltPack.objects.filter(
         system_type=system_type
-    ).aggregate(Max('bp_number'))['bp_number__max']
+    )).aggregate(Max('bp_number'))['bp_number__max']
     next_bp = (max_bp or 0) + 1
     return JsonResponse({'next_bp_number': next_bp})
 
@@ -499,6 +507,7 @@ def comm_channel_matrix(request):
 
 
 @staff_member_required
+@edit_rights_required
 def import_comm_positions(request):
     """Import positions from a text list"""
     if request.method == 'POST':
@@ -509,8 +518,10 @@ def import_comm_positions(request):
         for i, line in enumerate(lines, 1):
             position_name = line.strip()
             if position_name:
+                # In the current project: the lookup by name alone matched
+                # another project's row, and a new row had no project.
                 _, created = CommPosition.objects.get_or_create(
-                    name=position_name,
+                    name=position_name, project=request.current_project,
                     defaults={'order': i * 10}
                 )
                 if created:
@@ -525,6 +536,7 @@ def import_comm_positions(request):
 
 
 @staff_member_required
+@edit_rights_required
 def import_comm_names(request):
     """Import crew names from a text list"""
     if request.method == 'POST':
@@ -535,7 +547,8 @@ def import_comm_names(request):
         for line in lines:
             crew_name = line.strip()
             if crew_name:
-                _, created = CommCrewName.objects.get_or_create(name=crew_name)
+                _, created = CommCrewName.objects.get_or_create(
+                    name=crew_name, project=request.current_project)
                 if created:
                     created_count += 1
         
@@ -773,6 +786,7 @@ def mic_tracker_overview_view(request):
 
 @staff_member_required
 @require_POST
+@edit_rights_required
 def bulk_update_mics(request):
     """AJAX endpoint for bulk mic updates"""
     try:
@@ -879,6 +893,7 @@ def export_mic_tracker(request):
 
 @staff_member_required
 @require_POST
+@edit_rights_required
 def bulk_update_mics(request):
     """AJAX endpoint for bulk mic updates"""
     try:
@@ -927,6 +942,7 @@ def bulk_update_mics(request):
 
 @staff_member_required
 @require_POST
+@edit_rights_required
 def duplicate_session(request):
     """AJAX endpoint: duplicate a session into a brand-new session in the same
     day. Copies the session config plus all mic assignments, presenter slots,
@@ -1003,6 +1019,7 @@ def duplicate_session(request):
 #
 # Install reportlab if needed:  pip install reportlab
 
+@edit_rights_required
 def delete_session(request):
     """AJAX endpoint to delete a mic session"""
     try:
@@ -1084,6 +1101,7 @@ def export_mic_tracker(request):
     return response
 
 
+@edit_rights_required
 def delete_session(request):
     """AJAX endpoint to delete a mic session"""
     try:
@@ -1376,6 +1394,7 @@ def stamp_checksum(view):
 @csrf_exempt
 @require_http_methods(["POST"])
 @stamp_checksum
+@edit_rights_required
 def update_mic_assignment(request):
     """Update a mic assignment field"""
     try:
@@ -1509,6 +1528,7 @@ def update_mic_assignment(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def add_shared_presenter(request):
     """Add a new shared presenter to a mic assignment"""
     try:
@@ -1579,6 +1599,7 @@ def add_shared_presenter(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def remove_shared_presenter(request):
     """Remove a shared presenter from a mic assignment"""
     try:
@@ -1651,6 +1672,7 @@ def remove_shared_presenter(request):
 
 
 @require_POST
+@edit_rights_required
 def dmic_and_rotate(request):
     """Handle D-MIC checkbox with automatic presenter rotation"""
     try:
@@ -1713,6 +1735,7 @@ def dmic_and_rotate(request):
         })
 
 @require_POST
+@edit_rights_required
 def reset_presenter_rotation(request):
     """Reset the presenter rotation back to the primary presenter"""
     try:
@@ -1781,6 +1804,7 @@ def get_assignment_details(request, assignment_id):
 
 
 @require_POST
+@edit_rights_required
 def dmic_and_rotate(request):
     """Handle D-MIC checkbox with automatic presenter rotation"""
     try:
@@ -1840,6 +1864,7 @@ def dmic_and_rotate(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def update_slot_field(request):
     try:
         data = json.loads(request.body)
@@ -1895,6 +1920,7 @@ def _resolve_group_ids(data, session_id):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def assign_slot_group(request):
     try:
         data = json.loads(request.body)
@@ -1913,6 +1939,7 @@ def assign_slot_group(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def assign_slot_a2_group(request):
     try:
         data = json.loads(request.body)
@@ -1930,6 +1957,7 @@ def assign_slot_a2_group(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def toggle_slot_micd(request):
     try:
         data = json.loads(request.body)
@@ -1974,6 +2002,7 @@ def get_presenters_list(request):
     return JsonResponse({'presenters': list(presenters)})
 
 @staff_member_required
+@edit_rights_required
 def create_presenter(request):
     if request.method != 'POST':
         return JsonResponse({'success': False})
@@ -2168,6 +2197,7 @@ def _store_photo_for_slot(request, slot, data, scope):
 
 @require_POST
 @login_required
+@edit_rights_required
 def upload_slot_photo(request):
     from planner.utils.image_upload import ImageRejected, read_upload_capped
 
@@ -2181,8 +2211,6 @@ def upload_slot_photo(request):
         return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
 
     slot = _scoped_slot_for_photo(request, slot_id)
-    if not _can_edit_current_project(request):
-        return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
     scope, error = _photo_scope(slot, request.POST.get('scope'))
     if error:
         return JsonResponse({'success': False, 'error': error}, status=400)
@@ -2196,6 +2224,7 @@ def upload_slot_photo(request):
 
 @require_POST
 @login_required
+@edit_rights_required
 def upload_slot_photo_from_url(request):
     """Issue #39: fetch an image URL server-side and store it on the
     presenter slot, used when a user drags an HTML <img> from another
@@ -2220,10 +2249,6 @@ def upload_slot_photo_from_url(request):
         return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
 
     slot = _scoped_slot_for_photo(request, slot_id)
-    if not _can_edit_current_project(request):
-        return JsonResponse({'success': False, 'error': 'Not allowed'}, status=403)
-    # Checked before the fetch, so a refused upload never makes an outbound
-    # request.
     scope, error = _photo_scope(slot, requested_scope)
     if error:
         return JsonResponse({'success': False, 'error': error}, status=400)
@@ -2237,6 +2262,7 @@ def upload_slot_photo_from_url(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def advance_presenter_slot(request):
     """Move to next presenter slot"""
     try:
@@ -2277,6 +2303,7 @@ def advance_presenter_slot(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def previous_presenter_slot(request):
     """Move to previous presenter slot"""
     try:
@@ -2316,6 +2343,7 @@ def previous_presenter_slot(request):
         return JsonResponse({'success': False, 'error': str(e)})
     
 @require_POST
+@edit_rights_required
 def add_presenter_slot(request):
     """Add a new presenter slot to an assignment"""
     try:
@@ -2350,6 +2378,7 @@ def add_presenter_slot(request):
         return JsonResponse({'success': False, 'error': str(e)})
     
 @require_POST
+@edit_rights_required
 def remove_presenter_slot(request):
     """Remove a presenter slot from an assignment"""
     try:
@@ -2388,6 +2417,7 @@ def remove_presenter_slot(request):
 
 @require_POST
 @stamp_checksum
+@edit_rights_required
 def activate_presenter_slot(request):
     """Make a specific presenter slot the active one (clicking its chip)."""
     try:
@@ -2436,6 +2466,9 @@ def manage_mic_groups(request, session_id):
             day__project=_scoped_project(request),
         )
     if request.method == 'POST':
+        # Listing is a read; creating or deleting a group is a write.
+        if not _can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
         data = json.loads(request.body)
         action = data.get('action')
         if action == 'create':
@@ -2452,6 +2485,7 @@ def manage_mic_groups(request, session_id):
     return JsonResponse({'success': True, 'groups': groups})
 
 @require_POST
+@edit_rights_required
 def assign_mic_group(request):
     try:
         data = json.loads(request.body)
@@ -2606,32 +2640,11 @@ def comm_config_view(request, config_id=None):
                 'fsii_out_of_range': _fsii_partylines_out_of_range(config),
                 'opts': CommConfig._meta,  # needed for admin breadcrumbs
                 # Viewers get the page read-only (export still works); the
-                # writes themselves are refused by _edit_rights_required.
+                # writes themselves are refused by edit_rights_required.
                 'can_edit': _can_edit_current_project(request),
             }
 
             return render(request, 'planner/comm_config.html', context)                                     
-
-
-def _edit_rights_required(view):
-    """JSON 403 unless the user may edit the CURRENT project.
-
-    Every COMM Config write endpoint scoped its lookup to the current project
-    (so another tenant's rows 404) but never asked about the role ON it, so a
-    viewer could add, rename and delete partylines, roles, ports and whole
-    configs with a fetch() -- the page only hid the buttons. The check is
-    _can_edit_current_project, the per-project rule (owner, editor or
-    superuser), resolved when the request arrives.
-
-    Defined here, above the power-plan endpoints, because a decorator has to
-    exist by the time the function it wraps is defined.
-    """
-    @wraps(view)
-    def wrapped(request, *args, **kwargs):
-        if not _can_edit_current_project(request):
-            return JsonResponse({'error': 'Read-only access.'}, status=403)
-        return view(request, *args, **kwargs)
-    return wrapped
 
 
 # Power distribution: every plan and assignment lookup goes through these two.
@@ -2850,7 +2863,7 @@ def calculate_phase_distribution(plan):
 
 @login_required
 @require_http_methods(["POST"])
-@_edit_rights_required
+@edit_rights_required
 def update_plan_settings(request, plan_id):
     """AJAX endpoint to update plan settings"""
     plan = _power_plan_or_404(request, plan_id)
@@ -2948,7 +2961,7 @@ def _load_ohms(value):
 
 @login_required
 @require_http_methods(["POST"])
-@_edit_rights_required
+@edit_rights_required
 def add_amplifier_assignment(request, plan_id):
     """AJAX endpoint to add amplifier assignment"""
     plan = _power_plan_or_404(request, plan_id)
@@ -3021,8 +3034,7 @@ def generate_power_plan(request):
     plan = generator.generated_plan(project)
     if plan is None:
         if not _can_edit_current_project(request):
-            messages.error(request, "Read-only access: you can't generate a power plan.")
-            return redirect('admin:planner_amp_changelist')
+            raise PermissionDenied("Read-only access: you can't generate a power plan.")
         plan, _ = generator.generate(project, user=request.user)
     return redirect('planner:power_distribution_calculator_detail', plan_id=plan.pk)
 
@@ -3067,7 +3079,7 @@ def power_plan_amps(request, plan_id):
 
 @login_required
 @require_http_methods(["POST"])
-@_edit_rights_required
+@edit_rights_required
 def update_amplifier_assignment(request, assignment_id):
     """Update an existing amplifier assignment.
 
@@ -3122,7 +3134,7 @@ def update_amplifier_assignment(request, assignment_id):
 
 @login_required
 @require_http_methods(["DELETE"])
-@_edit_rights_required
+@edit_rights_required
 def delete_amplifier_assignment(request, assignment_id):
     """AJAX endpoint to delete amplifier assignment"""
     assignment = _power_assignment_or_404(request, assignment_id)
@@ -3256,6 +3268,7 @@ def prediction_detail(request, pk):
     return render(request, 'planner/prediction_detail.html', context)
 
 @require_POST
+@edit_rights_required
 def upload_prediction(request):
     """Handle PDF upload and parsing"""
     if 'pdf_file' not in request.FILES:
@@ -3632,6 +3645,7 @@ IP_FIELDS = ('ip_address', 'primary_ip_address', 'secondary_ip_address')
 
 @staff_member_required
 @require_http_methods(["POST"])
+@edit_rights_required
 def save_ip_address(request):
     """
     AJAX endpoint to save IP address changes.
@@ -3752,6 +3766,7 @@ def device_pdf_export(request, device_id):
 # Amplifier PDF Export
 
 @require_POST
+@edit_rights_required
 def amp_reorder(request):
     """Reorder an amp within its location group"""
     try:
@@ -3780,10 +3795,13 @@ def amp_reorder(request):
         item_a['obj'].save()
         item_b['obj'].save()
         return JsonResponse({'success': True})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
 @require_POST
+@edit_rights_required
 def amp_divider_add(request):
     """Add a new divider to a location"""
     try:
@@ -3792,7 +3810,8 @@ def amp_divider_add(request):
             AmpLocation, id=data['location_id'],
             project=_scoped_project(request),
         )
-        project = get_object_or_404(Project, id=data['project_id'])
+        # The location's project, never one named in the body.
+        project = location.project
         # Place at end of location items
         location_items = get_location_items(location, project)
         max_order = max((item['obj'].sort_order for item in location_items), default=-1)
@@ -3803,10 +3822,13 @@ def amp_divider_add(request):
             sort_order=max_order + 1
         )
         return JsonResponse({'success': True, 'divider_id': divider.id, 'sort_order': divider.sort_order})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
 @require_POST
+@edit_rights_required
 def amp_divider_update(request, divider_id):
     """Update a divider label"""
     try:
@@ -3817,10 +3839,13 @@ def amp_divider_update(request, divider_id):
         divider.label = data.get('label', '')
         divider.save()
         return JsonResponse({'success': True})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
 @require_POST
+@edit_rights_required
 def amp_divider_delete(request, divider_id):
     """Delete a divider"""
     try:
@@ -3829,10 +3854,13 @@ def amp_divider_delete(request, divider_id):
         )
         divider.delete()
         return JsonResponse({'success': True})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
 @require_POST
+@edit_rights_required
 def amp_divider_reorder(request, divider_id):
     """Move a divider up or down.
 
@@ -3858,6 +3886,8 @@ def amp_divider_reorder(request, divider_id):
             return JsonResponse({'success': False, 'error': 'Bad direction'})
         divider.save(update_fields=['sort_order'])
         return JsonResponse({'success': True, 'sort_order': divider.sort_order})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
@@ -3871,6 +3901,7 @@ def get_location_items(location, project):
 
 
 @require_POST
+@edit_rights_required
 def amp_divider_sync(request):
     """Sync all dividers for a location from localStorage state"""
     try:
@@ -3878,7 +3909,7 @@ def amp_divider_sync(request):
             AmpLocation, id=request.POST.get('location_id'),
             project=_scoped_project(request),
         )
-        project = get_object_or_404(Project, id=request.POST.get('project_id'))
+        project = location.project  # never one named in the body
         dividers_data = json.loads(request.POST.get('dividers', '[]'))
         
         # Get existing dividers for this location
@@ -3916,6 +3947,8 @@ def amp_divider_sync(request):
                 div.delete()
         
         return JsonResponse({'success': True, 'dividers': result})
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
@@ -3943,6 +3976,7 @@ def _project_or_403(request):
 
 @require_POST
 @login_required
+@edit_rights_required
 def amp_inline_update(request, amp_id):
     """Issue #27: update a single Amp field from the rack page.
 
@@ -3953,9 +3987,6 @@ def amp_inline_update(request, amp_id):
     if not project:
         return JsonResponse({'success': False, 'error': 'No project'}, status=400)
     amp = get_object_or_404(Amp, id=amp_id, project=project)
-    # Before the field check, so a viewer is refused whatever field is sent.
-    if not _can_edit_current_project(request):
-        return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
     field = request.POST.get('field', '')
     if field not in _INLINE_AMP_FIELDS:
         return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
@@ -3977,14 +4008,13 @@ def amp_inline_update(request, amp_id):
 
 @require_POST
 @login_required
+@edit_rights_required
 def amp_channel_inline_update(request, channel_id):
     """Issue #27: update a single AmpChannel field from the rack page."""
     project = _project_or_403(request)
     if not project:
         return JsonResponse({'success': False, 'error': 'No project'}, status=400)
     channel = get_object_or_404(AmpChannel, id=channel_id, amp__project=project)
-    if not _can_edit_current_project(request):
-        return JsonResponse({'success': False, 'error': 'Read-only access.'}, status=403)
     field = request.POST.get('field', '')
     if field == 'cabinet':
         return _amp_channel_cabinet_update(channel, {
@@ -4156,6 +4186,7 @@ def comm_beltpack_channel_delete(request, channel_id):
 
 @require_POST
 @login_required
+@edit_rights_required
 def mic_assignment_reorder(request):
     """Issue #38: drag-and-drop reorder of presenters between MicAssignment
     rows in the mic tracker.
@@ -4277,6 +4308,7 @@ def mic_assignment_reorder(request):
 
 @require_POST
 @login_required
+@edit_rights_required
 def amp_inline_create(request):
     """Issue #27: create a new Amp from the rack page's per-location
     '+ Add Amp' button. Takes the minimum needed to scaffold channels
@@ -4367,6 +4399,7 @@ def all_comm_beltpacks_pdf_export(request):
 
 
 #----Import Comm Crew Names---
+@edit_rights_required_page
 def import_comm_crew_names_csv(request):
     """Import Comm Crew Names from CSV (Column A only)."""
     from planner.models import CommCrewName, Project
@@ -4532,6 +4565,7 @@ def _parse_extension_item(item, fan_choices, ext_cable_choices, ext_length_choic
 
 
 @staff_member_required
+@edit_rights_required_page
 def import_pa_cables_csv(request):
     """Issue #51: bulk-import PA Cable entries (with fan-outs, extensions, and
     couplers) from a CSV. Rows are scoped to the current project; new zone
@@ -4751,6 +4785,7 @@ def export_system_processor_pdf(request):
 
 #-------<Mic Tracker Presenters .CSV Import---
 @staff_member_required
+@edit_rights_required_page
 def import_presenters_csv(request):
     """Import presenters from CSV file"""
     from planner.models import Project
@@ -5270,6 +5305,7 @@ import json
 
 @login_required
 @require_POST
+@edit_rights_required
 def create_day(request):
     """Create a new ShowDay for the current project."""
     try:
@@ -5307,6 +5343,7 @@ def create_day(request):
 
 @login_required
 @require_POST
+@edit_rights_required
 def create_session(request):
     """Create a new MicSession with blank mic assignments."""
     try:
@@ -5368,7 +5405,7 @@ def create_session(request):
 # COMM Config — Create
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_create(request):
     try:
         data = _json.loads(request.body)
@@ -5545,7 +5582,7 @@ def _seed_factory_defaults(config):
 # COMM Config — Partyline CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5569,7 +5606,7 @@ def comm_config_update_partyline(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_add_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5605,7 +5642,7 @@ def comm_config_add_partyline(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete_partyline(request):
     try:
         data = _json.loads(request.body)
@@ -5633,7 +5670,7 @@ def comm_config_delete_partyline(request):
 # COMM Config — Keyset update
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_keyset(request):
     try:
         data = _json.loads(request.body)
@@ -5678,7 +5715,7 @@ def comm_config_update_keyset(request):
 # COMM Config — Role update
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_role(request):
     try:
         data = _json.loads(request.body)
@@ -5703,7 +5740,7 @@ def comm_config_update_role(request):
 # COMM Config — Role delete
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete_role(request):
     try:
         data = _json.loads(request.body)
@@ -5728,7 +5765,7 @@ def comm_config_delete_role(request):
 # COMM Config — Add Role
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_add_role(request):
     try:
         data = _json.loads(request.body)
@@ -5799,7 +5836,7 @@ def comm_config_role_chips(request):
 # This endpoint only assigns an existing port to a partyline.
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_assign_port(request):
     try:
         data = _json.loads(request.body)
@@ -5846,7 +5883,7 @@ _SETTINGS_ALLOWED_FIELDS = {
 }
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_setting(request):
     try:
         data = _json.loads(request.body)
@@ -5881,7 +5918,7 @@ def comm_config_update_setting(request):
 # COMM Config — Delete Config
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete(request):
     try:
         data = _json.loads(request.body)
@@ -6447,6 +6484,7 @@ def audio_checklist_view(request):
     context = {
         'title': 'Audio Production Checklist',
         'project': project,
+        'can_edit': _can_edit_current_project(request),
     }
     
     return render(request, 'admin/planner/audio_checklist.html', context)
@@ -6511,6 +6549,7 @@ def audio_checklist_data(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_update_task(request):
     """API endpoint to update a task's text or stage"""
     try:
@@ -6543,6 +6582,7 @@ def audio_checklist_update_task(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_update_status(request):
     """API endpoint to update a task's status for a specific day"""
     try:
@@ -6584,6 +6624,7 @@ def audio_checklist_update_status(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_add_task(request):
     """API endpoint to add a new task"""
     try:
@@ -6633,6 +6674,7 @@ def audio_checklist_add_task(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_delete_task(request):
     """API endpoint to delete a task"""
     try:
@@ -6658,6 +6700,7 @@ def audio_checklist_delete_task(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_move_task(request):
     """API endpoint to move a task up or down within its column (issue #54).
 
@@ -6706,6 +6749,7 @@ def audio_checklist_move_task(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_set_days(request):
     """API endpoint to add/subtract daily-task day columns (issue #55).
 
@@ -6746,6 +6790,7 @@ def audio_checklist_set_days(request):
 @login_required
 @require_POST
 @csrf_protect
+@edit_rights_required
 def audio_checklist_reset(request):
     """API endpoint to reset checklists to defaults"""
     try:
@@ -6836,6 +6881,7 @@ def audio_checklist_list_templates(request):
 
 @login_required
 @require_POST
+@edit_rights_required
 def audio_checklist_load_template(request):
     """Replace current checklist tasks with a template."""
     try:
@@ -6844,12 +6890,6 @@ def audio_checklist_load_template(request):
         current_project = getattr(request, 'current_project', None)
         if not current_project:
             return JsonResponse({'error': 'No project'}, status=400)
-        # Loading deletes every task in the project's checklists before
-        # writing the template's, so it is a write: a viewer-role member
-        # could otherwise wipe the project's checklist.
-        if not _can_edit_current_project(request):
-            return JsonResponse({'error': 'Read-only access.'}, status=403)
-
         template = AudioChecklistTemplate.objects.get(id=template_id, created_by=request.user)
 
         from .models import AudioChecklist
@@ -6911,7 +6951,7 @@ def audio_checklist_delete_template(request):
 # COMM Config — Dante Channel CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_add_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6938,7 +6978,7 @@ def comm_config_add_dante(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6967,7 +7007,7 @@ def comm_config_update_dante(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete_dante(request):
     try:
         data = _json.loads(request.body)
@@ -6986,7 +7026,7 @@ def comm_config_delete_dante(request):
 # COMM Config — Session CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_add_session(request):
     try:
         data = _json.loads(request.body)
@@ -7010,7 +7050,7 @@ def comm_config_add_session(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_session(request):
     try:
         data = _json.loads(request.body)
@@ -7048,7 +7088,7 @@ def comm_config_update_session(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete_session(request):
     try:
         data = _json.loads(request.body)
@@ -7071,7 +7111,7 @@ def comm_config_delete_session(request):
 # COMM Config — Roleset CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_add_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -7098,7 +7138,7 @@ def comm_config_add_roleset(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -7118,7 +7158,7 @@ def comm_config_update_roleset(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete_roleset(request):
     try:
         data = _json.loads(request.body)
@@ -7137,7 +7177,7 @@ def comm_config_delete_roleset(request):
 # COMM Config — Crew Name CRUD
 # ─────────────────────────────────────────────────────────────
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_add_crew_name(request):
     try:
         data = _json.loads(request.body)
@@ -7156,7 +7196,7 @@ def comm_config_add_crew_name(request):
 
 
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_delete_crew_name(request):
     try:
         data = _json.loads(request.body)
@@ -7242,7 +7282,7 @@ def dashboard_stats(request):
 
 
 @login_required
-@_edit_rights_required
+@edit_rights_required
 def comm_config_update_lan(request):
     import json
     if request.method != 'POST':
@@ -7268,7 +7308,7 @@ def comm_config_update_lan(request):
 # ─────────────────────────────────────────────────────────────
 @login_required
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_save_as_template(request):
     import json as _j
     try:
@@ -7385,7 +7425,7 @@ def comm_config_list_templates(request):
 
 @login_required
 @require_POST
-@_edit_rights_required
+@edit_rights_required
 def comm_config_load_template(request):
     import json as _j
     try:
@@ -7755,6 +7795,7 @@ def multitrack_dashboard(request):
         'templates': templates,
         'current_project': current_project,
         'can_import_console_csv': can_import_console_csv,
+        'can_edit': _can_edit_current_project(request),
     })
 
 
@@ -7971,11 +8012,13 @@ def multitrack_editor(request, session_id):
     return render(
         request,
         'planner/multitrack/editor.html',
-        _editor_context(session, current_project=current_project),
+        _editor_context(session, current_project=current_project,
+                        can_edit=_can_edit_current_project(request)),
     )
 
 
 @staff_member_required
+@edit_rights_required_page
 def multitrack_create_view(request):
     """GET: render new-session form. POST: create + (optionally) apply a template
     + redirect to editor (MTS-01, MTS-04, TPL-02, D-08, D-10, D-12, D-13).
@@ -8034,6 +8077,7 @@ def multitrack_create_view(request):
 
 
 @staff_member_required
+@edit_rights_required_page
 def multitrack_edit_view(request, session_id):
     """GET / POST edit-metadata form (MTS-04). Tracks are NOT touched.
 
@@ -8243,16 +8287,7 @@ def _can_edit_current_project(request):
     they're a viewer on some *other* project (the recurring
     global-Viewer-vs-per-project-role trap). Use this for every mutate gate.
     """
-    if request.user.is_superuser:
-        return True
-    project = getattr(request, 'current_project', None)
-    if project is None:
-        return False
-    if project.owner_id == request.user.id:
-        return True
-    return ProjectMember.objects.filter(
-        user=request.user, project=project, role='editor'
-    ).exists()
+    return can_edit_current_project(request)
 
 
 def _multitrack_viewer_block(request):
@@ -10261,4 +10296,5 @@ def signal_flow_export_png(request, diagram_id):
 
     URL must exist now so editor.html data-export-png-url resolves.
     """
+    get_object_or_404(SignalFlowDiagram, id=diagram_id, project=_scoped_project(request))
     return JsonResponse({'error': 'Not yet implemented'}, status=501)

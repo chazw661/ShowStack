@@ -46,6 +46,51 @@ def can_access_project(user, project):
     return ProjectMember.objects.filter(user=user, project=project).exists()
 
 
+def can_edit_project(user, project):
+    """True if ``user`` may change ``project``: superuser, its owner, or an
+    'editor' member. Viewers may not. The per-project role only: the global
+    'Viewer' group says nothing about this project."""
+    from planner.models import ProjectMember
+
+    if project is None or not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or project.owner_id == user.id:
+        return True
+    return ProjectMember.objects.filter(user=user, project=project, role='editor').exists()
+
+
+def can_edit_current_project(request):
+    return can_edit_project(request.user, getattr(request, 'current_project', None))
+
+
+def edit_rights_required(view):
+    """JSON 403 unless the user may edit the current project, checked before
+    the view reads anything: a viewer's request is refused whatever it holds.
+    For the fetch() endpoints; edit_rights_required_page is the page one."""
+    from functools import wraps
+    from django.http import JsonResponse
+
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+def edit_rights_required_page(view):
+    """As edit_rights_required, for a page or form: the 403 page."""
+    from functools import wraps
+    from django.core.exceptions import PermissionDenied
+
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not can_edit_current_project(request):
+            raise PermissionDenied('Read-only access.')
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
 def current_project_or_none(request):
     """The request's current project if the user may access it, else ``None``.
 

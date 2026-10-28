@@ -53,8 +53,7 @@ class AmpInlineUpdateRightsTests(Fixture):
         for field in sorted(_INLINE_AMP_FIELDS | {'leg'}):
             response = self.post(field, '10.0.0.9' if field == 'ip_address' else 'L2')
             self.assertEqual(403, response.status_code, field)
-            self.assertEqual({'success': False, 'error': 'Read-only access.'},
-                             response.json(), field)
+            self.assertEqual({'error': 'Read-only access.'}, response.json(), field)
         self.assertEqual(before, self.amp_row())
 
     def test_non_member_cannot_reach_the_amp(self):
@@ -69,9 +68,10 @@ class AmpInlineUpdateRightsTests(Fixture):
         self.assertEqual(before, self.amp_row())
 
     def test_non_member_with_no_project(self):
+        # No project to edit: refused before the request is read.
         self.use(staff('nobody'), self.project)
         before = self.amp_row()
-        self.assertEqual(400, self.post('name', 'Hijack').status_code)
+        self.assertEqual(403, self.post('name', 'Hijack').status_code)
         self.assertEqual(before, self.amp_row())
 
 

@@ -21,6 +21,8 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_not_required, login_required
+
+from planner.tenancy import can_edit_current_project, edit_rights_required
 from django.db import close_old_connections
 from django.utils import timezone
 
@@ -119,7 +121,11 @@ def network_monitor_view(request):
         'active_alerts': active_alerts,
         'has_project': current_project is not None,
         'monitor_running': active_session is not None,
-        'agent_api_key': str(current_project.agent_api_key) if current_project else '',
+        # The key authorises the agent API, which writes to the project, so
+        # only someone who may edit the project gets it.
+        'agent_api_key': (str(current_project.agent_api_key)
+                          if current_project and can_edit_current_project(request) else ''),
+        'can_edit': can_edit_current_project(request),
         'snmp_configured': ProjectSNMPConfig.objects.filter(project=current_project).exists() if current_project else False,
         'show_mode': active_session.show_mode if active_session else 'show',
     }
@@ -207,6 +213,7 @@ def monitor_status_view(request):
 
 @login_required
 @require_POST
+@edit_rights_required
 def dashboard_remove_device(request, device_id):
     """Remove a device from monitoring (dashboard action, session auth)."""
     current_project = getattr(request, 'current_project', None)
@@ -226,6 +233,7 @@ def dashboard_remove_device(request, device_id):
 
 @login_required
 @require_POST
+@edit_rights_required
 def dashboard_reassign_device(request, device_id):
     """Change a device's domain assignment (e.g., unknown → switch)."""
     current_project = getattr(request, 'current_project', None)
@@ -251,6 +259,7 @@ def dashboard_reassign_device(request, device_id):
 
 @login_required
 @require_POST
+@edit_rights_required
 def dashboard_request_scan(request):
     """Set a scan-requested flag that the agent picks up on its next poll cycle."""
     current_project = getattr(request, 'current_project', None)
@@ -806,6 +815,7 @@ def health_check_view(request):
 
 @login_required
 @require_POST
+@edit_rights_required
 def dashboard_snmp_settings(request):
     """Save SNMP community string for the project (per D-01, D-02)."""
     current_project = getattr(request, 'current_project', None)
@@ -827,6 +837,7 @@ def dashboard_snmp_settings(request):
 
 @login_required
 @require_POST
+@edit_rights_required
 def dashboard_add_switch(request):
     """Manually add a switch IP to monitoring (per D-04)."""
     current_project = getattr(request, 'current_project', None)
@@ -864,6 +875,7 @@ def dashboard_add_switch(request):
 
 @login_required
 @require_POST
+@edit_rights_required
 def dashboard_set_show_mode(request):
     """Set the show mode (Setup/Show/Wrap) on the active MonitorSession (per D-07, D-08)."""
     current_project = getattr(request, 'current_project', None)

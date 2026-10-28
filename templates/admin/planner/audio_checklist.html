@@ -418,11 +418,11 @@
     </div>
     
     <div class="controls">
-        <button class="btn danger" onclick="resetAll()">🔄 Reset All</button>
+        {% if can_edit %}<button class="btn danger" onclick="resetAll()">🔄 Reset All</button>{% endif %}
         <button class="btn" onclick="exportToCSV()">📊 Export to CSV</button>
         <button class="btn" onclick="window.print()">🖨️ Print</button>
         <button class="btn" onclick="openSaveTemplateModal()" style="background:#1a3a5a;border-color:#4a9eff;color:#4a9eff;">💾 Save as Template</button>
-        <button class="btn" onclick="openLoadTemplateModal()" style="background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;">📂 Load Template</button>
+        {% if can_edit %}<button class="btn" onclick="openLoadTemplateModal()" style="background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;">📂 Load Template</button>{% endif %}
     </div>
 
     <div class="checklist-tabs" id="checklistTabs">
@@ -435,6 +435,8 @@
 
 <script>
 // Get CSRF token for AJAX requests
+const CAN_EDIT = {{ can_edit|yesno:"true,false" }};
+
 function getCsrfToken() {
     return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
            document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
@@ -612,6 +614,17 @@ function renderChecklists() {
         sectionDiv.appendChild(layoutDiv);
         container.appendChild(sectionDiv);
     });
+    if (!CAN_EDIT) applyReadOnly(container);
+}
+
+// A viewer sees the checklist but can't change it (the server refuses with
+// 403 too): fields are disabled and the add, move, delete and day buttons
+// are removed.
+function applyReadOnly(container) {
+    container.querySelectorAll('.task-input, .stage-select, .status-select')
+        .forEach(el => { el.disabled = true; });
+    container.querySelectorAll('.move-btn, .delete-btn, .section-header .btn, button[onclick^="changeDays"]')
+        .forEach(el => el.remove());
 }
 
 function createSetupTable(sectionName, type, tasks, taskStatuses) {

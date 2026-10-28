@@ -27,7 +27,7 @@
       {% if can_import_console_csv %}
         <a class="mts-btn mts-btn-secondary" href="{% url 'planner:console_import_upload' %}">Import Console CSV</a>
       {% endif %}
-      <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
+      {% if can_edit %}<a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>{% endif %}
     </div>
   </div>
 
@@ -44,7 +44,7 @@
         Create your first multitrack session to start building a track list.
         ShowStack uses your console's channel labels and patch.
       </p>
-      <a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>
+      {% if can_edit %}<a class="mts-btn mts-btn-primary" href="{% url 'planner:multitrack_create' %}">+ New Session</a>{% endif %}
     </div>
   {% endif %}
 

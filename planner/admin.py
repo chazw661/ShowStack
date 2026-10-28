@@ -4,7 +4,7 @@
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
@@ -143,8 +143,27 @@ class BaseAdmin(admin.ModelAdmin):
     """
 
 
+def viewer_ok(action):
+    """Mark an admin action a project viewer may run: it changes nothing in
+    the project (an export) or writes only the viewer's own things (a personal
+    template). Every other action is offered to owners and editors only
+    (BaseEquipmentAdmin.get_actions)."""
+    action.viewer_ok = True
+    return action
+
+
 class BaseEquipmentAdmin(BaseAdmin):
     """Base admin for equipment models with project filtering and role-based permissions"""
+
+    def get_actions(self, request):
+        """A viewer gets only the actions marked viewer_ok. Django offers an
+        action without allowed_permissions to anyone who can see the list, so
+        a viewer could run assign-colour, duplicate or "clear all" on it."""
+        actions = super().get_actions(request)
+        if request.user.is_superuser or self._can_edit_current_project(request):
+            return actions
+        return {name: action for name, action in actions.items()
+                if getattr(action[0], 'viewer_ok', False)}
 
 
     def _get_user_role_for_project(self, request, project):
@@ -1320,6 +1339,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
             'my_templates_url': reverse('admin:planner_showtemplate_changelist'),
         })
 
+    @viewer_ok
     @admin.action(description="Save selected console as template")
     def save_as_template(self, request, queryset):
         """Snapshot exactly one console into the caller's "My templates".
@@ -1383,6 +1403,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 
 
     
+    @viewer_ok
     def export_yamaha_rivage_csvs(self, request, queryset):
         """Admin action to export Yamaha CSVs for selected consoles"""
         if queryset.count() == 1:
@@ -2797,6 +2818,13 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
     def configure_view(self, request, pk):
         """Redirect to appropriate configuration based on device type"""
         obj = self.get_object(request, pk)
+        if obj is None:  # not in the current project
+            raise Http404("No such processor")
+        model = {'P1': P1Processor, 'GALAXY': GalaxyProcessor}.get(obj.device_type)
+        # Opening an existing configuration is a read; creating it is a write.
+        if model is not None and not self.has_change_permission(request, obj) \
+                and not model.objects.filter(system_processor=obj).exists():
+            raise PermissionDenied
         if obj.device_type == 'P1':
             p1, created = P1Processor.objects.get_or_create(system_processor=obj)
             # If newly created and no channels exist, create them (same as P1ProcessorAdmin._create_default_channels)
@@ -3141,6 +3169,7 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
         return obj.outputs.count()
     output_count.short_description = 'Outputs'
     
+    @viewer_ok
     def export_configurations(self, request, queryset):
         """Export selected P1 configurations"""
         if queryset.count() == 1:
@@ -3429,6 +3458,7 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
         return obj.outputs.count()
     output_count.short_description = 'Outputs'
     
+    @viewer_ok
     def export_configurations(self, request, queryset):
         """Export selected GALAXY configurations"""
         if queryset.count() == 1:
@@ -4111,6 +4141,7 @@ class PACableAdmin(BaseEquipmentAdmin):
 
         return response
     
+    @viewer_ok
     def export_cable_schedule(self, request, queryset):
         """Export cable schedule to CSV with full calculations"""
         response = HttpResponse(content_type='text/csv')
@@ -4526,9 +4557,10 @@ class CommPositionAdmin(BaseEquipmentAdmin):
         """Allow populate action to work on empty list"""
         
         # Special handling ONLY for populate action
-        if 'action' in request.POST and request.POST['action'] == 'populate_common_positions':
-            action = self.get_actions(request)['populate_common_positions'][0]
-            action(self, request, self.get_queryset(request))  # Use actual queryset
+        # (only when offered: a viewer's actions don't include it)
+        offered = self.get_actions(request).get('populate_common_positions')
+        if request.POST.get('action') == 'populate_common_positions' and offered:
+            offered[0](self, request, self.get_queryset(request))  # Use actual queryset
             return HttpResponseRedirect(request.get_full_path())
         
         # For all other actions (including delete), use normal behavior
@@ -4538,8 +4570,9 @@ class CommPositionAdmin(BaseEquipmentAdmin):
     
     def get_actions(self, request):
         actions = super().get_actions(request)
-        # Ensure our populate action is always available
-        if 'populate_common_positions' not in actions:
+        # Ensure our populate action is always available -- to those who
+        # may edit; a viewer's list was filtered by the base admin.
+        if 'populate_common_positions' not in actions and self._can_edit_current_project(request):
             actions['populate_common_positions'] = (
                 populate_common_positions,
                 'populate_common_positions',
@@ -4593,8 +4626,10 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         return custom_urls + urls
     
     def import_csv_view(self, request):
-        """Redirect to the import view."""
+        """Redirect to the import view (which needs edit rights too)."""
         from django.shortcuts import redirect
+        if not self._can_edit_current_project(request):
+            raise PermissionDenied
     
         return redirect('planner:import_comm_crew_names_csv')
     
@@ -5977,7 +6012,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         
         if request.method != 'POST':
             return JsonResponse({'error': 'POST required'}, status=405)
-        
+        if not self._can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
+
         try:
             data = json.loads(request.body)
             beltpack_channel_id = data.get('beltpack_channel_id')

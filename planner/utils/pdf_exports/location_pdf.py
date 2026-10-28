@@ -12,9 +12,11 @@ headings, and a "Page X of Y" footer.
 from reportlab.lib.units import inch
 from reportlab.platypus import Spacer, PageBreak, Paragraph
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from datetime import datetime
 import io
 
+from planner.tenancy import current_project_or_none
 from planner.utils.pdf_exports import report_kit as kit
 
 
@@ -102,13 +104,15 @@ def export_location_pdf(request, location_id):
     """
     from planner.models import Location, Amp
 
-    location = Location.objects.select_related('project').prefetch_related(
+    # The current project's location only. This looked the id up alone, so
+    # any signed-in user could fetch any show's equipment list.
+    location = get_object_or_404(Location.objects.select_related('project').prefetch_related(
         'consoles',
         'devices',
         'system_processors',
         'comm_beltpacks__position',
         'comm_beltpacks__name'
-    ).get(id=location_id)
+    ), id=location_id, project=current_project_or_none(request))
 
     # Create response
     response = HttpResponse(content_type='application/pdf')

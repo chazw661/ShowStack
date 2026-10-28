@@ -10,6 +10,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.http import require_http_methods
 from .models import Project, ProjectMember, SoundvisionPrediction, ShowDay, MicSession, MicAssignment, CommBeltPack
 from .models import count_micd
+from .tenancy import can_edit_project
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -429,6 +430,7 @@ def comm_list(request, project_id):
         'hardwired_packs': hardwired_packs,
         'total_packs': wireless_packs.count() + hardwired_packs.count(),
         'checked_out': CommBeltPack.objects.filter(project=project, checked_out=True).count(),
+        'can_edit': can_edit_project(request.user, project),
     }
     return render(request, 'mobile/comm_list.html', context)
 
@@ -467,6 +469,7 @@ def comm_list(request, project_id):
         'hardwired_packs': hardwired_packs,
         'total_packs': wireless_packs.count() + hardwired_packs.count(),
         'checked_out': CommBeltPack.objects.filter(project=project, checked_out=True).count(),
+        'can_edit': can_edit_project(request.user, project),
     }
     return render(request, 'mobile/comm_list.html', context)
 
@@ -476,16 +479,26 @@ def comm_list(request, project_id):
 # PHASE 5: Mobile Editing API
 # ============================================
 
+def _refuse_write(user, project):
+    """The response refusing ``user`` a change to ``project``, or None. Not a
+    member: 404, as if the row weren't there. A viewer: 403. These checked
+    membership only, so a viewer could toggle from the phone."""
+    if not user_can_access_project(user, project):
+        return JsonResponse({'success': False, 'error': 'Not found'}, status=404)
+    if not can_edit_project(user, project):
+        return JsonResponse({'success': False, 'error': 'Read-only access'}, status=403)
+    return None
+
+
 @login_required
 @require_POST
 def toggle_checkout(request, bp_id):
     """Toggle belt pack checked_out status."""
     try:
         bp = CommBeltPack.objects.get(id=bp_id)
-        
-        # Verify user has access to this project
-        if not user_can_access_project(request.user, bp.project):
-            return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+        refused = _refuse_write(request.user, bp.project)
+        if refused:
+            return refused
         
         bp.checked_out = not bp.checked_out
         bp.save()
@@ -505,10 +518,9 @@ def toggle_micd(request, assignment_id):
     """Toggle mic assignment MIC'D status."""
     try:
         assignment = MicAssignment.objects.get(id=assignment_id)
-        
-        # Verify user has access
-        if not user_can_access_project(request.user, assignment.session.day.project):
-            return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+        refused = _refuse_write(request.user, assignment.session.day.project)
+        if refused:
+            return refused
         
         assignment.is_micd = not assignment.is_micd
         assignment.save()
