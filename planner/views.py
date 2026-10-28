@@ -3890,7 +3890,7 @@ _INLINE_AMP_FIELDS = (
     | {f'cacom_{c}_ch{n}' for c in (1, 2, 3, 4) for n in (1, 2, 3, 4)}
     | {f'sc32_ch{n}' for n in range(1, 17)}
 )
-_INLINE_AMP_FIELDS |= {'leg'}
+_INLINE_AMP_FIELDS |= {'leg', 'in_plan'}
 _INLINE_CHANNEL_FIELDS = {'channel_name', 'avb_stream', 'aes_input', 'analog_input', 'channel_setting'}
 
 
@@ -3924,6 +3924,9 @@ def amp_inline_update(request, amp_id):
         value = value.strip() or None
     if field == 'leg' and value not in dict(Amp.LEG_CHOICES):
         return JsonResponse({'success': False, 'error': f'Unknown leg {value!r}'}, status=400)
+    if field == 'in_plan' and value not in dict(Amp.IN_PLAN_CHOICES):
+        return JsonResponse({'success': False, 'error': f'Unknown in-plan value {value!r}'},
+                            status=400)
     setattr(amp, field, value)
     try:
         amp.save(update_fields=[field])

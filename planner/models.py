@@ -220,6 +220,7 @@ class Project(models.Model):
                     name=amp.name,
                     ip_address=amp.ip_address,
                     leg=amp.leg,
+                    in_plan=amp.in_plan,
                     color=amp.color,
                     sort_order=amp.sort_order,
                     nl4_a_pair_1=amp.nl4_a_pair_1,
@@ -579,6 +580,7 @@ class Project(models.Model):
                         generated=assignment.generated,
                         source_amp=amp_map.get(assignment.source_amp_id),
                         amp_leg=assignment.amp_leg,
+                        amp_spare=assignment.amp_spare,
                         notes=assignment.notes
                     )
                 if power_plan.is_generated:
@@ -1971,6 +1973,15 @@ class Amp(models.Model):
     leg = models.CharField(
         max_length=2, blank=True, default='', choices=LEG_CHOICES,
         help_text="Mains leg; blank = balanced by the generated power plan",
+    )
+
+    # A spare amp is racked and powered but carries no programme: a generated
+    # power plan counts it at its idle draw.
+    IN_USE, SPARE = 'in_use', 'spare'
+    IN_PLAN_CHOICES = [(IN_USE, 'In use'), (SPARE, 'Spare')]
+    in_plan = models.CharField(
+        max_length=8, default=IN_USE, choices=IN_PLAN_CHOICES, verbose_name='In plan',
+        help_text="Spare: counted at idle on the generated power plan",
     )
 
     color = models.CharField(
@@ -5105,6 +5116,9 @@ class AmplifierAssignment(models.Model):
     # The amp's leg when the row was generated ('' = auto). Rebalancing reads
     # this, not the amp, so an edit on the amp waits for Regenerate.
     amp_leg = models.CharField(max_length=2, blank=True, default='', editable=False)
+    # Whether the amp was a spare when the row was generated. The row's figures,
+    # note and programme read this, so toggling the amp waits for Regenerate.
+    amp_spare = models.BooleanField(default=False, editable=False)
 
     # Calculated values (cached for performance)
     calculated_current_per_unit = models.DecimalField(
@@ -5140,13 +5154,14 @@ class AmplifierAssignment(models.Model):
         the plan's phase-to-neutral voltage. planner.utils.power_estimate.
 
         A generated row reads its amp's cabinets at the plan's programme
-        level (planner.utils.power_plan_generator.row_loads)."""
+        level (planner.utils.power_plan_generator.row_loads), or at idle
+        when the amp is a spare."""
         from planner.utils.power_estimate import plan_estimate, uniform_channel_loads
         plan = self.distribution_plan
         if self.generated:
             from planner.utils.power_plan_generator import row_loads
             loads, notes = row_loads(self)
-            draw = plan_estimate(self.amplifier, plan.programme, loads,
+            draw = plan_estimate(self.amplifier, self.effective_programme, loads,
                                  plan.service_type, plan.power_factor)
             if draw is not None:
                 draw.notes = notes + draw.notes
@@ -5154,6 +5169,24 @@ class AmplifierAssignment(models.Model):
         return plan_estimate(self.amplifier, self.programme,
                              uniform_channel_loads(self.amplifier, self.load_ohms),
                              plan.service_type, plan.power_factor)
+
+    @property
+    def is_spare(self):
+        """A spare as generated (amp_spare), not as the amp is now."""
+        return self.generated and self.amp_spare
+
+    @property
+    def effective_programme(self):
+        """The level this row is worked out at: idle for a spare amp, the
+        plan's programme on any other generated row, the row's own otherwise."""
+        from planner.utils.power_estimate import IDLE
+        if not self.generated:
+            return self.programme
+        return IDLE if self.is_spare else self.distribution_plan.programme
+
+    def get_effective_programme_display(self):
+        from planner.utils.power_estimate import PROGRAMME_CHOICES
+        return dict(PROGRAMME_CHOICES).get(self.effective_programme, self.effective_programme)
 
     @property
     def assumed_load_ohms(self):

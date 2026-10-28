@@ -8,6 +8,10 @@ amps, one row per amp, each worked out from the cabinets on its outputs
   load its table publishes on every channel -- and the row says so.
 * Outputs with no cabinet on an amp that has some are counted at idle, and
   the row says how many.
+* A spare amp (Amp.in_plan) is counted at its idle draw, whatever is on
+  its outputs, and the row says so. The row keeps what the amp was when
+  generated (amp_spare); a toggle since shows as changed until Regenerate. Only a spare is: an amp in use with no
+  cabinets is still the worst case -- missing data is never idle.
 * An amp whose model has no power profile has no figures; it is left out
   and listed (amp_models.amps_without_power_profile), as on any plan.
 
@@ -42,6 +46,7 @@ from planner.utils.power_estimate import (
 
 ALLOWANCE_LABEL = 'Other audio electronics (consoles, processors, playback)'
 STALE_MESSAGE = 'Amps or cabinets changed since generated'
+SPARE_NOTE = 'Spare: counted at idle'
 
 AUTO, SET, NOT_ON_SERVICE = 'auto', 'set', 'not_on_service'
 
@@ -59,8 +64,8 @@ def project_amps(project):
 
 def fingerprint(project, amps=None):
     """A hash of everything the generated rows are built from: which amps,
-    their names, locations, order, power profile, leg, and the cabinets on
-    each output."""
+    their names, locations, order, power profile, leg, in use or spare, and
+    the cabinets on each output."""
     amps = project_amps(project) if amps is None else amps
     data = []
     for amp in amps:
@@ -71,6 +76,10 @@ def fingerprint(project, amps=None):
             [[ch.channel_number, ch.cabinet_section_id, ch.cabinet_quantity]
              for ch in sorted(amp.channels.all(), key=lambda c: c.channel_number)],
         ])
+        # Only a spare adds to the hash, so plans generated before spares
+        # existed (every amp in use) still match.
+        if amp.in_plan == amp.SPARE:
+            data[-1].append(amp.in_plan)
     return hashlib.sha256(json.dumps(data).encode()).hexdigest()
 
 
@@ -80,8 +89,12 @@ def is_stale(plan):
 
 def row_loads(row):
     """(channel loads, notes) for a generated row: its amp's cabinets, or the
-    worst case when the amp has none (or is gone)."""
+    worst case when the amp has none (or is gone). A spare is counted at
+    idle (AmplifierAssignment.effective_programme), so its loads don't count.
+    Spare is the row's snapshot from generation, like its leg."""
     profile, amp = row.amplifier, row.source_amp
+    if row.is_spare:
+        return [], [SPARE_NOTE]
     if amp is not None:
         loads = amp_channel_loads(amp)
         empty = sum(1 for load in loads if load is None)
@@ -164,7 +177,8 @@ def build_rows(plan):
             continue
         row = AmplifierAssignment(
             distribution_plan=plan, amplifier=profile, quantity=1, generated=True,
-            source_amp=amp, amp_leg=amp.leg, zone=amp.location.name, position=amp.name,
+            source_amp=amp, amp_leg=amp.leg, amp_spare=amp.in_plan == amp.SPARE,
+            zone=amp.location.name, position=amp.name,
             programme=plan.programme, phase_assignment='AUTO')
         row.save()
     rebalance(plan)

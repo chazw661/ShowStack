@@ -1027,8 +1027,7 @@ def _section_power(project, styles, PowerDistributionPlan):
                     row_notes.append(f"{a.position}: set to {a.amp_leg} on the amp, not on this "
                                      f"service; balanced")
                 row_notes += [f"{a.position}: {note}" for note in generator.row_loads(a)[1]]
-            programme = (plan.get_programme_display() if a.generated
-                         else a.get_programme_display()).split(' (')[0]
+            programme = a.get_effective_programme_display().split(' (')[0]
             rows.append([
                 phase,
                 str(a.position) if a.position else '',

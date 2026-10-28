@@ -64,6 +64,7 @@ class _AmpMixin:
             'name': 'Posted Amp',
             'ip_address': '',
             'preset': '',
+            'in_plan': 'in_use',
             'color': '#FFFFFF',
             'sort_order': 0,
             'channels-TOTAL_FORMS': '0',

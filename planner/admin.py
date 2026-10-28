@@ -2503,7 +2503,7 @@ class AmpAdmin(BaseEquipmentAdmin):
     def get_fieldsets(self, request, obj=None):
         fieldsets = [
             ('Basic Information', {
-                'fields': ('location', 'amp_model', 'name', 'ip_address', 'preset', 'leg', 'color')
+                'fields': ('location', 'amp_model', 'name', 'ip_address', 'preset', 'leg', 'in_plan', 'color')
             }),
         ]
         
