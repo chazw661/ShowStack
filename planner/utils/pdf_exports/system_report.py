@@ -245,11 +245,13 @@ class MinRowsTable(Table):
         return parts
 
 
-def _data_table(headers, data, col_widths):
+def _data_table(headers, data, col_widths, zebra=True, extra_style=()):
     """Build a styled data table. Returns None when there is nothing to show.
 
     Alignment is chosen per column from the header label, so it stays correct
-    even after empty columns are pruned away.
+    even after empty columns are pruned away. ``zebra=False`` leaves out the
+    row stripes and the rule under each row, for a caller that groups rows
+    (``extra_style`` then sets its own backgrounds and rules).
     """
     if not data:
         return None
@@ -270,18 +272,19 @@ def _data_table(headers, data, col_widths):
         ('TEXTCOLOR', (0, 1), (-1, -1), INK),
         ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, ROW_ALT]),
-        ('LINEBELOW', (0, 1), (-1, -1), 0.25, HAIRLINE),
         ('LINEBELOW', (0, 0), (-1, 0), 1.5, BLUE),
         ('TOPPADDING', (0, 1), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
         ('LEFTPADDING', (0, 0), (-1, -1), 6),
         ('RIGHTPADDING', (0, 0), (-1, -1), 6),
     ]
+    if zebra:
+        style += [('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, ROW_ALT]),
+                  ('LINEBELOW', (0, 1), (-1, -1), 0.25, HAIRLINE)]
     for c, head in enumerate(headers):
         if head in NUMERIC_HEADERS:
             style.append(('ALIGN', (c, 1), (c, -1), 'CENTER'))
-    table.setStyle(TableStyle(style))
+    table.setStyle(TableStyle(style + list(extra_style)))
     return table
 
 
@@ -989,6 +992,78 @@ def _section_comm(project, styles, CommBeltPack):
 # ===========================================================================
 # Section 6 - Power Distribution
 # ===========================================================================
+_POWER_CELL = ParagraphStyle('PowerCell', fontName='Helvetica', fontSize=8, leading=10,
+                             textColor=INK)
+_POWER_NUM = ParagraphStyle('PowerNum', parent=_POWER_CELL, alignment=TA_CENTER)
+_POWER_BOLD = ParagraphStyle('PowerBold', parent=_POWER_NUM, fontName='Helvetica-Bold')
+_POWER_NOTE = ParagraphStyle('PowerNote', fontName='Helvetica-Oblique', fontSize=7,
+                             leading=9, textColor=MUTED)
+
+
+def _power_table(plan, assignments, legs, brands):
+    """(table, row count) for one plan: Paragraph cells, so text wraps inside
+    its column, and each amp's notes on a grey line spanning the table just
+    under its row, sharing its background. The model only in the Amplifier
+    column; one brand goes in the header (several are listed under the table)."""
+    from planner.utils import power_plan_generator as generator
+
+    def cell(text, style=_POWER_CELL):
+        return Paragraph(escape(str(text)), style)
+
+    data, style, stripe = [], [], 0
+    for a in assignments:
+        phase, notes = a.phase_assignment or '', []
+        if a.generated:
+            status = generator.leg_status(a, legs)
+            phase += {generator.AUTO: ' (auto)', generator.SET: ' (set)',
+                      generator.NOT_ON_SERVICE: ' (auto*)'}[status]
+            if status == generator.NOT_ON_SERVICE:
+                notes.append(f"set to {a.amp_leg} on the amp, not on this service; balanced")
+            notes += generator.row_loads(a)[1]
+        first = len(data) + 1  # table row of this amp (row 0 is the header)
+        data.append([
+            cell(phase),
+            cell(a.position or ''),
+            cell(a.amplifier.model if a.amplifier else ''),
+            cell(a.quantity or 1, _POWER_NUM),
+            cell(a.get_effective_programme_display().split(' (')[0]),
+            cell(f"{a.calculated_current_per_unit:.1f}A" if a.calculated_current_per_unit else '',
+                 _POWER_NUM),
+            cell(f"{a.calculated_total_current:.1f}A" if a.calculated_total_current else '',
+                 _POWER_BOLD),
+        ])
+        if notes:
+            data.append(['', cell('; '.join(notes), _POWER_NOTE)] + [''] * 5)
+            style += [('SPAN', (1, first + 1), (-1, first + 1)),
+                      ('NOSPLIT', (0, first), (-1, first + 1)),  # never a page between
+                      ('TOPPADDING', (0, first + 1), (-1, first + 1), 0),
+                      ('BOTTOMPADDING', (0, first), (-1, first), 1)]
+        last = len(data)
+        if stripe % 2:
+            style.append(('BACKGROUND', (0, first), (-1, last), ROW_ALT))
+        style.append(('LINEBELOW', (0, last), (-1, last), 0.25, HAIRLINE))
+        stripe += 1
+    if not data:
+        return None, 0
+    if plan.other_electronics_watts:
+        per_leg = generator.allowance(plan)[1]
+        data.append([
+            cell('each leg'),
+            cell(f"{generator.ALLOWANCE_LABEL}: {plan.other_electronics_watts} W"),
+            '', '', '',
+            cell(f"{per_leg:.1f}A", _POWER_NUM), cell(f"{per_leg:.1f}A/leg", _POWER_BOLD),
+        ])
+        row = len(data)
+        style += [('SPAN', (1, row), (4, row))]
+        if stripe % 2:
+            style.append(('BACKGROUND', (0, row), (-1, row), ROW_ALT))
+    amplifier = f"Amplifier ({brands[0]})" if len(brands) == 1 else 'Amplifier'
+    headers = ['Phase', 'Position', amplifier, 'Qty', 'Programme',
+               'Current/Unit*', 'Total Current*']
+    widths = [w * inch for w in (1.0, 2.8, 1.5, 0.5, 1.3, 1.3, 1.3)]
+    return _data_table(headers, data, widths, zebra=False, extra_style=style), len(data)
+
+
 def _section_power(project, styles, PowerDistributionPlan):
     story = [_section_banner("7", "Power Distribution", styles), Spacer(1, 0.12 * inch)]
     plans = PowerDistributionPlan.objects.filter(project=project)
@@ -1016,54 +1091,38 @@ def _section_power(project, styles, PowerDistributionPlan):
                if plan.is_generated else ''), styles['meta'])]
         if warning:
             intro.append(Paragraph(f"<b>Warning: {escape(warning)}.</b>", styles['meta']))
-        rows, row_notes = [], []
-        for a in assignments:
-            phase = a.phase_assignment or ''
-            if a.generated:
-                status = generator.leg_status(a, legs)
-                phase += {generator.AUTO: ' (auto)', generator.SET: ' (set)',
-                          generator.NOT_ON_SERVICE: ' (auto*)'}[status]
-                if status == generator.NOT_ON_SERVICE:
-                    row_notes.append(f"{a.position}: set to {a.amp_leg} on the amp, not on this "
-                                     f"service; balanced")
-                row_notes += [f"{a.position}: {note}" for note in generator.row_loads(a)[1]]
-            programme = a.get_effective_programme_display().split(' (')[0]
-            rows.append([
-                phase,
-                str(a.position) if a.position else '',
-                str(a.amplifier) if a.amplifier else '',
-                str(a.quantity) if a.quantity else '1',
-                programme,
-                f"{a.calculated_current_per_unit:.1f}A" if a.calculated_current_per_unit else '',
-                f"{a.calculated_total_current:.1f}A" if a.calculated_total_current else '',
-            ])
+        brands = sorted({a.amplifier.manufacturer for a in assignments if a.amplifier})
+        table, n_rows = _power_table(plan, assignments, legs, brands)
         phase_loads = calculate_phase_distribution(plan)
-        if plan.other_electronics_watts:
-            per_leg = phase_loads['allowance']['current_per_leg']
-            rows.append([
-                'each leg', '', f"{generator.ALLOWANCE_LABEL}: {plan.other_electronics_watts} W",
-                '', '', f"{per_leg:.1f}A", f"{per_leg:.1f}A/leg",
-            ])
-        headers = ['Phase', 'Position', 'Amplifier', 'Qty', 'Programme',
-                   'Current/Unit*', 'Total Current*']
-        widths = [w * inch for w in (0.8, 0.9, 2.4, 0.5, 1.2, 1.1, 1.1)]
-        table = _data_table(headers, rows, widths) if assignments else None
         if table:
-            story += _table_block([heading] + intro + [table], len(rows),
+            if len(brands) > 1:
+                models = {}
+                for a in assignments:
+                    if a.amplifier:
+                        models.setdefault(a.amplifier.manufacturer, set()).add(a.amplifier.model)
+                legend = [Paragraph("Amplifiers: " + "; ".join(
+                    f"{escape(', '.join(sorted(models[b])))} — {escape(b)}" for b in brands),
+                    styles['meta'])]
+            else:
+                legend = []
+            story += _table_block([heading] + intro + [table], n_rows,
                                   n_headings=1 + len(intro))
-            story.append(Paragraph(
-                "<b>Per leg:</b> " + " · ".join(
-                    f"{name} {leg['total_current']:.1f}A"
-                    for name, leg in phase_loads['phases'].items()),
-                styles['meta']))
-            for note in row_notes:
-                story.append(Paragraph(escape(note), styles['meta']))
-            story.append(Paragraph(
-                f"* {ESTIMATE_LABEL}: published watts / ({plan.get_phase_to_neutral_voltage()} V "
-                f"phase-to-neutral × power factor {plan.power_factor}, assumed), including "
-                f"{int((plan.transient_headroom - 1) * 100)}% transient headroom"
-                + ("; the other-electronics allowance has none" if plan.other_electronics_watts
-                   else '') + ".", styles['meta']))
+            leg_items = phase_loads['phases'].items()
+            story += legend + [
+                Paragraph("<b>Expected load:</b> " + " · ".join(
+                    f"{name} {leg['expected_current']:.1f}A" for name, leg in leg_items),
+                    styles['meta']),
+                Paragraph("<b>Size for:</b> " + " · ".join(
+                    f"{name} {leg['total_current']:.1f}A" for name, leg in leg_items),
+                    styles['meta']),
+                Paragraph(escape(generator.leg_figures_note(plan)), styles['meta']),
+                Paragraph(
+                    f"* {ESTIMATE_LABEL}: published watts / ({plan.get_phase_to_neutral_voltage()} V "
+                    f"phase-to-neutral × power factor {plan.power_factor}, assumed), including "
+                    f"{int((plan.transient_headroom - 1) * 100)}% transient headroom."
+                    + (" Headroom is not applied to the other-electronics allowance."
+                       if plan.other_electronics_watts else ''), styles['meta']),
+            ]
         else:
             story.append(_keep([heading] + intro
                                + [Paragraph("No amplifier assignments.", styles['empty'])]))

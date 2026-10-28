@@ -2733,6 +2733,7 @@ def power_distribution_calculator(request, plan_id=None):
         'voltage': voltage,
         'phase_to_neutral': plan.get_phase_to_neutral_voltage(),
         'three_phase_warning': generator.three_phase_warning(plan, assignments),
+        'leg_figures_note': generator.leg_figures_note(plan),
         'is_stale': generator.is_stale(plan),
         'stale_message': generator.STALE_MESSAGE,
         'allowance_label': generator.ALLOWANCE_LABEL,
@@ -2747,13 +2748,24 @@ HEADROOM_CHOICES = [('1.25', '25% (default)'), ('1.30', '30%'), ('1.50', '50%'),
 
 
 def calculate_phase_distribution(plan):
-    """Calculate the current distribution across phases"""
+    """Calculate the current distribution across phases.
+
+    Two figures per leg. 'expected_current' is the expected load: the amps'
+    estimated draw, no transient headroom and no allowance. 'total_current'
+    is what to size the leg for: the amps with headroom (the cached row
+    figures), plus the other-electronics allowance."""
+    from planner.utils.power_estimate import leg_current
     assignments = plan.amplifier_assignments.all()
+    volts, pf = plan.get_phase_to_neutral_voltage(), plan.power_factor
+
+    def expected_per_unit(assignment):
+        return float(leg_current(assignment.calculated_watts_per_unit or 0, volts, pf))
 
     # The service's legs on a generated plan (L1-L3 / L1-L2 / L1); L1-L3 on
     # a plan built by hand, as before.
     legs = plan.legs
-    phases = {leg: {'assignments': [], 'total_current': 0} for leg in legs}
+    phases = {leg: {'assignments': [], 'total_current': 0, 'expected_current': 0}
+              for leg in legs}
 
     # Auto-balance assignments marked as AUTO, or on a leg the service lacks
     auto_assignments = []
@@ -2766,6 +2778,8 @@ def calculate_phase_distribution(plan):
             phases[assignment.phase_assignment]['total_current'] += float(
                 assignment.calculated_total_current or 0
             )
+            phases[assignment.phase_assignment]['expected_current'] += (
+                expected_per_unit(assignment) * (assignment.quantity or 1))
     
    
     # Balance auto assignments - distribute amps evenly across phases (round-robin per line)
@@ -2780,6 +2794,7 @@ def calculate_phase_distribution(plan):
         for i in range(quantity):
             phase = legs[i % len(legs)]  # Round-robin: 0->L1, 1->L2, 2->L3, 3->L1, etc.
             phases[phase]['total_current'] += current_per_unit
+            phases[phase]['expected_current'] += expected_per_unit(assignment)
             assignment._phase_distribution[phase] += 1
         
         # Set display phase to show distribution (e.g., "L1:2, L2:2, L3:2")
@@ -2815,6 +2830,7 @@ def calculate_phase_distribution(plan):
             if usable_amperage > 0 else 0
         )
         phase_data['current_rounded'] = round(phase_data['total_current'], 1)
+        phase_data['expected_rounded'] = round(phase_data['expected_current'], 1)
     
     return {
         'phases': phases,
@@ -2889,6 +2905,7 @@ def update_plan_settings(request, plan_id):
                 name: {
                     'total_current': pdata.get('total_current', 0),
                     'current_rounded': pdata.get('current_rounded', 0),
+                    'expected_rounded': pdata.get('expected_rounded', 0),
                     'percentage': pdata.get('percentage', 0),
                 }
                 for name, pdata in phase_loads['phases'].items()

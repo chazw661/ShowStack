@@ -280,9 +280,9 @@ class SpareTests(GeneratorFixture):
         self.assertContains(page, generator.SPARE_NOTE, count=1)
         self.assertContains(page, '<td>Idle (no signal)</td>', count=1)
         text = pdf_text(self.project)
-        self.assertIn(f'Amp 2: {generator.SPARE_NOTE}', text)
-        self.assertNotIn(f'Amp 1: {generator.SPARE_NOTE}', text)
-        self.assertIn('Idle', text)
+        # The note is on the line under Amp 2's row, and only there.
+        self.assertRegex(text, rf'Amp 2 LA8 1 Idle [\d.]+A [\d.]+A\s+{generator.SPARE_NOTE}')
+        self.assertEqual(1, text.count(generator.SPARE_NOTE))
 
     def test_a_toggle_waits_for_regenerate(self):
         plan = self.generate()
