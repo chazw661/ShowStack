@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Power Distribution Calculator - {{ plan.show_day }}</title>
+    <title>Power Distribution Calculator - {{ plan.venue_name|default:plan.project.name }}</title>
     <style>
         * {
             margin: 0;
@@ -162,6 +162,14 @@
             font-size: 14px;
             color: #888;
         }
+
+        /* Two figures per leg: expected load, and what to size it for. */
+        .phase-figure { margin-bottom: 6px; }
+        .phase-figure-label {
+            font-size: 11px; color: #9aa7b4; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .phase-expected { font-size: 18px; font-weight: bold; color: #c9d6e3; }
+        .leg-figures-note { font-size: 12px; color: #9aa7b4; margin: 10px 0 16px; }
         
         .phase-bar {
             height: 8px;
@@ -329,9 +337,9 @@
         <div class="header">
             <h1>Power Distribution Calculator</h1>
             <div class="header-info">
-                <span><strong>Show:</strong> {{ plan.show_day }}</span>
-                <span><strong>Venue:</strong> {{ plan.venue_name }}</span>
-                <span><strong>Date:</strong> {{ plan.show_day.date }}</span>
+                {% if plan.show_day %}<span><strong>Show:</strong> {{ plan.show_day }}</span>{% endif %}
+                <span><strong>Venue:</strong> {{ plan.venue_name|default:plan.project.name }}</span>
+                {% if plan.show_day %}<span><strong>Date:</strong> {{ plan.show_day.date }}</span>{% endif %}
             </div>
         </div>
         <div>
@@ -474,7 +482,14 @@
                 {% for name, leg in phase_loads.phases.items %}
                 <div class="phase-display">
                     <div class="phase-label">{{ name }}</div>
-                    <div class="phase-current" id="{{ name|lower }}-current">{{ leg.current_rounded }}A</div>
+                    <div class="phase-figure">
+                        <div class="phase-figure-label">Expected load</div>
+                        <div class="phase-expected" id="{{ name|lower }}-expected">{{ leg.expected_rounded }}A</div>
+                    </div>
+                    <div class="phase-figure">
+                        <div class="phase-figure-label">Size for</div>
+                        <div class="phase-current" id="{{ name|lower }}-current">{{ leg.current_rounded }}A</div>
+                    </div>
                     <div class="phase-percentage">{{ leg.percentage|floatformat:1 }}% Used</div>
                     <div class="phase-bar">
                         <div class="phase-bar-fill" id="{{ name|lower }}-bar" style="width: {{ leg.percentage }}%"></div>
@@ -482,6 +497,7 @@
                 </div>
                 {% endfor %}
             </div>
+            <p class="leg-figures-note">{{ leg_figures_note }}</p>
             
             <div class="imbalance-indicator">
                 <div class="imbalance-value {% if phase_loads.imbalance < 10 %}imbalance-good{% elif phase_loads.imbalance < 15 %}imbalance-warning{% else %}imbalance-bad{% endif %}">
@@ -684,6 +700,8 @@
                 const current = document.getElementById(name.toLowerCase() + '-current');
                 if (!current) return;  // the service changed; the reload redraws
                 current.textContent = phaseLoads.phases[name].current_rounded + 'A';
+                const expected = document.getElementById(name.toLowerCase() + '-expected');
+                if (expected) expected.textContent = phaseLoads.phases[name].expected_rounded + 'A';
                 updatePhaseBar(name.toLowerCase() + '-bar', phaseLoads.phases[name].percentage);
             });
         }
