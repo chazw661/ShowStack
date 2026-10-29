@@ -6709,13 +6709,6 @@ class MicSessionAdmin(BaseEquipmentAdmin):
         return (obj.day.project.owner == request.user or
                 ProjectMember.objects.filter(user=request.user, project=obj.day.project).exists())
 
-    def has_change_permission(self, request, obj=None):
-        if request.user.is_superuser:
-            return True
-        if obj is None:
-            return True
-        return (obj.day.project.owner == request.user or
-                ProjectMember.objects.filter(user=request.user, project=obj.day.project, role='editor').exists())
     
     def mic_usage(self, obj):
         stats = obj.get_mic_usage_stats()
@@ -6893,13 +6886,7 @@ class MicShowInfoAdmin(BaseEquipmentAdmin):
         }),
     )
     
-    def has_add_permission(self, request):
-        # Only allow one instance
-        return not MicShowInfo.objects.exists()
     
-    def has_delete_permission(self, request, obj=None):
-        
-        return False
     
     class Media:
         css = {
@@ -7203,64 +7190,9 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
     
 
     
-    def get_total_current(self, obj):
-        """Calculate total current for list display"""
-        if not obj.pk:
-            return '-'
-        total = obj.amplifier_assignments.aggregate(
-            total=Sum('calculated_total_current')
-        )['total'] or 0
-        return f"{total:.1f}A"
-    get_total_current.short_description = 'Total current (estimate)'
     
-    def view_calculator_button(self, obj):
-        """Add button to view calculator in list display"""
-        if obj.pk:
-            url = f"/audiopatch/power-distribution/{obj.pk}/"
-            return format_html(
-                '<a class="button" href="{}" style="background:#4a9eff; color:white; padding:5px 10px; text-decoration:none; border-radius:4px;">View Calculator</a>',
-                url
-            )
-        return '-'
-    view_calculator_button.short_description = 'Power Calculator'
     
-    def get_calculator_link(self, obj):
-        """Add large button to view calculator in change form"""
-        if obj.pk:
-            url = f"/audiopatch/power-distribution/{obj.pk}/"
-            return format_html(
-                '''
-                <div style="padding: 20px; background: #2a2a2a; border-radius: 8px; text-align: center;">
-                    <p style="color: #e0e0e0; margin-bottom: 15px;">
-                        View phase distribution, load balancing, and detailed power analysis
-                    </p>
-                    <a href="{}" class="button" style="
-                        display: inline-block;
-                        background: #4a9eff;
-                        color: white;
-                        padding: 12px 30px;
-                        text-decoration: none;
-                        border-radius: 4px;
-                        font-size: 16px;
-                        font-weight: bold;
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-                    " target="_blank">
-                        📊 Open Power Distribution Calculator
-                    </a>
-                    <p style="color: #888; margin-top: 15px; font-size: 12px;">
-                        Opens in new tab with visual phase bars and imbalance monitoring
-                    </p>
-                </div>
-                ''',
-                url
-            )
-        return 'Save the plan first to access the calculator'
-    get_calculator_link.short_description = 'Visual Power Distribution Calculator'
     
-    def save_model(self, request, obj, form, change):
-        if not change:  # Creating new object
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
         
     def get_total_current(self, obj):
         """Calculate total current for list display"""
@@ -7316,10 +7248,6 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         return 'Save the plan first to access the calculator'
     get_calculator_link.short_description = 'Visual Power Distribution Calculator'
     
-    def save_model(self, request, obj, form, change):
-        if not change:  # Creating new object
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
     
     
     
@@ -7454,10 +7382,6 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         </div>
         """
     
-    def save_model(self, request, obj, form, change):
-        if not change:  # Creating new object
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
 
     def get_queryset(self, request):
         """Filter by current project"""
@@ -7542,11 +7466,7 @@ class AmplifierAssignmentAdmin(BaseEquipmentAdmin):
 class AudioChecklistAdmin(BaseEquipmentAdmin):
     """Admin interface for Audio Checklist"""
     
-    def has_add_permission(self, request):
-        return False
     
-    def has_delete_permission(self, request, obj=None):
-        return False
     
     def changelist_view(self, request, extra_context=None):
         """Show our custom checklist instead of model list: the same page as

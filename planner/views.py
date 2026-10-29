@@ -2928,15 +2928,6 @@ def get_amplifier_assignment(request, assignment_id):
 
     #-----Audio Checklist-----
 
-@login_required
-def audio_checklist(request):
-    """
-    Simple checklist view - no database required
-    All data is stored in browser localStorage
-    """
-    return render(request, 'planner/audio_checklist.html', {
-        'title': 'Audio Production Checklist',
-    })
 
 
 #-------Prediction Module---

@@ -8,7 +8,10 @@ functions that were defined twice.
 - The mobile COMM list read the same fields; its channel badges never showed.
 - Five views.py functions had two definitions; the second one is what ran.
   For dmic_and_rotate and get_assignment_details the first, never-run copy
-  was the newer, working one.
+  was the newer, working one. Methods defined twice in admin.py classes
+  lost their dead copies too (the live, last ones are kept).
+- /audiopatch/checklist/ rendered a template that does not exist; the
+  route is gone (its URL name already pointed at audiochecklist/).
 
 Run with::
 
@@ -176,3 +179,30 @@ class NoDuplicateDefinitionsTests(WriteGuardBase):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 (twice if node.name in seen else seen).add(node.name)
         self.assertEqual(set(), twice)
+
+    def test_classes_define_each_method_once(self):
+        # Same in a class body: the last def wins. AudioChecklistAdmin's
+        # "return False" add/delete never ran, nor did three of
+        # PowerDistributionPlanAdmin's four save_models.
+        planner = Path(__file__).resolve().parents[1]
+        twice = []
+        for name in ('admin.py', 'views.py'):
+            for cls in ast.walk(ast.parse((planner / name).read_text())):
+                if not isinstance(cls, ast.ClassDef):
+                    continue
+                seen = set()
+                for node in cls.body:
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        if node.name in seen:
+                            twice.append(f'{name} {cls.name}.{node.name} (line {node.lineno})')
+                        seen.add(node.name)
+        self.assertEqual([], twice)
+
+
+class DeadChecklistRouteTests(WriteGuardBase):
+
+    def test_only_the_working_checklist_is_routed(self):
+        # checklist/ rendered a template that does not exist (a 500). The
+        # name it shared already reversed to audiochecklist/.
+        self.assertEqual('/audiopatch/audiochecklist/', reverse('planner:audio_checklist'))
+        self.assertEqual(404, self.client.get('/audiopatch/checklist/').status_code)

@@ -223,7 +223,6 @@ urlpatterns = [
      path('api/power/plan/<int:plan_id>/add-amp/', views.add_amplifier_assignment, name='add_amplifier_assignment'),
      path('api/power/assignment/<int:assignment_id>/update/', views.update_amplifier_assignment, name='update_amplifier_assignment'),
      path('api/power/assignment/<int:assignment_id>/delete/', views.delete_amplifier_assignment, name='delete_amplifier_assignment'),
-     path('checklist/', views.audio_checklist, name='audio_checklist'),
      path('predictions/', views.predictions_list, name='predictions_list'),
      path('predictions/<int:pk>/', views.prediction_detail, name='prediction_detail'),
      path('predictions/upload/', views.upload_prediction, name='upload_prediction'),
