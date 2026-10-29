@@ -152,3 +152,77 @@ class ViewerPagesTests(WriteGuardBase):
         self.login(self.owner, self.project)
         self.client.post('/admin/planner/commposition/', {'action': 'populate_common_positions'})
         self.assertTrue(CommPosition.objects.filter(project=self.project).exists())
+
+
+class DecisionTests(WriteGuardBase):
+    """The four decisions on #147: day collapse is the user's own view, only
+    owners and editors duplicate a project, a project's agent key can be
+    replaced, and the monitor shows a viewer no controls that write."""
+
+    def test_day_collapse_is_per_user_in_the_browser(self):
+        from planner.models import ShowDay
+        day = ShowDay.objects.create(project=self.project, date='2027-04-01',
+                                     is_collapsed=True)
+        from django.urls import NoReverseMatch
+        with self.assertRaises(NoReverseMatch):
+            reverse('planner:toggle_day_collapse')
+        self.login(self.viewer, self.project)
+        page = self.client.get(reverse('planner:mic_tracker')).content.decode()
+        # Rendered open whatever the shared row says; the browser restores
+        # this user's own choice.
+        self.assertIn(f'data-day-id="{day.pk}"', page)
+        self.assertNotIn('mtt-day-collapse collapsed', page)
+        self.assertIn(f"'mic-tracker-days-collapsed:{self.viewer.pk}'", page)
+        self.assertNotIn('toggle-day-collapse', page)
+
+    def test_rotate_agent_key(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from django.test import RequestFactory
+        from planner.views_monitor import _authenticate_agent
+
+        old = self.project.agent_api_key
+        out = StringIO()
+        call_command('rotate_agent_key', project=self.project.pk, stdout=out)
+        self.project.refresh_from_db()
+        self.assertEqual(old, self.project.agent_api_key)
+        self.assertIn('Dry-run', out.getvalue())
+
+        call_command('rotate_agent_key', project=self.project.pk, apply=True, stdout=out)
+        self.project.refresh_from_db()
+        new = self.project.agent_api_key
+        self.assertNotEqual(old, new)
+        self.assertNotIn(str(new), out.getvalue())
+        agent = RequestFactory()
+        project, err = _authenticate_agent(agent.get('/', HTTP_AUTHORIZATION=f'Bearer {old}'))
+        self.assertIsNone(project)
+        self.assertEqual(403, err.status_code)
+        project, err = _authenticate_agent(agent.get('/', HTTP_AUTHORIZATION=f'Bearer {new}'))
+        self.assertEqual(self.project, project)
+        # The other project's key is untouched.
+        before = self.theirs.agent_api_key
+        self.theirs.refresh_from_db()
+        self.assertEqual(before, self.theirs.agent_api_key)
+
+    def test_rotate_agent_key_unknown_project(self):
+        from django.core.management import CommandError, call_command
+        with self.assertRaises(CommandError):
+            call_command('rotate_agent_key', project=999999, apply=True)
+
+    def test_monitor_hides_write_controls_from_a_viewer(self):
+        from planner.models import DiscoveredDevice
+        self.factory.get(DiscoveredDevice)
+        url = reverse('planner:network_monitor')
+        self.login(self.viewer, self.project)
+        viewer = self.client.get(url).content.decode()
+        self.login(self.owner, self.project)
+        owner = self.client.get(url).content.decode()
+        for marker in ('id="nhm-add-device-bar"', 'class="nhm-settings-btn" onclick="openSettings()"',
+                       'id="nhm-settings-panel"', 'id="nhm-community-string"',
+                       "onclick=\"setShowMode('setup')\"", 'id="nhm-rescan-btn"'):
+            self.assertIn(marker, owner)
+            self.assertNotIn(marker, viewer)
+        self.assertIn('const CAN_EDIT = false;', viewer)
+        self.assertIn('const CAN_EDIT = true;', owner)
+        # The mode itself still shows: the banner is read-only.
+        self.assertIn('id="nhm-mode-banner"', viewer)

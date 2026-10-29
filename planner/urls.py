@@ -161,7 +161,6 @@ urlpatterns = [
     path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
     path('api/session/duplicate/', views.duplicate_session, name='duplicate_session'),
     path('api/mic/delete-session/', views.delete_session, name='delete_session'),
-    path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
     path('mic-tracker/overview/', views.mic_tracker_overview_view, name='mic_tracker_overview'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),

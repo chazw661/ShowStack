@@ -401,8 +401,17 @@ def duplicate_project_action(modeladmin, request, queryset):
         return
     
     project = queryset.first()
-   
-    
+
+    # A copy carries everything in the project, so it takes the same rights
+    # as changing it: its owner or an editor. A viewer is refused.
+    if not modeladmin.has_change_permission(request, project):
+        modeladmin.message_user(
+            request,
+            "Only the project's owner or an editor can duplicate it.",
+            level=messages.ERROR
+        )
+        return
+
     # If this is a POST request, we're coming back from the form
     if request.POST.get('confirm_duplicate'):
        
@@ -689,7 +698,17 @@ class ProjectAdmin(admin.ModelAdmin):
             return (request.user.is_authenticated
                     and Project.objects.filter(owner=request.user).exists())
         return obj.owner_id == request.user.id
-    
+
+    def get_actions(self, request):
+        """Duplicate is offered to someone who owns or edits a project; the
+        action itself checks the one selected."""
+        actions = super().get_actions(request)
+        if not (request.user.is_superuser or Project.objects.filter(
+                Q(owner=request.user)
+                | Q(projectmember__user=request.user, projectmember__role='editor')).exists()):
+            actions.pop('duplicate_project_action', None)
+        return actions
+
     def save_model(self, request, obj, form, change):
         """Set owner to current user if creating"""
         if not change:  # New project
@@ -6436,7 +6455,7 @@ class ShowDayAdminForm(forms.ModelForm):
     """
     class Meta:
         model = ShowDay
-        fields = ['date', 'name', 'is_collapsed', 'order']
+        fields = ['date', 'name', 'order']
 
     def clean(self):
         cleaned = super().clean()
@@ -6948,7 +6967,6 @@ urlpatterns = [
     path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
     path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
     path('api/session/duplicate/', views.duplicate_session, name='duplicate_session'),
-    path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
 ]
 

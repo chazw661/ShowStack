@@ -1332,29 +1332,6 @@ def export_mic_tracker_pdf(request):
 
 
 
-@require_POST
-@staff_member_required
-def toggle_day_collapse(request):
-    """Toggle the collapsed state of a day"""
-    try:
-        day_id = request.POST.get('day_id')
-        if not day_id:
-            return JsonResponse({'success': False, 'error': 'No day_id provided'})
-        
-        day = ShowDay.objects.get(id=day_id, project=_scoped_project(request))
-        day.is_collapsed = not day.is_collapsed
-        day.save()
-        
-        return JsonResponse({
-            'success': True,
-            'is_collapsed': day.is_collapsed
-        })
-    except ShowDay.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Day not found'})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})      
-
-
 def stamp_checksum(view):
     """Add the post-save checksum to a mutating endpoint's JSON response.
 

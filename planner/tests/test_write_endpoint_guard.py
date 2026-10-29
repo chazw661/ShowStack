@@ -103,7 +103,6 @@ OPEN = {
     'audiopatch/audiochecklist/template/delete/': "deletes from the user's own template library",
     # Shared UI state, not project data. Pending a decision: it is stored on
     # the day, so a viewer collapsing a day collapses it for everyone.
-    'audiopatch/api/day/toggle/': 'collapses a day in the tracker (shared UI state; decision pending)',
     # Crews belong to a user, not a project: a project role has no bearing.
     'crew/new/': "creates the user's own crew",
     'crew/<int:crew_id>/': "the user's own crew",
@@ -210,9 +209,6 @@ KWARG_MODELS = {
 
 # Admin actions a viewer is offered besides viewer_ok ones, and why.
 VIEWER_ACTIONS = {
-    ('planner.Project', 'duplicate_project_action'):
-        "copies a project the viewer can see into a new one they own; the "
-        "original is untouched (decision pending)",
     ('planner.ShowTemplate', 'delete_selected'): "the user's own templates",
     ('planner.Console', 'save_as_template'): "writes to the user's own template library",
 }

@@ -32,13 +32,6 @@ class ViewScopeSweepTests(TenantIsolationBase):
 
     # -- Mic Tracker -----------------------------------------------------
 
-    def test_toggle_day_collapse_ignores_other_tenant_day(self):
-        before = self.show_day_b.is_collapsed
-        self.client.post(reverse('planner:toggle_day_collapse'),
-                         {'day_id': self.show_day_b.id})
-        self.show_day_b.refresh_from_db()
-        self.assertEqual(before, self.show_day_b.is_collapsed)
-
     def test_create_session_refuses_other_tenant_day(self):
         before = MicSession.objects.filter(day=self.show_day_b).count()
         resp = self.post_json('create_session', {
