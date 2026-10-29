@@ -53,10 +53,18 @@ class ChecklistRightsByRoleTests(TestCase):
         session['current_project_id'] = self.project.pk
         session.save()
 
+    # The checklist has two routes: the sidebar links to the admin one.
+    PAGES = ('/audiopatch/audiochecklist/', '/admin/planner/audiochecklist/')
+
     def page_can_edit(self, user):
         self.login(user)
-        html = self.client.get('/audiopatch/audiochecklist/').content.decode()
-        return 'const CAN_EDIT = true;' in html
+        answers = set()
+        for url in self.PAGES:
+            resp = self.client.get(url)
+            self.assertEqual(200, resp.status_code, url)
+            answers.add('const CAN_EDIT = true;' in resp.content.decode())
+        self.assertEqual(1, len(answers), f'{user.username}: the two routes disagree')
+        return answers.pop()
 
     def endpoint_can_edit(self, user):
         self.login(user)

@@ -7549,15 +7549,12 @@ class AudioChecklistAdmin(BaseEquipmentAdmin):
         return False
     
     def changelist_view(self, request, extra_context=None):
-        """Show our custom checklist instead of model list"""
-        context = {
-            'title': 'Audio Production Checklist',
-            'cl': self,
-            'opts': self.model._meta,
-            'has_filters': False,
-            'has_add_permission': False,
-        }
-        return render(request, 'admin/planner/audio_checklist.html', context)
+        """Show our custom checklist instead of model list: the same page as
+        /audiopatch/audiochecklist/. Rendering the template here as well left
+        out can_edit, so the sidebar's link showed every user a read-only
+        checklist."""
+        from planner.views import audio_checklist_view
+        return audio_checklist_view(request)
     
 
 
