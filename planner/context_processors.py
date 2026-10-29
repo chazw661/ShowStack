@@ -50,16 +50,21 @@ def user_projects(request):
             # User is invited but doesn't own - no dropdown, auto-scoped
             context['user_projects'] = invited_projects
             context['show_project_dropdown'] = False
-            
-            # Determine if editor or viewer
-            membership = ProjectMember.objects.filter(user=request.user).first()
-            if membership:
-                context['user_role'] = membership.role  # 'editor' or 'viewer'
-            else:
-                context['user_role'] = 'viewer'
     
     # Set current project from request
     if hasattr(request, 'current_project'):
         context['current_project'] = request.current_project
+
+    # The role on the project being shown. This used to be 'owner' for anyone
+    # who owned any project and otherwise the role of their first membership,
+    # so an editor here whose first invite was as a viewer got the VIEWER
+    # badge and the viewer-dimmed menu.
+    project = context['current_project']
+    if project is not None and not request.user.is_superuser:
+        if project.owner_id == request.user.id:
+            context['user_role'] = 'owner'
+        else:
+            context['user_role'] = ProjectMember.objects.filter(
+                user=request.user, project=project).values_list('role', flat=True).first()
     
     return context

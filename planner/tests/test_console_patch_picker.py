@@ -16,7 +16,7 @@ from unittest import mock
 from django.contrib.auth.models import Permission, User
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
@@ -26,6 +26,12 @@ from planner.models import (
     ConsoleStereoOutput, Device, DeviceInput, DeviceOutput, Project, ProjectMember,
 )
 from planner.utils import device_patch
+
+# Static files by their own names, whatever is in staticfiles/.
+PLAIN_STATIC = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
 
 
 CONSOLE_MODELS = ('console', 'consoleinput', 'consoleauxoutput', 'consolematrixoutput',
@@ -623,6 +629,10 @@ class ConsolePageCellTests(PickerBase):
         self.assertEqual(r.status_code, 200)
         return r.content.decode()
 
+    # Plain storage: with the manifest one these names come out hashed
+    # whenever a local `collectstatic` has put the file in staticfiles/, so
+    # the test would depend on a gitignored build folder.
+    @override_settings(STORAGES=PLAIN_STATIC)
     def test_owner_gets_buttons_and_the_picker_script(self):
         self.link(self.inport(1), self.kick)
         page = self.page()

@@ -321,6 +321,9 @@
     .a1-notes-input { width: 100%; min-height: 40px; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-secondary); font-size: 14px; font-family: inherit; padding: 2px 4px; outline: none; transition: border-color 0.15s; }
     .a1-notes-input:focus { border-bottom-color: var(--border-bright); }
     .a1-notes-input::placeholder { color: var(--text-dim); }
+    /* A viewer's fields are readonly: no text cursor, no focus underline. */
+    #content input[readonly], #content textarea[readonly] { cursor: not-allowed !important; }
+    .a1-notes-input[readonly]:focus { border-bottom-color: transparent; }
 
     .a1-actions-bar { display: flex; justify-content: flex-end; padding: 7px 12px; background: var(--mtt-bg-sunken); border-bottom: 1px solid var(--border); gap: 6px; }
 
@@ -653,7 +656,7 @@ silently 403-ing background saves and stopping updates from reaching others.
     {% for day_data in days_data %}
     <div class="mtt-day" data-day-id="{{ day_data.day.id }}">
         <div class="mtt-day-header" onclick="toggleDay({{ day_data.day.id }}, this)">
-            <span class="mtt-day-collapse {% if day_data.day.is_collapsed %}collapsed{% endif %}">▼</span>
+            <span class="mtt-day-collapse">▼</span>
             <span class="mtt-day-name">{{ day_data.day }}</span>
             <div class="mtt-day-stats">
                 {% with stats=day_data.day.get_all_mics_status %}
@@ -664,7 +667,7 @@ silently 403-ing background saves and stopping updates from reaching others.
             <div class="mtt-day-actions"></div>
         </div>
 
-        <div class="mtt-day-content" {% if day_data.day.is_collapsed %}style="display:none"{% endif %}>
+        <div class="mtt-day-content">
 
             {% for session in day_data.sessions %}
             <div class="mtt-session" data-session-id="{{ session.id }}">
@@ -1697,20 +1700,46 @@ function restoreMicTrackerState() {
 
 document.addEventListener('DOMContentLoaded', restoreMicTrackerState);
 
-function toggleDay(dayId, headerEl) {
-    const dayEl = headerEl.closest('.mtt-day');
+// A collapsed day is this user's view, kept in this browser. It used to be a
+// field on the shared day, so one person (a viewer included) collapsing a day
+// collapsed it for everyone.
+const DAY_COLLAPSE_KEY = 'mic-tracker-days-collapsed:{{ request.user.pk }}';
+
+function readCollapsedDays() {
+    try {
+        return JSON.parse(localStorage.getItem(DAY_COLLAPSE_KEY)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function setDayCollapsed(dayEl, collapsed) {
     const content = dayEl.querySelector('.mtt-day-content');
     const icon = dayEl.querySelector('.mtt-day-collapse');
     if (!content) return;
-    const isCollapsed = content.style.display === 'none';
-    content.style.display = isCollapsed ? '' : 'none';
-    if (icon) icon.classList.toggle('collapsed', !isCollapsed);
-    fetch('/audiopatch/api/toggle-day-collapse/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': getCsrfToken()},
-        body: 'day_id=' + dayId
-    });
+    content.style.display = collapsed ? 'none' : '';
+    if (icon) icon.classList.toggle('collapsed', collapsed);
 }
+
+function toggleDay(dayId, headerEl) {
+    const dayEl = headerEl.closest('.mtt-day');
+    const content = dayEl.querySelector('.mtt-day-content');
+    if (!content) return;
+    const collapsed = content.style.display !== 'none';
+    setDayCollapsed(dayEl, collapsed);
+    const days = readCollapsedDays();
+    if (collapsed) days[dayId] = true; else delete days[dayId];
+    try {
+        localStorage.setItem(DAY_COLLAPSE_KEY, JSON.stringify(days));
+    } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const days = readCollapsedDays();
+    document.querySelectorAll('.mtt-day[data-day-id]').forEach(dayEl => {
+        if (days[dayEl.dataset.dayId]) setDayCollapsed(dayEl, true);
+    });
+});
 
 // ── MIC'D toggles ─────────────────────────────────────────────
 // Every one of these used to hand-write classes and labels across the A1 row,

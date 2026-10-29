@@ -940,7 +940,8 @@
                 <input type="text" class="rack-divider-label"
                        value="{{ item.obj.label }}"
                        placeholder="— divider label —"
-                       data-divider-id="{{ item.obj.id }}">
+                       data-divider-id="{{ item.obj.id }}"{% if not can_edit %} readonly{% endif %}>
+                {% if can_edit %}
                 <div class="rack-divider-actions">
                     <button type="button" class="rack-divider-btn"
                             onclick="reorderDivider({{ item.obj.id }}, 'up')" title="Move up">▲</button>
@@ -949,6 +950,7 @@
                     <button type="button" class="rack-divider-btn delete"
                             onclick="deleteDivider({{ item.obj.id }})" title="Delete divider">✕</button>
                 </div>
+                {% endif %}
             </div>
             {% else %}
             {% with card=item.card %}
@@ -1227,7 +1229,8 @@
             {% endif %}
         {% endfor %}
 
-        {# ── '+ Add Amp' form for this location ───────────────── #}
+        {# ── '+ Add Amp' form for this location (not for viewers) ── #}
+        {% if can_edit %}
         <div class="add-amp-row">
             <label>+ Add Amp:</label>
             <select class="add-amp-model" data-loc-id="{{ group.location.id }}">
@@ -1242,6 +1245,7 @@
             <button type="button" class="add-divider-btn"
                     onclick="addDivider({{ group.location.id }})">+ Add Divider</button>
         </div>
+        {% endif %}
     </div>
 </div>
 {% endfor %}

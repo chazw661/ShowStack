@@ -1369,12 +1369,14 @@
     </div>
     <div class="nhm-header-right" id="nhm-agent-status">
       {% if has_project %}
+      {% if can_edit %}
       <button class="nhm-settings-btn" onclick="openSettings()" title="Settings" aria-label="Open monitor settings">&#x2699;</button>
       <button class="nhm-btn nhm-btn--primary" id="nhm-rescan-btn"
               onclick="requestRescan()" aria-label="Request network re-scan"
               {% if not monitor_running %}disabled title="Start the agent first"{% endif %}>
         Re-scan Network
       </button>
+      {% endif %}
       <span class="nhm-agent-indicator {% if monitor_running %}nhm-agent--connected{% else %}nhm-agent--disconnected{% endif %}"
             id="nhm-agent-indicator">
         <span class="nhm-dot {% if monitor_running %}nhm-dot--online{% else %}nhm-dot--unknown{% endif %}"></span>
@@ -1385,7 +1387,7 @@
   </div>
 
   <!-- ===== ADD DEVICE FORM ===== -->
-  {% if has_project %}
+  {% if has_project and can_edit %}
   <div class="nhm-add-device-bar" id="nhm-add-device-bar">
     <input type="text" class="nhm-input" id="nhm-add-ip"
            placeholder="IP Address (e.g. 192.168.0.239)"
@@ -1428,6 +1430,7 @@
       Unassigned: <span id="nhm-rollup-unassigned">{{ domain_counts.unknown.total|default:0 }}</span>
     </span>
     {% endif %}
+    {% if can_edit %}
     <div class="nhm-mode-toggle" role="group" aria-label="Show mode">
       <button class="nhm-mode-btn{% if show_mode == 'setup' %} nhm-mode-btn--active-amber{% endif %}"
               data-mode="setup" onclick="setShowMode('setup')" aria-pressed="{% if show_mode == 'setup' %}true{% else %}false{% endif %}">Setup</button>
@@ -1436,6 +1439,7 @@
       <button class="nhm-mode-btn{% if show_mode == 'wrap' %} nhm-mode-btn--active-amber{% endif %}"
               data-mode="wrap" onclick="setShowMode('wrap')" aria-pressed="{% if show_mode == 'wrap' %}true{% else %}false{% endif %}">Wrap</button>
     </div>
+    {% endif %}
   </div>
 
   <!-- ===== MODE BANNER ===== -->
@@ -1461,6 +1465,7 @@
       <div class="nhm-empty-body">
         Run the monitor agent on a laptop connected to your show network. The agent scans for devices and pushes status updates to this dashboard.
       </div>
+      {% if can_edit %}
       <div class="nhm-empty-code-block">
         <div class="nhm-empty-code-label">Run on show laptop:</div>
         <code class="nhm-empty-code" id="nhm-agent-cmd">python manage.py run_monitor --api-key {{ agent_api_key }} --scan --server https://showstack.io</code>
@@ -1469,6 +1474,9 @@
       <div class="nhm-empty-note">
         The API key is unique to this project. The agent needs <code>icmplib</code> and <code>netifaces</code> installed.
       </div>
+      {% else %}
+      <div class="nhm-empty-note">The project's owner or an editor starts the agent.</div>
+      {% endif %}
     </div>
 
     {% else %}
@@ -1526,11 +1534,13 @@
                   <span class="nhm-card-detail-value">{{ device.consecutive_failures }}</span>
                 </div>
                 {% endif %}
+                {% if can_edit %}
                 <button class="nhm-card-remove"
                         onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
                         aria-label="Remove {{ device.label }} from monitor">
                   Remove from monitor
                 </button>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -1596,11 +1606,13 @@
                   <span class="nhm-card-detail-label">Last Seen</span>
                   <span class="nhm-card-detail-value">{% if device.last_seen %}{{ device.last_seen|date:"H:i:s" }}{% else %}never{% endif %}</span>
                 </div>
+                {% if can_edit %}
                 <button class="nhm-card-remove"
                         onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
                         aria-label="Remove {{ device.label }} from monitor">
                   Remove from monitor
                 </button>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -1654,11 +1666,13 @@
                   <span class="nhm-card-detail-label">Status</span>
                   <span class="nhm-card-status-label">{{ device.last_known_state|default:'unknown' }}</span>
                 </div>
+                {% if can_edit %}
                 <button class="nhm-card-remove"
                         onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|escapejs }}')"
                         aria-label="Remove {{ device.label }} from monitor">
                   Remove from monitor
                 </button>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -1712,6 +1726,7 @@
                   <span class="nhm-card-detail-label">Status</span>
                   <span class="nhm-card-detail-value nhm-card-status-label">{{ device.last_known_state|default:"unknown" }}</span>
                 </div>
+                {% if can_edit %}
                 <div class="nhm-card-detail-row">
                   <span class="nhm-card-detail-label">Assign to</span>
                   <span class="nhm-card-detail-value">
@@ -1725,11 +1740,14 @@
                     </select>
                   </span>
                 </div>
+                {% endif %}
+                {% if can_edit %}
                 <a href="#" class="nhm-card-remove"
                    onclick="event.stopPropagation(); removeDevice({{ device.id }}, '{{ device.label|default:device.ip_address|escapejs }}')"
                    aria-label="Remove {{ device.label|default:device.ip_address }} from monitor">
                   Remove from monitor
                 </a>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -1780,6 +1798,7 @@
   </div><!-- /.nhm-content -->
 
   <!-- ===== SETTINGS PANEL ===== -->
+  {% if can_edit %}
   <div class="nhm-settings-backdrop" id="nhm-settings-backdrop" onclick="closeSettings()"></div>
   <div class="nhm-settings-panel" id="nhm-settings-panel" role="dialog" aria-modal="true" aria-label="Monitor Settings">
     <div class="nhm-settings-header">
@@ -1799,6 +1818,7 @@
       <div class="nhm-error" id="nhm-settings-save-error" style="margin-top:8px"></div>
     </div>
   </div>
+  {% endif %}
 
 </div><!-- /.nhm-root -->
 
@@ -1827,6 +1847,8 @@ function getCookie(name) {
     return cookieValue;
 }
 const csrfToken = getCookie('csrftoken');
+// A viewer is shown no controls that change the monitor; the server refuses them anyway.
+const CAN_EDIT = {{ can_edit|yesno:"true,false" }};
 
 // ===== AJAX POLLING =====
 let lastEventId = 0;
@@ -2564,7 +2586,7 @@ function closeSettings() {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         var panel = document.getElementById('nhm-settings-panel');
-        if (panel.classList.contains('nhm-settings-panel--open')) {
+        if (panel && panel.classList.contains('nhm-settings-panel--open')) {
             closeSettings();
         }
     }
@@ -2632,7 +2654,7 @@ function updateSwitchCards(switchPorts, snmpConfiguredFlag) {
         }
         if (!snmpConfigured) {
             summaryEl.textContent = '';
-            detailInner.innerHTML = '<div class="nhm-port-table--unconfigured"><h4>SNMP not configured</h4><p>Enter a community string in Monitor Settings to see port data.</p><button class="nhm-btn--ghost" onclick="openSettings()">Open Settings</button></div>';
+            detailInner.innerHTML = '<div class="nhm-port-table--unconfigured"><h4>SNMP not configured</h4><p>Enter a community string in Monitor Settings to see port data.</p>' + (CAN_EDIT ? '<button class="nhm-btn--ghost" onclick="openSettings()">Open Settings</button>' : '') + '</div>';
             return;
         }
         if (!ports || ports.length === 0) {
@@ -2643,7 +2665,7 @@ function updateSwitchCards(switchPorts, snmpConfiguredFlag) {
             } else {
                 summaryEl.textContent = '';
             }
-            detailInner.innerHTML = '<div class="nhm-port-table--unconfigured"><h4>SNMP unreachable</h4><p>Check the community string in Monitor Settings.</p><button class="nhm-btn--ghost" onclick="openSettings()">Open Settings</button></div>';
+            detailInner.innerHTML = '<div class="nhm-port-table--unconfigured"><h4>SNMP unreachable</h4><p>Check the community string in Monitor Settings.</p>' + (CAN_EDIT ? '<button class="nhm-btn--ghost" onclick="openSettings()">Open Settings</button>' : '') + '</div>';
             return;
         }
         var upCount = 0, errCount = 0;
@@ -2819,7 +2841,7 @@ function createDanteCard(dev, dd) {
                 '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Clock</span><span class="nhm-card-detail-value" id="nhm-clock-detail-' + dev.device_id + '">' + clockRole.charAt(0).toUpperCase() + clockRole.slice(1) + '</span></div>' +
                 '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Channels</span><span class="nhm-card-detail-value" id="nhm-channels-detail-' + dev.device_id + '">' + (chText ? 'TX: ' + dd.tx_channels + ' / RX: ' + dd.rx_channels : '&mdash;') + '</span></div>' +
                 '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Last Seen</span><span class="nhm-card-detail-value">' + (dev.last_seen ? new Date(dev.last_seen).toLocaleTimeString() : 'never') + '</span></div>' +
-                '<button class="nhm-card-remove" onclick="event.stopPropagation(); removeDevice(' + dev.device_id + ', \'' + (dev.label || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" aria-label="Remove ' + escapeHtml(dev.label || dev.ip) + ' from monitor">Remove from monitor</button>' +
+                (CAN_EDIT ? '<button class="nhm-card-remove" onclick="event.stopPropagation(); removeDevice(' + dev.device_id + ', \'' + (dev.label || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" aria-label="Remove ' + escapeHtml(dev.label || dev.ip) + ' from monitor">Remove from monitor</button>' : '') +
             '</div>' +
         '</div>';
 

@@ -206,9 +206,9 @@ class ShowStackAdminSite(admin.AdminSite):
             if not hasattr(request.user, 'userprofile'):
                 return False
             
-            # Paid and beta users can always access (they can create projects)
-            account_type = request.user.userprofile.account_type
-            if account_type in ['paid', 'beta']:
+            # Accounts that may create projects can always get in.
+            from planner.plans import can_create_projects
+            if can_create_projects(request.user):
                 return True
             
             # Free users need to be members of at least one project

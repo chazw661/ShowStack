@@ -38,7 +38,7 @@
              data-bp="{{ bp.bp_number }}"
              data-name="{{ bp.name.name|default:''|lower }}"
              data-position="{{ bp.position.name|default:''|lower }}"
-             onclick="toggleCheckout({{ bp.id }}, this)">
+             {% if can_edit %}onclick="toggleCheckout({{ bp.id }}, this)"{% endif %}>
             
             <div class="bp-number">{{ bp.bp_number }}</div>
             
@@ -83,7 +83,7 @@
              data-bp="{{ bp.bp_number }}"
              data-name="{{ bp.name.name|default:''|lower }}"
              data-position="{{ bp.position.name|default:''|lower }}"
-             onclick="toggleCheckout({{ bp.id }}, this)">
+             {% if can_edit %}onclick="toggleCheckout({{ bp.id }}, this)"{% endif %}>
             
             <div class="bp-number">{{ bp.bp_number }}</div>
             

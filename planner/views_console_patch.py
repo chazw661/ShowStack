@@ -10,7 +10,7 @@ can swap exactly those two in place -- the console form is never submitted, so
 unsaved edits elsewhere on the page survive. A refused write (409 stale/taken,
 400 choose, ...) carries the same fresh state, and nothing was written.
 
-Owner / editor of the CURRENT project only (``_edit_rights_required``, #121's
+Owner / editor of the CURRENT project only (``edit_rights_required``, #121's
 gate for JSON endpoints); a viewer gets 403 before anything is read. The
 channel and the port are looked up inside the current project, so another
 show's ids are 404. Rules: planner/utils/console_patch_edit.py.
@@ -23,11 +23,11 @@ from django.views.decorators.http import require_http_methods
 
 from planner.tenancy import current_project_or_none
 from planner.utils import console_patch_edit as edit
-from planner.views import _edit_rights_required
+from planner.tenancy import edit_rights_required
 
 
 @require_http_methods(['GET', 'POST'])
-@_edit_rights_required
+@edit_rights_required
 def console_patch(request, kind, pk):
     project = current_project_or_none(request)
     if project is None or kind not in edit.KINDS:

@@ -4,7 +4,7 @@
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
@@ -33,6 +33,8 @@ import json
 from datetime import datetime, timedelta  
 
 from planner.models import Project, ProjectMember
+from planner.tenancy import can_access_project, can_edit_project
+from planner.plans import can_create_projects
 from planner.utils import pa_cable_math
 from django.db import models
 
@@ -143,8 +145,27 @@ class BaseAdmin(admin.ModelAdmin):
     """
 
 
+def viewer_ok(action):
+    """Mark an admin action a project viewer may run: it changes nothing in
+    the project (an export) or writes only the viewer's own things (a personal
+    template). Every other action is offered to owners and editors only
+    (BaseEquipmentAdmin.get_actions)."""
+    action.viewer_ok = True
+    return action
+
+
 class BaseEquipmentAdmin(BaseAdmin):
     """Base admin for equipment models with project filtering and role-based permissions"""
+
+    def get_actions(self, request):
+        """A viewer gets only the actions marked viewer_ok. Django offers an
+        action without allowed_permissions to anyone who can see the list, so
+        a viewer could run assign-colour, duplicate or "clear all" on it."""
+        actions = super().get_actions(request)
+        if request.user.is_superuser or self._can_edit_current_project(request):
+            return actions
+        return {name: action for name, action in actions.items()
+                if getattr(action[0], 'viewer_ok', False)}
 
 
     def _get_user_role_for_project(self, request, project):
@@ -382,8 +403,27 @@ def duplicate_project_action(modeladmin, request, queryset):
         return
     
     project = queryset.first()
-   
-    
+
+    # The copy is a new project owned by whoever runs this, so it takes the
+    # right to create one: a free editor can't, whatever their role.
+    if not can_create_projects(request.user):
+        modeladmin.message_user(
+            request,
+            "Your account can't create projects, so it can't duplicate one.",
+            level=messages.ERROR
+        )
+        return
+
+    # A copy carries everything in the project, so it takes the same rights
+    # as changing it: its owner or an editor. A viewer is refused.
+    if not modeladmin.has_change_permission(request, project):
+        modeladmin.message_user(
+            request,
+            "Only the project's owner or an editor can duplicate it.",
+            level=messages.ERROR
+        )
+        return
+
     # If this is a POST request, we're coming back from the form
     if request.POST.get('confirm_duplicate'):
        
@@ -616,12 +656,9 @@ class ProjectAdmin(admin.ModelAdmin):
         )
     
     def has_add_permission(self, request):
-        """Paid/beta users can add projects"""
-        if request.user.is_superuser:
-            return True
-        if hasattr(request.user, 'userprofile'):
-            return request.user.userprofile.account_type in ['paid', 'beta', 'premium']
-        return False
+        """Paid/beta accounts only: a free account never creates a project.
+        ('premium' used to be listed too; it is not an account type.)"""
+        return can_create_projects(request.user)
 
     # View/change/delete used Django's model permissions, which only the
     # global Editor/Viewer groups carry -- and only people who have accepted
@@ -670,7 +707,18 @@ class ProjectAdmin(admin.ModelAdmin):
             return (request.user.is_authenticated
                     and Project.objects.filter(owner=request.user).exists())
         return obj.owner_id == request.user.id
-    
+
+    def get_actions(self, request):
+        """Duplicate is offered to someone who may create projects and owns
+        or edits one; the action itself checks the one selected."""
+        actions = super().get_actions(request)
+        if not can_create_projects(request.user) or not (
+                request.user.is_superuser or Project.objects.filter(
+                    Q(owner=request.user)
+                    | Q(projectmember__user=request.user, projectmember__role='editor')).exists()):
+            actions.pop('duplicate_project_action', None)
+        return actions
+
     def save_model(self, request, obj, form, change):
         """Set owner to current user if creating"""
         if not change:  # New project
@@ -679,61 +727,42 @@ class ProjectAdmin(admin.ModelAdmin):
 
 
 
-class BaseEquipmentInline(admin.TabularInline):
-    """Base inline class with viewer restrictions for equipment inlines"""
-    
-    def _user_is_viewer(self, request, obj):
-        """Check if user is a viewer for this object's project"""
-        if request.user.is_superuser:
-            return False
-        
+class ProjectRoleInlineMixin:
+    """An inline's rights come from the role on its parent's project, the
+    same rule BaseEquipmentAdmin applies to the parent.
+
+    Django's defaults ask the global Editor/Viewer groups instead, and those
+    say nothing about this project: a free account added as an editor through
+    a crew or the member admin is only in 'Viewer' (registration puts every
+    sign-up there), so its channel rows came up read-only and its edits were
+    silently dropped. An inline that defines one of these itself (channels
+    are auto-created, say) keeps its own answer.
+    """
+
+    def _inline_project(self, request, obj):
         if obj is None:
-            return False
-        
-        # Check if owner. `obj` is the parent; a MicSession has no `project`
-        # of its own, and the bare except that used to swallow that here
-        # treated every member, viewers included, as able to edit.
-        project = project_of(obj)
-        if project is None or project.owner == request.user:
-            return False
-        
-        # Check if viewer
-        try:
-            member = ProjectMember.objects.get(user=request.user, project=project)
-            return member.role == 'viewer'
-        except ProjectMember.DoesNotExist:
-            return True
-    
+            return getattr(request, 'current_project', None)
+        return project_of(obj)
+
+    def has_view_permission(self, request, obj=None):
+        return can_access_project(request.user, self._inline_project(request, obj))
+
     def has_add_permission(self, request, obj=None):
-        """Viewers cannot add"""
-        if request.user.is_superuser:
-            return True
-        
-        if self._user_is_viewer(request, obj):
-            return False
-        
-        return True
-    
+        return can_edit_project(request.user, self._inline_project(request, obj))
+
     def has_change_permission(self, request, obj=None):
-        """Viewers cannot change"""
-        if request.user.is_superuser:
-            return True
-            
-        if self._user_is_viewer(request, obj):
-            return False
-        
-        return True
-    
+        return can_edit_project(request.user, self._inline_project(request, obj))
+
     def has_delete_permission(self, request, obj=None):
-        """Viewers cannot delete"""
-        if request.user.is_superuser:
-            return True
-            
-        if self._user_is_viewer(request, obj):
-            return False
-        
-        return True
-    
+        return can_edit_project(request.user, self._inline_project(request, obj))
+
+
+class BaseEquipmentInline(ProjectRoleInlineMixin, admin.TabularInline):
+    """Base inline class with viewer restrictions for equipment inlines"""
+
+    def _user_is_viewer(self, request, obj):
+        return not can_edit_project(request.user, self._inline_project(request, obj))
+
     def get_max_num(self, request, obj=None, **kwargs):
         """Prevent adding new rows for viewers"""
         if self._user_is_viewer(request, obj):
@@ -832,7 +861,7 @@ class PatchColumnMixin:
         })
 
 
-class ConsoleInputInline(PatchColumnMixin, admin.TabularInline):
+class ConsoleInputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.TabularInline):
     model = ConsoleInput
     patch_after = 'source_b'
     form = ConsoleInputForm
@@ -908,7 +937,7 @@ class ConsoleInputInline(PatchColumnMixin, admin.TabularInline):
        
 
 
-class ConsoleAuxOutputInline(PatchColumnMixin, admin.TabularInline):
+class ConsoleAuxOutputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.TabularInline):
     model = ConsoleAuxOutput
     form = ConsoleAuxOutputForm
     extra = 0
@@ -949,7 +978,7 @@ class ConsoleAuxOutputInline(PatchColumnMixin, admin.TabularInline):
         return PrepopulatedFormSet
 
 
-class ConsoleMatrixOutputInline(PatchColumnMixin, admin.TabularInline):
+class ConsoleMatrixOutputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.TabularInline):
     model = ConsoleMatrixOutput
     form = ConsoleMatrixOutputForm
     extra = 0
@@ -990,7 +1019,7 @@ class ConsoleMatrixOutputInline(PatchColumnMixin, admin.TabularInline):
 
         return PrepopulatedFormSet
     
-class ConsoleStereoOutputInline(PatchColumnMixin, admin.TabularInline):
+class ConsoleStereoOutputInline(ProjectRoleInlineMixin, PatchColumnMixin, admin.TabularInline):
     model = ConsoleStereoOutput
     form = ConsoleStereoOutputForm
     extra = 3  # Changed from 4 to 3
@@ -1320,6 +1349,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
             'my_templates_url': reverse('admin:planner_showtemplate_changelist'),
         })
 
+    @viewer_ok
     @admin.action(description="Save selected console as template")
     def save_as_template(self, request, queryset):
         """Snapshot exactly one console into the caller's "My templates".
@@ -1383,6 +1413,7 @@ class ConsoleAdmin(BaseEquipmentAdmin):
 
 
     
+    @viewer_ok
     def export_yamaha_rivage_csvs(self, request, queryset):
         """Admin action to export Yamaha CSVs for selected consoles"""
         if queryset.count() == 1:
@@ -1893,7 +1924,7 @@ class AmpChannelInlineForm(forms.ModelForm):
                 self.fields['analog_input'].widget = forms.HiddenInput()
 
 
-class AmpChannelInline(admin.TabularInline):
+class AmpChannelInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = AmpChannel
     form = AmpChannelInlineForm
     extra = 0
@@ -2797,6 +2828,13 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
     def configure_view(self, request, pk):
         """Redirect to appropriate configuration based on device type"""
         obj = self.get_object(request, pk)
+        if obj is None:  # not in the current project
+            raise Http404("No such processor")
+        model = {'P1': P1Processor, 'GALAXY': GalaxyProcessor}.get(obj.device_type)
+        # Opening an existing configuration is a read; creating it is a write.
+        if model is not None and not self.has_change_permission(request, obj) \
+                and not model.objects.filter(system_processor=obj).exists():
+            raise PermissionDenied
         if obj.device_type == 'P1':
             p1, created = P1Processor.objects.get_or_create(system_processor=obj)
             # If newly created and no channels exist, create them (same as P1ProcessorAdmin._create_default_channels)
@@ -2893,7 +2931,7 @@ class SystemProcessorAdmin(BaseEquipmentAdmin):
 
 # ========== P1 Processor Admin ==========
 
-class P1InputInline(admin.TabularInline):
+class P1InputInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = P1Input
     form = P1InputInlineForm
     extra = 0
@@ -2910,7 +2948,7 @@ class P1InputInline(admin.TabularInline):
         return qs.order_by('input_type', 'channel_number')
     
 
-class P1OutputInline(admin.TabularInline):
+class P1OutputInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = P1Output
     form = P1OutputInlineForm
     extra = 0
@@ -3141,6 +3179,7 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
         return obj.outputs.count()
     output_count.short_description = 'Outputs'
     
+    @viewer_ok
     def export_configurations(self, request, queryset):
         """Export selected P1 configurations"""
         if queryset.count() == 1:
@@ -3187,7 +3226,7 @@ class P1ProcessorAdmin(BaseEquipmentAdmin):
 
         # ========== GALAXY Processor Admin ==========
 
-class GalaxyInputInline(admin.TabularInline):
+class GalaxyInputInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = GalaxyInput
     form = GalaxyInputInlineForm
     extra = 0
@@ -3204,7 +3243,7 @@ class GalaxyInputInline(admin.TabularInline):
         return qs.order_by('input_type', 'channel_number')
     
 
-class GalaxyOutputInline(admin.TabularInline):
+class GalaxyOutputInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = GalaxyOutput
     form = GalaxyOutputInlineForm
     extra = 0
@@ -3429,6 +3468,7 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
         return obj.outputs.count()
     output_count.short_description = 'Outputs'
     
+    @viewer_ok
     def export_configurations(self, request, queryset):
         """Export selected GALAXY configurations"""
         if queryset.count() == 1:
@@ -3499,7 +3539,7 @@ class PACableInline(admin.TabularInline):
             'all': ('planner/css/pa_cable_admin.css',)
         }
 
-class PAFanOutInline(admin.TabularInline):
+class PAFanOutInline(ProjectRoleInlineMixin, admin.TabularInline):
         """Inline for managing multiple fan outs per cable run"""
         model = PAFanOut
         extra = 1
@@ -3595,7 +3635,7 @@ class PAZoneAdmin(BaseEquipmentAdmin):
 
 # PA Cable Admin
 
-class PAFanOutInline(admin.TabularInline):
+class PAFanOutInline(ProjectRoleInlineMixin, admin.TabularInline):
     """Inline for managing multiple fan outs per cable run"""
     model = PAFanOut
     extra = 1
@@ -3613,7 +3653,7 @@ class PAFanOutInline(admin.TabularInline):
         return formset
 
 
-class PAFanOutExtensionInline(admin.TabularInline):
+class PAFanOutExtensionInline(ProjectRoleInlineMixin, admin.TabularInline):
     """Issue #23: extensions live in their own table so a fan-out can have
     multiple. The fan_out dropdown is scoped to the current cable's fan-outs
     so the engineer doesn't see (or accidentally pick) fan-outs from a
@@ -3643,7 +3683,7 @@ class PAFanOutExtensionInline(admin.TabularInline):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
-class PACouplerInline(admin.TabularInline):
+class PACouplerInline(ProjectRoleInlineMixin, admin.TabularInline):
     """Issue #23 follow-up: couplers are their own row type on a cable run.
 
     Engineers used to pick coupler types from the PAFanOut dropdown, which
@@ -4111,6 +4151,7 @@ class PACableAdmin(BaseEquipmentAdmin):
 
         return response
     
+    @viewer_ok
     def export_cable_schedule(self, request, queryset):
         """Export cable schedule to CSV with full calculations"""
         response = HttpResponse(content_type='text/csv')
@@ -4526,9 +4567,10 @@ class CommPositionAdmin(BaseEquipmentAdmin):
         """Allow populate action to work on empty list"""
         
         # Special handling ONLY for populate action
-        if 'action' in request.POST and request.POST['action'] == 'populate_common_positions':
-            action = self.get_actions(request)['populate_common_positions'][0]
-            action(self, request, self.get_queryset(request))  # Use actual queryset
+        # (only when offered: a viewer's actions don't include it)
+        offered = self.get_actions(request).get('populate_common_positions')
+        if request.POST.get('action') == 'populate_common_positions' and offered:
+            offered[0](self, request, self.get_queryset(request))  # Use actual queryset
             return HttpResponseRedirect(request.get_full_path())
         
         # For all other actions (including delete), use normal behavior
@@ -4538,8 +4580,9 @@ class CommPositionAdmin(BaseEquipmentAdmin):
     
     def get_actions(self, request):
         actions = super().get_actions(request)
-        # Ensure our populate action is always available
-        if 'populate_common_positions' not in actions:
+        # Ensure our populate action is always available -- to those who
+        # may edit; a viewer's list was filtered by the base admin.
+        if 'populate_common_positions' not in actions and self._can_edit_current_project(request):
             actions['populate_common_positions'] = (
                 populate_common_positions,
                 'populate_common_positions',
@@ -4593,8 +4636,10 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         return custom_urls + urls
     
     def import_csv_view(self, request):
-        """Redirect to the import view."""
+        """Redirect to the import view (which needs edit rights too)."""
         from django.shortcuts import redirect
+        if not self._can_edit_current_project(request):
+            raise PermissionDenied
     
         return redirect('planner:import_comm_crew_names_csv')
     
@@ -4935,7 +4980,7 @@ clear_all_beltpacks.short_description = '⚠️ DELETE all belt packs'
 
 
 
-class CommBeltPackChannelInline(admin.TabularInline):
+class CommBeltPackChannelInline(ProjectRoleInlineMixin, admin.TabularInline):
     """Inline for managing belt pack channels"""
     model = CommBeltPackChannel
     # Named here rather than on the model: it is what this section is called
@@ -4968,24 +5013,7 @@ class CommBeltPackChannelInline(admin.TabularInline):
         )
     delete_x.short_description = ''
 
-    def has_add_permission(self, request, obj=None):
-        """Allow users with change permission on parent to add channels"""
-        if request.user.is_superuser:
-            return True
-        # Check if user has permission to edit the parent belt pack
-        return request.user.has_perm('planner.change_commbeltpack')
-    
-    def has_change_permission(self, request, obj=None):
-        """Allow users with change permission on parent to edit channels"""
-        if request.user.is_superuser:
-            return True
-        return request.user.has_perm('planner.change_commbeltpack')
-    
-    def has_delete_permission(self, request, obj=None):
-        """Allow users with change permission on parent to delete channels"""
-        if request.user.is_superuser:
-            return True
-        return request.user.has_perm('planner.change_commbeltpack')
+    # Rights: ProjectRoleInlineMixin (the role on the belt pack's project).
     
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -5977,7 +6005,9 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         
         if request.method != 'POST':
             return JsonResponse({'error': 'POST required'}, status=405)
-        
+        if not self._can_edit_current_project(request):
+            return JsonResponse({'error': 'Read-only access.'}, status=403)
+
         try:
             data = json.loads(request.body)
             beltpack_channel_id = data.get('beltpack_channel_id')
@@ -6399,7 +6429,7 @@ class ShowDayAdminForm(forms.ModelForm):
     """
     class Meta:
         model = ShowDay
-        fields = ['date', 'name', 'is_collapsed', 'order']
+        fields = ['date', 'name', 'order']
 
     def clean(self):
         cleaned = super().clean()
@@ -6911,7 +6941,6 @@ urlpatterns = [
     path('api/mic/update/', views.update_mic_assignment, name='update_mic_assignment'),
     path('api/mic/bulk-update/', views.bulk_update_mics, name='bulk_update_mics'),
     path('api/session/duplicate/', views.duplicate_session, name='duplicate_session'),
-    path('api/day/toggle/', views.toggle_day_collapse, name='toggle_day_collapse'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
 ]
 
@@ -7083,7 +7112,7 @@ class AmplifierAssignmentInlineForm(forms.ModelForm):
                 field.disabled = True
 
 
-class AmplifierAssignmentInline(admin.TabularInline):
+class AmplifierAssignmentInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = AmplifierAssignment
     form = AmplifierAssignmentInlineForm
     extra = 1
@@ -7520,15 +7549,12 @@ class AudioChecklistAdmin(BaseEquipmentAdmin):
         return False
     
     def changelist_view(self, request, extra_context=None):
-        """Show our custom checklist instead of model list"""
-        context = {
-            'title': 'Audio Production Checklist',
-            'cl': self,
-            'opts': self.model._meta,
-            'has_filters': False,
-            'has_add_permission': False,
-        }
-        return render(request, 'admin/planner/audio_checklist.html', context)
+        """Show our custom checklist instead of model list: the same page as
+        /audiopatch/audiochecklist/. Rendering the template here as well left
+        out can_edit, so the sidebar's link showed every user a read-only
+        checklist."""
+        from planner.views import audio_checklist_view
+        return audio_checklist_view(request)
     
 
 
@@ -7556,14 +7582,14 @@ class AudioChecklistAdmin(BaseEquipmentAdmin):
     #--------Prediction Module-----
 
 
-class SpeakerCabinetInline(admin.TabularInline):
+class SpeakerCabinetInline(ProjectRoleInlineMixin, admin.TabularInline):
     model = SpeakerCabinet
     extra = 0
     fields = ['position_number', 'speaker_model', 'angle_to_next', 'site_angle', 
               'panflex_setting', 'top_z', 'bottom_z']
     ordering = ['position_number']
 
-class SpeakerArrayInline(admin.StackedInline):
+class SpeakerArrayInline(ProjectRoleInlineMixin, admin.StackedInline):
     model = SpeakerArray
     extra = 0
     fields = (

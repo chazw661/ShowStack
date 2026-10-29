@@ -47,7 +47,7 @@ def ensure_user_profile(sender, instance, created, **kwargs):
 # Migration 0202 does the same for accounts that already exist.
 # ──────────────────────────────────────────────────────────────────
 
-STAFF_ACCOUNT_TYPES = ('paid', 'beta')
+from planner.plans import CREATOR_ACCOUNT_TYPES as STAFF_ACCOUNT_TYPES
 
 
 def _grant_staff(user):

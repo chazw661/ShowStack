@@ -120,21 +120,14 @@ def dashboard(request):
         project_id__in=excluded_project_ids
     ).select_related('project', 'invited_by').order_by('-invited_at')
 
-        # Check if user can create projects
-    # Superusers, paid, and beta accounts can create projects
-    can_create_projects = False
-    if user.is_superuser:
-        can_create_projects = True
-    elif hasattr(user, 'userprofile'):
-        account_type = user.userprofile.account_type
-        can_create_projects = account_type in ['paid', 'beta']
-    
+    from planner.plans import account_type, can_create_projects
+
     context = {
         'owned_projects': owned_projects,
         'member_projects': member_projects,
         'pending_invitations': pending_invitations,
-        'can_create_projects': can_create_projects,
-        'account_type': user.userprofile.account_type if hasattr(user, 'userprofile') else 'free',
+        'can_create_projects': can_create_projects(user),
+        'account_type': account_type(user),
     }
     
     return render(request, 'accounts/dashboard.html', context)

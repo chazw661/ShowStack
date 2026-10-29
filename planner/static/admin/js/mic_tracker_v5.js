@@ -119,39 +119,6 @@ async function bulkUpdate(sessionId, action) {
     }
 }
 
-// Toggle day collapse/expand
-async function toggleDay(dayId) {
-    const daySection = document.querySelector(`[data-day-id="${dayId}"]`);
-    const dayContent = daySection.querySelector('.day-content');
-    const collapseIcon = daySection.querySelector('.collapse-icon');
-    const isCollapsed = daySection.dataset.collapsed === 'true';
-    
-    if (isCollapsed) {
-        dayContent.style.display = 'block';
-        collapseIcon.textContent = '▼';
-        daySection.dataset.collapsed = 'false';
-    } else {
-        dayContent.style.display = 'none';
-        collapseIcon.textContent = '▶';
-        daySection.dataset.collapsed = 'true';
-    }
-    
-    try {
-        await fetch('/audiopatch/api/day/toggle/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrftoken
-            },
-            body: JSON.stringify({
-                day_id: dayId
-            })
-        });
-    } catch (error) {
-        console.error('Error saving day state:', error);
-    }
-}
-
 // Expand all days
 function expandAllDays() {
     document.querySelectorAll('.day-section').forEach(daySection => {
