@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Comm Channel Matrix{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
+
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'css/surfaces.css' %}">
+<style>
+    .comm-matrix-wrap { padding: 20px; background: var(--ss-surface); color: #fff; overflow-x: auto; }
+    .comm-matrix-wrap h1 { color: #fff; margin: 0 0 4px; font-size: 24px; }
+    .comm-matrix-wrap .hint { color: #ccc; margin: 0 0 16px; font-size: 13px; }
+    .comm-matrix { border-collapse: collapse; font-size: 13px; }
+    .comm-matrix th, .comm-matrix td { border: 1px solid #333; padding: 6px 8px; text-align: center; white-space: nowrap; }
+    .comm-matrix th { background: #222; color: #fff; }
+    .comm-matrix td.bp { text-align: left; }
+    .comm-matrix td.on { background: #1d4d2b; color: #fff; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="comm-matrix-wrap">
+    <h1>Comm Channel Matrix</h1>
+    <p class="hint">Each cell shows the belt pack key that carries the channel.</p>
+    {% if matrix and channels %}
+    <table class="comm-matrix">
+        <thead>
+            <tr>
+                <th>BP #</th>
+                <th>Position</th>
+                <th>Name</th>
+                {% for channel in channels %}<th title="{{ channel.name }}">{{ channel.abbreviation|default:channel.name }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in matrix %}
+            <tr>
+                <td class="bp">{{ row.bp.get_system_type_display }} {{ row.bp.bp_number }}</td>
+                <td class="bp">{{ row.bp.position|default:"" }}</td>
+                <td class="bp">{{ row.bp.name|default:"" }}</td>
+                {% for key in row.channels %}<td{% if key %} class="on"{% endif %}>{{ key }}</td>{% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No belt packs or channels in this project yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
