@@ -15,7 +15,7 @@ import re
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
@@ -26,6 +26,12 @@ from planner.models import (
 from planner.utils.console_patch import (
     AMBIGUOUS, BY_NAME, LINKED, PortIndex, compress,
 )
+
+# Static files by their own names, whatever is in staticfiles/.
+PLAIN_STATIC = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
 
 
 class PatchBase(TestCase):
@@ -292,6 +298,10 @@ class ConsolePageTests(PatchBase):
     def url(self, console):
         return reverse('admin:planner_console_change', args=[console.pk])
 
+    # Plain storage: with the manifest one these names come out hashed
+    # whenever a local `collectstatic` has put the file in staticfiles/, so
+    # the test would depend on a gitignored build folder.
+    @override_settings(STORAGES=PLAIN_STATIC)
     def test_page_renders_feeds_marks_and_free_ports(self):
         host = self.ch(self.foh, 1, 'Host Mic')
         self.ch(self.foh, 2, 'Lectern', source_b='Lectern B')
