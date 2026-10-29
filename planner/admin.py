@@ -3539,22 +3539,6 @@ class PACableInline(admin.TabularInline):
             'all': ('planner/css/pa_cable_admin.css',)
         }
 
-class PAFanOutInline(ProjectRoleInlineMixin, admin.TabularInline):
-        """Inline for managing multiple fan outs per cable run"""
-        model = PAFanOut
-        extra = 1
-        fields = ['fan_out_type', 'quantity']
-
-        def get_formset(self, request, obj=None, **kwargs):
-            formset = super().get_formset(request, obj, **kwargs)
-            formset.form.base_fields['fan_out_type'].widget.attrs.update({
-                'style': 'width: 150px;'
-            })
-            formset.form.base_fields['quantity'].widget.attrs.update({
-                'style': 'width: 80px;',
-                'class': 'fan-out-quantity'
-            })
-            return formset
 
 
 
@@ -4539,8 +4523,6 @@ def populate_common_positions(modeladmin, request, queryset):
     
     modeladmin.message_user(request, "Common positions populated successfully.")
 
-def has_module_permission(self, request):
-    return False
 
 
 class CommPositionAdmin(BaseEquipmentAdmin):
@@ -4614,8 +4596,6 @@ class CommPositionAdmin(BaseEquipmentAdmin):
             'all': ('admin/css/comm_position_buttons.css',)
         }
     
-def has_module_permission(self, request):
-    return False   
 
 
 # Comm Crew Name Admin
@@ -4715,8 +4695,6 @@ class CommCrewNameAdmin(BaseEquipmentAdmin):
         }
 
 
-def has_module_permission(self, request):
-        return False
 
 
 # Custom form for CommBeltPack with dynamic dropdowns
@@ -7391,9 +7369,11 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         return qs.none()
     
     def save_model(self, request, obj, form, change):
-        """Auto-assign current project"""
-        if not change and hasattr(request, 'current_project') and request.current_project:
-            obj.project = request.current_project
+        """Auto-assign current project, and record who created the plan"""
+        if not change:
+            obj.created_by = request.user
+            if hasattr(request, 'current_project') and request.current_project:
+                obj.project = request.current_project
         super().save_model(request, obj, form, change)
 
 

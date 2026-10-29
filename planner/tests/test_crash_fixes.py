@@ -12,6 +12,10 @@ functions that were defined twice.
   lost their dead copies too (the live, last ones are kept).
 - /audiopatch/checklist/ rendered a template that does not exist; the
   route is gone (its URL name already pointed at audiochecklist/).
+- admin.py's module level had a dead PAFanOutInline copy and three unused
+  has_module_permission functions.
+- A power plan made in the admin now records created_by, as a generated
+  one already did.
 
 Run with::
 
@@ -25,6 +29,7 @@ import io
 import json
 from pathlib import Path
 
+from django.contrib.auth.models import User
 from django.urls import reverse
 
 from planner.models import (
@@ -170,15 +175,19 @@ class FormerDuplicateViewTests(WriteGuardBase):
 
 class NoDuplicateDefinitionsTests(WriteGuardBase):
 
-    def test_views_defines_each_function_once(self):
+    def test_modules_define_each_name_once(self):
         # A second top-level def silently replaces the first; the first one's
         # fixes then never run (dmic_and_rotate, get_assignment_details).
-        path = Path(__file__).resolve().parents[1] / 'views.py'
-        seen, twice = set(), set()
-        for node in ast.parse(path.read_text()).body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                (twice if node.name in seen else seen).add(node.name)
-        self.assertEqual(set(), twice)
+        planner = Path(__file__).resolve().parents[1]
+        twice = []
+        for name in ('admin.py', 'views.py'):
+            seen = set()
+            for node in ast.parse((planner / name).read_text()).body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if node.name in seen:
+                        twice.append(f'{name} {node.name} (line {node.lineno})')
+                    seen.add(node.name)
+        self.assertEqual([], twice)
 
     def test_classes_define_each_method_once(self):
         # Same in a class body: the last def wins. AudioChecklistAdmin's
@@ -206,3 +215,32 @@ class DeadChecklistRouteTests(WriteGuardBase):
         # name it shared already reversed to audiochecklist/.
         self.assertEqual('/audiopatch/audiochecklist/', reverse('planner:audio_checklist'))
         self.assertEqual(404, self.client.get('/audiopatch/checklist/').status_code)
+
+
+class PowerPlanCreatedByTests(WriteGuardBase):
+    """A new plan records who made it, by either path; editing keeps it."""
+
+    def test_admin_create_sets_it_and_an_edit_keeps_it(self):
+        from django.test import RequestFactory
+        from planner.admin import PowerDistributionPlanAdmin
+        from planner.admin_site import showstack_admin_site
+        from planner.models import PowerDistributionPlan
+        admin = PowerDistributionPlanAdmin(PowerDistributionPlan, showstack_admin_site)
+        request = RequestFactory().post('/')
+        request.user, request.current_project = self.owner, self.project
+        plan = PowerDistributionPlan(venue_name='Hall')
+        admin.save_model(request, plan, form=None, change=False)
+        plan.refresh_from_db()
+        self.assertEqual((self.owner, self.project), (plan.created_by, plan.project))
+        editor = User.objects.create_user('pp_editor', is_staff=True)
+        request.user = editor
+        admin.save_model(request, plan, form=None, change=True)
+        plan.refresh_from_db()
+        self.assertEqual(self.owner, plan.created_by)
+
+    def test_generate_from_amps_sets_it(self):
+        from planner.models import PowerDistributionPlan
+        self.login(self.owner, self.project)
+        self.client.post(reverse('planner:generate_power_plan'))
+        plan = PowerDistributionPlan.objects.get(project=self.project, generated_at__isnull=False)
+        self.assertEqual(self.owner, plan.created_by)
