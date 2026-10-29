@@ -373,8 +373,28 @@
         border: 1px solid var(--ss-field-border) !important;
     }
     #content .task-input:hover:not(:disabled),
-    #content .stage-select:hover, #content .status-select:hover {
+    #content .stage-select:hover:not(:disabled), #content .status-select:hover:not(:disabled) {
         border-color: var(--ss-field-border-hover) !important;
+    }
+    /* A viewer's fields are disabled (applyReadOnly). The field rules above
+       are !important, so without these they look exactly like editable ones.
+       Dimmed, dashed and no dropdown arrow; status fills stay readable. */
+    #content .task-input:disabled,
+    #content .stage-select:disabled, #content .status-select:disabled {
+        opacity: 0.55 !important;
+        border-style: dashed !important;
+        cursor: not-allowed !important;
+        -webkit-appearance: none !important;
+        appearance: none !important;
+    }
+    .read-only-note {
+        display: inline-block;
+        padding: 4px 10px;
+        border: 1px dashed var(--ss-field-border);
+        border-radius: 4px;
+        color: var(--ss-field-text);
+        opacity: 0.8;
+        font-size: 13px;
     }
     #content .task-input:focus, #content .stage-select:focus, #content .status-select:focus {
         border-color: var(--ss-accent) !important;
@@ -422,7 +442,7 @@
         <button class="btn" onclick="exportToCSV()">📊 Export to CSV</button>
         <button class="btn" onclick="window.print()">🖨️ Print</button>
         <button class="btn" onclick="openSaveTemplateModal()" style="background:#1a3a5a;border-color:#4a9eff;color:#4a9eff;">💾 Save as Template</button>
-        {% if can_edit %}<button class="btn" onclick="openLoadTemplateModal()" style="background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;">📂 Load Template</button>{% endif %}
+        {% if can_edit %}<button class="btn" onclick="openLoadTemplateModal()" style="background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;">📂 Load Template</button>{% else %}<span class="read-only-note">View only: you're a viewer on this project</span>{% endif %}
     </div>
 
     <div class="checklist-tabs" id="checklistTabs">

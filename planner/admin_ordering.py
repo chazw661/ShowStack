@@ -1,7 +1,7 @@
 # planner/admin_ordering.py
 # Updated to hide child models for viewers
 from django.contrib import admin
-from planner.models import ProjectMember, Project
+from planner.tenancy import can_access_project, can_edit_project
 from planner.admin_site import showstack_admin_site
 
 # Store the original get_app_list from showstack_admin_site
@@ -12,26 +12,15 @@ def ordered_get_app_list(request, app_label=None):
     app_list = original_get_app_list(request, app_label)
     app_list = [app for app in app_list if app['app_label'] != 'admin_interface']
     
-   # Check if user is a viewer (no editor/owner roles)
-    is_viewer = False
-    if request.user.is_authenticated and not request.user.is_superuser:
-        viewer_memberships = ProjectMember.objects.filter(
-            user=request.user,
-            role='viewer'
-        )
-        
-        if viewer_memberships.exists():
-            editor_owner_memberships = ProjectMember.objects.filter(
-                user=request.user,
-                role='editor'
-            ).exists()
-            
-            owns_projects = Project.objects.filter(owner=request.user).exists()
-            
-            # If ONLY viewer (no editor roles or owned projects), set read-only
-            if not editor_owner_memberships and not owns_projects:
-                is_viewer = True
-    
+    # A viewer on the CURRENT project: they can open it but not change it.
+    # The role is per project; being a viewer somewhere else, or an editor
+    # somewhere else, says nothing about the project in hand.
+    project = getattr(request, 'current_project', None)
+    is_viewer = (
+        can_access_project(request.user, project)
+        and not can_edit_project(request.user, project)
+    )
+
     # Define child models that should be hidden from viewers
     child_models = {
         'pafanout',           # Child of PA Cable Entries
