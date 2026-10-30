@@ -882,7 +882,7 @@ class OwnProjectStillWorksTests(TenantIsolationBase):
         self.assertEqual([], blocked, '\n'.join(blocked))
 
     def test_login_and_register_are_still_reachable_logged_out(self):
-        for name in ('login', 'register'):
+        for name in ('login', 'marketing:register'):
             resp = self.anon.get(reverse(name))
             self.assertEqual(
                 200, resp.status_code,

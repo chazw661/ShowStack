@@ -633,6 +633,14 @@ class ProjectAdmin(admin.ModelAdmin):
         }),
     )
 
+    def get_fieldsets(self, request, obj=None):
+        # Only the owner brings people onto a project, so only the owner sees
+        # its shareable access-request link.
+        fieldsets = super().get_fieldsets(request, obj)
+        if request.user.is_superuser or (obj is not None and obj.owner_id == request.user.id):
+            return fieldsets
+        return [fs for fs in fieldsets if fs[0] != 'Access & Sharing']
+
     class Media:
         css = {
             'all': ('admin/css/project_list_buttons.css',)

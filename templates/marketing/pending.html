@@ -1,7 +1,7 @@
 {% extends 'marketing/base_marketing.html' %}
 {% load static %}
 
-{% block title %}Account Pending - ShowStack{% endblock %}
+{% block title %}Registered - ShowStack{% endblock %}
 
 {% block content %}
 <section class="auth-section">
@@ -12,15 +12,14 @@
                     <span class="brand-icon">S</span>
                 </a>
                 <h1>You're registered!</h1>
-                <p>Your account is pending approval. You'll receive an email at the address you registered with once your account has been activated.</p>
+                <p>Your ShowStack account is ready.</p>
             </div>
             <div style="margin: 30px 0; padding: 24px; background: #f7f9fc; border-left: 4px solid #4a9eff; border-radius: 0 6px 6px 0; text-align: left;">
-                <p style="margin: 0; color: #444; font-size: 0.95rem;"><strong>What happens next?</strong><br><br>
-                ShowStack is currently in beta. Our team will review your registration and activate your account shortly. If you have questions, email us at <a href="mailto:showstackapp@gmail.com">showstackapp@gmail.com</a>.</p>
+                <p style="margin: 0; color: #444; font-size: 0.95rem;"><strong>Joining a project</strong><br><br>
+                To join a project, ask its owner to send you an invitation. When it arrives, open the link in the email and log in to accept it.</p>
             </div>
-            <a href="{% url 'marketing:home' %}" class="btn btn-primary">Back to Home</a>
+            <a href="{% url 'marketing:login' %}" class="btn btn-primary">Log in</a>
         </div>
     </div>
 </section>
 {% endblock %}
-EOF

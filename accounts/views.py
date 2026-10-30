@@ -1,12 +1,11 @@
 import logging
 
 from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_not_required, login_required
 from django.contrib import messages
 from django.contrib.auth.views import LoginView
-from django.urls import reverse_lazy
-from .forms import RegistrationForm
+from django.urls import reverse, reverse_lazy
 from planner.models import Project, ProjectMember
 from django.shortcuts import get_object_or_404
 from django.core.mail import send_mail
@@ -15,53 +14,8 @@ from planner.models import Invitation
 from .invitation_forms import InviteUserForm
 from django.contrib.auth.models import Group, User
 from django.db import transaction
-from planner.crew import claim_pending_crew_memberships
 
 logger = logging.getLogger(__name__)
-
-@login_not_required
-def register(request):
-    """
-    Public registration view - creates free accounts.
-    Free users can accept invitations but cannot create projects.
-    """
-    if request.user.is_authenticated:
-        return redirect('dashboard')
-    
-    if request.method == 'POST':
-        form = RegistrationForm(request.POST)
-        if form.is_valid():
-            # D-11: form.save() + auto-claim are atomic. If claim raises, the
-            # User row rolls back so the user can re-register cleanly.
-            with transaction.atomic():
-                user = form.save()
-                # D-07: inline call (no Django signals). Rebinds pending CrewMember
-                # rows and materializes ProjectMember rows for every project the
-                # crew has been bulk-added to (D-09 via CrewProjectAdd).
-                new_pms = claim_pending_crew_memberships(user)
-
-            # D-10/D-11: email sends happen OUTSIDE the atomic block — a Resend
-            # hiccup must not roll back the user account. Log + swallow per row.
-            for pm in new_pms:
-                try:
-                    send_crew_added_email(pm, request)
-                except Exception:
-                    logger.exception(
-                        "Crew-added email failed on register for %s",
-                        getattr(pm.user, 'email', '<unknown>'),
-                    )
-
-            messages.success(
-                request,
-                f'Welcome to ShowStack, {user.first_name}! Your free account has been created. '
-                'You can now accept project invitations from other users.'
-            )
-            return redirect('login')
-    else:
-        form = RegistrationForm()
-    
-    return render(request, 'accounts/register.html', {'form': form})
-
 
 class ShowStackLoginView(LoginView):
     """
@@ -282,20 +236,7 @@ def accept_invitation(request, token):
         return redirect('logout')
     
     # Accept the invitation
-    if invitation.accept(request.user):
-
-    # Auto-assign user to appropriate permission group
-        if invitation.role == 'editor':
-            editor_group, _ = Group.objects.get_or_create(name='Editor')
-            request.user.groups.add(editor_group)
-        elif invitation.role == 'viewer':
-            viewer_group, _ = Group.objects.get_or_create(name='Viewer')
-            request.user.groups.add(viewer_group)
-        
-        # Make user staff so they can access admin
-        if not request.user.is_staff:
-            request.user.is_staff = True
-            request.user.save()    
+    if accept_invitation_for(request.user, invitation):
         messages.success(
             request,
             f'Welcome to {invitation.project.name}! You have been added as {invitation.get_role_display()}.'
@@ -304,6 +245,35 @@ def accept_invitation(request, token):
     else:
         messages.error(request, 'Unable to accept invitation. Please contact the project owner.')
         return redirect('dashboard')
+
+
+def accept_invitation_for(user, invitation):
+    """Accept ``invitation`` for ``user`` and give them what a member needs.
+
+    The one path for both the accept link and an invited signup: the
+    ProjectMember (Invitation.accept), the Editor/Viewer groups derived from
+    every role the user now holds, and is_staff so the admin lets them in.
+    Never touches the account type: an invitation grants a project role,
+    not a plan. Returns False if the invitation can't be accepted.
+    """
+    if not invitation.accept(user):
+        return False
+    sync_user_permission_groups(user)
+    if not user.is_staff:
+        user.is_staff = True
+        user.save(update_fields=['is_staff'])
+    return True
+
+
+def landing_url(request):
+    """Where a signed-in user starts: the admin if it will let them in (a
+    creator plan, or a project they own or belong to), otherwise the
+    dashboard, which lists their pending invitations. Sending everyone to
+    the admin left a new free account on Django's "not authorized" page."""
+    from planner.admin_site import showstack_admin_site
+    if showstack_admin_site.has_permission(request):
+        return reverse('admin:index')
+    return reverse('dashboard')
 
 
 def send_invitation_email(invitation, request):
@@ -480,6 +450,7 @@ def leave_project(request, project_id):
         membership = ProjectMember.objects.get(project_id=project_id, user=request.user)
         project_name = membership.project.name
         membership.delete()
+        sync_user_permission_groups(request.user)
         messages.success(request, f'You have left: {project_name}')
     except ProjectMember.DoesNotExist:
         messages.error(request, "Project membership not found.")
@@ -1003,7 +974,7 @@ def send_crew_roster_signup_invite_email(crew_member, request):
     from django.urls import reverse
 
     resend.api_key = os.environ.get('RESEND_API_KEY')
-    signup_url = request.build_absolute_uri(reverse('register'))
+    signup_url = request.build_absolute_uri(reverse('marketing:register'))
     owner = crew_member.crew.owner
     owner_label = owner.get_full_name() or owner.username
 
@@ -1106,7 +1077,7 @@ def send_crew_invite_to_signup_email(crew_member, project, request):
     from django.urls import reverse
 
     resend.api_key = os.environ.get('RESEND_API_KEY')
-    signup_url = request.build_absolute_uri(reverse('register'))
+    signup_url = request.build_absolute_uri(reverse('marketing:register'))
     owner = project.owner
     owner_label = owner.get_full_name() or owner.username
 

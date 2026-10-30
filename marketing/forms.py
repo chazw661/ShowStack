@@ -123,6 +123,15 @@ class RegistrationForm(UserCreationForm):
             'placeholder': 'Confirm password',
         })
     
+    def clean_email(self):
+        # Invitations are matched to accounts by address, so two accounts on
+        # one address would leave it to chance which of them an invite reaches.
+        email = self.cleaned_data['email'].strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError(
+                'An account with this email address already exists. Log in instead.')
+        return email
+
     def save(self, commit=True):
         user = super().save(commit=False)
         user.email = self.cleaned_data['email']

@@ -34,6 +34,23 @@ def ensure_user_profile(sender, instance, created, **kwargs):
             profile = UserProfile.objects.get(user=instance)
 
 
+@receiver(post_delete, sender=User)
+def revoke_invitations_of_deleted_user(sender, instance, **kwargs):
+    """A deleted account's accepted invitations no longer stand for anyone.
+
+    Their ProjectMember rows go with the user (CASCADE); the invitations,
+    keyed by address, stayed 'accepted' and made the project's records say
+    the address was still on the team. Revoked, so a new account for the
+    same address starts from a fresh invite. Left alone while another
+    account still uses the address.
+    """
+    from .models import Invitation
+    email = (instance.email or '').strip()
+    if not email or User.objects.filter(email__iexact=email).exists():
+        return
+    Invitation.objects.filter(email__iexact=email, status='accepted').update(status='revoked')
+
+
 # ──────────────────────────────────────────────────────────────────
 # Admin access for everyone who owns, or may create, a project
 #
