@@ -12,11 +12,16 @@
                     <span class="brand-icon">S</span>
                 </a>
                 <h1>Create your account</h1>
+                {% if invitation %}
+                <p>You've been invited to <strong>{{ invitation.project.name }}</strong> as {{ invitation.get_role_display }}. Sign up with the address the invitation was sent to and you'll go straight to the project.</p>
+                {% else %}
                 <p>Start managing your audio productions today.</p>
+                {% endif %}
             </div>
             
             <form method="post" class="auth-form">
                 {% csrf_token %}
+                {% if invitation %}<input type="hidden" name="invite" value="{{ invitation.token }}">{% endif %}
                 
                 {% if form.non_field_errors %}
                 <div class="form-errors">
@@ -48,7 +53,7 @@
                     <label for="id_email">Email *</label>
                     {{ form.email }}
                     {% if form.email.errors %}
-                    <span class="field-error">{{ form.email.errors.0 }}</span>
+                    <span class="field-error">{{ form.email.errors.0 }}{% if invitation %} <a href="{% url 'marketing:login' %}?next={% url 'accept_invitation' invitation.token %}">Log in to accept the invitation</a>{% endif %}</span>
                     {% endif %}
                 </div>
                 
@@ -89,7 +94,7 @@
             </form>
             
             <div class="auth-footer">
-                <p>Already have an account? <a href="{% url 'marketing:login' %}">Log in</a></p>
+                <p>Already have an account? <a href="{% url 'marketing:login' %}{% if invitation %}?next={% url 'accept_invitation' invitation.token %}{% endif %}">Log in</a></p>
             </div>
         </div>
     </div>

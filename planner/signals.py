@@ -4,7 +4,7 @@ from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from .models import (
-    Project, UserProfile,
+    Project, ProjectMember, UserProfile,
     ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
     DeviceInput, DeviceOutput,
     MicSession, MicAssignment,
@@ -34,6 +34,23 @@ def ensure_user_profile(sender, instance, created, **kwargs):
             profile = UserProfile.objects.get(user=instance)
 
 
+@receiver(post_delete, sender=User)
+def revoke_invitations_of_deleted_user(sender, instance, **kwargs):
+    """A deleted account's accepted invitations no longer stand for anyone.
+
+    Their ProjectMember rows go with the user (CASCADE); the invitations,
+    keyed by address, stayed 'accepted' and made the project's records say
+    the address was still on the team. Revoked, so a new account for the
+    same address starts from a fresh invite. Left alone while another
+    account still uses the address.
+    """
+    from .models import Invitation
+    email = (instance.email or '').strip()
+    if not email or User.objects.filter(email__iexact=email).exists():
+        return
+    Invitation.objects.filter(email__iexact=email, status='accepted').update(status='revoked')
+
+
 # ──────────────────────────────────────────────────────────────────
 # Admin access for everyone who owns, or may create, a project
 #
@@ -42,7 +59,10 @@ def ensure_user_profile(sender, instance, created, **kwargs):
 # @staff_member_required views). Accepting an invitation sets it
 # (accounts.views.accept_invitation); nothing set it for a paid or beta
 # account, or for the owner of a project, so an owner who had never been
-# invited anywhere was turned away from their own show. Only ever granted
+# invited anywhere was turned away from their own show. Nor for a member
+# added any other way -- a crew roster claimed at signup, a crew bulk-add,
+# an approved access request -- who then landed on the admin's "not
+# authorized" page with a project they could see on the dashboard. Only ever granted
 # here, never taken away: is_active is the switch for shutting an account.
 # Migration 0202 does the same for accounts that already exist.
 # ──────────────────────────────────────────────────────────────────
@@ -66,6 +86,12 @@ def staff_for_paid_accounts(sender, instance, **kwargs):
 @receiver(post_save, sender=Project)
 def staff_for_project_owners(sender, instance, **kwargs):
     _grant_staff(instance.owner)
+
+
+@receiver(post_save, sender=ProjectMember)
+def staff_for_project_members(sender, instance, created, **kwargs):
+    if created:
+        _grant_staff(instance.user)
 
 
 # ──────────────────────────────────────────────────────────────────

@@ -498,15 +498,14 @@ class RegisterIntegrationTests(TestCase):
     def test_register_triggers_auto_claim(self, mock_email):
         """SPEC R6 — POST /register/ with a matching pending email materializes ProjectMember via D-11 atomic block.
 
-        The live register endpoint is marketing.views.register (first URL match in
-        audiopatch/urls.py). It requires a 'terms' POST field (clickwrap consent per
+        The register endpoint is marketing.views.register. It requires a 'terms' POST field (clickwrap consent per
         CLAUDE.md). On success it redirects to marketing:pending.
 
-        RegistrationForm fields confirmed via accounts/forms.py:
+        RegistrationForm fields confirmed via marketing/forms.py:
             username, email, first_name, last_name, password1, password2
         Plus 'terms' required by marketing.views.register (clickwrap).
         """
-        response = Client().post(reverse('register'), {
+        response = Client().post(reverse('marketing:register'), {
             'username': 'registrant',
             'email': 'registrant@example.com',
             'password1': 'a-very-strong-passw0rd!',
@@ -548,7 +547,7 @@ class RegisterIntegrationTests(TestCase):
         )
         CrewProjectAdd.objects.create(crew=crew2, project=project2)
 
-        response = Client().post(reverse('register'), {
+        response = Client().post(reverse('marketing:register'), {
             'username': 'emailfail',
             'email': 'emailfail@example.com',
             'password1': 'a-very-strong-passw0rd!',

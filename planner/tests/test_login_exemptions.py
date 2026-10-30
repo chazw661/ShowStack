@@ -96,14 +96,13 @@ class ExemptRouteInventoryTests(TestCase):
         ('/api/waitlist/', 'marketing.views.waitlist_ajax'),
 
         # -- Sign-in / sign-up ---------------------------------------------
-        # Both /login/ and /register/ are declared twice; marketing's copy is
-        # the one that actually resolves. Both are exempt, so resolution order
-        # cannot strand a visitor either way.
+        # /login/ is declared twice; marketing's copy is the one that actually
+        # resolves. Both are exempt, so resolution order cannot strand a
+        # visitor either way.
         ('/login/', 'marketing.views.user_login'),
         ('/login/', 'accounts.views.View.as_view.<locals>.view'),
         ('/logout/', 'marketing.views.user_logout'),
         ('/register/', 'marketing.views.register'),
-        ('/register/', 'accounts.views.register'),
         ('/m/login/', 'planner.mobile_views.mobile_login'),
 
         # -- Django admin login (exempt inside django.contrib.admin) --------
@@ -265,7 +264,7 @@ class AnonymousReachabilityTests(TestCase):
         self.assertIn(resp.status_code, (200, 302))
 
     def test_register_page_is_reachable(self):
-        resp = self.anon.get(reverse('register'))
+        resp = self.anon.get(reverse('marketing:register'))
         self.assertEqual(200, resp.status_code)
 
     def test_mobile_login_is_reachable(self):

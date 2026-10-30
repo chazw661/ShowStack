@@ -5518,6 +5518,8 @@ class Invitation(models.Model):
         ('accepted', 'Accepted'),
         ('declined', 'Declined'),
         ('expired', 'Expired'),
+        # The account that accepted it was deleted (planner.signals).
+        ('revoked', 'Revoked'),
     ]
     
     ROLE_CHOICES = [
@@ -5545,7 +5547,14 @@ class Invitation(models.Model):
     
     class Meta:
         ordering = ['-invited_at']
-        unique_together = [['project', 'email', 'status']]  # Prevent duplicate pending invites
+        # One live invitation per address per project. Only pending ones: a
+        # constraint over every status stopped a second invite to the same
+        # address from ever being accepted, expired or revoked.
+        constraints = [
+            UniqueConstraint(
+                fields=['project', 'email'], condition=Q(status='pending'),
+                name='invitation_one_pending_per_email'),
+        ]
     
     def __str__(self):
         return f"{self.email} invited to {self.project.name} as {self.role}"
@@ -5563,51 +5572,29 @@ class Invitation(models.Model):
         return True
     
     def accept(self, user):
-        """Accept the invitation and create ProjectMember"""
-        # Already accepted - nothing to do
+        """Put ``user`` on the project with this invitation's role.
+
+        Always leaves a ProjectMember behind. It used to return True without
+        one when an older invitation for the same project and address had
+        already been accepted (it deleted itself as a "duplicate"), so a
+        re-invited user saw "Welcome" and still couldn't open the project.
+        A user who is already on the project keeps their role.
+        """
         if self.status == 'accepted':
             return True
-        
         if not self.is_valid():
             return False
-        
-        # Check if user's email matches invitation
         if user.email.lower() != self.email.lower():
             return False
-        
-        # Check if already a member
-        if ProjectMember.objects.filter(project=self.project, user=user).exists():
-            # User is already a member, just mark invitation as accepted
+
+        with transaction.atomic():
+            if self.project.owner_id != user.id:
+                ProjectMember.objects.get_or_create(
+                    project=self.project, user=user,
+                    defaults={'role': self.role, 'invited_by': self.invited_by})
             self.status = 'accepted'
             self.accepted_at = timezone.now()
             self.save()
-            return True
-        
-        # Check for any other accepted invitation for same project/email (duplicate invite scenario)
-        existing_accepted = Invitation.objects.filter(
-            project=self.project,
-            email__iexact=self.email,
-            status='accepted'
-        ).exclude(pk=self.pk).exists()
-        
-        if existing_accepted:
-            # Another invitation was already accepted, delete this duplicate
-            self.delete()
-            return True
-        
-        # Create ProjectMember
-        ProjectMember.objects.create(
-            project=self.project,
-            user=user,
-            role=self.role,
-            invited_by=self.invited_by
-        )
-        
-        # Mark invitation as accepted
-        self.status = 'accepted'
-        self.accepted_at = timezone.now()
-        self.save()
-        
         return True
     
 

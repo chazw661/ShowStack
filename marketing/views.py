@@ -4,9 +4,11 @@ from django.contrib import messages
 from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_not_required
 from django.contrib.auth.forms import AuthenticationForm
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .forms import WaitlistForm, ContactForm, RegistrationForm
@@ -71,31 +73,62 @@ def contact(request):
     return render(request, 'marketing/contact.html', {'form': form})
 
 
+def _invitation_from(token):
+    """The Invitation a signup link carries (``?invite=<token>``), or None."""
+    from planner.models import Invitation
+    try:
+        return Invitation.objects.select_related('project').get(token=token)
+    except (Invitation.DoesNotExist, ValidationError, ValueError):
+        return None
+
+
 @login_not_required
 def register(request):
     """
     User registration page.
+
+    Arriving from an invitation (the preview page's "Create Free Account"
+    passes the token as ``invite``), a signup with the invited address is
+    accepted on the spot: the account is logged in and opens on the invited
+    project with the invited role. Every other signup -- no token, an
+    expired or used one, or a different address -- is a plain free account
+    with no projects.
     """
+    from accounts.views import landing_url
+
     if request.user.is_authenticated:
-        return redirect('admin:index')
+        return redirect(landing_url(request))
+
+    token = request.POST.get('invite') or request.GET.get('invite')
+    invitation = _invitation_from(token) if token else None
+    if invitation is not None and not invitation.is_valid():
+        if request.method == 'GET':
+            messages.warning(
+                request,
+                'This invitation has expired or has already been used. You can still '
+                'create an account; ask the project owner to send you a new invitation.')
+        invitation = None
 
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         terms_accepted = request.POST.get('terms')
         if not terms_accepted:
             messages.error(request, 'You must accept the Terms of Service and Privacy Policy to create an account.')
-            return render(request, 'marketing/register.html', {'form': form})
+            return render(request, 'marketing/register.html', {'form': form, 'invitation': invitation})
         if form.is_valid():
             # D-11 (Phase 6): form.save() + auto-claim are atomic so a claim failure
             # rolls back the User row cleanly and lets the user re-register.
             from planner.crew import claim_pending_crew_memberships
-            from accounts.views import send_crew_added_email
+            from accounts.views import accept_invitation_for, send_crew_added_email
+            accepted = False
             with transaction.atomic():
                 user = form.save()
                 # D-07: inline call (no Django signals). Rebinds pending CrewMember
                 # rows and materializes ProjectMember rows for every project the crew
                 # has been bulk-added to (D-09 via CrewProjectAdd).
                 new_pms = claim_pending_crew_memberships(user)
+                if invitation is not None:
+                    accepted = accept_invitation_for(user, invitation)
 
             # D-10/D-11: email sends happen OUTSIDE the atomic block — a Resend
             # hiccup must not roll back the user account. Log + swallow per row.
@@ -108,22 +141,47 @@ def register(request):
                         getattr(pm.user, 'email', '<unknown>'),
                     )
 
-            # Auto-assign to Viewer group
-            from django.contrib.auth.models import Group
-            try:
-                viewer_group = Group.objects.get(name='Viewer')
-                user.groups.add(viewer_group)
-            except Group.DoesNotExist:
-                pass
-            # Don't log them in yet — send to pending page
-            return redirect('marketing:pending')
-        return render(request, 'marketing/register.html', {'form': form})
-    else:
-        form = RegistrationForm()
+            if accepted:
+                login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+                request.session['current_project_id'] = invitation.project_id
+                messages.success(
+                    request,
+                    f'Welcome to {invitation.project.name}! You have been added as '
+                    f'{invitation.get_role_display()}.')
+                return redirect(landing_url(request))
 
-    return render(request, 'marketing/register.html', {'form': form})
-    
-    
+            if invitation is not None:
+                messages.warning(
+                    request,
+                    f'You signed up with a different email address from the one the '
+                    f'invitation to {invitation.project.name} was sent to, so you have not '
+                    f'been added to it. Ask the project owner to invite {user.email}.')
+
+            if new_pms:
+                # A crew roster put them on projects: groups from those roles,
+                # not a blanket Viewer that would block an editor everywhere.
+                from accounts.views import sync_user_permission_groups
+                sync_user_permission_groups(user)
+                names = ', '.join(sorted(pm.project.name for pm in new_pms))
+                messages.success(
+                    request, f"You've been added to {names}. Log in to open "
+                    f"{'it' if len(new_pms) == 1 else 'them'}.")
+            else:
+                # Auto-assign to Viewer group
+                from django.contrib.auth.models import Group
+                try:
+                    viewer_group = Group.objects.get(name='Viewer')
+                    user.groups.add(viewer_group)
+                except Group.DoesNotExist:
+                    pass
+            # Don't log them in yet — send to the registered page
+            return redirect('marketing:pending')
+        return render(request, 'marketing/register.html', {'form': form, 'invitation': invitation})
+    else:
+        initial = {'email': invitation.email} if invitation is not None else None
+        form = RegistrationForm(initial=initial)
+
+    return render(request, 'marketing/register.html', {'form': form, 'invitation': invitation})
 
 
 @login_not_required
@@ -131,8 +189,10 @@ def user_login(request):
     """
     User login page.
     """
+    from accounts.views import landing_url
+
     if request.user.is_authenticated:
-        return redirect('admin:index')
+        return redirect(landing_url(request))
     
     if request.method == 'POST':
         form = AuthenticationForm(request, data=request.POST)
@@ -142,8 +202,12 @@ def user_login(request):
             user = authenticate(username=username, password=password)
             if user is not None:
                 login(request, user)
-                next_url = request.GET.get('next', 'admin:index')
-                return redirect(next_url)
+                next_url = request.GET.get('next')
+                if next_url and url_has_allowed_host_and_scheme(
+                        next_url, allowed_hosts={request.get_host()},
+                        require_https=request.is_secure()):
+                    return redirect(next_url)
+                return redirect(landing_url(request))
         else:
             messages.error(request, "Invalid username or password.")
     else:
@@ -188,7 +252,7 @@ def about(request):
 @login_not_required
 def pending(request):
     """
-    Post-registration pending approval page.
+    Post-registration page for a plain signup (no invitation).
     """
     return render(request, 'marketing/pending.html')
 
