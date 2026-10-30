@@ -13,6 +13,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.db import transaction, IntegrityError
 from django.db.models import Max, F
 from django.utils import timezone
@@ -755,6 +756,182 @@ def mic_tracker_overview_view(request):
     })
 
 
+# ── Mic Tracker printouts: beltpack labels ──────────────────────────────────
+#
+# Read-only, so anyone who can view the project can print: no edit check.
+# Every id from the query string is looked up inside _scoped_project(), so
+# another tenant's session or day is a 404, and a request with no project
+# fails closed the same way. Layout and PDF generation live in
+# planner/utils/labels/ and never see the request.
+
+def _label_options(request, project):
+    """Parse and validate the label query string.
+
+    Returns (params, error_response). The PDF and the summary take the same
+    parameters, so the print page's preview and its "N labels" line can
+    never disagree about what was asked for.
+    """
+    from planner.utils.labels.layout import running_order_available
+    from planner.utils.labels.render import Options
+    from planner.utils.labels.stock import clamp_offset, clamp_start, get_stock
+
+    stock = get_stock(request.GET.get('stock'))
+    if stock is None:
+        return None, HttpResponseBadRequest('Unknown label stock.')
+
+    scope = request.GET.get('scope', 'session')
+    session = day = None
+    if scope == 'session':
+        session = get_object_or_404(MicSession, pk=_int_or_404(request.GET.get('session')),
+                                    day__project=project)
+    elif scope == 'day':
+        day = get_object_or_404(ShowDay, pk=_int_or_404(request.GET.get('day')), project=project)
+    elif scope != 'show':
+        return None, HttpResponseBadRequest('Unknown scope.')
+
+    mode = request.GET.get('mode', 'single')
+    if mode not in ('single', 'running'):
+        return None, HttpResponseBadRequest('Unknown mode.')
+    if mode == 'running':
+        available, reason = running_order_available(stock)
+        if not available:
+            return None, HttpResponseBadRequest(reason)
+
+    options = Options(
+        color=request.GET.get('color', '1') != '0',
+        start=clamp_start(request.GET.get('start'), stock),
+        dx_mm=clamp_offset(request.GET.get('dx')),
+        dy_mm=clamp_offset(request.GET.get('dy')),
+    )
+    return {'stock': stock, 'scope': scope, 'session': session, 'day': day,
+            'mode': mode, 'options': options}, None
+
+
+def _int_or_404(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise Http404('No such session or day.')
+
+
+def _label_filename(project, params):
+    """Says how to print it, because the filename is what a person sees in
+    the print dialog's title bar."""
+    show = MicShowInfo.objects.filter(project=project).values_list('show_name', flat=True).first()
+    if params['session'] is not None:
+        scope = params['session'].name
+    elif params['day'] is not None:
+        scope = params['day'].name or params['day'].date.isoformat()
+    else:
+        scope = 'whole-show'
+    parts = ['ShowStack-labels', slugify(show or project.name)[:40], slugify(scope)[:40],
+             params['mode'], 'PRINT-AT-100pct']
+    return '-'.join(p for p in parts if p) + '.pdf'
+
+
+def _pdf_response(pdf, filename, download):
+    response = HttpResponse(pdf, content_type='application/pdf')
+    disposition = 'attachment' if download else 'inline'
+    response['Content-Disposition'] = '{}; filename="{}"'.format(disposition, filename)
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+@staff_member_required
+def mic_tracker_print_view(request):
+    """The print page: scope, mode and calibration controls around an
+    iframe showing the real PDF."""
+    from planner.utils.labels.layout import running_order_available
+    from planner.utils.labels.stock import DEFAULT_STOCK, OFFSET_LIMIT_MM, STOCKS
+
+    project = _scoped_project(request)
+    if project is None:
+        return redirect('planner:mic_tracker')
+
+    days = ShowDay.objects.filter(project=project).order_by('date').prefetch_related('sessions')
+    try:
+        selected_session = int(request.GET.get('session') or 0)
+    except ValueError:
+        selected_session = 0
+    if not MicSession.objects.filter(pk=selected_session, day__project=project).exists():
+        selected_session = 0
+
+    stock = STOCKS[DEFAULT_STOCK]
+    running_available, running_reason = running_order_available(stock)
+    context = {
+        **_shared_header_context(request),
+        'days': days,
+        'selected_session': selected_session,
+        'stock': stock,
+        'running_available': running_available,
+        'running_reason': running_reason,
+        'start_positions': range(1, stock.count + 1),
+        'stock_cols': stock.cols,
+        'offset_limit': OFFSET_LIMIT_MM,
+    }
+    return render(request, 'planner/mic_tracker_print.html', context)
+
+
+@staff_member_required
+@xframe_options_sameorigin
+def mic_labels_pdf(request):
+    from planner.utils.labels.data import scope_data
+    from planner.utils.labels.render import generate_labels_pdf
+
+    project = _scoped_project(request)
+    if project is None:
+        raise Http404('No project.')
+    params, error = _label_options(request, project)
+    if error:
+        return error
+    data = scope_data(project, session=params['session'], day=params['day'])
+    filename = _label_filename(project, params)
+    pdf, _ = generate_labels_pdf(data, params['mode'], params['scope'], params['stock'],
+                                 params['options'], title=filename[:-4])
+    return _pdf_response(pdf, filename, request.GET.get('download') == '1')
+
+
+@staff_member_required
+@xframe_options_sameorigin
+def mic_labels_alignment_pdf(request):
+    from planner.utils.labels.render import Options, render_alignment_pdf
+    from planner.utils.labels.stock import clamp_offset, get_stock
+
+    if _scoped_project(request) is None:
+        raise Http404('No project.')
+    stock = get_stock(request.GET.get('stock'))
+    if stock is None:
+        return HttpResponseBadRequest('Unknown label stock.')
+    options = Options(dx_mm=clamp_offset(request.GET.get('dx')),
+                      dy_mm=clamp_offset(request.GET.get('dy')))
+    pdf = render_alignment_pdf(stock, options)
+    filename = 'ShowStack-label-alignment-{}-PRINT-AT-100pct.pdf'.format(stock.part)
+    return _pdf_response(pdf, filename, request.GET.get('download') == '1')
+
+
+@staff_member_required
+def mic_labels_summary(request):
+    """What the PDF for the same query string would contain, for the line
+    under the preview ("12 labels on 1 sheet · 3 slots without a presenter
+    skipped") -- an iframe cannot read the PDF response's headers."""
+    from planner.utils.labels.data import scope_data
+    from planner.utils.labels.render import build_layouts
+    from planner.utils.labels.stock import sheets_needed
+
+    project = _scoped_project(request)
+    if project is None:
+        raise Http404('No project.')
+    params, error = _label_options(request, project)
+    if error:
+        return JsonResponse({'error': error.content.decode()}, status=error.status_code)
+    data = scope_data(project, session=params['session'], day=params['day'])
+    labels = len(build_layouts(data, params['mode'], params['scope'], params['stock']))
+    return JsonResponse({
+        'labels': labels,
+        'sheets': sheets_needed(params['stock'], labels, params['options'].start),
+        'skipped': data.skipped,
+        'filename': _label_filename(project, params),
+    })
 
 
 # Replace these functions in planner/views.py
