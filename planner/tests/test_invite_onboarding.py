@@ -555,9 +555,10 @@ class CrewRosterClaim(Base):
         self.assertFalse(User.objects.get(pk=inactive.pk).is_staff)
 
 
-class LocalInvitationEmail(Base):
+class InvitationEmailWithoutAResendKey(Base):
+    """The console fallback is for local development only."""
 
-    def test_debug_without_a_resend_key_prints_the_link(self):
+    def send_without_key(self, debug):
         import io
         import os
         from contextlib import redirect_stdout
@@ -565,10 +566,30 @@ class LocalInvitationEmail(Base):
         self.client.force_login(self.owner)
         out = io.StringIO()
         env = {k: v for k, v in os.environ.items() if k != 'RESEND_API_KEY'}
-        with override_settings(DEBUG=True), patch.dict(os.environ, env, clear=True), \
+        with override_settings(DEBUG=debug), patch.dict(os.environ, env, clear=True), \
                 redirect_stdout(out):
             resp = self.client.post(reverse('invite_user', args=[self.project.pk]),
                                     {'email': INVITED, 'role': 'viewer'})
+        return resp, out.getvalue()
+
+    def test_debug_prints_the_link(self):
+        resp, printed = self.send_without_key(debug=True)
         self.assertEqual(302, resp.status_code)
         invitation = Invitation.objects.get()
-        self.assertIn(f'/invitations/accept/{invitation.token}/', out.getvalue())
+        self.assertIn(f'/invitations/accept/{invitation.token}/', printed)
+
+    def test_production_fails_loudly_and_prints_no_token(self):
+        from django.core.exceptions import ImproperlyConfigured
+        with self.assertRaisesMessage(ImproperlyConfigured, 'RESEND_API_KEY is not set'):
+            self.send_without_key(debug=False)
+        invitation = Invitation.objects.get()
+        # Nothing printed at all; certainly not the token or link.
+        with patch('builtins.print') as mock_print:
+            from django.test import RequestFactory, override_settings
+            import os
+            from accounts.views import send_invitation_email
+            env = {k: v for k, v in os.environ.items() if k != 'RESEND_API_KEY'}
+            with override_settings(DEBUG=False), patch.dict(os.environ, env, clear=True):
+                with self.assertRaises(ImproperlyConfigured):
+                    send_invitation_email(invitation, RequestFactory().get('/'))
+        mock_print.assert_not_called()

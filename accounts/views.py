@@ -282,17 +282,25 @@ def send_invitation_email(invitation, request):
 
     Local development (DEBUG with no RESEND_API_KEY) prints the link to the
     runserver console instead, so the flow can be followed without sending.
+    Anywhere else a missing key is an error, raised before the link exists:
+    a token is a working invitation and must not reach the logs.
     """
     import os
-    
-    accept_url = request.build_absolute_uri(
-        f'/invitations/accept/{invitation.token}/'
-    )
+    from django.core.exceptions import ImproperlyConfigured
 
-    if settings.DEBUG and not os.environ.get('RESEND_API_KEY'):
+    if not os.environ.get('RESEND_API_KEY'):
+        if not settings.DEBUG:
+            raise ImproperlyConfigured(
+                'RESEND_API_KEY is not set; invitation emails cannot be sent.')
+        accept_url = request.build_absolute_uri(
+            f'/invitations/accept/{invitation.token}/')
         print(f"📧 [DEBUG, not sent] Invitation for {invitation.email} to "
               f"{invitation.project.name} ({invitation.role}): {accept_url}")
         return
+
+    accept_url = request.build_absolute_uri(
+        f'/invitations/accept/{invitation.token}/'
+    )
 
     import resend
     
