@@ -453,12 +453,12 @@ def comm_list(request, project_id):
     wireless_packs = CommBeltPack.objects.filter(
         project=project,
         system_type='WIRELESS'
-    ).select_related('position', 'name').order_by('bp_number')
+    ).select_related('position', 'name').prefetch_related('channels__channel').order_by('bp_number')
     
     hardwired_packs = CommBeltPack.objects.filter(
         project=project,
         system_type='HARDWIRED'
-    ).select_related('position', 'name').order_by('bp_number')
+    ).select_related('position', 'name').prefetch_related('channels__channel').order_by('bp_number')
     
     print(f"DEBUG: Wireless count = {wireless_packs.count()}")
     print(f"DEBUG: Hardwired count = {hardwired_packs.count()}")

@@ -93,43 +93,18 @@ from planner.utils.console_csv_import import (
 )
 
 def console_detail(request, console_id):
+    """The console's own page is its admin change page.
+
+    This URL used to render planner/console_detail.html, a page from an
+    earlier design: it saved a formset naming ConsoleInput fields that no
+    longer exist (FieldError on every request), read an undefined
+    ``project`` on GET, and its template linked to URL names that are gone.
+    Nothing links here any more; an old bookmark lands on the live editor.
+    """
     console = get_object_or_404(
         Console, pk=console_id, project=_scoped_project(request),
     )
-    # Saving the formset is a write.
-    if request.method == "POST" and not _can_edit_current_project(request):
-        raise PermissionDenied("Read-only access.")
-
-    InputFormSet = modelformset_factory(
-        ConsoleInput,
-        fields=[
-            "output", "dante_number", "input_ch", "source", "group",
-            "dca", "mute", "direct_out", "omni_in", "omni_out"
-        ],
-        extra=10,
-        can_delete=True
-    )
-
-    if request.method == "POST":
-        formset = InputFormSet(request.POST, queryset=ConsoleInput.objects.filter(console=console))
-        if formset.is_valid():
-            instances = formset.save(commit=False)
-            for instance in instances:
-                instance.console = console
-                instance.save()
-            for obj in formset.deleted_objects:
-                obj.delete()
-    else:
-        formset = InputFormSet(queryset=ConsoleInput.objects.filter(console=console))
-
-        consoles = Console.objects.filter(project=project).order_by('name')
-
-    return render(request, "planner/console_detail.html", {
-        "formset": formset,
-        "console": console,
-        "consoles": consoles
-    })
-    
+    return redirect('admin:planner_console_change', console.pk)
 
 
 
@@ -424,86 +399,83 @@ def get_next_bp_number(request):
     return JsonResponse({'next_bp_number': next_bp})
 
 
+def _beltpack_channels(beltpacks):
+    """{beltpack id: {channel number: CommChannel or None}} and the highest
+    channel number any of them has. A belt pack's channels are its
+    CommBeltPackChannel rows; the old fixed channel_a..channel_f fields were
+    replaced by them (f2a6d68) and every reader of them broke."""
+    by_pack, width = {}, 0
+    for bp in beltpacks:
+        keys = {c.channel_number: c.channel for c in bp.channels.all()}
+        by_pack[bp.pk] = keys
+        width = max([width, *keys])
+    return by_pack, width
+
+
 @staff_member_required
 def export_comm_assignments(request):
-    """Export belt pack assignments to CSV"""
+    """Export the current project's belt pack assignments to CSV"""
+    beltpacks = (CommBeltPack.objects.filter(project=_scoped_project(request))
+                 .select_related('position', 'name')
+                 .prefetch_related('channels__channel')
+                 .order_by('system_type', 'bp_number'))
+    channels, width = _beltpack_channels(beltpacks)
+
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = 'attachment; filename="comm_assignments.csv"'
-    
+
     writer = csv.writer(response)
-    
-    # Write headers
     writer.writerow([
-        'BP #', 'Position', 'Name', 'Headset', 
-        'CH A', 'CH B', 'CH C', 'CH D',
+        'BP #', 'System', 'Position', 'Name', 'Headset',
+        *[f'CH {n}' for n in range(1, width + 1)],
         'Audio PGM', 'Group', 'Checked Out', 'Notes'
     ])
-    
-    # Write data
-    for bp in CommBeltPack.objects.all().order_by('bp_number'):
+    for bp in beltpacks:
+        keys = channels[bp.pk]
         writer.writerow([
             bp.bp_number,
-            bp.position,
-            bp.name,
+            bp.get_system_type_display(),
+            bp.position or '',
+            bp.name or '',
             bp.get_headset_display() if bp.headset else '',
-            str(bp.channel_a) if bp.channel_a else '',
-            str(bp.channel_b) if bp.channel_b else '',
-            str(bp.channel_c) if bp.channel_c else '',
-            str(bp.channel_d) if bp.channel_d else '',
+            *[str(keys[n]) if keys.get(n) else '' for n in range(1, width + 1)],
             'Yes' if bp.audio_pgm else 'No',
             bp.get_group_display() if bp.group else '',
             'Yes' if bp.checked_out else 'No',
-            bp.notes
+            bp.notes or ''
         ])
-    
+
     return response
 
 
 @staff_member_required
 def comm_channel_matrix(request):
-    """Display a matrix view of all belt pack channel assignments"""
-    
-    
-    belt_packs = CommBeltPack.objects.all().order_by('bp_number')
-    channels = CommChannel.objects.all().order_by('order')
-    
-    # Build matrix data
+    """Which belt pack key carries which channel, for the current project"""
+    project = _scoped_project(request)
+    beltpacks = (CommBeltPack.objects.filter(project=project)
+                 .select_related('position', 'name')
+                 .prefetch_related('channels__channel')
+                 .order_by('system_type', 'bp_number'))
+    channels = CommChannel.objects.filter(project=project).order_by('order')
+    keys_by_pack, _ = _beltpack_channels(beltpacks)
+
     matrix = []
-    for bp in belt_packs:
-        row = {
+    for bp in beltpacks:
+        key_of = {}
+        for number, channel in sorted(keys_by_pack[bp.pk].items()):
+            if channel is not None:
+                key_of.setdefault(channel.pk, []).append(str(number))
+        matrix.append({
             'bp': bp,
-            'channels': []
-        }
-        for channel in channels:
-            assigned = False
-            assignment_type = ''
-            
-            if bp.channel_a == channel:
-                assigned = True
-                assignment_type = 'A'
-            elif bp.channel_b == channel:
-                assigned = True
-                assignment_type = 'B'
-            elif bp.channel_c == channel:
-                assigned = True
-                assignment_type = 'C'
-            elif bp.channel_d == channel:
-                assigned = True
-                assignment_type = 'D'
-            
-            row['channels'].append({
-                'assigned': assigned,
-                'type': assignment_type
-            })
-        matrix.append(row)
-    
-    context = {
+            'channels': [', '.join(key_of.get(ch.pk, [])) for ch in channels],
+        })
+
+    return render(request, 'admin/planner/comm_matrix.html', {
         'channels': channels,
         'matrix': matrix,
-        'title': 'Comm Channel Matrix'
-    }
-    
-    return render(request, 'admin/planner/comm_matrix.html', context)
+        'title': 'Comm Channel Matrix',
+        'current_project': project,
+    })
 
 
 @staff_member_required
@@ -784,112 +756,12 @@ def mic_tracker_overview_view(request):
 
 
 
-@staff_member_required
-@require_POST
-@edit_rights_required
-def bulk_update_mics(request):
-    """AJAX endpoint for bulk mic updates"""
-    try:
-        data = json.loads(request.body)
-        session_id = data.get('session_id')
-        action = data.get('action')
-        
-        session = get_object_or_404(
-            MicSession, id=session_id,
-            day__project=_scoped_project(request),
-        )
-        
-        with transaction.atomic():
-            if action == 'clear_all':
-                session.mic_assignments.update(
-                    is_micd=False,
-                    is_d_mic=False,
-                    presenter_name='',
-                    mic_type='',
-                    shared_presenters=None
-                )
-            elif action == 'check_all_micd':
-                session.mic_assignments.update(is_micd=True)
-            elif action == 'uncheck_all_micd':
-                session.mic_assignments.update(is_micd=False)
-            elif action == 'check_all_dmic':
-                session.mic_assignments.update(is_d_mic=True)
-            elif action == 'uncheck_all_dmic':
-                session.mic_assignments.update(is_d_mic=False)
-            else:
-                return JsonResponse({'success': False, 'error': 'Invalid action'})
-        
-        session_stats = session.get_mic_usage_stats()
-        day_stats = session.day.get_all_mics_status()
-        
-        return JsonResponse({
-            'success': True,
-            'session_stats': session_stats,
-            'day_stats': day_stats
-        })
-    
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
 
 # Replace these functions in planner/views.py
 # Search for each function name and replace the entire function
 
 from planner.models import Presenter  # Add this to your imports at the top
 
-@staff_member_required
-def export_mic_tracker(request):
-    """Export mic tracker data as CSV"""
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="mic_tracker_{date.today()}.csv"'
-    
-    writer = csv.writer(response)
-    
-    # Write header
-    show_info, created = MicShowInfo.objects.get_or_create(
-    project=request.current_project,
-    defaults={
-        'default_mics_per_session': 16,
-        'default_session_duration': 60
-    }
-)
-    writer.writerow(['Mic Assignment List'])
-    writer.writerow(['Show Name:', show_info.show_name])
-    writer.writerow(['Venue:', show_info.venue_name])
-    writer.writerow(['Ballroom:', show_info.ballroom_name])
-    writer.writerow(['Duration:', show_info.duration_display])
-    writer.writerow([])
-    
-    # Write days and sessions
-    for day in ShowDay.objects.all().order_by('date'):
-        writer.writerow([f"Day: {day}"])
-        
-        for session in day.sessions.all().order_by('order'):
-            writer.writerow([f"Session: {session.name}"])
-            writer.writerow(['RF#', 'Type', 'Presenter', "MIC'D", 'D-MIC', 'Notes'])
-            
-            for assignment in session.mic_assignments.all().order_by('rf_number'):
-                # Get presenter display
-                presenter_name = assignment.presenter.name if assignment.presenter else ''
-                
-                # Add shared presenters
-                shared_names = [p.name for p in assignment.shared_presenters.all()]
-                if shared_names:
-                    presenter_display = f"{presenter_name} +{len(shared_names)}"
-                else:
-                    presenter_display = presenter_name
-                
-                writer.writerow([
-                    assignment.rf_number,
-                    assignment.mic_type,
-                    presenter_display,
-                    'Yes' if assignment.is_micd else 'No',
-                    'Yes' if assignment.is_d_mic else 'No',
-                    assignment.notes or ''
-                ])
-            
-            writer.writerow([])
-    
-    return response
 
 @staff_member_required
 @require_POST
@@ -1019,22 +891,7 @@ def duplicate_session(request):
 #
 # Install reportlab if needed:  pip install reportlab
 
-@edit_rights_required
-def delete_session(request):
-    """AJAX endpoint to delete a mic session"""
-    try:
-        data = json.loads(request.body)
-        session_id = data.get("session_id")
-        session = get_object_or_404(
-            MicSession, id=session_id,
-            day__project=_scoped_project(request),
-        )
-        session.delete()
-        return JsonResponse({"success": True})
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)})
 
-@staff_member_required
 @staff_member_required
 def export_mic_tracker(request):
     """Export mic tracker data as CSV — current project, all days/sessions."""
@@ -1648,6 +1505,7 @@ def remove_shared_presenter(request):
         })
 
 
+@staff_member_required
 @require_POST
 @edit_rights_required
 def dmic_and_rotate(request):
@@ -1780,63 +1638,6 @@ def get_assignment_details(request, assignment_id):
  
 
 
-@require_POST
-@edit_rights_required
-def dmic_and_rotate(request):
-    """Handle D-MIC checkbox with automatic presenter rotation"""
-    try:
-        data = json.loads(request.body)
-        assignment_id = data.get('assignment_id')
-        
-        if not assignment_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'Missing assignment ID'
-            })
-        
-        assignment = MicAssignment.objects.get(
-            id=assignment_id, session__day__project=_scoped_project(request),
-        )
-        
-        # Store previous presenter for notification
-        previous_presenter = assignment.current_presenter
-        
-        # Toggle D-MIC status
-        assignment.is_d_mic = not assignment.is_d_mic
-
-        if assignment.is_d_mic:
-            assignment.is_micd = False
-        
-        # If we're turning OFF d-mic and have shared presenters, rotate
-        if not assignment.is_d_mic and assignment.has_shared_presenters:
-            next_presenter = assignment.rotate_to_next_presenter()
-            message = f'{previous_presenter} D-MIC → {next_presenter} is now active'
-        else:
-            next_presenter = previous_presenter
-            message = f'{previous_presenter} {"D-MIC" if assignment.is_d_mic else "MIC"}'
-        
-        assignment.save()
-        
-        return JsonResponse({
-            'success': True,
-            'is_d_mic': assignment.is_d_mic,
-            'is_micd': assignment.is_micd,  # NEW: Include MIC'D status
-            'message': message,
-            'current_presenter': next_presenter,
-            'active_presenter_index': assignment.active_presenter_index,
-            'previous_presenter': previous_presenter
-        })
-        
-    except MicAssignment.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Assignment not found'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })
     
 
 @require_POST
@@ -2478,40 +2279,6 @@ def assign_mic_group(request):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
 
-@require_http_methods(["GET"])
-def get_assignment_details(request, assignment_id):
-    """Fetch assignment details including shared presenters"""
-    try:
-        assignment = get_object_or_404(
-            MicAssignment, id=assignment_id,
-            session__day__project=_scoped_project(request),
-        )
-        
-        shared_presenters = assignment.shared_presenters
-        if shared_presenters is None:
-            shared_presenters = []
-        elif isinstance(shared_presenters, str):
-            try:
-                shared_presenters = json.loads(shared_presenters)
-            except:
-                shared_presenters = []
-        
-        return JsonResponse({
-            'success': True,
-            'assignment': {
-                'id': assignment.id,
-                'rf_number': assignment.rf_number,
-                'presenter': assignment.presenter_name or '',  # Changed from assignment.presenter
-                'shared_presenters': shared_presenters,
-                'mic_type': assignment.mic_type or '',
-                'notes': assignment.notes or ''
-            }
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=400)
     
 
 
@@ -3161,15 +2928,6 @@ def get_amplifier_assignment(request, assignment_id):
 
     #-----Audio Checklist-----
 
-@login_required
-def audio_checklist(request):
-    """
-    Simple checklist view - no database required
-    All data is stored in browser localStorage
-    """
-    return render(request, 'planner/audio_checklist.html', {
-        'title': 'Audio Production Checklist',
-    })
 
 
 #-------Prediction Module---

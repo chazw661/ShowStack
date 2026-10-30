@@ -47,10 +47,7 @@
                 <div class="bp-name">{{ bp.name.name|default:"—" }}</div>
                 
                 <div class="bp-channels">
-                    {% if bp.channel_a %}<span class="channel-badge">{{ bp.channel_a.abbreviation }}</span>{% endif %}
-                    {% if bp.channel_b %}<span class="channel-badge">{{ bp.channel_b.abbreviation }}</span>{% endif %}
-                    {% if bp.channel_c %}<span class="channel-badge">{{ bp.channel_c.abbreviation }}</span>{% endif %}
-                    {% if bp.channel_d %}<span class="channel-badge">{{ bp.channel_d.abbreviation }}</span>{% endif %}
+                    {% for key in bp.channels.all %}{% if key.channel %}<span class="channel-badge">{{ key.channel.abbreviation|default:key.channel.name }}</span>{% endif %}{% endfor %}
                 </div>
             </div>
             
@@ -92,10 +89,7 @@
                 <div class="bp-name">{{ bp.name.name|default:"—" }}</div>
                 
                 <div class="bp-channels">
-                    {% if bp.channel_a %}<span class="channel-badge">{{ bp.channel_a.abbreviation }}</span>{% endif %}
-                    {% if bp.channel_b %}<span class="channel-badge">{{ bp.channel_b.abbreviation }}</span>{% endif %}
-                    {% if bp.channel_c %}<span class="channel-badge">{{ bp.channel_c.abbreviation }}</span>{% endif %}
-                    {% if bp.channel_d %}<span class="channel-badge">{{ bp.channel_d.abbreviation }}</span>{% endif %}
+                    {% for key in bp.channels.all %}{% if key.channel %}<span class="channel-badge">{{ key.channel.abbreviation|default:key.channel.name }}</span>{% endif %}{% endfor %}
                 </div>
                 
                 {% if bp.ip_address %}
