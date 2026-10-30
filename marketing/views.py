@@ -157,13 +157,23 @@ def register(request):
                     f'invitation to {invitation.project.name} was sent to, so you have not '
                     f'been added to it. Ask the project owner to invite {user.email}.')
 
-            # Auto-assign to Viewer group
-            from django.contrib.auth.models import Group
-            try:
-                viewer_group = Group.objects.get(name='Viewer')
-                user.groups.add(viewer_group)
-            except Group.DoesNotExist:
-                pass
+            if new_pms:
+                # A crew roster put them on projects: groups from those roles,
+                # not a blanket Viewer that would block an editor everywhere.
+                from accounts.views import sync_user_permission_groups
+                sync_user_permission_groups(user)
+                names = ', '.join(sorted(pm.project.name for pm in new_pms))
+                messages.success(
+                    request, f"You've been added to {names}. Log in to open "
+                    f"{'it' if len(new_pms) == 1 else 'them'}.")
+            else:
+                # Auto-assign to Viewer group
+                from django.contrib.auth.models import Group
+                try:
+                    viewer_group = Group.objects.get(name='Viewer')
+                    user.groups.add(viewer_group)
+                except Group.DoesNotExist:
+                    pass
             # Don't log them in yet — send to the registered page
             return redirect('marketing:pending')
         return render(request, 'marketing/register.html', {'form': form, 'invitation': invitation})

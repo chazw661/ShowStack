@@ -24,7 +24,8 @@ from django.utils import timezone
 from planner.admin import ConsoleInputInline, DeviceInputInline
 from planner.admin_site import showstack_admin_site
 from planner.models import (
-    Console, Crew, Device, Invitation, Project, ProjectMember, UserProfile,
+    Console, Crew, CrewMember, CrewProjectAdd, Device, Invitation, Project,
+    ProjectMember, UserProfile,
 )
 from planner.plans import account_type, can_create_projects
 
@@ -456,3 +457,118 @@ class OnlyOwnersInvite(Base):
                     self.assertEqual(offered, invitations_url in html, page)
                 html = self.client.get(change_url).content.decode()
                 self.assertEqual(offered, 'Shareable Access Request Link' in html)
+
+
+class CrewRosterClaim(Base):
+    """A pending email on an owner's crew roster, after that crew was added
+    to the owner's project, becomes a member when the address signs up."""
+
+    def setUp(self):
+        super().setUp()
+        self.crew = Crew.objects.create(owner=self.owner, name='A team')
+
+    def roster(self, crew=None, email=INVITED, role='viewer'):
+        return CrewMember.objects.create(crew=crew or self.crew, email=email, default_role=role)
+
+    @patch('accounts.views.send_crew_added_email')
+    def test_signup_gets_the_rosters_role_and_nothing_more(self, _send):
+        self.roster(role='editor')
+        CrewProjectAdd.objects.create(crew=self.crew, project=self.project)
+        resp = self.signup()
+        self.assertRedirects(resp, reverse('marketing:pending'), fetch_redirect_response=False)
+        user = User.objects.get(username='invitee')
+        pm = self.membership(user)
+        self.assertEqual(('editor', self.owner), (pm.role, pm.invited_by))
+        self.assertEqual('free', account_type(user))
+        self.assertFalse(can_create_projects(user))
+        self.assertTrue(user.is_staff)
+        self.assertEqual(['Editor'], group_names(user))
+        page = self.client.get(reverse('marketing:pending')).content.decode()
+        self.assertIn("added to Main Show", page)
+        resp = self.client.post('/login/', {'username': 'invitee',
+                                            'password': 'a-very-strong-passw0rd!'})
+        self.assertRedirects(resp, '/admin/', fetch_redirect_response=False)
+        self.assertEqual(200, self.client.get('/admin/').status_code)
+
+    @patch('accounts.views.send_crew_added_email')
+    def test_viewer_roster_role(self, _send):
+        self.roster(role='viewer')
+        CrewProjectAdd.objects.create(crew=self.crew, project=self.project)
+        self.signup()
+        user = User.objects.get(username='invitee')
+        self.assertEqual('viewer', self.membership(user).role)
+        self.assertEqual(['Viewer'], group_names(user))
+
+    def test_a_roster_alone_grants_no_project(self):
+        self.roster()
+        self.signup()
+        self.assertFalse(ProjectMember.objects.filter(user__username='invitee').exists())
+
+    @patch('accounts.views.send_crew_invite_to_signup_email')
+    @patch('accounts.views.send_crew_added_email')
+    def test_only_owners_control_the_roster_and_where_it_goes(self, _added, _signup):
+        member = make_user('member', staff=True)
+        ProjectMember.objects.create(project=self.project, user=member, role='editor',
+                                     invited_by=self.owner)
+        self.client.force_login(member)
+        # Someone else's crew: no reading, adding or removing.
+        listed = self.roster(email='listed@example.com')
+        self.assertRedirects(self.client.get(reverse('crew_detail', args=[self.crew.pk])),
+                             reverse('crew_index'), fetch_redirect_response=False)
+        self.client.post(reverse('crew_member_add', args=[self.crew.pk]),
+                         {'user_or_email': INVITED, 'default_role': 'editor'})
+        self.client.post(reverse('crew_member_remove', args=[self.crew.pk, listed.pk]))
+        self.assertEqual(['listed@example.com'],
+                         list(self.crew.crewmember_set.values_list('email', flat=True)))
+        # Their own crew can't be attached to a project they don't own.
+        own = Crew.objects.create(owner=member, name='Mine')
+        self.roster(crew=own, role='editor')
+        self.client.post(reverse('bulk_add_crew', args=[self.project.pk, own.pk]))
+        self.assertFalse(CrewProjectAdd.objects.exists())
+        self.client.logout()
+        self.signup()
+        self.assertFalse(ProjectMember.objects.filter(user__username='invitee').exists())
+
+    @patch('accounts.views.send_crew_added_email')
+    def test_bulk_add_of_a_registered_free_account(self, _send):
+        user = make_user('invitee', email=INVITED)
+        self.assertFalse(user.is_staff)
+        CrewMember.objects.create(crew=self.crew, user=user, default_role='editor')
+        self.client.force_login(self.owner)
+        self.client.post(reverse('bulk_add_crew', args=[self.project.pk, self.crew.pk]))
+        user.refresh_from_db()
+        self.assertEqual('editor', self.membership(user).role)
+        self.assertTrue(user.is_staff)
+        self.assertEqual(['Editor'], group_names(user))
+        self.assertEqual('free', account_type(user))
+
+    def test_any_new_membership_grants_staff(self):
+        user = make_user('member')
+        ProjectMember.objects.create(project=self.project, user=user, role='viewer',
+                                     invited_by=self.owner)
+        user.refresh_from_db()
+        self.assertTrue(user.is_staff)
+        inactive = make_user('inactive')
+        User.objects.filter(pk=inactive.pk).update(is_active=False)
+        ProjectMember.objects.create(project=self.project, user=User.objects.get(pk=inactive.pk),
+                                     role='viewer', invited_by=self.owner)
+        self.assertFalse(User.objects.get(pk=inactive.pk).is_staff)
+
+
+class LocalInvitationEmail(Base):
+
+    def test_debug_without_a_resend_key_prints_the_link(self):
+        import io
+        import os
+        from contextlib import redirect_stdout
+        from django.test import override_settings
+        self.client.force_login(self.owner)
+        out = io.StringIO()
+        env = {k: v for k, v in os.environ.items() if k != 'RESEND_API_KEY'}
+        with override_settings(DEBUG=True), patch.dict(os.environ, env, clear=True), \
+                redirect_stdout(out):
+            resp = self.client.post(reverse('invite_user', args=[self.project.pk]),
+                                    {'email': INVITED, 'role': 'viewer'})
+        self.assertEqual(302, resp.status_code)
+        invitation = Invitation.objects.get()
+        self.assertIn(f'/invitations/accept/{invitation.token}/', out.getvalue())

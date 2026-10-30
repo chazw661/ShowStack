@@ -4,7 +4,7 @@ from django.dispatch import receiver
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from .models import (
-    Project, UserProfile,
+    Project, ProjectMember, UserProfile,
     ConsoleInput, ConsoleAuxOutput, ConsoleMatrixOutput, ConsoleStereoOutput,
     DeviceInput, DeviceOutput,
     MicSession, MicAssignment,
@@ -59,7 +59,10 @@ def revoke_invitations_of_deleted_user(sender, instance, **kwargs):
 # @staff_member_required views). Accepting an invitation sets it
 # (accounts.views.accept_invitation); nothing set it for a paid or beta
 # account, or for the owner of a project, so an owner who had never been
-# invited anywhere was turned away from their own show. Only ever granted
+# invited anywhere was turned away from their own show. Nor for a member
+# added any other way -- a crew roster claimed at signup, a crew bulk-add,
+# an approved access request -- who then landed on the admin's "not
+# authorized" page with a project they could see on the dashboard. Only ever granted
 # here, never taken away: is_active is the switch for shutting an account.
 # Migration 0202 does the same for accounts that already exist.
 # ──────────────────────────────────────────────────────────────────
@@ -83,6 +86,12 @@ def staff_for_paid_accounts(sender, instance, **kwargs):
 @receiver(post_save, sender=Project)
 def staff_for_project_owners(sender, instance, **kwargs):
     _grant_staff(instance.owner)
+
+
+@receiver(post_save, sender=ProjectMember)
+def staff_for_project_members(sender, instance, created, **kwargs):
+    if created:
+        _grant_staff(instance.user)
 
 
 # ──────────────────────────────────────────────────────────────────

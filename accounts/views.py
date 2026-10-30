@@ -279,13 +279,22 @@ def landing_url(request):
 def send_invitation_email(invitation, request):
     """
     Send invitation email with acceptance link using Resend API.
+
+    Local development (DEBUG with no RESEND_API_KEY) prints the link to the
+    runserver console instead, so the flow can be followed without sending.
     """
-    import resend
     import os
     
     accept_url = request.build_absolute_uri(
         f'/invitations/accept/{invitation.token}/'
     )
+
+    if settings.DEBUG and not os.environ.get('RESEND_API_KEY'):
+        print(f"📧 [DEBUG, not sent] Invitation for {invitation.email} to "
+              f"{invitation.project.name} ({invitation.role}): {accept_url}")
+        return
+
+    import resend
     
     subject = f'Invitation to join {invitation.project.name} on ShowStack'
     
@@ -1169,6 +1178,7 @@ def bulk_add_crew(request, project_id, crew_id):
             invited_by=request.user,
         )
         new_rows.append(pm)
+        sync_user_permission_groups(m.user)
 
     # D-09: record bulk-add so the auto-claim hook (Plan 05) knows which
     # projects to materialize for newly-registered crew members.
