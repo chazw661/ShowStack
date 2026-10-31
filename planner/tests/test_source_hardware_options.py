@@ -40,7 +40,10 @@ class SourceHardwareOptionTests(TestCase):
         self.join(self.viewer, self.project, 'viewer')
         self.join(self.viewer, other, 'editor')
         self.root = User.objects.create_superuser('root', 'root@example.com', 'pw')
-        self.option = SourceHardwareOption.objects.create(label='Shure AD2', sort_order=1)
+        # Migration 0174 seeds 'Shure AD2' when the test database is built
+        # from migrations; with --settings=audiopatch.test_settings it is not.
+        self.option, _ = SourceHardwareOption.objects.get_or_create(
+            label='Shure AD2', defaults={'sort_order': 1})
 
         self.changelist = reverse('admin:planner_sourcehardwareoption_changelist')
         self.add = reverse('admin:planner_sourcehardwareoption_add')
@@ -125,10 +128,14 @@ class SourceHardwareOptionTests(TestCase):
     def test_superuser_can_add_rename_reorder_and_delete(self):
         self.use(self.root)
         self.client.post(self.add, {'label': 'Sennheiser 6000', 'sort_order': 2})
+        added = SourceHardwareOption.objects.get(label='Sennheiser 6000')
+        self.assertEqual(added.sort_order, 2)
         self.client.post(self.change, {'label': 'Shure Axient', 'sort_order': 3})
-        self.assertEqual(self.state(), [('Shure Axient', 3), ('Sennheiser 6000', 2)])
+        self.option.refresh_from_db()
+        self.assertEqual((self.option.label, self.option.sort_order), ('Shure Axient', 3))
         self.client.post(self.delete, {'post': 'yes'})
-        self.assertEqual(self.state(), [('Sennheiser 6000', 2)])
+        self.assertFalse(SourceHardwareOption.objects.filter(pk=self.option.pk).exists())
+        self.assertTrue(SourceHardwareOption.objects.filter(pk=added.pk).exists())
 
     # -- existing shows --------------------------------------------------------
 

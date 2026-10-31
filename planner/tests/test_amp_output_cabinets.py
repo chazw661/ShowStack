@@ -637,6 +637,15 @@ class MergeAmpModelsTests(TestCase):
         call_command('merge_amp_models', *args, stdout=out)
         return out.getvalue()
 
+    def remaining(self):
+        """Which of this test's AmpModel rows still exist. The catalogue may
+        hold other rows (a test database built from migrations seeds some),
+        so assertions look only at these."""
+        return set(AmpModel.objects.filter(pk__in=self.all_ours()).values_list('pk', flat=True))
+
+    def all_ours(self):
+        return {self.linked.pk, self.copy.pk, self.abbrev.pk, self.solo.pk}
+
     def test_dry_run_lists_the_group_and_writes_nothing(self):
         self.assertIsNotNone(self.linked.power_profile_id)
         out = self.run_command()
@@ -646,31 +655,33 @@ class MergeAmpModelsTests(TestCase):
         self.assertIn(f'merge   #{self.abbrev.pk} "LA LA12X"', out)
         self.assertIn('3 amps move, 2 rows deleted', out)
         self.assertNotIn('X8', out)
-        self.assertEqual(4, AmpModel.objects.count())
+        self.assertEqual(self.all_ours(), self.remaining())
         self.assertEqual(2, Amp.objects.filter(amp_model=self.copy).count())
 
     def test_apply_moves_the_amps_then_deletes_the_extras(self):
         out = self.run_command('--apply')
         self.assertIn('3 amps moved, 2 rows deleted', out)
-        self.assertEqual({self.linked.pk, self.solo.pk}, set(AmpModel.objects.values_list('pk', flat=True)))
+        self.assertEqual({self.linked.pk, self.solo.pk}, self.remaining())
         for amp in self.amps:
             amp.refresh_from_db()
             self.assertEqual(self.linked.pk, amp.amp_model_id)
             self.assertEqual(4, amp.channels.count())
-        self.assertIn('No duplicate amp models', self.run_command())
+        out = self.run_command()                  # nothing of ours left to merge
+        for pk in self.all_ours():
+            self.assertNotIn(f'#{pk} "', out)
 
     def test_a_group_that_would_lose_outputs_is_skipped(self):
         AmpModel.objects.filter(pk=self.abbrev.pk).update(sc32_connector_count=1)
         out = self.run_command('--apply')
         self.assertIn('SKIPPED', out)
         self.assertIn('sc32 connector count', out)
-        self.assertEqual(4, AmpModel.objects.count())
+        self.assertEqual(self.all_ours(), self.remaining())
 
     def test_a_different_channel_count_is_skipped(self):
         AmpModel.objects.filter(pk=self.copy.pk).update(channel_count=8)
         out = self.run_command('--apply')
         self.assertIn('SKIPPED', out)
-        self.assertEqual(4, AmpModel.objects.count())
+        self.assertEqual(self.all_ours(), self.remaining())
 
 
 class KivaDerivedTests(TestCase):
@@ -737,15 +748,14 @@ class MergeAliasTests(TestCase):
         a.refresh_from_db()
         self.assertEqual(('Lacoustics', 'LA8-2', None), (a.manufacturer, a.model_name, a.power_profile_id))
 
-        out = self.run_command('--apply')
-        self.assertIn('1 renamed, 1 linked to a profile', out)
+        self.run_command('--apply')
         a.refresh_from_db()
         self.assertEqual(('L-Acoustics', 'LA8', self.la8_profile.pk),
                          (a.manufacturer, a.model_name, a.power_profile_id))
         self.assertFalse(AmpModel.objects.filter(pk=b.pk).exists())
         amp.refresh_from_db()
         self.assertEqual(a.pk, amp.amp_model_id)
-        self.assertIn('No duplicate amp models', self.run_command())
+        self.assertNotIn(f'#{a.pk} "', self.run_command())
 
     def test_a_lone_alias_is_renamed_and_linked_too(self):
         lone = AmpModel.objects.create(manufacturer='Lacoustics', model_name='LA8-2', channel_count=4)
@@ -755,5 +765,5 @@ class MergeAliasTests(TestCase):
                          (lone.manufacturer, lone.model_name, lone.power_profile_id))
 
     def test_a_model_without_a_profile_is_not_touched(self):
-        AmpModel.objects.create(manufacturer='Powersoft', model_name='X8', channel_count=8)
-        self.assertIn('No duplicate amp models', self.run_command())
+        x8 = AmpModel.objects.create(manufacturer='Powersoft', model_name='X8', channel_count=8)
+        self.assertNotIn(f'#{x8.pk} "', self.run_command())

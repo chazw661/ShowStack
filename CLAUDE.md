@@ -30,6 +30,24 @@ railway run python manage.py <command>   # run Django mgmt commands against prod
 
 **Do not** run destructive SQL against Railway Postgres without confirming with Charlie first.
 
+### Running tests
+
+```bash
+# Fast iteration: no migrations, tables built straight from the models
+python manage.py test --settings=audiopatch.test_settings
+
+# Before opening any PR: the plain suite, migrations on
+python manage.py test
+```
+
+Fast iteration: `--settings=audiopatch.test_settings`. Before opening any PR,
+run the plain suite (migrations on). Mandatory for PRs that add a migration.
+
+The two modes differ: `test_settings` skips migrations, so seeded rows (Source
+Hardware options, the amp catalogue) are absent there and present in the plain
+run. Tests must pass in both, so assert on the rows a test creates, never on
+whole-table counts.
+
 ### Running management commands against prod — without the database proxy
 
 **Use this, not the proxy, for anything that only needs to run a management
