@@ -627,6 +627,11 @@ class BrandingViewTests(TestCase):
         r = self.client.get(reverse('planner:mic_tracker_print'))
         self.assertContains(r, 'none (default dark)')
         self.assertContains(r, reverse('planner:project_branding'))
+        # The default theme is black toner already: B&W would save nothing.
+        self.assertNotContains(r, 'Heavy colour coverage')
+        self.save(accent=[], accent_style='none')
+        r = self.client.get(reverse('planner:mic_tracker_print'))
+        self.assertContains(r, NAVY)
         self.assertContains(r, 'Heavy colour coverage')
         self.save(bg_color='#FFFFFF', accent=[], accent_style='none')
         r = self.client.get(reverse('planner:mic_tracker_print'))
@@ -654,8 +659,14 @@ class BrandingViewTests(TestCase):
         self.assertContains(r, link)
         r = self.client.get(link)
         self.assertRedirects(r, reverse('planner:project_branding'), fetch_redirect_response=False)
-        r = self.client.get(reverse('set_project', args=[self.project.pk]) + '?next=https://evil.example/')
-        self.assertEqual(r['Location'], '/admin/')
+        url = reverse('set_project', args=[self.project.pk])
+        for target in ('https://evil.com', '//evil.com', '/\\evil.com', 'javascript:alert(1)',
+                       'http://showstack.io.evil.com', 'http://testserver.evil.com/'):
+            r = self.client.get(url, {'next': target})
+            self.assertEqual(r['Location'], '/admin/', target)
+        for target in (reverse('planner:mic_tracker_print'), '/audiopatch/mic-tracker/?session=3'):
+            r = self.client.get(url, {'next': target})
+            self.assertEqual(r['Location'], target)
 
     def test_duplicate_copies_branding(self):
         from planner.models import ProjectLogo

@@ -114,7 +114,7 @@
     <div class="mtp-brand" id="mtp-brand">
         <strong>Client branding:</strong> {{ brand.describe }}
         {% if can_edit_branding %}<a href="{% url 'planner:project_branding' %}">Edit branding</a>{% endif %}
-        {% if brand.text_white %}<span class="mtp-toner">Heavy colour coverage — use B&amp;W if the venue printer is low on toner.</span>{% endif %}
+        {% if brand.bg and brand.text_white %}<span class="mtp-toner">Heavy colour coverage — use B&amp;W if the venue printer is low on toner.</span>{% endif %}
         <span class="mtp-note" style="display:block">The alignment page shows a swatch of each brand colour: print it first to check the venue printer's colour.</span>
     </div>
 
