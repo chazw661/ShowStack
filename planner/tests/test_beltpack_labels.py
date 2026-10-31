@@ -647,6 +647,16 @@ class LabelViewTests(TestCase):
         self.assertContains(r, f'openGroupManager({self.keynote.pk})')
         self.assertContains(r, 'a2-print-labels', count=2)
 
+    def test_header_print_button_opens_the_page_with_nothing_preselected(self):
+        viewer = self.member('vi3', 'viewer')
+        self.login(viewer)
+        r = self.client.get(reverse('planner:mic_tracker'))
+        url = reverse('planner:mic_tracker_print')
+        self.assertContains(r, f'<a href="{url}" class="btn-mtt btn-mtt-export">🖨 Print Labels</a>',
+                            html=True)
+        r = self.client.get(url)
+        self.assertEqual(r.context['selected_session'], 0)
+
     def test_print_page_preselects_the_session(self):
         self.login(self.owner)
         r = self.client.get(reverse('planner:mic_tracker_print') + f'?session={self.panel.pk}')
