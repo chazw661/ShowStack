@@ -34,6 +34,23 @@ from planner.utils.labels.stock import (
 )
 
 OL = STOCKS['OL3016LP']
+
+
+def ink(text, size, path='planner/data/fonts/NotoSans-SemiBold.ttf'):
+    """(bottom, top) of the glyphs' own outline boxes relative to the
+    baseline, in points: the glyf table's per-glyph bounds."""
+    import struct
+    from reportlab.pdfbase.ttfonts import TTFontFile
+    font = TTFontFile(path)
+    glyf, upem = font.get_table('glyf'), font.unitsPerEm
+    low = high = 0
+    for ch in text:
+        gid = font.charToGlyph[ord(ch)]
+        start, end = font.glyphPos[gid], font.glyphPos[gid + 1]
+        if start != end:
+            _, _, y_min, _, y_max = struct.unpack('>hhhhh', glyf[start:start + 10])
+            low, high = min(low, y_min), max(high, y_max)
+    return low * size / upem, high * size / upem
 TOL_PT = float(Fraction(1, 100) * POINTS_PER_MM)    # 0.01 mm
 
 
@@ -185,18 +202,17 @@ class GroupingTests(SimpleTestCase):
                          [('Bob', 'Keynote'), ('Zoë', 'Keynote +1'), ('Ann', 'Panel')])
 
     # -- running order
-    def test_one_selected_session_is_in_the_header_and_has_no_separators(self):
+    def test_one_selected_session_is_in_the_header_and_is_one_group(self):
         d = data({4: {1: [ZOE, BOB]}}, sessions=[KEYNOTE])
         (unit,) = running_units(d)
         self.assertEqual(unit.header, (DAY1, '9:00a', 'Keynote'))
-        self.assertEqual(unit.groups, ((None, (('Zoë', ''), ('Bob', ''))),))
+        self.assertEqual(unit.groups, (('Zoë', 'Bob'),))
 
-    def test_separators_only_for_multi_session_labels(self):
+    def test_names_are_grouped_by_the_session_they_start_in(self):
         d = data({4: {1: [ZOE], 2: [BOB]}, 5: {2: [ANN]}})
         units = {u.pack: u for u in running_units(d)}
-        self.assertEqual(units[4].groups, (('9:00a · Keynote', (('Zoë', ''),)),
-                                           ('10:30a · Panel', (('Bob', ''),))))
-        self.assertEqual(units[5].groups, ((None, (('Ann', ''),)),))
+        self.assertEqual(units[4].groups, (('Zoë',), ('Bob',)))
+        self.assertEqual(units[5].groups, (('Ann',),))
         self.assertEqual(units[5].header, (DAY1,))
 
     def test_one_unit_per_pack_per_day_and_the_header_is_counted_per_day(self):
@@ -207,46 +223,33 @@ class GroupingTests(SimpleTestCase):
         self.assertEqual([(u.pack, u.header) for u in units],
                          [(4, (DAY1,)), (4, (DAY2, '8:30a', 'Opening'))])
 
-    def test_session_without_start_time_separator_is_just_its_name(self):
-        untimed = S(2, 1, 'Panel', '')
-        d = data({4: {1: [ZOE], 2: [BOB]}}, sessions=[KEYNOTE, untimed])
-        (unit,) = running_units(d)
-        self.assertEqual(unit.groups[1][0], 'Panel')
-
     # -- merge, running order (mirrors the single-name tests)
     def test_running_merges_consecutive_sessions(self):
         d = data({4: {1: [ZOE], 2: [ZOE], 3: [ZOE]}})
         (unit,) = running_units(d)
-        self.assertEqual(unit.groups, (('9:00a · Keynote', (('Zoë', 'S1–3'),)),))
+        self.assertEqual(unit.groups, (('Zoë',),))      # once, no marker
 
     def test_running_merge_broken_by_a_different_presenter(self):
         d = data({4: {1: [ZOE], 2: [BOB], 3: [ZOE]}})
         (unit,) = running_units(d)
-        self.assertEqual(unit.groups, (('9:00a · Keynote', (('Zoë', ''),)),
-                                       ('10:30a · Panel', (('Bob', ''),)),
-                                       ('1:15p · Breakout', (('Zoë', ''),))))
+        self.assertEqual(unit.groups, (('Zoë',), ('Bob',), ('Zoë',)))
 
     def test_running_merge_broken_by_no_presenter_or_no_rf_row(self):
         d = data({4: {1: [ZOE], 3: [ZOE]}})
         (unit,) = running_units(d)
-        self.assertEqual([g[0] for g in unit.groups], ['9:00a · Keynote', '1:15p · Breakout'])
+        self.assertEqual(unit.groups, (('Zoë',), ('Zoë',)))
 
     def test_running_merge_never_crosses_a_day(self):
         d = data({4: {3: [ZOE], 4: [ZOE]}})
         units = running_units(d)
-        self.assertEqual([u.groups for u in units], [((None, (('Zoë', ''),)),)] * 2)
+        self.assertEqual([u.groups for u in units], [(('Zoë',),)] * 2)
 
     def test_an_unselected_session_in_between_breaks_the_merge(self):
         # Keynote and Breakout selected, Panel (index 1) between them not.
         d = data({4: {1: [ZOE], 3: [ZOE]}}, sessions=[KEYNOTE, BREAKOUT])
         self.assertEqual([i.session for i in single_name_items(d)], ['Keynote', 'Breakout'])
         (unit,) = running_units(d)
-        self.assertEqual([g[0] for g in unit.groups], ['9:00a · Keynote', '1:15p · Breakout'])
-
-    def test_session_span(self):
-        from planner.utils.labels.data import session_span
-        self.assertEqual(session_span([KEYNOTE, PANEL, BREAKOUT]), 'S1–3')
-        self.assertEqual(session_span([PANEL, BREAKOUT]), 'S2–3')
+        self.assertEqual(unit.groups, (('Zoë',), ('Zoë',)))
 
     def test_pack_entries_record_the_run(self):
         d = data({4: {1: [ZOE], 2: [ZOE]}})
@@ -283,7 +286,7 @@ class LayoutTests(SimpleTestCase):
         g = layout.geometry
         for run in layout.runs:
             self.assertTrue(g.safe.contains(run.bbox, 1e-6), (run.text, run.bbox, g.safe))
-            if run.role in ('name', 'meta', 'separator'):
+            if run.role in ('name', 'meta'):
                 self.assertTrue(g.text.contains(run.bbox, 1e-6), (run.text, run.bbox, g.text))
                 self.assertTrue(g.panel.contains(run.bbox, 1e-6))
             if run.role == 'header':
@@ -327,31 +330,43 @@ class LayoutTests(SimpleTestCase):
                         self.assert_contained(L.layout_running(page, stock))
 
     def test_running_capacity_on_ol3016lp(self):
-        self.assertEqual(L.running_order_capacity(OL), 3)          # worst case
-        pages = running_pages(['Ann Lee'] * 6)                      # one session
-        self.assertEqual(len(pages), 1)
-        pages = running_pages(['Ann Lee'] * 7)
-        self.assertEqual(len(pages), 2)
-        # Two sessions on a label: four names, split 3 + 1 at most.
-        pages = running_pages(['Ann Lee'] * 4, sessions=(KEYNOTE, PANEL))
-        self.assertEqual(len(pages), 1)
+        self.assertEqual(L.running_order_capacity(OL), 5)          # worst case
+        self.assertEqual(len(running_pages(['Ann Lee'] * 6)), 1)    # one session
+        self.assertEqual(len(running_pages(['Ann Lee'] * 7)), 2)
+        five = (KEYNOTE, PANEL, BREAKOUT, S(5, 3, 'D', ''), S(6, 4, 'E', ''))
+        six = five + (S(7, 5, 'F', ''),)
+        self.assertEqual(len(running_pages(['Ann Lee'] * 5, sessions=five)), 1)
+        self.assertEqual(len(running_pages(['Ann Lee'] * 6, sessions=six)), 2)
 
-    def test_separator_clears_the_descenders_above_it(self):
+    def test_divider_clears_real_glyphs_at_the_floor(self):
+        # The worst pair: the J of "Phil Jacobs" above, the stacked accents
+        # of "Nguyễn Đặng" below, at 11 pt. Glyph boxes come from the font's
+        # own outlines, not its ascent and descent.
+        # Five names, each a new session: a full label, so it stays at 11 pt.
+        rows = [L.Row(name, divider=True)
+                for name in ('Ann Lee', 'Bob Ray', 'Cy Dunn', 'Phil Jacobs', 'Nguyễn Đặng')]
+        layout = L.layout_running(L.RunningPage(2, (DAY1,), tuple(rows)), OL)
+        names = [r for r in layout.runs if r.role == 'name']
+        self.assertEqual({r.size for r in names}, {L.RUNNING_NAME_FLOOR})
+        above, below = names[-2], names[-1]
+        (_, rule_y, _) = layout.rules[-1]
+        half = 0.25                                     # of the 0.5 pt hairline
+        self.assertGreater(above.y + ink(above.text, above.size)[0], rule_y + half)
+        self.assertLess(below.y + ink(below.text, below.size)[1], rule_y - half)
+        # The font boxes do not overlap either.
+        self.assertGreaterEqual(above.bbox.y - below.bbox.top, 0)
+
+    def test_divider_count_and_no_divider_at_the_top(self):
         sessions = (KEYNOTE, PANEL, BREAKOUT)
-        for stock in (OL, big_stock()):
-            for count in (3, 6, 12):
-                for page in running_pages(['Sarah McMillan'] * count, stock, sessions):
-                    layout = L.layout_running(page, stock)
-                    text = [r for r in layout.runs if r.role != 'header']
-                    for above, row in zip(text, text[1:]):
-                        if row.role != 'separator':
-                            continue
-                        name_size = above.size
-                        clear = above.bbox.y - row.bbox.top
-                        self.assertGreaterEqual(clear + 1e-6, 0, (stock.part, row.text))
-                        gap = (above.y - row.y) - (row.size * L.SEPARATOR_LEADING)
-                        self.assertGreaterEqual(gap + 1e-6, L.SEPARATOR_GAP * name_size)
-                    self.assertEqual(text[0].role, 'separator')
+        for names, dividers in ((['Ann Lee'], 0), (['Ann Lee'] * 2, 1), (['Ann Lee'] * 3, 2)):
+            (page,) = running_pages(names, sessions=sessions)
+            self.assertEqual(len(L.layout_running(page, OL).rules), dividers, names)
+        pages = running_pages(['Ann Lee'] * 12, sessions=sessions)
+        for page in pages:
+            layout = L.layout_running(page, OL)
+            top_name = max(r.y for r in layout.runs if r.role == 'name')
+            self.assertTrue(all(y < top_name for _, y, _ in layout.rules))
+            self.assertEqual(len(layout.rules), sum(r.divider for r in page.rows[1:]))
 
     def test_few_names_grow_and_are_centred(self):
         g = L.geometry(OL)
@@ -371,53 +386,32 @@ class LayoutTests(SimpleTestCase):
         self.assertEqual({r.size for r in layout.runs if r.role == 'name'},
                          {L.RUNNING_NAME_FLOOR})
 
-    def test_merged_row_after_another_name_regression(self):
-        # Printed RF 01 read "Session 1 +2 / sam / Sarah McMillan": the run
-        # belongs to Sarah, so it goes on her row and the separator is plain.
+    def test_real_day_packs_each_fit_one_label(self):
+        # Printed on a real day, these split onto 1/2 + 2/2 with separator
+        # rows. Each must be one label, with a divider per new session.
         s1, s2, s3 = (S(10 + i, i, f'Session {i + 1}', '') for i in range(3))
-        sam, sarah = (20, 'sam'), (21, 'Sarah McMillan')
-        d = data({1: {s1.id: [sam, sarah], s2.id: [sarah], s3.id: [sarah]}},
-                 sessions=[s1, s2, s3])
-        (unit,) = running_units(d)
-        self.assertEqual(unit.groups, (('Session 1', (('sam', ''), ('Sarah McMillan', 'S1–3'))),))
-        (page,) = [p for u in running_units(d) for p in L.paginate_running(u, OL)]
-        layout = L.layout_running(page, OL)
-        texts = [(r.role, r.text) for r in layout.runs if r.role != 'header']
-        # "Sarah McMillan · S1–3" is 109.3 pt at the 11 pt floor against a
-        # 105.7 pt line, so the suffix wraps and the name stays whole.
-        self.assertEqual(texts, [('separator', 'Session 1'), ('name', 'sam'),
-                                 ('name', 'Sarah McMillan'), ('suffix', 'S1–3')])
-        name, suffix = layout.runs[-2], layout.runs[-1]
-        self.assertLess(suffix.y, name.y)
-        self.assertEqual(suffix.x - name.x, L.WRAP_INDENT)
-        self.assertEqual((suffix.font, suffix.size), (fonts.BOLD, L.geometry(OL).small))
-        self.assert_contained(layout)
-        self.assertFalse(any('+' in r.text for r in layout.runs))
-        # Single-name mode keeps its meta line.
-        items = single_name_items(d)
-        self.assertEqual([(i.name, i.session) for i in items],
-                         [('sam', 'Session 1'), ('Sarah McMillan', 'Session 1 +2')])
-
-    def test_suffix_wraps_before_the_name_does(self):
-        g = L.geometry(OL)
-        # 101.5 pt of a 105.7 pt line: the name fits, the suffix does not.
-        row = L.Row('name', 'Christopher Brown', 'S1–3')
-        lines, truncated = L._row_lines(row, g, L.RUNNING_NAME_FLOOR)
-        self.assertFalse(truncated)
-        self.assertEqual([(l.role, l.text, l.suffix) for l in lines],
-                         [('name', 'Christopher Brown', ''), ('suffix', 'S1–3', '')])
-        # A short name keeps it inline.
-        lines, _ = L._row_lines(L.Row('name', 'Ann Lee', 'S1–3'), g, L.RUNNING_NAME_FLOOR)
-        self.assertEqual([(l.role, l.suffix) for l in lines], [('name', ' · S1–3')])
-        # Laid out among other names, everything stays inside.
-        page = L.RunningPage(4, ('Tue Nov 3',), (
-            L.Row('separator', '9:00a · Keynote'), L.Row('name', 'Ann Lee'),
-            L.Row('name', 'Christopher Brown', 'S1–3'), L.Row('name', 'Bob Ray', 'S1–2')))
-        layout = L.layout_running(page, OL)
-        self.assert_contained(layout)
-        roles = [r.role for r in layout.runs if r.role != 'header']
-        self.assertEqual(roles, ['separator', 'name', 'name', 'suffix', 'name', 'suffix'])
-        self.assertEqual(layout.name_lines, 3)
+        sarah = (21, 'Sarah McMillan')
+        d = data({
+            1: {s1.id: [(20, 'sam'), sarah], s2.id: [sarah], s3.id: [sarah]},
+            2: {s1.id: [(30, 'Mark Phezan')], s2.id: [(31, 'Phil Jacobs'), (32, 'Amanda Phillen')],
+                s3.id: [(33, 'Nguyễn Đặng')]},
+            4: {s1.id: [(40, 'Bill Overstreet')], s2.id: [(41, 'William Bobster')],
+                s3.id: [(42, 'WILLIAM M. MORROW')]},
+        }, sessions=[s1, s2, s3])
+        expected = {
+            1: (['sam', 'Sarah McMillan'], 0),    # S2 and S3 add no name: no divider
+            2: (['Mark Phezan', 'Phil Jacobs', 'Amanda Phillen', 'Nguyễn Đặng'], 2),
+            4: (['Bill Overstreet', 'William Bobster', 'WILLIAM M.', 'MORROW'], 2),
+        }
+        layouts = build_layouts(d, 'running', OL)
+        self.assertEqual(len(layouts), 3)
+        for unit, layout in zip(running_units(d), layouts):
+            self.assertEqual(len(L.paginate_running(unit, OL)), 1, unit.pack)
+            names, dividers = expected[unit.pack]
+            self.assertEqual([r.text for r in layout.runs if r.role == 'name'], names)
+            self.assertEqual(len(layout.rules), dividers, unit.pack)
+            self.assertFalse(any('S1' in r.text or '+' in r.text for r in layout.runs))
+            self.assert_contained(layout)
 
     def test_growing_never_breaks_a_word(self):
         for name in ('Christopher Brown', 'Bartholomew Smith', 'Jacqueline Mwangi'):
@@ -468,7 +462,7 @@ class LayoutTests(SimpleTestCase):
         self.assertTrue(lines[1].text.endswith(L.ELLIPSIS))
         self.assertTrue(layout.truncated)
 
-    def test_overflow_labels_and_repeated_separator(self):
+    def test_overflow_labels(self):
         sessions = (KEYNOTE, PANEL)
         names = ['Ann Lee'] * 12
         pages = running_pages(names, sessions=sessions)
@@ -476,10 +470,11 @@ class LayoutTests(SimpleTestCase):
         n = len(pages)
         self.assertEqual([p.part for p in pages], [(i, n) for i in range(1, n + 1)])
         for page in pages:
-            self.assertEqual(page.rows[0].kind, 'separator')     # never starts bare
-            self.assertEqual(page.rows[-1].kind, 'name')         # never ends on one
+            # A divider is never drawn at the top of a continuation label.
+            self.assertEqual(len(L.layout_running(page, OL).rules),
+                             sum(r.divider for r in page.rows[1:]))
         # Every name made it onto a label exactly once.
-        self.assertEqual(sum(r.kind == 'name' for p in pages for r in p.rows), 12)
+        self.assertEqual(sum(len(p.rows) for p in pages), 12)
 
     def test_header_numbers_match_the_tracker_badge(self):
         item = single_name_items(data({4: {1: [ZOE]}}, sessions=[KEYNOTE]))[0]
@@ -638,7 +633,7 @@ class LabelViewTests(TestCase):
         gapped = single_name_items(scope_data(self.project, [a.pk, c.pk]))
         self.assertEqual([i.session for i in gapped], ['A', 'C'])
         units = running_units(scope_data(self.project, [a.pk, c.pk]))
-        self.assertEqual([g[0] for g in units[0].groups], ['A', 'C'])
+        self.assertEqual(units[0].groups, (('Amy',), ('Amy',)))
 
     def test_sessions_across_days(self):
         from planner.models import Presenter, ShowDay

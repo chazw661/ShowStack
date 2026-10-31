@@ -1,8 +1,9 @@
 """What goes on the beltpack labels: Mic Tracker rows in, label contents out.
 
 ``scope_data`` is the only function here that touches the database. It
-flattens the selected sessions into a ``ScopeData`` of plain values, and everything after that is pure, so the grouping rules are tested
-with hand-built data and no fixtures.
+flattens the selected sessions into a ``ScopeData`` of plain values, and
+everything after that is pure, so the grouping rules are tested with
+hand-built data and no fixtures.
 
 The model, for anyone arriving cold:
 
@@ -20,8 +21,8 @@ The model, for anyone arriving cold:
 Merging: one presenter on the same pack across consecutive sessions of the
 same day is one label (single-name) or one row (running order). A
 single-name label carries the first session's time and "Keynote +2"; a
-running-order row carries the sessions' positions in the day after the
-name, "Sarah McMillan · S1–3", and its separator stays plain. Consecutive means
+running-order row is just the name, appearing once: the pack stays with it
+until the next name. Consecutive means
 adjacent in the day's session order; any session in between where the pack
 has a different presenter, no presenter, or no RF row breaks the run -- and
 so does a session in between that was not selected.
@@ -83,7 +84,9 @@ class RunningUnit:
     it is split onto labels."""
     pack: int
     header: tuple                       # header lines, right block
-    groups: tuple                       # ((separator text or None, ((name, suffix), ...)), ...)
+    # Names grouped by the session they start in, in order: ((name, ...), ...).
+    # A label draws a divider between groups.
+    groups: tuple
 
 
 # ---------------------------------------------------------------- formatting
@@ -111,21 +114,6 @@ def pack_label(pack):
 
 def with_extra(text, extra):
     return '{} +{}'.format(text, extra) if extra else text
-
-
-def separator_text(session):
-    return '{} · {}'.format(session.time, session.name) if session.time else session.name
-
-
-def session_span(sessions):
-    """Positions in the day, 1-based: "S1–3". A merged run is always
-    adjacent sessions, so first and last say it all."""
-    return 'S{}–{}'.format(sessions[0].index + 1, sessions[-1].index + 1)
-
-
-def run_suffix(entry):
-    """What a running-order row adds after a merged presenter's name."""
-    return session_span(entry.sessions) if entry.extra else ''
 
 
 _DIGITS = re.compile(r'(\d+)')
@@ -227,8 +215,9 @@ def running_units(data):
     the header names it (day, time, session); with several, the header is
     the day alone.
 
-    Separators appear only when the unit covers more than one session; under
-    one, the header or the separator-free list already says enough.
+    Names are grouped by the session they start in, and the label draws a
+    divider between groups. A session that adds no new name to the pack (a
+    merged run carrying on through it) adds no group, so no divider.
     """
     per_day = {}
     for session in data.sessions:
@@ -244,22 +233,12 @@ def running_units(data):
                 header = tuple(line for line in (first.day_label, first.time, first.name) if line)
             else:
                 header = (first.day_label,)
-            covered = {s.id for e in entries for s in e.sessions}
-            if len(covered) > 1:
-                groups = []
-                for entry in entries:
-                    if groups and groups[-1][0] == entry.first.id:
-                        groups[-1][2].append(entry)
-                    else:
-                        groups.append((entry.first.id, entry.first, [entry]))
-                # A merged run is marked on its own row, not the separator:
-                # the separator names where the label's reading starts, and
-                # the run may be one of several names under it.
-                groups = tuple(
-                    (separator_text(session), tuple((e.name, run_suffix(e)) for e in group))
-                    for _, session, group in groups
-                )
-            else:
-                groups = ((None, tuple((e.name, run_suffix(e)) for e in entries)),)
-            units.append(RunningUnit(pack=pack, header=header, groups=groups))
+            groups, session_id = [], None
+            for entry in entries:
+                if entry.first.id != session_id:
+                    groups.append([])
+                    session_id = entry.first.id
+                groups[-1].append(entry.name)
+            units.append(RunningUnit(pack=pack, header=header,
+                                     groups=tuple(tuple(names) for names in groups)))
     return units

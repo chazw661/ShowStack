@@ -12,9 +12,8 @@ label. For OL3016LP (S = 144 pt) the numbers come out as:
     panel padding   0.04 S x, 0.015 S y  5.76 / 2.16 pt
     text box                            105.70 x 77.62 pt  (37.3 x 27.4 mm)
 
-The vertical numbers are as tight as they are so a running order still fits
-three names in the worst case (every name opening a new session) with the
-space above each separator.
+A running order fits six one-line names on a label, and five when every
+name opens a new session and so brings a divider.
 
 Text is stacked with the font's real ascent and descent, so a line's box --
 what the tests check against the safe zone and the panel -- holds stacked
@@ -40,7 +39,6 @@ OTHER_FLOOR = 9
 SIZE_STEP = 0.5
 
 NAME_LEADING = 1.12
-SEPARATOR_LEADING = 1.1
 META_LEADING = 1.15
 HEADER_LEADING = 1.1
 
@@ -50,19 +48,14 @@ CAP_HEIGHT = 0.714
 # Second line of a wrapped running-order name, so it reads as the same row.
 WRAP_INDENT = 6
 
-# Extra space above a running-order separator, x the name size, so the
-# separator never sits on the descenders of the name above it. The first row
-# on a label has nothing above it and gets none.
-SEPARATOR_GAP = 0.35
-
-# A merged run's suffix ("· S1–3") is set like a separator. When it does not
-# fit after the name it takes a line of its own, this much x the name size
-# further below the name than separator leading alone.
-SUFFIX_GAP = 0.2
-SUFFIX_JOIN = ' · '
+# Extra space where a running order moves to the next session, x the name
+# size (3.3 pt at the 11 pt floor). A 0.5 pt hairline sits in the middle of
+# it. Checked against real glyph boxes: at the floor it clears the descender
+# of "Phil Jacobs" above and the stacked accents of "Nguyễn Đặng" below.
+DIVIDER_GAP = 0.3
 
 # Running order is only offered where the worst case -- every name opening a
-# new session, so every name brings a separator -- still shows this many.
+# new session, so every name brings a divider -- still shows this many.
 RUNNING_MIN_NAMES = 3
 
 
@@ -79,7 +72,7 @@ class Geometry:
     header_pad: float
     single_name_max: float
     meta_max: float
-    small: float            # header lines, separators, "RF": the 9 pt tier
+    small: float            # header lines and "RF": the 9 pt tier
     number: float           # the RF number in the header
 
 
@@ -115,7 +108,7 @@ class Run:
     size: float
     x: float                # left edge
     y: float                # baseline
-    role: str               # 'header' | 'name' | 'meta' | 'separator' | 'empty'
+    role: str               # 'header' | 'name' | 'meta'
     floor: float = 0
 
     @property
@@ -305,20 +298,11 @@ def layout_single(item, stock):
 
 @dataclass(frozen=True)
 class Row:
-    kind: str       # 'separator' | 'name'
+    """One presenter in a running order. ``divider``: this name opens a new
+    session after another session's names, so a hairline goes above it --
+    unless it is the first name on its label."""
     text: str
-    suffix: str = ''    # a merged run's sessions, name rows only: "S1–3"
-
-
-@dataclass(frozen=True)
-class Line:
-    text: str
-    font: str
-    size: float
-    indent: float
-    advance: float      # baseline to baseline from the line above
-    role: str           # 'separator' | 'name' | 'suffix'
-    suffix: str = ''    # set inline after ``text``, in the separator style
+    divider: bool = False
 
 
 @dataclass(frozen=True)
@@ -329,39 +313,25 @@ class RunningPage:
     part: tuple = None      # (i, n) when the pack needs more than one label
 
 
-def _row_lines(row, g, size):
-    """([Line], truncated) for one row at name size. A line's advance is the
-    space above it, so a label's first line drops it.
-
-    A suffix never costs the name a line: it goes after the name's last line
-    when it fits there, and on a line of its own when it does not."""
-    if row.kind == 'separator':
-        text = ellipsize(row.text, fonts.BOLD, g.small, g.text.w)
-        advance = g.small * SEPARATOR_LEADING + SEPARATOR_GAP * size
-        return [Line(text, fonts.BOLD, g.small, 0, advance, 'separator')], False
+def _row_lines(row, g, size, first=False):
+    """([(text, indent, advance)], truncated) for one row at ``size``. A
+    line's advance is the space above it; a label's first line has none."""
     texts, truncated = wrap(row.text, fonts.SEMIBOLD, size, g.text.w, indent=WRAP_INDENT)
-    lines = [Line(text, fonts.SEMIBOLD, size, WRAP_INDENT if i else 0, size * NAME_LEADING, 'name')
-             for i, text in enumerate(texts)]
-    if row.suffix:
-        last = lines[-1]
-        inline = SUFFIX_JOIN + row.suffix
-        used = last.indent + fonts.string_width(last.text, last.font, last.size)
-        if _fits(inline, fonts.BOLD, g.small, g.text.w - used):
-            lines[-1] = Line(last.text, last.font, last.size, last.indent, last.advance,
-                             'name', inline)
-        else:
-            text = ellipsize(row.suffix, fonts.BOLD, g.small, g.text.w - WRAP_INDENT)
-            advance = g.small * SEPARATOR_LEADING + SUFFIX_GAP * size
-            lines.append(Line(text, fonts.BOLD, g.small, WRAP_INDENT, advance, 'suffix'))
+    lines = []
+    for i, text in enumerate(texts):
+        advance = size * NAME_LEADING
+        if i == 0 and row.divider and not first:
+            advance += DIVIDER_GAP * size
+        lines.append((text, WRAP_INDENT if i else 0, advance))
     return lines, truncated
 
 
 def _rows_height(rows, g, size):
-    lines = []
-    for row in rows:
-        row_lines, _ = _row_lines(row, g, size)
-        lines.extend((line.font, line.size, line.advance) for line in row_lines)
-    return _stack_height(lines)
+    advances = []
+    for i, row in enumerate(rows):
+        lines, _ = _row_lines(row, g, size, first=i == 0)
+        advances.extend(advance for _, _, advance in lines)
+    return _stack_height([(fonts.SEMIBOLD, size, a) for a in advances])
 
 
 def _rows_fit(rows, g, size):
@@ -369,31 +339,20 @@ def _rows_fit(rows, g, size):
 
 
 def paginate_running(unit, stock):
-    """Split a unit's rows onto as many labels as it needs, measured at the
-    floor size (wrapped names take their two lines). A separator never ends
-    a label, and a label that continues a session repeats its separator."""
+    """Split a unit's names onto as many labels as they need, measured at
+    the floor size (wrapped names take their two lines). A divider that
+    would start a continuation label is simply not drawn."""
     g = geometry(stock)
-    rows = []
-    for separator, names in unit.groups:
-        if separator:
-            rows.append(Row('separator', separator))
-        rows.extend(Row('name', name, suffix) for name, suffix in names)
-
-    pages, current, separator = [], [], None
+    rows = [Row(name, divider=bool(i) and j == 0)
+            for i, names in enumerate(unit.groups) for j, name in enumerate(names)]
+    pages, current = [], []
     for row in rows:
-        if row.kind == 'separator':
-            separator = row
-        if _rows_fit(current + [row], g, RUNNING_NAME_FLOOR):
-            current.append(row)
-            continue
-        if row.kind == 'name' and current and current[-1] is separator:
-            current.pop()
-        pages.append(current)
-        current = [separator] if row.kind == 'name' and separator else []
+        if current and not _rows_fit(current + [row], g, RUNNING_NAME_FLOOR):
+            pages.append(current)
+            current = []
         current.append(row)
     if current:
         pages.append(current)
-
     n = len(pages)
     return [RunningPage(unit.pack, unit.header, tuple(p), (i + 1, n) if n > 1 else None)
             for i, p in enumerate(pages)]
@@ -404,6 +363,7 @@ def layout_running(page, stock):
     layout = LabelLayout(g)
     _header(layout, g, list(page.header), page.pack, page.part)
     box = g.text
+    rows = page.rows
 
     # The largest size, up to the single-name maximum, where everything
     # fits and nothing is cut short or broken mid-word: a name that needs an
@@ -412,67 +372,51 @@ def layout_running(page, stock):
     # floor (a bigger name broken in two reads worse than a smaller one
     # whole, next to names that are not); a lone name wraps to two lines as
     # on a single-name label.
-    # A row's shape is its name lines and whether its suffix has a line of
-    # its own: growing may change neither, so a suffix that sits after the
-    # name at the floor stays there.
     def shape(size):
-        measured = [_row_lines(row, g, size) for row in page.rows]
-        counts = [(sum(line.role == 'name' for line in lines), lines[-1].role == 'suffix')
-                  for lines, _ in measured]
-        return counts, any(t for _, t in measured)
+        measured = [_row_lines(row, g, size) for row in rows]
+        return [len(lines) for lines, _ in measured], any(t for _, t in measured)
 
     at_floor, _ = shape(RUNNING_NAME_FLOOR)
-    lone = sum(row.kind == 'name' for row in page.rows) == 1
+    lone = len(rows) == 1
     size = RUNNING_NAME_FLOOR
     for candidate in _sizes(g.single_name_max, RUNNING_NAME_FLOOR):
         counts, truncated = shape(candidate)
         whole = all(_whole_words(row.text, fonts.SEMIBOLD, candidate, box.w - WRAP_INDENT)
-                    for row in page.rows if row.kind == 'name')
-        if (_rows_fit(page.rows, g, candidate) and not truncated and whole
+                    for row in rows)
+        if (_rows_fit(rows, g, candidate) and not truncated and whole
                 and (lone or counts == at_floor)):
             size = candidate
             break
 
     # Centre the block in the text box.
-    top = box.y + (box.h + _rows_height(page.rows, g, size)) / 2
+    top = box.y + (box.h + _rows_height(rows, g, size)) / 2
+    ascent = fonts.ascent(fonts.SEMIBOLD, size)
+    descent = fonts.descent(fonts.SEMIBOLD, size)
     y = None
-    for row in page.rows:
-        row_lines, truncated = _row_lines(row, g, size)
+    for i, row in enumerate(rows):
+        lines, truncated = _row_lines(row, g, size, first=i == 0)
         layout.truncated = layout.truncated or truncated
-        for line in row_lines:
-            font, sz = line.font, line.size
-            y = top - fonts.ascent(font, sz) if y is None else y - line.advance
-            x = box.x + line.indent
-            floor = RUNNING_NAME_FLOOR if line.role == 'name' else OTHER_FLOOR
-            layout.runs.append(Run(line.text, font, sz, x, y, line.role, floor))
-            if line.role == 'name':
-                layout.name_lines += 1
-            if line.suffix:
-                after = x + fonts.string_width(line.text, font, sz)
-                layout.runs.append(Run(line.suffix, fonts.BOLD, g.small, after, y,
-                                       'suffix', OTHER_FLOOR))
-            if line.role == 'separator':
-                # A hairline from the end of the separator to the right edge
-                # of the text box, at mid x-height: it marks the session
-                # break without costing a line of height.
-                end = x + fonts.string_width(line.text, font, sz) + 3
-                if end < box.right - 4:
-                    layout.rules.append((end, y + 0.3 * sz, box.right))
+        for j, (text, indent, advance) in enumerate(lines):
+            above = y
+            y = top - ascent if y is None else y - advance
+            layout.runs.append(Run(text, fonts.SEMIBOLD, size, box.x + indent, y,
+                                   'name', RUNNING_NAME_FLOOR))
+            layout.name_lines += 1
+            if j == 0 and row.divider and above is not None:
+                # Midway between the line above's descent and this line's
+                # ascent: the font's whole boxes, accents included.
+                layout.rules.append((box.x, ((above - descent) + (y + ascent)) / 2, box.right))
     return layout
 
 
 def running_order_capacity(stock):
     """Names per label in the worst case at the floor: every name opens a
-    new session, so each brings a separator row with it."""
+    new session, so each brings a divider."""
     g = geometry(stock)
     k = 0
-    while True:
-        rows = []
-        for i in range(k + 1):
-            rows += [Row('separator', '9:00a · Keynote'), Row('name', 'Name')]
-        if not _rows_fit(rows, g, RUNNING_NAME_FLOOR):
-            return k
+    while _rows_fit([Row('Name', divider=True)] * (k + 1), g, RUNNING_NAME_FLOOR):
         k += 1
+    return k
 
 
 def running_order_available(stock):
