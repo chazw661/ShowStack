@@ -39,6 +39,10 @@
         color: var(--text-primary); font-size: 13px;
     }
     .mtp-warning strong { color: var(--accent-amber); }
+    .mtp-brand { margin: 10px 24px 0; font-size: 13px; color: var(--text-secondary); }
+    .mtp-brand strong { color: var(--text-primary); }
+    #mtp-root .mtp-brand a { color: var(--accent-blue); margin-left: 6px; }
+    .mtp-brand .mtp-toner { display: block; margin-top: 4px; color: var(--accent-amber); }
 
     .mtp-layout { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 20px; padding: 16px 24px; }
     @media (max-width: 900px) { .mtp-layout { grid-template-columns: 1fr; } }
@@ -105,6 +109,13 @@
         <strong>Print at 100% / “Actual size”</strong> — not “Fit to page”, which shrinks
         everything off the labels. Print the alignment page first on plain paper and check
         that both bars measure exactly 100&nbsp;mm.
+    </div>
+
+    <div class="mtp-brand" id="mtp-brand">
+        <strong>Client branding:</strong> {{ brand.describe }}
+        {% if can_edit_branding %}<a href="{% url 'planner:project_branding' %}">Edit branding</a>{% endif %}
+        {% if brand.text_white %}<span class="mtp-toner">Heavy colour coverage — use B&amp;W if the venue printer is low on toner.</span>{% endif %}
+        <span class="mtp-note" style="display:block">The alignment page shows a swatch of each brand colour: print it first to check the venue printer's colour.</span>
     </div>
 
     <div class="mtp-layout">

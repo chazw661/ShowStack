@@ -27,6 +27,11 @@ POINTS_PER_MM = Fraction(POINTS_PER_INCH * 10, 254)
 # off the label.
 OFFSET_LIMIT_MM = 5
 
+# Background fills run this far past the die line, so a sheet die-cut a
+# little off still shows no white edge. Text and logos stay inside the safe
+# zone, well clear of it.
+BLEED_MM = '2.5'
+
 
 def inches(value):
     """Points from inches, exactly. Pass a str or Fraction, not a float."""

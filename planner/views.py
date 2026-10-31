@@ -764,13 +764,15 @@ def mic_tracker_overview_view(request):
 # fails closed the same way. Layout and PDF generation live in
 # planner/utils/labels/ and never see the request.
 
-def _label_options(request, project):
+def _label_options(request, project, with_logo_content=True):
     """Parse and validate the label query string.
 
     Returns (params, error_response). The PDF and the summary take the same
     parameters, so the print page's preview and its "N labels" line can
-    never disagree about what was asked for.
+    never disagree about what was asked for. The project's branding comes
+    with them: it decides how many names fit a label.
     """
+    from planner.utils.labels.brand import brand_for
     from planner.utils.labels.layout import running_order_available
     from planner.utils.labels.render import Options
     from planner.utils.labels.stock import clamp_offset, clamp_start, get_stock
@@ -792,11 +794,12 @@ def _label_options(request, project):
         # Another project's session, or none at all: the same 404 either way.
         raise Http404('No such session.')
 
+    brand = brand_for(project, with_logo_content)
     mode = request.GET.get('mode', 'single')
     if mode not in ('single', 'running'):
         return None, HttpResponseBadRequest('Unknown mode.')
     if mode == 'running':
-        available, reason = running_order_available(stock)
+        available, reason = running_order_available(stock, brand.frame())
         if not available:
             return None, HttpResponseBadRequest(reason)
 
@@ -805,6 +808,7 @@ def _label_options(request, project):
         start=clamp_start(request.GET.get('start'), stock),
         dx_mm=clamp_offset(request.GET.get('dx')),
         dy_mm=clamp_offset(request.GET.get('dy')),
+        brand=brand,
     )
     return {'stock': stock, 'sessions': sessions, 'mode': mode, 'options': options}, None
 
@@ -840,12 +844,14 @@ def mic_tracker_print_view(request):
     """The print page: a session checklist, mode and calibration controls
     around an iframe showing the real PDF. ``?session=<id>`` (the A2 tab's
     shortcut) ticks that session; without it nothing is ticked."""
+    from planner.utils.labels.brand import brand_for
     from planner.utils.labels.layout import running_order_available
     from planner.utils.labels.stock import DEFAULT_STOCK, OFFSET_LIMIT_MM, STOCKS
 
     project = _scoped_project(request)
     if project is None:
         return redirect('planner:mic_tracker')
+    brand = brand_for(project, with_logo_content=False)
 
     from django.db.models import Prefetch
     days = (ShowDay.objects.filter(project=project).order_by('date', 'id')
@@ -859,9 +865,11 @@ def mic_tracker_print_view(request):
         selected_session = 0
 
     stock = STOCKS[DEFAULT_STOCK]
-    running_available, running_reason = running_order_available(stock)
+    running_available, running_reason = running_order_available(stock, brand.frame())
     context = {
         **_shared_header_context(request),
+        'brand': brand,
+        'can_edit_branding': _can_edit_current_project(request),
         'days': days,
         'selected_session': selected_session,
         'stock': stock,
@@ -899,13 +907,17 @@ def mic_labels_alignment_pdf(request):
     from planner.utils.labels.render import Options, render_alignment_pdf
     from planner.utils.labels.stock import clamp_offset, get_stock
 
-    if _scoped_project(request) is None:
+    from planner.utils.labels.brand import brand_for
+
+    project = _scoped_project(request)
+    if project is None:
         raise Http404('No project.')
     stock = get_stock(request.GET.get('stock'))
     if stock is None:
         return HttpResponseBadRequest('Unknown label stock.')
     options = Options(dx_mm=clamp_offset(request.GET.get('dx')),
-                      dy_mm=clamp_offset(request.GET.get('dy')))
+                      dy_mm=clamp_offset(request.GET.get('dy')),
+                      brand=brand_for(project, with_logo_content=False))
     pdf = render_alignment_pdf(stock, options)
     filename = 'ShowStack-label-alignment-{}-PRINT-AT-100pct.pdf'.format(stock.part)
     return _pdf_response(pdf, filename, request.GET.get('download') == '1')
@@ -923,11 +935,12 @@ def mic_labels_summary(request):
     project = _scoped_project(request)
     if project is None:
         raise Http404('No project.')
-    params, error = _label_options(request, project)
+    params, error = _label_options(request, project, with_logo_content=False)
     if error:
         return JsonResponse({'error': error.content.decode()}, status=error.status_code)
     data = scope_data(project, [s.pk for s in params['sessions']])
-    labels = len(build_layouts(data, params['mode'], params['stock']))
+    labels = len(build_layouts(data, params['mode'], params['stock'],
+                               params['options'].brand.frame()))
     return JsonResponse({
         'labels': labels,
         'sheets': sheets_needed(params['stock'], labels, params['options'].start),

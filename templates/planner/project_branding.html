@@ -1,0 +1,273 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Label branding{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'planner:mic_tracker_print' %}">Print labels</a>
+    &rsaquo; Label branding
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
+    <style>
+    body { background: var(--bg-base); color: var(--text-primary); }
+    #pb-root { padding: 0 0 48px; }
+    .pb-header {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        padding: 18px 24px 14px; border-bottom: 1px solid var(--border); background: var(--bg-card);
+    }
+    .pb-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
+    .pb-sub { font-size: 11px; color: var(--text-dim); }
+    .pb-header-actions { margin-left: auto; display: flex; gap: 8px; }
+    #pb-root a.pb-btn, #pb-root a.pb-btn:link, #pb-root a.pb-btn:visited, #pb-root button.pb-btn {
+        display: inline-block; padding: 8px 14px; cursor: pointer;
+        background: var(--bg-raised); color: var(--text-primary) !important;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+        border: 1px solid var(--border-bright); border-radius: 4px; text-decoration: none;
+    }
+    #pb-root button.pb-btn.primary { background: var(--accent-blue); color: var(--mtt-text-inverse) !important; border-color: var(--accent-blue); }
+    #pb-root button.pb-btn.small { padding: 5px 10px; font-size: 10px; }
+    .pb-messages { margin: 16px 24px 0; padding: 0; list-style: none; }
+    .pb-messages li { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 6px;
+                      border: 1px solid var(--border-bright); background: var(--bg-card); }
+    .pb-messages li.error { border-color: var(--accent-red, #e5534b); }
+    .pb-messages li.success { border-color: var(--accent-green, #3fb950); }
+    .pb-readonly { margin: 16px 24px 0; font-size: 13px; color: var(--text-dim); }
+
+    .pb-layout { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 20px; padding: 16px 24px; }
+    @media (max-width: 900px) { .pb-layout { grid-template-columns: 1fr; } }
+    .pb-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+    .pb-panel + .pb-panel { margin-top: 16px; }
+    .pb-panel h3 {
+        margin: 0 0 10px; padding: 0; background: none;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-dim);
+    }
+    .pb-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--text-secondary); }
+    .pb-row > span.pb-label { width: 92px; flex: none; }
+    .pb-row input[type=text] {
+        width: 96px; background: var(--bg-raised); color: var(--text-primary);
+        border: 1px solid var(--border-bright); border-radius: 4px; padding: 5px 8px; font-size: 13px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .pb-row input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--border-bright); border-radius: 4px; background: none; }
+    .pb-note { font-size: 11px; color: var(--text-dim); margin: 4px 0 0; }
+    .pb-note.warn { color: var(--accent-amber); }
+    .pb-note.ok { color: var(--text-secondary); }
+    .pb-styles label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin: 6px 0; }
+    .pb-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .pb-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary);
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .pb-chip i { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--border-bright); display: inline-block; }
+
+    .pb-logo { border-top: 1px solid var(--border); padding: 12px 0 4px; }
+    .pb-logo:first-of-type { border-top: 0; padding-top: 0; }
+    .pb-logo-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .pb-logo-img { margin: 8px 0; padding: 8px; border-radius: 4px; display: inline-block; max-width: 100%; }
+    .pb-logo-img img { display: block; max-height: 48px; max-width: 100%; }
+    .pb-logo form { display: inline-flex; gap: 8px; align-items: center; margin: 4px 8px 0 0; }
+    .pb-logo input[type=file] { font-size: 12px; color: var(--text-secondary); max-width: 220px; }
+
+    .pb-preview { display: flex; flex-direction: column; gap: 8px; min-height: 70vh; }
+    .pb-preview iframe { flex: 1; width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div id="pb-root" data-preview-url="{% url 'planner:branding_preview_pdf' %}"
+     data-suggest-url="{% url 'planner:branding_suggest_accents' %}" data-default-bg="#262626">
+    <div class="pb-header">
+        <div>
+            <div class="pb-title">Label branding</div>
+            <div class="pb-sub">Client colours and logo for this project's beltpack labels.</div>
+        </div>
+        <div class="pb-header-actions">
+            <a class="pb-btn" href="{% url 'planner:mic_tracker_print' %}">← Print labels</a>
+        </div>
+    </div>
+
+    {% if messages %}
+    <ul class="pb-messages">
+        {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if not can_edit %}
+    <p class="pb-readonly">You can view this project's label branding. Only its owner and editors can change it.</p>
+    {% endif %}
+
+    <div class="pb-layout">
+        <div>
+            <form class="pb-panel" id="pb-colours"{% if can_edit %} method="post" action="{% url 'planner:branding_save' %}"{% else %} onsubmit="return false;"{% endif %}>
+                {% csrf_token %}
+                <h3>Colours</h3>
+                <div class="pb-row">
+                    <span class="pb-label">Background</span>
+                    <input type="color" data-for="bg_color" value="{{ brand.bg|default:'#262626' }}"{% if not can_edit %} disabled{% endif %} aria-label="Background colour picker">
+                    <input type="text" name="bg_color" value="{{ brand.bg }}" placeholder="default" maxlength="7"
+                           pattern="#?[0-9A-Fa-f]{6}"{% if not can_edit %} disabled{% endif %} aria-label="Background colour hex">
+                </div>
+                <p class="pb-note">Blank: the default charcoal (85% black toner). Use #FFFFFF for light labels. Text turns white or black for contrast.</p>
+                {% for accent in accents %}
+                <div class="pb-row">
+                    <span class="pb-label">Accent {{ forloop.counter }}</span>
+                    <input type="color" data-for="accent-{{ forloop.counter }}" value="{{ accent|default:'#888888' }}"{% if not can_edit %} disabled{% endif %} aria-label="Accent {{ forloop.counter }} colour picker">
+                    <input type="text" name="accent" id="accent-{{ forloop.counter }}" value="{{ accent }}" placeholder="none" maxlength="7"
+                           pattern="#?[0-9A-Fa-f]{6}"{% if not can_edit %} disabled{% endif %} aria-label="Accent {{ forloop.counter }} hex">
+                </div>
+                {% endfor %}
+                {% if can_edit %}
+                <div class="pb-row">
+                    <button type="button" class="pb-btn small" id="pb-suggest">Suggest from logo</button>
+                </div>
+                <div id="pb-suggestions" hidden>
+                    <div class="pb-chips" id="pb-chips"></div>
+                    <div class="pb-row"><button type="button" class="pb-btn small" id="pb-use">Use these</button></div>
+                </div>
+                <p class="pb-note" id="pb-suggest-note" aria-live="polite"></p>
+                {% endif %}
+                {% if not bw_separated %}
+                <p class="pb-note warn">In black &amp; white these accents cannot all be kept 20 K apart from the background and each other; some bars will look alike.</p>
+                {% endif %}
+
+                <h3 style="margin-top:16px">Accents</h3>
+                <div class="pb-styles">
+                    {% for key, title in styles %}
+                    <label><input type="radio" name="accent_style" value="{{ key }}"{% if brand.accent_style == key %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> {{ title }}</label>
+                    {% endfor %}
+                </div>
+                <p class="pb-note">Corner bars keep 5 mm at the bottom clear of names (one fewer name on a full running order). The edge stripe costs no space. No accent colours: nothing is drawn.</p>
+                {% if can_edit %}<div class="pb-row"><button type="submit" class="pb-btn primary">Save colours</button></div>{% endif %}
+            </form>
+
+            <div class="pb-panel">
+                <h3>Logos (PNG or JPEG)</h3>
+                <p class="pb-note">The logo prints top-right in the header, 8 mm high, never smaller: up to {{ max_aspect|floatformat:2 }}:1 wide. Too wide, and the mark prints instead.</p>
+                {% for logo in logos %}
+                <div class="pb-logo">
+                    <div class="pb-logo-title">{{ logo.title }}</div>
+                    {% if logo.row %}
+                    <div class="pb-logo-img" style="background: {% if logo.kind == 'on_light' %}{% if brand.text_white %}#ffffff{% else %}{{ brand.bg }}{% endif %}{% elif logo.kind == 'on_dark' %}{% if brand.text_white %}{{ brand.bg|default:'#262626' }}{% else %}#262626{% endif %}{% else %}{{ brand.bg|default:'#262626' }}{% endif %}">
+                        <img src="{% url 'planner:branding_logo' %}?kind={{ logo.kind }}&amp;v={{ logo.row.sha256|slice:':12' }}" alt="{{ logo.title }}">
+                    </div>
+                    <div class="pb-note">{{ logo.row.width }} × {{ logo.row.height }} px</div>
+                    {% for level, text in logo.notes %}<p class="pb-note {{ level }}">{{ text }}</p>{% endfor %}
+                    {% else %}
+                    <p class="pb-note">None.</p>
+                    {% endif %}
+                    {% if can_edit %}
+                    <form method="post" action="{% url 'planner:branding_logo_upload' %}" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="{{ logo.kind }}">
+                        <input type="file" name="logo" accept="image/png,image/jpeg" required aria-label="{{ logo.title }} file">
+                        <button type="submit" class="pb-btn small">{% if logo.row %}Replace{% else %}Upload{% endif %}</button>
+                    </form>
+                    {% if logo.row %}
+                    <form method="post" action="{% url 'planner:branding_logo_delete' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="{{ logo.kind }}">
+                        <button type="submit" class="pb-btn small">Remove</button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="pb-preview">
+            <div class="pb-note">Preview with sample names: running order and single name, colour and black &amp; white. Unsaved colours show here before you save.</div>
+            <iframe id="pb-frame" title="Label branding preview"></iframe>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var root = document.getElementById('pb-root');
+    var form = document.getElementById('pb-colours');
+    var frame = document.getElementById('pb-frame');
+    var HEX = /^#?[0-9A-Fa-f]{6}$/;
+
+    function norm(v) {
+        v = (v || '').trim();
+        return HEX.test(v) ? '#' + v.replace('#', '').toUpperCase() : '';
+    }
+
+    function query() {
+        var p = new URLSearchParams();
+        p.set('bg', norm(form.bg_color.value));
+        form.querySelectorAll('input[name="accent"]').forEach(function (el) {
+            var v = norm(el.value);
+            if (v) p.append('accent', v);
+        });
+        p.set('accents', '1');
+        var style = form.querySelector('input[name="accent_style"]:checked');
+        p.set('accent_style', style ? style.value : 'none');
+        return p;
+    }
+
+    var timer = null;
+    function refresh() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            frame.src = root.dataset.previewUrl + '?' + query().toString() + '#view=FitH';
+        }, 350);
+    }
+
+    // Each colour picker drives the hex box beside it and the other way round.
+    form.querySelectorAll('input[type="color"]').forEach(function (picker) {
+        var box = picker.dataset.for === 'bg_color' ? form.bg_color : document.getElementById(picker.dataset.for);
+        picker.addEventListener('input', function () { box.value = picker.value.toUpperCase(); refresh(); });
+        box.addEventListener('input', function () {
+            var v = norm(box.value);
+            if (v) picker.value = v.toLowerCase();
+            refresh();
+        });
+    });
+    form.addEventListener('change', refresh);
+
+    var suggest = document.getElementById('pb-suggest');
+    if (suggest) {
+        var found = [];
+        var note = document.getElementById('pb-suggest-note');
+        suggest.addEventListener('click', function () {
+            note.textContent = '';
+            var p = new URLSearchParams({bg: norm(form.bg_color.value)});
+            fetch(root.dataset.suggestUrl + '?' + p.toString(), {credentials: 'same-origin'})
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    found = data.accents || [];
+                    var chips = document.getElementById('pb-chips');
+                    chips.textContent = '';
+                    found.forEach(function (hex) {
+                        var chip = document.createElement('span');
+                        chip.className = 'pb-chip';
+                        var swatch = document.createElement('i');
+                        swatch.style.background = hex;
+                        chip.appendChild(swatch);
+                        chip.appendChild(document.createTextNode(hex));
+                        chips.appendChild(chip);
+                    });
+                    document.getElementById('pb-suggestions').hidden = !found.length;
+                    if (data.error) note.textContent = data.error;
+                    else if (!found.length) note.textContent = 'No distinct colours found in the logo.';
+                })
+                .catch(function () { note.textContent = 'Could not read the logo.'; });
+        });
+        document.getElementById('pb-use').addEventListener('click', function () {
+            form.querySelectorAll('input[name="accent"]').forEach(function (el, i) {
+                el.value = found[i] || '';
+                el.dispatchEvent(new Event('input'));
+            });
+            note.textContent = 'Suggested colours filled in: Save colours to keep them.';
+        });
+    }
+
+    refresh();
+})();
+</script>
+{% endblock %}

@@ -87,6 +87,9 @@ class RunningUnit:
     # Names grouped by the session they start in, in order: ((name, ...), ...).
     # A label draws a divider between groups.
     groups: tuple
+    # The one header line that fits under a client logo: (day, time) when
+    # the header names one session, else (day,). Never the session name.
+    compact: tuple = ()
 
 
 # ---------------------------------------------------------------- formatting
@@ -231,8 +234,9 @@ def running_units(data):
             first = entries[0].first
             if per_day[first.day_id] == 1:
                 header = tuple(line for line in (first.day_label, first.time, first.name) if line)
+                compact = tuple(line for line in (first.day_label, first.time) if line)
             else:
-                header = (first.day_label,)
+                header = compact = (first.day_label,)
             groups, session_id = [], None
             for entry in entries:
                 if entry.first.id != session_id:
@@ -240,5 +244,6 @@ def running_units(data):
                     session_id = entry.first.id
                 groups[-1].append(entry.name)
             units.append(RunningUnit(pack=pack, header=header,
-                                     groups=tuple(tuple(names) for names in groups)))
+                                     groups=tuple(tuple(names) for names in groups),
+                                     compact=compact))
     return units

@@ -46,7 +46,20 @@ class Project(models.Model):
     # having to reach the rack Mac directly (Safari blocks https -> http://localhost).
     listen_status = models.JSONField(null=True, blank=True, editable=False)
     listen_status_at = models.DateTimeField(null=True, blank=True, editable=False)
-    
+
+    # Client branding for the beltpack labels (planner.utils.labels.brand).
+    # Nothing set prints the default charcoal theme. The logos are
+    # ProjectLogo rows, not columns here: this row is loaded on every request.
+    brand_bg_color = models.CharField(
+        max_length=7, blank=True, default='',
+        help_text="Label background, #RRGGBB. Blank: the default charcoal.")
+    brand_accent_colors = models.JSONField(
+        default=list, blank=True, help_text="0-3 accent colours, #RRGGBB.")
+    brand_accent_style = models.CharField(
+        max_length=16, default='none',
+        choices=[('none', 'None'), ('corner_bars', 'Angled corner bars'),
+                 ('edge_stripe', 'Edge stripe')])
+
     class Meta:
         ordering = ['-updated_at']
         
@@ -84,8 +97,15 @@ class Project(models.Model):
                 venue=self.venue,
                 client=self.client,
                 notes=self.notes,
-                is_archived=False  # Always create as active
+                is_archived=False,  # Always create as active
+                brand_bg_color=self.brand_bg_color,
+                brand_accent_colors=list(self.brand_accent_colors or []),
+                brand_accent_style=self.brand_accent_style,
             )
+            for logo in self.logos.all():
+                logo.pk = None
+                logo.project = new_project
+                logo.save()
             
             # Track old_id -> new_object mappings for relationships
             location_map = {}
@@ -800,7 +820,65 @@ class ProjectMember(models.Model):
     
     def __str__(self):
         return f"{self.user.username} → {self.project.name} ({self.role})"
-    
+
+
+class ProjectLogo(models.Model):
+    """A client logo for the project's beltpack labels: the full logo for
+    dark backgrounds, for light ones, or the mark (icon only).
+
+    Its own table for the reason PresenterPhoto is one: Project is loaded on
+    every request, and the image only by the few that print or show it. The
+    bytes are a normalised PNG or JPEG (planner.utils.image_upload.
+    normalize_logo), never the upload as sent.
+    """
+    KINDS = [
+        ('on_dark', 'Logo for dark backgrounds'),
+        ('on_light', 'Logo for light backgrounds'),
+        ('mark', 'Logo mark (icon only)'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='logos')
+    kind = models.CharField(max_length=16, choices=KINDS)
+    content = models.BinaryField()
+    content_type = models.CharField(max_length=32)
+    sha256 = models.CharField(max_length=64)
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        verbose_name = "Project Logo"
+        constraints = [
+            UniqueConstraint(fields=['project', 'kind'], name='unique_project_logo_kind'),
+        ]
+
+    @classmethod
+    def store(cls, project, kind, raw, user=None):
+        """Normalise ``raw`` and make it ``project``'s ``kind`` logo.
+
+        Raises planner.utils.image_upload.ImageRejected for anything that is
+        not an acceptable logo.
+        """
+        from planner.utils.image_upload import normalize_logo
+
+        content, content_type, width, height, digest = normalize_logo(raw)
+        logo, _ = cls.objects.update_or_create(
+            project=project, kind=kind,
+            defaults={
+                'content': content, 'content_type': content_type,
+                'sha256': digest, 'width': width, 'height': height,
+                'updated_by': user if (user and user.is_authenticated) else None,
+            },
+        )
+        return logo
+
+    def __str__(self):
+        return f"{self.get_kind_display()} for {self.project}"
+
 
 
 class ProjectAccessRequest(models.Model):

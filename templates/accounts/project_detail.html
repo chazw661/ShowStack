@@ -304,6 +304,7 @@
             {% if can_invite %}
             <a href="{% url 'project_invitations' project.id %}" class="btn-invite">Manage Invitations</a>
             {% endif %}
+            <a href="{% url 'set_project' project.id %}?next={% url 'planner:project_branding' %}" class="btn-back">Label branding</a>
         </div>
     </div>
     
