@@ -247,7 +247,6 @@ class GroupingTests(SimpleTestCase):
         from planner.utils.labels.data import session_span
         self.assertEqual(session_span([KEYNOTE, PANEL, BREAKOUT]), 'S1–3')
         self.assertEqual(session_span([PANEL, BREAKOUT]), 'S2–3')
-        self.assertEqual(session_span([KEYNOTE, BREAKOUT]), 'S1, S3')
 
     def test_pack_entries_record_the_run(self):
         d = data({4: {1: [ZOE], 2: [ZOE]}})

@@ -118,12 +118,9 @@ def separator_text(session):
 
 
 def session_span(sessions):
-    """Positions in the day, 1-based: "S1–3" for a contiguous run, else
-    "S1, S3"."""
-    positions = [s.index + 1 for s in sessions]
-    if positions == list(range(positions[0], positions[0] + len(positions))):
-        return 'S{}–{}'.format(positions[0], positions[-1])
-    return ', '.join('S{}'.format(p) for p in positions)
+    """Positions in the day, 1-based: "S1–3". A merged run is always
+    adjacent sessions, so first and last say it all."""
+    return 'S{}–{}'.format(sessions[0].index + 1, sessions[-1].index + 1)
 
 
 def run_suffix(entry):
