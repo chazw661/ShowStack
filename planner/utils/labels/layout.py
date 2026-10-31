@@ -7,10 +7,14 @@ label. For OL3016LP (S = 144 pt) the numbers come out as:
 
     safe inset      max(S/16, 3.2 mm)   9.07 pt  3.2 mm
     header band     0.26 S              37.44 pt 13.2 mm
-    header->panel   0.03 S               4.32 pt
+    header->panel   0.015 S              2.16 pt
     panel margin    0.03 S               4.32 pt (tint shows round the panel)
-    panel padding   0.04 S x, 0.03 S y   5.76 / 4.32 pt
-    text box                            105.70 x 71.14 pt  (37.3 x 25.1 mm)
+    panel padding   0.04 S x, 0.015 S y  5.76 / 2.16 pt
+    text box                            105.70 x 77.62 pt  (37.3 x 27.4 mm)
+
+The vertical numbers are as tight as they are so a running order still fits
+three names in the worst case (every name opening a new session) with the
+space above each separator.
 
 Text is stacked with the font's real ascent and descent, so a line's box --
 what the tests check against the safe zone and the panel -- holds stacked
@@ -46,6 +50,11 @@ CAP_HEIGHT = 0.714
 # Second line of a wrapped running-order name, so it reads as the same row.
 WRAP_INDENT = 6
 
+# Extra space above a running-order separator, x the name size, so the
+# separator never sits on the descenders of the name above it. The first row
+# on a label has nothing above it and gets none.
+SEPARATOR_GAP = 0.35
+
 # Running order is only offered where the worst case -- every name opening a
 # new session, so every name brings a separator -- still shows this many.
 RUNNING_MIN_NAMES = 3
@@ -63,7 +72,6 @@ class Geometry:
     text: Rect
     header_pad: float
     single_name_max: float
-    running_name_max: float
     meta_max: float
     small: float            # header lines, separators, "RF": the 9 pt tier
     number: float           # the RF number in the header
@@ -77,16 +85,15 @@ def geometry(stock):
     band_h = 0.26 * s
     band = Rect(safe.x, safe.top - band_h, safe.w, band_h)
     margin = 0.03 * s
-    gap = 0.03 * s
+    gap = 0.015 * s
     panel = Rect(safe.x + margin, safe.y + margin,
                  safe.w - 2 * margin, band.y - gap - (safe.y + margin))
-    pad_x, pad_y = 0.04 * s, 0.03 * s
+    pad_x, pad_y = 0.04 * s, 0.015 * s
     text = Rect(panel.x + pad_x, panel.y + pad_y, panel.w - 2 * pad_x, panel.h - 2 * pad_y)
     return Geometry(
         size=s, corner_r=float(stock.corner_r), label=label, safe=safe, band=band,
         panel=panel, panel_r=0.05 * s, text=text, header_pad=0.04 * s,
         single_name_max=max(SINGLE_NAME_FLOOR, 0.18 * s),
-        running_name_max=max(RUNNING_NAME_FLOOR, 0.11 * s),
         meta_max=max(OTHER_FLOOR, 0.07 * s),
         small=max(OTHER_FLOOR, s / 16),
         number=0.75 * band_h,
@@ -175,6 +182,13 @@ def wrap(text, font, size, width, max_lines=2, indent=0):
     return lines, False
 
 
+def _whole_words(text, font, size, width):
+    """True when every word fits a line, so wrapping never has to break one
+    mid-word. Sizes above the floor must pass this."""
+    return all(_fits(token.strip(), font, size, width)
+               for token in _TOKENS.findall(text) if token.strip())
+
+
 def _stack_height(lines):
     """lines: [(font, size, advance)]. Ascent of the first line, the
     baseline-to-baseline advances, descent of the last."""
@@ -261,7 +275,7 @@ def layout_single(item, stock):
     for size in _sizes(g.single_name_max, SINGLE_NAME_FLOOR):
         lines, truncated = wrap(item.name, fonts.BOLD, size, box.w)
         height = _stack_height([(fonts.BOLD, size, size * NAME_LEADING)] * len(lines))
-        if not truncated and height <= area_h:
+        if not truncated and height <= area_h and _whole_words(item.name, fonts.BOLD, size, box.w):
             chosen = (size, lines, truncated, height)
             break
     if chosen is None:
@@ -298,10 +312,12 @@ class RunningPage:
 
 
 def _row_lines(row, g, size):
-    """[(text, font, size, indent, advance)] for one row at name size."""
+    """[(text, font, size, indent, advance)] for one row at name size. A
+    line's advance is the space above it, so a label's first line drops it."""
     if row.kind == 'separator':
         text = ellipsize(row.text, fonts.BOLD, g.small, g.text.w)
-        return [(text, fonts.BOLD, g.small, 0, g.small * SEPARATOR_LEADING)], False
+        advance = g.small * SEPARATOR_LEADING + SEPARATOR_GAP * size
+        return [(text, fonts.BOLD, g.small, 0, advance)], False
     lines, truncated = wrap(row.text, fonts.SEMIBOLD, size, g.text.w, indent=WRAP_INDENT)
     return [(line, fonts.SEMIBOLD, size, WRAP_INDENT if i else 0, size * NAME_LEADING)
             for i, line in enumerate(lines)], truncated
@@ -356,28 +372,37 @@ def layout_running(page, stock):
     _header(layout, g, list(page.header), page.pack, page.part)
     box = g.text
 
-    # The largest size where everything fits, no name wraps that would sit
-    # on one line at the floor (a bigger name broken in two reads worse than
-    # a smaller one whole), and nothing is cut short: a name that needs an
-    # ellipsis gets it at the floor, where it keeps the most letters.
+    # The largest size, up to the single-name maximum, where everything
+    # fits and nothing is cut short or broken mid-word: a name that needs an
+    # ellipsis gets it at the floor, where it keeps the most letters. With
+    # more than one name, no name may wrap that would sit on one line at the
+    # floor (a bigger name broken in two reads worse than a smaller one
+    # whole, next to names that are not); a lone name wraps to two lines as
+    # on a single-name label.
     def shape(size):
         measured = [_row_lines(row, g, size) for row in page.rows]
         return [len(lines) for lines, _ in measured], any(t for _, t in measured)
 
     at_floor, _ = shape(RUNNING_NAME_FLOOR)
+    lone = sum(row.kind == 'name' for row in page.rows) == 1
     size = RUNNING_NAME_FLOOR
-    for candidate in _sizes(g.running_name_max, RUNNING_NAME_FLOOR):
+    for candidate in _sizes(g.single_name_max, RUNNING_NAME_FLOOR):
         counts, truncated = shape(candidate)
-        if _rows_fit(page.rows, g, candidate) and counts == at_floor and not truncated:
+        whole = all(_whole_words(row.text, fonts.SEMIBOLD, candidate, box.w - WRAP_INDENT)
+                    for row in page.rows if row.kind == 'name')
+        if (_rows_fit(page.rows, g, candidate) and not truncated and whole
+                and (lone or counts == at_floor)):
             size = candidate
             break
 
+    # Centre the block in the text box.
+    top = box.y + (box.h + _rows_height(page.rows, g, size)) / 2
     y = None
     for row in page.rows:
         row_lines, truncated = _row_lines(row, g, size)
         layout.truncated = layout.truncated or truncated
         for text, font, sz, indent, advance in row_lines:
-            y = box.top - fonts.ascent(font, sz) if y is None else y - advance
+            y = top - fonts.ascent(font, sz) if y is None else y - advance
             role = 'separator' if row.kind == 'separator' else 'name'
             floor = OTHER_FLOOR if role == 'separator' else RUNNING_NAME_FLOOR
             layout.runs.append(Run(text, font, sz, box.x + indent, y, role, floor))

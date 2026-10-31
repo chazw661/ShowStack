@@ -278,7 +278,7 @@ class LayoutTests(SimpleTestCase):
         self.assertAlmostEqual(g.safe.x, 3.2 * 72 / 25.4, places=6)
         self.assertAlmostEqual(g.band.h, 37.44, places=6)
         self.assertAlmostEqual(g.text.w, 105.698, places=2)
-        self.assertAlmostEqual(g.text.h, 71.138, places=2)
+        self.assertAlmostEqual(g.text.h, 77.618, places=2)
 
     def test_proportional_on_a_bigger_stock(self):
         small, big = L.geometry(OL), L.geometry(big_stock())
@@ -311,10 +311,56 @@ class LayoutTests(SimpleTestCase):
 
     def test_running_capacity_on_ol3016lp(self):
         self.assertEqual(L.running_order_capacity(OL), 3)          # worst case
-        pages = running_pages(['Ann Lee'] * 5)                      # one session
+        pages = running_pages(['Ann Lee'] * 6)                      # one session
         self.assertEqual(len(pages), 1)
-        pages = running_pages(['Ann Lee'] * 6)
+        pages = running_pages(['Ann Lee'] * 7)
         self.assertEqual(len(pages), 2)
+        # Two sessions on a label: four names, split 3 + 1 at most.
+        pages = running_pages(['Ann Lee'] * 4, scope='day', sessions=(KEYNOTE, PANEL))
+        self.assertEqual(len(pages), 1)
+
+    def test_separator_clears_the_descenders_above_it(self):
+        sessions = (KEYNOTE, PANEL, BREAKOUT)
+        for stock in (OL, big_stock()):
+            for count in (3, 6, 12):
+                for page in running_pages(['Sarah McMillan'] * count, stock, 'day', sessions):
+                    layout = L.layout_running(page, stock)
+                    text = [r for r in layout.runs if r.role != 'header']
+                    for above, row in zip(text, text[1:]):
+                        if row.role != 'separator':
+                            continue
+                        name_size = above.size
+                        clear = above.bbox.y - row.bbox.top
+                        self.assertGreaterEqual(clear + 1e-6, 0, (stock.part, row.text))
+                        gap = (above.y - row.y) - (row.size * L.SEPARATOR_LEADING)
+                        self.assertGreaterEqual(gap + 1e-6, L.SEPARATOR_GAP * name_size)
+                    self.assertEqual(text[0].role, 'separator')
+
+    def test_few_names_grow_and_are_centred(self):
+        g = L.geometry(OL)
+        for names in (['Ann Lee'], ['Ann Lee', 'Bob Ray'], ['WILLIAM M. MORROW']):
+            layout = L.layout_running(running_pages(names)[0], OL)
+            lines = [r for r in layout.runs if r.role == 'name']
+            size = lines[0].size
+            self.assertGreater(size, 16, names)
+            self.assertLessEqual(size, g.single_name_max)
+            self.assertLessEqual(layout.name_lines, 2 * len(names))
+            self.assertFalse(layout.truncated)
+            top = max(r.bbox.top for r in lines)
+            bottom = min(r.bbox.y for r in lines)
+            self.assertAlmostEqual(g.text.top - top, bottom - g.text.y, places=3)
+        # A full label stays at the floor.
+        layout = L.layout_running(running_pages(['Ann Lee'] * 6)[0], OL)
+        self.assertEqual({r.size for r in layout.runs if r.role == 'name'},
+                         {L.RUNNING_NAME_FLOOR})
+
+    def test_growing_never_breaks_a_word(self):
+        for name in ('Christopher Brown', 'Bartholomew Smith', 'Jacqueline Mwangi'):
+            item = single_name_items(data({4: {1: [(1, name)]}}, sessions=[KEYNOTE]))[0]
+            for layout in (L.layout_single(item, OL),
+                           L.layout_running(running_pages([name])[0], OL)):
+                lines = [r.text for r in layout.runs if r.role == 'name']
+                self.assertEqual(lines, name.split(' '), name)
 
     def test_running_disabled_on_a_small_stock(self):
         available, reason = L.running_order_available(small_stock())
@@ -344,9 +390,9 @@ class LayoutTests(SimpleTestCase):
         self.assertEqual(lines[1].x - lines[0].x, L.WRAP_INDENT)
 
     def test_wrapped_name_counts_toward_capacity(self):
-        self.assertEqual(len(running_pages(['Ann Lee'] * 5)), 1)
-        # Four one-line names and one two-line name are six lines: too many.
-        pages = running_pages(['Ann Lee'] * 4 + ['WILLIAM M. MORROW'])
+        self.assertEqual(len(running_pages(['Ann Lee'] * 6)), 1)
+        # Five one-line names and one two-line name are seven lines: too many.
+        pages = running_pages(['Ann Lee'] * 5 + ['WILLIAM M. MORROW'])
         self.assertEqual(len(pages), 2)
         self.assertEqual([p.part for p in pages], [(1, 2), (2, 2)])
 
@@ -375,7 +421,7 @@ class LayoutTests(SimpleTestCase):
         texts = [r.text for r in L.layout_single(item, OL).runs if r.role == 'header']
         self.assertIn('RF', texts)
         self.assertIn('04', texts)
-        page = running_pages(['Ann Lee'] * 6)[1]
+        page = running_pages(['Ann Lee'] * 7)[1]
         texts = [r.text for r in L.layout_running(page, OL).runs if r.role == 'header']
         self.assertIn('2/2', texts)
 
