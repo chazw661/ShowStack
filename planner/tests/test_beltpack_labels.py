@@ -189,13 +189,14 @@ class GroupingTests(SimpleTestCase):
         d = data({4: {1: [ZOE, BOB]}}, sessions=[KEYNOTE])
         (unit,) = running_units(d)
         self.assertEqual(unit.header, (DAY1, '9:00a', 'Keynote'))
-        self.assertEqual(unit.groups, ((None, ('Zoë', 'Bob')),))
+        self.assertEqual(unit.groups, ((None, (('Zoë', ''), ('Bob', ''))),))
 
     def test_separators_only_for_multi_session_labels(self):
         d = data({4: {1: [ZOE], 2: [BOB]}, 5: {2: [ANN]}})
         units = {u.pack: u for u in running_units(d)}
-        self.assertEqual(units[4].groups, (('9:00a · Keynote', ('Zoë',)), ('10:30a · Panel', ('Bob',))))
-        self.assertEqual(units[5].groups, ((None, ('Ann',)),))
+        self.assertEqual(units[4].groups, (('9:00a · Keynote', (('Zoë', ''),)),
+                                           ('10:30a · Panel', (('Bob', ''),))))
+        self.assertEqual(units[5].groups, ((None, (('Ann', ''),)),))
         self.assertEqual(units[5].header, (DAY1,))
 
     def test_one_unit_per_pack_per_day_and_the_header_is_counted_per_day(self):
@@ -216,13 +217,14 @@ class GroupingTests(SimpleTestCase):
     def test_running_merges_consecutive_sessions(self):
         d = data({4: {1: [ZOE], 2: [ZOE], 3: [ZOE]}})
         (unit,) = running_units(d)
-        self.assertEqual(unit.groups, (('9:00a · Keynote +2', ('Zoë',)),))
+        self.assertEqual(unit.groups, (('9:00a · Keynote', (('Zoë', 'S1–3'),)),))
 
     def test_running_merge_broken_by_a_different_presenter(self):
         d = data({4: {1: [ZOE], 2: [BOB], 3: [ZOE]}})
         (unit,) = running_units(d)
-        self.assertEqual(unit.groups, (('9:00a · Keynote', ('Zoë',)), ('10:30a · Panel', ('Bob',)),
-                                       ('1:15p · Breakout', ('Zoë',))))
+        self.assertEqual(unit.groups, (('9:00a · Keynote', (('Zoë', ''),)),
+                                       ('10:30a · Panel', (('Bob', ''),)),
+                                       ('1:15p · Breakout', (('Zoë', ''),))))
 
     def test_running_merge_broken_by_no_presenter_or_no_rf_row(self):
         d = data({4: {1: [ZOE], 3: [ZOE]}})
@@ -232,7 +234,7 @@ class GroupingTests(SimpleTestCase):
     def test_running_merge_never_crosses_a_day(self):
         d = data({4: {3: [ZOE], 4: [ZOE]}})
         units = running_units(d)
-        self.assertEqual([u.groups for u in units], [((None, ('Zoë',)),), ((None, ('Zoë',)),)])
+        self.assertEqual([u.groups for u in units], [((None, (('Zoë', ''),)),)] * 2)
 
     def test_an_unselected_session_in_between_breaks_the_merge(self):
         # Keynote and Breakout selected, Panel (index 1) between them not.
@@ -240,6 +242,12 @@ class GroupingTests(SimpleTestCase):
         self.assertEqual([i.session for i in single_name_items(d)], ['Keynote', 'Breakout'])
         (unit,) = running_units(d)
         self.assertEqual([g[0] for g in unit.groups], ['9:00a · Keynote', '1:15p · Breakout'])
+
+    def test_session_span(self):
+        from planner.utils.labels.data import session_span
+        self.assertEqual(session_span([KEYNOTE, PANEL, BREAKOUT]), 'S1–3')
+        self.assertEqual(session_span([PANEL, BREAKOUT]), 'S2–3')
+        self.assertEqual(session_span([KEYNOTE, BREAKOUT]), 'S1, S3')
 
     def test_pack_entries_record_the_run(self):
         d = data({4: {1: [ZOE], 2: [ZOE]}})
@@ -363,6 +371,54 @@ class LayoutTests(SimpleTestCase):
         layout = L.layout_running(running_pages(['Ann Lee'] * 6)[0], OL)
         self.assertEqual({r.size for r in layout.runs if r.role == 'name'},
                          {L.RUNNING_NAME_FLOOR})
+
+    def test_merged_row_after_another_name_regression(self):
+        # Printed RF 01 read "Session 1 +2 / sam / Sarah McMillan": the run
+        # belongs to Sarah, so it goes on her row and the separator is plain.
+        s1, s2, s3 = (S(10 + i, i, f'Session {i + 1}', '') for i in range(3))
+        sam, sarah = (20, 'sam'), (21, 'Sarah McMillan')
+        d = data({1: {s1.id: [sam, sarah], s2.id: [sarah], s3.id: [sarah]}},
+                 sessions=[s1, s2, s3])
+        (unit,) = running_units(d)
+        self.assertEqual(unit.groups, (('Session 1', (('sam', ''), ('Sarah McMillan', 'S1–3'))),))
+        (page,) = [p for u in running_units(d) for p in L.paginate_running(u, OL)]
+        layout = L.layout_running(page, OL)
+        texts = [(r.role, r.text) for r in layout.runs if r.role != 'header']
+        # "Sarah McMillan · S1–3" is 109.3 pt at the 11 pt floor against a
+        # 105.7 pt line, so the suffix wraps and the name stays whole.
+        self.assertEqual(texts, [('separator', 'Session 1'), ('name', 'sam'),
+                                 ('name', 'Sarah McMillan'), ('suffix', 'S1–3')])
+        name, suffix = layout.runs[-2], layout.runs[-1]
+        self.assertLess(suffix.y, name.y)
+        self.assertEqual(suffix.x - name.x, L.WRAP_INDENT)
+        self.assertEqual((suffix.font, suffix.size), (fonts.BOLD, L.geometry(OL).small))
+        self.assert_contained(layout)
+        self.assertFalse(any('+' in r.text for r in layout.runs))
+        # Single-name mode keeps its meta line.
+        items = single_name_items(d)
+        self.assertEqual([(i.name, i.session) for i in items],
+                         [('sam', 'Session 1'), ('Sarah McMillan', 'Session 1 +2')])
+
+    def test_suffix_wraps_before_the_name_does(self):
+        g = L.geometry(OL)
+        # 101.5 pt of a 105.7 pt line: the name fits, the suffix does not.
+        row = L.Row('name', 'Christopher Brown', 'S1–3')
+        lines, truncated = L._row_lines(row, g, L.RUNNING_NAME_FLOOR)
+        self.assertFalse(truncated)
+        self.assertEqual([(l.role, l.text, l.suffix) for l in lines],
+                         [('name', 'Christopher Brown', ''), ('suffix', 'S1–3', '')])
+        # A short name keeps it inline.
+        lines, _ = L._row_lines(L.Row('name', 'Ann Lee', 'S1–3'), g, L.RUNNING_NAME_FLOOR)
+        self.assertEqual([(l.role, l.suffix) for l in lines], [('name', ' · S1–3')])
+        # Laid out among other names, everything stays inside.
+        page = L.RunningPage(4, ('Tue Nov 3',), (
+            L.Row('separator', '9:00a · Keynote'), L.Row('name', 'Ann Lee'),
+            L.Row('name', 'Christopher Brown', 'S1–3'), L.Row('name', 'Bob Ray', 'S1–2')))
+        layout = L.layout_running(page, OL)
+        self.assert_contained(layout)
+        roles = [r.role for r in layout.runs if r.role != 'header']
+        self.assertEqual(roles, ['separator', 'name', 'name', 'suffix', 'name', 'suffix'])
+        self.assertEqual(layout.name_lines, 3)
 
     def test_growing_never_breaks_a_word(self):
         for name in ('Christopher Brown', 'Bartholomew Smith', 'Jacqueline Mwangi'):

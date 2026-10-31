@@ -18,8 +18,10 @@ The model, for anyone arriving cold:
   the current UI writes it, and the A2 cards are built from slots.
 
 Merging: one presenter on the same pack across consecutive sessions of the
-same day is one label (single-name) or one row (running order), carrying the
-first session's time and "+N" for the sessions after it. Consecutive means
+same day is one label (single-name) or one row (running order). A
+single-name label carries the first session's time and "Keynote +2"; a
+running-order row carries the sessions' positions in the day after the
+name, "Sarah McMillan · S1–3", and its separator stays plain. Consecutive means
 adjacent in the day's session order; any session in between where the pack
 has a different presenter, no presenter, or no RF row breaks the run -- and
 so does a session in between that was not selected.
@@ -81,7 +83,7 @@ class RunningUnit:
     it is split onto labels."""
     pack: int
     header: tuple                       # header lines, right block
-    groups: tuple                       # ((separator text or None, (name, ...)), ...)
+    groups: tuple                       # ((separator text or None, ((name, suffix), ...)), ...)
 
 
 # ---------------------------------------------------------------- formatting
@@ -111,9 +113,22 @@ def with_extra(text, extra):
     return '{} +{}'.format(text, extra) if extra else text
 
 
-def separator_text(session, extra=0):
-    text = '{} · {}'.format(session.time, session.name) if session.time else session.name
-    return with_extra(text, extra)
+def separator_text(session):
+    return '{} · {}'.format(session.time, session.name) if session.time else session.name
+
+
+def session_span(sessions):
+    """Positions in the day, 1-based: "S1–3" for a contiguous run, else
+    "S1, S3"."""
+    positions = [s.index + 1 for s in sessions]
+    if positions == list(range(positions[0], positions[0] + len(positions))):
+        return 'S{}–{}'.format(positions[0], positions[-1])
+    return ', '.join('S{}'.format(p) for p in positions)
+
+
+def run_suffix(entry):
+    """What a running-order row adds after a merged presenter's name."""
+    return session_span(entry.sessions) if entry.extra else ''
 
 
 _DIGITS = re.compile(r'(\d+)')
@@ -240,13 +255,14 @@ def running_units(data):
                         groups[-1][2].append(entry)
                     else:
                         groups.append((entry.first.id, entry.first, [entry]))
-                # "+N" belongs to the run that carries on past this session,
-                # which can only be the last name under the separator.
+                # A merged run is marked on its own row, not the separator:
+                # the separator names where the label's reading starts, and
+                # the run may be one of several names under it.
                 groups = tuple(
-                    (separator_text(session, group[-1].extra), tuple(e.name for e in group))
+                    (separator_text(session), tuple((e.name, run_suffix(e)) for e in group))
                     for _, session, group in groups
                 )
             else:
-                groups = ((None, tuple(e.name for e in entries)),)
+                groups = ((None, tuple((e.name, run_suffix(e)) for e in entries)),)
             units.append(RunningUnit(pack=pack, header=header, groups=groups))
     return units

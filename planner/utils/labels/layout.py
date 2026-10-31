@@ -55,6 +55,12 @@ WRAP_INDENT = 6
 # on a label has nothing above it and gets none.
 SEPARATOR_GAP = 0.35
 
+# A merged run's suffix ("· S1–3") is set like a separator. When it does not
+# fit after the name it takes a line of its own, this much x the name size
+# further below the name than separator leading alone.
+SUFFIX_GAP = 0.2
+SUFFIX_JOIN = ' · '
+
 # Running order is only offered where the worst case -- every name opening a
 # new session, so every name brings a separator -- still shows this many.
 RUNNING_MIN_NAMES = 3
@@ -301,6 +307,18 @@ def layout_single(item, stock):
 class Row:
     kind: str       # 'separator' | 'name'
     text: str
+    suffix: str = ''    # a merged run's sessions, name rows only: "S1–3"
+
+
+@dataclass(frozen=True)
+class Line:
+    text: str
+    font: str
+    size: float
+    indent: float
+    advance: float      # baseline to baseline from the line above
+    role: str           # 'separator' | 'name' | 'suffix'
+    suffix: str = ''    # set inline after ``text``, in the separator style
 
 
 @dataclass(frozen=True)
@@ -312,22 +330,37 @@ class RunningPage:
 
 
 def _row_lines(row, g, size):
-    """[(text, font, size, indent, advance)] for one row at name size. A
-    line's advance is the space above it, so a label's first line drops it."""
+    """([Line], truncated) for one row at name size. A line's advance is the
+    space above it, so a label's first line drops it.
+
+    A suffix never costs the name a line: it goes after the name's last line
+    when it fits there, and on a line of its own when it does not."""
     if row.kind == 'separator':
         text = ellipsize(row.text, fonts.BOLD, g.small, g.text.w)
         advance = g.small * SEPARATOR_LEADING + SEPARATOR_GAP * size
-        return [(text, fonts.BOLD, g.small, 0, advance)], False
-    lines, truncated = wrap(row.text, fonts.SEMIBOLD, size, g.text.w, indent=WRAP_INDENT)
-    return [(line, fonts.SEMIBOLD, size, WRAP_INDENT if i else 0, size * NAME_LEADING)
-            for i, line in enumerate(lines)], truncated
+        return [Line(text, fonts.BOLD, g.small, 0, advance, 'separator')], False
+    texts, truncated = wrap(row.text, fonts.SEMIBOLD, size, g.text.w, indent=WRAP_INDENT)
+    lines = [Line(text, fonts.SEMIBOLD, size, WRAP_INDENT if i else 0, size * NAME_LEADING, 'name')
+             for i, text in enumerate(texts)]
+    if row.suffix:
+        last = lines[-1]
+        inline = SUFFIX_JOIN + row.suffix
+        used = last.indent + fonts.string_width(last.text, last.font, last.size)
+        if _fits(inline, fonts.BOLD, g.small, g.text.w - used):
+            lines[-1] = Line(last.text, last.font, last.size, last.indent, last.advance,
+                             'name', inline)
+        else:
+            text = ellipsize(row.suffix, fonts.BOLD, g.small, g.text.w - WRAP_INDENT)
+            advance = g.small * SEPARATOR_LEADING + SUFFIX_GAP * size
+            lines.append(Line(text, fonts.BOLD, g.small, WRAP_INDENT, advance, 'suffix'))
+    return lines, truncated
 
 
 def _rows_height(rows, g, size):
     lines = []
     for row in rows:
         row_lines, _ = _row_lines(row, g, size)
-        lines.extend((font, sz, advance) for _, font, sz, _, advance in row_lines)
+        lines.extend((line.font, line.size, line.advance) for line in row_lines)
     return _stack_height(lines)
 
 
@@ -344,7 +377,7 @@ def paginate_running(unit, stock):
     for separator, names in unit.groups:
         if separator:
             rows.append(Row('separator', separator))
-        rows.extend(Row('name', name) for name in names)
+        rows.extend(Row('name', name, suffix) for name, suffix in names)
 
     pages, current, separator = [], [], None
     for row in rows:
@@ -379,9 +412,14 @@ def layout_running(page, stock):
     # floor (a bigger name broken in two reads worse than a smaller one
     # whole, next to names that are not); a lone name wraps to two lines as
     # on a single-name label.
+    # A row's shape is its name lines and whether its suffix has a line of
+    # its own: growing may change neither, so a suffix that sits after the
+    # name at the floor stays there.
     def shape(size):
         measured = [_row_lines(row, g, size) for row in page.rows]
-        return [len(lines) for lines, _ in measured], any(t for _, t in measured)
+        counts = [(sum(line.role == 'name' for line in lines), lines[-1].role == 'suffix')
+                  for lines, _ in measured]
+        return counts, any(t for _, t in measured)
 
     at_floor, _ = shape(RUNNING_NAME_FLOOR)
     lone = sum(row.kind == 'name' for row in page.rows) == 1
@@ -401,18 +439,23 @@ def layout_running(page, stock):
     for row in page.rows:
         row_lines, truncated = _row_lines(row, g, size)
         layout.truncated = layout.truncated or truncated
-        for text, font, sz, indent, advance in row_lines:
-            y = top - fonts.ascent(font, sz) if y is None else y - advance
-            role = 'separator' if row.kind == 'separator' else 'name'
-            floor = OTHER_FLOOR if role == 'separator' else RUNNING_NAME_FLOOR
-            layout.runs.append(Run(text, font, sz, box.x + indent, y, role, floor))
-            if role == 'name':
+        for line in row_lines:
+            font, sz = line.font, line.size
+            y = top - fonts.ascent(font, sz) if y is None else y - line.advance
+            x = box.x + line.indent
+            floor = RUNNING_NAME_FLOOR if line.role == 'name' else OTHER_FLOOR
+            layout.runs.append(Run(line.text, font, sz, x, y, line.role, floor))
+            if line.role == 'name':
                 layout.name_lines += 1
-            else:
+            if line.suffix:
+                after = x + fonts.string_width(line.text, font, sz)
+                layout.runs.append(Run(line.suffix, fonts.BOLD, g.small, after, y,
+                                       'suffix', OTHER_FLOOR))
+            if line.role == 'separator':
                 # A hairline from the end of the separator to the right edge
                 # of the text box, at mid x-height: it marks the session
                 # break without costing a line of height.
-                end = box.x + fonts.string_width(text, font, sz) + 3
+                end = x + fonts.string_width(line.text, font, sz) + 3
                 if end < box.right - 4:
                     layout.rules.append((end, y + 0.3 * sz, box.right))
     return layout
