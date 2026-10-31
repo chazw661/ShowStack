@@ -185,51 +185,61 @@ class GroupingTests(SimpleTestCase):
                          [('Bob', 'Keynote'), ('Zoë', 'Keynote +1'), ('Ann', 'Panel')])
 
     # -- running order
-    def test_session_scope_has_the_session_in_the_header_and_no_separators(self):
+    def test_one_selected_session_is_in_the_header_and_has_no_separators(self):
         d = data({4: {1: [ZOE, BOB]}}, sessions=[KEYNOTE])
-        (unit,) = running_units(d, 'session')
+        (unit,) = running_units(d)
         self.assertEqual(unit.header, (DAY1, '9:00a', 'Keynote'))
         self.assertEqual(unit.groups, ((None, ('Zoë', 'Bob')),))
 
     def test_separators_only_for_multi_session_labels(self):
         d = data({4: {1: [ZOE], 2: [BOB]}, 5: {2: [ANN]}})
-        units = {u.pack: u for u in running_units(d, 'day')}
+        units = {u.pack: u for u in running_units(d)}
         self.assertEqual(units[4].groups, (('9:00a · Keynote', ('Zoë',)), ('10:30a · Panel', ('Bob',))))
         self.assertEqual(units[5].groups, ((None, ('Ann',)),))
         self.assertEqual(units[5].header, (DAY1,))
 
-    def test_whole_show_is_one_unit_per_pack_per_day(self):
+    def test_one_unit_per_pack_per_day_and_the_header_is_counted_per_day(self):
+        # Three sessions selected on day 1: the day alone. One on day 2: the
+        # day, its time and its name.
         d = data({4: {1: [ZOE], 4: [BOB]}})
-        units = running_units(d, 'show')
-        self.assertEqual([(u.pack, u.header) for u in units], [(4, (DAY1,)), (4, (DAY2,))])
+        units = running_units(d)
+        self.assertEqual([(u.pack, u.header) for u in units],
+                         [(4, (DAY1,)), (4, (DAY2, '8:30a', 'Opening'))])
 
     def test_session_without_start_time_separator_is_just_its_name(self):
         untimed = S(2, 1, 'Panel', '')
         d = data({4: {1: [ZOE], 2: [BOB]}}, sessions=[KEYNOTE, untimed])
-        (unit,) = running_units(d, 'day')
+        (unit,) = running_units(d)
         self.assertEqual(unit.groups[1][0], 'Panel')
 
     # -- merge, running order (mirrors the single-name tests)
     def test_running_merges_consecutive_sessions(self):
         d = data({4: {1: [ZOE], 2: [ZOE], 3: [ZOE]}})
-        (unit,) = running_units(d, 'day')
+        (unit,) = running_units(d)
         self.assertEqual(unit.groups, (('9:00a · Keynote +2', ('Zoë',)),))
 
     def test_running_merge_broken_by_a_different_presenter(self):
         d = data({4: {1: [ZOE], 2: [BOB], 3: [ZOE]}})
-        (unit,) = running_units(d, 'day')
+        (unit,) = running_units(d)
         self.assertEqual(unit.groups, (('9:00a · Keynote', ('Zoë',)), ('10:30a · Panel', ('Bob',)),
                                        ('1:15p · Breakout', ('Zoë',))))
 
     def test_running_merge_broken_by_no_presenter_or_no_rf_row(self):
         d = data({4: {1: [ZOE], 3: [ZOE]}})
-        (unit,) = running_units(d, 'day')
+        (unit,) = running_units(d)
         self.assertEqual([g[0] for g in unit.groups], ['9:00a · Keynote', '1:15p · Breakout'])
 
     def test_running_merge_never_crosses_a_day(self):
         d = data({4: {3: [ZOE], 4: [ZOE]}})
-        units = running_units(d, 'show')
+        units = running_units(d)
         self.assertEqual([u.groups for u in units], [((None, ('Zoë',)),), ((None, ('Zoë',)),)])
+
+    def test_an_unselected_session_in_between_breaks_the_merge(self):
+        # Keynote and Breakout selected, Panel (index 1) between them not.
+        d = data({4: {1: [ZOE], 3: [ZOE]}}, sessions=[KEYNOTE, BREAKOUT])
+        self.assertEqual([i.session for i in single_name_items(d)], ['Keynote', 'Breakout'])
+        (unit,) = running_units(d)
+        self.assertEqual([g[0] for g in unit.groups], ['9:00a · Keynote', '1:15p · Breakout'])
 
     def test_pack_entries_record_the_run(self):
         d = data({4: {1: [ZOE], 2: [ZOE]}})
@@ -249,13 +259,13 @@ WORST = [
 ]
 
 
-def running_pages(names, stock=OL, scope='session', sessions=(KEYNOTE,)):
+def running_pages(names, stock=OL, sessions=(KEYNOTE,)):
     packs = {4: {}}
     for i, name in enumerate(names):
         session = sessions[i % len(sessions)]
         packs[4].setdefault(session.id, []).append((100 + i, name))
     pages = []
-    for unit in running_units(data(packs, sessions=sessions), scope):
+    for unit in running_units(data(packs, sessions=sessions)):
         pages.extend(L.paginate_running(unit, stock))
     return pages
 
@@ -304,9 +314,9 @@ class LayoutTests(SimpleTestCase):
     def test_running_worst_cases_stay_inside(self):
         for stock in (OL, big_stock()):
             for count in range(1, 13):
-                for scope, sessions in (('session', (KEYNOTE,)), ('day', (KEYNOTE, PANEL, BREAKOUT))):
+                for sessions in ((KEYNOTE,), (KEYNOTE, PANEL, BREAKOUT)):
                     names = (WORST * 2)[:count]
-                    for page in running_pages(names, stock, scope, sessions):
+                    for page in running_pages(names, stock, sessions):
                         self.assert_contained(L.layout_running(page, stock))
 
     def test_running_capacity_on_ol3016lp(self):
@@ -316,14 +326,14 @@ class LayoutTests(SimpleTestCase):
         pages = running_pages(['Ann Lee'] * 7)
         self.assertEqual(len(pages), 2)
         # Two sessions on a label: four names, split 3 + 1 at most.
-        pages = running_pages(['Ann Lee'] * 4, scope='day', sessions=(KEYNOTE, PANEL))
+        pages = running_pages(['Ann Lee'] * 4, sessions=(KEYNOTE, PANEL))
         self.assertEqual(len(pages), 1)
 
     def test_separator_clears_the_descenders_above_it(self):
         sessions = (KEYNOTE, PANEL, BREAKOUT)
         for stock in (OL, big_stock()):
             for count in (3, 6, 12):
-                for page in running_pages(['Sarah McMillan'] * count, stock, 'day', sessions):
+                for page in running_pages(['Sarah McMillan'] * count, stock, sessions):
                     layout = L.layout_running(page, stock)
                     text = [r for r in layout.runs if r.role != 'header']
                     for above, row in zip(text, text[1:]):
@@ -406,7 +416,7 @@ class LayoutTests(SimpleTestCase):
     def test_overflow_labels_and_repeated_separator(self):
         sessions = (KEYNOTE, PANEL)
         names = ['Ann Lee'] * 12
-        pages = running_pages(names, scope='day', sessions=sessions)
+        pages = running_pages(names, sessions=sessions)
         self.assertGreater(len(pages), 1)
         n = len(pages)
         self.assertEqual([p.part for p in pages], [(i, n) for i in range(1, n + 1)])
@@ -446,7 +456,7 @@ class FontTests(SimpleTestCase):
         from PyPDF2 import PdfReader
         d = data({4: {1: [(1, n) for n in self.NAMES]}}, sessions=[KEYNOTE])
         for mode in ('single', 'running'):
-            pdf, count = generate_labels_pdf(d, mode, 'session', OL, Options())
+            pdf, count = generate_labels_pdf(d, mode, OL, Options())
             self.assertGreater(count, 0)
             fonts_used = set()
             for page in PdfReader(BytesIO(pdf)).pages:
@@ -517,7 +527,7 @@ class LabelViewTests(TestCase):
         return user
 
     def pdf_url(self, **params):
-        query = {'scope': 'session', 'session': self.keynote.pk, 'mode': 'single'}
+        query = {'sessions': self.keynote.pk, 'mode': 'single'}
         query.update(params)
         return reverse('planner:mic_labels_pdf') + '?' + '&'.join(f'{k}={v}' for k, v in query.items())
 
@@ -531,12 +541,23 @@ class LabelViewTests(TestCase):
                 reverse('planner:mic_labels_alignment_pdf'), self.summary_url()]
 
     def summary_url(self):
-        return reverse('planner:mic_labels_summary') + f'?scope=session&session={self.keynote.pk}'
+        return reverse('planner:mic_labels_summary') + f'?sessions={self.keynote.pk}'
+
+    def both(self):
+        return f'{self.keynote.pk},{self.panel.pk}'
+
+    def add_session(self, day, name, order, rf=None, presenter=None):
+        from planner.models import MicAssignment, MicSession, PresenterSlot
+        session = MicSession.objects.create(day=day, name=name, num_mics=12, order=order)
+        if presenter is not None:
+            a = MicAssignment.objects.get(session=session, rf_number=rf)
+            PresenterSlot.objects.create(assignment=a, presenter=presenter, order=0)
+        return session
 
     # -- data
-    def test_scope_data_flattens_the_show(self):
+    def test_scope_data_flattens_the_selected_sessions(self):
         from planner.utils.labels.data import scope_data
-        d = scope_data(self.project)
+        d = scope_data(self.project, [self.keynote.pk, self.panel.pk])
         self.assertEqual([s.name for s in d.sessions], ['Keynote', 'Panel'])
         self.assertEqual([s.index for s in d.sessions], [0, 1])
         self.assertEqual(d.sessions[0].time, '9:00a')
@@ -545,23 +566,61 @@ class LabelViewTests(TestCase):
         self.assertEqual([(i.pack, i.session) for i in single_name_items(d)],
                          [(2, 'Keynote +1'), (10, 'Keynote')])
 
-    def test_scope_data_session_and_day(self):
+    def test_scope_data_one_session_keeps_its_place_in_the_day(self):
         from planner.utils.labels.data import scope_data
-        self.assertEqual(scope_data(self.project, session=self.panel).skipped, 1)
-        self.assertEqual(len(scope_data(self.project, day=self.day).sessions), 2)
+        d = scope_data(self.project, [self.panel.pk])
+        self.assertEqual(d.skipped, 1)
+        self.assertEqual([(s.name, s.index) for s in d.sessions], [('Panel', 1)])
+
+    def test_unselected_session_in_between_breaks_the_merge(self):
+        from planner.models import Presenter, ShowDay
+        from planner.utils.labels.data import scope_data
+        day = ShowDay.objects.create(project=self.project, date=datetime.date(2026, 11, 5))
+        amy = Presenter.objects.create(project=self.project, name='Amy')
+        a, b, c = (self.add_session(day, n, i, 5, amy) for i, n in enumerate(('A', 'B', 'C')))
+        merged = single_name_items(scope_data(self.project, [a.pk, b.pk, c.pk]))
+        self.assertEqual([i.session for i in merged], ['A +2'])
+        gapped = single_name_items(scope_data(self.project, [a.pk, c.pk]))
+        self.assertEqual([i.session for i in gapped], ['A', 'C'])
+        units = running_units(scope_data(self.project, [a.pk, c.pk]))
+        self.assertEqual([g[0] for g in units[0].groups], ['A', 'C'])
+
+    def test_sessions_across_days(self):
+        from planner.models import Presenter, ShowDay
+        from planner.utils.labels.data import scope_data
+        day2 = ShowDay.objects.create(project=self.project, date=datetime.date(2026, 11, 4))
+        cy = Presenter.objects.create(project=self.project, name='Cy')
+        opening = self.add_session(day2, 'Opening', 0, 2, cy)
+        d = scope_data(self.project, [self.keynote.pk, self.panel.pk, opening.pk])
+        units = [u for u in running_units(d) if u.pack == 2]
+        # Two selected on Nov 3: the day alone; one on Nov 4: the full header.
+        self.assertEqual([u.header for u in units],
+                         [('Tue Nov 3',), ('Wed Nov 4', 'Opening')])
+        self.login(self.owner)
+        body = self.summary(sessions=f'{self.both()},{opening.pk}', mode='running').json()
+        self.assertEqual(body['labels'], 3)            # pack 2 on each day, pack 10
+        self.assertIn('3-sessions', body['filename'])
+
+    def test_several_sessions_on_one_day(self):
+        self.login(self.owner)
+        body = self.summary(sessions=self.both(), mode='running').json()
+        self.assertEqual(body['labels'], 2)
+        self.assertIn('-2026-11-03-', body['filename'])
+        body = self.summary(sessions=f'{self.panel.pk},{self.keynote.pk},{self.panel.pk}').json()
+        self.assertEqual(body['labels'], 2)            # order and repeats do not matter
 
     # -- views
     def test_summary_counts_labels_and_skipped_slots(self):
         self.login(self.owner)
-        body = self.summary(scope='show').json()
+        body = self.summary(sessions=self.both()).json()
         self.assertEqual((body['labels'], body['sheets'], body['skipped']), (2, 1, 2))
         self.assertIn('PRINT-AT-100pct', body['filename'])
-        body = self.summary(scope='show', start=12).json()
+        body = self.summary(sessions=self.both(), start=12).json()
         self.assertEqual(body['sheets'], 2)
 
     def test_pdf_response(self):
         self.login(self.owner)
-        r = self.client.get(self.pdf_url(scope='day', day=self.day.pk, mode='running', color='0',
+        r = self.client.get(self.pdf_url(sessions=self.both(), mode='running', color='0',
                                          start='3', dx='9', dy='nan'))
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r['Content-Type'], 'application/pdf')
@@ -574,9 +633,23 @@ class LabelViewTests(TestCase):
     def test_bad_parameters(self):
         self.login(self.owner)
         self.assertEqual(self.client.get(self.pdf_url(mode='fancy')).status_code, 400)
-        self.assertEqual(self.client.get(self.pdf_url(scope='week')).status_code, 400)
         self.assertEqual(self.client.get(self.pdf_url(stock='NOPE')).status_code, 400)
-        self.assertEqual(self.client.get(self.pdf_url(session='abc')).status_code, 404)
+        self.assertEqual(self.client.get(self.pdf_url(sessions='abc')).status_code, 400)
+        self.assertEqual(self.client.get(self.pdf_url(sessions='999999')).status_code, 404)
+
+    def test_empty_selection_is_refused_with_a_message(self):
+        self.login(self.owner)
+        for empty in ('', ',', ' '):
+            r = self.client.get(self.pdf_url(sessions=empty))
+            self.assertEqual(r.status_code, 400)
+            self.assertIn(b'Select at least one session', r.content)
+        r = self.summary(sessions='')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('Select at least one session', r.json()['error'])
+        r = self.client.get(reverse('planner:mic_tracker_print'))
+        self.assertContains(r, 'Select at least one session to print.')
+        self.assertNotContains(r, 'name="sessions" value="{}" data-day="{}" checked'.format(
+            self.keynote.pk, self.day.pk))
 
     def test_running_order_refused_on_a_stock_too_small(self):
         self.login(self.owner)
@@ -607,10 +680,13 @@ class LabelViewTests(TestCase):
     def test_another_tenants_ids_are_404(self):
         self.login(self.other_owner, self.other)
         self.assertEqual(self.client.get(self.pdf_url()).status_code, 404)
-        self.assertEqual(self.client.get(self.pdf_url(scope='day', day=self.day.pk)).status_code, 404)
         self.assertEqual(self.client.get(self.summary_url()).status_code, 404)
+        # One foreign id among their own is enough to refuse the lot.
+        mixed = f'{self.other_session.pk},{self.keynote.pk}'
+        self.assertEqual(self.client.get(self.pdf_url(sessions=mixed)).status_code, 404)
+        self.assertEqual(self.summary(sessions=mixed).status_code, 404)
         # Their own session works; ours is not offered as a preselection.
-        r = self.client.get(self.pdf_url(session=self.other_session.pk))
+        r = self.client.get(self.pdf_url(sessions=self.other_session.pk))
         self.assertEqual(r.status_code, 200)
         r = self.client.get(reverse('planner:mic_tracker_print') + f'?session={self.keynote.pk}')
         self.assertEqual(r.context['selected_session'], 0)
@@ -661,5 +737,8 @@ class LabelViewTests(TestCase):
         self.login(self.owner)
         r = self.client.get(reverse('planner:mic_tracker_print') + f'?session={self.panel.pk}')
         self.assertEqual(r.context['selected_session'], self.panel.pk)
+        box = '<input type="checkbox" name="sessions" value="{}" data-day="{}"{}>'
+        self.assertContains(r, box.format(self.panel.pk, self.day.pk, ' checked'))
+        self.assertContains(r, box.format(self.keynote.pk, self.day.pk, ''))
         self.assertContains(r, 'Print at 100%')
         self.assertTrue(r.context['running_available'])

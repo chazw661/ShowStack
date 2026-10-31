@@ -132,10 +132,10 @@ def _canvas(buffer, stock, title):
     return c
 
 
-def build_layouts(data, mode, scope, stock):
+def build_layouts(data, mode, stock):
     if mode == 'running':
         pages = []
-        for unit in running_units(data, scope):
+        for unit in running_units(data):
             pages.extend(L.paginate_running(unit, stock))
         return [L.layout_running(p, stock) for p in pages]
     return [L.layout_single(item, stock) for item in single_name_items(data)]
@@ -147,7 +147,7 @@ def render_labels_pdf(layouts, stock, options, title='Beltpack labels'):
     if not layouts:
         c.setFont(fonts.REGULAR, 12)
         c.drawCentredString(float(stock.page_w) / 2, float(stock.page_h) / 2,
-                            'No presenters assigned in this scope, so there are no labels to print.')
+                            'No presenters assigned in these sessions, so there are no labels to print.')
     page = 0
     for lay, (p, position) in zip(layouts, sheet_positions(stock, len(layouts), options.start)):
         while page < p:
@@ -163,9 +163,9 @@ def render_labels_pdf(layouts, stock, options, title='Beltpack labels'):
     return buffer.getvalue()
 
 
-def generate_labels_pdf(data, mode, scope, stock, options, title='Beltpack labels'):
+def generate_labels_pdf(data, mode, stock, options, title='Beltpack labels'):
     """The whole pipeline from ScopeData: (pdf bytes, number of labels)."""
-    layouts = build_layouts(data, mode, scope, stock)
+    layouts = build_layouts(data, mode, stock)
     return render_labels_pdf(layouts, stock, options, title), len(layouts)
 
 

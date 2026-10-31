@@ -55,7 +55,9 @@
         background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-bright);
         border-radius: 4px; padding: 5px 8px; font-size: 13px;
     }
-    .mtp-group select { width: 100%; margin: 2px 0 6px 24px; max-width: calc(100% - 24px); }
+    .mtp-day { border: 0; margin: 8px 0 0; padding: 0; min-width: 0; }
+    .mtp-group label.mtp-all, .mtp-group label.mtp-day-all { font-weight: 700; color: var(--text-primary); }
+    .mtp-group .mtp-session { margin-left: 24px; }
     .mtp-note { font-size: 11px; color: var(--text-dim); margin: 4px 0 0; }
 
     .mtp-start-grid { display: grid; gap: 4px; width: max-content; }
@@ -73,6 +75,9 @@
     .mtp-preview { display: flex; flex-direction: column; gap: 8px; min-height: 70vh; }
     .mtp-summary { font-size: 13px; color: var(--text-secondary); min-height: 18px; }
     .mtp-summary .skipped { color: var(--accent-amber); }
+    .mtp-empty { padding: 40px 16px; text-align: center; font-size: 14px; color: var(--text-dim);
+                 border: 1px dashed var(--border-bright); border-radius: 6px; }
+    #mtp-root a.mtp-btn.disabled { opacity: 0.45; pointer-events: none; }
     .mtp-preview iframe { flex: 1; width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
     </style>
 {% endblock %}
@@ -105,23 +110,19 @@
     <div class="mtp-layout">
         <form class="mtp-panel" id="mtp-form" onsubmit="return false;">
             <div class="mtp-group">
-                <h3>What to print</h3>
+                <h3>Sessions</h3>
                 {% if days %}
-                <label><input type="radio" name="scope" value="session" checked> One session</label>
-                <select name="session" aria-label="Session">
-                    {% for day in days %}
-                    <optgroup label="{{ day }}">
-                        {% for session in day.sessions.all %}
-                        <option value="{{ session.id }}"{% if session.id == selected_session %} selected{% endif %}>{{ session.name }}{% if session.start_time %} · {{ session.start_time|time:"g:i A" }}{% endif %}</option>
-                        {% endfor %}
-                    </optgroup>
+                <label class="mtp-all"><input type="checkbox" id="mtp-all-sessions"> Select all sessions</label>
+                {% for day in days %}
+                <fieldset class="mtp-day">
+                    <label class="mtp-day-all"><input type="checkbox" data-day-all="{{ day.id }}"> {{ day }}</label>
+                    {% for session in day.sessions.all %}
+                    <label class="mtp-session"><input type="checkbox" name="sessions" value="{{ session.id }}" data-day="{{ day.id }}"{% if session.id == selected_session %} checked{% endif %}> {{ session.name }}{% if session.start_time %} · {{ session.start_time|time:"g:i A" }}{% endif %}</label>
+                    {% empty %}
+                    <p class="mtp-note mtp-session">No sessions on this day.</p>
                     {% endfor %}
-                </select>
-                <label><input type="radio" name="scope" value="day"> One day</label>
-                <select name="day" aria-label="Day">
-                    {% for day in days %}<option value="{{ day.id }}">{{ day }}</option>{% endfor %}
-                </select>
-                <label><input type="radio" name="scope" value="show"> Whole show</label>
+                </fieldset>
+                {% endfor %}
                 {% else %}
                 <p class="mtp-note">This project has no show days yet. Add a day and a session in the Mic Tracker first.</p>
                 {% endif %}
@@ -163,6 +164,7 @@
 
         <div class="mtp-preview">
             <div class="mtp-summary" id="mtp-summary" aria-live="polite"></div>
+            <div class="mtp-empty" id="mtp-empty" hidden>Select at least one session to print.</div>
             <iframe id="mtp-frame" title="Label PDF preview"></iframe>
         </div>
     </div>
@@ -208,17 +210,40 @@
 
     function query() {
         var p = new URLSearchParams();
-        var scope = checked('scope') || 'show';
         p.set('stock', root.dataset.stock);
-        p.set('scope', scope);
-        if (scope === 'session' && form.session) p.set('session', form.session.value);
-        if (scope === 'day' && form.day) p.set('day', form.day.value);
+        p.set('sessions', selectedSessions().join(','));
         p.set('mode', checked('mode'));
         p.set('color', checked('color'));
         p.set('start', start);
         p.set('dx', clamp(form.dx.value));
         p.set('dy', clamp(form.dy.value));
         return p;
+    }
+
+    function sessionBoxes(day) {
+        var selector = 'input[name="sessions"]' + (day ? '[data-day="' + day + '"]' : '');
+        return Array.prototype.slice.call(form.querySelectorAll(selector));
+    }
+
+    function selectedSessions() {
+        return sessionBoxes().filter(function (b) { return b.checked; })
+                             .map(function (b) { return b.value; });
+    }
+
+    // A "select all" box shows ticked when every box under it is, and
+    // half-ticked when some are.
+    function paintAll(box, boxes) {
+        if (!box) return;
+        var on = boxes.filter(function (b) { return b.checked; }).length;
+        box.checked = boxes.length > 0 && on === boxes.length;
+        box.indeterminate = on > 0 && on < boxes.length;
+    }
+
+    function paintSelection() {
+        form.querySelectorAll('input[data-day-all]').forEach(function (box) {
+            paintAll(box, sessionBoxes(box.dataset.dayAll));
+        });
+        paintAll(document.getElementById('mtp-all-sessions'), sessionBoxes());
     }
 
     function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
@@ -229,11 +254,23 @@
         timer = setTimeout(function () {
             var mine = ++generation;
             var p = query();
-            frame.src = root.dataset.pdfUrl + '?' + p.toString();
-            var dl = new URLSearchParams(p); dl.set('download', '1');
-            document.getElementById('mtp-download').href = root.dataset.pdfUrl + '?' + dl.toString();
+            var download = document.getElementById('mtp-download');
+            var none = !p.get('sessions');
+            document.getElementById('mtp-empty').hidden = !none;
+            frame.hidden = none;
+            download.classList.toggle('disabled', none);
+            download.setAttribute('aria-disabled', none ? 'true' : 'false');
             var al = new URLSearchParams({stock: p.get('stock'), dx: p.get('dx'), dy: p.get('dy')});
             document.getElementById('mtp-alignment').href = root.dataset.alignmentUrl + '?' + al.toString();
+            if (none) {
+                frame.removeAttribute('src');
+                download.removeAttribute('href');
+                summary.textContent = '';
+                return;
+            }
+            frame.src = root.dataset.pdfUrl + '?' + p.toString();
+            var dl = new URLSearchParams(p); dl.set('download', '1');
+            download.href = root.dataset.pdfUrl + '?' + dl.toString();
             fetch(root.dataset.summaryUrl + '?' + p.toString(), {credentials: 'same-origin'})
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
@@ -263,16 +300,12 @@
         b.addEventListener('click', function () { start = parseInt(b.dataset.start, 10); paintStart(); refresh(); });
     });
 
-    // Choosing a session or a day in its list also selects that scope.
-    ['session', 'day'].forEach(function (name) {
-        if (!form[name]) return;
-        form[name].addEventListener('change', function () {
-            var radio = form.querySelector('input[name="scope"][value="' + name + '"]');
-            if (radio) radio.checked = true;
-        });
-    });
-
     form.addEventListener('change', function (e) {
+        if (e.target.id === 'mtp-all-sessions' || e.target.dataset.dayAll) {
+            var on = e.target.checked;
+            sessionBoxes(e.target.dataset.dayAll).forEach(function (b) { b.checked = on; });
+        }
+        if (e.target.type === 'checkbox') paintSelection();
         if (e.target.name === 'dx' || e.target.name === 'dy') {
             e.target.value = clamp(e.target.value);
             saveCalibration();
@@ -283,6 +316,7 @@
         if (e.target.name === 'dx' || e.target.name === 'dy') refresh();
     });
 
+    paintSelection();
     refresh();
 })();
 </script>

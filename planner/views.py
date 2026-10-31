@@ -779,15 +779,18 @@ def _label_options(request, project):
     if stock is None:
         return None, HttpResponseBadRequest('Unknown label stock.')
 
-    scope = request.GET.get('scope', 'session')
-    session = day = None
-    if scope == 'session':
-        session = get_object_or_404(MicSession, pk=_int_or_404(request.GET.get('session')),
-                                    day__project=project)
-    elif scope == 'day':
-        day = get_object_or_404(ShowDay, pk=_int_or_404(request.GET.get('day')), project=project)
-    elif scope != 'show':
-        return None, HttpResponseBadRequest('Unknown scope.')
+    raw = [part for part in request.GET.get('sessions', '').split(',') if part.strip()]
+    try:
+        ids = sorted({int(part) for part in raw})
+    except ValueError:
+        return None, HttpResponseBadRequest('Sessions must be a list of session ids.')
+    if not ids:
+        return None, HttpResponseBadRequest('Select at least one session to print.')
+    sessions = list(MicSession.objects.filter(pk__in=ids, day__project=project)
+                    .select_related('day'))
+    if len(sessions) != len(ids):
+        # Another project's session, or none at all: the same 404 either way.
+        raise Http404('No such session.')
 
     mode = request.GET.get('mode', 'single')
     if mode not in ('single', 'running'):
@@ -803,27 +806,22 @@ def _label_options(request, project):
         dx_mm=clamp_offset(request.GET.get('dx')),
         dy_mm=clamp_offset(request.GET.get('dy')),
     )
-    return {'stock': stock, 'scope': scope, 'session': session, 'day': day,
-            'mode': mode, 'options': options}, None
-
-
-def _int_or_404(value):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        raise Http404('No such session or day.')
+    return {'stock': stock, 'sessions': sessions, 'mode': mode, 'options': options}, None
 
 
 def _label_filename(project, params):
     """Says how to print it, because the filename is what a person sees in
     the print dialog's title bar."""
     show = MicShowInfo.objects.filter(project=project).values_list('show_name', flat=True).first()
-    if params['session'] is not None:
-        scope = params['session'].name
-    elif params['day'] is not None:
-        scope = params['day'].name or params['day'].date.isoformat()
+    sessions = params['sessions']
+    days = {s.day for s in sessions}
+    if len(sessions) == 1:
+        scope = sessions[0].name
+    elif len(days) == 1:
+        day = days.pop()
+        scope = day.name or day.date.isoformat()
     else:
-        scope = 'whole-show'
+        scope = '{}-sessions'.format(len(sessions))
     parts = ['ShowStack-labels', slugify(show or project.name)[:40], slugify(scope)[:40],
              params['mode'], 'PRINT-AT-100pct']
     return '-'.join(p for p in parts if p) + '.pdf'
@@ -839,8 +837,9 @@ def _pdf_response(pdf, filename, download):
 
 @staff_member_required
 def mic_tracker_print_view(request):
-    """The print page: scope, mode and calibration controls around an
-    iframe showing the real PDF."""
+    """The print page: a session checklist, mode and calibration controls
+    around an iframe showing the real PDF. ``?session=<id>`` (the A2 tab's
+    shortcut) ticks that session; without it nothing is ticked."""
     from planner.utils.labels.layout import running_order_available
     from planner.utils.labels.stock import DEFAULT_STOCK, OFFSET_LIMIT_MM, STOCKS
 
@@ -848,7 +847,10 @@ def mic_tracker_print_view(request):
     if project is None:
         return redirect('planner:mic_tracker')
 
-    days = ShowDay.objects.filter(project=project).order_by('date').prefetch_related('sessions')
+    from django.db.models import Prefetch
+    days = (ShowDay.objects.filter(project=project).order_by('date', 'id')
+            .prefetch_related(Prefetch('sessions',
+                                       queryset=MicSession.objects.order_by('order', 'id'))))
     try:
         selected_session = int(request.GET.get('session') or 0)
     except ValueError:
@@ -884,9 +886,9 @@ def mic_labels_pdf(request):
     params, error = _label_options(request, project)
     if error:
         return error
-    data = scope_data(project, session=params['session'], day=params['day'])
+    data = scope_data(project, [s.pk for s in params['sessions']])
     filename = _label_filename(project, params)
-    pdf, _ = generate_labels_pdf(data, params['mode'], params['scope'], params['stock'],
+    pdf, _ = generate_labels_pdf(data, params['mode'], params['stock'],
                                  params['options'], title=filename[:-4])
     return _pdf_response(pdf, filename, request.GET.get('download') == '1')
 
@@ -924,8 +926,8 @@ def mic_labels_summary(request):
     params, error = _label_options(request, project)
     if error:
         return JsonResponse({'error': error.content.decode()}, status=error.status_code)
-    data = scope_data(project, session=params['session'], day=params['day'])
-    labels = len(build_layouts(data, params['mode'], params['scope'], params['stock']))
+    data = scope_data(project, [s.pk for s in params['sessions']])
+    labels = len(build_layouts(data, params['mode'], params['stock']))
     return JsonResponse({
         'labels': labels,
         'sheets': sheets_needed(params['stock'], labels, params['options'].start),
