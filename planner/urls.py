@@ -163,6 +163,10 @@ urlpatterns = [
     path('api/mic/delete-session/', views.delete_session, name='delete_session'),
     path('mic-tracker/', views.mic_tracker_view, name='mic_tracker'),
     path('mic-tracker/overview/', views.mic_tracker_overview_view, name='mic_tracker_overview'),
+    path('mic-tracker/print/', views.mic_tracker_print_view, name='mic_tracker_print'),
+    path('mic-tracker/print/labels.pdf', views.mic_labels_pdf, name='mic_labels_pdf'),
+    path('mic-tracker/print/alignment.pdf', views.mic_labels_alignment_pdf, name='mic_labels_alignment_pdf'),
+    path('mic-tracker/print/summary.json', views.mic_labels_summary, name='mic_labels_summary'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     # In urls.py

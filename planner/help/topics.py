@@ -180,6 +180,17 @@ TOPICS = (
         keywords=('csv', 'import', 'export', 'pdf', 'spreadsheet', 'mic sheet', 'print', 'presenter list',),
     ),
     Topic(
+        slug='mic-labels',
+        title='Print beltpack labels',
+        section='Show day',
+        summary='Print presenter labels for the front of each bodypack: one name per label, or the running order per pack.',
+        pages=(
+            'planner:mic_tracker',
+            'planner:mic_tracker_print',
+        ),
+        keywords=('label', 'labels', 'beltpack', 'bodypack', 'pack', 'sticker', 'print', 'running order', 'OL3016LP', 'alignment', 'calibration',),
+    ),
+    Topic(
         slug='mic-updates-banner',
         title='Keep several screens in sync ("Updates available")',
         section='Show day',

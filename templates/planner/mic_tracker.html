@@ -423,7 +423,7 @@
 
     @media print {
         .mtt-header-actions, .session-tabs, .mtt-day-actions, .session-actions,
-        .a1-actions-bar, .mtt-add-session-bar, .session-panel:not(.active),
+        .a1-actions-bar, .a2-actions-bar, .mtt-add-session-bar, .session-panel:not(.active),
         .a1-micd-cell { display: none !important; }
         body, #mic-tracker-root { background: var(--mtt-print-bg); color: var(--mtt-print-fg); }
         .a1-table thead th { background: var(--mtt-print-th-bg); color: var(--mtt-print-th-fg); }
@@ -640,6 +640,7 @@ silently 403-ing background saves and stopping updates from reaching others.
             {% if not is_viewer %}<button class="btn-mtt btn-mtt-secondary" onclick="addNewDay()">+ Add Day</button>{% endif %}
             <a href="/admin/planner/presenter/" class="btn-mtt btn-mtt-secondary">👤 Presenters</a>
             <a href="/audiopatch/mic-tracker/export/pdf/" class="btn-mtt btn-mtt-export" style="color:var(--accent-amber) !important;">↓ Export PDF</a>
+            <a href="{% url 'planner:mic_tracker_print' %}" class="btn-mtt btn-mtt-export">🖨 Print Labels</a>
             <a href="/audiopatch/mic-tracker/export/" class="btn-mtt btn-mtt-export">↓ Export CSV</a>
             {# Issue #74 — A2 Listen companion setup. #}
             <button class="btn-mtt btn-mtt-export" onclick="openListenSetup()" title="Pair this device with the Listen companion app">🎧 Listen Setup</button>
@@ -894,14 +895,22 @@ silently 403-ing background saves and stopping updates from reaching others.
 
                     <!-- ════════════════ A2 PANEL ════════════════ -->
                     <div class="session-panel" id="session-{{ session.id }}-a2">
-                        {% if not is_viewer %}
-                        <div style="padding: 8px 14px 0;">
+                        {% comment %}
+                        The bar renders for viewers too: printing labels is
+                        read-only, so anyone who can see the project can do it.
+                        Only GRP (which edits groups) stays behind is_viewer.
+                        {% endcomment %}
+                        <div class="a2-actions-bar" style="display:flex;align-items:center;gap:8px;padding: 8px 14px 0;">
+                            {% if not is_viewer %}
                             <button onclick="openGroupManager({{ session.id }})"
                                     style="font-size:10px;font-weight:800;letter-spacing:0.08em;padding:5px 8px;
                                            background:rgba(var(--mtt-rgb-blue), 0.15);border:1px solid var(--accent-blue);
                                            color:var(--accent-blue);border-radius:3px;cursor:pointer;line-height:1;">GRP</button>
+                            {% endif %}
+                            <a href="{% url 'planner:mic_tracker_print' %}?session={{ session.id }}"
+                               class="btn-mtt btn-mtt-ghost a2-print-labels"
+                               style="font-size:10px;padding:5px 10px;margin-left:auto;text-decoration:none;">🖨 Print labels</a>
                         </div>
-                        {% endif %}
                         <div class="a2-grid">
                         {% for assignment in session.mic_assignments.all %}
                         {% comment %}

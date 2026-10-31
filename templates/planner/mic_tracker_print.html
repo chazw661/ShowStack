@@ -1,0 +1,323 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Print labels — Mic Tracker{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'planner:mic_tracker' %}">Mic Tracker</a>
+    &rsaquo; Print labels
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
+    <style>
+    body { background: var(--bg-base); color: var(--text-primary); }
+    #mtp-root { padding: 0 0 48px; }
+    .mtp-header {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+        background: var(--bg-card);
+    }
+    .mtp-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
+    .mtp-sub { font-size: 11px; color: var(--text-dim); }
+    .mtp-header-actions { margin-left: auto; display: flex; gap: 8px; }
+    #mtp-root a.mtp-btn, #mtp-root a.mtp-btn:link, #mtp-root a.mtp-btn:visited, #mtp-root button.mtp-btn {
+        display: inline-block; padding: 8px 14px; cursor: pointer;
+        background: var(--bg-raised); color: var(--text-primary) !important;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+        border: 1px solid var(--border-bright); border-radius: 4px; text-decoration: none;
+    }
+    #mtp-root a.mtp-btn.primary { background: var(--accent-blue); color: var(--mtt-text-inverse) !important; border-color: var(--accent-blue); }
+
+    .mtp-warning {
+        margin: 16px 24px 0; padding: 12px 16px; border-radius: 6px;
+        border: 1px solid var(--accent-amber); background: rgba(var(--mtt-rgb-amber), 0.12);
+        color: var(--text-primary); font-size: 13px;
+    }
+    .mtp-warning strong { color: var(--accent-amber); }
+
+    .mtp-layout { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 20px; padding: 16px 24px; }
+    @media (max-width: 900px) { .mtp-layout { grid-template-columns: 1fr; } }
+
+    .mtp-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+    .mtp-panel h3 {
+        margin: 0 0 8px; padding: 0; background: none;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-dim);
+    }
+    .mtp-group + .mtp-group { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .mtp-group label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin: 6px 0; }
+    .mtp-group label.disabled { opacity: 0.45; }
+    .mtp-group select, .mtp-group input[type=number] {
+        background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-bright);
+        border-radius: 4px; padding: 5px 8px; font-size: 13px;
+    }
+    .mtp-day { border: 0; margin: 8px 0 0; padding: 0; min-width: 0; }
+    .mtp-group label.mtp-all, .mtp-group label.mtp-day-all { font-weight: 700; color: var(--text-primary); }
+    .mtp-group .mtp-session { margin-left: 24px; }
+    .mtp-note { font-size: 11px; color: var(--text-dim); margin: 4px 0 0; }
+
+    .mtp-start-grid { display: grid; gap: 4px; width: max-content; }
+    .mtp-start-grid button {
+        width: 34px; height: 34px; border-radius: 5px; cursor: pointer;
+        background: var(--bg-raised); color: var(--text-secondary);
+        border: 1px solid var(--border-bright); font-size: 12px; font-weight: 700;
+    }
+    .mtp-start-grid button.used { opacity: 0.35; }
+    .mtp-start-grid button.active { background: var(--accent-blue); color: var(--mtt-text-inverse); border-color: var(--accent-blue); }
+
+    .mtp-offsets { display: flex; gap: 14px; }
+    .mtp-offsets input { width: 70px; }
+
+    .mtp-preview { display: flex; flex-direction: column; gap: 8px; min-height: 70vh; }
+    .mtp-summary { font-size: 13px; color: var(--text-secondary); min-height: 18px; }
+    .mtp-summary .skipped { color: var(--accent-amber); }
+    .mtp-empty { padding: 40px 16px; text-align: center; font-size: 14px; color: var(--text-dim);
+                 border: 1px dashed var(--border-bright); border-radius: 6px; }
+    #mtp-root a.mtp-btn.disabled { opacity: 0.45; pointer-events: none; }
+    .mtp-preview iframe { flex: 1; width: 100%; min-height: 70vh; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div id="mtp-root"
+     data-pdf-url="{% url 'planner:mic_labels_pdf' %}"
+     data-alignment-url="{% url 'planner:mic_labels_alignment_pdf' %}"
+     data-summary-url="{% url 'planner:mic_labels_summary' %}"
+     data-stock="{{ stock.part }}"
+     data-offset-limit="{{ offset_limit }}">
+    <div class="mtp-header">
+        <div>
+            <div class="mtp-title">🖨 Print beltpack labels</div>
+            <div class="mtp-sub">{{ stock.description }}</div>
+        </div>
+        <div class="mtp-header-actions">
+            <a class="mtp-btn" href="{% url 'planner:mic_tracker' %}">← Mic Tracker</a>
+            <a class="mtp-btn" id="mtp-alignment" href="#" target="_blank" rel="noopener">Print alignment page</a>
+            <a class="mtp-btn primary" id="mtp-download" href="#">↓ Download PDF</a>
+        </div>
+    </div>
+
+    <div class="mtp-warning">
+        <strong>Print at 100% / “Actual size”</strong> — not “Fit to page”, which shrinks
+        everything off the labels. Print the alignment page first on plain paper and check
+        that both bars measure exactly 100&nbsp;mm.
+    </div>
+
+    <div class="mtp-layout">
+        <form class="mtp-panel" id="mtp-form" onsubmit="return false;">
+            <div class="mtp-group">
+                <h3>Sessions</h3>
+                {% if days %}
+                <label class="mtp-all"><input type="checkbox" id="mtp-all-sessions"> Select all sessions</label>
+                {% for day in days %}
+                <fieldset class="mtp-day">
+                    <label class="mtp-day-all"><input type="checkbox" data-day-all="{{ day.id }}"> {{ day }}</label>
+                    {% for session in day.sessions.all %}
+                    <label class="mtp-session"><input type="checkbox" name="sessions" value="{{ session.id }}" data-day="{{ day.id }}"{% if session.id == selected_session %} checked{% endif %}> {{ session.name }}{% if session.start_time %} · {{ session.start_time|time:"g:i A" }}{% endif %}</label>
+                    {% empty %}
+                    <p class="mtp-note mtp-session">No sessions on this day.</p>
+                    {% endfor %}
+                </fieldset>
+                {% endfor %}
+                {% else %}
+                <p class="mtp-note">This project has no show days yet. Add a day and a session in the Mic Tracker first.</p>
+                {% endif %}
+            </div>
+
+            <div class="mtp-group">
+                <h3>Label style</h3>
+                <label><input type="radio" name="mode" value="single" checked> Single name — one label per presenter</label>
+                <label class="{% if not running_available %}disabled{% endif %}">
+                    <input type="radio" name="mode" value="running"{% if not running_available %} disabled{% endif %}>
+                    Running order — one label per pack, presenters in order
+                </label>
+                {% if not running_available %}<p class="mtp-note">{{ running_reason }}</p>{% endif %}
+            </div>
+
+            <div class="mtp-group">
+                <h3>Colour</h3>
+                <label><input type="radio" name="color" value="1" checked> Colour</label>
+                <label><input type="radio" name="color" value="0"> Black &amp; white</label>
+            </div>
+
+            <div class="mtp-group">
+                <h3>Start at label</h3>
+                <div class="mtp-start-grid" style="grid-template-columns: repeat({{ stock_cols }}, 34px);">
+                    {% for n in start_positions %}<button type="button" data-start="{{ n }}"{% if n == 1 %} class="active"{% endif %}>{{ n }}</button>{% endfor %}
+                </div>
+                <p class="mtp-note">Pick the first unused label to reuse a part-used sheet.</p>
+            </div>
+
+            <div class="mtp-group">
+                <h3>Printer calibration (mm)</h3>
+                <div class="mtp-offsets">
+                    <label>X <input type="number" name="dx" step="0.1" min="-{{ offset_limit }}" max="{{ offset_limit }}" value="0"></label>
+                    <label>Y <input type="number" name="dy" step="0.1" min="-{{ offset_limit }}" max="{{ offset_limit }}" value="0"></label>
+                </div>
+                <p class="mtp-note">+X moves the print right, +Y moves it down. Saved in this browser for this label stock.</p>
+            </div>
+        </form>
+
+        <div class="mtp-preview">
+            <div class="mtp-summary" id="mtp-summary" aria-live="polite"></div>
+            <div class="mtp-empty" id="mtp-empty" hidden>Select at least one session to print.</div>
+            <iframe id="mtp-frame" title="Label PDF preview"></iframe>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var root = document.getElementById('mtp-root');
+    var form = document.getElementById('mtp-form');
+    var frame = document.getElementById('mtp-frame');
+    var summary = document.getElementById('mtp-summary');
+    var limit = parseFloat(root.dataset.offsetLimit);
+    var storageKey = 'showstack.labelCal.' + root.dataset.stock;
+    var start = 1;
+
+    function clamp(v) {
+        v = parseFloat(v);
+        if (!isFinite(v)) return 0;
+        return Math.round(Math.max(-limit, Math.min(limit, v)) * 10) / 10;
+    }
+
+    // Calibration belongs to this browser's printer, so it lives here and
+    // not in the database. Storage can be missing (private mode), so every
+    // touch is guarded and the page works the same without it.
+    try {
+        var saved = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+        if (saved) {
+            form.dx.value = clamp(saved.dx);
+            form.dy.value = clamp(saved.dy);
+        }
+    } catch (e) {}
+
+    function saveCalibration() {
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify({dx: clamp(form.dx.value), dy: clamp(form.dy.value)}));
+        } catch (e) {}
+    }
+
+    function checked(name) {
+        var el = form.querySelector('input[name="' + name + '"]:checked');
+        return el ? el.value : '';
+    }
+
+    function query() {
+        var p = new URLSearchParams();
+        p.set('stock', root.dataset.stock);
+        p.set('sessions', selectedSessions().join(','));
+        p.set('mode', checked('mode'));
+        p.set('color', checked('color'));
+        p.set('start', start);
+        p.set('dx', clamp(form.dx.value));
+        p.set('dy', clamp(form.dy.value));
+        return p;
+    }
+
+    function sessionBoxes(day) {
+        var selector = 'input[name="sessions"]' + (day ? '[data-day="' + day + '"]' : '');
+        return Array.prototype.slice.call(form.querySelectorAll(selector));
+    }
+
+    function selectedSessions() {
+        return sessionBoxes().filter(function (b) { return b.checked; })
+                             .map(function (b) { return b.value; });
+    }
+
+    // A "select all" box shows ticked when every box under it is, and
+    // half-ticked when some are.
+    function paintAll(box, boxes) {
+        if (!box) return;
+        var on = boxes.filter(function (b) { return b.checked; }).length;
+        box.checked = boxes.length > 0 && on === boxes.length;
+        box.indeterminate = on > 0 && on < boxes.length;
+    }
+
+    function paintSelection() {
+        form.querySelectorAll('input[data-day-all]').forEach(function (box) {
+            paintAll(box, sessionBoxes(box.dataset.dayAll));
+        });
+        paintAll(document.getElementById('mtp-all-sessions'), sessionBoxes());
+    }
+
+    function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+    var timer = null, generation = 0;
+    function refresh() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            var mine = ++generation;
+            var p = query();
+            var download = document.getElementById('mtp-download');
+            var none = !p.get('sessions');
+            document.getElementById('mtp-empty').hidden = !none;
+            frame.hidden = none;
+            download.classList.toggle('disabled', none);
+            download.setAttribute('aria-disabled', none ? 'true' : 'false');
+            var al = new URLSearchParams({stock: p.get('stock'), dx: p.get('dx'), dy: p.get('dy')});
+            document.getElementById('mtp-alignment').href = root.dataset.alignmentUrl + '?' + al.toString();
+            if (none) {
+                frame.removeAttribute('src');
+                download.removeAttribute('href');
+                summary.textContent = '';
+                return;
+            }
+            frame.src = root.dataset.pdfUrl + '?' + p.toString();
+            var dl = new URLSearchParams(p); dl.set('download', '1');
+            download.href = root.dataset.pdfUrl + '?' + dl.toString();
+            fetch(root.dataset.summaryUrl + '?' + p.toString(), {credentials: 'same-origin'})
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (mine !== generation) return;
+                    if (data.error) { summary.textContent = data.error; return; }
+                    var text = plural(data.labels, 'label') + ' on ' + plural(data.sheets, 'sheet');
+                    summary.textContent = text;
+                    if (data.skipped) {
+                        var s = document.createElement('span');
+                        s.className = 'skipped';
+                        s.textContent = ' · ' + plural(data.skipped, 'slot') + ' without a presenter skipped';
+                        summary.appendChild(s);
+                    }
+                })
+                .catch(function () { if (mine === generation) summary.textContent = ''; });
+        }, 400);
+    }
+
+    function paintStart() {
+        form.querySelectorAll('.mtp-start-grid button').forEach(function (b) {
+            var n = parseInt(b.dataset.start, 10);
+            b.classList.toggle('active', n === start);
+            b.classList.toggle('used', n < start);
+        });
+    }
+    form.querySelectorAll('.mtp-start-grid button').forEach(function (b) {
+        b.addEventListener('click', function () { start = parseInt(b.dataset.start, 10); paintStart(); refresh(); });
+    });
+
+    form.addEventListener('change', function (e) {
+        if (e.target.id === 'mtp-all-sessions' || e.target.dataset.dayAll) {
+            var on = e.target.checked;
+            sessionBoxes(e.target.dataset.dayAll).forEach(function (b) { b.checked = on; });
+        }
+        if (e.target.type === 'checkbox') paintSelection();
+        if (e.target.name === 'dx' || e.target.name === 'dy') {
+            e.target.value = clamp(e.target.value);
+            saveCalibration();
+        }
+        refresh();
+    });
+    form.addEventListener('input', function (e) {
+        if (e.target.name === 'dx' || e.target.name === 'dy') refresh();
+    });
+
+    paintSelection();
+    refresh();
+})();
+</script>
+{% endblock %}
