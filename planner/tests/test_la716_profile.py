@@ -58,10 +58,12 @@ class Base(Fixture):
         self.touring = AmpModel.objects.create(
             manufacturer="L'Acoustics", model_name='LA7.16', channel_count=16,
             sc32_connector_count=1)
-        self.install = AmpModel.objects.create(
-            manufacturer='L-Acoustics', model_name='LA7.16i', channel_count=16,
-            sc32_connector_count=1,
-            power_profile=AmplifierProfile.objects.get(model='LA7.16i'))
+        # A test database built from migrations already has an LA7.16i row;
+        # use it, or the merge command would see two and keep the older.
+        self.install, _ = AmpModel.objects.update_or_create(
+            manufacturer='L-Acoustics', model_name='LA7.16i',
+            defaults={'channel_count': 16, 'sc32_connector_count': 1,
+                      'power_profile': AmplifierProfile.objects.get(model='LA7.16i')})
         self.models['LA7.16'] = self.touring
 
 
