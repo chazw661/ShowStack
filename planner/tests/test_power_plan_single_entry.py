@@ -3,7 +3,8 @@
 The sidebar used to open the admin plan list, a page without Regenerate,
 and from there the calculator. Now the sidebar, the dashboard and the admin
 home card open the calculator, which shows the project's generated plan (or
-how to make one). The admin list and add form are superuser-only; hand-built
+how to make one). The admin list is superuser-only and nobody can add a plan
+there, superusers included: plans come from "Generate from amps". Hand-built
 plans stay in the database but are never picked by the calculator.
 
 Run with::
@@ -13,9 +14,11 @@ Run with::
 """
 
 from django.contrib.auth.models import User
+from django.test import RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from planner.admin_site import showstack_admin_site
 from planner.models import PowerDistributionPlan, ProjectMember, UserProfile
 from planner.tests.test_power_plan_tenancy import PowerPlanBase
 
@@ -106,21 +109,57 @@ class AdminListAccessTests(SingleEntryBase):
                 self.assertEqual(403, resp.status_code)
                 self.assertEqual(before, PowerDistributionPlan.objects.count())
 
-    def test_superuser_keeps_the_admin_list_and_add_form(self):
-        self.use(self.superuser)
-        for name in self.ADMIN_PAGES:
-            with self.subTest(page=name):
-                self.assertEqual(200, self.client.get(reverse(name)).status_code)
+    def test_nobody_has_add_permission_superuser_included(self):
+        model_admin = showstack_admin_site._registry[PowerDistributionPlan]
+        for user in (self.superuser, self.user_a, self.editor, self.viewer):
+            with self.subTest(user=user.username):
+                request = RequestFactory().get('/')
+                request.user = user
+                self.assertFalse(model_admin.has_add_permission(request))
 
-    def test_calculator_links_the_admin_list_for_superusers_only(self):
+    def test_superuser_keeps_the_list_with_no_add_button(self):
+        self.use(self.superuser)
+        resp = self.client.get(reverse('admin:planner_powerdistributionplan_changelist'))
+        self.assertEqual(200, resp.status_code)
+        html = resp.content.decode()
+        self.assertIn('Venue AAA', html)
+        self.assertNotIn(reverse('admin:planner_powerdistributionplan_add'), html)
+        self.assertNotIn('Add Power Distribution Plan', html)
+
+    def test_superuser_can_still_open_and_delete_a_plan(self):
+        self.use(self.superuser)
+        for name in ('admin:planner_powerdistributionplan_change',
+                     'admin:planner_powerdistributionplan_delete'):
+            with self.subTest(page=name):
+                resp = self.client.get(reverse(name, args=[self.plan_a.pk]))
+                self.assertEqual(200, resp.status_code)
+
+    def test_superuser_cannot_add_a_plan(self):
+        self.use(self.superuser)
+        url = reverse('admin:planner_powerdistributionplan_add')
+        self.assertEqual(403, self.client.get(url).status_code)
+        before = PowerDistributionPlan.objects.count()
+        self.assertEqual(403, self.client.post(url, {'venue_name': 'Hand plan'}).status_code)
+        self.assertEqual(before, PowerDistributionPlan.objects.count())
+
+    def test_calculator_has_no_admin_link_for_any_user(self):
         self.generate_a()
-        for user, shown in ((self.superuser, True), (self.user_a, False),
-                            (self.editor, False), (self.viewer, False)):
+        for user in (self.superuser, self.user_a, self.editor, self.viewer):
             with self.subTest(user=user.username):
                 self.use(user)
                 html = self.client.get(reverse(CALCULATOR)).content.decode()
-                self.assertEqual(shown, 'All plans (admin)' in html)
+                self.assertNotIn(reverse('admin:planner_powerdistributionplan_changelist'), html)
+                self.assertNotIn('All plans (admin)', html)
                 self.assertNotIn('Back to Power Distribution Plans', html)
+
+    def test_empty_state_has_no_build_by_hand_link(self):
+        for user in (self.superuser, self.user_a, self.editor, self.viewer):
+            with self.subTest(user=user.username):
+                self.use(user)
+                html = self.client.get(reverse(CALCULATOR)).content.decode()
+                self.assertIn('id="power-plan-empty"', html)
+                self.assertNotIn('/admin/planner/powerdistributionplan/', html)
+                self.assertNotIn('by hand', html.lower())
 
 
 class CalculatorPlanChoiceTests(SingleEntryBase):

@@ -178,7 +178,7 @@ def ordered_get_app_list(request, app_label=None):
                 if model_name == 'powerdistributionplan':
                     # The sidebar opens the project's power plan page (the
                     # one with Regenerate), not the admin list; superusers
-                    # reach that from the page's "All plans (admin)".
+                    # reach the list at its URL.
                     model['admin_url'] = reverse('planner:power_distribution_calculator')
                     model['add_url'] = None
                 filtered_models.append(model)

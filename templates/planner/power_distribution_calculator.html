@@ -358,7 +358,6 @@
             </div>
         </div>
         <div>
-            {% if request.user.is_superuser %}<a href="{% url 'admin:planner_powerdistributionplan_changelist' %}" class="btn" id="all-plans-admin">All plans (admin)</a>{% endif %}
             {% include "help/_help_link.html" %}
         </div>
     </div>

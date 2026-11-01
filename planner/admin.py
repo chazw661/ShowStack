@@ -7201,8 +7201,9 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
     view_calculator_button.short_description = 'Power Calculator'
     
     def _superuser_only(self, request):
-        """The admin list and add form are superuser-only: everyone else works
-        on the project's generated plan, on the calculator page. A GET is sent
+        """The admin list is superuser-only, and so is the add URL (where
+        has_add_permission refuses even them): everyone else works on the
+        project's generated plan, on the calculator page. A GET is sent
         there; anything else is refused, so nothing is written."""
         if request.user.is_superuser:
             return None
@@ -7214,8 +7215,7 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         return self._superuser_only(request) or super().changelist_view(request, extra_context)
 
     def add_view(self, request, form_url='', extra_context=None):
-        """Hand-built plans are made by superusers only; the rest generate one
-        from the amp module."""
+        """Plans are generated from the amp module, never added here."""
         return self._superuser_only(request) or super().add_view(request, form_url, extra_context)
 
     def get_queryset(self, request):
@@ -7238,10 +7238,10 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
 
 
     def has_add_permission(self, request):
-        """Only editors and owners can add"""
-        if request.user.is_superuser:
-            return True
-        return super().has_add_permission(request)
+        """Nobody adds a plan here, superusers included: plans are made with
+        "Generate from amps". The list stays for superusers to view, repair
+        and delete."""
+        return False
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""
