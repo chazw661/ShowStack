@@ -27,26 +27,34 @@ def _back():
     return redirect('planner:project_branding')
 
 
+def _mm(points):
+    return points * 25.4 / 72
+
+
 def logo_notes(brand, stock):
     """{kind: [(level, message)]} for the logos on the page: what prints
-    where, and why a logo will not print or will look soft."""
+    where and how big, and why a logo will not print or will look soft.
+    'warn' means it will not print as uploaded."""
     notes = {kind: [] for kind in B.LOGO_KINDS}
     full = brand.full_logo_kind
     widest, widest_part = L.max_logo_aspect(stock), L.max_logo_aspect(stock, part=True)
     mark = brand.logo('mark')
     for logo in brand.logos:
         out = notes[logo.kind]
-        dpi = logo.dpi_at(L.LOGO_HEIGHT)
-        if dpi < B.MIN_PRINT_DPI:
-            out.append(('warn', 'Prints at {:.0f} dpi at 8 mm high, below {}: it may look soft. '
-                                'Upload a larger image.'.format(dpi, B.MIN_PRINT_DPI)))
+        height = L.printed_logo_height(stock, logo.aspect)
+        if height:
+            dpi = logo.dpi_at(height)
+            if dpi < B.MIN_PRINT_DPI:
+                out.append(('warn', 'Prints at {:.0f} dpi at {:.1f} mm high, below {}: it may '
+                                    'look soft. Upload a larger image.'.format(
+                                        dpi, _mm(height), B.MIN_PRINT_DPI)))
         if logo.kind == 'mark':
             if mark_contrast_low(brand, logo):
                 out.append(('warn', 'Low contrast against the background (under {:.0f}:1): '
                                     'the mark may barely show.'.format(B.MARK_MIN_CONTRAST)))
-            if logo.aspect > widest:
-                out.append(('warn', 'Too wide for the header at 8 mm high (at most {:.2f}:1), '
-                                    'so no logo prints.'.format(widest)))
+            if not height:
+                out.append(('warn', 'Too wide for the header even at 6 mm high (at most '
+                                    '{:.2f}:1), so no logo prints.'.format(widest)))
             continue
         if logo.kind != full:
             out.append(('info', 'Not used: the background is {}, so the logo for {} backgrounds '
@@ -54,14 +62,18 @@ def logo_notes(brand, stock):
                                                  'dark' if brand.text_white else 'light')))
             continue
         instead = 'the mark prints instead' if mark else 'no logo prints (upload a mark)'
-        if logo.aspect > widest:
-            out.append(('warn', 'Too wide for the header at 8 mm high: {:.2f}:1 against at most '
-                                '{:.2f}:1, so {}.'.format(logo.aspect, widest, instead)))
-        elif logo.aspect > widest_part:
+        if not height:
+            out.append(('warn', 'Too wide for the header even at 6 mm high: {:.2f}:1 against at '
+                                'most {:.2f}:1, so {}.'.format(logo.aspect, widest, instead)))
+            continue
+        if logo.aspect > widest_part:
             out.append(('info', 'On a pack\'s continuation labels ("1/2") there is room for '
                                 '{:.2f}:1, so {} there.'.format(widest_part, instead)))
+        if height < L.LOGO_HEIGHT - 1e-6:
+            out.append(('ok', 'Prints top-right, shrunk to {:.1f} mm high to fit the width.'
+                              .format(_mm(height))))
         else:
-            out.append(('ok', 'Prints top-right on every label.'))
+            out.append(('ok', 'Prints top-right, 8 mm high.'))
     return notes
 
 
@@ -142,12 +154,20 @@ def branding_logo_upload(request):
     if kind not in B.LOGO_KINDS or upload is None:
         messages.error(request, 'Choose a PNG or JPEG file to upload.')
         return _back()
+    title = dict(B.LOGO_KIND_CHOICES)[kind]
     try:
         ProjectLogo.store(project, kind, read_upload_capped(upload), request.user)
     except ImageRejected as error:
-        messages.error(request, '{}: {}.'.format(dict(B.LOGO_KIND_CHOICES)[kind], error))
+        messages.error(request, '{}: {}.'.format(title, error))
         return _back()
-    messages.success(request, '{} uploaded.'.format(dict(B.LOGO_KIND_CHOICES)[kind]))
+    # Say straight away when it will not print as uploaded: too wide (so the
+    # mark or nothing prints), soft, or a mark that barely shows.
+    problems = [text for level, text in
+                logo_notes(B.brand_for(project), STOCKS[DEFAULT_STOCK])[kind] if level == 'warn']
+    if problems:
+        messages.warning(request, '{} uploaded, but: {}'.format(title, ' '.join(problems)))
+    else:
+        messages.success(request, '{} uploaded.'.format(title))
     return _back()
 
 

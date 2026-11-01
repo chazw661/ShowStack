@@ -229,6 +229,46 @@ class BlackAndWhiteAccentTests(SimpleTestCase):
         self.assertEqual(greys, (10, 20, 30, 70, 80))
 
 
+class AccentColourTests(SimpleTestCase):
+
+    def test_accent_1_colours_the_number_and_dividers_when_it_stands_out(self):
+        from reportlab.lib.colors import HexColor
+        brand = Brand(bg=NAVY, accents=('#F39200', '#0096D6'), accent_style='corner_bars')
+        self.assertGreaterEqual(contrast(luminance('#F39200'), luminance(NAVY)), 3)
+        self.assertEqual(brand.accent_for_text, '#F39200')
+        paint = paint_for(brand, color=True)
+        orange, navy = HexColor('#F39200'), HexColor(NAVY)
+        self.assertEqual(paint.number.rgb(), orange.rgb())
+        for got, a, b in zip(paint.rule.rgb(), orange.rgb(), navy.rgb()):
+            self.assertAlmostEqual(got, 0.6 * a + 0.4 * b, places=6)
+        self.assertEqual(paint.text.rgb(), (1, 1, 1))           # names never change
+
+    def test_low_contrast_accent_1_keeps_the_text_colour(self):
+        brand = Brand(bg=NAVY, accents=('#1B3A6B', '#F39200'), accent_style='corner_bars')
+        self.assertLess(contrast(luminance('#1B3A6B'), luminance(NAVY)), 3)
+        self.assertIsNone(brand.accent_for_text)
+        paint = paint_for(brand, color=True)
+        self.assertEqual(paint.number.rgb(), paint.text.rgb())
+        self.assertEqual(paint.rule.rgb(), paint_for(Brand(bg=NAVY), True).rule.rgb())
+
+    def test_black_and_white_never_uses_the_accent(self):
+        brand = Brand(bg=NAVY, accents=('#F39200',), accent_style='edge_stripe')
+        paint = paint_for(brand, color=False)
+        self.assertEqual(paint.number, paint.text)
+        self.assertEqual(paint.rule, paint_for(Brand(bg=NAVY), False).rule)
+
+    def test_only_the_rf_column_and_number_take_it(self):
+        brand = Brand(bg=NAVY, accents=('#F39200',), accent_style='corner_bars')
+        page = running_page(['Ann Lee', 'Bob Ray'], header=('Day 1', '9:00a', 'Keynote'),
+                            part=(1, 2), dividers=True)
+        layout = L.layout_running(page, OL, brand.frame())
+        emphasised = sorted(r.text for r in layout.runs if r.emphasis)
+        self.assertEqual(emphasised, ['02', '1/2', 'RF'])
+        pdf = render_preview_pdf(brand, OL)
+        (_, stream), = page_streams(pdf)
+        self.assertIn('.952941 .572549 0 rg', stream)            # #F39200 text fill
+
+
 # ---------------------------------------------------------------- layout with a brand
 
 class CapacityTests(SimpleTestCase):
@@ -308,17 +348,39 @@ class LogoLayoutTests(SimpleTestCase):
         for run in layout.runs:
             self.assertFalse(overlaps(run.bbox, rect), run.text)
 
-    def test_never_shrunk_below_8mm(self):
-        # Just too wide: no logo at all, not a smaller one.
+    def test_wider_logos_shrink_to_fit_down_to_6mm(self):
         widest = L.max_logo_aspect(OL)
+        layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', widest - 0.01),)))
+        _, rect = layout.logo
+        self.assertGreaterEqual(rect.h, L.LOGO_MIN_HEIGHT - 1e-9)
+        self.assertLess(rect.h, L.LOGO_HEIGHT)
+        self.assertTrue(layout.geometry.safe.contains(rect, 1e-6))
+        # Any wider and it would go under 6 mm: no logo, not a smaller one.
         layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', widest + 0.01),)))
         self.assertIsNone(layout.logo)
-        layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', widest - 0.01),)))
-        self.assertIsNotNone(layout.logo)
+        layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', widest + 0.01),
+                                                            ('mark', 1.0))))
+        self.assertEqual(layout.logo[0], 'mark')
+        self.assertAlmostEqual(layout.logo[1].h, L.LOGO_HEIGHT, places=9)
+
+    def test_a_475_by_145_logo_prints(self):
+        aspect = 475 / 145                                      # 3.28:1
+        self.assertGreater(aspect, L.max_logo_aspect(OL, height=L.LOGO_HEIGHT))
+        for part in (None, (1, 2)):
+            page = running_page(['Ann Lee'], part=part)
+            layout = L.layout_running(page, OL, L.Frame(logos=(('on_dark', aspect),)))
+            kind, rect = layout.logo
+            self.assertEqual(kind, 'on_dark')
+            self.assertGreater(rect.h, L.LOGO_MIN_HEIGHT)
+            for run in layout.runs:
+                self.assertFalse(overlaps(run.bbox, rect), run.text)
+                self.assertTrue(layout.geometry.safe.contains(run.bbox, 1e-6))
+        self.assertAlmostEqual(L.printed_logo_height(OL, aspect) * 25.4 / 72, 7.44, places=2)
 
     def test_max_aspect(self):
-        self.assertAlmostEqual(L.max_logo_aspect(OL), 3.05, places=2)
-        self.assertAlmostEqual(L.max_logo_aspect(OL, part=True), 2.91, places=2)
+        self.assertAlmostEqual(L.max_logo_aspect(OL), 4.06, places=2)                  # at 6 mm
+        self.assertAlmostEqual(L.max_logo_aspect(OL, part=True), 3.88, places=2)
+        self.assertAlmostEqual(L.max_logo_aspect(OL, height=L.LOGO_HEIGHT), 3.05, places=2)
 
     def test_day_and_time_without_ellipsis_when_only_the_session_is_dropped(self):
         page = running_page(['Ann Lee'], header=('Day 1', '9:00a', 'General Session'),
@@ -640,6 +702,32 @@ class BrandingViewTests(TestCase):
         self.login(self.viewer)
         r = self.client.get(reverse('planner:mic_tracker_print'))
         self.assertNotContains(r, reverse('planner:project_branding'))
+
+    def messages_of(self, response):
+        from django.contrib.messages import get_messages
+        return [(m.level_tag, str(m)) for m in get_messages(response.wsgi_request)]
+
+    def test_upload_message_warns_when_it_will_not_print_as_uploaded(self):
+        self.login(self.owner)
+        r = self.upload(data=image_bytes(475, 145))              # 3.28:1, shrinks: fine
+        self.assertEqual([lvl for lvl, _ in self.messages_of(r)], ['success'])
+        r = self.upload(data=image_bytes(600, 100))              # 6:1, too wide, no mark
+        level, text = self.messages_of(r)[-1]
+        self.assertEqual(level, 'warning')
+        self.assertIn('no logo prints', text)
+        r = self.upload(kind='mark', data=image_bytes(30, 30))   # soft
+        level, text = self.messages_of(r)[-1]
+        self.assertEqual(level, 'warning')
+        self.assertIn('dpi', text)
+
+    def test_style_without_accents_warns_on_the_page(self):
+        self.login(self.owner)
+        r = self.client.get(reverse('planner:project_branding'))
+        self.assertContains(r, 'id="pb-style-warning" hidden')
+        self.save(accent=[], accent_style='corner_bars')
+        r = self.client.get(reverse('planner:project_branding'))
+        self.assertContains(r, 'id="pb-style-warning">')
+        self.assertContains(r, 'Add at least one accent colour')
 
     def test_page_warns_about_wide_low_res_and_low_contrast_logos(self):
         self.login(self.owner)

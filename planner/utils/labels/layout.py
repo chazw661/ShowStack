@@ -21,7 +21,8 @@ name opens a new session and so brings a divider; with a 5 mm corner-bar
 footer, five and four.
 
 A client logo goes in the header, top-right, never in the text box, so it
-costs no names: see _header.
+costs no names: 8 mm high, or shrunk to fit the width down to 6 mm. See
+_header_logo.
 
 Text is stacked with the font's real ascent and descent, so a line's box --
 what the tests check against the safe zone and the text box -- holds stacked
@@ -62,10 +63,12 @@ WRAP_INDENT = 6
 # of "Phil Jacobs" above and the stacked accents of "Nguyễn Đặng" below.
 DIVIDER_GAP = 0.3
 
-# A client logo: always this tall, never smaller (a logo that cannot be
-# printed this tall falls back to the mark, then to no logo at all), with the
-# day line under it.
+# A client logo prints this tall when its width allows; a wider one shrinks
+# to fit the header's width, but never below LOGO_MIN_HEIGHT -- a logo that
+# would have to go smaller falls back to the mark, then to no logo at all.
+# The day line sits under it.
 LOGO_HEIGHT = float(mm(8))
+LOGO_MIN_HEIGHT = float(mm(6))
 
 # Between the RF number (or its "1/2") and anything right of it in the
 # header: the day lines or the logo. At least 4 pt.
@@ -138,6 +141,7 @@ class Run:
     y: float                # baseline
     role: str               # 'header' | 'name' | 'meta'
     floor: float = 0
+    emphasis: bool = False  # the RF column and number: may take accent 1
 
     @property
     def width(self):
@@ -253,14 +257,14 @@ def _header(layout, g, lines, pack, part=None, compact=None, logos=()):
     # baseline. Stacked rather than strung out after the number, so the
     # right block keeps the width for "Tue Nov 3".
     column = [Run('RF', fonts.BOLD, g.small, x,
-                  baseline + cap * (g.number - g.small), 'header', OTHER_FLOOR)]
+                  baseline + cap * (g.number - g.small), 'header', OTHER_FLOOR, True)]
     if part:
         column.append(Run('{}/{}'.format(*part), fonts.BOLD, g.small, x, baseline,
-                          'header', OTHER_FLOOR))
+                          'header', OTHER_FLOOR, True))
     layout.runs.extend(column)
     x += max(run.width for run in column) + 2
     number = pack_label(pack)
-    layout.runs.append(Run(number, fonts.BOLD, g.number, x, baseline, 'header', OTHER_FLOOR))
+    layout.runs.append(Run(number, fonts.BOLD, g.number, x, baseline, 'header', OTHER_FLOOR, True))
     x += fonts.string_width(number, fonts.BOLD, g.number)
 
     if logos and _header_logo(layout, g, x + HEADER_GAP, compact or tuple(lines[:1]), logos):
@@ -281,25 +285,41 @@ def _header(layout, g, lines, pack, part=None, compact=None, logos=()):
         y -= advance
 
 
+def _day_line(g):
+    return fonts.ascent(fonts.BOLD, g.small) + fonts.descent(fonts.BOLD, g.small)
+
+
 def logo_room(g, left):
     """Widest logo, in points, that fits right of ``left`` in the header with
-    a day line under it; 0 when the band is too short for the two."""
-    line = fonts.ascent(fonts.BOLD, g.small) + fonts.descent(fonts.BOLD, g.small)
-    if LOGO_HEIGHT + g.logo_gap + line > g.band.h + 1e-6:
+    a day line under it; 0 when the band is too short for a minimum-height
+    logo and the line."""
+    if LOGO_MIN_HEIGHT + g.logo_gap + _day_line(g) > g.band.h + 1e-6:
         return 0.0
     return max(0.0, g.safe.right - left)
 
 
+def logo_height(g, aspect, room):
+    """How tall a logo of ``aspect`` prints in ``room`` points of width:
+    LOGO_HEIGHT if it fits, else as tall as the width allows; None below
+    LOGO_MIN_HEIGHT."""
+    if aspect <= 0 or room <= 0:
+        return None
+    tallest = min(LOGO_HEIGHT, g.band.h - g.logo_gap - _day_line(g))
+    height = min(tallest, room / aspect)
+    return height if height >= LOGO_MIN_HEIGHT - 1e-9 else None
+
+
 def _header_logo(layout, g, left, compact, logos):
-    """Place the first of ``logos`` that fits at LOGO_HEIGHT, top-right on
-    the safe zone's corner, with one day line right-aligned under it. False,
-    and nothing placed, when none fits: the caller lays out the header
-    without a logo."""
+    """Place the first of ``logos`` that fits at LOGO_MIN_HEIGHT or taller,
+    top-right on the safe zone's corner, with one day line right-aligned
+    under it. False, and nothing placed, when none fits: the caller lays
+    out the header without a logo."""
     room = logo_room(g, left)
     for kind, aspect in logos:
-        w = LOGO_HEIGHT * aspect
-        if 0 < w <= room + 1e-6:
-            rect = Rect(g.safe.right - w, g.safe.top - LOGO_HEIGHT, w, LOGO_HEIGHT)
+        h = logo_height(g, aspect, room)
+        if h:
+            w = h * aspect
+            rect = Rect(g.safe.right - w, g.safe.top - h, w, h)
             break
     else:
         return False
@@ -325,16 +345,29 @@ def _header_logo(layout, g, left, compact, logos):
     return True
 
 
-def max_logo_aspect(stock, part=False):
-    """The widest logo (width / height) the header takes beside RF 00, or
-    beside "1/2" on a continuation label. For the branding page's warnings."""
+def header_logo_room(stock, part=False):
+    """(geometry, room): the logo width the header has beside RF 00, or
+    beside "1/2" on a continuation label."""
     g = geometry(stock)
     widths = [fonts.string_width('RF', fonts.BOLD, g.small)]
     if part:
         widths.append(fonts.string_width('1/2', fonts.BOLD, g.small))
     left = (g.band.x + g.header_pad + max(widths) + 2
             + fonts.string_width(pack_label(0), fonts.BOLD, g.number) + HEADER_GAP)
-    return logo_room(g, left) / LOGO_HEIGHT
+    return g, logo_room(g, left)
+
+
+def max_logo_aspect(stock, part=False, height=LOGO_MIN_HEIGHT):
+    """The widest logo (width / height) the header takes at ``height``:
+    by default the minimum, so anything wider cannot print."""
+    _, room = header_logo_room(stock, part)
+    return room / height
+
+
+def printed_logo_height(stock, aspect, part=False):
+    """How tall a logo of ``aspect`` prints in the header; None if it cannot."""
+    g, room = header_logo_room(stock, part)
+    return logo_height(g, aspect, room)
 
 
 # ---------------------------------------------------------------- single name

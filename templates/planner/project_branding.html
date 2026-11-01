@@ -37,6 +37,7 @@
                       border: 1px solid var(--border-bright); background: var(--bg-card); }
     .pb-messages li.error { border-color: var(--accent-red, #e5534b); }
     .pb-messages li.success { border-color: var(--accent-green, #3fb950); }
+    .pb-messages li.warning { border-color: var(--accent-amber); color: var(--accent-amber); }
     .pb-readonly { margin: 16px 24px 0; font-size: 13px; color: var(--text-dim); }
 
     .pb-layout { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 20px; padding: 16px 24px; }
@@ -139,13 +140,14 @@
                     <label><input type="radio" name="accent_style" value="{{ key }}"{% if brand.accent_style == key %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> {{ title }}</label>
                     {% endfor %}
                 </div>
+                <p class="pb-note warn" id="pb-style-warning"{% if brand.accent_style == 'none' or brand.accents %} hidden{% endif %}>Add at least one accent colour — nothing is drawn yet.</p>
                 <p class="pb-note">Corner bars keep 5 mm at the bottom clear of names (one fewer name on a full running order). The edge stripe costs no space. No accent colours: nothing is drawn.</p>
                 {% if can_edit %}<div class="pb-row"><button type="submit" class="pb-btn primary">Save colours</button></div>{% endif %}
             </form>
 
             <div class="pb-panel">
                 <h3>Logos (PNG or JPEG)</h3>
-                <p class="pb-note">The logo prints top-right in the header, 8 mm high, never smaller: up to {{ max_aspect|floatformat:2 }}:1 wide. Too wide, and the mark prints instead.</p>
+                <p class="pb-note">The logo prints top-right in the header, 8 mm high. A wider logo shrinks to fit, down to 6 mm high: up to {{ max_aspect|floatformat:2 }}:1 wide. Wider than that, and the mark prints instead.</p>
                 {% for logo in logos %}
                 <div class="pb-logo">
                     <div class="pb-logo-title">{{ logo.title }}</div>
@@ -230,6 +232,18 @@
     });
     form.addEventListener('change', refresh);
 
+    // An accent style with no accent colour draws nothing: say so now, not
+    // after a save.
+    var styleWarning = document.getElementById('pb-style-warning');
+    function paintStyleWarning() {
+        var style = form.querySelector('input[name="accent_style"]:checked');
+        var any = Array.prototype.some.call(form.querySelectorAll('input[name="accent"]'),
+                                            function (el) { return !!norm(el.value); });
+        styleWarning.hidden = !style || style.value === 'none' || any;
+    }
+    form.addEventListener('input', paintStyleWarning);
+    form.addEventListener('change', paintStyleWarning);
+
     var suggest = document.getElementById('pb-suggest');
     if (suggest) {
         var found = [];
@@ -267,6 +281,7 @@
         });
     }
 
+    paintStyleWarning();
     refresh();
 })();
 </script>
