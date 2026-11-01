@@ -63,14 +63,14 @@
                     <div class="stat-label">Hole</div>
                     <div class="stat-value">#{{ item.array.front_pickup_position }}</div>
                 </div>
-                {% elif item.array.bumper_angle %}
+                {% elif item.array.bumper_angle is not None %}
                 <div class="stat-item">
                     <div class="stat-label">Bumper</div>
                     <div class="stat-value">{{ item.array.bumper_angle }}°</div>
                 </div>
                 {% endif %}
                 
-                {% if item.array.azimuth %}
+                {% if item.array.azimuth is not None %}
                 <div class="stat-item">
                     <div class="stat-label">Azimuth</div>
                     <div class="stat-value">{{ item.array.azimuth }}°</div>
