@@ -6,10 +6,10 @@ register = template.Library()
 
 
 @register.inclusion_tag('tutorials/_button.html')
-def tutorial_button(key, extra_class=''):
+def tutorial_button(key):
     """The "Watch how" button for video ``key``; renders nothing when that
     video has no ID. The page also needs ``{% tutorial_assets %}`` once."""
-    return {'video': tutorial(key), 'extra_class': extra_class}
+    return {'video': tutorial(key)}
 
 
 @register.inclusion_tag('tutorials/_assets.html')

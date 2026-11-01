@@ -1,7 +1,8 @@
 """Tutorial videos, the label order link, and the branding page's messages.
 
 - A "Watch how" button renders wherever its video has an ID and vanishes
-  when the ID is blank -- pages and Help alike.
+  when the ID is blank -- pages and Help alike. The amp page shows it once,
+  in its header, not on every amp.
 - No page carries a YouTube iframe on load: the button holds the embed URL
   and the player script builds the iframe only when it is pressed.
 - The label stock carries its own order link, shown on Print labels, in
@@ -233,19 +234,30 @@ class PowerCalculatorTests(VideoAssertions, SingleEntryBase):
 
 class AmpRackTests(VideoAssertions, AmpFixture):
 
-    def test_cabinets_row_shows_the_power_video_beside_the_help_link(self):
+    def setUp(self):
+        super().setUp()
+        # Several amps: the button must still appear once.
+        self.amp(self.project, 'LA8', name='Amp 2')
+        self.amp(self.project, 'LA4X', name='Amp 3')
+
+    def test_power_video_once_in_the_page_header_not_per_amp(self):
         viewer = User.objects.create_user('tv_amp_viewer', password='pw', is_staff=True)
         self.join(viewer, self.project, 'viewer')
         for user in (self.owner, viewer):
             self.use(user)
             html = self.client.get(reverse('admin:planner_amp_changelist')).content.decode()
             with self.subTest(user=user.username):
-                head = re.search(r'<div class="amp-cabinets-head">(.*?)<div class="amp-plan-controls">',
-                                 html, re.S)
-                self.assertIsNotNone(head)
-                self.assertIn('How power is worked out', head.group(1))
-                self.assert_button(head.group(1) + html, POWER_ID)
-                self.assertIn(POWER_ID, head.group(1))
+                self.assert_button(html, POWER_ID)
+                self.assertEqual(len(BUTTON.findall(html)), 1)
+                actions = re.search(r'<div class="rack-actions">(.*?)</div>', html, re.S)
+                self.assertIsNotNone(actions)
+                self.assertIn(POWER_ID, actions.group(1))
+                cabinets = re.findall(r'<div class="amp-cabinets-head">(.*?)<div class="amp-plan-controls">',
+                                      html, re.S)
+                self.assertEqual(len(cabinets), 3)
+                for head in cabinets:
+                    self.assertIn('How power is worked out', head)
+                    self.assertNotIn('ss-tutorial-btn', head)
                 self.assert_nothing_loads_from_youtube(html)
 
     def test_blank_id_hides_it(self):

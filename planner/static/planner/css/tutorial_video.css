@@ -28,7 +28,6 @@ button.ss-tutorial-btn:focus-visible {
     border-color: #4a9eff !important;
 }
 button.ss-tutorial-btn:focus-visible { outline: 2px solid #4a9eff; outline-offset: 2px; }
-button.ss-tutorial-btn.small { padding: 2px 8px !important; font-size: 11px !important; }
 
 dialog.ss-tutorial-dialog {
     width: min(960px, calc(100vw - 32px));
