@@ -453,12 +453,14 @@
                 </div>
                 <div class="form-group">
                     <label>Safety Margin</label>
+                    {% with m=plan.safety_margin|stringformat:".2f" %}
                     <select id="safety-margin" onchange="updatePlanSettings()">
-                        <option value="0.7" {% if plan.safety_margin == 0.7 %}selected{% endif %}>70%</option>
-                        <option value="0.8" {% if plan.safety_margin == 0.8 %}selected{% endif %}>80%</option>
-                        <option value="0.9" {% if plan.safety_margin == 0.9 %}selected{% endif %}>90%</option>
-                        <option value="1.0" {% if plan.safety_margin == 1.0 %}selected{% endif %}>100%</option>
+                        {% for value, label in margin_choices %}
+                        <option value="{{ value }}"{% if m == value %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                        {% if m not in margin_values %}<option value="{{ m }}" selected>{% widthratio m 1 100 %}%</option>{% endif %}
                     </select>
+                    {% endwith %}
                 </div>
                 <div class="form-group">
                     <label for="power-factor">Power Factor (assumed)</label>

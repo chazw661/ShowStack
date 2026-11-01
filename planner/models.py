@@ -5133,7 +5133,8 @@ class PowerDistributionPlan(models.Model):
     
     def get_usable_amperage(self):
         """Calculate usable amperage after applying safety margin"""
-        return int(self.available_amperage_per_leg * float(self.safety_margin))
+        # Decimal, not float: 0.29 x 100 in floats is 28.999... and truncates to 28.
+        return int(self.available_amperage_per_leg * Decimal(str(self.safety_margin)))
     
     def get_voltage(self):
         """Extract voltage from service type"""
