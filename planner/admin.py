@@ -7155,7 +7155,6 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
 
     exclude = ['project', 'show_day']
     
-    # Remove get_summary_html from readonly_fields since it's not a real field
     readonly_fields = ['created_by', 'created_at', 'updated_at', 'get_total_current',
                        'phase_to_neutral_voltage', 'generated_at']
 
@@ -7201,173 +7200,23 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
         return '-'
     view_calculator_button.short_description = 'Power Calculator'
     
-    def get_calculator_link(self, obj):
-        """Add large button to view calculator in change form"""
-        if obj.pk:
-            url = f"/audiopatch/power-distribution/{obj.pk}/"
-            return format_html(
-                '''
-                <div style="padding: 20px; background: #2a2a2a; border-radius: 8px; text-align: center;">
-                    <p style="color: #e0e0e0; margin-bottom: 15px;">
-                        View phase distribution, load balancing, and detailed power analysis
-                    </p>
-                    <a href="{}" class="button" style="
-                        display: inline-block;
-                        background: #4a9eff;
-                        color: white;
-                        padding: 12px 30px;
-                        text-decoration: none;
-                        border-radius: 4px;
-                        font-size: 16px;
-                        font-weight: bold;
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-                    " target="_blank">
-                        📊 Open Power Distribution Calculator
-                    </a>
-                    <p style="color: #888; margin-top: 15px; font-size: 12px;">
-                        Opens in new tab with visual phase bars and imbalance monitoring
-                    </p>
-                </div>
-                ''',
-                url
-            )
-        return 'Save the plan first to access the calculator'
-    get_calculator_link.short_description = 'Visual Power Distribution Calculator'
-    
-    
-    
-    
-    def get_summary_html(self, obj):
-        """Generate HTML summary of power distribution"""
-        if not obj.pk:
-            return "Save the plan first to see summary"
-        
-        # [Keep all the existing get_summary_html code here - the same as before]
-        # Get all assignments
-        assignments = obj.amplifier_assignments.all()
-        
-        # Calculate totals by phase
-        phase_totals = {
-            'L1': 0,
-            'L2': 0,
-            'L3': 0,
-            'AUTO': 0
-        }
-        
-        total_amps = 0
-        total_current = 0
-        total_power = 0
-        
-        for assignment in assignments:
-            phase = assignment.phase_assignment
-            current = float(assignment.calculated_total_current or 0)
-            phase_totals[phase] += current
-            total_amps += assignment.quantity
-            total_current += current
-            
-            total_power += (assignment.calculated_watts_per_unit or 0) * assignment.quantity
-        
-        # Auto-balance AUTO assignments
-        auto_current = phase_totals['AUTO']
-        if auto_current > 0:
-            # Distribute AUTO current evenly
-            per_phase = auto_current / 3
-            phase_totals['L1'] += per_phase
-            phase_totals['L2'] += per_phase
-            phase_totals['L3'] += per_phase
-        
-        # Calculate imbalance
-        max_phase = max(phase_totals['L1'], phase_totals['L2'], phase_totals['L3'])
-        min_phase = min(phase_totals['L1'], phase_totals['L2'], phase_totals['L3'])
-        if max_phase > 0:
-            imbalance = ((max_phase - min_phase) / max_phase) * 100
-        else:
-            imbalance = 0
-        
-        # Calculate percentages
-        usable = obj.get_usable_amperage()
-        
-        # Calculate total of all phases
-        phase_total_sum = phase_totals['L1'] + phase_totals['L2'] + phase_totals['L3']
-        
-        # Return the HTML
-        return f"""
-        <div style="background: #2a2a2a; padding: 15px; border-radius: 8px; color: #e0e0e0;">
-            <h3 style="margin-top: 0; color: #4a9eff;">System Totals</h3>
-            
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
-                <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
-                    <strong>Total Amplifiers:</strong><br>
-                    <span style="font-size: 24px; color: #4a9eff;">{total_amps}</span>
-                </div>
-                <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
-                    <strong>Total Current:</strong><br>
-                    <span style="font-size: 24px; color: #4a9eff;">{total_current:.1f}A</span>
-                </div>
-                <div style="background: #1a1a1a; padding: 10px; border-radius: 4px;">
-                    <strong>Power at programme level:</strong><br>
-                    <span style="font-size: 24px; color: #4a9eff;">{total_power/1000:.1f}kW</span>
-                </div>
-            </div>
-            
-            <h4 style="color: #4a9eff;">Phase Distribution</h4>
-            <table style="width: 100%; color: #e0e0e0; border-collapse: collapse;">
-                <tr style="border-bottom: 1px solid #444;">
-                    <th style="text-align: left; padding: 8px;">Phase</th>
-                    <th style="text-align: left; padding: 8px;">Current</th>
-                    <th style="text-align: left; padding: 8px;">% of {usable}A</th>
-                    <th style="text-align: left; padding: 8px;">Status</th>
-                </tr>
-                <tr>
-                    <td style="padding: 8px;"><strong>L1</strong></td>
-                    <td style="padding: 8px;">{phase_totals['L1']:.1f}A</td>
-                    <td style="padding: 8px;">{(phase_totals['L1']/usable*100):.1f}%</td>
-                    <td style="padding: 8px;">{'✓ Good' if phase_totals['L1']/usable*100 < 50 else '⚠️ Moderate' if phase_totals['L1']/usable*100 < 80 else '❌ High'}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 8px;"><strong>L2</strong></td>
-                    <td style="padding: 8px;">{phase_totals['L2']:.1f}A</td>
-                    <td style="padding: 8px;">{(phase_totals['L2']/usable*100):.1f}%</td>
-                    <td style="padding: 8px;">{'✓ Good' if phase_totals['L2']/usable*100 < 50 else '⚠️ Moderate' if phase_totals['L2']/usable*100 < 80 else '❌ High'}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 8px;"><strong>L3</strong></td>
-                    <td style="padding: 8px;">{phase_totals['L3']:.1f}A</td>
-                    <td style="padding: 8px;">{(phase_totals['L3']/usable*100):.1f}%</td>
-                    <td style="padding: 8px;">{'✓ Good' if phase_totals['L3']/usable*100 < 50 else '⚠️ Moderate' if phase_totals['L3']/usable*100 < 80 else '❌ High'}</td>
-                </tr>
-                <tr style="border-top: 2px solid #4a9eff; font-weight: bold; background: #1a1a1a;">
-                    <td style="padding: 8px;"><strong>TOTAL</strong></td>
-                    <td style="padding: 8px; color: #4a9eff;"><strong>{phase_total_sum:.1f}A</strong></td>
-                    <td style="padding: 8px;">-</td>
-                    <td style="padding: 8px;">3-Phase Total</td>
-                </tr>
-            </table>
-            
-            <div style="margin-top: 15px; padding: 10px; background: #1a1a1a; border-radius: 4px;">
-                <strong>Phase Imbalance:</strong> 
-                <span style="color: {'#28a745' if imbalance < 10 else '#ffc107' if imbalance < 15 else '#dc3545'};">
-                    {imbalance:.1f}%
-                </span>
-                {' ✓' if imbalance < 10 else ' ⚠️ Target <10%'}
-            </div>
-            
-            <div style="margin-top: 15px; padding: 10px; background: #1a1a1a; border-radius: 4px;">
-                <strong>Average Load per Phase:</strong> {(phase_total_sum/3):.1f}A
-                <span style="color: #888; margin-left: 10px;">
-                    ({(phase_total_sum/3/usable*100):.1f}% of usable)
-                </span>
-            </div>
-            
-            <div style="margin-top: 10px; font-size: 12px; color: #888;">
-                Available: {obj.available_amperage_per_leg}A per leg<br>
-                Usable (with {int(obj.safety_margin*100)}% margin): {usable}A per leg<br>
-                Transient Headroom: {int((obj.transient_headroom-1)*100)}%<br>
-                Current per leg at {obj.get_phase_to_neutral_voltage()} V phase-to-neutral, power factor {obj.power_factor}
-            </div>
-        </div>
-        """
-    
+    def _superuser_only(self, request):
+        """The admin list is superuser-only, and so is the add URL (where
+        has_add_permission refuses even them): everyone else works on the
+        project's generated plan, on the calculator page. A GET is sent
+        there; anything else is refused, so nothing is written."""
+        if request.user.is_superuser:
+            return None
+        if request.method in ('GET', 'HEAD'):
+            return redirect('planner:power_distribution_calculator')
+        raise PermissionDenied
+
+    def changelist_view(self, request, extra_context=None):
+        return self._superuser_only(request) or super().changelist_view(request, extra_context)
+
+    def add_view(self, request, form_url='', extra_context=None):
+        """Plans are generated from the amp module, never added here."""
+        return self._superuser_only(request) or super().add_view(request, form_url, extra_context)
 
     def get_queryset(self, request):
         """Filter by current project"""
@@ -7389,10 +7238,10 @@ class PowerDistributionPlanAdmin(BaseEquipmentAdmin):
 
 
     def has_add_permission(self, request):
-        """Only editors and owners can add"""
-        if request.user.is_superuser:
-            return True
-        return super().has_add_permission(request)
+        """Nobody adds a plan here, superusers included: plans are made with
+        "Generate from amps". The list stays for superusers to view, repair
+        and delete."""
+        return False
     
     def has_change_permission(self, request, obj=None):
         """Only editors and owners can edit"""

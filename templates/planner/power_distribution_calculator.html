@@ -85,6 +85,8 @@
         .form-group {
             margin-bottom: 15px;
         }
+        .plan-notes { grid-column: span 2; }
+        textarea { font-family: inherit; resize: vertical; }
         
         label {
             display: block;
@@ -93,7 +95,7 @@
             font-size: 14px;
         }
         
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 8px 12px;
             background: #1a1a1a;
@@ -103,7 +105,7 @@
             font-size: 14px;
         }
         
-        input:focus, select:focus {
+        input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: #4a9eff;
             box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
@@ -356,7 +358,6 @@
             </div>
         </div>
         <div>
-            <a href="/admin/planner/powerdistributionplan/" class="btn">← Back to Power Distribution Plans</a>
             {% include "help/_help_link.html" %}
         </div>
     </div>
@@ -419,6 +420,17 @@
         <!-- Service Configuration Panel -->
         <div class="panel">
             <h2 class="panel-title">Service Configuration</h2>
+            <div class="grid-3">
+                <div class="form-group">
+                    <label for="venue-name">Venue</label>
+                    <input type="text" id="venue-name" maxlength="200" value="{{ plan.venue_name }}"
+                           onchange="updatePlanSettings()"{% if not can_edit %} readonly{% endif %}>
+                </div>
+                <div class="form-group plan-notes">
+                    <label for="plan-notes">Notes</label>
+                    <textarea id="plan-notes" rows="2" onchange="updatePlanSettings()"{% if not can_edit %} readonly{% endif %}>{{ plan.notes }}</textarea>
+                </div>
+            </div>
             <div class="grid-3">
                 <div class="form-group">
                     <label>Available Amps/Leg</label>
@@ -676,6 +688,8 @@
                 power_factor: document.getElementById('power-factor').value,
                 service_type: document.getElementById('service-type').value,
                 other_electronics_watts: document.getElementById('other-electronics').value,
+                venue_name: document.getElementById('venue-name').value,
+                notes: document.getElementById('plan-notes').value,
             };
             const programme = document.getElementById('plan-programme');
             if (programme) data.programme = programme.value;
