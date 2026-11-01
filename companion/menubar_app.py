@@ -21,22 +21,44 @@ import logging.handlers
 import os
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import uuid
 import webbrowser
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import rumps
 from AppKit import NSApp, NSPasteboard, NSPasteboardTypeString
-from Foundation import NSAppleEventManager, NSObject
+from Foundation import NSAppleEventManager, NSBundle, NSObject
 
 import certs
 import listen_companion as lc
 
-APP_NAME = certs.APP_NAME
-BUNDLE_ID = "io.showstack.listen"
+def _bundle_info(key):
+    try:
+        value = NSBundle.mainBundle().objectForInfoDictionaryKey_(key)
+        return str(value) if value is not None else ""
+    except Exception:
+        return ""
+
+
+# "ShowStack Listen Beta.app" (io.showstack.listen.beta) shares the installed
+# app's certificates and config — so phones already trust it and it starts on
+# the same show — but has its own name, login item and log. Both use the same
+# ports, so only one of the two can run at a time.
+BETA = _bundle_info("CFBundleIdentifier").endswith(".beta")
+APP_NAME = certs.APP_NAME                       # support folder: shared
+DISPLAY_NAME = APP_NAME + (" Beta" if BETA else "")
+BUNDLE_ID = "io.showstack.listen" + (".beta" if BETA else "")
+BUILD = _bundle_info("ShowStackBuild") if BETA else ""
+ICON = "🎧β" if BETA else "🎧"
+DEFAULT_API = "https://showstack.io"
+# Beta only: "Test signal" swaps the input for --simulate's fake show, for a
+# home test with no Dante. Held in memory, never saved, so a relaunch is
+# always back on the real input.
+SIMULATE_CHANNELS = 24
 HTTPS_PORT = 8443
 LOCAL_PORT = 8480
 
@@ -57,7 +79,7 @@ def _fourcc(code):
 # ──────────────────────────────────────────────────────────────────
 
 CONFIG_PATH = os.path.join(certs.support_dir(), "config.json")
-LOG_DIR = os.path.expanduser("~/Library/Logs/%s" % APP_NAME)
+LOG_DIR = os.path.expanduser("~/Library/Logs/%s" % DISPLAY_NAME)
 LOG_PATH = os.path.join(LOG_DIR, "companion.log")
 LAUNCH_AGENT = os.path.expanduser("~/Library/LaunchAgents/%s.plist" % BUNDLE_ID)
 
@@ -75,6 +97,26 @@ def save_config(config):
     with open(tmp, "w") as fh:
         json.dump(config, fh, indent=2)
     os.replace(tmp, CONFIG_PATH)
+
+
+# The beta's first launch copies the shared settings folder (certificates +
+# config) here before touching it, so the installed app's exact state can be
+# put back. Only ever made once; never overwritten.
+BETA_BACKUP_DIR = os.path.expanduser(
+    "~/Library/Application Support/%s (before beta)" % APP_NAME)
+
+
+def backup_settings_before_beta():
+    if not BETA or os.path.exists(BETA_BACKUP_DIR):
+        return
+    src = certs.support_dir()
+    if not any(os.path.exists(os.path.join(src, f)) for f in ("config.json", "ca.pem")):
+        return                          # nothing installed before the beta
+    try:
+        shutil.copytree(src, BETA_BACKUP_DIR)   # copy2: keeps the keys' 0600 mode
+        log.info("Backed up settings to %s", BETA_BACKUP_DIR)
+    except OSError as exc:
+        log.warning("Could not back up settings (%s)", exc)
 
 
 def setup_logging():
@@ -129,6 +171,34 @@ def api_allowed(api):
     return u.scheme in ("http", "https") and host in LOOPBACK_HOSTS
 
 
+def server_label(api):
+    """How a server reads in the menu and dialogs: "showstack.io", "localhost:8000"."""
+    u = urlparse(api or DEFAULT_API)
+    host = (u.hostname or "").lower()
+    if host in ALLOWED_API_HOSTS:
+        return host
+    return "%s:%s" % (host, u.port) if u.port else host
+
+
+def parse_pairing(text):
+    """(token, api) from what was pasted into "Pair with a show…".
+
+    Takes a bare token, a showstack-listen://start link (its api= is the
+    server), or Listen Setup's whole terminal command (--token and --api).
+    api is "" when the paste doesn't name a server. An https Listen page
+    address points at a rack Mac, not at ShowStack, so only its token counts.
+    """
+    text = (text or "").strip()
+    flags = dict(re.findall(r"--(token|api)[\s=]+['\"]?([^\s'\"\\]+)", text))
+    if flags.get("token"):
+        return flags["token"], flags.get("api", "").rstrip("/")
+    if "://" in text:
+        params = {k: v[0] for k, v in parse_qs(urlparse(text).query).items()}
+        api = params.get("api", "") if text.startswith("showstack-listen:") else ""
+        return params.get("token", ""), api.rstrip("/")
+    return text, ""
+
+
 def valid_token(token):
     try:
         uuid.UUID(token)
@@ -140,7 +210,7 @@ def valid_token(token):
 def alert(message, ok=None, cancel=None):
     # Menu bar apps aren't frontmost; bring the dialog forward.
     NSApp.activateIgnoringOtherApps_(True)
-    return rumps.alert(APP_NAME, message, ok=ok, cancel=cancel)
+    return rumps.alert(DISPLAY_NAME, message, ok=ok, cancel=cancel)
 
 
 def show_row(item, text):
@@ -173,13 +243,15 @@ class URLEventHandler(NSObject):
 
 class ListenApp(rumps.App):
     def __init__(self):
-        super().__init__(APP_NAME, title="🎧", quit_button=None)
+        super().__init__(DISPLAY_NAME, title=ICON, quit_button=None)
         self.config = load_config()
         self.server = None
         self.state = "stopped"          # stopped | starting | live | lost | error
         self.error = ""
         self._lock = threading.Lock()
         self._device_names = None
+        self.simulate = 0
+        self.pair_api = DEFAULT_API     # server for pasted tokens; memory only
 
         self.show_item = rumps.MenuItem("Not paired with a show")
         self.source_item = rumps.MenuItem("")
@@ -188,15 +260,27 @@ class ListenApp(rumps.App):
         self.phone_item = rumps.MenuItem("Set up a phone…", callback=self.open_phone_setup)
         self.copy_item = rumps.MenuItem("Copy phone Listen address", callback=self.copy_lan_url)
         self.toggle_item = rumps.MenuItem("Start", callback=self.toggle_server)
+        self.pair_item = rumps.MenuItem("Pair with a show…", callback=self.pair_by_token)
+        self.sim_row = rumps.MenuItem("Test signal warning")   # unique key; hidden until on
+        self.sim_item = rumps.MenuItem("Test signal (simulated %d ch)" % SIMULATE_CHANNELS,
+                                       callback=self.toggle_simulate)
         self.login_item = rumps.MenuItem("Open at Login", callback=self.toggle_login)
+        self.server_item = rumps.MenuItem("Advanced: server…", callback=self.choose_server)
         self.menu = [
             self.show_item, self.source_item, self.listeners_item, None,
             self.input_menu, None,
             self.phone_item, self.copy_item, None,
-            self.toggle_item, self.login_item,
+            self.toggle_item, self.pair_item, self.server_item, self.login_item,
             rumps.MenuItem("Show Log", callback=self.show_log), None,
-            rumps.MenuItem("Quit %s" % APP_NAME, callback=self.quit_app),
+            rumps.MenuItem("Quit %s" % DISPLAY_NAME, callback=self.quit_app),
         ]
+        if BETA:
+            self.build_item = rumps.MenuItem("Beta %s · build %s" % (lc.__version__, BUILD or "?"))
+            self.menu.insert_before(self.show_item.title, self.build_item)
+            self.build_item.set_callback(None)
+            self.menu.insert_after(self.build_item.title, self.sim_row)
+            self.sim_row.set_callback(None)
+            self.menu.insert_after(self.input_menu.title, self.sim_item)
         for item in (self.show_item, self.source_item, self.listeners_item):
             item.set_callback(None)
         self.login_item.state = login_item_enabled()
@@ -237,14 +321,15 @@ class ListenApp(rumps.App):
     def start_server(self):
         if not self.config.get("token"):
             alert("Not paired with a show yet.\n\nIn ShowStack open Mic Tracker → "
-                                  "🎧 Listen Setup and click “Start on this Mac”.")
+                  "🎧 Listen Setup and click “Start on this Mac”, or use "
+                  "%s → Pair with a show…" % ICON)
             return
-        if not self.config.get("device"):
+        if not self.config.get("device") and not self.simulate:
             device = self._choose_default_device()
             if device is None:
                 self.state, self.error = "error", "Choose an audio input"
                 self.refresh(None)
-                rumps.notification(APP_NAME, "Choose an audio input",
+                rumps.notification(DISPLAY_NAME, "Choose an audio input",
                                    "Pick the input that carries your beltpacks from the 🎧 menu.")
                 return
             self.config["device"] = device
@@ -267,11 +352,13 @@ class ListenApp(rumps.App):
                 https_port=HTTPS_PORT, ssl_context=ssl_ctx, local_port=LOCAL_PORT,
                 ca_profile=certs.ca_mobileconfig,
                 instance=self.instance_id(), client_id=cfg.get("client_id", ""),
+                simulate=self.simulate,
             )
             try:
                 server.start()
             except lc.PairingError as exc:
-                self.state, self.error = "error", "Pairing rejected — start again from ShowStack"
+                self.state, self.error = "error", "Pairing rejected by %s — pair again" \
+                    % server_label(cfg["api"])
                 log.warning("%s", exc)
                 return
             except OSError as exc:
@@ -333,16 +420,22 @@ class ListenApp(rumps.App):
             if self.server is None:
                 self.start_server()
             else:
-                rumps.notification(APP_NAME, "Already running",
+                rumps.notification(DISPLAY_NAME, "Already running",
                                    "Listening for %s" % (self.config.get("show") or "this show"))
             return
 
+        host = server_label(api)
         try:
-            show, _mapping, _sessions = lc.fetch_mapping(api, token)
+            # strict: an unreachable server must not look like a good pairing.
+            show, _mapping, _sessions = lc.fetch_mapping(api, token, strict=True)
         except lc.PairingError:
-            alert("ShowStack rejected this show's pairing token.")
+            alert("%s rejected this show token.\n\nChecked with %s. If the token "
+                  "is from a different server, use %s → Advanced: server…"
+                  % (host, api, ICON))
             return
-        host = urlparse(api).hostname
+        except lc.MappingUnavailable as exc:
+            alert("Couldn't check the token with %s.\n\n%s" % (host, exc))
+            return
         running = self.server is not None and self.config.get("show")
         message = "Start A2 Listen for “%s” from %s?\n\nThis Mac will stream its audio input " \
                   "to phones that open this show's Listen link." % (show or "this show", host)
@@ -357,6 +450,52 @@ class ListenApp(rumps.App):
 
     # ── menu actions ─────────────────────────────────────────────
 
+    def pair_by_token(self, _sender):
+        """Pair by pasting the show token — the same path as a Start link."""
+        NSApp.activateIgnoringOtherApps_(True)
+        response = rumps.Window(
+            "Checking with %s.\n\nPaste the show token from ShowStack → Mic Tracker → "
+            "🎧 Listen Setup → Advanced (the --token value, or the whole command). "
+            "For another server, use %s → Advanced: server…"
+            % (server_label(self.pair_api), ICON),
+            title="%s — pair with a show" % DISPLAY_NAME,
+            default_text="", ok="Pair", cancel="Cancel", dimensions=(320, 24),
+        ).run()
+        if response.clicked != 1 or not (response.text or "").strip():
+            return
+        token, api = parse_pairing(response.text)
+        if not valid_token(token):
+            alert("That doesn't look like a show token.")
+            return
+        # A paste that names its server wins; a bare token goes to the
+        # chosen server, which is showstack.io unless changed for this run.
+        api = api or self.pair_api
+        self.handle_url("showstack-listen://start?" + urlencode({"token": token, "api": api}))
+
+    def choose_server(self, _sender):
+        """Advanced: pair with a local ShowStack. Held in memory only, so the
+        next launch pairs with showstack.io again."""
+        NSApp.activateIgnoringOtherApps_(True)
+        response = rumps.Window(
+            "Server that “Pair with a show…” checks tokens with. Leave it as "
+            "%s for real shows; use e.g. http://127.0.0.1:8000 only for local "
+            "ShowStack development. Back to %s on the next launch."
+            % (server_label(DEFAULT_API), server_label(DEFAULT_API)),
+            title="%s — server" % DISPLAY_NAME,
+            default_text=self.pair_api, ok="Use", cancel="Cancel", dimensions=(320, 24),
+        ).run()
+        if response.clicked != 1:
+            return
+        api = (response.text or "").strip().rstrip("/") or DEFAULT_API
+        if "://" not in api:
+            api = "https://" + api
+        if not api_allowed(api):
+            alert("Only showstack.io or this Mac (localhost / 127.0.0.1) can be used.")
+            return
+        self.pair_api = api
+        log.info("Pairing server: %s", api)
+        self.refresh(None)
+
     def toggle_server(self, _sender):
         if self.server is not None or self.state == "starting":
             self.config["autostart"] = False
@@ -367,10 +506,20 @@ class ListenApp(rumps.App):
             save_config(self.config)
             self.start_server()
 
+    def toggle_simulate(self, _sender):
+        self.simulate = 0 if self.simulate else SIMULATE_CHANNELS
+        log.info("Test signal %s", "ON (simulated %d ch)" % self.simulate if self.simulate
+                 else "off — back to live input")
+        self.stop_server()
+        self.start_server()
+
     def choose_device(self, sender):
         name = sender.title
         self.config["device"] = name
         save_config(self.config)
+        if self.simulate:               # picking a real input ends the test signal
+            self.toggle_simulate(None)
+            return
         if self.server is not None:
             self.server.set_device(name)
         elif self.config.get("token"):
@@ -387,7 +536,7 @@ class ListenApp(rumps.App):
         status = self.server.status() if self.server else None
         if status and status.get("lan_url"):
             copy_to_clipboard(status["lan_url"])
-            rumps.notification(APP_NAME, "Copied", status["lan_url"])
+            rumps.notification(DISPLAY_NAME, "Copied", status["lan_url"])
 
     def toggle_login(self, sender):
         set_login_item(not sender.state)
@@ -428,34 +577,50 @@ class ListenApp(rumps.App):
         if status and self.state in ("live", "lost"):
             self.state = "live" if status.get("source") else "lost"
 
+        self.server_item.title = "Advanced: server…" if self.pair_api == DEFAULT_API \
+            else "Advanced: server — %s" % server_label(self.pair_api)
+        # Name the server when it isn't showstack.io, so a show paired with a
+        # local test server can't pass for the real one.
+        saved = self.config.get("api") or DEFAULT_API
+        where = "" if server_label(saved) == server_label(DEFAULT_API) \
+            else " (%s)" % server_label(saved)
         if self.config.get("show"):
-            self.show_item.title = "Show: %s" % self.config["show"]
+            self.show_item.title = "Show: %s%s" % (self.config["show"], where)
         elif self.config.get("token"):
-            self.show_item.title = "Show: (paired)"
+            self.show_item.title = "Show: (paired)%s" % where
         else:
             self.show_item.title = "Not paired — use “Start on this Mac” in ShowStack"
 
         if self.state == "live":
-            self.title = "🎧"
+            self.title = ICON
             show_row(self.source_item, "Source: %s" % status["source"])
             n = status.get("listeners", 0)
             show_row(self.listeners_item, "Listeners: %d" % n)
         elif self.state == "lost":
-            self.title = "🎧⚠︎"
+            self.title = ICON + "⚠︎"
             show_row(self.source_item, "⚠︎ Waiting for “%s”…" % status.get("device"))
             show_row(self.listeners_item, "Listeners: %d" % status.get("listeners", 0))
         elif self.state == "starting":
-            self.title = "🎧…"
+            self.title = ICON + "…"
             show_row(self.source_item, "Starting…")
             show_row(self.listeners_item, "")
         elif self.state == "error":
-            self.title = "🎧⚠︎"
+            self.title = ICON + "⚠︎"
             show_row(self.source_item, "⚠︎ %s" % self.error)
             show_row(self.listeners_item, "")
         else:
-            self.title = "🎧○"
+            self.title = ICON + "○"
             show_row(self.source_item, "Stopped")
             show_row(self.listeners_item, "")
+
+        if self.simulate:
+            # Never mistakable for the real show: marked in the menu bar itself.
+            self.title = self.title + " TEST"
+            show_row(self.sim_row, "⚠︎ TEST SIGNAL — not live audio")
+        else:
+            show_row(self.sim_row, "")
+        self.sim_item.title = ("Back to live input" if self.simulate
+                               else "Test signal (simulated %d ch)" % SIMULATE_CHANNELS)
 
         running = self.server is not None
         self.toggle_item.title = "Stop" if running or self.state == "starting" else "Start"
@@ -467,7 +632,8 @@ class ListenApp(rumps.App):
 
 def main():
     setup_logging()
-    log.info("%s %s starting", APP_NAME, lc.__version__)
+    log.info("%s %s starting%s", DISPLAY_NAME, lc.__version__, (" (build %s)" % BUILD) if BUILD else "")
+    backup_settings_before_beta()       # before ListenApp reads or writes config
     ListenApp().run()
 
 

@@ -1,0 +1,4 @@
+# Beta build output (LISTEN_BETA=1 ./build_app.sh); dist/ and build/ are
+# ignored by the repo's top-level .gitignore.
+dist-beta/
+build-beta/

@@ -3,6 +3,11 @@
 #
 #   cd companion && ./build_app.sh
 #
+# Beta: "ShowStack Listen Beta.app" into companion/dist-beta/ — never touches
+# dist/, so the released app there stays as the rollback:
+#
+#   LISTEN_BETA=1 ./build_app.sh
+#
 # Signing:
 #   * Default: ad-hoc signed — runs on this Mac; elsewhere needs right-click → Open.
 #   * Distribution: set SIGN_IDENTITY (and NOTARY_PROFILE to notarize + staple):
@@ -18,14 +23,21 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PYTHON="${PYTHON:-venv/bin/python}"
-APP="dist/ShowStack Listen.app"
-ZIP="dist/ShowStack-Listen-mac-$(uname -m).zip"
+export LISTEN_BETA="${LISTEN_BETA:-}"
+if [[ "$LISTEN_BETA" == "1" ]]; then
+    NAME="ShowStack Listen Beta"; OUT="dist-beta"; WORK="build-beta"
+    export LISTEN_BUILD="$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo '+dirty') $(date '+%Y-%m-%d %H:%M')"
+else
+    NAME="ShowStack Listen"; OUT="dist"; WORK="build"
+fi
+APP="$OUT/$NAME.app"
+ZIP="$OUT/${NAME// /-}-mac-$(uname -m).zip"
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 
 "$PYTHON" -m pip install -q -r requirements.txt -r requirements-app.txt
-rm -rf build dist
-"$PYTHON" -m PyInstaller --noconfirm --clean ShowStackListen.spec
+rm -rf "$WORK" "$OUT"
+"$PYTHON" -m PyInstaller --noconfirm --clean --distpath "$OUT" --workpath "$WORK" ShowStackListen.spec
 
 if [[ -z "$SIGN_IDENTITY" ]]; then
     # arm64 binaries must be signed to run; ad-hoc until a Developer ID is used.
@@ -41,8 +53,8 @@ else
         if file -b "$f" | grep -q "Mach-O"; then
             sign "$f"
         fi
-    done < <(find "$APP/Contents" -type f ! -path "*/Contents/MacOS/ShowStack Listen" -print0)
-    sign --entitlements entitlements.plist "$APP/Contents/MacOS/ShowStack Listen"
+    done < <(find "$APP/Contents" -type f ! -path "*/Contents/MacOS/$NAME" -print0)
+    sign --entitlements entitlements.plist "$APP/Contents/MacOS/$NAME"
     sign --entitlements entitlements.plist "$APP"
 fi
 codesign --verify --deep --strict --verbose=1 "$APP"
