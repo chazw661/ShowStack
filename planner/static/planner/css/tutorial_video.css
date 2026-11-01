@@ -1,0 +1,82 @@
+/* "Watch how" button and player. Loaded on admin pages, the standalone power
+   calculator and Help alike, so it brings its own colours and outranks the
+   admin's button styles. */
+
+button.ss-tutorial-btn {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px !important;
+    margin: 0 !important;
+    background: transparent !important;
+    color: #4a9eff !important;
+    border: 1px solid rgba(74, 158, 255, 0.55) !important;
+    border-radius: 6px !important;
+    font: inherit;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    height: auto !important;
+}
+button.ss-tutorial-btn:hover,
+button.ss-tutorial-btn:focus-visible {
+    background: rgba(74, 158, 255, 0.12) !important;
+    border-color: #4a9eff !important;
+}
+button.ss-tutorial-btn:focus-visible { outline: 2px solid #4a9eff; outline-offset: 2px; }
+button.ss-tutorial-btn.small { padding: 2px 8px !important; font-size: 11px !important; }
+
+dialog.ss-tutorial-dialog {
+    width: min(960px, calc(100vw - 32px));
+    max-width: none;
+    padding: 0;
+    border: 1px solid #2c3240;
+    border-radius: 8px;
+    background: #0f1218;
+    color: #e6e8ec;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+dialog.ss-tutorial-dialog::backdrop { background: rgba(0, 0, 0, 0.75); }
+.ss-tutorial-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 8px 8px 16px;
+}
+h2.ss-tutorial-title {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: none !important;
+    color: #e6e8ec !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+}
+button.ss-tutorial-close {
+    width: 40px;
+    height: 40px;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #1f2430 !important;
+    color: #e6e8ec !important;
+    border: 1px solid #2c3240 !important;
+    border-radius: 6px !important;
+    font-size: 24px !important;
+    line-height: 1 !important;
+    cursor: pointer;
+}
+button.ss-tutorial-close:focus-visible { outline: 2px solid #4a9eff; outline-offset: 2px; }
+.ss-tutorial-frame { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.ss-tutorial-frame iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}

@@ -30,7 +30,7 @@ from reportlab.pdfgen import canvas as pdfcanvas
 from planner.utils.labels import fonts, layout as L
 from planner.utils.labels.brand import ACCENT_FOOTER_MM, DEFAULT, Brand
 from planner.utils.labels.data import RunningUnit, SingleItem, running_units, single_name_items
-from planner.utils.labels.stock import BLEED_MM, Rect, mm, sheet_positions
+from planner.utils.labels.stock import BLEED_MM, Rect, mm, order_line, sheet_positions
 
 
 @dataclass(frozen=True)
@@ -375,7 +375,10 @@ def render_alignment_pdf(stock, options):
     _scale_bar(c, vx, float(first.top) - dy, 100, vertical=True)
 
     third = stock.label_rect(1 + 2 * stock.cols) if stock.rows > 2 else None
-    y = (float(below.y + third.top) / 2 if third else float(below.y) - 12) + 4 - dy
+    order = order_line(stock)
+    # The text block sits centred in the row gap; the order line makes it a
+    # line taller, so it starts half a line higher.
+    y = (float(below.y + third.top) / 2 if third else float(below.y) - 12) + (10 if order else 4) - dy
     c.setFont(fonts.BOLD, 8)
     c.drawString(bar_x, y, 'Each bar should measure exactly 100 mm. If it does not, '
                  'print at 100% / Actual size, not "Fit to page".')
@@ -383,6 +386,10 @@ def render_alignment_pdf(stock, options):
     c.drawString(bar_x, y - 12, 'ShowStack label alignment: {}. Offset X {:+.1f} mm, Y {:+.1f} mm. '
                  'Dashed = 3.2 mm safe zone; dotted = 2.5 mm bleed.'.format(
                      stock.part, options.dx_mm, options.dy_mm))
+    if order:
+        c.drawString(bar_x, y - 24, order)
+        width = c.stringWidth(order, fonts.REGULAR, 8)
+        c.linkURL(stock.order_url, (bar_x, y - 26, bar_x + width, y - 16), relative=0)
 
     # The swatches go in the gap above the bottom row of labels.
     if stock.rows > 1:

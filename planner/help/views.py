@@ -11,6 +11,8 @@ from django.http import Http404, HttpResponse
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 
+from planner.tutorials import tutorial
+
 from .context import topics_for
 from .topics import SECTIONS, TOPICS, TOPICS_BY_SLUG
 
@@ -22,7 +24,7 @@ def _body(topic):
 
 
 def _entry(topic):
-    return {'topic': topic, 'body': _body(topic)}
+    return {'topic': topic, 'body': _body(topic), 'video': tutorial(topic.video)}
 
 
 def help_index(request):
@@ -49,6 +51,7 @@ def help_topic(request, slug):
     html = render_to_string('help/topic.html', {
         'topic': topic,
         'body': _body(topic),
+        'video': tutorial(topic.video),
         'related': related,
     })
     return HttpResponse(html)

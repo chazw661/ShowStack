@@ -1,5 +1,5 @@
 <!-- Create this file: planner/templates/planner/power_distribution_calculator.html -->
-<!DOCTYPE html>
+{% load tutorial_tags %}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -342,6 +342,7 @@
             margin-top: 5px;
         }
     </style>
+    {% tutorial_assets %}
 </head>
 <body>
     <div class="container">
@@ -350,6 +351,7 @@
                 <h1>Power Distribution Calculator</h1>
                 <a href="{% url 'planner:power_plan_amps' plan.id %}" class="amps-link" id="amps-link">← Amplifiers</a>
                 <a href="{% url 'planner:power_plan_pdf' plan.id %}" class="pdf-link" id="pdf-link">PDF</a>
+                {% tutorial_button 'power' %}
             </div>
             <div class="header-info">
                 {% if plan.show_day %}<span><strong>Show:</strong> {{ plan.show_day }}</span>{% endif %}

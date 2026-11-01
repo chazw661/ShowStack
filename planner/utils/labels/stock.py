@@ -83,6 +83,9 @@ class LabelStock:
     pitch_y: Fraction
     cols: int
     rows: int
+    # Where to buy this stock; blank hides the order link and the PDF line.
+    supplier: str = ''
+    order_url: str = ''
 
     @property
     def count(self):
@@ -132,10 +135,29 @@ STOCKS = {
         pitch_y=inches(Fraction(17, 6)),
         cols=3,
         rows=4,
+        supplier='OnlineLabels',
+        order_url='https://www.onlinelabels.com/products/ol3016lp',
     ),
 }
 
 DEFAULT_STOCK = 'OL3016LP'
+
+
+def order_link_text(stock):
+    """The order URL as a person would type it: no scheme, no www."""
+    url = stock.order_url
+    for prefix in ('https://', 'http://', 'www.'):
+        if url.startswith(prefix):
+            url = url[len(prefix):]
+    return url.rstrip('/')
+
+
+def order_line(stock):
+    """The alignment page's "where to buy" line, or '' with no order URL."""
+    if not stock.order_url:
+        return ''
+    name = ' '.join(p for p in (stock.supplier, stock.part) if p)
+    return 'Labels: {} \u2014 {}'.format(name, order_link_text(stock))
 
 
 def get_stock(part):

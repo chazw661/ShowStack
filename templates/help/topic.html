@@ -1,4 +1,5 @@
 {% extends "help/base.html" %}
+{% load tutorial_tags %}
 {% block title %}{{ topic.title }}{% endblock %}
 {% block content %}
 <div class="top">
@@ -11,6 +12,7 @@
 <p class="intro">{{ topic.section }}</p>
 <article class="body">
     {{ body }}
+    {% if video %}<p class="help-video">{% tutorial_button video.key %}</p>{% endif %}
 </article>
 {% if related %}
 <h2>More in {{ topic.section }}</h2>

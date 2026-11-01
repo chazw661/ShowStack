@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n admin_urls static %}
+{% load i18n admin_urls static tutorial_tags %}
 
 {% block title %}Amp Rack View{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
@@ -13,6 +13,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
+{% tutorial_assets %}
 <style>
     /* ── Toolbar at top ───────────────────────────────────────── */
     .rack-toolbar {
@@ -1133,6 +1134,7 @@
                         <div class="amp-output-title">Cabinets per output — used for the power estimate</div>
                         <a class="amp-cabinets-help" href="{% url 'help:topic' 'power-amp-profiles' %}"
                            target="_blank" rel="noopener">How power is worked out</a>
+                        {% tutorial_button 'power' 'small' %}
                         {% if not card.amp.amp_model.power_profile_id %}
                         <span class="amp-cabinets-nopower">No power figures for this model</span>
                         {% endif %}

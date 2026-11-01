@@ -18,6 +18,8 @@ class Topic:
     summary: str
     pages: tuple
     keywords: tuple = ()
+    # A planner.tutorials key: Help shows its "Watch how" button with the topic.
+    video: str = ''
 
     @property
     def template(self):
@@ -189,6 +191,7 @@ TOPICS = (
             'planner:mic_tracker_print',
         ),
         keywords=('label', 'labels', 'beltpack', 'bodypack', 'pack', 'sticker', 'print', 'running order', 'OL3016LP', 'alignment', 'calibration',),
+        video='labels',
     ),
     Topic(
         slug='label-branding',
@@ -200,6 +203,7 @@ TOPICS = (
             'planner:mic_tracker_print',
         ),
         keywords=('branding', 'brand', 'logo', 'client', 'colour', 'color', 'accent', 'toner', 'label', 'labels',),
+        video='labels',
     ),
     Topic(
         slug='mic-updates-banner',
@@ -511,6 +515,7 @@ TOPICS = (
             'planner:power_distribution_calculator_detail',
         ),
         keywords=('power', 'power distribution', 'calculator', 'phase', 'leg', 'amps per leg', 'imbalance', 'programme', '1/8 power', '1/3 power', 'estimate', 'power factor', 'headroom', 'safety margin', '3-phase',),
+        video='power',
     ),
     Topic(
         slug='power-plan-generate',
