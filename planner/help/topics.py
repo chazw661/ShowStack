@@ -503,7 +503,7 @@ TOPICS = (
         slug='power-plan',
         title='Build a power distribution plan',
         section='Amps & PA',
-        summary='Add amps to a power plan and check current per leg and imbalance.',
+        summary='Open the plan generated from your amps; check current per leg and imbalance.',
         pages=(
             'admin:planner_powerdistributionplan_changelist',
             'admin:planner_amplifierassignment_changelist',

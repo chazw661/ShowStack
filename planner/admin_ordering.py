@@ -1,6 +1,7 @@
 # planner/admin_ordering.py
 # Updated to hide child models for viewers
 from django.contrib import admin
+from django.urls import reverse
 from planner.tenancy import can_access_project, can_edit_project
 from planner.admin_site import showstack_admin_site
 
@@ -174,6 +175,12 @@ def ordered_get_app_list(request, app_label=None):
                     continue  # Always hide these
                 if is_viewer and model_name in child_models:
                     continue  # Hide children for viewers
+                if model_name == 'powerdistributionplan':
+                    # The sidebar opens the project's power plan page (the
+                    # one with Regenerate), not the admin list; superusers
+                    # reach that from the page's "All plans (admin)".
+                    model['admin_url'] = reverse('planner:power_distribution_calculator')
+                    model['add_url'] = None
                 filtered_models.append(model)
             
             app['models'] = filtered_models

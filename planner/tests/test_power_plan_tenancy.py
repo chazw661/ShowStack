@@ -16,6 +16,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 
 from planner.models import (
     AmplifierAssignment, AmplifierProfile, PowerDistributionPlan, ProjectMember,
@@ -63,28 +64,35 @@ class PowerPlanCrossTenantTests(PowerPlanBase):
         self.assertNoLeak(resp, 'power calculator detail')
 
     def test_calculator_without_id_opens_only_current_project_plan(self):
-        # plan_b is the older-created row in some orderings; either way the
-        # no-id route must never reach it.
+        # Both plans generated: the no-id route opens A's, never B's.
+        PowerDistributionPlan.objects.update(generated_at=timezone.now())
         resp = self.client.get(reverse('planner:power_distribution_calculator'))
         self.assertEqual(200, resp.status_code)
         self.assertEqual(self.plan_a, resp.context['plan'])
         self.assertNoLeak(resp, 'power calculator (no id)')
 
-    def test_calculator_show_day_param_404s_for_other_tenant_day(self):
+    def test_calculator_ignores_a_show_day_param(self):
+        # ?show_day= used to pick a plan; it is ignored now, and another
+        # tenant's day never shows that tenant's plan.
+        PowerDistributionPlan.objects.update(generated_at=timezone.now())
         resp = self.client.get(
             reverse('planner:power_distribution_calculator'),
             {'show_day': self.show_day_b.id},
         )
-        self.assertEqual(404, resp.status_code)
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual(self.plan_a, resp.context['plan'])
+        self.assertNoLeak(resp, 'power calculator (show_day param)')
 
-    def test_calculator_without_plan_redirects_instead_of_borrowing_one(self):
-        self.plan_a.delete()
+    def test_calculator_without_generated_plan_never_borrows_one(self):
+        # A has only a hand-built plan, B a generated one: A sees the empty
+        # state, not B's plan, and the GET creates nothing.
+        PowerDistributionPlan.objects.filter(pk=self.plan_b.pk).update(
+            generated_at=timezone.now())
         resp = self.client.get(reverse('planner:power_distribution_calculator'))
-        self.assertRedirects(
-            resp, reverse('admin:planner_powerdistributionplan_add'),
-            fetch_redirect_response=False,
-        )
-        self.assertEqual(1, PowerDistributionPlan.objects.count(),
+        self.assertEqual(200, resp.status_code)
+        self.assertTemplateUsed(resp, 'planner/power_plan_empty.html')
+        self.assertNoLeak(resp, 'power calculator (no generated plan)')
+        self.assertEqual(2, PowerDistributionPlan.objects.count(),
                          'a plan was created on a GET')
 
     def test_update_plan_settings_404s_for_other_tenant(self):

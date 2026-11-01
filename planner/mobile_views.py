@@ -133,7 +133,6 @@ def project_overview(request, project_id):
         'mic_count': _safe_count(project, 'micassignments'),
         'comm_count': _safe_count(project, 'beltpacks'),
         'prediction_count': _safe_count(project, 'predictions'),
-        'power_count': _safe_count(project, 'powerdistributors'),
     }
     
     # Define available modules for the navigation grid

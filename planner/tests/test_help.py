@@ -265,8 +265,16 @@ class EveryHelpLinkLeadsToATopicTests(TestCase):
         r'/media/|/static/)'
     )
 
+    # Pages the crawl must reach, so it can't pass by crawling nothing.
+    MUST_REACH = ('admin:planner_console_changelist', 'planner:mic_tracker',
+                  'mobile:dashboard', 'dashboard', 'crew_index',
+                  'planner:power_distribution_calculator')
+
+    def make_user(self):
+        return User.objects.create_superuser('help_su', 'su@example.com', 'pw')
+
     def setUp(self):
-        self.user = User.objects.create_superuser('help_su', 'su@example.com', 'pw')
+        self.user = self.make_user()
         UserProfile.objects.update_or_create(user=self.user, defaults={'account_type': 'paid'})
         self.project = Project.objects.create(name='Crawl Project', owner=self.user)
         location = Location.objects.create(project=self.project, name='FOH')
@@ -353,8 +361,7 @@ class EveryHelpLinkLeadsToATopicTests(TestCase):
 
         # Not vacuous: the crawl reached the admin, planner, accounts and mobile pages.
         self.assertGreaterEqual(len(set(checked)), 25, sorted(set(checked)))
-        for must in ('admin:planner_console_changelist', 'planner:mic_tracker',
-                     'mobile:dashboard', 'dashboard', 'crew_index'):
+        for must in self.MUST_REACH:
             self.assertIn(must, checked, 'crawl never reached {}'.format(must))
         self.assertEqual(
             sorted(set(unmapped)), [],
@@ -370,6 +377,20 @@ class EveryHelpLinkLeadsToATopicTests(TestCase):
     def test_unhelped_pages_really_have_no_topic(self):
         both = [k for k in self.UNHELPED if topics_for(k)]
         self.assertEqual(both, [], 'These have topics now; drop them from UNHELPED')
+
+
+class EveryHelpLinkLeadsToATopicAsOwnerTests(EveryHelpLinkLeadsToATopicTests):
+    """The same crawl as a project owner who is not a superuser: the pages
+    they see differ (the power plan admin list sends them to the calculator,
+    whose no-plan state carries its own Help link)."""
+
+    def make_user(self):
+        return User.objects.create_user('help_owner', 'owner@example.com', 'pw', is_staff=True)
+
+    def test_power_plan_admin_list_is_not_crawled_as_a_page(self):
+        resp = self.client.get(reverse('admin:planner_powerdistributionplan_changelist'))
+        self.assertRedirects(resp, reverse('planner:power_distribution_calculator'),
+                             fetch_redirect_response=False)
 
 
 # ---------------------------------------------------------------------------

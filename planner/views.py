@@ -2607,12 +2607,12 @@ def _power_assignment_or_404(request, assignment_id):
 def power_distribution_calculator(request, plan_id=None):
     """Main power distribution calculator view.
 
-    With no plan id this opens the current project's most recent plan (for one
-    show day when ?show_day= is given). It used to fall back to
-    PowerDistributionPlan.objects.first() -- the oldest-sorted plan of ANY
-    tenant -- and to create plans with no project, which the non-null FK
-    refused. With no plan in the project there is nothing to show, so send the
-    engineer to the admin to create one rather than creating rows on a GET.
+    With no plan id (the sidebar link) this opens the current
+    project's generated plan -- the one built from the amp module, with
+    Regenerate. Plans built by hand stay in the database for superusers,
+    who open them from the admin list; they are never picked here. With no
+    generated plan the page says how to make one, and creates nothing on a
+    GET.
     """
     if plan_id:
         plan = _power_plan_or_404(request, plan_id)
@@ -2620,15 +2620,13 @@ def power_distribution_calculator(request, plan_id=None):
         project = _scoped_project(request)
         if project is None:
             raise Http404("No project selected")
-        plans = PowerDistributionPlan.objects.filter(project=project)
-        show_day_id = request.GET.get('show_day')
-        if show_day_id:
-            show_day = get_object_or_404(ShowDay, id=show_day_id, project=project)
-            plans = plans.filter(show_day=show_day)
-        plan = plans.order_by('-created_at').first()
+        from planner.utils.power_plan_generator import generated_plan
+        plan = generated_plan(project)
         if plan is None:
-            messages.info(request, "Create a power distribution plan for this project first.")
-            return redirect('admin:planner_powerdistributionplan_add')
+            return render(request, 'planner/power_plan_empty.html', {
+                'project': project,
+                'can_edit': _can_edit_current_project(request),
+            })
 
     # Get all amplifier profiles
     amplifier_profiles = AmplifierProfile.objects.all()
@@ -2847,7 +2845,14 @@ def update_plan_settings(request, plan_id):
                                      'error': 'Power factor must be 0.5-1.0'}, status=400)
             plan.power_factor = power_factor
         if 'venue_name' in data:
-            plan.venue_name = data['venue_name']
+            venue_name = str(data['venue_name']).strip()
+            if len(venue_name) > PowerDistributionPlan._meta.get_field('venue_name').max_length:
+                return JsonResponse({'success': False,
+                                     'error': 'Venue name must be 200 characters or fewer'},
+                                    status=400)
+            plan.venue_name = venue_name
+        if 'notes' in data:
+            plan.notes = str(data['notes'])
         
         plan.save()
         
