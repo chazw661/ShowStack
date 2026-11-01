@@ -120,6 +120,7 @@
                            pattern="#?[0-9A-Fa-f]{6}"{% if not can_edit %} disabled{% endif %} aria-label="Accent {{ forloop.counter }} hex">
                 </div>
                 {% endfor %}
+                <p class="pb-note">Accent 1 also colours the RF number when it's readable on the background.</p>
                 {% if can_edit %}
                 <div class="pb-row">
                     <button type="button" class="pb-btn small" id="pb-suggest">Suggest from logo</button>
@@ -142,7 +143,7 @@
                 </div>
                 <p class="pb-note warn" id="pb-style-warning"{% if brand.accent_style == 'none' or brand.accents %} hidden{% endif %}>Add at least one accent colour — nothing is drawn yet.</p>
                 <p class="pb-note">Corner bars keep 5 mm at the bottom clear of names (one fewer name on a full running order). The edge stripe costs no space. No accent colours: nothing is drawn.</p>
-                {% if can_edit %}<div class="pb-row"><button type="submit" class="pb-btn primary">Save colours</button></div>{% endif %}
+                {% if can_edit %}<div class="pb-row"><button type="submit" class="pb-btn primary">Save colours</button> <span class="pb-note warn" id="pb-dirty" hidden>Unsaved changes</span></div>{% endif %}
             </form>
 
             <div class="pb-panel">
@@ -280,6 +281,25 @@
             note.textContent = 'Suggested colours filled in: Save colours to keep them.';
         });
     }
+
+    // Unsaved colours: a marker by Save, and the browser's "leave page?"
+    // prompt -- the logo forms and the links all navigate away. Dirty means
+    // different from what was saved, or "Use these" pressed since.
+    var dirtyMark = document.getElementById('pb-dirty');
+    var saved = query().toString();
+    var forced = false, submitting = false;
+    function isDirty() { return !!dirtyMark && (forced || query().toString() !== saved); }
+    function paintDirty() { if (dirtyMark) dirtyMark.hidden = !isDirty(); }
+    form.addEventListener('input', paintDirty);
+    form.addEventListener('change', paintDirty);
+    var use = document.getElementById('pb-use');
+    if (use) use.addEventListener('click', function () { forced = true; paintDirty(); });
+    form.addEventListener('submit', function () { submitting = true; });
+    window.addEventListener('beforeunload', function (e) {
+        if (submitting || !isDirty()) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
 
     paintStyleWarning();
     refresh();

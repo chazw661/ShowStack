@@ -720,6 +720,31 @@ class BrandingViewTests(TestCase):
         self.assertEqual(level, 'warning')
         self.assertIn('dpi', text)
 
+    def test_pdf_responses_are_not_stored(self):
+        import datetime
+        from planner.models import MicSession, ShowDay
+        day = ShowDay.objects.create(project=self.project, date=datetime.date(2026, 11, 3))
+        session = MicSession.objects.create(day=day, name='Keynote', num_mics=2, order=0)
+        self.login(self.viewer)
+        for url in (reverse('planner:mic_labels_pdf') + f'?sessions={session.pk}',
+                    reverse('planner:mic_labels_pdf') + f'?sessions={session.pk}&download=1',
+                    reverse('planner:mic_labels_alignment_pdf'),
+                    reverse('planner:branding_preview_pdf')):
+            r = self.client.get(url)
+            self.assertEqual(r.status_code, 200, url)
+            self.assertEqual(r['Content-Type'], 'application/pdf', url)
+            self.assertEqual(r['Cache-Control'], 'no-store', url)
+
+    def test_page_has_the_unsaved_changes_marker_and_accent_hint(self):
+        self.login(self.owner)
+        r = self.client.get(reverse('planner:project_branding'))
+        self.assertContains(r, 'id="pb-dirty" hidden>Unsaved changes')
+        self.assertContains(r, "beforeunload")
+        self.assertContains(r, "Accent 1 also colours the RF number when it's readable")
+        self.login(self.viewer)
+        r = self.client.get(reverse('planner:project_branding'))
+        self.assertNotContains(r, 'id="pb-dirty"')
+
     def test_style_without_accents_warns_on_the_page(self):
         self.login(self.owner)
         r = self.client.get(reverse('planner:project_branding'))
