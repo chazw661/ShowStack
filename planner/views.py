@@ -2680,6 +2680,11 @@ def power_distribution_calculator(request, plan_id=None):
         # float 1.3 a template literal gives, so 30% was never shown selected.
         'headroom_choices': HEADROOM_CHOICES,
         'headroom_values': [v for v, _ in HEADROOM_CHOICES],
+        # Same trap: Decimal 0.80 never equalled the float 0.8, so 70/80/90%
+        # never showed selected, the menu fell back to 70%, and the next save
+        # of any setting sent 0.7.
+        'margin_choices': MARGIN_CHOICES,
+        'margin_values': [v for v, _ in MARGIN_CHOICES],
         'voltage': voltage,
         'phase_to_neutral': plan.get_phase_to_neutral_voltage(),
         'three_phase_warning': generator.three_phase_warning(plan, assignments),
@@ -2695,6 +2700,8 @@ def power_distribution_calculator(request, plan_id=None):
 
 HEADROOM_CHOICES = [('1.25', '25% (default)'), ('1.30', '30%'), ('1.50', '50%'),
                     ('1.75', '75%'), ('2.00', '100%')]
+MARGIN_CHOICES = [('0.70', '70%'), ('0.80', '80% (default)'), ('0.90', '90%'),
+                  ('1.00', '100%')]
 
 
 def calculate_phase_distribution(plan):
@@ -2827,7 +2834,12 @@ def update_plan_settings(request, plan_id):
         if 'transient_headroom' in data:
             plan.transient_headroom = Decimal(str(data['transient_headroom']))
         if 'safety_margin' in data:
-            plan.safety_margin = Decimal(str(data['safety_margin']))
+            safety_margin = Decimal(str(data['safety_margin']))
+            if not Decimal('0') < safety_margin <= Decimal('1'):
+                return JsonResponse({'success': False,
+                                     'error': 'Safety margin must be above 0 and at most 1.0'},
+                                    status=400)
+            plan.safety_margin = safety_margin
         if 'power_factor' in data:
             power_factor = Decimal(str(data['power_factor']))
             if not Decimal('0.5') <= power_factor <= Decimal('1'):
