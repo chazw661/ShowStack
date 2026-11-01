@@ -9,6 +9,7 @@ from .views import populate_amp_models_view
 from . import views_monitor
 from . import views_listen
 from . import views_console_patch
+from . import views_branding
 
 from .views import (
      audio_checklist_view,
@@ -167,6 +168,13 @@ urlpatterns = [
     path('mic-tracker/print/labels.pdf', views.mic_labels_pdf, name='mic_labels_pdf'),
     path('mic-tracker/print/alignment.pdf', views.mic_labels_alignment_pdf, name='mic_labels_alignment_pdf'),
     path('mic-tracker/print/summary.json', views.mic_labels_summary, name='mic_labels_summary'),
+    path('project/branding/', views_branding.project_branding, name='project_branding'),
+    path('project/branding/save/', views_branding.branding_save, name='branding_save'),
+    path('project/branding/logo/upload/', views_branding.branding_logo_upload, name='branding_logo_upload'),
+    path('project/branding/logo/delete/', views_branding.branding_logo_delete, name='branding_logo_delete'),
+    path('project/branding/logo/', views_branding.branding_logo, name='branding_logo'),
+    path('project/branding/preview.pdf', views_branding.branding_preview_pdf, name='branding_preview_pdf'),
+    path('project/branding/suggest-accents.json', views_branding.branding_suggest_accents, name='branding_suggest_accents'),
     path('mic-tracker/export/', views.export_mic_tracker, name='export_mic_tracker'),
     path('api/mic/get-assignment/<int:assignment_id>/', views.get_assignment_details, name='get_assignment_details'),
     # In urls.py

@@ -191,6 +191,17 @@ TOPICS = (
         keywords=('label', 'labels', 'beltpack', 'bodypack', 'pack', 'sticker', 'print', 'running order', 'OL3016LP', 'alignment', 'calibration',),
     ),
     Topic(
+        slug='label-branding',
+        title='Brand the beltpack labels',
+        section='Show day',
+        summary="Print the labels in the client's colours, with their logo.",
+        pages=(
+            'planner:project_branding',
+            'planner:mic_tracker_print',
+        ),
+        keywords=('branding', 'brand', 'logo', 'client', 'colour', 'color', 'accent', 'toner', 'label', 'labels',),
+    ),
+    Topic(
         slug='mic-updates-banner',
         title='Keep several screens in sync ("Updates available")',
         section='Show day',

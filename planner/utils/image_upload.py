@@ -32,8 +32,11 @@ class ImageRejected(Exception):
     """The bytes are not an image we accept. ``str()`` is user-safe."""
 
 
-def validate_photo_bytes(data):
-    """Return the MIME type for ``data`` if it is an acceptable photo, else raise."""
+def validate_photo_bytes(data, formats=None, refusal='Only JPEG, PNG or WebP images are accepted'):
+    """Return the MIME type for ``data`` if it is an acceptable photo, else
+    raise. ``formats`` narrows ALLOWED_FORMATS, with ``refusal`` as the
+    message for anything outside it."""
+    formats = formats or ALLOWED_FORMATS
     if not data:
         raise ImageRejected('Empty file')
     if len(data) > MAX_PHOTO_BYTES:
@@ -42,8 +45,8 @@ def validate_photo_bytes(data):
         with Image.open(BytesIO(data)) as img:
             fmt = img.format
             width, height = img.size
-            if fmt not in ALLOWED_FORMATS:
-                raise ImageRejected('Only JPEG, PNG or WebP images are accepted')
+            if fmt not in formats:
+                raise ImageRejected(refusal)
             if width * height > MAX_PHOTO_PIXELS:
                 raise ImageRejected('Image dimensions are too large')
             img.verify()
@@ -52,7 +55,7 @@ def validate_photo_bytes(data):
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError,
             SyntaxError, ValueError):
         raise ImageRejected('That file is not a valid image')
-    return ALLOWED_FORMATS[fmt]
+    return formats[fmt]
 
 
 def read_upload_capped(uploaded_file):
@@ -111,6 +114,66 @@ def normalize_headshot(data):
         raise ImageRejected('That file is not a valid image')
     content = out.getvalue()
     return content, 'image/jpeg', width, height, hashlib.sha256(content).hexdigest()
+
+
+# A logo prints at most 2" across a 2" label; 1200 px is 600 dpi at that.
+LOGO_MAX_EDGE = 1200
+LOGO_FORMATS = {'JPEG': 'image/jpeg', 'PNG': 'image/png'}
+LOGO_JPEG_QUALITY = 90
+# Alpha at or below this, or within this of the corner colour on an opaque
+# logo, counts as empty margin and is trimmed.
+LOGO_TRIM_THRESHOLD = 16
+
+
+def normalize_logo(data):
+    """Validate ``data`` as a PNG or JPEG logo and re-encode it.
+
+    Returns ``(bytes, content_type, width, height, sha256_hex)``.
+
+    Unlike a headshot, transparency is kept (a logo sits on the label's
+    colour), so a logo with alpha comes back as PNG and an opaque one as
+    JPEG. Empty margins are trimmed -- transparent ones, or on an opaque
+    logo a border the colour of its corner -- so the logo's own artwork is
+    what gets sized to 8 mm on the label. SVG and every other format is
+    refused: Pillow cannot open SVG, and the formats check refuses the rest.
+    """
+    import hashlib
+
+    from PIL import ImageChops, ImageOps
+
+    validate_photo_bytes(data, LOGO_FORMATS, 'Logos must be PNG or JPEG')
+    try:
+        with Image.open(BytesIO(data)) as img:
+            img = ImageOps.exif_transpose(img)
+            has_alpha = img.mode in ('RGBA', 'LA', 'PA') or (
+                img.mode == 'P' and 'transparency' in img.info)
+            img = img.convert('RGBA' if has_alpha else 'RGB')
+            if has_alpha:
+                mask = img.getchannel('A').point(lambda a: 255 if a > LOGO_TRIM_THRESHOLD else 0)
+            else:
+                corner = Image.new('RGB', img.size, img.getpixel((0, 0)))
+                mask = ImageChops.difference(img, corner).convert('L').point(
+                    lambda v: 255 if v > LOGO_TRIM_THRESHOLD else 0)
+            box = mask.getbbox()
+            if box is None:
+                raise ImageRejected('That logo is blank')
+            img = img.crop(box)
+            img.thumbnail((LOGO_MAX_EDGE, LOGO_MAX_EDGE), Image.LANCZOS)
+            out = BytesIO()
+            if has_alpha:
+                img.save(out, format='PNG', optimize=True)
+                content_type = 'image/png'
+            else:
+                img.save(out, format='JPEG', quality=LOGO_JPEG_QUALITY, optimize=True)
+                content_type = 'image/jpeg'
+            width, height = img.size
+    except ImageRejected:
+        raise
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError,
+            SyntaxError, ValueError):
+        raise ImageRejected('That file is not a valid image')
+    content = out.getvalue()
+    return content, content_type, width, height, hashlib.sha256(content).hexdigest()
 
 
 def session_photo_data_url(data):

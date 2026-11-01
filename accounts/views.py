@@ -433,7 +433,14 @@ def set_project(request, project_id):
         request.session['current_project_id'] = project_id
         request.session.modified = True  # <-- ADD THIS LINE
         messages.success(request, f'Now viewing: {project.name}')
-        
+
+        # ?next= lets a project page link straight to a page of that project
+        # (Label branding). Same-site paths only.
+        from django.utils.http import url_has_allowed_host_and_scheme
+        target = request.GET.get('next', '')
+        if target and url_has_allowed_host_and_scheme(
+                target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+            return redirect(target)
         return redirect('/admin/')
         
     except Project.DoesNotExist:
