@@ -161,7 +161,10 @@ class DecisionTests(WriteGuardBase):
 
     def test_day_collapse_is_per_user_in_the_browser(self):
         from planner.models import ShowDay
-        day = ShowDay.objects.create(project=self.project, date='2027-04-01',
+        # Before 2026: the write-guard Factory dates its rows 2026-01-01 + n,
+        # n counting across the whole worker, so a fixed later date collided
+        # with its ShowDay whenever a parallel worker's count reached it.
+        day = ShowDay.objects.create(project=self.project, date='2025-04-01',
                                      is_collapsed=True)
         from django.urls import NoReverseMatch
         with self.assertRaises(NoReverseMatch):
