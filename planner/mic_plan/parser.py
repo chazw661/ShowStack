@@ -1,0 +1,799 @@
+"""Showflow rows -> timeline, people, send/catch events and flags.
+
+Pure functions over the row dicts ``extract`` produces (keys: line, start,
+end, duration, description, speaker, bsm, notes). No Django, no pdfplumber:
+the importer re-runs ``analyse`` from stored rows whenever crew names or
+merges change, and the tests feed it rows directly.
+
+The rules are written up in docs/mic_plan/PARSING_RULES.md.
+"""
+
+import re
+from dataclasses import dataclass, field
+
+# ==========================================================================
+# Layout rules
+# ==========================================================================
+# Everything below was added because a real showflow needed it. Each line
+# names the layout: Client A (four files, 14-column, plus an upper-case BSM
+# export), Client B (9-column, no send/catch cues), Client C (14-column,
+# panels), Client D (27-column, line numbers under an "a" header). The
+# fixtures in planner/tests/showflow_fixture.py copy each layout with
+# made-up names. Change a rule here, not in the code below.
+
+# -- Speaker separators ----------------------------------------------------
+_TOKEN = re.compile(r"[^\s,&()/+;]+|[,&()/+;]")
+SEPARATORS = {
+    ',', '&', 'and', '/',      # Client A: "Name, Name & Name"
+    '+',                       # Client B: "Name + Name"
+    ';',                       # Client C: "ORDER; Name, Name"
+}
+PUNCT = {'(', ')', '-', '–'}   # Client A: "Name - Role"
+
+# -- Name stop-words: capitalised words that are never part of a name ------
+NOT_NAMES = (
+    # Client A: cue and screen words around names; "Pickle" is a clicker
+    {'pickle', 'pickles', 'both', 'everyone', 'all', 'presenters', 'presenter', 'titles', 'gfx',
+     'video', 'ppt', 'vo', 'the', 'team'}
+    # Client A (BSM export): VOG/TITLE rows and Enter/Exit stage notes
+    | {'title', 'vog', 'enter', 'exit', 'partner'}
+    # Client A (BSM export): chatter after a name in a cue ("Sends Kim Needs Clicker")
+    | {'needs', 'need', 'grab', 'get', 'gets', 'has', 'have', 'clicker', 'mic', 'exits',
+       'enters', 'walks', 'wraps', 'send', 'sends', 'catch', 'catches', 'on', 'with', 'to',
+       'people', 'speaker', 'speakers', 'winners'}
+    # Client B: "DJ Audio Throughout" in the Speaker column
+    | {'dj', 'audio', 'music', 'throughout'}
+    # Client C: "(Name Stays)", "ORDER: ...", "TBD with ..."
+    | {'stays', 'order', 'tbd', 'tba'}
+    # Client D: "Send Person 1", "Name (Moderator)"
+    | {'person', 'moderator'}
+)
+# Client B: lower-case name parts that still belong to a name ("Rory vandeberg")
+NAME_PARTICLES = ('mac', 'mc', 'van', 'von', 'de', 'da', 'di', 'du', 'del', 'la', 'le', 'st')
+# Client B: Speaker-cell text that is not a person and needs no mic: dropped, not flagged
+_NOT_A_PERSON = re.compile(r'(?i)\b(?:dj|audio|music|playback|walk-?in|tbd|tba|n/?a)\b')
+
+# -- Speaker-cell strips -------------------------------------------------------
+_STAGE_NOTES = re.compile(
+    r'\{[^}]*\}'                       # Client A (BSM export): "{CLICKER 1}"
+    r'|\([^)]{0,40}\)'                 # Client A "(SL)", Client C "(MC)", Client A "(F)"
+    r'|\b(?:Enter|Exit)\s*:\s*\S*'      # Client A (BSM export): "Enter: BSL Exit: BSR"
+    r'|\b(?:OS)?(?:BS|US|DS)[LRC]\b'    # Client A (BSM export): bare stage codes
+    r'|\b(?:SL|SR|CS|N/A)\b')           # Client A: bare stage positions
+_GRAPHICS = re.compile(r'\b(?:GFX|TITLES):.*$')                   # Client A: graphics cues
+_TITLES_PREFIX = re.compile(r'(?i)^titles\s*(?:\([^)]*\))?\s*:\s*')  # Client A: "Titles (Stacked):"
+
+# -- Welcome lines and job titles --------------------------------------------
+_WELCOME = re.compile(r'(?i)\bplease\s+welcome\b(.*)$')            # Client A: "please welcome ..."
+# Client A "Name, President & CEO"; Client D "Title, Company, Name" welcomes
+TITLE_WORDS = {
+    'president', 'ceo', 'cfo', 'coo', 'cto', 'cmo', 'cio', 'chair', 'chairman', 'chairwoman',
+    'chief', 'officer', 'board', 'vice', 'vp', 'evp', 'svp', 'director', 'manager', 'founder',
+    'executive', 'senior', 'head', 'md', 'gm',
+}
+TITLE_CONNECTORS = {'&', 'and', 'of', '/', 'the'}                  # Client A: "President & CEO"
+
+# -- Send / catch cues ---------------------------------------------------------
+_VERB = re.compile(r'(?i)^(?:sends?|sending|catch(?:es)?|catching)$')  # Client A
+CUE_FILLERS = ('to', 'will')        # Client A: "Lee to send ...", "Sam will ..."
+# Client D: a BSM cell that opens with the verb ("Send Alex") is a cue with no crew name
+CUE_VERB_OPENS_CELL = True
+
+# -- Mic hints -------------------------------------------------------------------
+_HH = re.compile(r'(?i)\bHH\b|\bhand-?helds?\b')    # Client B "handheld(s)", Client B "Need HH"
+_BACKUP = re.compile(r'(?i)\bback-?up\s+mic\b')     # Client A "Sam with Name Backup mic"
+
+# --------------------------------------------------------------------------
+# Times
+# --------------------------------------------------------------------------
+
+_CLOCK = re.compile(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])?\.?\s*[Mm]?\.?$')
+_HMS = re.compile(r'^\d{1,2}:\d{2}:\d{2}$')
+_HM = re.compile(r'^\d{1,2}:\d{2}$')
+
+# A clock time with no AM/PM is read as whichever of the two lies closest
+# after the previous one, and dropped if that is more than this far ahead.
+AMBIGUOUS_WINDOW_MIN = 120
+# A send's time is the start of the next segment only if that segment begins
+# within this many rows; further away, the cue is mid-segment ("Host
+# Enters") and the row's own interpolated time is nearer the truth.
+SEND_LOOKAHEAD_ROWS = 4
+# A speaker counts as covered by a send/catch window that opens up to this
+# many minutes after their segment starts.
+COVER_SLACK_MIN = 6
+
+
+def parse_clock(text):
+    """(hour, minute, 'A'|'P'|None) for a clock time, None otherwise.
+
+    The Start column also carries video run times: "0:05:13" (hour 0) and
+    timecode "00:04:08:00" (four fields) are not clock times.
+    """
+    m = _CLOCK.match((text or '').strip())
+    if not m:
+        return None
+    hour, minute = int(m[1]), int(m[2])
+    if hour == 0 or hour > 23 or minute > 59:
+        return None
+    return hour, minute, (m[4] or '').upper() or None
+
+
+def _minutes(hour, minute, ampm):
+    if ampm:
+        hour = hour % 12 + (12 if ampm == 'P' else 0)
+    return hour * 60 + minute
+
+
+def resolve_clock(parsed, after):
+    """Minutes from midnight for a parse_clock() result, given the previous
+    anchor ``after`` (or None). None if the time cannot be placed."""
+    hour, minute, ampm = parsed
+    if ampm or hour > 12:
+        t = _minutes(hour, minute, ampm)
+        return t if after is None or t >= after else None
+    readings = [_minutes(hour, minute, 'A'), _minutes(hour, minute, 'P')]
+    if after is None:
+        # First anchor of the file: a show day runs roughly 6a to 6p.
+        return readings[0] if 6 <= hour <= 11 else readings[1]
+    ahead = [t for t in readings if after <= t <= after + AMBIGUOUS_WINDOW_MIN]
+    return min(ahead) if ahead else None
+
+
+@dataclass
+class RowTime:
+    minute: float = None      # interpolated where the row has no clock time
+    exact: bool = False       # the row's own Start time
+    is_segment: bool = False
+    t0: float = None
+    t1: float = None
+
+
+def build_times(rows):
+    """[RowTime] per row, plus warnings."""
+    out = [RowTime() for _ in rows]
+    warnings = []
+    anchors = {}
+    guessed = set()           # anchors read without AM/PM
+    last = None
+    for i, row in enumerate(rows):
+        parsed = parse_clock(row['start'])
+        if not parsed:
+            continue
+        explicit = bool(parsed[2]) or parsed[0] > 12
+        if explicit and last is not None:
+            # "10:45:00" read as 10:45a, then "10:41 AM" on the next segment:
+            # the explicit time wins and the guesses past it are dropped.
+            t = _minutes(*parsed)
+            for k in sorted(anchors, reverse=True):
+                if k not in guessed or anchors[k] <= t:
+                    break
+                del anchors[k]
+            last = max(anchors.values()) if anchors else None
+        t = resolve_clock(parsed, last)
+        if t is None and explicit and len(anchors) >= 2:
+            # One stray time ahead of the rest ("9:33 AM" on a VOG line, then
+            # the 9:00 segment): if this time fits after the anchor before
+            # it, the stray one is what is wrong. Drop that instead.
+            prev, stray = sorted(anchors)[-2:]
+            t = _minutes(*parsed)
+            if anchors[prev] <= t < anchors[stray]:
+                warnings.append(('time_backwards', stray, 'Start time {} on line {} is later than '
+                                 'the times after it; ignored.'.format(
+                                     rows[stray]['start'], rows[stray]['line'] or '?')))
+                del anchors[stray]
+                guessed.discard(stray)
+                last = anchors[prev]
+            else:
+                t = None
+        if t is None:
+            if parsed[2]:
+                warnings.append(('time_backwards', i, 'Start time {} on line {} is earlier than '
+                                 'the line before it; ignored.'.format(row['start'], row['line'] or '?')))
+            continue
+        anchors[i] = last = t
+        if not explicit:
+            guessed.add(i)
+    if not anchors:
+        warnings.append(('no_times', None, 'No clock times found in the Start column.'))
+        return out, warnings
+    keys = sorted(anchors)
+    for i in range(len(rows)):
+        if i in anchors:
+            out[i].minute, out[i].exact = anchors[i], True
+            continue
+        before = [k for k in keys if k < i]
+        after = [k for k in keys if k > i]
+        if not before:
+            out[i].minute = anchors[after[0]]
+        elif not after:
+            out[i].minute = anchors[before[-1]]
+        else:
+            a, b = before[-1], after[0]
+            out[i].minute = anchors[a] + (anchors[b] - anchors[a]) * (i - a) / (b - a)
+
+    segments = find_segments(rows, anchors)
+    for n, i in enumerate(segments):
+        rt = out[i]
+        rt.is_segment, rt.t0 = True, anchors[i]
+        end = parse_clock(rows[i]['end'])
+        t1 = resolve_clock(end, rt.t0) if end else None
+        if t1 is None or t1 - rt.t0 > 12 * 60:
+            if n + 1 < len(segments):
+                t1 = anchors[segments[n + 1]]
+            else:
+                t1 = rt.t0 + (_duration_min(rows[i]['duration']) or 0)
+        rt.t1 = max(t1, rt.t0)
+    return out, warnings
+
+
+def find_segments(rows, anchors):
+    """Rows that open a segment: a clock Start and a clock End, plus a
+    Duration in the form the file uses for segments.
+
+    Files differ. Where segments carry "0:30:00", a "0:24" beside a Start and
+    End is a slide count inside one, not a segment; where they carry "0:30",
+    that is the form; and some leave Duration blank throughout.
+    """
+    timed = [i for i in sorted(anchors) if parse_clock(rows[i]['end'])]
+    for form in (_HMS, _HM):
+        found = [i for i in timed if form.match(rows[i]['duration'].strip())]
+        if found:
+            return found
+    return timed
+
+
+def hm(t):
+    """'8:46a' for a minute-of-day value."""
+    if t is None:
+        return ''
+    t = round(t)
+    h, m = divmod(t, 60)
+    return '{}:{:02d}{}'.format((h - 1) % 12 + 1, m, 'a' if h % 24 < 12 else 'p')
+
+
+# --------------------------------------------------------------------------
+# Names
+# --------------------------------------------------------------------------
+
+def name_key(name):
+    return re.sub(r'\s+', ' ', name).strip(' .,;:').lower()
+
+
+def _tokens(text):
+    return _TOKEN.findall(text or '')
+
+
+def _clean_token(tok):
+    return tok.strip('.:;!?"“”')
+
+
+def _is_name_word(tok):
+    w = _clean_token(tok)
+    return (bool(w) and w[0].isupper() and not any(ch.isdigit() for ch in w)
+            and w.lower() not in NOT_NAMES)
+
+
+def _is_name_part(tok):
+    """A later word of a name: capitalised, or a particle ("vandeberg")."""
+    w = _clean_token(tok)
+    return _is_name_word(w) or (w.isalpha() and w.lower().startswith(NAME_PARTICLES)
+                                and w.lower() not in NOT_NAMES)
+
+
+def _first_name(name):
+    words = name.split()
+    if len(words) == 1:
+        return words[0].split('-')[0] if '-' in words[0] else None
+    first = words[0]
+    return first if first.lower().rstrip('.') not in {'dr', 'mr', 'mrs', 'ms'} else None
+
+
+class Roster:
+    """The people of a part, and every spelling that refers to each.
+
+    ``canon`` maps a lower-cased token sequence to a display name. Full
+    names and the user's merged aliases always count; a first name counts
+    only while it is unique among the people found.
+    """
+
+    def __init__(self, known=()):
+        self.names = {}          # display name -> set(lower aliases)
+        self.manual = {}         # lower alias -> display name (from merges)
+        self.bsm_only = set()
+        for display, aliases in known:
+            self.names.setdefault(display, set())
+            self.manual[name_key(display)] = display
+            for alias in aliases:
+                self.manual[name_key(alias)] = display
+        self.found = set()       # display names this part mentions
+        self._index = None
+
+    def resolve(self, raw):
+        """Display name for a spelling, adding the person if new."""
+        key = name_key(raw)
+        if key in self.manual:
+            return self.manual[key]
+        idx = self.index()
+        if key in idx:
+            return idx[key]
+        display = re.sub(r'\s+', ' ', raw).strip(' .,;:')
+        if display.isupper() and len(display) > 3:
+            display = display.title()  # "ROBIN COLE" in a VOG line
+        self.names.setdefault(display, set())
+        self._index = None
+        return display
+
+    def add(self, raw):
+        display = self.resolve(raw)
+        self.found.add(display)
+        return display
+
+    def index(self):
+        if self._index is None:
+            idx = {}
+            firsts = {}
+            for display in self.names:
+                idx[name_key(display)] = display
+                first = _first_name(display)
+                if first:
+                    firsts.setdefault(first.lower(), set()).add(display)
+            for first, owners in firsts.items():
+                if len(owners) == 1 and first not in idx:
+                    idx[first] = next(iter(owners))
+            idx.update(self.manual)
+            self._index = idx
+            self.longest = max((len(k.split()) for k in idx), default=1)
+        return self._index
+
+    def match_at(self, toks, i):
+        """(display name, tokens used) for the longest spelling at toks[i]."""
+        idx = self.index()
+        for n in range(min(self.longest, len(toks) - i), 0, -1):
+            window = toks[i:i + n]
+            if any(t in SEPARATORS or t in PUNCT for t in window):
+                continue  # "Alex ," must not read as "Alex" and swallow the comma
+            words = [_clean_token(t) for t in window]
+            if not all(words) or not words[0][0].isupper():
+                continue
+            key = name_key(' '.join(words))
+            if key in idx:
+                return idx[key], n
+        return None, 0
+
+
+def _welcome_names(text, speaker_text=None):
+    """Names in a "please welcome" line. Titles and companies sit in the
+    same comma list ("welcome to the stage, Vice President, Acme Consulting,
+    Alex Host"), so with ``speaker_text`` (every Speaker cell, lower-cased)
+    a name only counts if a Speaker or Titles cell carries it too."""
+    m = _WELCOME.search(re.sub(r'\([^)]*\)', ' ', text or ''))
+    if not m:
+        return []
+    rest = m[1]
+    for ellipsis in ('…', '...'):
+        if ellipsis in rest:
+            rest = rest.rsplit(ellipsis, 1)[1]
+    rest = re.sub(r'(?i)^\W*(?:to\s+the\s+stage|back)\b', '', rest)
+    names = []
+    for part in re.split(r',|&|\band\b', rest):
+        words = [w for w in part.strip(' .…:;!').split() if w]
+        while len(words) > 2 and words[0].lower().strip('.') in TITLE_WORDS:
+            words = words[1:]
+        if not words or len(words) > 4 or not all(_is_name_word(w) for w in words):
+            continue
+        if len(words) == 1 and '-' not in words[0]:
+            continue  # a lone first name is too weak to add someone
+        name = ' '.join(words)
+        if speaker_text is not None and name.lower() not in speaker_text:
+            continue
+        names.append(name)
+    return names
+
+
+def _speaker_text(text):
+    text = _GRAPHICS.sub('', text or '')
+    text = _TITLES_PREFIX.sub('', text.strip())
+    return _STAGE_NOTES.sub(' ', text)
+
+
+def split_cell(text, roster, discover):
+    """Names in a Speaker/Titles cell, and the text no name accounts for.
+
+    Speaker cells run names together without separators ("Dana Able Chris
+    Baker"), so known spellings are matched first. With ``discover``, what is
+    left becomes a name if it is two or three words standing alone between
+    separators ("Tess St. Clair", "Rory vandeberg"), or a run of
+    capitalised pairs. Anything else is left over for the reviewer, unless it
+    is plainly not a person ("DJ Audio Throughout").
+    """
+    toks = _tokens(_speaker_text(text))
+    names, leftovers, chunk = [], [], []
+    bounded = [True]   # the chunk began at the cell's start or a separator
+    # The chunk follows "Name -": an affiliation ("Alex Host - Acme AI Robin
+    # Cole - Initech"), possibly with the next person's name at its end.
+    after_dash = [False]
+    named_last = [False]
+
+    def close_chunk(bounded_end=True):
+        if not chunk:
+            bounded[0] = bounded_end
+            return
+        words = [_clean_token(t) for t in chunk]
+        alone = bounded[0] and bounded_end
+        digits = any(ch.isdigit() for ch in ' '.join(words))
+        dash, after_dash[0] = after_dash[0], False
+        named_last[0] = True
+        if dash and not digits:
+            if (discover and bounded_end and len(words) >= 3 and _is_name_word(words[-2])
+                    and _is_name_part(words[-1])):
+                names.append(roster.add(' '.join(words[-2:])))
+            elif len(words) > 4:
+                leftovers.append(' '.join(chunk).strip(' -–'))
+                named_last[0] = False
+        elif (discover and alone and len(words) in (2, 3) and _is_name_word(words[0])
+                and all(_is_name_part(w) for w in words[1:])):
+            names.append(roster.add(' '.join(words)))
+        elif discover and len(words) % 2 == 0 and all(_is_name_word(w) for w in words):
+            for j in range(0, len(words), 2):
+                names.append(roster.add(' '.join(words[j:j + 2])))
+        else:
+            named_last[0] = False
+            text_ = ' '.join(chunk).strip(' -–')
+            if text_ and not _NOT_A_PERSON.search(text_):
+                leftovers.append(text_)
+        chunk.clear()
+        bounded[0] = bounded_end
+
+    i = 0
+    while i < len(toks):
+        name, used = roster.match_at(toks, i)
+        if name and used == 1 and chunk:
+            name = None  # "Tess St. Clair": a first name mid-name is not that person
+        if name:
+            close_chunk(bounded_end=False)
+            names.append(name)
+            roster.found.add(name)
+            i += used
+            # "Name, President & CEO" / "Name - Patient": a title, not text to flag.
+            if i < len(toks) and toks[i] in (',', '-', '–'):
+                j = i + 1
+                if (j < len(toks) and _is_name_word(toks[j]) and not roster.match_at(toks, j)[0]
+                        and (toks[i] != ',' or _clean_token(toks[j]).lower() in TITLE_WORDS)):
+                    j += 1
+                    while j < len(toks):
+                        low = _clean_token(toks[j]).lower()
+                        if low in TITLE_WORDS:
+                            j += 1
+                        elif low in TITLE_CONNECTORS and j + 1 < len(toks):
+                            j += 2
+                        else:
+                            break
+                    after_dash[0] = toks[i] in ('-', '–')
+                    i = j
+            bounded[0] = False
+            named_last[0] = True
+            continue
+        if toks[i] in SEPARATORS or toks[i] in ('-', '–', '(', ')'):
+            close_chunk()
+            if toks[i] in ('-', '–') and named_last[0]:
+                after_dash[0] = True
+        else:
+            chunk.append(toks[i])
+        i += 1
+    close_chunk()
+    return list(dict.fromkeys(names)), leftovers
+
+
+# --------------------------------------------------------------------------
+# Send / catch
+# --------------------------------------------------------------------------
+
+
+
+def _bsm_stream(rows):
+    """[(row index, token)] over every BSM cell in order: one stream, so a cue
+    that spills into the next row or onto the next page reads as one."""
+    return [(i, tok) for i, row in enumerate(rows) for tok in _tokens(row['bsm'])]
+
+
+def _opens_cell(stream, k):
+    """True if token k is the first word of its BSM cell."""
+    return k == 0 or stream[k - 1][0] != stream[k][0]
+
+
+def detect_crew(rows, roster):
+    """Capitalised words right before a send/catch verb that are not people:
+    the crew names to suggest on a first import."""
+    stream = _bsm_stream(rows)
+    found = []
+    for k, (_, tok) in enumerate(stream):
+        if not _VERB.match(tok) or _opens_cell(stream, k):
+            continue
+        j = k - 1
+        if j >= 0 and stream[j][1].lower() in CUE_FILLERS:
+            j -= 1
+        if j >= 0:
+            word = _clean_token(stream[j][1])
+            if _is_name_word(word) and not roster.match_at([word], 0)[0]:
+                found.append(word)
+    return list(dict.fromkeys(found))
+
+
+def find_events(rows, crew, roster):
+    """(events, unknown-crew flags). Each event: (kind, display name, row).
+
+    A cue is "<crew> (to) send(s)/catch(es) <names>", names joined by commas,
+    "and" or "&"; or, with no crew, a cell that opens with the verb ("Send
+    Alex"). The list ends at the first word that is neither a name nor
+    a separator, so "...Robin and Morgan Robin and Dana have pickles" stops at
+    Morgan. A capitalised name nobody else mentions is kept as a BSM-only
+    person, to be merged on the review page.
+    """
+    crew_keys = {c.strip().lower() for c in crew if c.strip()}
+    stream = _bsm_stream(rows)
+    toks = [t for _, t in stream]
+    events, flags = [], []
+    k = 0
+    while k < len(toks):
+        if not _VERB.match(toks[k]):
+            k += 1
+            continue
+        j = k - 1
+        if j >= 0 and toks[j].lower() in CUE_FILLERS:
+            j -= 1
+        who = _clean_token(toks[j]).lower() if j >= 0 else ''
+        row = stream[k][0]
+        crewless = (CUE_VERB_OPENS_CELL and who not in crew_keys and _opens_cell(stream, k)
+                    and toks[k][:1].isupper())
+        if who not in crew_keys and not crewless:
+            if (who and _clean_token(toks[j])[:1].isupper()
+                    and not roster.match_at([_clean_token(toks[j])], 0)[0]):
+                flags.append(('unknown_crew', row, '"{} {}" on line {}: {} is not in the crew '
+                              'names, so this cue was not read.'.format(
+                                  _clean_token(toks[j]), toks[k], rows[row]['line'] or '?',
+                                  _clean_token(toks[j]))))
+            k += 1
+            continue
+        kind = 'send' if toks[k].lower().startswith('send') else 'catch'
+        got = []
+        p = k + 1
+        expect = True
+        while p < len(toks):
+            if expect and got and toks[p].lower() in SEPARATORS:
+                p += 1  # ", and Robin"
+                continue
+            if expect:
+                name, used = roster.match_at(toks, p)
+                if name:
+                    got.append(name)
+                    p += used
+                    expect = False
+                    continue
+                run = []
+                while (p + len(run) < len(toks) and len(run) < 3
+                       and _is_name_word(toks[p + len(run)])
+                       and _clean_token(toks[p + len(run)]).lower() not in crew_keys
+                       and not _VERB.match(toks[p + len(run)])):
+                    run.append(_clean_token(toks[p + len(run)]))
+                if not run:
+                    break
+                raw = ' '.join(run)
+                new = name_key(raw) not in roster.index()
+                name = roster.add(raw)
+                if new:
+                    roster.bsm_only.add(name)
+                got.append(name)
+                p += len(run)
+                expect = False
+            elif toks[p].lower() in SEPARATORS:
+                p += 1
+                expect = True
+            else:
+                break
+        for name in dict.fromkeys(got):
+            events.append((kind, name, row))
+            roster.found.add(name)
+        k = p if got else k + 1
+    return events, flags
+
+
+# --------------------------------------------------------------------------
+# The whole part
+# --------------------------------------------------------------------------
+
+@dataclass
+class Event:
+    kind: str
+    name: str
+    row: int
+    minute: float = None
+
+
+@dataclass
+class Analysis:
+    times: list
+    people: dict                      # display name -> {'rows': [...], 'mic_hint': str, 'bsm_only': bool}
+    events: list
+    flags: list                       # (kind, row index or None, text, name or None)
+    crew: list
+    segments: list = field(default_factory=list)
+    span: tuple = (None, None)
+
+
+def _next_segment(times, row):
+    for i in range(row + 1, len(times)):
+        if times[i].is_segment:
+            return i
+    return None
+
+
+def _duration_min(text):
+    """Minutes in "H:MM:SS" or "H:MM", else None."""
+    m = re.match(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?$', (text or '').strip())
+    return int(m[1]) * 60 + int(m[2]) + int(m[3] or 0) / 60 if m else None
+
+
+def event_minute(times, kind, row, rows=None, sent_here=False):
+    """When a cue happens. A row with its own clock time wins; otherwise a
+    send is the start of the segment that follows (if it follows closely),
+    and a catch the start of the next segment. Sent and caught on the same
+    row ("Sam sends Pat Lee catches Pat") is a walk-on: the catch is
+    the send plus the row's Duration, or 5 minutes."""
+    if sent_here:
+        send = event_minute(times, 'send', row)
+        dur = _duration_min(rows[row]['duration']) if rows else None
+        return send + (dur if dur else 5) if send is not None else None
+    if times[row].exact:
+        return times[row].minute
+    nxt = _next_segment(times, row)
+    if nxt is not None and (kind == 'catch' or nxt - row <= SEND_LOOKAHEAD_ROWS):
+        return times[nxt].t0
+    if kind == 'catch' and nxt is None:
+        # Caught after the last segment starts: off when that segment ends.
+        last = next((times[i] for i in range(row, -1, -1) if times[i].is_segment), None)
+        if last is not None:
+            return last.t1
+    return times[row].minute
+
+
+def analyse(rows, crew=None, known=()):
+    """Everything PR 1 shows for one part. ``crew`` None = detect it;
+    ``known`` = [(display name, [aliases])] for the day's people."""
+    times, time_warnings = build_times(rows)
+    roster = Roster(known)
+    mentions = {}
+
+    def mention(name, i):
+        mentions.setdefault(name, set()).add(i)
+
+    # Discover: welcome lines, then Titles cells, then Speaker cells. Titles
+    # before Speaker so the run-together Speaker cells split on real names.
+    speaker_text = ' '.join(re.sub(r'\s+', ' ', row['speaker']) for row in rows).lower()
+    for i, row in enumerate(rows):
+        for raw in _welcome_names(row['description'], speaker_text):
+            mention(roster.add(raw), i)
+    titled = [i for i, row in enumerate(rows) if _TITLES_PREFIX.match(row['speaker'] or '')]
+    for i in titled + [i for i in range(len(rows)) if i not in titled]:
+        if rows[i]['speaker']:
+            split_cell(rows[i]['speaker'], roster, discover=True)
+
+    if crew is None:
+        crew = detect_crew(rows, roster)
+    events_raw, flags = find_events(rows, crew, roster)
+    flags = [(kind, row, text, None) for kind, row, text in flags]
+    flags += [(kind, row, text, None) for kind, row, text in time_warnings]
+
+    # Final pass with the whole roster known: who each cell names, and what is left.
+    speakers = {}
+    for i, row in enumerate(rows):
+        if not row['speaker']:
+            continue
+        names, leftovers = split_cell(row['speaker'], roster, discover=False)
+        speakers[i] = names
+        for name in names:
+            mention(name, i)
+        if leftovers:
+            flags.append(('unmatched_speaker', i, 'Line {}: {} in the Speaker column is not a '
+                          'person ShowStack recognised. Decide its mics (a group may need '
+                          'handhelds).'.format(row['line'] or '?',
+                                               ', '.join('"{}"'.format(t) for t in leftovers)), None))
+
+    sends = {(name, row) for kind, name, row in events_raw if kind == 'send'}
+    events = [Event(kind, name, row, event_minute(
+        times, kind, row, rows, sent_here=kind == 'catch' and (name, row) in sends))
+        for kind, name, row in events_raw]
+    for e in events:
+        mention(e.name, e.row)
+
+    hints = {}
+    for i, row in enumerate(rows):
+        for cell in (row['bsm'], row['notes'], row['speaker'], row['description']):
+            hint = 'HH' if _HH.search(cell or '') else 'backup' if _BACKUP.search(cell or '') else ''
+            if not hint:
+                continue
+            toks = _tokens(cell)
+            named = [roster.match_at(toks, p)[0] for p in range(len(toks))]
+            named = [n for n in named if n and name_key(n) not in {c.lower() for c in crew}]
+            # "no clicker, handheld" names nobody: it is about the row's speakers.
+            for name in named or speakers.get(i, ()):
+                if hints.get(name) != 'HH':
+                    hints[name] = hint
+
+    segments = [i for i, t in enumerate(times) if t.is_segment]
+    flags += _window_flags(rows, times, events, segments, speakers)
+    for name in sorted(roster.bsm_only):
+        first = min(mentions.get(name, {None}) - {None}, default=None)
+        flags.append(('bsm_only', first, '{}: named in a BSM cue but nowhere else. If this is '
+                      "someone's nickname, merge it into them.".format(name), name))
+
+    people = {name: {'rows': sorted(mentions.get(name, ())), 'mic_hint': hints.get(name, ''),
+                     'bsm_only': name in roster.bsm_only}
+              for name in roster.found | set(mentions)}
+    starts = [times[i].t0 for i in segments]
+    ends = [times[i].t1 for i in segments]
+    if starts:
+        span = (min(starts), max(ends))
+    else:
+        known_t = [t.minute for t in times if t.minute is not None]
+        span = (min(known_t), max(known_t)) if known_t else (None, None)
+    return Analysis(times=times, people=people, events=events, flags=_dedupe(flags),
+                    crew=list(crew), segments=segments, span=span)
+
+
+def _dedupe(flags):
+    seen, out = set(), []
+    for f in flags:
+        if f[2] not in seen:
+            seen.add(f[2])
+            out.append(f)
+    return out
+
+
+def _window_flags(rows, times, events, segments, speakers):
+    """Sent-never-caught, caught-but-still-listed, and listed-with-no-cue."""
+    flags = []
+    windows = {}
+    for e in sorted(events, key=lambda e: (e.minute if e.minute is not None else 0, e.row,
+                                           e.kind != 'send')):
+        ws = windows.setdefault(e.name, [])
+        if e.kind == 'send':
+            if ws and ws[-1]['off'] is None:
+                continue  # already on stage
+            ws.append({'on': e.minute, 'off': None, 'row': e.row, 'off_row': None})
+        elif ws and ws[-1]['off'] is None:
+            ws[-1]['off'], ws[-1]['off_row'] = e.minute, e.row
+
+    listed = set()
+
+    def line(i):
+        return rows[i]['line'] or '?'
+
+    def seg_label(i):
+        return '"{}" ({}–{})'.format(rows[i]['description'][:60], hm(times[i].t0), hm(times[i].t1))
+
+    for name, ws in windows.items():
+        for w in ws:
+            if w['on'] is None:
+                continue
+            if w['off'] is None:
+                flags.append(('never_caught', w['row'], '{}: sent on line {} but never caught.'.format(
+                    name, line(w['row'])), name))
+                continue
+            # The segment that follows the catch still lists them: they stay on.
+            nxt = next((i for i in segments if i > w['off_row']), None)
+            if nxt is not None and name in speakers.get(nxt, ()):
+                listed.add((name, nxt))
+                flags.append(('caught_but_listed', w['off_row'], '{}: caught on line {} but still '
+                              'listed as a speaker in {}, so kept on.'.format(
+                                  name, line(w['off_row']), seg_label(nxt)), name))
+    for i in segments:
+        for name in speakers.get(i, ()):
+            if (name, i) in listed:
+                continue
+            covered = any(w['on'] is not None and w['on'] - COVER_SLACK_MIN <= times[i].t0
+                          and (w['off'] is None or times[i].t0 <= w['off'])
+                          for w in windows.get(name, ()))
+            if not covered:
+                flags.append(('no_cue', i, '{}: listed as a speaker in {} with no send or catch.'
+                              .format(name, seg_label(i)), name))
+    return flags

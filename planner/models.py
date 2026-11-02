@@ -7004,3 +7004,144 @@ class SwitchPortSnapshot(models.Model):
 
     def __str__(self):
         return f"{self.device} port {self.port_index} ({self.oper_status})"
+
+# ======== Mic Plan ========
+#
+# A run-of-show PDF ("showflow") imported per ShowDay, parsed in the request
+# and never stored: only the rows and what was read from them are kept. A day
+# may come in several parts (an AM and a PM file); people belong to the day,
+# so a merge or a Presenter link made on one part holds across all of them
+# and survives re-importing either. Nothing here writes to Mic Tracker.
+
+class ShowflowImport(models.Model):
+    STATUS_CHOICES = [('pending', 'Pending'), ('active', 'Active')]
+
+    day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='showflow_imports')
+    # 'pending' between upload and the replace-or-add choice; never shown.
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    part_order = models.PositiveSmallIntegerField(default=0)
+    source_filename = models.CharField(max_length=255)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    imported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    page_count = models.PositiveSmallIntegerField(default=0)
+    detected_columns = models.JSONField(default=list, blank=True)
+    crew_names = models.JSONField(default=list, blank=True)
+    # Parse warnings and review flags: [{kind, text, row_order, person}].
+    warnings = models.JSONField(default=list, blank=True)
+    # Segment span in minutes from midnight; decides replace-or-add.
+    span_start = models.PositiveSmallIntegerField(null=True, blank=True)
+    span_end = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Showflow import'
+        verbose_name_plural = 'Mic Plan'
+        ordering = ['day', 'part_order', 'id']
+
+    def __str__(self):
+        return f'{self.day} — {self.source_filename}'
+
+
+class ShowflowRow(models.Model):
+    showflow_import = models.ForeignKey(ShowflowImport, on_delete=models.CASCADE,
+                                        related_name='rows')
+    order = models.PositiveIntegerField()
+    page_no = models.PositiveSmallIntegerField(default=1)
+    line_no = models.CharField(max_length=20, blank=True)
+    start_text = models.CharField(max_length=50, blank=True)
+    end_text = models.CharField(max_length=50, blank=True)
+    duration_text = models.CharField(max_length=50, blank=True)
+    description = models.TextField(blank=True)
+    speaker_text = models.TextField(blank=True)
+    bsm_text = models.TextField(blank=True)
+    notes_text = models.TextField(blank=True)
+    is_segment = models.BooleanField(default=False)
+    segment_t0 = models.PositiveSmallIntegerField(null=True, blank=True)
+    segment_t1 = models.PositiveSmallIntegerField(null=True, blank=True)
+    est_time = models.PositiveSmallIntegerField(null=True, blank=True)
+    # The row's own Start time, not interpolated between its neighbours.
+    time_exact = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['showflow_import', 'order']
+        constraints = [
+            UniqueConstraint(fields=['showflow_import', 'order'], name='uniq_showflow_row_order'),
+        ]
+
+    def __str__(self):
+        return f'{self.line_no or self.order}: {self.description[:40]}'
+
+    @property
+    def is_blank(self):
+        return not any((self.start_text, self.description, self.speaker_text, self.bsm_text,
+                        self.notes_text))
+
+    def as_parser_row(self):
+        return {'line': self.line_no, 'start': self.start_text, 'end': self.end_text,
+                'duration': self.duration_text, 'description': self.description,
+                'speaker': self.speaker_text, 'bsm': self.bsm_text, 'notes': self.notes_text}
+
+
+class ShowflowPerson(models.Model):
+    MIC_HINT_CHOICES = [('', '—'), ('HH', 'Handheld'), ('backup', 'Backup mic')]
+
+    day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='showflow_people')
+    display_name = models.CharField(max_length=200)
+    # Lower-cased, spaces collapsed: what a re-import matches on.
+    name_key = models.CharField(max_length=200)
+    # Other spellings merged into this person on the review page.
+    aliases = models.JSONField(default=list, blank=True)
+    presenter = models.ForeignKey(Presenter, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='showflow_people')
+    mic_hint = models.CharField(max_length=10, choices=MIC_HINT_CHOICES, blank=True, default='')
+    # Set once someone picks a hint by hand; a re-parse then leaves it alone.
+    mic_hint_locked = models.BooleanField(default=False)
+    # {'bsm_only': bool, 'rows': {import id: [row order, ...]}}
+    flags = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['day', 'display_name']
+        constraints = [
+            UniqueConstraint(fields=['day', 'name_key'], name='uniq_showflow_person_day_name'),
+        ]
+
+    def __str__(self):
+        return self.display_name
+
+
+class ShowflowEvent(models.Model):
+    KIND_CHOICES = [('send', 'Send'), ('catch', 'Catch')]
+
+    row = models.ForeignKey(ShowflowRow, on_delete=models.CASCADE, related_name='events')
+    person = models.ForeignKey(ShowflowPerson, on_delete=models.CASCADE, related_name='events')
+    kind = models.CharField(max_length=5, choices=KIND_CHOICES)
+    # When it happens, minutes from midnight (see parser.event_minute).
+    event_min = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['row__showflow_import', 'row__order', 'id']
+
+    def __str__(self):
+        return f'{self.kind} {self.person} @ {self.row}'
+
+
+class MicPlanSettings(models.Model):
+    project = models.OneToOneField(Project, on_delete=models.CASCADE,
+                                   related_name='mic_plan_settings')
+    a2_count = models.PositiveSmallIntegerField(
+        'A2s', default=1, validators=[MinValueValidator(1), MaxValueValidator(10)])
+    mic_min = models.PositiveSmallIntegerField(
+        'Mic (min)', default=3, validators=[MinValueValidator(1), MaxValueValidator(30)])
+    demic_min = models.PositiveSmallIntegerField(
+        'De-mic (min)', default=3, validators=[MinValueValidator(1), MaxValueValidator(30)])
+    premic_lead_min = models.PositiveSmallIntegerField(
+        'Pre-mic lead (min)', default=30, validators=[MinValueValidator(0), MaxValueValidator(240)])
+    margin_min = models.PositiveSmallIntegerField(
+        'Margin (min)', default=5, validators=[MinValueValidator(0), MaxValueValidator(60)])
+
+    class Meta:
+        verbose_name = 'Mic Plan settings'
+        verbose_name_plural = 'Mic Plan settings'
+
+    def __str__(self):
+        return f'Mic Plan settings — {self.project}'

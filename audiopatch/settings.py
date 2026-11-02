@@ -307,6 +307,13 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
+        # Mic Plan logs every showflow import's parse time at INFO, to see
+        # real Railway timings against the page cap (planner/mic_plan/importer.py).
+        'planner.mic_plan': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 

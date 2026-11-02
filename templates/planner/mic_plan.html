@@ -1,0 +1,301 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Mic Plan{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; Mic Plan
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
+    <style>
+    body { background: var(--bg-base); color: var(--text-primary); }
+    #mp-root { padding: 0 0 48px; }
+    .mp-header {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        padding: 18px 24px 14px; border-bottom: 1px solid var(--border); background: var(--bg-card);
+    }
+    .mp-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
+    .mp-sub { font-size: 11px; color: var(--text-dim); }
+    .mp-header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #mp-root a.mp-btn, #mp-root a.mp-btn:link, #mp-root a.mp-btn:visited, #mp-root button.mp-btn {
+        display: inline-block; padding: 8px 14px; cursor: pointer;
+        background: var(--bg-raised); color: var(--text-primary) !important;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+        border: 1px solid var(--border-bright); border-radius: 4px; text-decoration: none;
+    }
+    #mp-root button.mp-btn.primary { background: var(--accent-blue); color: var(--mtt-text-inverse) !important; border-color: var(--accent-blue); }
+    #mp-root button.mp-btn.danger { background: var(--mtt-danger, #c0392b); color: #fff !important; border-color: transparent; }
+    #mp-root button.mp-btn.small, #mp-root a.mp-btn.small { padding: 4px 9px; font-size: 10px; }
+    #mp-root select, #mp-root input[type=text], #mp-root input[type=number], #mp-root input[type=file] {
+        background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-bright);
+        border-radius: 4px; padding: 5px 7px; font-size: 12px;
+    }
+    #mp-root input[type=number] { width: 64px; }
+    .mp-readonly { margin: 16px 24px 0; font-size: 13px; color: var(--text-dim); }
+    .mp-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; margin-bottom: 16px; }
+    .mp-panel h2 { margin: 0 0 10px; font-size: 12px; font-weight: 800; letter-spacing: 0.10em; text-transform: uppercase; color: var(--text-primary); background: none; padding: 0; }
+    .mp-panel p.mp-help { margin: 0 0 10px; font-size: 12px; color: var(--text-dim); }
+    .mp-body { padding: 16px 24px; }
+    .mp-layout { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.3fr); gap: 16px; }
+    @media (max-width: 1000px) { .mp-layout { grid-template-columns: 1fr; } }
+
+    .mp-parts { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; margin-bottom: 16px; }
+    #mp-root a.mp-part { display: block; padding: 8px 12px; border: 1px solid var(--border-bright); border-radius: 4px;
+        background: var(--bg-raised); color: var(--text-primary) !important; text-decoration: none; font-size: 12px; }
+    #mp-root a.mp-part.current { border-color: var(--accent-blue); box-shadow: inset 0 -2px 0 var(--accent-blue); }
+    .mp-part small { display: block; color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+    .mp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; margin: 0 4px 4px 0;
+        border: 1px solid var(--border-bright); border-radius: 999px; font-size: 12px; background: var(--bg-raised); }
+    .mp-chip input { accent-color: var(--accent-blue); }
+    .mp-flags { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow: auto; }
+    .mp-flags li { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; line-height: 1.4; }
+    .mp-flags li:last-child { border-bottom: 0; }
+    .mp-flag-kind { display: inline-block; min-width: 92px; font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--accent-amber); }
+    .mp-flags a { color: var(--accent-blue) !important; }
+
+    .mp-people { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mp-people td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .mp-people .mp-name { font-weight: 700; }
+    .mp-people .mp-meta { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+    .mp-people form { display: inline; }
+    .mp-tag { display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 3px;
+        background: var(--bg-raised); border: 1px solid var(--border-bright); color: var(--accent-amber); margin-left: 4px; }
+    .mp-alias button { background: none; border: 0; color: var(--text-dim); cursor: pointer; padding: 0 0 0 2px; font-size: 12px; }
+
+    .mp-rows-wrap { overflow-x: auto; }
+    .mp-rows { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mp-rows th { text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+        padding: 6px; border-bottom: 1px solid var(--border-bright); background: var(--bg-card); position: sticky; top: 0; }
+    .mp-rows td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .mp-rows tr.mp-segment td { background: var(--mtt-bg-session-header, var(--bg-raised)); font-weight: 600; }
+    .mp-rows tr.mp-blank { display: none; }
+    .mp-rows.show-blank tr.mp-blank { display: table-row; }
+    .mp-rows tr:target td { outline: 2px solid var(--accent-amber); outline-offset: -2px; }
+    .mp-rows .mp-time { white-space: nowrap; color: var(--text-dim); }
+    .mp-rows .mp-time.exact { color: var(--text-primary); }
+    mark.mp-send { background: rgba(46, 204, 113, 0.25); color: inherit; padding: 0 2px; border-radius: 2px; }
+    mark.mp-catch { background: rgba(231, 76, 60, 0.25); color: inherit; padding: 0 2px; border-radius: 2px; }
+    .mp-ev { display: inline-block; font-size: 10px; margin: 3px 8px 0 0; color: var(--text-dim); }
+    .mp-settings { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; font-size: 11px; color: var(--text-dim); }
+    .mp-settings label { display: flex; flex-direction: column; gap: 3px; }
+    details.mp-delete { display: inline-block; }
+    details.mp-delete summary { cursor: pointer; font-size: 11px; color: var(--text-dim); list-style: none; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div id="mp-root">
+    <div class="mp-header">
+        <div>
+            <div class="mp-title">Mic Plan</div>
+            <div class="mp-sub">Read a day's showflow PDF: who goes on, when they are sent and caught, and what doesn't add up.</div>
+        </div>
+        <div class="mp-header-actions">
+            {% if days %}
+            <form method="get" action="{% url 'planner:mic_plan' %}">
+                <label class="mp-sub" for="mp-day">Day</label>
+                <select id="mp-day" name="day" onchange="this.form.submit()">
+                    {% for d in days %}<option value="{{ d.pk }}"{% if d.pk == day.pk %} selected{% endif %}>{{ d }}</option>{% endfor %}
+                </select>
+                <noscript><button class="mp-btn small" type="submit">Show</button></noscript>
+            </form>
+            {% endif %}
+            <a class="mp-btn" href="{% url 'planner:mic_tracker' %}">Mic Tracker →</a>
+        </div>
+    </div>
+
+    {% if not can_edit %}
+    <p class="mp-readonly">You can view this project's Mic Plan. Only its owner and editors can import or change it.</p>
+    {% endif %}
+
+    <div class="mp-body">
+    {% if not day %}
+        <div class="mp-panel">
+            <h2>No show days yet</h2>
+            <p class="mp-help">Mic Plan imports a showflow into a show day. Add the day in the <a href="{% url 'planner:mic_tracker' %}">Mic Tracker</a> first.</p>
+        </div>
+    {% else %}
+        {% if parts %}
+        <div class="mp-parts">
+            {% for p in parts %}
+            <a class="mp-part{% if p.obj.pk == part.pk %} current{% endif %}" href="?day={{ day.pk }}&amp;part={{ p.obj.pk }}">
+                Part {{ forloop.counter }}: {{ p.obj.source_filename }}
+                <small>{{ p.span|default:"no times" }} · {{ p.obj.page_count }} page{{ p.obj.page_count|pluralize }} · imported {{ p.obj.imported_at|date:"M j, H:i" }}</small>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if can_edit %}
+        <form class="mp-panel" method="post" action="{% url 'planner:mic_plan_upload' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <h2>{% if parts %}Import another file{% else %}Import a showflow{% endif %}</h2>
+            <p class="mp-help">PDF, up to {{ max_pages }} pages and {{ max_mb }} MB. It is read now and not kept: only its rows are saved.{% if parts %} A file covering the same times as a part replaces it (you are asked first); otherwise it is added as a new part.{% endif %}</p>
+            <input type="hidden" name="day" value="{{ day.pk }}">
+            <input type="file" name="showflow" accept="application/pdf,.pdf" required>
+            <button class="mp-btn primary" type="submit">Import</button>
+        </form>
+        {% endif %}
+
+        {% if part %}
+        <div class="mp-layout">
+            <div>
+                <form class="mp-panel" id="mp-crew"{% if can_edit %} method="post" action="{% url 'planner:mic_plan_crew' part.pk %}"{% else %} onsubmit="return false;"{% endif %}>
+                    {% csrf_token %}
+                    <h2>Crew names</h2>
+                    <p class="mp-help">Cues are read as "&lt;crew&gt; sends / catches &lt;names&gt;". Untick a name to stop reading its cues.</p>
+                    <div>
+                        {% for c in part.crew_names %}
+                        <label class="mp-chip"><input type="checkbox" name="crew" value="{{ c }}" checked{% if not can_edit %} disabled{% endif %}> {{ c }}</label>
+                        {% empty %}<span class="mp-sub">None yet.</span>{% endfor %}
+                    </div>
+                    {% if can_edit %}
+                    <div style="margin-top:8px">
+                        <input type="text" name="add" placeholder="Add names, comma-separated" aria-label="Add crew names">
+                        <button class="mp-btn small primary" type="submit">Save &amp; re-read</button>
+                    </div>
+                    {% endif %}
+                </form>
+
+                <div class="mp-panel" id="mp-flags">
+                    <h2>Flags ({{ flags|length }})</h2>
+                    {% if flags %}
+                    <ul class="mp-flags">
+                        {% for f in flags %}
+                        <li><span class="mp-flag-kind">{{ f.label }}</span>
+                            {% if f.row %}<a href="#row-{{ f.row.order }}">line {{ f.row.line_no|default:f.row.order }}</a> · {% endif %}{{ f.text }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}<p class="mp-help">Nothing to check.</p>{% endif %}
+                </div>
+
+                <form class="mp-panel"{% if can_edit %} method="post" action="{% url 'planner:mic_plan_settings' %}"{% else %} onsubmit="return false;"{% endif %}>
+                    {% csrf_token %}
+                    <input type="hidden" name="day" value="{{ day.pk }}">
+                    <h2>Plan settings</h2>
+                    <p class="mp-help">For the whole project. The draft plan (coming later) uses these.</p>
+                    <div class="mp-settings">
+                        <label>A2s <input type="number" name="a2_count" min="1" max="10" value="{{ settings.a2_count }}"{% if not can_edit %} disabled{% endif %}></label>
+                        <label>Mic (min) <input type="number" name="mic_min" min="1" max="30" value="{{ settings.mic_min }}"{% if not can_edit %} disabled{% endif %}></label>
+                        <label>De-mic (min) <input type="number" name="demic_min" min="1" max="30" value="{{ settings.demic_min }}"{% if not can_edit %} disabled{% endif %}></label>
+                        <label>Pre-mic lead (min) <input type="number" name="premic_lead_min" min="0" max="240" value="{{ settings.premic_lead_min }}"{% if not can_edit %} disabled{% endif %}></label>
+                        <label>Margin (min) <input type="number" name="margin_min" min="0" max="60" value="{{ settings.margin_min }}"{% if not can_edit %} disabled{% endif %}></label>
+                        {% if can_edit %}<button class="mp-btn small primary" type="submit">Save</button>{% endif %}
+                    </div>
+                </form>
+
+                {% if can_edit %}
+                <div class="mp-panel">
+                    <h2>This part</h2>
+                    <details class="mp-delete">
+                        <summary>Delete {{ part.source_filename }}…</summary>
+                        <form method="post" action="{% url 'planner:mic_plan_delete' part.pk %}" style="margin-top:8px">
+                            {% csrf_token %}
+                            <p class="mp-help">Removes its rows and cues. People no other part of this day mentions go too; the Mic Tracker is not touched.</p>
+                            <button class="mp-btn small danger" type="submit">Delete this import</button>
+                        </form>
+                    </details>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="mp-panel" id="mp-people">
+                <h2>People on {{ day }} ({{ people|length }})</h2>
+                <p class="mp-help">For the whole day, every part. Merges, Presenter links and mic hints stay when a file is re-imported.</p>
+                <table class="mp-people">
+                    {% for person in people %}
+                    <tr id="person-{{ person.pk }}">
+                        <td>
+                            <div class="mp-name">{{ person.display_name }}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}</div>
+                            {% if person.aliases %}<div class="mp-meta">Also read as:
+                                {% for a in person.aliases %}
+                                {% if can_edit %}<form class="mp-alias" method="post" action="{% url 'planner:mic_plan_unalias' person.pk %}">{% csrf_token %}<input type="hidden" name="alias" value="{{ a }}"><input type="hidden" name="part" value="{{ part.pk }}"><span class="mp-chip">{{ a }}<button type="submit" title="Stop reading “{{ a }}” as {{ person.display_name }}" aria-label="Remove alias {{ a }}">×</button></span></form>
+                                {% else %}<span class="mp-chip">{{ a }}</span>{% endif %}
+                                {% endfor %}</div>{% endif %}
+                            <div class="mp-meta">{% if person.lines %}Lines {{ person.lines|join:", " }}{% else %}Not in this part{% endif %}</div>
+                        </td>
+                        <td>
+                            {% if can_edit %}
+                            <form method="post" action="{% url 'planner:mic_plan_person' person.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="part" value="{{ part.pk }}">
+                                <select name="presenter" aria-label="Presenter for {{ person.display_name }}">
+                                    <option value="">— No presenter —</option>
+                                    {% for pr in presenters %}<option value="{{ pr.pk }}"{% if pr.pk == person.presenter_id %} selected{% endif %}>{{ pr.name }}</option>{% endfor %}
+                                </select>
+                                <select name="mic_hint" aria-label="Mic hint for {{ person.display_name }}">
+                                    {% for value, label in person.MIC_HINT_CHOICES %}<option value="{{ value }}"{% if value == person.mic_hint %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                                </select>
+                                <button class="mp-btn small" type="submit">Save</button>
+                            </form>
+                            <form method="post" action="{% url 'planner:mic_plan_merge' person.pk %}" style="display:block;margin-top:6px">
+                                {% csrf_token %}
+                                <input type="hidden" name="part" value="{{ part.pk }}">
+                                <select name="into" aria-label="Merge {{ person.display_name }} into" required>
+                                    <option value="">Merge into…</option>
+                                    {% for other in people %}{% if other.pk != person.pk %}<option value="{{ other.pk }}">{{ other.display_name }}</option>{% endif %}{% endfor %}
+                                </select>
+                                <button class="mp-btn small" type="submit">Merge</button>
+                            </form>
+                            {% else %}
+                            <div class="mp-meta">{% if person.presenter %}Presenter: {{ person.presenter.name }}{% else %}No presenter linked{% endif %}{% if person.mic_hint %} · {{ person.get_mic_hint_display }}{% endif %}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td class="mp-meta">Nobody found yet.</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+
+        <div class="mp-panel" id="mp-rows-panel">
+            <h2>Rows ({{ rows|length }})</h2>
+            <p class="mp-help">
+                Times with ≈ are estimated between the clock times around them.
+                {% if blank_count %}<label><input type="checkbox" id="mp-show-blank"> Show {{ blank_count }} blank row{{ blank_count|pluralize }}</label>{% endif %}
+            </p>
+            <div class="mp-rows-wrap">
+            <table class="mp-rows" id="mp-rows">
+                <thead><tr><th>Line</th><th>Time</th><th>Description</th><th>Speaker</th><th>BSM</th><th>Notes</th></tr></thead>
+                <tbody>
+                {% for row in rows %}
+                <tr id="row-{{ row.order }}" class="{% if row.is_segment %}mp-segment{% endif %}{% if row.is_blank %} mp-blank{% endif %}">
+                    <td>{{ row.line_no }}</td>
+                    <td class="mp-time{% if row.time_exact %} exact{% endif %}">{% if not row.is_blank %}{{ row.time_label }}{% endif %}</td>
+                    <td>{{ row.description }}</td>
+                    <td>{{ row.speaker_text }}</td>
+                    <td>{{ row.bsm_html|safe }}{% if row.event_list %}<div>{% for e in row.event_list %}<span class="mp-ev">{{ e.get_kind_display }}: {{ e.person.display_name }}</span>{% endfor %}</div>{% endif %}</td>
+                    <td>{{ row.notes_text }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% elif not parts %}
+        <div class="mp-panel"><p class="mp-help">No showflow imported for {{ day }} yet.</p></div>
+        {% endif %}
+    {% endif %}
+    </div>
+</div>
+<script>
+(function () {
+    var box = document.getElementById('mp-show-blank');
+    var table = document.getElementById('mp-rows');
+    if (!box || !table) return;
+    box.addEventListener('change', function () { table.classList.toggle('show-blank', box.checked); });
+    // A flag linking to a blank row has to show it.
+    var target = location.hash && document.querySelector(location.hash + '.mp-blank');
+    if (target) { box.checked = true; table.classList.add('show-blank'); }
+})();
+</script>
+{% endblock %}

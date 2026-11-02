@@ -180,7 +180,8 @@ ADMIN_PREFIXES = ('admin/', 'audiopatch/admin/')
 KWARG_MODELS = {
     'project_id': [('', 'Project')],
     'session_id': [('multitrack', 'MultitrackSession'), ('', 'MicSession')],
-    'pk': [('console-patch', 'ConsoleInput'), ('predictions', 'SoundvisionPrediction'),
+    'pk': [('mic-plan/import', 'ShowflowImport'), ('mic-plan/person', 'ShowflowPerson'),
+           ('console-patch', 'ConsoleInput'), ('predictions', 'SoundvisionPrediction'),
            ('console/', 'Console'), ('ampmodel', 'AmpModel'),
            ('systemprocessor', 'SystemProcessor')],
     'assignment_id': [('power', 'AmplifierAssignment'), ('', 'MicAssignment')],
