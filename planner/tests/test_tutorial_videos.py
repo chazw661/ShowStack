@@ -1,6 +1,6 @@
 """Tutorial videos, the label order link, and the branding page's messages.
 
-- A "Watch how" button renders wherever its video has an ID and vanishes
+- A tutorial button ("▶ Label printing tutorial (2 min)") renders wherever its video has an ID and vanishes
   when the ID is blank -- pages and Help alike. The amp page shows it once,
   in its header, not on every amp.
 - No page carries a YouTube iframe on load: the button holds the embed URL
@@ -50,16 +50,26 @@ class VideoAssertions:
 
     def assert_button(self, html, video_id):
         buttons = [b for b in BUTTON.findall(html) if video_id in b]
-        self.assertTrue(buttons, 'no Watch how button for {}'.format(video_id))
+        self.assertTrue(buttons, 'no tutorial button for {}'.format(video_id))
         for b in buttons:
             self.assertIn('data-tutorial-src="https://www.youtube-nocookie.com/embed/{}"'
                           .format(video_id), b)
             self.assertIn('aria-haspopup="dialog"', b)
         self.assertIn('planner/js/tutorial_video.js', html)
 
+    def assert_quiet_and_last(self, html, row_class):
+        """The button is the link-style variant and the last thing in the
+        page's header actions row, after every real action."""
+        row = re.search(r'<div class="{}">(.*?)</div>'.format(row_class), html, re.S)
+        self.assertIsNotNone(row, row_class)
+        body = row.group(1).rstrip()
+        self.assertTrue(body.endswith('</button>'), body[-200:])
+        last = body[body.rindex('<button'):]
+        self.assertIn('class="ss-tutorial-btn ss-tutorial-link"', last)
+
     def assert_no_button(self, html):
         self.assertFalse(BUTTON.findall(html))
-        self.assertNotIn('Watch how', html)
+        self.assertNotIn('tutorial (', html)
 
     def assert_nothing_loads_from_youtube(self, html):
         # The only mention of YouTube is the button's data attribute.
@@ -78,8 +88,20 @@ class TutorialConfigTests(VideoAssertions, TestCase):
             Context({'key': key}))
 
     def test_button_text_carries_the_length(self):
-        self.assertIn('▶ Watch how (2 min)', self.render('labels'))
-        self.assertIn('▶ Watch how (1½ min)', self.render('power'))
+        self.assertIn('>▶ Label printing tutorial (2 min)</button>', self.render('labels'))
+        self.assertIn('>▶ Power plan tutorial (1½ min)</button>', self.render('power'))
+
+    def test_label_follows_the_title_in_the_config(self):
+        with mock.patch.dict(tutorials.TUTORIAL_DETAILS,
+                             {'labels': {'title': 'Sheet setup tutorial', 'minutes': '3'}}):
+            html = self.render('labels')
+        self.assertIn('>▶ Sheet setup tutorial (3 min)</button>', html)
+        self.assertIn('data-tutorial-title="Sheet setup tutorial"', html)
+
+    def test_quiet_variant_is_a_link_style_control(self):
+        html = Template("{% load tutorial_tags %}{% tutorial_button 'power' quiet=True %}").render(Context())
+        self.assertIn('class="ss-tutorial-btn ss-tutorial-link"', html)
+        self.assertIn('class="ss-tutorial-btn"', self.render('power'))
 
     def test_blank_or_unknown_id_renders_nothing(self):
         with blank('labels'):
@@ -137,6 +159,9 @@ class LabelPageTests(VideoAssertions, TestCase):
                 with self.subTest(user=user.username, page=name):
                     html = self.page(name)
                     self.assert_button(html, LABELS_ID)
+                    self.assertIn('▶ Label printing tutorial (2 min)', html)
+                    row = 'mtp-header-actions' if 'print' in name else 'pb-header-actions'
+                    self.assert_quiet_and_last(html, row)
                     self.assertNotIn(POWER_ID, html)
                     self.assert_nothing_loads_from_youtube(html)
 
@@ -221,6 +246,8 @@ class PowerCalculatorTests(VideoAssertions, SingleEntryBase):
             html = r.content.decode()
             with self.subTest(user=user.username):
                 self.assert_button(html, POWER_ID)
+                self.assertIn('▶ Power plan tutorial (1½ min)', html)
+                self.assert_quiet_and_last(html, 'header-title')
                 self.assertNotIn(LABELS_ID, html)
                 self.assert_nothing_loads_from_youtube(html)
 
@@ -249,9 +276,7 @@ class AmpRackTests(VideoAssertions, AmpFixture):
             with self.subTest(user=user.username):
                 self.assert_button(html, POWER_ID)
                 self.assertEqual(len(BUTTON.findall(html)), 1)
-                actions = re.search(r'<div class="rack-actions">(.*?)</div>', html, re.S)
-                self.assertIsNotNone(actions)
-                self.assertIn(POWER_ID, actions.group(1))
+                self.assert_quiet_and_last(html, 'rack-actions')
                 cabinets = re.findall(r'<div class="amp-cabinets-head">(.*?)<div class="amp-plan-controls">',
                                       html, re.S)
                 self.assertEqual(len(cabinets), 3)
@@ -283,6 +308,8 @@ class HelpVideoTests(VideoAssertions, TestCase):
             with self.subTest(slug=slug):
                 html = self.client.get(reverse('help:topic', args=[slug])).content.decode()
                 self.assert_button(html, video_id)
+                # Help keeps the outlined button, not the header link style.
+                self.assertNotIn('ss-tutorial-link"', html)
                 self.assert_nothing_loads_from_youtube(html)
         index = self.client.get(reverse('help:index')).content.decode()
         self.assert_button(index, LABELS_ID)

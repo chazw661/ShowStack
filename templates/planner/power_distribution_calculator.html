@@ -41,6 +41,7 @@
         .header-title { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
                         margin-bottom: 10px; }
         .header-title h1 { margin-bottom: 0; }
+        .header-title .ss-tutorial-link { margin-left: auto !important; }
         .amps-link { color: #4a9eff; text-decoration: none; font-size: 14px; }
         .amps-link:hover { text-decoration: underline; }
         .pdf-link { color: #fff; background: #4a9eff; text-decoration: none; font-size: 12px;
@@ -351,7 +352,7 @@
                 <h1>Power Distribution Calculator</h1>
                 <a href="{% url 'planner:power_plan_amps' plan.id %}" class="amps-link" id="amps-link">← Amplifiers</a>
                 <a href="{% url 'planner:power_plan_pdf' plan.id %}" class="pdf-link" id="pdf-link">PDF</a>
-                {% tutorial_button 'power' %}
+                {% tutorial_button 'power' quiet=True %}
             </div>
             <div class="header-info">
                 {% if plan.show_day %}<span><strong>Show:</strong> {{ plan.show_day }}</span>{% endif %}

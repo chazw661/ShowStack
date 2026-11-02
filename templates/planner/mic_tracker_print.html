@@ -102,10 +102,10 @@
                 <a class="mtp-order" id="mtp-order" href="{{ stock.order_url }}" target="_blank" rel="noopener">Order labels ↗</a>{% endif %}</div>
         </div>
         <div class="mtp-header-actions">
-            {% tutorial_button 'labels' %}
             <a class="mtp-btn" href="{% url 'planner:mic_tracker' %}">← Mic Tracker</a>
             <a class="mtp-btn" id="mtp-alignment" href="#" target="_blank" rel="noopener">Print alignment page</a>
             <a class="mtp-btn primary" id="mtp-download" href="#">↓ Download PDF</a>
+            {% tutorial_button 'labels' quiet=True %}
         </div>
     </div>
 

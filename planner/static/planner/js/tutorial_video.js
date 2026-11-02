@@ -1,4 +1,4 @@
-/* "Watch how" tutorial player.
+/* Tutorial video player.
  *
  * Buttons ({% tutorial_button %}) carry the embed URL; this builds one modal
  * <dialog> the first time any of them is pressed. The iframe is created on
@@ -55,7 +55,7 @@
     function openDialog(button) {
         if (!dialog) build();
         opener = button;
-        heading.textContent = button.dataset.tutorialTitle || 'Watch how';
+        heading.textContent = button.dataset.tutorialTitle || 'Tutorial';
 
         var iframe = document.createElement('iframe');
         iframe.src = button.dataset.tutorialSrc + '?autoplay=1&rel=0&modestbranding=1';

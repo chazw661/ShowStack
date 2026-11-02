@@ -82,8 +82,8 @@
             <div class="pb-sub">Client colours and logo for this project's beltpack labels.</div>
         </div>
         <div class="pb-header-actions">
-            {% tutorial_button 'labels' %}
             <a class="pb-btn" href="{% url 'planner:mic_tracker_print' %}">← Print labels</a>
+            {% tutorial_button 'labels' quiet=True %}
         </div>
     </div>
 

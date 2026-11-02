@@ -29,6 +29,22 @@ button.ss-tutorial-btn:focus-visible {
 }
 button.ss-tutorial-btn:focus-visible { outline: 2px solid #4a9eff; outline-offset: 2px; }
 
+/* Quiet: a link, not a button -- in page headers it sits at the right end
+   of the actions row, set apart from them, and must not compete with them. */
+button.ss-tutorial-btn.ss-tutorial-link {
+    margin-left: 12px !important;
+    padding: 4px 2px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    font-weight: 500 !important;
+}
+button.ss-tutorial-btn.ss-tutorial-link:hover,
+button.ss-tutorial-btn.ss-tutorial-link:focus-visible {
+    background: transparent !important;
+    text-decoration: underline;
+}
+
 dialog.ss-tutorial-dialog {
     width: min(960px, calc(100vw - 32px));
     max-width: none;

@@ -18,7 +18,7 @@ class Topic:
     summary: str
     pages: tuple
     keywords: tuple = ()
-    # A planner.tutorials key: Help shows its "Watch how" button with the topic.
+    # A planner.tutorials key: Help shows its tutorial button with the topic.
     video: str = ''
 
     @property
