@@ -4,8 +4,17 @@ An upload is parsed once, in the request, and saved as a *pending* import
 with its rows; the PDF goes no further. The user then confirms whether it
 replaces an existing part of the day or adds a new one (the default is
 decided by time overlap). Every change after that -- confirm, delete, crew
-names, a merge -- ends in ``rebuild_day``, which re-runs the parser over the
-stored rows of every part and reconciles the day's people with what it found.
+names, a merge, a re-read -- ends in ``rebuild_day``, which re-runs the parser
+over the stored rows of every part and reconciles the day's people with what
+it found.
+
+Only what the user set survives a rebuild: merges (``aliases``; only
+``merge`` writes them), a mic hint picked by hand (``mic_hint_locked``) and a
+Presenter link chosen by hand (``flags['presenter_by'] == 'user'``).
+Everything the parser derived -- the people themselves, their lines, an
+automatic Presenter match, a hint read from a callout -- is worked out again
+from scratch, so a parser fix is never undone by the state an older parse
+left behind.
 """
 
 import logging
@@ -21,6 +30,8 @@ from planner.models import (
 
 from .extract import ShowflowError, extract
 from .parser import analyse, name_key
+
+USER_FLAGS = ('presenter_by',)   # keys of ShowflowPerson.flags a rebuild keeps
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +68,7 @@ def stage_upload(day, data, filename, user):
     if not rows:
         raise ShowflowError('Found the column header but no rows under it.')
     crew = project_crew(day.project)
-    known = [(p.display_name, p.aliases) for p in day.showflow_people.all()]
+    known = _merges(day.showflow_people.all())
     result = analyse(rows, crew=crew, known=known)
     # No file name: showflows can be under NDA.
     logger.info('Mic Plan import: %d pages, %d rows, extract %.2fs, parse %.2fs '
@@ -158,8 +169,9 @@ def merge(source, target):
             keys.add(name_key(alias))
             aliases.append(alias)
     target.aliases = aliases
-    if target.presenter_id is None:
+    if target.presenter_id is None and source.presenter_id is not None:
         target.presenter_id = source.presenter_id
+        target.flags = {**target.flags, **_user_flags(source)}
     if not target.mic_hint_locked and source.mic_hint_locked:
         target.mic_hint, target.mic_hint_locked = source.mic_hint, True
     source.delete()
@@ -174,6 +186,51 @@ def remove_alias(person, alias):
     rebuild_day(person.day)
 
 
+@transaction.atomic
+def reread(part):
+    """Run the current parser over ``part``'s stored rows: their times and
+    segments, then the whole day (people, cues, flags). No PDF needed."""
+    rows = list(part.rows.order_by('order'))
+    result = analyse([r.as_parser_row() for r in rows], crew=part.crew_names)
+    changed = []
+    for row, t in zip(rows, result.times):
+        new = (t.is_segment, _minute(t.t0), _minute(t.t1), _minute(t.minute), t.exact)
+        if new != (row.is_segment, row.segment_t0, row.segment_t1, row.est_time, row.time_exact):
+            (row.is_segment, row.segment_t0, row.segment_t1, row.est_time, row.time_exact) = new
+            changed.append(row)
+    ShowflowRow.objects.bulk_update(changed, ['is_segment', 'segment_t0', 'segment_t1',
+                                              'est_time', 'time_exact'])
+    part.span_start, part.span_end = _minute(result.span[0]), _minute(result.span[1])
+    part.save(update_fields=['span_start', 'span_end'])
+    rebuild_day(part.day)
+
+
+@transaction.atomic
+def remove_person(person):
+    """Drop someone no showflow mentions any more, with what the user set on them."""
+    if not person.flags.get('gone'):
+        raise ValueError('Still in a showflow of this day.')
+    day = person.day
+    person.delete()
+    rebuild_day(day)
+
+
+def _merges(people):
+    """What the parser is told about the day's people: merges only. A hint
+    or Presenter link set by hand stays with the person by name after the
+    parse; it does not make their name a spelling the parser must match."""
+    return [(p.display_name, p.aliases) for p in people if p.aliases]
+
+
+def _user_flags(person):
+    return {k: person.flags[k] for k in USER_FLAGS if k in person.flags}
+
+
+def has_user_state(person):
+    return bool(person.aliases or person.mic_hint_locked
+                or person.flags.get('presenter_by') == 'user')
+
+
 def _hint_rank(hint):
     return {'HH': 2, 'backup': 1}.get(hint, 0)
 
@@ -181,14 +238,18 @@ def _hint_rank(hint):
 def rebuild_day(day):
     """Re-run every active part of ``day`` and reconcile people and events.
 
-    People are matched by name_key, then by alias, so merges, Presenter links
-    and mic hints carry over. Someone no part mentions any more is removed.
+    The parser is told only about merges (``_merges``); people it made last
+    time are not fed back to it. Existing people are matched by name_key,
+    then by alias, so a user link or hint stays with them. Someone no part
+    mentions any more is removed, unless they carry user state: then they
+    stay, marked ``gone``.
     """
     people = list(day.showflow_people.all())
-    known = [(p.display_name, p.aliases) for p in people]
+    known = _merges(people)
     by_key = {}
     for p in people:
         by_key[p.name_key] = p
+    for p in people:
         for alias in p.aliases:
             by_key.setdefault(name_key(alias), p)
 
@@ -207,8 +268,7 @@ def rebuild_day(day):
             person = by_key.get(name_key(name))
             if person is None:
                 person = ShowflowPerson.objects.create(
-                    day=day, display_name=name[:200], name_key=name_key(name)[:200],
-                    presenter=presenters.get(name_key(name)))
+                    day=day, display_name=name[:200], name_key=name_key(name)[:200])
                 by_key[person.name_key] = person
             found[person.name_key] = person
             state = states.setdefault(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': True,
@@ -221,16 +281,21 @@ def rebuild_day(day):
                 state['hint'] = info['mic_hint']
 
     keep = {p.pk for p in found.values()}
-    day.showflow_people.exclude(pk__in=keep).delete()
+    gone = [p for p in people if p.pk not in keep and has_user_state(p)]
+    day.showflow_people.exclude(pk__in=keep | {p.pk for p in gone}).delete()
     for person in found.values():
         state = states[person.pk]
         person.flags = {'rows': state['rows'], 'intro': state['intro'],
-                        'bsm_only': state['bsm_only']}
-        fields = ['flags']
-        if not person.mic_hint_locked and person.mic_hint != state['hint']:
+                        'bsm_only': state['bsm_only'], **_user_flags(person)}
+        if not person.mic_hint_locked:
             person.mic_hint = state['hint']
-            fields.append('mic_hint')
-        person.save(update_fields=fields)
+        if person.flags.get('presenter_by') != 'user':
+            person.presenter = presenters.get(person.name_key)   # automatic: matched afresh
+        person.save(update_fields=['flags', 'mic_hint', 'presenter'])
+    for person in gone:
+        person.flags = {'rows': {}, 'intro': {}, 'bsm_only': False, 'gone': True,
+                        **_user_flags(person)}
+        person.save(update_fields=['flags'])
 
     ShowflowEvent.objects.filter(row__showflow_import__in=parts).delete()
     events = []

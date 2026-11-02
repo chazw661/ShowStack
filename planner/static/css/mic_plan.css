@@ -179,6 +179,8 @@ body:has(.mp-page) { background: var(--mp-bg, #16171a); }
 .mp-people tr.selected td:first-child { box-shadow: inset 2px 0 0 var(--mp-accent); }
 .mp-people .mp-lines { font: 500 11.5px var(--mp-mono); color: var(--mp-muted); }
 .mp-people .mp-tag { font: 600 10px var(--mp-mono); letter-spacing: .06em; color: var(--mp-warn); margin-left: 6px; }
+.mp-people .mp-remove { display: inline; margin-left: 6px; }
+.mp-people tr:has(.mp-tag.gone) td:first-child { color: var(--mp-muted); }
 .mp-people tr.mp-merging td { outline: 1px dashed var(--mp-accent); outline-offset: -1px; }
 .mp-editor { display: none; border: 1px solid var(--mp-accent); border-radius: 6px; padding: 12px; margin-top: 10px;
     background: var(--mp-raise); }

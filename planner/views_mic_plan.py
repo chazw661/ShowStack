@@ -43,6 +43,7 @@ FLAG_LABELS = {
     'bsm_only': 'BSM only',
     'which_first': 'Which?',
     'description_names': 'Not listed',
+    'gone': 'Gone',
 }
 _CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
 SETTINGS_FIELDS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
@@ -144,6 +145,12 @@ def mic_plan(request):
             person.lines = [line_of[o] for o in person.flags.get('rows', {}).get(str(part.pk), [])
                             if o in line_of]
     segments, loose_flags = stage.build(part, rows, people, events) if part else ([], [])
+    if part:
+        # Day-wide, so on every part's page; not stored in any part's warnings.
+        loose_flags += [stage.Flag('gone', '{} is no longer in this showflow but has a merge, '
+                                   'Presenter link or mic hint you set. Remove them in People '
+                                   'if they are not needed.'.format(p.display_name), '', -1, p.pk)
+                        for p in people if p.flags.get('gone')]
     flag_count = len(loose_flags) + sum(isinstance(i, stage.Flag) for s in segments for i in s.items)
 
     from planner.views import _shared_header_context
@@ -274,6 +281,21 @@ def showflow_delete(request, pk):
     return _back(day)
 
 
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def showflow_reread(request, pk):
+    part = _part(request, pk)
+    importer.reread(part)
+    people = sum(1 for p in part.day.showflow_people.all()
+                 if p.flags.get('rows', {}).get(str(part.pk)))
+    part.refresh_from_db(fields=['warnings'])
+    flags = sum(1 for w in part.warnings if w['kind'] != 'parse')
+    messages.success(request, 'Re-read with current rules: {} {}, {} to check.'.format(
+        people, 'person' if people == 1 else 'people', flags))
+    return _back(part.day, part)
+
+
 # --------------------------------------------------------------------------
 # Review edits
 # --------------------------------------------------------------------------
@@ -297,16 +319,19 @@ def person_save(request, pk):
     part = request.POST.get('part', '')
     presenter_id = request.POST.get('presenter', '')
     if presenter_id.isdigit():
-        person.presenter = get_object_or_404(Presenter, pk=int(presenter_id),
-                                             project=person.day.project)
+        presenter = get_object_or_404(Presenter, pk=int(presenter_id), project=person.day.project)
     else:
-        person.presenter = None
+        presenter = None
+    if presenter != person.presenter:
+        # Chosen by hand (even "no presenter"): a rebuild no longer re-matches it.
+        person.presenter = presenter
+        person.flags = {**person.flags, 'presenter_by': 'user'}
     hint = request.POST.get('mic_hint', '')
     if hint not in dict(ShowflowPerson.MIC_HINT_CHOICES):
         hint = ''
     if hint != person.mic_hint:
         person.mic_hint, person.mic_hint_locked = hint, True
-    person.save(update_fields=['presenter', 'mic_hint', 'mic_hint_locked'])
+    person.save(update_fields=['presenter', 'flags', 'mic_hint', 'mic_hint_locked'])
     messages.success(request, 'Saved {}.'.format(person.display_name))
     return _back(person.day, _maybe_part(request, part), '#person-{}'.format(person.pk))
 
@@ -336,6 +361,22 @@ def person_unalias(request, pk):
     messages.success(request, '"{}" is no longer read as {}.'.format(alias, person.display_name))
     return _back(person.day, _maybe_part(request, request.POST.get('part', '')),
                  '#person-{}'.format(person.pk))
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def person_remove(request, pk):
+    person = _person(request, pk)
+    name, day = person.display_name, person.day
+    try:
+        importer.remove_person(person)
+    except ValueError:
+        messages.error(request, '{} is still in a showflow of this day; merge them instead.'
+                       .format(name))
+        return _back(day, _maybe_part(request, request.POST.get('part', '')))
+    messages.success(request, 'Removed {}.'.format(name))
+    return _back(day, _maybe_part(request, request.POST.get('part', '')), '#mp-people')
 
 
 @staff_member_required

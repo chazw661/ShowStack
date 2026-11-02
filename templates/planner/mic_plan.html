@@ -139,7 +139,7 @@
             <aside class="mp-side">
                 <div class="mp-panel" id="mp-people">
                     <h2>People on {{ day }}</h2>
-                    <p class="mp-note" style="margin-bottom:8px">Every part of the day. Merges, Presenter links and mic hints stay when a file is re-imported. Select someone to see their lines{% if can_edit %} and change them{% endif %}.</p>
+                    <p class="mp-note" style="margin-bottom:8px">Every part of the day. Merges, Presenter links and mic hints you set stay when a file is re-imported or re-read; everything else is read again. Select someone to see their lines{% if can_edit %} and change them{% endif %}.</p>
                     <table class="mp-people">
                         <thead><tr><th>Name</th><th>Lines</th><th>Presenter</th><th>Mic</th></tr></thead>
                         <tbody>
@@ -147,7 +147,12 @@
                         <tr id="person-{{ person.pk }}" data-person="{{ person.pk }}" data-name="{{ person.display_name }}"
                             data-presenter="{{ person.presenter_id|default:'' }}" data-hint="{{ person.mic_hint }}" tabindex="0"
                             aria-label="{{ person.display_name }}">
-                            <td>{{ person.display_name }}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}</td>
+                            <td>{{ person.display_name }}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}
+                                {% if person.flags.gone %}<span class="mp-tag gone">no longer in this showflow</span>
+                                {% if can_edit %}<form class="mp-remove" method="post" action="{% url 'planner:mic_plan_remove' person.pk %}">
+                                    {% csrf_token %}<input type="hidden" name="part" value="{{ part.pk }}">
+                                    <button type="submit" class="mp-btn small danger" title="Delete {{ person.display_name }} with the merge, Presenter link and mic hint set on them">Remove</button>
+                                </form>{% endif %}{% endif %}</td>
                             <td class="mp-lines">{{ person.lines|join:", "|default:"—" }}</td>
                             <td>{{ person.presenter.name|default:"—" }}</td>
                             <td class="mp-lines">{{ person.mic_hint|default:"—" }}</td>
@@ -221,11 +226,16 @@
                 {% endif %}
 
                 {% if can_edit %}
-                <details class="mp-panel">
-                    <summary class="mp-muted" style="cursor:pointer">Delete {{ part.source_filename }}…</summary>
-                    <form method="post" action="{% url 'planner:mic_plan_delete' part.pk %}" style="margin-top:8px">
+<details class="mp-panel mp-partmenu">
+                    <summary class="mp-muted" style="cursor:pointer">Part menu: {{ part.source_filename }}</summary>
+                    <form method="post" action="{% url 'planner:mic_plan_reread' part.pk %}" style="margin-top:8px">
                         {% csrf_token %}
-                        <p class="mp-note">Removes its rows and cues. People no other part of this day mentions go too; the Mic Tracker is not touched.</p>
+                        <p class="mp-note">Reads this part's saved rows again with the current rules: times, people, cues and flags. No PDF needed. Merges, Presenter links and mic hints you set are kept.</p>
+                        <button class="mp-btn small" type="submit">Re-read with current rules</button>
+                    </form>
+                    <form method="post" action="{% url 'planner:mic_plan_delete' part.pk %}" style="margin-top:12px">
+                        {% csrf_token %}
+                        <p class="mp-note">Removes its rows and cues. People no other part of this day mentions go too, unless you set something on them; the Mic Tracker is not touched.</p>
                         <button class="mp-btn small danger" type="submit">Delete this import</button>
                     </form>
                 </details>
