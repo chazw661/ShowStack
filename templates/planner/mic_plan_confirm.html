@@ -13,45 +13,34 @@
 
 {% block extrastyle %}
     {{ block.super }}
-    <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
-    <style>
-    body { background: var(--bg-base); color: var(--text-primary); }
-    #mp-confirm { max-width: 720px; margin: 24px; background: var(--bg-card); border: 1px solid var(--border);
-        border-radius: 6px; padding: 18px 20px; }
-    #mp-confirm h1 { font-size: 15px; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); margin: 0 0 8px; }
-    #mp-confirm p { font-size: 13px; color: var(--text-dim); }
-    #mp-confirm label.mp-choice { display: block; padding: 10px 12px; margin: 8px 0; border: 1px solid var(--border-bright);
-        border-radius: 4px; cursor: pointer; font-size: 13px; }
-    #mp-confirm label.mp-choice small { display: block; color: var(--text-dim); margin-top: 2px; }
-    #mp-confirm input[type=radio] { accent-color: var(--accent-blue); margin-right: 6px; }
-    #mp-confirm .mp-actions { display: flex; gap: 8px; margin-top: 14px; }
-    #mp-confirm button { padding: 8px 14px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
-        border-radius: 4px; cursor: pointer; border: 1px solid var(--border-bright); background: var(--bg-raised); color: var(--text-primary); }
-    #mp-confirm button.primary { background: var(--accent-blue); border-color: var(--accent-blue); color: var(--mtt-text-inverse); }
-    </style>
+    <link rel="stylesheet" href="{% static 'css/mic_plan.css' %}">
 {% endblock %}
 
 {% block content %}
-<form id="mp-confirm" method="post">
-    {% csrf_token %}
-    <h1>Replace or add?</h1>
-    <p><strong>{{ pending.source_filename }}</strong> covers {{ pending_span|default:"no clock times" }} on {{ day }}.
-       {% if target %}It overlaps part <strong>{{ target.source_filename }}</strong>, so replacing that part is selected.{% else %}It overlaps no part of this day, so adding it is selected.{% endif %}</p>
-    {% for p in parts %}
-    <label class="mp-choice">
-        <input type="radio" name="choice" value="replace:{{ p.obj.pk }}"{% if target and p.obj.pk == target.pk %} checked{% endif %}>
-        Replace part {{ forloop.counter }}: {{ p.obj.source_filename }}
-        <small>{{ p.span|default:"no times" }}{% if p.overlap %} · overlaps by {{ p.overlap }} min{% endif %}. Merges, Presenter links and mic hints are kept.</small>
-    </label>
-    {% endfor %}
-    <label class="mp-choice">
-        <input type="radio" name="choice" value="add"{% if not target %} checked{% endif %}>
-        Add as a new part
-        <small>Keep every existing part; this file becomes another part of the day.</small>
-    </label>
-    <div class="mp-actions">
-        <button class="primary" type="submit">Import</button>
-        <button type="submit" name="cancel" value="1" formnovalidate>Cancel</button>
+<div class="mp-page">
+    <div class="mp-toolbar">
+        <h1>Mic Plan &mdash; replace or add?</h1>
     </div>
-</form>
+    <form class="mp-panel mp-confirm" method="post">
+        {% csrf_token %}
+        <p><strong>{{ pending.source_filename }}</strong> covers <span class="mp-mono">{{ pending_span|default:"no clock times" }}</span> on {{ day }}.
+           {% if target %}It overlaps part <strong>{{ target.source_filename }}</strong>, so replacing that part is selected.{% else %}It overlaps no part of this day, so adding it is selected.{% endif %}</p>
+        {% for p in parts %}
+        <label class="mp-choice">
+            <input type="radio" name="choice" value="replace:{{ p.obj.pk }}"{% if target and p.obj.pk == target.pk %} checked{% endif %}>
+            Replace part {{ forloop.counter }}: {{ p.obj.source_filename }}
+            <small>{{ p.span|default:"no times" }}{% if p.overlap %} · overlaps by {{ p.overlap }} min{% endif %}. Merges, Presenter links and mic hints are kept.</small>
+        </label>
+        {% endfor %}
+        <label class="mp-choice">
+            <input type="radio" name="choice" value="add"{% if not target %} checked{% endif %}>
+            Add as a new part
+            <small>Keep every existing part; this file becomes another part of the day.</small>
+        </label>
+        <div class="mp-actions">
+            <button class="mp-btn primary" type="submit">Import</button>
+            <button class="mp-btn" type="submit" name="cancel" value="1" formnovalidate>Cancel</button>
+        </div>
+    </form>
+</div>
 {% endblock %}

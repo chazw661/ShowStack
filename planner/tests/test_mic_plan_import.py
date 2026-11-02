@@ -345,3 +345,105 @@ class SidebarTests(MicPlanBase):
         resp = self.client.get(reverse('admin:planner_showflowimport_changelist'))
         self.assertRedirects(resp, reverse('planner:mic_plan'), fetch_redirect_response=False)
         self.assertIn(ShowflowImport, showstack_admin_site._registry)
+
+
+class ReviewPageTests(MicPlanBase):
+    """The review page: who's on stage, people, crew only with cues."""
+
+    def setUp(self):
+        super().setUp()
+        self.use(self.owner)
+
+    def page(self):
+        return self.client.get(reverse('planner:mic_plan'))
+
+    def test_who_is_on_stage_lists_segments_with_their_people_and_cues(self):
+        self.upload()
+        resp = self.page()
+        self.assertContains(resp, "Who's on stage")
+        segments = resp.context['segments']
+        names = [s.name for s in segments]
+        self.assertIn('Keynote Conversation', names)
+        keynote = next(s for s in segments if s.name == 'Keynote')
+        on = {a.person.display_name: a for a in keynote.people}
+        self.assertTrue(on['Kim Keynote'].by_cue)             # sent 113, caught 115
+        self.assertEqual(('113', '115'), (on['Kim Keynote'].on_line, on['Kim Keynote'].off_line))
+        self.assertContains(resp, 'id="mp-crew"')             # this file has cues
+        opening = next(s for s in segments if s.name == 'Opening')
+        on = {a.person.display_name: a for a in opening.people}
+        # Sent and caught on line 106, inside Opening: shown there, not in the next segment.
+        self.assertEqual(('106', '106', True), (on['Pat Guest'].on_line, on['Pat Guest'].off_line,
+                                                on['Pat Guest'].by_cue))
+        self.assertNotIn('Chris Baker', on)                    # sent on 108 for the next segment
+        nxt = next(s for s in segments if s.name == 'Building the Future')
+        self.assertNotIn('Pat Guest', [a.person.display_name for a in nxt.people])
+
+    def test_a_cue_free_file_says_so_and_has_no_crew_panel(self):
+        self.upload()                                          # the project now has crew names
+        day2 = ShowDay.objects.create(project=self.project, date=date(2026, 3, 2))
+        self.upload('CLIENT_E_PAGES', day=day2)
+        self.assertTrue(ShowflowImport.objects.get(day=day2).crew_names)   # copied, yet no cues
+        resp = self.client.get(reverse('planner:mic_plan') + '?day={}'.format(day2.pk))
+        self.assertContains(resp, 'No send/catch cues in this showflow — on/off times come from '
+                                  'segment times.')
+        self.assertNotContains(resp, 'id="mp-crew"')
+        opening = resp.context['segments'][0]
+        self.assertEqual('Opening Session', opening.name)
+        vic = next(a for a in opening.people if a.person.display_name == 'Vic Stone')
+        self.assertFalse(vic.by_cue)
+        self.assertEqual(('304', '305', '8:00a', '8:45a'),
+                         (vic.on_line, vic.off_line, vic.on_time, vic.off_time))
+        self.assertContains(resp, "intro'd line 304")
+        self.assertEqual(['BREAK'], [s.name for s in resp.context['segments'] if s.is_break])
+
+    def test_flags_sit_at_their_line_in_plain_language(self):
+        self.upload('CLIENT_E_PAGES')
+        segments = self.page().context['segments']
+        flags = [(s.name, i.line, i.text) for s in segments for i in s.items if not hasattr(i, 'person')]
+        self.assertIn(('Opening Session', '311', 'Line 311: description names people not in the '
+                       'Speaker column — check who goes on'), flags)
+        self.assertTrue(any(line == '319' and text.startswith('Line 319: which Vic?')
+                            for _, line, text in flags))
+
+    def test_intro_rows_are_stored_per_part(self):
+        self.upload('CLIENT_E_PAGES')
+        part = self.parts()[0]
+        row = ShowflowRow.objects.get(showflow_import=part,
+                                      order=self.person('Dr. Una Reyes').flags['intro'][str(part.pk)])
+        self.assertEqual('306', row.line_no)
+
+    def test_settings_are_not_on_this_page(self):
+        self.upload()
+        resp = self.page()
+        self.assertNotContains(resp, reverse('planner:mic_plan_settings'))
+        self.assertNotContains(resp, 'premic_lead_min')
+
+    def test_one_editor_for_the_selected_person_not_controls_on_every_row(self):
+        self.upload()
+        resp = self.page()
+        self.assertContains(resp, 'id="mp-editor"', count=1)
+        self.assertContains(resp, 'name="presenter"', count=1)
+        self.assertContains(resp, 'name="into"', count=1)
+
+    def test_fonts_are_self_hosted(self):
+        resp = self.page()
+        self.assertNotContains(resp, 'fonts.googleapis')
+        css = open(os.path.join(settings.BASE_DIR, 'planner', 'static', 'css', 'mic_plan.css')).read()
+        self.assertNotIn('googleapis', css)
+        for family in ('barlow-condensed', 'ibm-plex-sans', 'ibm-plex-mono'):
+            folder = os.path.join(settings.BASE_DIR, 'planner', 'static', 'fonts', family)
+            self.assertTrue(os.path.exists(os.path.join(folder, 'OFL.txt')))
+            for name in os.listdir(folder):
+                if name.endswith('.woff2'):
+                    self.assertIn('../fonts/{}/{}'.format(family, name), css)
+
+    def test_page_cap_is_sixty(self):
+        self.assertEqual(60, importer.MAX_PAGES)
+        self.assertContains(self.page(), 'up to 60 pages')
+
+    def test_viewer_gets_no_editor(self):
+        self.upload()
+        self.use(self.viewer)
+        resp = self.page()
+        self.assertNotContains(resp, 'id="mp-editor"')
+        self.assertNotContains(resp, 'id="mp-import"')

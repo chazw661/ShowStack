@@ -25,13 +25,11 @@ from .parser import analyse, name_key
 logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
-# pdfplumber is nearly all of an import. Across the seven real showflows the
-# slowest page took 0.16 s on a laptop (a 27-column grid with text; empty grid
-# pages are skipped, see extract._only_line_numbers). Allowing for a Railway
-# vCPU 4x slower, 30 pages is ~19 s worst case, and extract.TIME_BUDGET_S
-# stops any file at 15 s whatever its page count. Every import logs its
-# timing at INFO, so check the real numbers in `railway logs`.
-MAX_PAGES = 30
+# pdfplumber is nearly all of an import. On Railway a 19-page showflow read in
+# 0.77 s (the INFO timing log), about 0.04 s a page, so 60 pages is a few
+# seconds; empty grid pages are skipped (extract._only_line_numbers), and
+# extract.TIME_BUDGET_S stops any file at 15 s whatever its page count.
+MAX_PAGES = 60
 STALE_PENDING = timedelta(hours=6)
 
 
@@ -213,8 +211,11 @@ def rebuild_day(day):
                     presenter=presenters.get(name_key(name)))
                 by_key[person.name_key] = person
             found[person.name_key] = person
-            state = states.setdefault(person.pk, {'rows': {}, 'bsm_only': True, 'hint': ''})
+            state = states.setdefault(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': True,
+                                                  'hint': ''})
             state['rows'][str(part.pk)] = [rows[i].order for i in info['rows']]
+            if info.get('intro') is not None:
+                state['intro'][str(part.pk)] = rows[info['intro']].order
             state['bsm_only'] = state['bsm_only'] and info['bsm_only']
             if _hint_rank(info['mic_hint']) > _hint_rank(state['hint']):
                 state['hint'] = info['mic_hint']
@@ -223,7 +224,8 @@ def rebuild_day(day):
     day.showflow_people.exclude(pk__in=keep).delete()
     for person in found.values():
         state = states[person.pk]
-        person.flags = {'rows': state['rows'], 'bsm_only': state['bsm_only']}
+        person.flags = {'rows': state['rows'], 'intro': state['intro'],
+                        'bsm_only': state['bsm_only']}
         fields = ['flags']
         if not person.mic_hint_locked and person.mic_hint != state['hint']:
             person.mic_hint = state['hint']

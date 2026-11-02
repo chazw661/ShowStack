@@ -162,14 +162,14 @@ TOPICS = (
         slug='mic-plan-import',
         title='Import a showflow into Mic Plan',
         section='Show day',
-        summary='Read a run-of-show PDF for a day, then check its people, send/catch cues and flags.',
+        summary="Read a run-of-show PDF for a day, then check who's on stage, its people and flags.",
         pages=(
             'planner:mic_plan',
             'planner:mic_plan_confirm',
             'admin:planner_showflowimport_changelist',
         ),
         keywords=('mic plan', 'showflow', 'run of show', 'ros', 'pdf', 'import', 'bsm', 'send', 'catch',
-                  'crew', 'merge', 'alias', 'flags',),
+                  'crew', 'merge', 'alias', 'flags', 'on stage', 'title'),
     ),
     Topic(
         slug='mic-photos',

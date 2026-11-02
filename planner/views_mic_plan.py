@@ -22,11 +22,11 @@ from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import importer
+from planner.mic_plan import importer, stage
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
 from planner.models import (
-    MicPlanSettings, Presenter, ShowDay, ShowflowImport, ShowflowPerson,
+    MicPlanSettings, Presenter, ShowDay, ShowflowEvent, ShowflowImport, ShowflowPerson,
 )
 from planner.tenancy import can_edit_current_project, edit_rights_required_page
 from planner.tenancy import current_project_or_none as _scoped_project
@@ -41,7 +41,10 @@ FLAG_LABELS = {
     'caught_but_listed': 'Still listed',
     'no_cue': 'No cue',
     'bsm_only': 'BSM only',
+    'which_first': 'Which?',
+    'description_names': 'Not listed',
 }
+_CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
 SETTINGS_FIELDS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
 
 
@@ -111,33 +114,38 @@ def mic_plan(request):
                            .values_list('day_id', flat=True))
         day = next((d for d in days if d.pk in with_imports), days[0] if days else None)
 
-    parts, part, rows, people, flags = [], None, [], [], []
+    parts, part, rows, people, events = [], None, [], [], []
     if day is not None:
         parts = importer.active_parts(day)
         if request.GET.get('part', '').isdigit():
             part = next((p for p in parts if p.pk == int(request.GET['part'])), None)
         part = part or (parts[0] if parts else None)
+        people = list(day.showflow_people.select_related('presenter'))
     if part is not None:
-        for row in part.rows.prefetch_related('events__person'):
+        rows = list(part.rows.all())
+        events = list(ShowflowEvent.objects.filter(row__showflow_import=part)
+                      .select_related('row', 'person'))
+        events_by_row = {}
+        for e in events:
+            events_by_row.setdefault(e.row_id, []).append(e)
+        names_by_row = {}
+        for person in people:
+            for o in person.flags.get('rows', {}).get(str(part.pk), []):
+                names_by_row.setdefault(o, []).append(person)
+        for row in rows:
             row.bsm_html = _bsm_html(row.bsm_text, part.crew_names)
             row.time_label = ('' if row.est_time is None
                               else hm(row.est_time) if row.time_exact else '≈' + hm(row.est_time))
-            row.event_list = list(row.events.all())
-            rows.append(row)
-        by_order = {r.order: r for r in rows}
-        for w in part.warnings:
-            row = by_order.get(w.get('row_order'))
-            flags.append({'kind': w['kind'], 'label': FLAG_LABELS.get(w['kind'], w['kind']),
-                          'text': w['text'], 'row': row})
-    if day is not None:
-        people = list(day.showflow_people.select_related('presenter'))
-        if part is not None:
-            line_of = {r.order: r.line_no or '#{}'.format(r.order + 1) for r in rows}
-            for person in people:
-                person.lines = [line_of[o] for o in person.flags.get('rows', {}).get(str(part.pk), [])
-                                if o in line_of]
+            row.event_list = events_by_row.get(row.pk, [])
+            row.people = names_by_row.get(row.order, [])
+            row.people_ids = ' '.join(str(p.pk) for p in row.people)
+        line_of = {r.order: stage.line_label(r) for r in rows}
+        for person in people:
+            person.lines = [line_of[o] for o in person.flags.get('rows', {}).get(str(part.pk), [])
+                            if o in line_of]
+    segments, loose_flags = stage.build(part, rows, people, events) if part else ([], [])
+    flag_count = len(loose_flags) + sum(isinstance(i, stage.Flag) for s in segments for i in s.items)
 
-    settings_obj, _ = MicPlanSettings.objects.get_or_create(project=project)
     from planner.views import _shared_header_context
     return render(request, 'planner/mic_plan.html', {
         **_shared_header_context(request),
@@ -148,10 +156,17 @@ def mic_plan(request):
         'part': part,
         'rows': rows,
         'blank_count': sum(1 for r in rows if r.is_blank),
-        'people': people,
-        'flags': flags,
+        'people': sorted(people, key=lambda p: p.display_name.lower()),
+        'people_here': sum(1 for p in people if getattr(p, 'lines', None)),
+        'segments': segments,
+        'loose_flags': loose_flags,
+        'flag_count': flag_count,
+        'flag_labels': FLAG_LABELS,
+        # Crew names only matter when this file has send/catch cues to read. Not
+        # "has crew names": a new part starts with the project's last ones.
+        'has_cues': bool(events) or any(_CUE_WORD.search(r.bsm_text) for r in rows),
         'presenters': Presenter.objects.filter(project=project).order_by('name'),
-        'settings': settings_obj,
+        'mic_hint_choices': ShowflowPerson.MIC_HINT_CHOICES,
         'can_edit': can_edit_current_project(request),
         'max_pages': importer.MAX_PAGES,
         'max_mb': importer.MAX_UPLOAD_BYTES // (1024 * 1024),

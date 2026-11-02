@@ -16,7 +16,8 @@ below is a placeholder, and the test fixture
   - 9 columns: LINE #, Start, End, Duration, Description, Speaker Name, Video
     Preset, DSM's, BSM.
   A third, upper-case layout adds LINE #, SCENE #, PROPS and STAGE LOCATION
-  columns.
+  columns. A fourth heads the line column "a"; a fifth uses LINE # with
+  "Enter Exit" and "DSMs" and has no send/catch cues at all.
 - A header row names Start and Description, plus End, Speaker Name or BSM.
   If no row on any page does, the import fails with a clear message. Mic
   Plan does not guess.
@@ -60,7 +61,8 @@ below is a placeholder, and the test fixture
   - "please welcome …" lines. Names are split on `,` `&` `and`, and if the
     line has an ellipsis only the part after the last one counts
     ("please welcome… Acme President & CEO… Alex Host").
-  - `Titles:` cells.
+  - `Titles:` cells, and `TITLE:` / `N-UP TITLE:` cells (any N, any case).
+    Their names may sit on the next line of the cell.
   - The Speaker column.
 - A welcome line often lists "Title, Company, Name" ("welcome to the stage,
   Vice President, Acme Consulting, Alex Host"), so a welcome-line name only
@@ -90,6 +92,30 @@ below is a placeholder, and the test fixture
   Merges on the review page add aliases ("KK" → Kim Keynote).
 - A job title after `Name,` or `Name -` is dropped ("Alex Host, President &
   CEO").
+- A title before a name stays part of it: "Dr. Ann Lee" (written with a full
+  stop whether or not the file has one). "Ann Lee" without it is the same
+  person. In a run-together cell a title starts the next name ("Kit Ames Dr.
+  Lou Penn Dr. Sol Tate").
+- A title and a surname alone ("Dr. Lee") never make a person. It is whoever
+  was last introduced with that surname, or left over and flagged.
+
+## Short names
+
+- A first name alone in a Speaker cell ("Ned, Ola, Vic") is the person most
+  recently introduced in full with that first name. An introduction is a
+  `TITLE:` row, a welcome line, or an earlier Speaker cell with the full name;
+  rows are read in order. Not any roster match: when "Vic Stone" is
+  introduced on line 304 and "Vic Dahl" on line 316, "Vic" on line 305 is Vic
+  Stone and on line 317 Vic Dahl.
+- With no introduction yet, a first name only one person on the day has is
+  that person.
+- If the latest introduction names two people with that first name ("Vic
+  Stone & Vic Dahl"), or nobody was introduced and two people share it, the
+  line is flagged "which Vic?" and nobody is guessed.
+- Each person keeps the line that first introduced them; the review page
+  shows it as "intro'd line N".
+- First names in BSM cues still need to be unique on the day (a merge sets
+  an alias otherwise).
 - "Pickle" means a clicker, not a mic, and is never a person.
 - Mic hints only come from explicit callouts: HH or handheld gives HH, and
   "backup mic" gives backup. The hint goes to the people named in the same
@@ -124,6 +150,25 @@ below is a placeholder, and the test fixture
   - When the same row both sends and catches someone, the catch is the send
     plus the row's Duration, or 5 minutes if it has none.
 
+## Segment names
+
+- A segment's name is its first description that is not a VOG line, a
+  "ROLL RECORDS" / "END RECORDS" cue, a "STAGE SET" note or a walk-in loop;
+  one file puts the VOG line on the row with the segment's times.
+- A segment with a "BREAK" or "LUNCH" line and no Speaker text is a break.
+
+## Description intros
+
+- A description that brings people on (welcome / join / introduce / bring
+  up / invite wording) is checked: the "First Last" items after that wording,
+  and any known full name there, should be in a Speaker cell within three
+  rows either side. One upper-case export lists the Speaker two rows before
+  the VOG welcome, so the check looks back as well as ahead.
+- Items with a job title or an organisation word ("… Consulting", "Product
+  Management", a game or talk title) are not people.
+- If someone is missing, the line is flagged "description names people not
+  in the Speaker column — check who goes on". They are not made into people.
+
 ## Flags
 
 - **Not caught:** sent, but never caught afterwards.
@@ -131,7 +176,11 @@ below is a placeholder, and the test fixture
   lists them as a speaker. They stay on, as when a host and a keynote are
   caught and then both appear in the "Keynote Conversation".
 - **No cue:** listed as a speaker in a segment that no send/catch window
-  covers.
+  covers. Not raised when the part has no cues, or when cues cover fewer than
+  half of the people listed (one stray cue in a file without cues).
+- **Which?:** a first name that more than one person on the day could be.
+- **Not listed:** a description brings on people no nearby Speaker cell
+  names.
 - **Speaker?:** Speaker column text that matches no person.
 - **BSM only:** a name that only ever appears in a cue, usually a nickname to
   merge.
@@ -139,6 +188,8 @@ below is a placeholder, and the test fixture
 - **Times:** a Start time earlier than the one before it.
 
 ## Reading time
+
+Up to 60 pages. On Railway a 19-page file read in 0.77 s.
 
 pdfplumber's table search is nearly all of an import. A page whose only text
 is digits (an empty ruled grid, at most numbered down the side) can't yield a

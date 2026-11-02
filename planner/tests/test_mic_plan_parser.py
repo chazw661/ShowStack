@@ -13,7 +13,9 @@ from unittest import mock
 from django.test import SimpleTestCase
 
 from planner.mic_plan.extract import ShowflowError, extract, header_map, rows_from_tables
-from planner.mic_plan.parser import analyse, hm, parse_clock, resolve_clock
+from planner.mic_plan.parser import (
+    analyse, hm, name_key, parse_clock, resolve_clock, segment_heading,
+)
 from planner.tests import showflow_fixture as F
 
 
@@ -263,7 +265,7 @@ class LineColumnAndShortDurationTests(SimpleTestCase):
 
     def test_one_stray_time_is_dropped_not_the_ones_after_it(self):
         self.assertEqual(['time_backwards'], [f[0] for f in _flags(self.result, 'time_backwards')])
-        self.assertIn('line 119', _flags(self.result, 'time_backwards')[0][2])
+        self.assertTrue(_flags(self.result, 'time_backwards')[0][2].startswith('Line 119:'))
         self.assertTrue(self.result.times[4].exact)   # 9:00 AM on line 120 kept
 
     def test_crewless_send_and_no_title_people(self):
@@ -309,3 +311,103 @@ class CueFreeLayoutTests(SimpleTestCase):
         hints = {n: p['mic_hint'] for n, p in self.result.people.items() if p['mic_hint']}
         self.assertEqual({'Nina Host': 'HH', 'Nell Avery': 'HH', 'Rory vandeberg': 'HH',
                           'Ike Morrow': 'HH'}, hints)
+
+
+class ClientELayoutTests(SimpleTestCase):
+    """TITLE: prefixes, "Dr." names, first names that mean whoever was
+    introduced last, VOG segment rows, and people named only in a
+    description (Client E)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.rows, cls.columns, _, _ = extract(F.build_pdf(F.CLIENT_E_PAGES))
+        cls.result = analyse(cls.rows)
+
+    def lines(self, name):
+        return [self.rows[i]['line'] for i in self.result.people[name]['rows']]
+
+    def intro(self, name):
+        return self.rows[self.result.people[name]['intro']]['line']
+
+    def test_title_and_n_up_title_prefixes_read_like_titles(self):
+        self.assertEqual('304', self.intro('Vic Stone'))
+        self.assertIn('Gil Ware', self.result.people)
+        self.assertIn('Bo Lark', self.result.people)       # "2-UP TITLE: Bo Lark & Zed Moss"
+        self.assertIn('Zed Moss', self.result.people)
+        for name in ('Kit Ames', 'Dr. Lou Penn', 'Dr. Sol Tate'):   # "4-UP TITLE: ..."
+            self.assertIn('315', self.lines(name))
+        self.assertFalse(_flags(self.result, 'unmatched_speaker'))
+
+    def test_dr_stays_in_the_name_and_title_plus_surname_is_no_one_new(self):
+        self.assertIn('Dr. Una Reyes', self.result.people)
+        self.assertNotIn('Dr Reyes', self.result.people)
+        self.assertNotIn('Dr. Reyes', self.result.people)
+        self.assertEqual(['306', '307'], self.lines('Dr. Una Reyes'))   # "Ned, Max, Dr. Reyes"
+
+    def test_a_first_name_is_whoever_was_introduced_last(self):
+        self.assertIn('305', self.lines('Vic Stone'))      # 304 introduced Vic Stone
+        self.assertNotIn('305', self.lines('Vic Dahl'))    # not the later Vic
+        self.assertIn('317', self.lines('Vic Dahl'))       # 316 introduced Vic Dahl
+        self.assertNotIn('317', self.lines('Vic Stone'))
+        self.assertEqual(['308', '309'], self.lines('Gil Ware'))   # "TITLE: Gil Ware", then "Gil"
+
+    def test_two_people_introduced_together_make_a_bare_first_name_ambiguous(self):
+        which = _flags(self.result, 'which_first')
+        self.assertEqual(['319'], [self.rows[f[1]]['line'] for f in which])
+        self.assertTrue(which[0][2].startswith('Line 319: which Vic?'))
+        self.assertNotIn('319', self.lines('Vic Stone') + self.lines('Vic Dahl'))
+
+    def test_description_naming_people_no_speaker_cell_has_is_flagged(self):
+        flags = _flags(self.result, 'description_names')
+        self.assertEqual(['311'], [self.rows[f[1]]['line'] for f in flags])
+        self.assertEqual('Line 311: description names people not in the Speaker column — check '
+                         'who goes on', flags[0][2])
+        self.assertNotIn('Cy Dorn', self.result.people)    # flagged only, not made a person
+
+    def test_intro_is_the_first_line_naming_them_in_full(self):
+        self.assertEqual('306', self.intro('Dr. Una Reyes'))
+        self.assertEqual('314', self.intro('Dr. Lou Penn'))   # the VOG welcome
+        self.assertEqual('301', self.intro('Max Pine'))
+
+    def test_segment_names_skip_vog_and_records_rows_and_breaks_are_marked(self):
+        segs = self.result.segments + [len(self.rows)]
+        got = [segment_heading(self.rows, s, e) for s, e in zip(segs, segs[1:])]
+        self.assertEqual([('Opening Session', False), ('BREAK', True),
+                          ('The Future Panel', False)], got)
+
+    def test_no_cues_means_no_no_cue_flags(self):
+        self.assertEqual([], self.result.events)
+        self.assertFalse(_flags(self.result, 'no_cue'))
+
+
+class NameAndCoverageTests(SimpleTestCase):
+
+    def test_dr_with_or_without_a_full_stop_is_one_key(self):
+        self.assertEqual(name_key('Dr. Ann Lee'), name_key('Dr Ann Lee'))
+        self.assertEqual('dr. ann lee', name_key('DR Ann Lee'))
+        self.assertEqual('drew ann', name_key('Drew Ann'))
+
+    @staticmethod
+    def _row(line, start='', end='', dur='', desc='', speaker='', bsm=''):
+        return {'line': line, 'start': start, 'end': end, 'duration': dur, 'description': desc,
+                'speaker': speaker, 'bsm': bsm, 'notes': ''}
+
+    def _speakers_in_segments(self, n, cued):
+        rows = []
+        for k in range(n):
+            start, end = 8 * 60 + 15 * k, 8 * 60 + 15 * (k + 1)    # 15-minute talks from 8:00
+            rows.append(self._row(str(10 + k), '{}:{:02d} AM'.format(*divmod(start, 60)),
+                                  '{}:{:02d} AM'.format(*divmod(end, 60)), '0:15:00',
+                                  'Talk {}'.format(k), 'Ann{} Lee'.format(chr(97 + k))))
+        rows[0]['bsm'] = 'Sam sends ' + ', '.join('Ann{} Lee'.format(chr(97 + k)) for k in range(cued))
+        return analyse(rows, crew=['Sam'])
+
+    def test_a_stray_cue_does_not_turn_every_speaker_into_a_no_cue_flag(self):
+        result = self._speakers_in_segments(6, cued=1)     # 1 of 6 cued
+        self.assertTrue(result.events)
+        self.assertFalse(_flags(result, 'no_cue'))
+
+    def test_cues_for_half_the_speakers_keep_the_no_cue_flags(self):
+        result = self._speakers_in_segments(6, cued=3)     # 3 of 6 cued
+        self.assertEqual(3, len(_flags(result, 'no_cue')))
