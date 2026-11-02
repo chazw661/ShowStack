@@ -123,6 +123,7 @@ def ordered_get_app_list(request, app_label=None):
         'micassignment': 18,
         'presenter': 19,
         'micshowinfo': 20,
+        'showflowimport': 20.5,   # Mic Plan: opens the review page
         
         # PA Zones (21)
         'pazone': 21,
@@ -180,6 +181,11 @@ def ordered_get_app_list(request, app_label=None):
                     # one with Regenerate), not the admin list; superusers
                     # reach the list at its URL.
                     model['admin_url'] = reverse('planner:power_distribution_calculator')
+                    model['add_url'] = None
+                if model_name == 'showflowimport':
+                    # "Mic Plan" opens the import + review page; the admin
+                    # list itself only redirects there.
+                    model['admin_url'] = reverse('planner:mic_plan')
                     model['add_url'] = None
                 filtered_models.append(model)
             

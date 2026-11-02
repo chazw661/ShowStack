@@ -10,6 +10,7 @@ from . import views_monitor
 from . import views_listen
 from . import views_console_patch
 from . import views_branding
+from . import views_mic_plan
 
 from .views import (
      audio_checklist_view,
@@ -169,6 +170,15 @@ urlpatterns = [
     path('mic-tracker/print/alignment.pdf', views.mic_labels_alignment_pdf, name='mic_labels_alignment_pdf'),
     path('mic-tracker/print/summary.json', views.mic_labels_summary, name='mic_labels_summary'),
     path('project/branding/', views_branding.project_branding, name='project_branding'),
+    path('mic-plan/', views_mic_plan.mic_plan, name='mic_plan'),
+    path('mic-plan/upload/', views_mic_plan.showflow_upload, name='mic_plan_upload'),
+    path('mic-plan/import/<int:pk>/confirm/', views_mic_plan.showflow_confirm, name='mic_plan_confirm'),
+    path('mic-plan/import/<int:pk>/delete/', views_mic_plan.showflow_delete, name='mic_plan_delete'),
+    path('mic-plan/import/<int:pk>/crew/', views_mic_plan.showflow_crew, name='mic_plan_crew'),
+    path('mic-plan/person/<int:pk>/', views_mic_plan.person_save, name='mic_plan_person'),
+    path('mic-plan/person/<int:pk>/merge/', views_mic_plan.person_merge, name='mic_plan_merge'),
+    path('mic-plan/person/<int:pk>/unalias/', views_mic_plan.person_unalias, name='mic_plan_unalias'),
+    path('mic-plan/settings/', views_mic_plan.mic_plan_settings, name='mic_plan_settings'),
     path('project/branding/save/', views_branding.branding_save, name='branding_save'),
     path('project/branding/logo/upload/', views_branding.branding_logo_upload, name='branding_logo_upload'),
     path('project/branding/logo/delete/', views_branding.branding_logo_delete, name='branding_logo_delete'),

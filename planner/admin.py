@@ -50,6 +50,7 @@ from .models import Location, AmpLocation, Amp, AmpChannel, AmpDivider, AMP_PRES
 from .models import SystemProcessor, P1Processor, P1Input, P1Output
 from .models import GalaxyProcessor, GalaxyInput, GalaxyOutput
 from .models import ShowDay, MicSession, MicAssignment, MicShowInfo, MicGroup
+from .models import ShowflowImport
 from .models import Presenter
 
 # Form imports
@@ -92,6 +93,8 @@ CHILD_PROJECT_PATHS = {
     'MicSession': 'day__project',
     'MicAssignment': 'session__day__project',
     'MicGroup': 'session__day__project',
+    'ShowflowImport': 'day__project',
+    'ShowflowPerson': 'day__project',   # not in the admin; for project_of
     # 'Presenter': REMOVED - now has direct project FK ✓
     # 'MicShowInfo': REMOVED - now has direct project OneToOneField ✓
     'SpeakerArray': 'prediction__project',
@@ -7922,7 +7925,27 @@ showstack_admin_site.register(CommChannel, CommChannelAdmin)
 showstack_admin_site.register(CommPosition, CommPositionAdmin)
 showstack_admin_site.register(CommCrewName, CommCrewNameAdmin)
 showstack_admin_site.register(CommBeltPack, CommBeltPackAdmin)
+class ShowflowImportAdmin(BaseEquipmentAdmin):
+    """Mic Plan's sidebar entry. Imports are made and reviewed on the Mic Plan
+    page (planner.views_mic_plan); the admin only routes there."""
+
+    project_scoped_fks = {'day': 'project'}
+
+    def changelist_view(self, request, extra_context=None):
+        return redirect('planner:mic_plan')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 showstack_admin_site.register(ShowDay, ShowDayAdmin)
+showstack_admin_site.register(ShowflowImport, ShowflowImportAdmin)
 showstack_admin_site.register(Presenter, PresenterAdmin)
 showstack_admin_site.register(MicSession, MicSessionAdmin)
 showstack_admin_site.register(MicAssignment, MicAssignmentAdmin)
