@@ -33,7 +33,7 @@ _LOOKUP_COMPACT = {alias.replace(' ', ''): field for alias, field in _LOOKUP.ite
 
 # A longer file is refused before pdfplumber reads a page; see MAX_PAGES in
 # the importer for the timing behind the number.
-MAX_PAGES_DEFAULT = 30
+MAX_PAGES_DEFAULT = 60
 # Stop reading past this, whatever the page count: one pathological page
 # must not hold a gunicorn worker until its 30 s timeout kills it.
 TIME_BUDGET_S = 15

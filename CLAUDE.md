@@ -215,7 +215,7 @@ Implemented via Django groups and `BaseEquipmentAdmin`:
 | PA Cable Schedule | |
 | COMM Config | Clear-Com Arcadia + FreeSpeak II `.cca` offline config export (see COMM Config section below) |
 | Mic Tracker | |
-| Mic Plan | Showflow PDF import per ShowDay (`planner/mic_plan/`, `views_mic_plan.py`). PDF parsed in memory, never stored. Rules: `docs/mic_plan/PARSING_RULES.md`. Does not write to Mic Tracker (apply comes in a later PR). |
+| Mic Plan | Showflow PDF import per ShowDay (`planner/mic_plan/`, `views_mic_plan.py`). PDF parsed in memory, never stored. Rules: `docs/mic_plan/PARSING_RULES.md`. Review page = "Who's on stage" (`mic_plan/stage.py`); look: `static/css/mic_plan.css` (fonts self-hosted, reference `docs/mic_plan/mic_plan_theme.css`). Does not write to Mic Tracker (apply comes in a later PR). |
 | Power Distribution Calculator | |
 | Soundvision Predictions | L'Acoustics PDF parsing |
 | IP Address Management | |
