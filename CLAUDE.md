@@ -300,4 +300,5 @@ Runs in `railway.json`'s `startCommand` on every Railway deploy. If static files
 - **Ask before running destructive operations against Railway Postgres.** Fake migrations, manual `ALTER TABLE`s, and data backfills need confirmation.
 - **Ask before touching factory pouchdb files** in `planner/data/comm_config/`. These are binary references; a wrong edit breaks `.cca` export for all users.
 - **Never commit** `.env`, Resend API keys, Railway tokens, or anything already listed in `.gitignore`.
+- **Any PR that touches `requirements.txt`** must be verified with `pip install -r requirements.txt` in a fresh venv, then `pip check`, before the PR is opened. `pip install <pkg>` into the existing venv can silently upgrade a pinned dependency, so the old venv passes while Railway's clean build fails (pdfplumber vs the Pillow pin broke the #160 deploy). On macOS, plyvel needs `CPPFLAGS=-I/opt/homebrew/include LDFLAGS=-L/opt/homebrew/lib ARCHFLAGS="-arch arm64"` to build against Homebrew leveldb.
 - If a proposed change touches COMM Config export logic, verify against the rules in the COMM Config section before implementing.
