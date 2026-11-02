@@ -6,7 +6,7 @@ django-admin-interface==0.30.1
 django-colorfield==0.14.0
 gunicorn==23.0.0
 packaging==25.0
-pillow==12.0.0
+pillow==12.2.0
 psycopg2-binary==2.9.11
 PyPDF2==3.0.1
 pdfplumber==0.11.10
