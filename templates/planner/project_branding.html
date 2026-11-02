@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load static %}
+{% load static tutorial_tags %}
 
 {% block title %}Label branding{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
@@ -14,6 +14,7 @@
 {% block extrastyle %}
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
+    {% tutorial_assets %}
     <style>
     body { background: var(--bg-base); color: var(--text-primary); }
     #pb-root { padding: 0 0 48px; }
@@ -23,7 +24,7 @@
     }
     .pb-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
     .pb-sub { font-size: 11px; color: var(--text-dim); }
-    .pb-header-actions { margin-left: auto; display: flex; gap: 8px; }
+    .pb-header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     #pb-root a.pb-btn, #pb-root a.pb-btn:link, #pb-root a.pb-btn:visited, #pb-root button.pb-btn {
         display: inline-block; padding: 8px 14px; cursor: pointer;
         background: var(--bg-raised); color: var(--text-primary) !important;
@@ -32,12 +33,6 @@
     }
     #pb-root button.pb-btn.primary { background: var(--accent-blue); color: var(--mtt-text-inverse) !important; border-color: var(--accent-blue); }
     #pb-root button.pb-btn.small { padding: 5px 10px; font-size: 10px; }
-    .pb-messages { margin: 16px 24px 0; padding: 0; list-style: none; }
-    .pb-messages li { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 6px;
-                      border: 1px solid var(--border-bright); background: var(--bg-card); }
-    .pb-messages li.error { border-color: var(--accent-red, #e5534b); }
-    .pb-messages li.success { border-color: var(--accent-green, #3fb950); }
-    .pb-messages li.warning { border-color: var(--accent-amber); color: var(--accent-amber); }
     .pb-readonly { margin: 16px 24px 0; font-size: 13px; color: var(--text-dim); }
 
     .pb-layout { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 20px; padding: 16px 24px; }
@@ -88,14 +83,10 @@
         </div>
         <div class="pb-header-actions">
             <a class="pb-btn" href="{% url 'planner:mic_tracker_print' %}">← Print labels</a>
+            {% tutorial_button 'labels' quiet=True %}
         </div>
     </div>
 
-    {% if messages %}
-    <ul class="pb-messages">
-        {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
-    </ul>
-    {% endif %}
     {% if not can_edit %}
     <p class="pb-readonly">You can view this project's label branding. Only its owner and editors can change it.</p>
     {% endif %}

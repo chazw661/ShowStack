@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n admin_urls static %}
+{% load i18n admin_urls static tutorial_tags %}
 
 {% block title %}Amp Rack View{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
@@ -13,6 +13,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
+{% tutorial_assets %}
 <style>
     /* ── Toolbar at top ───────────────────────────────────────── */
     .rack-toolbar {
@@ -25,7 +26,7 @@
     }
     .rack-toolbar h1 { margin: 0; font-size: 22px; color: #e0e0e0; }
     .power-plan-stale { color: #f0c674; }
-    .rack-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .rack-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     /* Secondary (the default): outlined, no fill. Locations and
        Collapse / Expand All are both secondary, so the toolbar has exactly
        one filled button -- see .rack-btn.primary below. */
@@ -893,6 +894,7 @@
         {% endif %}
         <button type="button" class="rack-btn" onclick="openLocationsModal()">Locations</button>
         <button type="button" class="rack-btn" onclick="collapseAll()">Collapse / Expand All</button>
+        {% tutorial_button 'power' quiet=True %}
     </div>
     {% endif %}
 </div>

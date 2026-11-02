@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load static %}
+{% load static tutorial_tags %}
 
 {% block title %}Print labels — Mic Tracker{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
@@ -14,6 +14,7 @@
 {% block extrastyle %}
     {{ block.super }}
     <link rel="stylesheet" href="{% static 'admin/css/mic_tracker.css' %}">
+    {% tutorial_assets %}
     <style>
     body { background: var(--bg-base); color: var(--text-primary); }
     #mtp-root { padding: 0 0 48px; }
@@ -24,7 +25,8 @@
     }
     .mtp-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
     .mtp-sub { font-size: 11px; color: var(--text-dim); }
-    .mtp-header-actions { margin-left: auto; display: flex; gap: 8px; }
+    .mtp-header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #mtp-root a.mtp-order { color: var(--accent-blue); margin-left: 6px; white-space: nowrap; }
     #mtp-root a.mtp-btn, #mtp-root a.mtp-btn:link, #mtp-root a.mtp-btn:visited, #mtp-root button.mtp-btn {
         display: inline-block; padding: 8px 14px; cursor: pointer;
         background: var(--bg-raised); color: var(--text-primary) !important;
@@ -96,12 +98,14 @@
     <div class="mtp-header">
         <div>
             <div class="mtp-title">🖨 Print beltpack labels</div>
-            <div class="mtp-sub">{{ stock.description }}</div>
+            <div class="mtp-sub">{{ stock.description }}{% if stock.order_url %}
+                <a class="mtp-order" id="mtp-order" href="{{ stock.order_url }}" target="_blank" rel="noopener">Order labels ↗</a>{% endif %}</div>
         </div>
         <div class="mtp-header-actions">
             <a class="mtp-btn" href="{% url 'planner:mic_tracker' %}">← Mic Tracker</a>
             <a class="mtp-btn" id="mtp-alignment" href="#" target="_blank" rel="noopener">Print alignment page</a>
             <a class="mtp-btn primary" id="mtp-download" href="#">↓ Download PDF</a>
+            {% tutorial_button 'labels' quiet=True %}
         </div>
     </div>
 
