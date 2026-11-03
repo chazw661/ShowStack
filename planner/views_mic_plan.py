@@ -1,4 +1,5 @@
-"""Mic Plan, PR 1: import a showflow per show day and review what was read.
+"""Mic Plan: import a showflow per show day, review what was read, and
+generate the day's draft mic plan (packs and A2 actions).
 
 Everything is the current project's: every id in a URL or form is looked up
 through ``day__project`` of the session's project, so another tenant's id is
@@ -16,17 +17,18 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import ValidationError
 from django.core.files.uploadhandler import MemoryFileUploadHandler
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import importer, stage
+from planner.mic_plan import importer, page, planning
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
+from planner.mic_plan.solver import SolverError
 from planner.models import (
-    MicPlanSettings, Presenter, ShowDay, ShowflowEvent, ShowflowImport, ShowflowPerson,
+    MicPlan, MicPlanSettings, Presenter, ShowDay, ShowflowEvent, ShowflowImport, ShowflowPerson,
 )
 from planner.tenancy import can_edit_current_project, edit_rights_required_page
 from planner.tenancy import current_project_or_none as _scoped_project
@@ -46,7 +48,8 @@ FLAG_LABELS = {
     'gone': 'Gone',
 }
 _CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
-SETTINGS_FIELDS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
+INT_SETTINGS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
+OPTIONAL_SETTINGS = ('body_pack_count', 'hh_count')     # blank: report the minimum needed
 
 
 def _project_or_404(request):
@@ -115,43 +118,36 @@ def mic_plan(request):
                            .values_list('day_id', flat=True))
         day = next((d for d in days if d.pk in with_imports), days[0] if days else None)
 
-    parts, part, rows, people, events = [], None, [], [], []
+    parts, part, rows, people, events, plan = [], None, [], [], [], None
     if day is not None:
         parts = importer.active_parts(day)
         if request.GET.get('part', '').isdigit():
             part = next((p for p in parts if p.pk == int(request.GET['part'])), None)
         part = part or (parts[0] if parts else None)
         people = list(day.showflow_people.select_related('presenter'))
+        plan = MicPlan.objects.filter(day=day).first()
+    apps, actions = page.load(plan)
     if part is not None:
         rows = list(part.rows.all())
         events = list(ShowflowEvent.objects.filter(row__showflow_import=part)
                       .select_related('row', 'person'))
-        events_by_row = {}
-        for e in events:
-            events_by_row.setdefault(e.row_id, []).append(e)
         names_by_row = {}
         for person in people:
             for o in person.flags.get('rows', {}).get(str(part.pk), []):
-                names_by_row.setdefault(o, []).append(person)
+                names_by_row.setdefault(o, []).append(person.pk)
         for row in rows:
             row.bsm_html = _bsm_html(row.bsm_text, part.crew_names)
             row.time_label = ('' if row.est_time is None
                               else hm(row.est_time) if row.time_exact else '≈' + hm(row.est_time))
-            row.event_list = events_by_row.get(row.pk, [])
-            row.people = names_by_row.get(row.order, [])
-            row.people_ids = ' '.join(str(p.pk) for p in row.people)
-        line_of = {r.order: stage.line_label(r) for r in rows}
+            row.people_ids = names_by_row.get(row.order, [])
+        page.showflow_rows(part, rows, events, plan, apps, actions)
+        line_of = {r.order: r.line_no or '#{}'.format(r.order + 1) for r in rows}
         for person in people:
             person.lines = [line_of[o] for o in person.flags.get('rows', {}).get(str(part.pk), [])
                             if o in line_of]
-    segments, loose_flags = stage.build(part, rows, people, events) if part else ([], [])
-    if part:
-        # Day-wide, so on every part's page; not stored in any part's warnings.
-        loose_flags += [stage.Flag('gone', '{} is no longer in this showflow but has a merge, '
-                                   'Presenter link or mic hint you set. Remove them in People '
-                                   'if they are not needed.'.format(p.display_name), '', -1, p.pk)
-                        for p in people if p.flags.get('gone')]
-    flag_count = len(loose_flags) + sum(isinstance(i, stage.Flag) for s in segments for i in s.items)
+            person.intro_line = line_of.get(person.flags.get('intro', {}).get(str(part.pk)), '')
+    current = planning.settings_dict(planning.project_settings(project))
+    cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
 
     from planner.views import _shared_header_context
     return render(request, 'planner/mic_plan.html', {
@@ -161,23 +157,65 @@ def mic_plan(request):
         'day': day,
         'parts': [{'obj': p, 'span': _span(p)} for p in parts],
         'part': part,
+        'part_no': next((k + 1 for k, p in enumerate(parts) if part and p.pk == part.pk), None),
         'rows': rows,
-        'blank_count': sum(1 for r in rows if r.is_blank),
+        'blank_count': sum(1 for r in rows if r.empty) if part else 0,
         'people': sorted(people, key=lambda p: p.display_name.lower()),
-        'people_here': sum(1 for p in people if getattr(p, 'lines', None)),
-        'segments': segments,
-        'loose_flags': loose_flags,
-        'flag_count': flag_count,
+        'plan': plan,
+        'stats': page.stats(plan),
+        'chart': page.pack_chart(plan, apps, actions),
+        'cards': cards,
+        'settings': current,
+        'settings_summary': page.settings_summary(plan.settings if plan else current),
+        'settings_changed': bool(plan and plan.settings != current),
         'flag_labels': FLAG_LABELS,
         # Crew names only matter when this file has send/catch cues to read. Not
         # "has crew names": a new part starts with the project's last ones.
         'has_cues': bool(events) or any(_CUE_WORD.search(r.bsm_text) for r in rows),
         'presenters': Presenter.objects.filter(project=project).order_by('name'),
         'mic_hint_choices': ShowflowPerson.MIC_HINT_CHOICES,
+        'backup_choices': ShowflowPerson.BACKUP_TYPE_CHOICES,
         'can_edit': can_edit_current_project(request),
         'max_pages': importer.MAX_PAGES,
         'max_mb': importer.MAX_UPLOAD_BYTES // (1024 * 1024),
     })
+
+
+def _day(request, pk):
+    return get_object_or_404(ShowDay, pk=pk, project=_project_or_404(request))
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def plan_generate(request, pk):
+    day = _day(request, pk)
+    part = _maybe_part(request, request.POST.get('part', ''))
+    existing = MicPlan.objects.filter(day=day).first()
+    if existing is not None and request.POST.get('replace') != '1':
+        messages.error(request, 'Confirm to replace the draft plan (v{}).'.format(existing.version))
+        return _back(day, part)
+    if not importer.active_parts(day):
+        messages.error(request, 'Import a showflow for this day first.')
+        return _back(day)
+    try:
+        plan = planning.generate(day, request.user)
+    except SolverError:
+        messages.error(request, 'The plan could not be worked out for this day. Nothing was changed.')
+        return _back(day, part)
+    messages.success(request, 'Draft plan v{} generated.'.format(plan.version))
+    return _back(day, part, '#showflow')
+
+
+@staff_member_required
+@require_GET
+def plan_json(request, pk):
+    day = _day(request, pk)
+    plan = MicPlan.objects.filter(day=day).first()
+    if plan is None:
+        raise Http404('No plan for this day.')
+    apps, actions = page.load(plan)
+    return JsonResponse(page.plan_data(plan, apps, actions))
 
 
 # --------------------------------------------------------------------------
@@ -329,9 +367,15 @@ def person_save(request, pk):
     hint = request.POST.get('mic_hint', '')
     if hint not in dict(ShowflowPerson.MIC_HINT_CHOICES):
         hint = ''
+    backup = request.POST.get('backup_mic_type', person.backup_mic_type)
+    if backup not in dict(ShowflowPerson.BACKUP_TYPE_CHOICES):
+        backup = person.backup_mic_type
+    if hint != person.mic_hint or backup != person.backup_mic_type:
+        planning.mark_stale(person.day)    # the plan's packs depend on these
     if hint != person.mic_hint:
         person.mic_hint, person.mic_hint_locked = hint, True
-    person.save(update_fields=['presenter', 'flags', 'mic_hint', 'mic_hint_locked'])
+    person.backup_mic_type = backup
+    person.save(update_fields=['presenter', 'flags', 'mic_hint', 'mic_hint_locked', 'backup_mic_type'])
     messages.success(request, 'Saved {}.'.format(person.display_name))
     return _back(person.day, _maybe_part(request, part), '#person-{}'.format(person.pk))
 
@@ -384,21 +428,29 @@ def person_remove(request, pk):
 @edit_rights_required_page
 def mic_plan_settings(request):
     project = _project_or_404(request)
-    settings_obj, _ = MicPlanSettings.objects.get_or_create(project=project)
-    for name in SETTINGS_FIELDS:
+    settings_obj = planning.project_settings(project)
+    day = _maybe_day(request)
+    for name in INT_SETTINGS + OPTIONAL_SETTINGS:
         field = MicPlanSettings._meta.get_field(name)
-        raw = request.POST.get(name, '')
+        raw = request.POST.get(name, '').strip()
+        if raw == '' and name in OPTIONAL_SETTINGS:
+            setattr(settings_obj, name, None)
+            continue
         try:
             value = int(raw)
+            if value < 0:
+                raise ValueError
             for validator in field.validators:
                 validator(value)
         except (ValueError, ValidationError):
-            messages.error(request, '{}: enter a whole number in range.'.format(field.verbose_name))
-            return _back(_maybe_day(request))
+            messages.error(request, '{}: enter a whole number in range{}.'.format(
+                field.verbose_name, ', or leave it blank' if name in OPTIONAL_SETTINGS else ''))
+            return _back(day)
         setattr(settings_obj, name, value)
+    settings_obj.emergency_spare_hh = request.POST.get('emergency_spare_hh') == '1'
     settings_obj.save()
-    messages.success(request, 'Mic Plan settings saved.')
-    return _back(_maybe_day(request))
+    messages.success(request, 'Mic Plan settings saved. Re-generate to use them.')
+    return _back(day, _maybe_part(request, request.POST.get('part', '')))
 
 
 def _maybe_part(request, pk):

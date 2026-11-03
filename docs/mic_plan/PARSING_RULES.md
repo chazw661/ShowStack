@@ -214,11 +214,68 @@ Re-read also recomputes each stored row's times and segments (est_time,
 segment start/end) and the part's span. Presenter links that existed before
 this rule (PR 1.2) were all treated as automatic on the first rebuild.
 
+## The plan
+
+`planner/mic_plan/solver.py` (pure Python, no Django; `planning.py` feeds it
+from the database and saves the day's `MicPlan`). Times are minutes.
+
+### Appearances
+- **A part with cues** (cues cover at least half the people it lists): on at
+  the send, off at the catch.
+  - Caught, but a segment starting before the catch still lists them: kept on
+    to the end of that segment ("still listed").
+  - Never caught: on through the segment they were sent into, and through any
+    segments straight after it that still list them.
+  - Listed in a segment no cue window covers: on for that segment. As in the
+    parser's "No cue" rule, "listed in a segment" means named by the
+    segment's heading row (its Speaker cell), not by a welcome line just
+    before it.
+- **A part without cues:** on at the first row naming them; off when the row
+  after their last naming row starts, at most the end of that segment (the
+  end of the segment when that row has no later time). Rows in the same or the
+  next segment are one appearance; a segment without them splits it.
+- **Hosts:** 3+ appearances, or listed in 3+ segments: one appearance from
+  their first on to their last off, one pack, never de-mic'd.
+- **Back on within the pre-mic lead** of coming off: the pack stays on (no
+  de-mic, no new mic).
+
+### A2 time
+- Mic: released at on − lead, must finish by on − margin. De-mic: released at
+  off.
+- The A2 free soonest takes the next action; one A2's actions never overlap.
+- A de-mic is done first when doing it now still lets every open mic make its
+  deadline (earliest-deadline-first check across all A2s, against the lateness
+  that is already unavoidable).
+- Otherwise a mic is done as soon as it is released and a pack is free. With
+  no free pack it waits for one to free up, unless none can free up in time,
+  and opens a new pack only when waiting longer would make a mic later. This
+  is how A2s work (people are mic'd as they arrive) and never needs more packs
+  than the prototype's latest-safe mics (tested on both fixtures).
+- Late (ready after the walk-on) and tight (inside the margin) are flagged;
+  nothing is retried, so an impossible day still finishes.
+
+### Packs
+- The person's own previous pack if free, else the pack free longest, else a
+  new one. Body and handheld are separate pools (hint "HH" = handheld).
+- Hint "backup": an extra pack of their own (handheld unless set to body pack
+  in People), mic'd and de-mic'd with them, shown as "<Name> backup" and
+  counted in the totals.
+- RF numbers: body, body backups, handheld, handheld backups, then the
+  emergency spare handheld, which is never assigned and counts against the
+  handheld total.
+- Over a set body or handheld count, the plan is still made and each pack
+  over is flagged at its line ("need 1 more body pack than the 8 set").
+- A2 busy: action minutes inside each segment, per A2. More than the segment
+  is long is flagged "A2 overload"; 90 % and over is counted in the stat tile.
+
 ## Interactions with the plan
 
-- A re-read changes `est_time`, and with it every on/off time, so it must
-  mark the day's MicPlan stale (PR 2). So must an import, Replace, delete,
-  merge, crew change and mic hint change.
+- A re-read changes `est_time`, and with it every on/off time, so it marks
+  the day's MicPlan stale. So do an import, Replace, delete, merge, alias
+  removal, crew change, Remove and a mic hint or backup type change. A plan
+  settings change is shown as a banner (the plan keeps its settings snapshot).
+- PR 5: once a plan has been applied to Mic Tracker, Re-generate must treat
+  the current RF numbers as soft pins, so labels already printed stay valid.
 
 ## Reading time
 

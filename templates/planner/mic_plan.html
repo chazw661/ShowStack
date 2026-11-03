@@ -29,6 +29,24 @@
                 <button type="button" class="mp-btn primary" id="mp-import-btn"
                         title="PDF, up to {{ max_pages }} pages and {{ max_mb }} MB. Read now, not kept: only its rows are saved.">Import showflow</button>
             </form>
+            {% if parts %}
+            <form id="mp-generate" class="mp-generate" method="post" action="{% url 'planner:mic_plan_generate' day.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="part" value="{{ part.pk }}">
+                {% if plan %}
+                <input type="hidden" name="replace" value="1">
+                <button type="button" class="mp-btn" id="mp-regen">Re-generate</button>
+                <span class="mp-ask" id="mp-regen-ask" hidden>
+                    Replace the draft (v{{ plan.version }})?
+                    <button type="submit" class="mp-btn small primary">Re-generate</button>
+                    <button type="button" class="mp-btn small" id="mp-regen-cancel">Cancel</button>
+                </span>
+                <noscript><button type="submit" class="mp-btn">Replace the draft (v{{ plan.version }})</button></noscript>
+                {% else %}
+                <button type="submit" class="mp-btn">Generate plan</button>
+                {% endif %}
+            </form>
+            {% endif %}
             {% endif %}
             <a class="mp-btn" href="{% url 'planner:mic_tracker' %}">Mic Tracker →</a>
             {% tutorial_button 'mic_plan' quiet=True %}
@@ -44,7 +62,7 @@
             </select>
             <noscript><button class="mp-btn small" type="submit">Show</button></noscript>
         </form>
-        {% if parts|length > 1 or part %}
+        {% if part %}
         <nav class="mp-tabs" aria-label="Parts of this day">
             {% for p in parts %}
             <a class="mp-tab" href="?day={{ day.pk }}&amp;part={{ p.obj.pk }}"{% if p.obj.pk == part.pk %} aria-current="page"{% endif %}
@@ -54,15 +72,42 @@
             </a>
             {% endfor %}
         </nav>
+        {% if can_edit %}
+        <details class="mp-partmenu" id="mp-partmenu">
+            <summary class="mp-btn small">Part {{ part_no }} menu</summary>
+            <div class="mp-menu">
+                <p class="mp-muted">{{ part.source_filename }} · imported {{ part.imported_at|date:"M j, H:i" }}</p>
+                <form method="post" action="{% url 'planner:mic_plan_reread' part.pk %}">
+                    {% csrf_token %}
+                    <button class="mp-btn small" type="submit">Re-read with current rules</button>
+                    <p class="mp-note">Reads this part's saved rows again: times, people, cues and flags. No PDF needed. What you set on people is kept.</p>
+                </form>
+                <form method="post" action="{% url 'planner:mic_plan_delete' part.pk %}">
+                    {% csrf_token %}
+                    <button class="mp-btn small danger" type="submit">Delete this part</button>
+                    <p class="mp-note">Removes its rows and cues. The Mic Tracker is not touched.</p>
+                </form>
+            </div>
+        </details>
         {% endif %}
-        {% if part %}
-        <div class="mp-stats">
-            <div class="mp-stat"><b>{{ segments|length }}</b><span>Segments</span></div>
-            <div class="mp-stat"><b>{{ people_here }}</b><span>People</span></div>
-            <div class="mp-stat{% if flag_count %} warn{% endif %}"><b>{{ flag_count }}</b><span>To check</span></div>
-        </div>
+        <button type="button" class="mp-btn small" data-drawer="people">People ({{ people|length }})</button>
         {% endif %}
     </div>
+    {% if part %}
+    <div class="mp-stats">
+        {% if stats %}
+        <div class="mp-stat"><b>{{ stats.body }}</b><span>Body packs</span></div>
+        {% if stats.hh %}<div class="mp-stat"><b>{{ stats.hh }}</b><span>Handhelds</span></div>{% endif %}
+        <div class="mp-stat"><b>{{ stats.hosts }}</b><span>Host packs</span></div>
+        <div class="mp-stat"><b>{{ stats.swaps }}</b><span>Swaps</span></div>
+        <div class="mp-stat{% if stats.hot %} warn{% endif %}"><b>{{ stats.hot }}</b><span>Segments A2 ≥ 90%</span></div>
+        {% endif %}
+        <div class="mp-stat{% if cards %} warn{% endif %}"><b>{{ cards|length }}</b><span>To review</span></div>
+        <button type="button" class="mp-stat mp-stat-settings" data-drawer="settings" title="Plan settings">
+            <b>Settings</b><span>{{ settings_summary }}</span>
+        </button>
+    </div>
+    {% endif %}
     {% endif %}
 
     <div class="mp-body">
@@ -81,193 +126,215 @@
             <p class="mp-note">Import the day's showflow PDF (up to {{ max_pages }} pages and {{ max_mb }} MB). It is read now and not kept: only its rows are saved.</p>
         </div>
     {% else %}
-        <p class="mp-note">{{ part.source_filename }} · imported {{ part.imported_at|date:"M j, H:i" }}.
-            A file covering the same times as a part replaces it (you are asked first); otherwise it is added as a new part.</p>
+        {% if plan.stale %}<p class="mp-banner warn" role="status">The showflow, its people or their mic hints changed after this plan was made (v{{ plan.version }}). Re-generate to update it.</p>{% endif %}
+        {% if settings_changed %}<p class="mp-banner warn" role="status">Plan settings changed after this plan was made (v{{ plan.version }}). Re-generate to use them.</p>{% endif %}
+        {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so on and off times come from the lines that name each person.</p>{% endif %}
+        {% if not plan %}<p class="mp-banner" role="status">No plan yet.{% if can_edit %} Check the showflow and people, then press <b>Generate plan</b>.{% endif %}</p>{% endif %}
 
-        {% if loose_flags %}
-        <ul class="mp-loose">
-            {% for f in loose_flags %}<li class="mp-flag"><span class="mp-kind">{{ flag_labels|get_item:f.kind|default:f.kind }}</span>{{ f.text }}</li>{% endfor %}
-        </ul>
-        {% endif %}
-
-        <div class="mp-layout">
-            <section aria-labelledby="mp-stage-h">
-                <div class="mp-focusbar" id="mp-focusbar" role="status">
-                    <span>Showing <strong id="mp-focus-name"></strong>: their lines are highlighted.</span>
-                    <button type="button" class="mp-btn small" id="mp-focus-clear">Show everyone</button>
+        <div class="mp-viewbar">
+            <div class="mp-views" role="tablist">
+                <button type="button" class="mp-view" role="tab" id="t-showflow" data-v="showflow">Showflow + plan</button>
+                <button type="button" class="mp-view" role="tab" id="t-packs" data-v="packs">Pack chart</button>
+                <button type="button" class="mp-view" role="tab" id="t-review" data-v="review">Review ({{ cards|length }})</button>
+            </div>
+            <div class="mp-tools">
+                <div class="mp-pill" id="mp-pill" role="status" hidden>
+                    <span id="mp-pill-text"></span>
+                    <button type="button" class="mp-btn small" id="mp-pill-details" hidden>Details</button>
+                    <button type="button" class="mp-btn small" id="mp-pill-clear">Clear</button>
                 </div>
-                <h2 class="mp-h2" id="mp-stage-h">Who's on stage</h2>
-                {% if not has_cues %}
-                <p class="mp-note" style="margin-bottom:10px">No send/catch cues in this showflow — on/off times come from segment times.</p>
-                {% endif %}
-                <div class="mp-stage">
-                {% for s in segments %}
-                    <article class="mp-seg{% if s.is_break %} brk{% endif %}{% if not s.items %} quiet{% endif %}" id="seg-{{ s.start }}">
-                        <header class="mp-seg-head">
-                            <span class="mp-seg-name">{{ s.name|default:"(untitled)" }}</span>
-                            {% if s.t0 %}<span class="mp-seg-time">{{ s.t0 }}–{{ s.t1 }}</span>{% endif %}
-                            <span class="mp-seg-line">line {{ s.first_line }}</span>
-                        </header>
-                        {% if s.items %}
-                        <ul class="mp-items">
-                        {% for item in s.items %}
-                            {% if item.person %}
-                            <li class="mp-item" data-person="{{ item.person.pk }}">
-                                <div class="mp-who">
-                                    <button type="button" class="mp-name" data-select="{{ item.person.pk }}">{{ item.person.display_name }}</button>
-                                    {% if item.intro_line %}<span class="mp-intro">intro'd line {{ item.intro_line }}</span>{% endif %}
-                                </div>
-                                <div class="mp-read">
-                                    <span class="mp-on">on {{ item.on_line }}</span>
-                                    {% if item.off_line %}<span class="mp-off">off {{ item.off_line }}</span>{% else %}<span class="mp-how">not caught</span>{% endif %}
-                                    <span class="mp-how">{% if item.by_cue %}{{ item.on_time }}{% if item.off_time %}–{{ item.off_time }}{% endif %} · cue{% elif item.on_time %}{{ item.on_time }}–{{ item.off_time }} · segment{% endif %}</span>
-                                </div>
-                            </li>
-                            {% else %}
-                            <li class="mp-item flag"{% if item.person_id %} data-person="{{ item.person_id }}"{% endif %}>
-                                <span class="mp-kind">{{ flag_labels|get_item:item.kind|default:item.kind }}</span><a href="#row-{{ item.order }}" data-open-rows>{{ item.text }}</a>
-                            </li>
-                            {% endif %}
-                        {% endfor %}
-                        </ul>
-                        {% endif %}
-                    </article>
-                {% endfor %}
-                </div>
-            </section>
-
-            <aside class="mp-side">
-                <div class="mp-panel" id="mp-people">
-                    <h2>People on {{ day }}</h2>
-                    <p class="mp-note" style="margin-bottom:8px">Every part of the day. Merges, Presenter links and mic hints you set stay when a file is re-imported or re-read; everything else is read again. Select someone to see their lines{% if can_edit %} and change them{% endif %}.</p>
-                    <table class="mp-people">
-                        <thead><tr><th>Name</th><th>Lines</th><th>Presenter</th><th>Mic</th></tr></thead>
-                        <tbody>
-                        {% for person in people %}
-                        <tr id="person-{{ person.pk }}" data-person="{{ person.pk }}" data-name="{{ person.display_name }}"
-                            data-presenter="{{ person.presenter_id|default:'' }}" data-hint="{{ person.mic_hint }}" tabindex="0"
-                            aria-label="{{ person.display_name }}">
-                            <td>{{ person.display_name }}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}
-                                {% if person.flags.gone %}<span class="mp-tag gone">no longer in this showflow</span>
-                                {% if can_edit %}<form class="mp-remove" method="post" action="{% url 'planner:mic_plan_remove' person.pk %}">
-                                    {% csrf_token %}<input type="hidden" name="part" value="{{ part.pk }}">
-                                    <button type="submit" class="mp-btn small danger" title="Delete {{ person.display_name }} with the merge, Presenter link and mic hint set on them">Remove</button>
-                                </form>{% endif %}{% endif %}</td>
-                            <td class="mp-lines">{{ person.lines|join:", "|default:"—" }}</td>
-                            <td>{{ person.presenter.name|default:"—" }}</td>
-                            <td class="mp-lines">{{ person.mic_hint|default:"—" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="4" class="mp-muted">Nobody found yet.</td></tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-
-                    {% if can_edit and people %}
-                    <div class="mp-editor" id="mp-editor" aria-live="polite">
-                        <h3 id="mp-editor-name"></h3>
-                        <form method="post" id="mp-person-form" data-action="{% url 'planner:mic_plan_person' 0 %}">
-                            {% csrf_token %}
-                            <input type="hidden" name="part" value="{{ part.pk }}">
-                            <label>Presenter
-                                <select name="presenter" id="mp-presenter">
-                                    <option value="">— No presenter —</option>
-                                    {% for pr in presenters %}<option value="{{ pr.pk }}">{{ pr.name }}</option>{% endfor %}
-                                </select>
-                            </label>
-                            <label>Mic
-                                <select name="mic_hint" id="mp-hint">
-                                    {% for value, label in mic_hint_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-                                </select>
-                            </label>
-                            <button class="mp-btn small primary" type="submit">Save</button>
-                        </form>
-                        {% for person in people %}{% if person.aliases %}
-                        <div class="mp-aliases" data-for="{{ person.pk }}" hidden>
-                            <span class="mp-muted" style="font-size:12px">Also read as:</span>
-                            {% for a in person.aliases %}
-                            <form class="mp-alias" method="post" action="{% url 'planner:mic_plan_unalias' person.pk %}">
-                                {% csrf_token %}<input type="hidden" name="alias" value="{{ a }}"><input type="hidden" name="part" value="{{ part.pk }}">
-                                {{ a }}<button type="submit" title="Stop reading “{{ a }}” as {{ person.display_name }}" aria-label="Remove alias {{ a }}">×</button>
-                            </form>
-                            {% endfor %}
-                        </div>
-                        {% endif %}{% endfor %}
-                        <button type="button" class="mp-btn small" id="mp-merge-start">Merge a duplicate into this person…</button>
-                        <form class="mp-mergebar" id="mp-mergebar" method="post" data-action="{% url 'planner:mic_plan_merge' 0 %}">
-                            {% csrf_token %}
-                            <input type="hidden" name="part" value="{{ part.pk }}">
-                            <input type="hidden" name="into" id="mp-merge-into">
-                            <span id="mp-merge-text">Now select the duplicate in the list.</span>
-                            <button type="submit" class="mp-btn small primary" id="mp-merge-go" disabled>Merge</button>
-                            <button type="button" class="mp-btn small" id="mp-merge-cancel">Cancel</button>
-                        </form>
-                    </div>
-                    {% endif %}
-                </div>
-
-                {% if has_cues %}
-                <form class="mp-panel" id="mp-crew"{% if can_edit %} method="post" action="{% url 'planner:mic_plan_crew' part.pk %}"{% else %} onsubmit="return false;"{% endif %}>
-                    {% csrf_token %}
-                    <h2>Crew names</h2>
-                    <p class="mp-note" style="margin-bottom:8px">Cues are read as "&lt;crew&gt; sends / catches &lt;names&gt;". Untick a name to stop reading its cues.</p>
-                    <div>
-                        {% for c in part.crew_names %}
-                        <label class="mp-chip"><input type="checkbox" name="crew" value="{{ c }}" checked{% if not can_edit %} disabled{% endif %}> {{ c }}</label>
-                        {% empty %}<span class="mp-muted">None yet.</span>{% endfor %}
-                    </div>
-                    {% if can_edit %}
-                    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-                        <input type="text" name="add" placeholder="Add names, comma-separated" aria-label="Add crew names">
-                        <button class="mp-btn small" type="submit">Save &amp; re-read</button>
-                    </div>
-                    {% endif %}
-                </form>
-                {% endif %}
-
-                {% if can_edit %}
-<details class="mp-panel mp-partmenu">
-                    <summary class="mp-muted" style="cursor:pointer">Part menu: {{ part.source_filename }}</summary>
-                    <form method="post" action="{% url 'planner:mic_plan_reread' part.pk %}" style="margin-top:8px">
-                        {% csrf_token %}
-                        <p class="mp-note">Reads this part's saved rows again with the current rules: times, people, cues and flags. No PDF needed. Merges, Presenter links and mic hints you set are kept.</p>
-                        <button class="mp-btn small" type="submit">Re-read with current rules</button>
-                    </form>
-                    <form method="post" action="{% url 'planner:mic_plan_delete' part.pk %}" style="margin-top:12px">
-                        {% csrf_token %}
-                        <p class="mp-note">Removes its rows and cues. People no other part of this day mentions go too, unless you set something on them; the Mic Tracker is not touched.</p>
-                        <button class="mp-btn small danger" type="submit">Delete this import</button>
-                    </form>
-                </details>
-                {% endif %}
-            </aside>
+                {% if blank_count %}<label id="mp-empty-wrap" class="mp-muted"><input type="checkbox" id="mp-show-empty"> Show {{ blank_count }} empty line{{ blank_count|pluralize }}</label>{% endif %}
+            </div>
         </div>
 
-        <details class="mp-panel mp-all" id="mp-all">
-            <summary>Show all showflow lines ({{ rows|length }})</summary>
-            <p class="mp-note" style="margin-top:8px">Times with ≈ are estimated between the clock times around them.
-                {% if blank_count %}<label><input type="checkbox" id="mp-show-blank"> Show {{ blank_count }} blank line{{ blank_count|pluralize }}</label>{% endif %}</p>
+        <section id="v-showflow" role="tabpanel" aria-labelledby="t-showflow" hidden>
             <div class="mp-rows-wrap">
             <table class="mp-rows" id="mp-rows">
-                <thead><tr><th>Line</th><th>Time</th><th>Description</th><th>Speaker</th><th>BSM</th><th>Notes</th><th class="read">ShowStack read</th></tr></thead>
+                <thead><tr><th>Line</th><th>Time</th><th>Showflow</th><th>BSM (as written)</th><th class="plan">Packs</th><th class="plan">A2 does here</th></tr></thead>
                 <tbody>
                 {% for row in rows %}
-                <tr id="row-{{ row.order }}" class="{% if row.is_segment %}seg{% endif %}{% if row.is_blank %} blank{% endif %}"{% if row.people_ids %} data-people="{{ row.people_ids }}"{% endif %}>
+                <tr id="row-{{ row.order }}" class="{% if row.is_segment %}seg{% if row.segment.is_break %} brk{% endif %}{% endif %}{% if row.empty %} blank{% endif %}"
+                    data-who="{{ row.who|join:' ' }}" data-rf="{{ row.rfs|join:' ' }}">
                     <td class="num">{{ row.line_no }}</td>
-                    <td class="num{% if row.time_exact %} exact{% endif %}">{% if not row.is_blank %}{{ row.time_label }}{% endif %}</td>
-                    <td class="desc">{{ row.description }}</td>
-                    <td class="small">{{ row.speaker_text }}</td>
-                    <td class="small">{{ row.bsm_html|safe }}</td>
-                    <td class="small">{{ row.notes_text }}</td>
-                    <td class="read">{% for e in row.event_list %}<span class="mp-ev {% if e.kind == 'send' %}mp-on{% else %}mp-off{% endif %}">{{ e.get_kind_display }} {{ e.person.display_name }}</span>{% endfor %}{% if row.people and not row.event_list %}{% for p in row.people %}{{ p.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</td>
+                    <td class="num{% if row.time_exact %} exact{% endif %}">{% if row.segment %}{{ row.segment.t0_label }}{% elif not row.is_blank %}{{ row.time_label }}{% endif %}</td>
+                    <td class="src">
+                        {% if row.segment %}
+                        <div><span class="sname">{{ row.segment.name|default:row.description }}</span> <span class="stime">{{ row.segment.t0_label }}–{{ row.segment.t1_label }}</span></div>
+                        {% for m in row.segment.meters %}<div class="load {{ m.level }}"><span class="meter {{ m.level }}"><i style="width:{{ m.pct }}%"></i></span>{{ m.a2 }} busy {{ m.busy }} of {{ m.span }} min</div>{% endfor %}
+                        {% else %}<span{% if row.is_segment %} class="sname"{% endif %}>{{ row.description }}</span>{% endif %}
+                        {% if row.speaker_text %}<span class="spk">{{ row.speaker_text }}</span>{% endif %}
+                    </td>
+                    <td class="bsm">{{ row.bsm_html|safe }}</td>
+                    <td class="plan"><div class="cell">{% for c in row.chips %}{% if c.kind == 'send' or c.kind == 'on' %}<button type="button" class="chip send" data-who="{{ c.person }}">{{ c.name }}{% if c.kind == 'on' %} on{% endif %} <span class="rf" data-rf="{{ c.rf|default:'' }}">→{% if c.rf %} RF {{ c.rf }}{% endif %}</span></button>{% else %}<button type="button" class="chip catch" data-who="{{ c.person }}"><span class="rf" data-rf="{{ c.rf|default:'' }}">{% if c.rf %}RF {{ c.rf }} {% endif %}←</span> {{ c.name }}{% if c.kind == 'off' %} off{% endif %}</button>{% endif %}{% endfor %}</div></td>
+                    <td class="plan">{% if row.acts %}<div class="act">{% for a in row.acts %}<span class="t">{{ a.time }}</span><span>{% if a.a2 %}<span class="a2">{{ a.a2 }}</span> {% endif %}<span class="verb {{ a.kind }}">{{ a.verb }}</span><button type="button" class="chip" data-who="{{ a.person }}">{{ a.name }} <span class="rf" data-rf="{{ a.rf_number }}">{{ a.rf }}</span></button> <span class="note{% if a.late %} crit{% elif a.long_wait or a.tight %} warn{% endif %}">{{ a.reason }}</span></span>{% endfor %}</div>{% endif %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
             </table>
             </div>
-        </details>
+        </section>
+
+        <section id="v-packs" role="tabpanel" aria-labelledby="t-packs" hidden>
+            {% if chart %}
+            <div class="mp-chart-wrap"><div class="mp-chart" id="mp-chart">
+                <div class="axis">
+                    {% for b in chart.bands %}<div class="band{% if b.is_break %} brk{% endif %}" style="left:{{ b.left }}%;width:{{ b.width }}%" title="{{ b.tip }}"><span>{{ b.label }}</span></div>{% endfor %}
+                    {% for t in chart.ticks %}<span class="tick" style="left:{{ t.left }}%">{{ t.label }}</span>{% endfor %}
+                </div>
+                {% for lane in chart.lanes %}
+                <div class="lane{% if lane.spare %} spare{% endif %}" data-rf="{{ lane.rf }}">
+                    <button type="button" class="rflab" data-rf="{{ lane.rf }}">RF {{ lane.rf }}<small>{% if lane.pool == 'HH' %}HH · {% endif %}{{ lane.sub }}</small></button>
+                    <div class="track">
+                        {% for b in chart.bands %}{% if b.is_break %}<div class="bg" style="left:{{ b.left }}%;width:{{ b.width }}%"></div>{% endif %}{% endfor %}
+                        {% for s in lane.bars %}<div class="worn" data-who="{{ s.person }}" style="left:{{ s.worn_left }}%;width:{{ s.worn_width }}%" title="{{ s.tip }}"></div><div class="stage" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%;width:{{ s.stage_width }}%" title="{{ s.tip }}">{{ s.first }}</div>{% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div></div>
+            <div class="mp-legend"><span><i class="k-stage"></i>On stage</span><span><i class="k-worn"></i>Mic'd off stage (mic → de-mic)</span><span><i class="k-break"></i>Break / lunch</span></div>
+            {% else %}
+            <div class="mp-panel"><p class="mp-note">The pack chart appears once a plan is generated.</p></div>
+            {% endif %}
+        </section>
+
+        <section id="v-review" role="tabpanel" aria-labelledby="t-review" hidden>
+            <p class="mp-note" style="margin-bottom:10px">Where the showflow was incomplete or contradicted itself, and where the plan is tight. Check each one before the plan is used.</p>
+            <div class="mp-cards">
+            {% for c in cards %}
+                <div class="mp-card{% if c.plan %} plan{% endif %} k-{{ c.kind }}">
+                    <span class="mp-kind">{{ c.label }}</span>
+                    <div class="what">{{ c.text }}</div>
+                    {% if c.note %}<div class="assume">Plan: {{ c.note }}</div>{% endif %}
+                    <div class="where">{% if c.line %}Line {{ c.line }}{% if parts|length > 1 %} · Part {{ c.part_no }}{% endif %}{% endif %}</div>
+                    {% if c.part %}<a class="mp-btn small" href="?day={{ day.pk }}&amp;part={{ c.part }}#showflow:row-{{ c.row_order }}">Show in showflow</a>
+                    {% elif c.person %}<button type="button" class="mp-btn small" data-open-person="{{ c.person }}">Show person</button>{% endif %}
+                </div>
+            {% empty %}
+                <div class="mp-panel"><p class="mp-note">Nothing to review.</p></div>
+            {% endfor %}
+            </div>
+        </section>
     {% endif %}
     </div>
+
+    {% if part %}
+    <aside class="mp-drawer" id="mp-drawer" aria-label="People and plan settings" hidden>
+        <div class="mp-drawer-head">
+            <h2 id="mp-drawer-title">People</h2>
+            <button type="button" class="mp-btn small" id="mp-drawer-close">Close</button>
+        </div>
+        <div class="mp-panel" id="mp-people" data-pane="people">
+            <p class="mp-note" style="margin-bottom:8px">Every part of the day. Merges, Presenter links and mic hints you set stay when a file is re-imported or re-read. Select someone to see their lines{% if can_edit %} and change them{% endif %}.</p>
+            <table class="mp-people">
+                <thead><tr><th>Name</th><th>Lines (part {{ part_no }})</th><th>Presenter</th><th>Mic</th></tr></thead>
+                <tbody>
+                {% for person in people %}
+                <tr id="person-{{ person.pk }}" data-person="{{ person.pk }}" data-name="{{ person.display_name }}"
+                    data-presenter="{{ person.presenter_id|default:'' }}" data-hint="{{ person.mic_hint }}"
+                    data-backup="{{ person.backup_mic_type }}" tabindex="0" aria-label="{{ person.display_name }}">
+                    <td>{{ person.display_name }}{% if person.intro_line %} <span class="mp-intro">intro'd line {{ person.intro_line }}</span>{% endif %}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}
+                        {% if person.flags.gone %}<span class="mp-tag gone">no longer in this showflow</span>
+                        {% if can_edit %}<form class="mp-remove" method="post" action="{% url 'planner:mic_plan_remove' person.pk %}">
+                            {% csrf_token %}<input type="hidden" name="part" value="{{ part.pk }}">
+                            <button type="submit" class="mp-btn small danger" title="Delete {{ person.display_name }} with the merge, Presenter link and mic hint set on them">Remove</button>
+                        </form>{% endif %}{% endif %}</td>
+                    <td class="mp-lines">{{ person.lines|join:", "|default:"—" }}</td>
+                    <td>{{ person.presenter.name|default:"—" }}</td>
+                    <td class="mp-lines">{{ person.mic_hint|default:"—" }}{% if person.mic_hint == 'backup' %} + {{ person.get_backup_mic_type_display|lower }}{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="mp-muted">Nobody found yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if can_edit and people %}
+            <div class="mp-editor" id="mp-editor" aria-live="polite">
+                <h3 id="mp-editor-name"></h3>
+                <form method="post" id="mp-person-form" data-action="{% url 'planner:mic_plan_person' 0 %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="part" value="{{ part.pk }}">
+                    <label>Presenter
+                        <select name="presenter" id="mp-presenter">
+                            <option value="">— No presenter —</option>
+                            {% for pr in presenters %}<option value="{{ pr.pk }}">{{ pr.name }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label>Mic
+                        <select name="mic_hint" id="mp-hint">
+                            {% for value, label in mic_hint_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label id="mp-backup-wrap">Backup pack
+                        <select name="backup_mic_type" id="mp-backup">
+                            {% for value, label in backup_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <button class="mp-btn small primary" type="submit">Save</button>
+                </form>
+                {% for person in people %}{% if person.aliases %}
+                <div class="mp-aliases" data-for="{{ person.pk }}" hidden>
+                    <span class="mp-muted" style="font-size:12px">Also read as:</span>
+                    {% for a in person.aliases %}
+                    <form class="mp-alias" method="post" action="{% url 'planner:mic_plan_unalias' person.pk %}">
+                        {% csrf_token %}<input type="hidden" name="alias" value="{{ a }}"><input type="hidden" name="part" value="{{ part.pk }}">
+                        {{ a }}<button type="submit" title="Stop reading “{{ a }}” as {{ person.display_name }}" aria-label="Remove alias {{ a }}">×</button>
+                    </form>
+                    {% endfor %}
+                </div>
+                {% endif %}{% endfor %}
+                <button type="button" class="mp-btn small" id="mp-merge-start">Merge a duplicate into this person…</button>
+                <form class="mp-mergebar" id="mp-mergebar" method="post" data-action="{% url 'planner:mic_plan_merge' 0 %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="part" value="{{ part.pk }}">
+                    <input type="hidden" name="into" id="mp-merge-into">
+                    <span id="mp-merge-text">Now select the duplicate in the list.</span>
+                    <button type="submit" class="mp-btn small primary" id="mp-merge-go" disabled>Merge</button>
+                    <button type="button" class="mp-btn small" id="mp-merge-cancel">Cancel</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if has_cues %}
+        <form class="mp-panel" id="mp-crew" data-pane="people"{% if can_edit %} method="post" action="{% url 'planner:mic_plan_crew' part.pk %}"{% else %} onsubmit="return false;"{% endif %}>
+            {% csrf_token %}
+            <h2>Crew names</h2>
+            <p class="mp-note" style="margin-bottom:8px">Cues are read as "&lt;crew&gt; sends / catches &lt;names&gt;". Untick a name to stop reading its cues.</p>
+            <div>
+                {% for c in part.crew_names %}
+                <label class="mp-chip"><input type="checkbox" name="crew" value="{{ c }}" checked{% if not can_edit %} disabled{% endif %}> {{ c }}</label>
+                {% empty %}<span class="mp-muted">None yet.</span>{% endfor %}
+            </div>
+            {% if can_edit %}
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+                <input type="text" name="add" placeholder="Add names, comma-separated" aria-label="Add crew names">
+                <button class="mp-btn small" type="submit">Save &amp; re-read</button>
+            </div>
+            {% endif %}
+        </form>
+        {% endif %}
+
+        <form class="mp-panel mp-settings" id="mp-settings" data-pane="settings"{% if can_edit %} method="post" action="{% url 'planner:mic_plan_settings' %}"{% else %} onsubmit="return false;"{% endif %}>
+            {% csrf_token %}
+            <input type="hidden" name="day" value="{{ day.pk }}">
+            <input type="hidden" name="part" value="{{ part.pk }}">
+            <h2>Plan settings</h2>
+            <p class="mp-note" style="margin-bottom:8px">For every day of this project, in minutes except the counts. Leave a pack count blank to see how many the plan needs.</p>
+            <div class="mp-fields">
+                <label>A2s<input type="number" name="a2_count" min="1" max="10" value="{{ settings.a2_count }}" required{% if not can_edit %} disabled{% endif %}></label>
+                <label>Mic<input type="number" name="mic_min" min="1" max="30" value="{{ settings.mic_min }}" required{% if not can_edit %} disabled{% endif %}></label>
+                <label>De-mic<input type="number" name="demic_min" min="1" max="30" value="{{ settings.demic_min }}" required{% if not can_edit %} disabled{% endif %}></label>
+                <label>Pre-mic lead<input type="number" name="premic_lead_min" min="0" max="240" value="{{ settings.premic_lead_min }}" required{% if not can_edit %} disabled{% endif %}></label>
+                <label>Margin<input type="number" name="margin_min" min="0" max="60" value="{{ settings.margin_min }}" required{% if not can_edit %} disabled{% endif %}></label>
+                <label>Body packs<input type="number" name="body_pack_count" min="0" max="200" value="{{ settings.body_pack_count|default_if_none:'' }}" placeholder="as needed"{% if not can_edit %} disabled{% endif %}></label>
+                <label>Handhelds<input type="number" name="hh_count" min="0" max="200" value="{{ settings.hh_count|default_if_none:'' }}" placeholder="as needed"{% if not can_edit %} disabled{% endif %}></label>
+                <label class="mp-check"><input type="checkbox" name="emergency_spare_hh" value="1"{% if settings.emergency_spare_hh %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> Keep the last handheld as an emergency spare</label>
+            </div>
+            {% if can_edit %}<button class="mp-btn small primary" type="submit">Save settings</button>{% endif %}
+        </form>
+    </aside>
+    {% endif %}
 </div>
 <script src="{% static 'planner/js/mic_plan.js' %}"></script>
 {% endblock %}
