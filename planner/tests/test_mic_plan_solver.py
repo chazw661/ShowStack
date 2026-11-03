@@ -657,3 +657,55 @@ class PackPolicyTests(TestCase):
                         plan = _solve(day, recycle(premic_lead_min=lead, margin_min=5, a2_count=a2))
                         self.assertEqual([], unexplained(plan))
                         self.assertEqual(0, solver.summary(plan)['mid_session'])
+
+
+def assert_fewest_never_needs_more(test, day, **settings):
+    """fewest_packs body <= recycle_at_breaks body (HH <= HH when body is
+    equal), unless recycle_at_breaks' plan has more late, tight or short
+    flags (then fewest_packs keeps its own)."""
+    fewest = solver.summary(_solve(day, _Settings(pack_policy=solver.FEWEST_PACKS, **settings)))
+    recycled = solver.summary(_solve(day, _Settings(pack_policy=RECYCLE, **settings)))
+    if any(recycled[k] > fewest[k] for k in ('late', 'tight', 'shortage')):
+        return
+    test.assertLessEqual((fewest['body'], fewest['hh']), (recycled['body'], recycled['hh']))
+
+
+SETTINGS_GRID = [dict(premic_lead_min=lead, margin_min=margin, a2_count=a2)
+                 for lead in (5, 10, 20, 30) for margin in (0, 5, 10) for a2 in (1, 2)]
+
+
+class FewestPacksNeverNeedsMoreTests(DbTestCase):
+
+    def fixture_day(self, name):
+        user = User.objects.get_or_create(username='fx', defaults={'email': 'fx@example.com'})[0]
+        project = Project.objects.create(name=name, owner=user)
+        day = ShowDay.objects.create(project=project, date=date(2026, 4, 1))
+        importer.confirm(importer.stage_upload(day, F.build_pdf(getattr(F, name)), 'x.pdf', user))
+        return planning.build_day(day)[0]
+
+    def test_on_the_client_e_fixture_fewest_packs_takes_the_recycled_plan(self):
+        # Fewest packs' own plan: line 310's two walk-ons wait idle for a pack
+        # to free up, so the A2 has no time to de-mic before the 9:00 wave
+        # and opens an extra pack (11). Recycle at breaks needs 10.
+        day = self.fixture_day('CLIENT_E_PAGES')
+        own = solver.summary(solver._solve(day, _Settings(pack_policy=solver.FEWEST_PACKS), False))
+        plan = _solve(day, _Settings(pack_policy=solver.FEWEST_PACKS))
+        recycled = _solve(day, _Settings(pack_policy=RECYCLE))
+        self.assertEqual((11, 10, 10), (own['body'], solver.summary(plan)['body'],
+                                        solver.summary(recycled)['body']))
+        self.assertEqual(RECYCLE, plan.from_policy)
+        self.assertFalse([f for f in plan.flags if f['kind'] in ('reuse', 'break')])
+
+    def test_property_on_the_fixtures_across_the_settings_grid(self):
+        for name in ('MAIN_PAGES', 'CLIENT_E_PAGES', 'REVISED_PAGES'):
+            day = self.fixture_day(name)
+            for settings in SETTINGS_GRID:
+                with self.subTest(name=name, **settings):
+                    assert_fewest_never_needs_more(self, day, **settings)
+
+    def test_property_on_synthetic_days(self):
+        for day in (morning_and_awards().day(), break_day('9:35').day(), break_day('10:30').day(),
+                    mid_day().day(), mid_day(HH).day(), panel_day(8).day()):
+            for settings in SETTINGS_GRID:
+                with self.subTest(**settings):
+                    assert_fewest_never_needs_more(self, day, **settings)

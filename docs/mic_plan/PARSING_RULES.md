@@ -285,7 +285,15 @@ from the database and saves the day's `MicPlan`). Times are minutes.
     a session a pack that has been worn never goes to someone else, so a
     returner always gets their own back.
   - **Fewest packs** (the behaviour before PR 2.2): the pack free longest,
-    else a new one.
+    else a new one. This greedy reuse can cost a pack: on the Client E
+    fixture, line 310's two walk-ons wait idle for packs to free up, which
+    leaves the A2 no time to de-mic before the 9:00 wave, so it opens an
+    extra pack (11 against Recycle at breaks' 10). So Fewest packs also
+    solves the day with Recycle at breaks and uses that plan when it needs
+    fewer body packs (or as many and fewer handhelds) with no more late,
+    tight or short flags, without its mid-session and break-turnover flags.
+    Fewest packs therefore never needs more packs (tested on the fixtures;
+    checked on the 8 real files).
 - Sessions start at each break segment's start, and at the start of a part
   that begins after every earlier part has ended. A walk-on at or after a
   session start is in that session. A pack's session is the last one it was

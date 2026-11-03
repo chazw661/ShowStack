@@ -24,7 +24,8 @@ Times are minutes from midnight. The logic follows the prototype solver
    pack count); a run short of A2 time also gets the smallest pre-mic lead
    that fixes it, and whether one more A2 would. Nothing is retried.
 4. Packs: the person's own previous pack if free; else, by pack policy,
-   ``fewest_packs``: the one free longest; ``recycle_at_breaks`` (the
+   ``fewest_packs``: the one free longest (or recycle_at_breaks' whole plan
+   when that needs fewer packs); ``recycle_at_breaks`` (the
    default): a pack last worn before the latest break (or the start of a
    later part), lowest RF first, so within a session a worn pack never goes
    to someone else. Else a new one. A set pack count is binding: at it, a
@@ -183,6 +184,7 @@ class Plan:
     spill: dict = field(default_factory=dict)
     swaps: int = 0
     mid_session: int = 0     # packs that went to someone else within a session
+    from_policy: str = None  # fewest_packs: set when recycle_at_breaks' plan needed fewer packs
 
 
 def hm(t):
@@ -453,7 +455,33 @@ def session_starts(day):
 
 def solve(day, settings=Settings(), suggest=True):
     """The day's plan. ``suggest``: work out the fix for each run of late
-    mics the A2 can't reach (re-solves the day, so off inside that)."""
+    mics the A2 can't reach (re-solves the day, so off inside that).
+
+    fewest_packs never needs more packs than recycle_at_breaks: its greedy
+    reuse can cost a pack (a mic waiting idle for a pack to free up leaves
+    the A2 no time for de-mics later), so the day is also solved with
+    recycle_at_breaks, and that plan is used when it needs fewer body packs
+    (or as many, and fewer HH) and has no more late, tight or short flags."""
+    plan = _solve(day, settings, suggest)
+    if settings.pack_policy != FEWEST_PACKS:
+        return plan
+    alt = _solve(day, replace(settings, pack_policy=RECYCLE_AT_BREAKS), suggest)
+    if _fewer_packs(alt, plan):
+        # Mid-session reuse and break turnover are no concern of fewest_packs.
+        alt.flags = [f for f in alt.flags if f['kind'] not in ('reuse', 'break')]
+        alt.from_policy = RECYCLE_AT_BREAKS
+        return alt
+    return plan
+
+
+def _fewer_packs(a, b):
+    sa, sb = summary(a), summary(b)
+    if any(sa[k] > sb[k] for k in ('late', 'tight', 'shortage')):
+        return False
+    return (sa['body'], sa['hh']) < (sb['body'], sb['hh'])
+
+
+def _solve(day, settings, suggest):
     ix = _Index(day)
     plan = Plan()
     apps, hosts = appearances(day, ix)
