@@ -350,6 +350,141 @@ class ScheduleTests(TestCase):
         self.assertEqual('A2 1 8:30a MIC Person 1 RF 1 (new pack)', f['text'])
 
 
+def unexplained(plan):
+    """Late or tight mics the A2 could have reached: between the mic's
+    release and its start, its A2 started a de-mic or sat idle. With no pack
+    limit every late mic must be A2 time, so this must come back empty."""
+    out = []
+    for m in mics(plan):
+        if not (m.late or m.tight):
+            continue
+        busy_to = m.released
+        for a in sorted((a for a in plan.actions if a.a2_index == m.a2_index
+                         and a.end_min > m.released and a.start_min < m.start_min), key=lambda a: a.start_min):
+            if (a.kind == 'demic' and a.start_min >= m.released) or a.start_min > busy_to + 1e-9:
+                break
+            busy_to = max(busy_to, a.end_min)
+        else:
+            if busy_to >= m.start_min - 1e-9:
+                continue
+        out.append(m)
+    return out
+
+
+def morning_and_awards():
+    """Shaped like the cue-free day that showed the bug. 7:40-8:30: five
+    people on from 7:40, off at 8:14, 8:16, 8:20, 8:20 and 8:20; Eve walks on
+    at 8:26 needing one of their packs (before the fix: all five de-mics
+    first, and Eve late). 11:00-12:00: nine walk on together at 11:41, which one
+    A2 can't mic in a 20-minute lead (27 min of mics)."""
+    s = (Show().line(1, '7:40').line(2, '7:40').line(3, '8:14').line(4, '8:16').line(5, '8:20')
+         .line(6, '8:26').line(7, '8:30').line(8, '11:00').line(9, '11:41').line(10, '12:00')
+         .segment(1, 7, 'Panel', '7:40', '8:30').segment(8, 10, 'Awards', '11:00', '12:00'))
+    for k, (name, lines) in enumerate((('Ana Bell', (2,)), ('Cy Dunn', (2, 3)), ('Dee Fox', (2, 3, 4)),
+                                       ('Gil Hart', (2, 3, 4)), ('Eve Ford', (6,)), ('Ivy Kerr', (2, 3, 4))), 1):
+        s.person(k, name).lists(k, *lines)
+    for k in range(10, 19):
+        s.person(k, 'Winner {}'.format(k - 9)).lists(k, 9)
+    return s
+
+
+LEAD_20 = Settings(premic_lead_min=20, margin_min=5)
+
+
+class LateCauseTests(TestCase):
+
+    def test_an_unavoidably_late_run_later_in_the_day_no_longer_lets_de_mics_make_earlier_mics_late(self):
+        plan = solve(morning_and_awards().day(), LEAD_20)
+        eve, = mics(plan, 5)
+        self.assertFalse(eve.late or eve.tight)
+        self.assertEqual((h('8:17'), 'recycled'), (eve.start_min, eve.reason))   # straight after the first de-mic
+        late = {plan.appearances[m.appearance].person for m in mics(plan) if m.late or m.tight}
+        self.assertEqual(set(range(10, 19)) & late, late)       # only the 11:41 winners
+        self.assertEqual(4, sum(1 for m in mics(plan) if m.late or m.tight))
+        self.assertEqual([], unexplained(plan))
+
+    def test_with_no_pack_limit_every_late_mic_is_a2_time(self):
+        days = [morning_and_awards().day(), panel_day(6).day(), panel_day(8).day()]
+        for day in days:
+            for lead in (10, 15, 20, 30):
+                for margin in (0, 5, 10):
+                    for a2 in (1, 2):
+                        with self.subTest(lead=lead, margin=margin, a2=a2):
+                            plan = solve(day, Settings(premic_lead_min=lead, margin_min=margin, a2_count=a2))
+                            self.assertEqual([], unexplained(plan))
+                            causes = {f['cause'] for f in plan.flags if f['kind'] in ('late', 'tight')}
+                            self.assertLessEqual(causes, {'a2'})
+
+    def test_a2_time_is_named_with_the_smallest_lead_that_fixes_the_run_or_a_second_a2(self):
+        day = morning_and_awards().day()
+        plan = solve(day, LEAD_20)
+        flags = [f for f in plan.flags if f['kind'] in ('late', 'tight')]
+        self.assertEqual(['A2 time'] * 4, [f['text'].split('Cause: ')[1].split('.')[0] for f in flags])
+        # Nine 3-min mics finishing by 11:36 must start by 11:09: a 32-min
+        # lead. Two A2s do five each in 15 min: done 11:36, just in time.
+        self.assertEqual({'lead': 32, 'a2': True, 'mics': 4}, flags[0]['fix'])
+        self.assertTrue(flags[0]['text'].endswith(
+            'Cause: A2 time. Fix for these 4 mics: pre-mic lead 32 min (now 20), or a second A2.'))
+        for f in flags[1:]:
+            self.assertNotIn('fix', f)
+
+        def winners_on_time(settings):
+            p = solve(day, settings, suggest=False)
+            return not any(m.late or m.tight for m in mics(p) if m.person >= 10)
+        self.assertFalse(winners_on_time(Settings(premic_lead_min=31, margin_min=5)))
+        self.assertTrue(winners_on_time(Settings(premic_lead_min=32, margin_min=5)))
+        self.assertTrue(winners_on_time(Settings(premic_lead_min=20, margin_min=5, a2_count=2)))
+
+    def test_a_second_a2_is_only_offered_when_it_fixes_the_run(self):
+        # Ten at once with a 10-min lead: two A2s still need 15 min of mics.
+        s = panel_day(10)
+        plan = solve(s.day(), Settings(premic_lead_min=10, margin_min=0))
+        fix = next(f for f in plan.flags if 'fix' in f)
+        self.assertEqual(30, fix['fix']['lead'])
+        self.assertFalse(fix['fix']['a2'])
+        self.assertIn('Fix for these', fix['text'])
+        self.assertNotIn('A2.', fix['text'])
+
+    def pack_day(self):
+        # Ana is on 9:00-9:15; Bo walks on at 9:22 and can only have her pack.
+        return (Show().line(1, '9:00').line(2, '9:00').line(3, '9:15').line(4, '9:22').line(5, '9:30')
+                .segment(1, 5, 'Panel', '9:00', '9:30')
+                .person(1, 'Ana Bell').lists(1, 2).person(2, 'Bo Lane').lists(2, 4))
+
+    def test_at_the_pack_limit_a_mic_waits_for_a_de_mic_and_names_the_limit(self):
+        plan = solve(self.pack_day().day(), Settings(body_pack_count=1))
+        bo, = mics(plan, 2)
+        self.assertEqual((h('9:18'), 'recycled'), (bo.start_min, bo.reason))     # after Ana's 9:15 de-mic
+        flag, = [f for f in plan.flags if f['kind'] in ('late', 'tight')]
+        self.assertEqual(('tight', 'pack'), (flag['kind'], flag['cause']))
+        self.assertEqual('Line 4: Bo Lane is ready at 9:21a, 1 min before walking on (margin 5). '
+                         'Cause: no pack free (body limit 1).', flag['text'])
+        self.assertNotIn('fix', flag)
+        self.assertEqual(1, len(plan.packs))
+        self.assertFalse([f for f in plan.flags if f['kind'] == 'shortage'])
+
+    def test_the_handheld_limit_reads_the_same_with_the_spare_kept_back(self):
+        s = self.pack_day()
+        s.people[:] = [Person(1, 'Ana Bell', HH), Person(2, 'Bo Lane', HH)]
+        plan = solve(s.day(), Settings(hh_count=2, emergency_spare_hh=True))
+        flag, = [f for f in plan.flags if f['kind'] in ('late', 'tight')]
+        self.assertTrue(flag['text'].endswith('Cause: no pack free (handheld limit 2, 1 kept spare).'))
+
+    def test_without_a_limit_the_same_mic_gets_a_new_pack_on_time(self):
+        plan = solve(self.pack_day().day())
+        self.assertEqual(2, len(plan.packs))
+        self.assertFalse([f for f in plan.flags if f['kind'] in ('late', 'tight')])
+
+    def test_over_the_limit_only_when_no_pack_frees_before_the_walk_on(self):
+        s = self.pack_day()
+        s.rows[2] = Row(s.rows[2].key, PART, 2, '3', h('9:19'))      # Ana now off 9:19: free 9:22 + 3 min mic
+        plan = solve(s.day(), Settings(body_pack_count=1))
+        bo, = mics(plan, 2)
+        self.assertEqual('new pack', bo.reason)
+        self.assertFalse(bo.late or bo.tight)
+        self.assertEqual(['shortage'], [f['kind'] for f in plan.flags])
+
+
 class FixtureStrategyTests(DbTestCase):
     """Mic'ing people as they arrive never needs more packs than the
     prototype's latest-safe mics, on the scrubbed cued and cue-free files."""
@@ -368,6 +503,20 @@ class FixtureStrategyTests(DbTestCase):
                 self.assertLessEqual(sum(a.start_min for a in mics(early)),
                                      sum(a.start_min for a in mics(late)))
                 self.assertFalse(any(a.late for a in early.actions))
+
+    def test_with_no_pack_limit_every_late_mic_is_a2_time(self):
+        user = User.objects.create_user('fx', 'fx@example.com', 'pw', is_staff=True)
+        for name in ('MAIN_PAGES', 'CLIENT_E_PAGES'):
+            project = Project.objects.create(name=name, owner=user)
+            day = ShowDay.objects.create(project=project, date=date(2026, 4, 1))
+            importer.confirm(importer.stage_upload(day, F.build_pdf(getattr(F, name)), 'x.pdf', user))
+            data, _, _ = planning.build_day(day)
+            for lead in (5, 10, 20, 30):
+                for margin in (0, 5, 10):
+                    for a2 in (1, 2):
+                        with self.subTest(name=name, lead=lead, margin=margin, a2=a2):
+                            plan = solve(data, Settings(premic_lead_min=lead, margin_min=margin, a2_count=a2))
+                            self.assertEqual([], unexplained(plan))
 
 
 class StatTileTests(TestCase):

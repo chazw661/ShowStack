@@ -243,16 +243,26 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - Mic: released at on − lead, must finish by on − margin. De-mic: released at
   off.
 - The A2 free soonest takes the next action; one A2's actions never overlap.
-- A de-mic is done first when doing it now still lets every open mic make its
-  deadline (earliest-deadline-first check across all A2s, against the lateness
-  that is already unavoidable).
+- Mics come first. A de-mic (or an idle minute) is done only when it makes no
+  open mic any later past its deadline (on − margin), checked mic by mic with
+  an earliest-deadline-first pass across all A2s. Comparing against the day's
+  worst lateness instead let an unavoidably late run at 11:41 wave through
+  de-mics that made 8:26 mics late; the per-mic check is what stops that.
 - Otherwise a mic is done as soon as it is released and a pack is free. With
   no free pack it waits for one to free up, unless none can free up in time,
   and opens a new pack only when waiting longer would make a mic later. This
   is how A2s work (people are mic'd as they arrive) and never needs more packs
   than the prototype's latest-safe mics (tested on both fixtures).
-- Late (ready after the walk-on) and tight (inside the margin) are flagged;
-  nothing is retried, so an impossible day still finishes.
+- Late (ready after the walk-on) and tight (inside the margin) are flagged
+  with their cause: "A2 time", or "no pack free (body limit 9)" when the mic
+  waited on a set pack count while it could still have been on time. With no
+  pack count set every late mic is A2 time (tested: its A2 did only mics from
+  its release to its start).
+- A run of A2-time mics (release-to-finish windows overlapping) gets a fix on
+  its first flag: the smallest pre-mic lead that puts every mic in it on time
+  with the same A2s, and "or a second A2" when that would too. Both come from
+  solving the day again (lead +1 min at a time, up to 240), not an estimate.
+- Nothing is retried, so an impossible day still finishes.
 
 ### Packs
 - The person's own previous pack if free, else the pack free longest, else a
@@ -263,6 +273,10 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - RF numbers: body, body backups, handheld, handheld backups, then the
   emergency spare handheld, which is never assigned and counts against the
   handheld total.
+- A set body or handheld count is binding: at it, a mic waits for the next
+  de-mic of that pool instead of opening a pack (it may then be tight or late,
+  cause "no pack free"). It goes over the count only when no pack can free up
+  before its walk-on. Backup packs count toward the pool and never wait.
 - Over a set body or handheld count, the plan is still made. Each stretch of
   time with more packs of a pool in use than set gets one flag, at the line
   where it starts, giving its peak ("Line 183: need 2 more body packs than the

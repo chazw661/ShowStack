@@ -190,12 +190,16 @@ body:has(.mp-page) { background: var(--mp-bg, #16171a); }
 .mp-rows td { padding: 6px 8px; border-bottom: 1px solid var(--mp-line); vertical-align: top; }
 .mp-rows td.num { font: 500 12px var(--mp-mono); color: var(--mp-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .mp-rows td.num.exact { color: var(--mp-fg); }
-.mp-rows td.src { max-width: 42ch; }
+.mp-rows td.src { min-width: 32ch; max-width: 56ch; }
 .mp-rows td.src .spk { display: block; color: var(--mp-muted); font-size: 12.5px; margin-top: 2px; }
 .mp-rows td.bsm { color: var(--mp-muted); font-size: 12.5px; max-width: 30ch; }
 /* ShowStack's plan, kept apart from the producer's text */
 .mp-rows th.plan, .mp-rows td.plan { background: var(--mp-accent-tint); border-left: 2px solid rgba(139, 92, 246, 0.45); }
 .mp-rows td.plan { min-width: 170px; }
+/* Packs: chips only, one per line, as narrow as the widest chip */
+.mp-rows th.packs, .mp-rows td.packs { width: 1%; min-width: 0; }
+.mp-rows td.packs .cell { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; gap: 3px; }
+.mp-rows td.acts { min-width: 280px; }
 .mp-rows tr.seg td { background: var(--mp-seg); }
 .mp-rows tr.seg td.plan { background: color-mix(in srgb, var(--mp-accent-tint) 60%, var(--mp-seg)); }
 .mp-rows tr.seg.brk td { background: var(--mp-break); }
@@ -207,7 +211,7 @@ body:has(.mp-page) { background: var(--mp-bg, #16171a); }
 .mp-rows tr.target td { box-shadow: inset 0 2px 0 var(--mp-accent), inset 0 -2px 0 var(--mp-accent); }
 .mp-focus .mp-rows tr.hit td { background: var(--mp-accent-tint); }
 .mp-focus .mp-rows tr.dim { opacity: .35; }
-@media (prefers-reduced-motion: no-preference) { .mp-rows tr, .mp-chart .worn, .mp-chart .stage { transition: opacity .15s; } }
+@media (prefers-reduced-motion: no-preference) { .mp-rows tr, .mp-chart .worn, .mp-chart .stage, .mp-chart .under { transition: opacity .15s; } }
 .load { display: flex; align-items: center; gap: 8px; margin-top: 5px; font: 500 11.5px var(--mp-mono); color: var(--mp-muted); }
 .meter { width: 90px; height: 6px; border-radius: 3px; background: var(--mp-line); overflow: hidden; flex: none; }
 .meter i { display: block; height: 100%; background: var(--mp-on); }
@@ -245,20 +249,25 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
     font: 500 10.5px var(--mp-mono); color: var(--mp-muted); padding: 3px 4px; white-space: nowrap; }
 .mp-chart .band.brk { background: var(--mp-break); }
 .mp-chart .tick { position: absolute; bottom: 2px; font: 500 10.5px var(--mp-mono); color: var(--mp-muted); transform: translateX(-50%); }
-.mp-chart .lane { display: flex; align-items: center; height: 30px; border-bottom: 1px solid var(--mp-line); }
+.mp-chart .lane { display: flex; align-items: flex-start; min-height: 30px; border-bottom: 1px solid var(--mp-line); }
 .mp-chart .lane.hit { background: var(--mp-accent-tint); }
 .mp-chart .lane.spare .rflab { color: var(--mp-muted); }
 .mp-page button.rflab { all: unset; cursor: pointer; width: 132px; flex: none; font: 600 13px var(--mp-mono); color: var(--mp-fg);
-    display: flex; flex-direction: column; line-height: 1.1; }
+    display: flex; flex-direction: column; justify-content: center; height: 30px; line-height: 1.1; }
 .mp-page button.rflab small { font: 500 10px var(--mp-mono); color: var(--mp-muted); text-transform: uppercase;
     letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 124px; }
-.mp-chart .track { position: relative; flex: 1; height: 100%; }
+.mp-chart .track { position: relative; flex: 1; align-self: stretch; min-height: 30px; }
 .mp-chart .bg { position: absolute; top: 0; bottom: 0; background: var(--mp-break); }
 .mp-chart .worn { position: absolute; top: 7px; height: 16px; border-radius: 3px;
     border: 1px solid color-mix(in srgb, var(--mp-accent) 55%, transparent);
     background: repeating-linear-gradient(135deg, rgba(139, 92, 246, .28) 0 4px, transparent 4px 8px); }
 .mp-chart .stage { position: absolute; top: 5px; height: 20px; border-radius: 3px; background: var(--mp-accent);
     color: #fff; font: 600 11px/20px var(--mp-body); padding: 0 5px; overflow: hidden; white-space: nowrap; }
+/* Too short for its name (no tooltips on iPad): the name sits under the bar,
+   a row lower when it would run into the last one (mic_plan.js lays them out). */
+.mp-chart .stage.short .nm { visibility: hidden; }
+.mp-chart .under { position: absolute; top: 27px; font: 600 10.5px/13px var(--mp-body); color: var(--mp-fg);
+    white-space: nowrap; padding-left: 3px; border-left: 1px solid var(--mp-accent); cursor: pointer; }
 .mp-chart .dim { opacity: .2; }
 .mp-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; font-size: 12.5px; color: var(--mp-muted); }
 .mp-legend i { display: inline-block; width: 18px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }

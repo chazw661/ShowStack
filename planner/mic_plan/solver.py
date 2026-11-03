@@ -13,14 +13,20 @@ Times are minutes from midnight. The logic follows the prototype solver
    segments merge.
 2. Hosts: 3+ appearances, or listed in 3+ segments, get one pack all day.
 3. A2 time is the binding constraint. Every mic must finish ``margin``
-   before its walk-on. A de-mic is done when doing it now still lets every
-   open mic make its deadline. Mics are done as early as they are released
-   (``lead`` before the walk-on) when a pack is free; without one the mic
-   waits for a pack to free up, and only opens a new pack when waiting any
-   longer would make it (or another mic) later. Deadlines that cannot all
-   be met are flagged "late"; nothing is retried.
+   before its walk-on. Mics come first: a de-mic (or an idle minute) is done
+   only when it makes no open mic any later past its deadline, mic by mic,
+   so a run of mics that is late anyway never lets de-mics push other mics
+   late. Mics are done as early as they are released (``lead`` before the
+   walk-on) when a pack is free; without one the mic waits for a pack to
+   free up, and only opens a new pack when waiting any longer would make it
+   (or another mic) later. Deadlines that cannot all be met are flagged
+   "late" or "tight" with their cause (A2 time, or no pack free at a set
+   pack count); a run short of A2 time also gets the smallest pre-mic lead
+   that fixes it, and whether one more A2 would. Nothing is retried.
 4. Packs: the person's own previous pack if free, else the one free
-   longest, else a new one. Body and HH are separate pools; a "backup"
+   longest, else a new one. A set pack count is binding: at it, a mic waits
+   for a de-mic, and goes over (a shortage) only when no pack can free up
+   before its walk-on. Body and HH are separate pools; a "backup"
    person also wears their own backup pack. RF numbers: body, body
    backups, HH, HH backups, then the emergency spare HH (never assigned).
 5. Shortages are flagged once per stretch over a set pack count; A2 busy
@@ -29,7 +35,7 @@ Times are minutes from midnight. The logic follows the prototype solver
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 HOST_MIN = 3                 # appearances or segments that make someone a host
 BODY, HH = 'body', 'HH'
@@ -385,6 +391,7 @@ class _Task:
     due: float = None        # mics: finish by
     backup: bool = False
     done: bool = False
+    pack_wait: bool = False  # mics: once waited on the pack limit when it could still be on time
 
 
 @dataclass
@@ -399,20 +406,25 @@ class _Pack:
     off: float = INF         # while worn: when its wearer comes off (INF for a host)
 
 
-def _lateness(frees, mics, mic_min):
-    """Worst lateness if the open mics are done earliest-deadline-first by
-    A2s free at ``frees``."""
+def _overrun(frees, mics, mic_min):
+    """{id(mic): minutes past its deadline} if the open mics are done
+    earliest-deadline-first by A2s free at ``frees``."""
     frees = list(frees)
-    worst = -INF
-    for m in sorted(mics, key=lambda m: m.due):
+    out = {}
+    for m in sorted(mics, key=lambda m: (m.due, m.app.key, m.backup)):
         j = min(range(len(frees)), key=frees.__getitem__)
         end = max(frees[j], m.rel) + mic_min
         frees[j] = end
-        worst = max(worst, end - m.due)
-    return worst
+        out[id(m)] = max(0, end - m.due)
+    return out
 
 
-def solve(day, settings=Settings()):
+LEAD_MAX = 240               # MicPlanSettings.premic_lead_min's upper bound
+
+
+def solve(day, settings=Settings(), suggest=True):
+    """The day's plan. ``suggest``: work out the fix for each run of late
+    mics the A2 can't reach (re-solves the day, so off inside that)."""
     ix = _Index(day)
     plan = Plan()
     apps, hosts = appearances(day, ix)
@@ -451,6 +463,7 @@ def solve(day, settings=Settings()):
     seqs = [0] * n
     packs = []
     worn = {}                # (appearance key, backup) -> _Pack
+    behind = []              # (late or tight mic action, its flag)
     last = {}                # person -> their last regular pack
     backups = {}             # person -> backup pack
     limits = {BODY: S.body_pack_count,
@@ -473,17 +486,29 @@ def solve(day, settings=Settings()):
             return min(free, key=lambda p: (p.free_at, p.tmp)), 'recycled'
         return None, None
 
-    def can_free_in_time(task, t):
+    def can_free_in_time(task, t, by=None):
         """Could a pack of the task's pool be free in time for it to be mic'd
-        by its deadline, if this A2 de-mic'd it as soon as possible?"""
+        by ``by`` (its deadline), if this A2 de-mic'd it as soon as possible?"""
         pool = pool_of(task)
+        by = task.due if by is None else by
         for p in packs:
             if p.pool != pool or p.backup_of is not None:
                 continue
             ready_at = p.free_at if p.free_at < INF else max(t, p.off) + S.demic_min
-            if ready_at + S.mic_min <= task.due:
+            if ready_at + S.mic_min <= by:
                 return True
         return False
+
+    def blocked(task, t):
+        """At a set pack count with none free: the mic waits for a de-mic,
+        unless no pack can free up before the walk-on (then it goes over the
+        count, and the shortage is flagged)."""
+        pool = pool_of(task)
+        if task.backup or limits[pool] is None:
+            return False
+        if sum(1 for p in packs if p.pool == pool) < limits[pool] or free_pack(task, t)[0] is not None:
+            return False
+        return can_free_in_time(task, t, by=task.app.on)
 
     def new_pack(task):
         pool = pool_of(task)
@@ -550,17 +575,27 @@ def solve(day, settings=Settings()):
                 plan.assignments.append(Assignment(k, 0, 'backup' if task.backup else 'same as before',
                                                    backup=task.backup))
                 plan.assignments[-1]._pack = pack
-        if late:
-            plan.flags.append({'kind': 'late', 'row': a.on_row, 'person': a.person,
-                               'text': "Line {}: {} is mic'd {}-{} but walks on at {}{}.".format(
-                                   ix.line(a.on_row), person.name, hm(t), hm(end), hm(a.on),
-                                   ' (backup)' if task.backup else '')})
-        elif tight:
-            plan.flags.append({'kind': 'tight', 'row': a.on_row, 'person': a.person,
-                               'text': 'Line {}: {} is ready at {}, {} min before walking on (margin {}).'.format(
-                                   ix.line(a.on_row), person.name, hm(end), int(round(a.on - end)),
-                                   S.margin_min)})
+        if late or tight:
+            cause = 'pack' if task.pack_wait else 'a2'
+            if late:
+                text = "Line {}: {} is mic'd {}-{} but walks on at {}{}.".format(
+                    ix.line(a.on_row), person.name, hm(t), hm(end), hm(a.on), ' (backup)' if task.backup else '')
+            else:
+                text = 'Line {}: {} is ready at {}, {} min before walking on (margin {}).'.format(
+                    ix.line(a.on_row), person.name, hm(end), int(round(a.on - end)), S.margin_min)
+            plan.flags.append({'kind': 'late' if late else 'tight', 'row': a.on_row, 'person': a.person,
+                               'cause': cause, 'text': '{} Cause: {}.'.format(text, cause_text(task))})
+            behind.append((plan.actions[-1], plan.flags[-1]))
         return end
+
+    def cause_text(task):
+        if not task.pack_wait:
+            return 'A2 time'
+        pool = pool_of(task)
+        if pool == BODY:
+            return 'no pack free (body limit {})'.format(S.body_pack_count)
+        return 'no pack free (handheld limit {}{})'.format(
+            S.hh_count, ', 1 kept spare' if S.emergency_spare_hh else '')
 
     guard = 0
     while not all(t.done for t in tasks):
@@ -571,16 +606,24 @@ def solve(day, settings=Settings()):
         t = frees[i]
         open_mics = [x for x in tasks if x.kind == 'mic' and not x.done]
         ready = [m for m in open_mics if m.rel <= t]
+        # Waiting on the pack count: no A2 time helps them until a de-mic.
+        stuck = {id(m) for m in ready if blocked(m, t)}
+        for m in ready:
+            if id(m) in stuck and t + S.mic_min <= m.due:
+                m.pack_wait = True
+        ready = [m for m in ready if id(m) not in stuck]
+        open_mics = [m for m in open_mics if id(m) not in stuck]
         demics = [x for x in tasks if x.kind == 'demic' and not x.done and x.rel <= t
                   and (x.app.key, x.backup) in worn]
-        base = max(0, _lateness(frees, open_mics, S.mic_min)) if open_mics else 0
+        base = _overrun(frees, open_mics, S.mic_min)
 
         def ok_after(delay):
-            if not open_mics:
-                return True
+            """Mics come first: holding this A2 ``delay`` min makes no open
+            mic any later past its deadline (on - margin)."""
             trial = list(frees)
             trial[i] = t + delay
-            return _lateness(trial, open_mics, S.mic_min) <= base
+            after = _overrun(trial, open_mics, S.mic_min)
+            return all(after[k] <= base[k] + 1e-9 for k in base)
 
         job = pack = how = None
         if demics and ok_after(S.demic_min):
@@ -613,10 +656,61 @@ def solve(day, settings=Settings()):
         frees[i] = record(job, i, t, pack, how)
         job.done = True
 
+    if suggest:
+        _suggest(day, S, behind, ix)
     _number(plan, packs, S, ix)
     _shortages(plan, limits, ix)
     _busy(plan, day, n, S)
     return plan
+
+
+def _suggest(day, S, behind, ix):
+    """For each run of late or tight mics short of A2 time (mics whose
+    release-to-finish windows overlap), the smallest pre-mic lead that puts
+    every one of them on time with the same A2s, and whether one more A2
+    would too. Both found by solving the day again, not estimated. Added to
+    the run's first flag."""
+    runs = []
+    for act, flag in sorted((x for x in behind if x[1]['cause'] == 'a2'), key=lambda x: x[0].released):
+        if runs and act.released < runs[-1]['end']:
+            runs[-1]['items'].append((act, flag))
+            runs[-1]['end'] = max(runs[-1]['end'], act.end_min)
+        else:
+            runs.append({'items': [(act, flag)], 'end': act.end_min})
+    if not runs:
+        return
+
+    def on_time(plan, run):
+        keys = {(a.appearance, a.backup) for a, _ in run['items']}
+        return not any(a.kind == 'mic' and (a.appearance, a.backup) in keys and (a.late or a.tight)
+                       for a in plan.actions)
+
+    lead = {}
+    for minutes in range(S.premic_lead_min + 1, LEAD_MAX + 1):
+        if len(lead) == len(runs):
+            break
+        trial = solve(day, replace(S, premic_lead_min=minutes), suggest=False)
+        for k, run in enumerate(runs):
+            if k not in lead and on_time(trial, run):
+                lead[k] = minutes
+    more = solve(day, replace(S, a2_count=S.a2_count + 1), suggest=False)
+    another = 'a second A2' if S.a2_count == 1 else 'one more A2'
+    for k, run in enumerate(runs):
+        a2 = on_time(more, run)
+        fixes = (['pre-mic lead {} min (now {})'.format(lead[k], S.premic_lead_min)] if k in lead else []) + \
+            ([another] if a2 else [])
+        if fixes:
+            text = 'Fix{}: {}.'.format('' if len(run['items']) == 1 else ' for these {} mics'.format(len(run['items'])),
+                                       ', or '.join(fixes))
+        else:
+            text = 'No pre-mic lead up to {} min or extra A2 puts these on time.'.format(LEAD_MAX)
+        act, flag = run['items'][0]
+        flag['text'] += ' ' + text
+        flag['fix'] = {'lead': lead.get(k), 'a2': a2, 'mics': len(run['items'])}
+        first = ix.line(flag['row'])
+        for _, other in run['items'][1:]:
+            if ix.line(other['row']) != first:
+                other['text'] += ' Fix: see line {}.'.format(first)
 
 
 def _shortages(plan, limits, ix):
