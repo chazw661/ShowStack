@@ -23,22 +23,31 @@ Times are minutes from midnight. The logic follows the prototype solver
    "late" or "tight" with their cause (A2 time, or no pack free at a set
    pack count); a run short of A2 time also gets the smallest pre-mic lead
    that fixes it, and whether one more A2 would. Nothing is retried.
-4. Packs: the person's own previous pack if free, else the one free
-   longest, else a new one. A set pack count is binding: at it, a mic waits
-   for a de-mic, and goes over (a shortage) only when no pack can free up
-   before its walk-on. Body and HH are separate pools; a "backup"
-   person also wears their own backup pack. RF numbers: body, body
-   backups, HH, HH backups, then the emergency spare HH (never assigned).
+4. Packs: the person's own previous pack if free; else, by pack policy,
+   ``fewest_packs``: the one free longest; ``recycle_at_breaks`` (the
+   default): a pack last worn before the latest break (or the start of a
+   later part), lowest RF first, so within a session a worn pack never goes
+   to someone else. Else a new one. A set pack count is binding: at it, a
+   mic waits for a de-mic, and goes over (a shortage) only when no pack can
+   free up before its walk-on; under ``recycle_at_breaks`` it first waits
+   for a pack from before the break if one frees by its deadline, then
+   reuses the pack free longest mid-session (flagged). A break too short to
+   free the packs worn before it is flagged once. Body and HH are separate
+   pools; a "backup" person also wears their own backup pack. RF numbers:
+   body, body backups, HH, HH backups, then the emergency spare HH (never
+   assigned).
 5. Shortages are flagged once per stretch over a set pack count; A2 busy
    minutes are counted once each, and work a segment owes that runs past
    its end is "spill".
 """
 
 import math
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field, replace
 
 HOST_MIN = 3                 # appearances or segments that make someone a host
 BODY, HH = 'body', 'HH'
+RECYCLE_AT_BREAKS, FEWEST_PACKS = 'recycle_at_breaks', 'fewest_packs'
 INF = math.inf
 
 
@@ -52,6 +61,7 @@ class Settings:
     body_pack_count: int = None     # None: report the minimum needed
     hh_count: int = None
     emergency_spare_hh: bool = False
+    pack_policy: str = RECYCLE_AT_BREAKS
     # 'earliest' (mic people as they arrive) or 'latest' (the prototype's
     # latest-safe mics; kept to check 'earliest' never needs more packs).
     strategy: str = 'earliest'
@@ -172,6 +182,7 @@ class Plan:
     # owes (de-mics released in it, mics due in it) finishing after it ends.
     spill: dict = field(default_factory=dict)
     swaps: int = 0
+    mid_session: int = 0     # packs that went to someone else within a session
 
 
 def hm(t):
@@ -404,6 +415,7 @@ class _Pack:
     tmp: int = 0
     rf: int = 0
     off: float = INF         # while worn: when its wearer comes off (INF for a host)
+    session: int = -1        # the last session it was worn in
 
 
 def _overrun(frees, mics, mic_min):
@@ -420,6 +432,23 @@ def _overrun(frees, mics, mic_min):
 
 
 LEAD_MAX = 240               # MicPlanSettings.premic_lead_min's upper bound
+
+
+def session_starts(day):
+    """[(minute, row key)] where a session starts: each break segment's
+    start, and the start of a part that begins after every earlier part has
+    ended. Sessions run between them (and the start and end of the day)."""
+    out = [(s.t0, s.key) for s in day.segments if s.is_break]
+    by_part = {}
+    for seg in day.segments:
+        by_part.setdefault(seg.part, []).append(seg)
+    end = None
+    for segs in sorted(by_part.values(), key=lambda segs: min(x.t0 for x in segs)):
+        first = min(segs, key=lambda x: (x.t0, x.start))
+        if end is not None and first.t0 >= end:
+            out.append((first.t0, first.key))
+        end = max(x.t1 for x in segs) if end is None else max(end, max(x.t1 for x in segs))
+    return sorted(set(out))
 
 
 def solve(day, settings=Settings(), suggest=True):
@@ -468,13 +497,34 @@ def solve(day, settings=Settings(), suggest=True):
     backups = {}             # person -> backup pack
     limits = {BODY: S.body_pack_count,
               HH: None if S.hh_count is None else max(0, S.hh_count - (1 if S.emergency_spare_hh else 0))}
+    recycle = S.pack_policy == RECYCLE_AT_BREAKS
+    starts = session_starts(day)
+    marks = [m for m, _ in starts]
+    turnover = {}            # session start index -> {'mics': set, 'packs': set} (break too short)
+    reuse_flags = []         # (flag, pack): mid-session reuse at a set count, RF filled in later
+
+    def session_of(on):
+        """A walk-on at or after a session start is in that session."""
+        return bisect_right(marks, on)
+
+    def allowed(p, task):
+        """May this regular pack go to ``task``'s person under the policy?"""
+        return not recycle or p is last.get(task.app.person) or p.session < session_of(task.app.on)
+
+    def at_limit(task):
+        pool = pool_of(task)
+        return (not task.backup and limits[pool] is not None
+                and sum(1 for p in packs if p.pool == pool) >= limits[pool])
 
     def pool_of(task):
         if task.backup:
             return ix.people[task.app.person].backup
         return task.app.mic_type
 
-    def free_pack(task, t):
+    def free_pack(task, t, fallback=False):
+        """(pack, how) for ``task`` now, or (None, None). ``fallback``: at a
+        set count under recycle_at_breaks, the pack free longest even if it
+        was worn this session (how 'mid-session')."""
         if task.backup:
             return backups.get(task.app.person), 'backup'
         pool = pool_of(task)
@@ -482,17 +532,27 @@ def solve(day, settings=Settings(), suggest=True):
         mine = last.get(task.app.person)
         if mine in free:
             return mine, 'same as before'
-        if free:
-            return min(free, key=lambda p: (p.free_at, p.tmp)), 'recycled'
+        if not recycle:
+            if free:
+                return min(free, key=lambda p: (p.free_at, p.tmp)), 'recycled'
+            return None, None
+        ok = [p for p in free if allowed(p, task)]
+        if ok:
+            return min(ok, key=lambda p: p.tmp), 'recycled'      # down the line
+        if fallback and free:
+            return min(free, key=lambda p: (p.free_at, p.tmp)), 'mid-session'
         return None, None
 
-    def can_free_in_time(task, t, by=None):
-        """Could a pack of the task's pool be free in time for it to be mic'd
-        by ``by`` (its deadline), if this A2 de-mic'd it as soon as possible?"""
+    def can_free_in_time(task, t, by=None, any_pack=False):
+        """Could a pack of the task's pool (one the policy allows, unless
+        ``any_pack``) be free in time for it to be mic'd by ``by`` (its
+        deadline), if this A2 de-mic'd it as soon as possible?"""
         pool = pool_of(task)
         by = task.due if by is None else by
         for p in packs:
             if p.pool != pool or p.backup_of is not None:
+                continue
+            if not any_pack and not allowed(p, task):
                 continue
             ready_at = p.free_at if p.free_at < INF else max(t, p.off) + S.demic_min
             if ready_at + S.mic_min <= by:
@@ -508,7 +568,21 @@ def solve(day, settings=Settings(), suggest=True):
             return False
         if sum(1 for p in packs if p.pool == pool) < limits[pool] or free_pack(task, t)[0] is not None:
             return False
+        if recycle:
+            # A pack from before the break, if one frees by the deadline;
+            # else one free now, reused mid-session; else as fewest_packs.
+            if can_free_in_time(task, t):
+                return True
+            if free_pack(task, t, fallback=True)[0] is not None:
+                return False
+            return can_free_in_time(task, t, by=task.app.on, any_pack=True)
         return can_free_in_time(task, t, by=task.app.on)
+
+    def pack_for(task, t):
+        p, h = free_pack(task, t)
+        if p is None and at_limit(task):
+            p, h = free_pack(task, t, fallback=True)
+        return p, h
 
     def new_pack(task):
         pool = pool_of(task)
@@ -533,6 +607,23 @@ def solve(day, settings=Settings(), suggest=True):
         late = tight = False
         wait = 0
         if task.kind == 'mic':
+            here = session_of(a.on)
+            if not task.backup:
+                if how in ('recycled', 'mid-session') and pack.session >= here:
+                    plan.mid_session += 1
+                if how == 'mid-session':
+                    reuse_flags.append(({'kind': 'reuse', 'row': a.on_row, 'person': a.person}, pack, task))
+                elif how == 'new' and recycle and here > 0:
+                    # Packs worn before the break whose wearer is off by this
+                    # walk-on, but not yet free: the break was too short.
+                    waiting = {id(p) for p in packs if p is not pack and p.pool == pack.pool
+                               and p.backup_of is None and p.session < here and p.free_at > t
+                               and p.off <= a.on}
+                    if waiting:
+                        slot = turnover.setdefault(here - 1, {'mics': set(), 'packs': set()})
+                        slot['mics'].add(id(task))
+                        slot['packs'] |= waiting
+                how = 'recycled' if how == 'mid-session' else how
             pack.free_at = INF
             pack.wearers.append(a.key)
             worn[(a.key, task.backup)] = pack
@@ -540,6 +631,7 @@ def solve(day, settings=Settings(), suggest=True):
             while k in kept_next:
                 k = kept_next[k]
             pack.off = INF if a.is_host else app_by_key[k].off
+            pack.session = len(marks) if a.is_host else bisect_left(marks, pack.off)
             if task.backup:
                 backups[a.person] = pack
                 reason = 'backup'
@@ -635,7 +727,7 @@ def solve(day, settings=Settings(), suggest=True):
                 # free up in time anyway (waiting would only make it later).
                 with_pack = []
                 for m in ready:
-                    p, h = free_pack(m, t)
+                    p, h = pack_for(m, t)
                     if p is not None or (m.backup and m.app.person not in backups) or \
                             (not m.backup and not can_free_in_time(m, t)):
                         with_pack.append((m, p, h))
@@ -643,7 +735,7 @@ def solve(day, settings=Settings(), suggest=True):
                     job, pack, how = min(with_pack, key=lambda x: (x[0].due, x[0].app.key))
             if job is None and not ok_after(1):
                 job = min(ready, key=lambda m: (m.due, m.app.key))
-                pack, how = free_pack(job, t)
+                pack, how = pack_for(job, t)
             if job is not None and pack is None:
                 pack, how = new_pack(job), 'new'
         if job is None:
@@ -659,6 +751,19 @@ def solve(day, settings=Settings(), suggest=True):
     if suggest:
         _suggest(day, S, behind, ix)
     _number(plan, packs, S, ix)
+    for flag, pack, task in reuse_flags:
+        pool = pool_of(task)
+        flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {} count ({}) reached.'.format(
+            ix.line(task.app.on_row), pack.rf, *(('body pack', S.body_pack_count) if pool == BODY
+                                                  else ('handheld', S.hh_count)))
+        plan.flags.append(flag)
+    for k, slot in sorted(turnover.items()):
+        n_packs = min(len(slot['mics']), len(slot['packs']))
+        minute, key = starts[k]
+        brk = next((x for x in day.segments if x.key == key), None)
+        plan.flags.append({'kind': 'break', 'row': key, 'person': None, 'text': '{} at line {} too short to turn over {} pack{}.'.format(
+            'Break' if brk is not None and brk.is_break else 'Gap before the part', ix.line(key), n_packs,
+            '' if n_packs == 1 else 's')})
     _shortages(plan, limits, ix)
     _busy(plan, day, n, S)
     return plan
@@ -857,6 +962,7 @@ def summary(plan):
         'backups': sum(1 for p in regular if p.backup_of is not None),
         'spare': sum(1 for p in plan.packs if p.spare),
         'swaps': plan.swaps,
+        'mid_session': plan.mid_session,
         'late': sum(1 for f in plan.flags if f['kind'] == 'late'),
         'tight': sum(1 for f in plan.flags if f['kind'] == 'tight'),
         'shortage': sum(1 for f in plan.flags if f['kind'] == 'shortage'),

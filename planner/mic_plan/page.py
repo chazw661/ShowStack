@@ -221,7 +221,8 @@ def review_cards(parts, plan, apps, people, labels):
                 used.add((a.person_id, a.note_row_id))
                 break
     if plan is not None:
-        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill'}
+        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill',
+                       'reuse': 'Mid-session', 'break': 'Turnover'}
         for f in plan.flags:
             part, row = rows.get(f.get('row'), (None, None))
             cards.append(_card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,
@@ -267,10 +268,24 @@ def stats(plan):
     }
 
 
+POLICY_NAMES = {'recycle_at_breaks': 'Recycle at breaks', 'fewest_packs': 'Fewest packs'}
+
+
 def settings_summary(values):
-    return '{} A2 · mic {} · de-mic {} · lead {} · margin {} min'.format(
-        values.get('a2_count'), values.get('mic_min'), values.get('demic_min'),
-        values.get('premic_lead_min'), values.get('margin_min'))
+    # Plans from before PR 2.2 have no pack_policy: they used fewest_packs.
+    return '{} · {} A2 · mic {} · de-mic {} · lead {} · margin {} min'.format(
+        POLICY_NAMES[values.get('pack_policy', 'fewest_packs')], values.get('a2_count'),
+        values.get('mic_min'), values.get('demic_min'), values.get('premic_lead_min'), values.get('margin_min'))
+
+
+def policy_counts_text(counts):
+    """"Recycle at breaks: 14 body · Fewest packs: 9 body", or '' (no counts)."""
+    out = []
+    for policy, name in POLICY_NAMES.items():
+        c = counts.get(policy)
+        if c:
+            out.append('{}: {} body{}'.format(name, c['body'], ' + {} HH'.format(c['hh']) if c['hh'] else ''))
+    return ' · '.join(out)
 
 
 def plan_data(plan, apps, actions):

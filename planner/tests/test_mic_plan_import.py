@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from planner.admin_site import showstack_admin_site
-from planner.mic_plan import importer
+from planner.mic_plan import importer, planning, solver
 from planner.models import (
     MicPlan, MicPlanA2Action, MicPlanSettings, Presenter, Project, ProjectMember, ShowDay, ShowflowEvent, ShowflowImport,
     ShowflowPerson, ShowflowRow, UserProfile,
@@ -275,6 +275,7 @@ class AccessTests(MicPlanBase):
             (reverse('planner:mic_plan_upload'), {'day': self.day.pk}),
             (reverse('planner:mic_plan_delete', args=[part.pk]), {}),
             (reverse('planner:mic_plan_crew', args=[part.pk]), {'crew': ['X']}),
+            (reverse('planner:mic_plan_break', args=[part.pk]), {'row': part.rows.first().pk, 'is_break': '1'}),
             (reverse('planner:mic_plan_person', args=[person.pk]), {'mic_hint': 'HH'}),
             (reverse('planner:mic_plan_merge', args=[person.pk]), {'into': into.pk}),
             (reverse('planner:mic_plan_unalias', args=[person.pk]), {'alias': 'x'}),
@@ -723,3 +724,135 @@ class PlanTests(MicPlanBase):
         self.assertEqual('line estimates', plan.cue_mode)
         self.assertContains(self.client.get(reverse('planner:mic_plan') + '?day={}'.format(day2.pk)),
                             'Built from line estimates')
+
+
+class PackPolicyPageTests(MicPlanBase):
+    """The pack policy setting, both-policy counts, and the Break toggle."""
+
+    def setUp(self):
+        super().setUp()
+        self.use(self.editor)
+        self.upload()
+        self.part = self.parts()[0]
+
+    def generate(self):
+        return self.client.post(reverse('planner:mic_plan_generate', args=[self.day.pk]), {'replace': '1'})
+
+    def save_settings(self, **extra):
+        return self.client.post(reverse('planner:mic_plan_settings'), {
+            'a2_count': 1, 'mic_min': 3, 'demic_min': 3, 'premic_lead_min': 30, 'margin_min': 5, **extra})
+
+    def heading(self):
+        """The first segment heading and its detected break value."""
+        rows = list(self.part.rows.order_by('order'))
+        seg = planning.part_segments(self.part, rows, planning.named_orders(self.day, self.part))[0]
+        return seg['row'], seg['detected']
+
+    def test_the_policy_is_saved_shown_and_changing_it_banners_the_plan(self):
+        self.assertEqual('recycle_at_breaks', planning.project_settings(self.project).pack_policy)
+        self.generate()
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(page, 'Pack use: <b>Recycle at breaks</b>')
+        self.assertContains(page, 'Recycle at breaks · 1 A2')
+        self.assertNotContains(page, 'Plan settings changed after this plan was made')
+        self.save_settings(pack_policy='fewest_packs')
+        self.assertEqual('fewest_packs', planning.project_settings(self.project).pack_policy)
+        self.assertContains(self.client.get(reverse('planner:mic_plan')),
+                            'Plan settings changed after this plan was made')
+        self.generate()
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(page, 'Pack use: <b>Fewest packs</b>')
+        self.assertNotContains(page, 'Plan settings changed after this plan was made')
+
+    def test_an_unknown_policy_is_refused(self):
+        resp = self.save_settings(pack_policy='whatever')
+        self.assertEqual(302, resp.status_code)
+        self.assertEqual('recycle_at_breaks', planning.project_settings(self.project).pack_policy)
+
+    def test_a_plan_from_before_the_policy_counts_as_fewest_packs(self):
+        self.generate()
+        plan = MicPlan.objects.get(day=self.day)
+        plan.settings = {k: v for k, v in plan.settings.items() if k != 'pack_policy'}
+        plan.save()
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(page, 'Pack use: <b>Fewest packs</b>')
+        self.assertContains(page, 'Plan settings changed after this plan was made')
+
+    def test_both_policy_counts_match_two_separate_solves(self):
+        self.save_settings(body_pack_count=2)
+        self.generate()
+        plan = MicPlan.objects.get(day=self.day)
+        data, _, _ = planning.build_day(self.day)
+        values = planning.settings_dict(planning.project_settings(self.project))
+        for policy in ('recycle_at_breaks', 'fewest_packs'):
+            with self.subTest(policy=policy):
+                s = solver.summary(solver.solve(data, planning.solver_settings(
+                    {**values, 'pack_policy': policy, 'body_pack_count': None, 'hh_count': None})))
+                self.assertEqual({'body': s['body'], 'hh': s['hh'], 'mid_session': s['mid_session']},
+                                 plan.policy_counts[policy])
+        counts = plan.policy_counts
+        text = 'Recycle at breaks: {} body'.format(counts['recycle_at_breaks']['body'])
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(page, text)
+        self.assertContains(page, 'Fewest packs: {} body'.format(counts['fewest_packs']['body']))
+
+    def test_the_break_toggle_overrides_detection_marks_the_plan_stale_and_goes_back(self):
+        self.generate()
+        row, detected = self.heading()
+        url = reverse('planner:mic_plan_break', args=[self.part.pk])
+        resp = self.client.post(url, {'row': row.pk, 'is_break': '0' if detected else '1'})
+        self.assertRedirects(resp, reverse('planner:mic_plan') + '?day={}&part={}#showflow:row-{}'.format(
+            self.day.pk, self.part.pk, row.order), fetch_redirect_response=False)
+        self.part.refresh_from_db()
+        saved = self.part.break_overrides[row.line_no]
+        self.assertEqual((not detected, self.editor.pk), (saved['is_break'], saved['by']))
+        self.assertTrue(MicPlan.objects.get(day=self.day).stale)
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(page, '{} · set by you'.format('not a break' if detected else 'break'))
+        data, _, _ = planning.build_day(self.day)
+        self.assertEqual(not detected, next(s for s in data.segments if s.key == row.pk).is_break)
+        # Back to the detected value: the override goes.
+        self.client.post(url, {'row': row.pk, 'is_break': '1' if detected else '0'})
+        self.part.refresh_from_db()
+        self.assertEqual({}, self.part.break_overrides)
+
+    def test_another_editor_sees_who_set_it(self):
+        row, detected = self.heading()
+        self.client.post(reverse('planner:mic_plan_break', args=[self.part.pk]),
+                         {'row': row.pk, 'is_break': '0' if detected else '1'})
+        self.use(self.owner)
+        self.assertContains(self.client.get(reverse('planner:mic_plan')), 'set by mp_editor')
+
+    def test_a_row_that_is_not_a_segment_heading_is_refused(self):
+        row = self.part.rows.filter(is_segment=False).first()
+        self.client.post(reverse('planner:mic_plan_break', args=[self.part.pk]), {'row': row.pk, 'is_break': '1'})
+        self.part.refresh_from_db()
+        self.assertEqual({}, self.part.break_overrides)
+
+    def test_a_break_set_by_hand_survives_re_read_and_replace(self):
+        row, detected = self.heading()
+        self.client.post(reverse('planner:mic_plan_break', args=[self.part.pk]),
+                         {'row': row.pk, 'is_break': '0' if detected else '1'})
+        self.client.post(reverse('planner:mic_plan_reread', args=[self.part.pk]))
+        self.part.refresh_from_db()
+        self.assertIn(row.line_no, self.part.break_overrides)
+        self.upload('REVISED_PAGES', 'Actual day1.pdf')
+        pending = ShowflowImport.objects.get(status='pending')
+        self.client.post(reverse('planner:mic_plan_confirm', args=[pending.pk]),
+                         {'choice': f'replace:{self.part.pk}'})
+        new = self.parts()[0]
+        self.assertEqual(pending.pk, new.pk)
+        head = new.rows.get(line_no=row.line_no, is_segment=True)
+        seg = next(s for s in planning.part_segments(new, list(new.rows.order_by('order')),
+                                                     planning.named_orders(self.day, new))
+                   if s['row'].pk == head.pk)
+        self.assertEqual((not detected, True), (seg['is_break'], bool(seg['override'])))
+
+    def test_viewers_see_a_hand_set_break_but_no_toggle(self):
+        row, detected = self.heading()
+        self.client.post(reverse('planner:mic_plan_break', args=[self.part.pk]),
+                         {'row': row.pk, 'is_break': '0' if detected else '1'})
+        self.use(self.viewer)
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertNotContains(page, reverse('planner:mic_plan_break', args=[self.part.pk]))
+        self.assertContains(page, 'set by mp_editor')

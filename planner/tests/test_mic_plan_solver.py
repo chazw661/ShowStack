@@ -14,11 +14,23 @@ from django.test import TestCase as DbTestCase
 
 from planner.mic_plan import importer, planning, solver
 from planner.mic_plan.display import format_action
-from planner.mic_plan.solver import BODY, HH, Cue, Day, Person, Row, Segment, Settings, solve
+from planner.mic_plan.solver import BODY, HH, Cue, Day, Person, Row, Segment
+from planner.mic_plan.solver import Settings as _Settings
+from planner.mic_plan.solver import solve as _solve
 from planner.models import Project, ShowDay
 from planner.tests import showflow_fixture as F
 
 PART = 1
+
+
+# The tests written before PR 2.2 describe fewest_packs; recycle_at_breaks
+# (the default) has its own below.
+def Settings(**kw):
+    return _Settings(**{'pack_policy': solver.FEWEST_PACKS, **kw})
+
+
+def solve(day, settings=None, **kw):
+    return _solve(day, settings if settings is not None else Settings(), **kw)
 
 
 def h(text):
@@ -511,12 +523,14 @@ class FixtureStrategyTests(DbTestCase):
             day = ShowDay.objects.create(project=project, date=date(2026, 4, 1))
             importer.confirm(importer.stage_upload(day, F.build_pdf(getattr(F, name)), 'x.pdf', user))
             data, _, _ = planning.build_day(day)
-            for lead in (5, 10, 20, 30):
-                for margin in (0, 5, 10):
-                    for a2 in (1, 2):
-                        with self.subTest(name=name, lead=lead, margin=margin, a2=a2):
-                            plan = solve(data, Settings(premic_lead_min=lead, margin_min=margin, a2_count=a2))
-                            self.assertEqual([], unexplained(plan))
+            for policy in (solver.FEWEST_PACKS, solver.RECYCLE_AT_BREAKS):
+                for lead in (5, 10, 20, 30):
+                    for margin in (0, 5, 10):
+                        for a2 in (1, 2):
+                            with self.subTest(name=name, policy=policy, lead=lead, margin=margin, a2=a2):
+                                plan = solve(data, Settings(premic_lead_min=lead, margin_min=margin, a2_count=a2,
+                                                            pack_policy=policy))
+                                self.assertEqual([], unexplained(plan))
 
 
 class StatTileTests(TestCase):
@@ -529,3 +543,117 @@ class StatTileTests(TestCase):
             {'t0': 601, 't1': 631, 'busy': [28.0]},       # 93 %
             {'t0': 631, 't1': 661, 'busy': [20.0]}])      # 67 %
         self.assertEqual(1, stats(plan)['hot'])
+
+
+RECYCLE = 'recycle_at_breaks'
+
+
+def break_day(break_end, mic=BODY):
+    """Ana and Cy on 9:00-9:30, a break from 9:30 to ``break_end``, then Dee
+    and Eve walk on at ``break_end``."""
+    end = h(break_end)
+    after = '{}:{:02d}'.format(*divmod(end + 30, 60))
+    s = (Show().line(1, '9:00').line(2, '9:00').line(3, '9:30').line(4, break_end).line(5, break_end)
+         .line(6, after)
+         .segment(1, 2, 'Panel', '9:00', '9:30').segment(3, 3, 'Break', '9:30', break_end, is_break=True)
+         .segment(4, 5, 'Talks', break_end, after).segment(6, 6, 'Close', after, after))
+    for k, (name, line) in enumerate((('Ana Bell', 2), ('Cy Dunn', 2), ('Dee Fox', 5), ('Eve Ford', 5)), 1):
+        s.person(k, name, mic).lists(k, line)
+    return s
+
+
+def mid_day(mic=BODY):
+    """One session: Ana on 9:00-9:15, Cy walks on at 9:40 (Ana's pack is free
+    long before)."""
+    return (Show().line(1, '9:00').line(2, '9:00').line(3, '9:15').line(4, '9:40').line(5, '9:50')
+            .line(6, '10:00')
+            .segment(1, 5, 'Panel', '9:00', '10:00').segment(6, 6, 'Close', '10:00', '10:30')
+            .person(1, 'Ana Bell', mic).lists(1, 2).person(2, 'Cy Dunn', mic).lists(2, 4))
+
+
+def recycle(**kw):
+    return _Settings(pack_policy=RECYCLE, **kw)
+
+
+class PackPolicyTests(TestCase):
+
+    def test_recycle_at_breaks_is_the_default(self):
+        self.assertEqual(RECYCLE, _Settings().pack_policy)
+
+    def test_no_mid_session_reuse_when_packs_are_unlimited(self):
+        plan = _solve(mid_day().day(), recycle())
+        self.assertEqual(({1}, {2}), (rf(plan, 1), rf(plan, 2)))
+        self.assertEqual(0, solver.summary(plan)['mid_session'])
+        fewest = solve(mid_day().day())                   # today's behaviour: Ana's pack goes to Cy
+        self.assertEqual(({1}, {1}), (rf(fewest, 1), rf(fewest, 2)))
+        self.assertEqual(1, solver.summary(fewest)['mid_session'])
+
+    def test_packs_are_reused_after_a_break_when_turnaround_fits(self):
+        plan = _solve(break_day('10:30').day(), recycle())
+        self.assertEqual(2, solver.summary(plan)['body'])
+        self.assertEqual({1, 2}, rf(plan, 3) | rf(plan, 4))
+        self.assertEqual(['recycled', 'recycled'], [m.reason for m in mics(plan) if m.person in (3, 4)])
+        self.assertFalse([f for f in plan.flags if f['kind'] == 'break'])
+
+    def test_a_break_too_short_continues_down_the_line_and_is_flagged_once(self):
+        plan = _solve(break_day('9:35').day(), recycle())
+        self.assertEqual(({3}, {4}), (rf(plan, 3), rf(plan, 4)))
+        flags = [f for f in plan.flags if f['kind'] == 'break']
+        self.assertEqual(['Break at line 3 too short to turn over 2 packs.'], [f['text'] for f in flags])
+
+    def test_new_presenters_take_unused_packs_lowest_rf_first(self):
+        # After a long break, Dee (first by deadline) takes RF 1, Eve RF 2.
+        plan = _solve(break_day('10:30').day(), recycle())
+        self.assertEqual(({1}, {2}), (rf(plan, 3), rf(plan, 4)))
+
+    def test_at_the_body_pack_count_a_pack_is_reused_mid_session_and_flagged(self):
+        plan = _solve(mid_day().day(), recycle(body_pack_count=1))
+        self.assertEqual(({1}, {1}), (rf(plan, 1), rf(plan, 2)))
+        reuse = [f['text'] for f in plan.flags if f['kind'] == 'reuse']
+        self.assertEqual(['Line 4: RF 1 reused mid-session — body pack count (1) reached.'], reuse)
+        self.assertEqual(1, solver.summary(plan)['mid_session'])
+        self.assertFalse([f for f in plan.flags if f['kind'] in ('late', 'tight', 'shortage')])
+
+    def test_a_returner_in_the_same_session_gets_their_own_pack(self):
+        s = (Show().line(1, '9:00').line(2, '9:00').line(3, '9:05').line(4, '9:15').line(5, '9:20')
+             .line(6, '9:30').line(7, '10:00').line(8, '10:00').line(9, '10:10').line(10, '10:30')
+             .segment(1, 5, 'A', '9:00', '9:30').segment(6, 6, 'B', '9:30', '10:00')
+             .segment(7, 9, 'C', '10:00', '10:30').segment(10, 10, 'Close', '10:30', '11:00')
+             .person(1, 'Ana Bell').lists(1, 2, 8).person(2, 'Cy Dunn').lists(2, 3))
+        plan = _solve(s.day(), recycle())
+        ana = mics(plan, 1)
+        self.assertEqual(2, len(ana))
+        self.assertEqual(({1}, 'same pack'), (rf(plan, 1), ana[1].reason))
+
+    def test_handhelds_follow_the_policy_and_the_spare_is_never_assigned(self):
+        plan = _solve(mid_day(HH).day(), recycle())
+        self.assertEqual(({1}, {2}), (rf(plan, 1), rf(plan, 2)))
+        plan = _solve(mid_day(HH).day(), recycle(hh_count=2, emergency_spare_hh=True))
+        self.assertEqual(({1}, {1}), (rf(plan, 1), rf(plan, 2)))
+        spare, = [p for p in plan.packs if p.spare]
+        self.assertNotIn(spare.rf, {s.rf for s in plan.assignments})
+        self.assertEqual(['Line 4: RF 1 reused mid-session — handheld count (2) reached.'],
+                         [f['text'] for f in plan.flags if f['kind'] == 'reuse'])
+
+    def test_a_later_part_that_starts_after_the_earlier_one_ends_starts_a_session(self):
+        s = mid_day()
+        day = s.day()
+        # Cy's line moved into a second part, 9:40-10:00, after part 1 ends at 9:30.
+        rows = [Row(r.key, PART if r.key < 4 else 2, r.order if r.key < 4 else r.order - 3, r.line, r.minute)
+                for r in day.rows]
+        segments = (Segment(1, PART, 0, 3, 'Panel', h('9:00'), h('9:30')),
+                    Segment(4, 2, 0, 3, 'Talk', h('9:40'), h('10:00')))
+        day = Day(tuple(rows), segments, day.people, day.cues, day.listings, day.cued_parts)
+        self.assertEqual([(h('9:40'), 4)], solver.session_starts(day))
+        plan = _solve(day, recycle())
+        self.assertEqual(({1}, {1}), (rf(plan, 1), rf(plan, 2)))
+        self.assertEqual(0, solver.summary(plan)['mid_session'])
+
+    def test_every_late_mic_is_a2_time_under_recycle_at_breaks_too(self):
+        for day in (morning_and_awards().day(), break_day('9:40').day(), panel_day(8).day()):
+            for lead in (10, 20, 30):
+                for a2 in (1, 2):
+                    with self.subTest(lead=lead, a2=a2):
+                        plan = _solve(day, recycle(premic_lead_min=lead, margin_min=5, a2_count=a2))
+                        self.assertEqual([], unexplained(plan))
+                        self.assertEqual(0, solver.summary(plan)['mid_session'])

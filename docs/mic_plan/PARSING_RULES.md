@@ -155,7 +155,19 @@ below is a placeholder, and the test fixture
 - A segment's name is its first description that is not a VOG line, a
   "ROLL RECORDS" / "END RECORDS" cue, a "STAGE SET" note or a walk-in loop;
   one file puts the VOG line on the row with the segment's times.
-- A segment with a "BREAK" or "LUNCH" line and no Speaker text is a break.
+- A segment is a break when any of these holds:
+  - a "BREAK" or "LUNCH" line and no Speaker text (Client E);
+  - its name has break, lunch, networking, intermission, recess, coffee,
+    refresh, reception, transition or meal in it, and its heading row names
+    nobody to speak (Client A "Networking Break"; Client B "BREAK" with "DJ
+    Audio Throughout"; not Client A "Back from Break" or "... & Lunch
+    Transition", where presenters walk on);
+  - 15 minutes or more with nobody named and no Speaker text (Client A
+    "Doors").
+- Editors can set any segment to break or not (the Break toggle on its
+  heading in Showflow + plan). The setting is stored by the heading's line,
+  is kept on Re-read and Replace, and shows as "break · set by you". Setting
+  it back to the detected value removes it. Changing it makes the plan stale.
 
 ## Description intros
 
@@ -201,6 +213,7 @@ scratch. Only what the user set is carried over:
 | Merges (aliases; only a merge writes them) | The people themselves, their lines and intro line |
 | A mic hint picked by hand (`mic_hint_locked`) | A hint read from a callout ("HH", "backup") |
 | A Presenter chosen by hand, including "no presenter" (`flags['presenter_by'] = 'user'`) | An automatic Presenter match by name |
+| A segment set to break or not by hand (`ShowflowImport.break_overrides`, by line) | Break detection |
 
 The parser is only told about merges (each alias and the name it points to).
 A hand-set hint or Presenter link stays with the person by name after the
@@ -265,8 +278,34 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - Nothing is retried, so an impossible day still finishes.
 
 ### Packs
-- The person's own previous pack if free, else the pack free longest, else a
-  new one. Body and handheld are separate pools (hint "HH" = handheld).
+- The person's own previous pack if free. Otherwise it depends on the pack
+  policy (Plan settings, "Pack use"):
+  - **Recycle at breaks** (the default): a pack last worn before the latest
+    session start, lowest RF first ("down the line"), else a new one. Within
+    a session a pack that has been worn never goes to someone else, so a
+    returner always gets their own back.
+  - **Fewest packs** (the behaviour before PR 2.2): the pack free longest,
+    else a new one.
+- Sessions start at each break segment's start, and at the start of a part
+  that begins after every earlier part has ended. A walk-on at or after a
+  session start is in that session. A pack's session is the last one it was
+  worn in.
+- De-mics still happen when people come off; only reuse waits for the break.
+  Whether a pack's de-mic fits before the next walk-on is the A2-time model's
+  call. When it doesn't, the next person gets a new pack, and the break gets
+  one flag: "Break at line 196 too short to turn over 2 packs." (K: the
+  number of new packs opened after it while a pack from before it was still
+  waiting for its de-mic.)
+- Under Recycle at breaks, at a set count: a mic first waits for a pack from
+  before the break if one frees up by its deadline, then reuses the pack free
+  longest mid-session, flagged at its line ("Line 141: RF 3 reused
+  mid-session — body pack count (9) reached."), then waits as below.
+- Body and handheld are separate pools (hint "HH" = handheld). Hosts and
+  backup packs are the same under both policies.
+- On Generate the day is also solved under both policies with the pack
+  counts blank. The packs each needs are shown in the settings tile and form
+  ("Recycle at breaks: 14 body · Fewest packs: 9 body"); only the chosen
+  policy's plan is saved. Plans from before PR 2.2 count as Fewest packs.
 - Hint "backup": an extra pack of their own (handheld unless set to body pack
   in People), mic'd and de-mic'd with them, shown as "<Name> backup" and
   counted in the totals.

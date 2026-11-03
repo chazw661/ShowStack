@@ -116,6 +116,14 @@ NO_CUE_MIN_COVERAGE = 0.5
 _NOT_A_HEADING = re.compile(r'(?i)^\s*(?:vog\b|\[|roll\s+records|end\s+records|stage\s+set'
                             r'|.*\bwalk-?\s?in\b)')
 _BREAK = re.compile(r'(?i)^\s*(?:lunch(?:\s+break)?|break)\b')     # Client E "BREAK", "LUNCH BREAK"
+# A segment named like a break is one unless its heading row names someone
+# to speak: Client A "Networking Break", Client B "BREAK" with "DJ Audio
+# Throughout" as its Speaker; not Client A "Back from Break" or "... & Lunch
+# Transition", where presenters walk on.
+_BREAK_NAME = re.compile(r'(?i)\b(?:break|lunch|networking|intermission|recess|coffee|refresh'
+                         r'|reception|transition|meal)')
+# Nobody named and no Speaker text for this long is a break too (Client A Doors).
+BREAK_QUIET_MIN = 15
 
 # --------------------------------------------------------------------------
 # Times
@@ -976,16 +984,20 @@ def _description_flags(rows, roster, speakers):
     return flags
 
 
-def segment_heading(rows, start, end):
+def segment_heading(rows, start, end, named=(), minutes=None):
     """(name, is_break) for the segment whose rows are rows[start:end]: the
     first description that is not a VOG line, records cue or stage set
-    (Client E), and whether it is a break with nobody speaking."""
+    (Client E), and whether it is a break. ``named``: indexes of rows that
+    name a person to speak; ``minutes``: the segment's length."""
     descs = [(r['description'] or '').strip() for r in rows[start:end]]
-    name = next((d for d in descs if d and not _NOT_A_HEADING.match(d)),
-                descs[0] if descs else '')
-    is_break = (any(_BREAK.match(d) for d in descs)
-                and not any((r['speaker'] or '').strip() for r in rows[start:end]))
-    return re.sub(r'\s+', ' ', name), is_break
+    name = re.sub(r'\s+', ' ', next((d for d in descs if d and not _NOT_A_HEADING.match(d)),
+                                    descs[0] if descs else ''))
+    speakers = any((r['speaker'] or '').strip() for r in rows[start:end])
+    anyone = any(k in named for k in range(start, end))
+    is_break = ((any(_BREAK.match(d) for d in descs) and not speakers)
+                or (bool(_BREAK_NAME.search(name)) and start not in named)
+                or (minutes is not None and minutes >= BREAK_QUIET_MIN and not speakers and not anyone))
+    return name, is_break
 
 
 def _dedupe(flags):
