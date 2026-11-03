@@ -43,6 +43,10 @@ python manage.py test
 Fast iteration: `--settings=audiopatch.test_settings`. Before opening any PR,
 run the plain suite (migrations on). Mandatory for PRs that add a migration.
 
+**Working rule:** while iterating, run only the affected module's tests, e.g.
+`python manage.py test planner.tests.test_amp_profiles --settings=audiopatch.test_settings`.
+Run the full suite (both modes, ~17 min) once, before opening the PR.
+
 The two modes differ: `test_settings` skips migrations, so seeded rows (Source
 Hardware options, the amp catalogue) are absent there and present in the plain
 run. Tests must pass in both, so assert on the rows a test creates, never on
