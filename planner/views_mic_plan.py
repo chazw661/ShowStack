@@ -28,7 +28,7 @@ from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
 from planner.mic_plan.solver import SolverError
 from planner.models import (
-    MicPlan, MicPlanSettings, Presenter, ShowDay, ShowflowEvent, ShowflowImport, ShowflowPerson,
+    MicPlan, MicPlanSettings, Presenter, ShowDay, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
 )
 from planner.tenancy import can_edit_current_project, edit_rights_required_page
 from planner.tenancy import current_project_or_none as _scoped_project
@@ -135,7 +135,13 @@ def mic_plan(request):
         for person in people:
             for o in person.flags.get('rows', {}).get(str(part.pk), []):
                 names_by_row.setdefault(o, []).append(person.pk)
+        breaks = {s['row'].pk: s for s in planning.part_segments(part, rows, planning.named_orders(day, part))}
         for row in rows:
+            seg = breaks.get(row.pk)
+            if seg is not None:
+                by = seg['override'] or {}
+                row.brk = {'is_break': seg['is_break'], 'set': bool(seg['override']),
+                           'by': 'you' if by.get('by') == request.user.pk else by.get('by_name') or 'an editor'}
             row.bsm_html = _bsm_html(row.bsm_text, part.crew_names)
             row.time_label = ('' if row.est_time is None
                               else hm(row.est_time) if row.time_exact else '≈' + hm(row.est_time))
@@ -167,7 +173,11 @@ def mic_plan(request):
         'cards': cards,
         'settings': current,
         'settings_summary': page.settings_summary(plan.settings if plan else current),
-        'settings_changed': bool(plan and plan.settings != current),
+        'settings_changed': bool(plan and {'pack_policy': 'fewest_packs', **plan.settings} != current),
+        'policy': (plan.settings if plan else current).get('pack_policy', 'fewest_packs'),
+        'policy_name': page.POLICY_NAMES[(plan.settings if plan else current).get('pack_policy', 'fewest_packs')],
+        'policy_counts': page.policy_counts_text(plan.policy_counts) if plan else '',
+        'policy_choices': MicPlanSettings.PACK_POLICY_CHOICES,
         'flag_labels': FLAG_LABELS,
         # Crew names only matter when this file has send/catch cues to read. Not
         # "has crew names": a new part starts with the project's last ones.
@@ -352,6 +362,25 @@ def showflow_crew(request, pk):
 @staff_member_required
 @require_POST
 @edit_rights_required_page
+def showflow_break(request, pk):
+    """Mark a segment of this part a break, or not (the plan goes stale)."""
+    part = _part(request, pk)
+    row_pk = request.POST.get('row', '')
+    row = get_object_or_404(ShowflowRow, pk=int(row_pk), showflow_import=part) if row_pk.isdigit() else None
+    if row is None or request.POST.get('is_break') not in ('0', '1'):
+        messages.error(request, 'That segment could not be changed.')
+        return _back(part.day, part)
+    try:
+        planning.set_break(part, row, request.POST['is_break'] == '1', request.user)
+    except ValueError:
+        messages.error(request, 'That line is not a segment heading.')
+        return _back(part.day, part)
+    return _back(part.day, part, '#showflow:row-{}'.format(row.order))
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
 def person_save(request, pk):
     person = _person(request, pk)
     part = request.POST.get('part', '')
@@ -448,6 +477,11 @@ def mic_plan_settings(request):
             return _back(day)
         setattr(settings_obj, name, value)
     settings_obj.emergency_spare_hh = request.POST.get('emergency_spare_hh') == '1'
+    policy = request.POST.get('pack_policy', settings_obj.pack_policy)
+    if policy not in dict(MicPlanSettings.PACK_POLICY_CHOICES):
+        messages.error(request, 'Pack use: choose one of the options.')
+        return _back(day)
+    settings_obj.pack_policy = policy
     settings_obj.save()
     messages.success(request, 'Mic Plan settings saved. Re-generate to use them.')
     return _back(day, _maybe_part(request, request.POST.get('part', '')))

@@ -104,7 +104,7 @@
         {% endif %}
         <div class="mp-stat{% if cards %} warn{% endif %}"><b>{{ cards|length }}</b><span>To review</span></div>
         <button type="button" class="mp-stat mp-stat-settings" data-drawer="settings" title="Plan settings">
-            <b>Settings</b><span>{{ settings_summary }}</span>
+            <b>Settings</b><span>{{ settings_summary }}</span>{% if policy_counts %}<span class="mp-policy-counts">{{ policy_counts }}</span>{% endif %}
         </button>
     </div>
     {% endif %}
@@ -128,6 +128,7 @@
     {% else %}
         {% if plan.stale %}<p class="mp-banner warn" role="status">The showflow, its people or their mic hints changed after this plan was made (v{{ plan.version }}). Re-generate to update it.</p>{% endif %}
         {% if settings_changed %}<p class="mp-banner warn" role="status">Plan settings changed after this plan was made (v{{ plan.version }}). Re-generate to use them.</p>{% endif %}
+        {% if plan %}<p class="mp-banner" role="status">Pack use: <b>{{ policy_name }}</b>{% if policy == 'recycle_at_breaks' %}. A pack worn this session goes to someone else only after a break.{% else %}. A freed pack goes to the next person who needs one.{% endif %}</p>{% endif %}
         {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so on and off times come from the lines that name each person.</p>{% endif %}
         {% if not plan %}<p class="mp-banner" role="status">No plan yet.{% if can_edit %} Check the showflow and people, then press <b>Generate plan</b>.{% endif %}</p>{% endif %}
 
@@ -153,7 +154,7 @@
                 <thead><tr><th>Line</th><th>Time</th><th>Showflow</th><th>BSM (as written)</th><th class="plan packs">Packs</th><th class="plan acts">A2 does here</th></tr></thead>
                 <tbody>
                 {% for row in rows %}
-                <tr id="row-{{ row.order }}" class="{% if row.is_segment %}seg{% if row.segment.is_break %} brk{% endif %}{% endif %}{% if row.empty %} blank{% endif %}"
+                <tr id="row-{{ row.order }}" class="{% if row.is_segment %}seg{% if row.brk.is_break %} brk{% endif %}{% endif %}{% if row.empty %} blank{% endif %}"
                     data-who="{{ row.who|join:' ' }}" data-rf="{{ row.rfs|join:' ' }}">
                     <td class="num">{{ row.line_no }}</td>
                     <td class="num{% if row.time_exact %} exact{% endif %}">{% if row.segment %}{{ row.segment.t0_label }}{% elif not row.is_blank %}{{ row.time_label }}{% endif %}</td>
@@ -164,6 +165,7 @@
                         {% if row.segment.spill_text %}<div class="load spill">{{ row.segment.spill_text }}</div>{% endif %}
                         {% else %}<span{% if row.is_segment %} class="sname"{% endif %}>{{ row.description }}</span>{% endif %}
                         {% if row.speaker_text %}<span class="spk">{{ row.speaker_text }}</span>{% endif %}
+                        {% if row.brk %}{% if can_edit %}<form class="mp-brk" method="post" action="{% url 'planner:mic_plan_break' part.pk %}">{% csrf_token %}<input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="is_break" value="{% if row.brk.is_break %}0{% else %}1{% endif %}"><button type="submit" class="mp-brk-toggle" aria-pressed="{% if row.brk.is_break %}true{% else %}false{% endif %}" title="{% if row.brk.is_break %}Packs worn before this segment can go to someone else after it. Press to make it not a break.{% else %}Press to make this segment a break: packs can go to someone else after it.{% endif %}">Break</button>{% if row.brk.set %} <span class="mp-brk-by">{% if row.brk.is_break %}break{% else %}not a break{% endif %} · set by {{ row.brk.by }}</span>{% endif %}</form>{% elif row.brk.is_break or row.brk.set %}<span class="mp-brk-by">{% if row.brk.is_break %}break{% else %}not a break{% endif %}{% if row.brk.set %} · set by {{ row.brk.by }}{% endif %}</span>{% endif %}{% endif %}
                     </td>
                     <td class="bsm">{{ row.bsm_html|safe }}</td>
                     <td class="plan packs"><div class="cell">{% for c in row.chips %}{% if c.kind == 'send' or c.kind == 'on' %}<button type="button" class="chip send" data-who="{{ c.person }}">{{ c.name }}{% if c.kind == 'on' %} on{% endif %} <span class="rf" data-rf="{{ c.rf|default:'' }}">→{% if c.rf %} RF {{ c.rf }}{% endif %}</span></button>{% else %}<button type="button" class="chip catch" data-who="{{ c.person }}"><span class="rf" data-rf="{{ c.rf|default:'' }}">{% if c.rf %}RF {{ c.rf }} {% endif %}←</span> {{ c.name }}{% if c.kind == 'off' %} off{% endif %}</button>{% endif %}{% endfor %}</div></td>
@@ -331,6 +333,11 @@
                 <label>Body packs<input type="number" name="body_pack_count" min="0" max="200" value="{{ settings.body_pack_count|default_if_none:'' }}" placeholder="as needed"{% if not can_edit %} disabled{% endif %}></label>
                 <label>Handhelds<input type="number" name="hh_count" min="0" max="200" value="{{ settings.hh_count|default_if_none:'' }}" placeholder="as needed"{% if not can_edit %} disabled{% endif %}></label>
                 <label class="mp-check"><input type="checkbox" name="emergency_spare_hh" value="1"{% if settings.emergency_spare_hh %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> Keep the last handheld as an emergency spare</label>
+                <fieldset class="mp-policy">
+                    <legend>Pack use</legend>
+                    {% for value, label in policy_choices %}<label class="mp-check"><input type="radio" name="pack_policy" value="{{ value }}"{% if settings.pack_policy == value %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> {{ label }}<span class="mp-muted">{% if value == 'recycle_at_breaks' %}a pack worn this session goes to someone else only after a break{% else %}a freed pack goes to the next person who needs one{% endif %}</span></label>{% endfor %}
+                    {% if policy_counts %}<p class="mp-note">For this day at plan v{{ plan.version }}'s settings, pack counts blank: {{ policy_counts }}.</p>{% endif %}
+                </fieldset>
             </div>
             {% if can_edit %}<button class="mp-btn small primary" type="submit">Save settings</button>{% endif %}
         </form>

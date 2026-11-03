@@ -381,6 +381,37 @@ class ClientELayoutTests(SimpleTestCase):
         self.assertFalse(_flags(self.result, 'no_cue'))
 
 
+class BreakDetectionTests(SimpleTestCase):
+    """segment_heading's break rule: a break-like name with nobody named on
+    its heading row, or 15+ minutes with nobody named and no Speaker text."""
+
+    def seg(self, *rows, named=(), minutes=30):
+        rows = [{'description': d, 'speaker': spk} for d, spk in rows]
+        return segment_heading(rows, 0, len(rows), named=set(named), minutes=minutes)[1]
+
+    def test_break_like_names_are_breaks(self):
+        for name in ('Networking Break', 'Lunch', 'Coffee & Refreshments', 'Reception in the Hall',
+                     'INTERMISSION', 'Morning recess', 'Meal service'):
+            with self.subTest(name=name):
+                self.assertTrue(self.seg((name, '')))
+
+    def test_a_break_with_speaker_text_but_nobody_named_is_a_break(self):
+        # Client B: "BREAK" with "DJ Audio Throughout"; Client A: a lunch whose
+        # walk-in VOG line names the emcee further down.
+        self.assertTrue(self.seg(('BREAK', 'DJ Audio Throughout')))
+        self.assertTrue(self.seg(('Lunch', ''), ('Emcee: please take your seats', 'Emcee'), named=[1]))
+
+    def test_named_headings_are_not_breaks(self):
+        self.assertFalse(self.seg(('Back from Break (Center STAGE)', 'Emcee'), named=[0], minutes=1))
+        self.assertFalse(self.seg(('Giveaways & Lunch Transition', 'Host & Emcee'), named=[0], minutes=5))
+
+    def test_quiet_segments_of_15_minutes_or_more_are_breaks(self):
+        self.assertTrue(self.seg(('Doors', ''), minutes=15))
+        self.assertFalse(self.seg(('Doors', ''), minutes=14))
+        self.assertFalse(self.seg(('Video', 'VIDEO: sizzle'), minutes=20))     # Speaker text
+        self.assertFalse(self.seg(('Panel', ''), ('Ana Bell', 'Ana Bell'), named=[1], minutes=40))
+
+
 class NameAndCoverageTests(SimpleTestCase):
 
     def test_dr_with_or_without_a_full_stop_is_one_key(self):

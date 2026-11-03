@@ -7027,6 +7027,9 @@ class ShowflowImport(models.Model):
     page_count = models.PositiveSmallIntegerField(default=0)
     detected_columns = models.JSONField(default=list, blank=True)
     crew_names = models.JSONField(default=list, blank=True)
+    # Segment breaks set by hand, by the heading's line (kept on Replace):
+    # {line: {is_break, by, by_name, at}}. Absent: the detected value.
+    break_overrides = models.JSONField(default=dict, blank=True)
     # Parse warnings and review flags: [{kind, text, row_order, person}].
     warnings = models.JSONField(default=list, blank=True)
     # Segment span in minutes from midnight; decides replace-or-add.
@@ -7148,6 +7151,10 @@ class MicPlanSettings(models.Model):
         'Handhelds', null=True, blank=True, validators=[MaxValueValidator(200)])
     # Reserves the last handheld: never assigned.
     emergency_spare_hh = models.BooleanField('Emergency spare handheld', default=False)
+    PACK_POLICY_CHOICES = [('recycle_at_breaks', 'Recycle at breaks'), ('fewest_packs', 'Fewest packs')]
+    # recycle_at_breaks: a worn pack goes to someone else only after a break.
+    pack_policy = models.CharField('Pack use', max_length=20, choices=PACK_POLICY_CHOICES,
+                                   default='recycle_at_breaks')
 
     class Meta:
         verbose_name = 'Mic Plan settings'
@@ -7181,6 +7188,9 @@ class MicPlan(models.Model):
     # [{rf, pool, label, host, backup_of, spare}], RF order.
     packs = models.JSONField(default=list, blank=True)
     swaps = models.PositiveIntegerField(default=0)
+    # Packs each policy needs for this day at the plan's other settings, pack
+    # counts blank: {policy: {body, hh, mid_session}}.
+    policy_counts = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = 'Mic plan'

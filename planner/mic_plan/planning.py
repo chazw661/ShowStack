@@ -6,6 +6,7 @@ Tracker.
 
 import logging
 import time
+from dataclasses import replace
 
 from django.db import transaction
 from django.utils import timezone
@@ -21,7 +22,8 @@ from .parser import NO_CUE_MIN_COVERAGE, segment_heading
 logger = logging.getLogger(__name__)
 
 SETTINGS_FIELDS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min',
-                   'body_pack_count', 'hh_count', 'emergency_spare_hh')
+                   'body_pack_count', 'hh_count', 'emergency_spare_hh', 'pack_policy')
+POLICIES = ('recycle_at_breaks', 'fewest_packs')
 
 
 def project_settings(project):
@@ -37,9 +39,27 @@ def mark_stale(day):
     MicPlan.objects.filter(day=day, stale=False).update(stale=True)
 
 
-def _segments(part, rows):
-    """solver.Segment for each segment heading of ``part`` (rows in order)."""
+def segment_line(row):
+    """The key a segment's break override is stored under: its heading's line."""
+    return row.line_no or '#{}'.format(row.order + 1)
+
+
+def named_orders(day, part):
+    """Orders of ``part``'s rows that name someone to speak."""
+    out = set()
+    for p in day.showflow_people.all():
+        if not p.flags.get('gone'):
+            out.update(p.flags.get('rows', {}).get(str(part.pk), []))
+    return out
+
+
+def part_segments(part, rows, named):
+    """Each segment heading of ``part`` (rows in order) that has a time:
+    {row, name, t0, t1, end, detected, override, is_break}. ``override`` is
+    the stored hand-set value, or None."""
     parser_rows = [r.as_parser_row() for r in rows]
+    by_order = {r.order: k for k, r in enumerate(rows)}
+    named = {by_order[o] for o in named if o in by_order}
     starts = [k for k, r in enumerate(rows) if r.is_segment]
     out = []
     for k, a in enumerate(starts):
@@ -47,12 +67,39 @@ def _segments(part, rows):
         head = rows[a]
         if head.segment_t0 is None:
             continue
-        name, is_break = segment_heading(parser_rows, a, b)
         t1 = head.segment_t1 if head.segment_t1 is not None else head.segment_t0
-        out.append(solver.Segment(key=head.pk, part=part.pk, start=head.order, end=rows[b - 1].order + 1,
-                                  name=name, t0=head.segment_t0, t1=max(t1, head.segment_t0 + 1),
-                                  is_break=is_break))
+        name, detected = segment_heading(parser_rows, a, b, named=named, minutes=t1 - head.segment_t0)
+        override = (part.break_overrides or {}).get(segment_line(head))
+        out.append({'row': head, 'name': name, 't0': head.segment_t0, 't1': max(t1, head.segment_t0 + 1),
+                    'end': rows[b - 1].order + 1, 'detected': detected, 'override': override,
+                    'is_break': override['is_break'] if override else detected})
     return out
+
+
+def set_break(part, row, is_break, user):
+    """Mark segment ``row`` of ``part`` a break or not. Back to the detected
+    value clears the override. The day's plan no longer matches."""
+    seg = next((s for s in part_segments(part, list(part.rows.order_by('order')), named_orders(part.day, part))
+                if s['row'].pk == row.pk), None)
+    if seg is None:
+        raise ValueError('Not a segment heading.')
+    overrides = dict(part.break_overrides or {})
+    if is_break == seg['detected']:
+        overrides.pop(segment_line(row), None)
+    else:
+        overrides[segment_line(row)] = {'is_break': is_break, 'by': user.pk if user else None,
+                                        'by_name': user.get_username() if user else '',
+                                        'at': timezone.now().isoformat()}
+    part.break_overrides = overrides
+    part.save(update_fields=['break_overrides'])
+    mark_stale(part.day)
+
+
+def _segments(part, rows, named):
+    """solver.Segment for each segment heading of ``part`` (rows in order)."""
+    return [solver.Segment(key=s['row'].pk, part=part.pk, start=s['row'].order, end=s['end'], name=s['name'],
+                           t0=s['t0'], t1=s['t1'], is_break=s['is_break'])
+            for s in part_segments(part, rows, named)]
 
 
 def build_day(day):
@@ -63,7 +110,7 @@ def build_day(day):
         part_rows = list(part.rows.order_by('order'))
         rows_by_part[part.pk] = part_rows
         rows += [solver.Row(r.pk, part.pk, r.order, r.line_no, r.est_time) for r in part_rows]
-        segments += _segments(part, part_rows)
+        segments += _segments(part, part_rows, named_orders(day, part))
     events = list(ShowflowEvent.objects.filter(row__showflow_import__in=parts).select_related('row'))
     cue_rows = {}
     for e in events:
@@ -105,6 +152,17 @@ def solver_settings(values):
     return solver.Settings(**{k: values[k] for k in SETTINGS_FIELDS})
 
 
+def policy_counts(data, settings):
+    """{policy: {body, hh, mid_session}}: the packs each policy needs for the
+    day at ``settings`` with the pack counts blank."""
+    out = {}
+    for policy in POLICIES:
+        s = solver.summary(solver.solve(
+            data, replace(settings, pack_policy=policy, body_pack_count=None, hh_count=None), suggest=False))
+        out[policy] = {'body': s['body'], 'hh': s['hh'], 'mid_session': s['mid_session']}
+    return out
+
+
 @transaction.atomic
 def generate(day, user=None):
     """Solve ``day`` with its project's settings and save it as the day's plan."""
@@ -112,6 +170,7 @@ def generate(day, user=None):
     data, rows_by_part, mode = build_day(day)
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values))
+    counts = policy_counts(data, solver_settings(values))
     logger.info('Mic Plan generate: %d appearances, %d actions, %.3fs (project %s, day %s)',
                 len(result.appearances), len(result.actions), time.monotonic() - started,
                 day.project_id, day.pk)
@@ -144,6 +203,7 @@ def generate(day, user=None):
     plan.packs = [{'rf': p.rf, 'pool': p.pool, 'label': p.label, 'host': p.host,
                    'backup_of': p.backup_of, 'spare': p.spare} for p in result.packs]
     plan.swaps = result.swaps
+    plan.policy_counts = counts
     plan.save()
 
     apps = {}

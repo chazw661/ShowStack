@@ -129,9 +129,11 @@ def confirm(pending, replace=None):
             raise ValueError('Not a part of this day.')
         if replace.crew_names:
             pending.crew_names = replace.crew_names
+        # Breaks set by hand follow the segment's line into the new file.
+        pending.break_overrides = replace.break_overrides
         replace.delete()
     pending.status = 'active'
-    pending.save(update_fields=['status', 'crew_names'])
+    pending.save(update_fields=['status', 'crew_names', 'break_overrides'])
     _renumber(pending.day)
     rebuild_day(pending.day)
     return pending
