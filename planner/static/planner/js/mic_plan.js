@@ -45,6 +45,7 @@
         });
         var wrap = $('mp-empty-wrap');
         if (wrap) wrap.hidden = v !== 'showflow';
+        if (v === 'packs') layoutChart();
         if (parts[1]) {
             var tr = document.getElementById(parts[1]);
             if (tr) {
@@ -62,6 +63,38 @@
         });
     });
     window.addEventListener('hashchange', function () { show(location.hash); });
+
+    // Pack chart: a name that doesn't fit its bar goes under it, dropping a
+    // row when it would run into the name before it. Measured, so only while
+    // the chart is showing (a hidden chart has no widths).
+    var UNDER_ROW = 14, UNDER_TOP = 27;
+    function layoutChart() {
+        var chart = $('mp-chart');
+        if (!chart || !chart.offsetWidth) return;
+        all('.lane', chart).forEach(function (lane) {
+            var ends = [];          // per row of names: right edge of the last one (px)
+            all('.stage', lane).sort(function (a, b) { return a.offsetLeft - b.offsetLeft; }).forEach(function (bar) {
+                var under = bar.nextElementSibling, nm = bar.querySelector('.nm');
+                if (!under || !under.classList.contains('under') || !nm) return;
+                var fits = nm.offsetWidth + 10 <= bar.clientWidth;
+                bar.classList.toggle('short', !fits);
+                under.hidden = fits;
+                if (fits) return;
+                var x = bar.offsetLeft, k = 0;
+                while (k < ends.length && ends[k] > x - 4) k++;
+                under.style.top = (UNDER_TOP + k * UNDER_ROW) + 'px';
+                ends[k] = x + under.offsetWidth;
+            });
+            lane.style.minHeight = ends.length ? (UNDER_TOP + ends.length * UNDER_ROW + 3) + 'px' : '';
+        });
+    }
+    var layoutQueued = false;
+    window.addEventListener('resize', function () {
+        if (layoutQueued) return;
+        layoutQueued = true;
+        requestAnimationFrame(function () { layoutQueued = false; layoutChart(); });
+    });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(layoutChart);
 
     // Focus: one person or RF highlighted everywhere, the rest dimmed.
     var people = {};
@@ -84,7 +117,7 @@
             tr.classList.toggle('hit', !!f && hit);
             tr.classList.toggle('dim', !!f && !hit);
         });
-        all('.mp-chart .worn, .mp-chart .stage').forEach(function (el) {
+        all('.mp-chart .worn, .mp-chart .stage, .mp-chart .under').forEach(function (el) {
             var on = !f || (f.who && el.dataset.who === f.who) || (f.rf && el.closest('.lane').dataset.rf === f.rf);
             el.classList.toggle('dim', !on);
         });

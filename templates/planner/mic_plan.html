@@ -150,7 +150,7 @@
         <section id="v-showflow" role="tabpanel" aria-labelledby="t-showflow" hidden>
             <div class="mp-rows-wrap">
             <table class="mp-rows" id="mp-rows">
-                <thead><tr><th>Line</th><th>Time</th><th>Showflow</th><th>BSM (as written)</th><th class="plan">Packs</th><th class="plan">A2 does here</th></tr></thead>
+                <thead><tr><th>Line</th><th>Time</th><th>Showflow</th><th>BSM (as written)</th><th class="plan packs">Packs</th><th class="plan acts">A2 does here</th></tr></thead>
                 <tbody>
                 {% for row in rows %}
                 <tr id="row-{{ row.order }}" class="{% if row.is_segment %}seg{% if row.segment.is_break %} brk{% endif %}{% endif %}{% if row.empty %} blank{% endif %}"
@@ -166,8 +166,8 @@
                         {% if row.speaker_text %}<span class="spk">{{ row.speaker_text }}</span>{% endif %}
                     </td>
                     <td class="bsm">{{ row.bsm_html|safe }}</td>
-                    <td class="plan"><div class="cell">{% for c in row.chips %}{% if c.kind == 'send' or c.kind == 'on' %}<button type="button" class="chip send" data-who="{{ c.person }}">{{ c.name }}{% if c.kind == 'on' %} on{% endif %} <span class="rf" data-rf="{{ c.rf|default:'' }}">→{% if c.rf %} RF {{ c.rf }}{% endif %}</span></button>{% else %}<button type="button" class="chip catch" data-who="{{ c.person }}"><span class="rf" data-rf="{{ c.rf|default:'' }}">{% if c.rf %}RF {{ c.rf }} {% endif %}←</span> {{ c.name }}{% if c.kind == 'off' %} off{% endif %}</button>{% endif %}{% endfor %}</div></td>
-                    <td class="plan">{% if row.acts %}<div class="act">{% for a in row.acts %}<span class="t">{{ a.time }}</span><span>{% if a.a2 %}<span class="a2">{{ a.a2 }}</span> {% endif %}<span class="verb {{ a.kind }}">{{ a.verb }}</span><button type="button" class="chip" data-who="{{ a.person }}">{{ a.name }} <span class="rf" data-rf="{{ a.rf_number }}">{{ a.rf }}</span></button> <span class="note{% if a.late %} crit{% elif a.long_wait or a.tight %} warn{% endif %}">{{ a.reason }}</span></span>{% endfor %}</div>{% endif %}</td>
+                    <td class="plan packs"><div class="cell">{% for c in row.chips %}{% if c.kind == 'send' or c.kind == 'on' %}<button type="button" class="chip send" data-who="{{ c.person }}">{{ c.name }}{% if c.kind == 'on' %} on{% endif %} <span class="rf" data-rf="{{ c.rf|default:'' }}">→{% if c.rf %} RF {{ c.rf }}{% endif %}</span></button>{% else %}<button type="button" class="chip catch" data-who="{{ c.person }}"><span class="rf" data-rf="{{ c.rf|default:'' }}">{% if c.rf %}RF {{ c.rf }} {% endif %}←</span> {{ c.name }}{% if c.kind == 'off' %} off{% endif %}</button>{% endif %}{% endfor %}</div></td>
+                    <td class="plan acts">{% if row.acts %}<div class="act">{% for a in row.acts %}<span class="t">{{ a.time }}</span><span>{% if a.a2 %}<span class="a2">{{ a.a2 }}</span> {% endif %}<span class="verb {{ a.kind }}">{{ a.verb }}</span><button type="button" class="chip" data-who="{{ a.person }}">{{ a.name }} <span class="rf" data-rf="{{ a.rf_number }}">{{ a.rf }}</span></button> <span class="note{% if a.late %} crit{% elif a.long_wait or a.tight %} warn{% endif %}">{{ a.reason }}</span></span>{% endfor %}</div>{% endif %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -187,7 +187,7 @@
                     <button type="button" class="rflab" data-rf="{{ lane.rf }}">RF {{ lane.rf }}<small>{% if lane.pool == 'HH' %}HH · {% endif %}{{ lane.sub }}</small></button>
                     <div class="track">
                         {% for b in chart.bands %}{% if b.is_break %}<div class="bg" style="left:{{ b.left }}%;width:{{ b.width }}%"></div>{% endif %}{% endfor %}
-                        {% for s in lane.bars %}<div class="worn" data-who="{{ s.person }}" style="left:{{ s.worn_left }}%;width:{{ s.worn_width }}%" title="{{ s.tip }}"></div><div class="stage" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%;width:{{ s.stage_width }}%" title="{{ s.tip }}">{{ s.first }}</div>{% endfor %}
+                        {% for s in lane.bars %}<div class="worn" data-who="{{ s.person }}" style="left:{{ s.worn_left }}%;width:{{ s.worn_width }}%" title="{{ s.tip }}"></div><div class="stage" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%;width:{{ s.stage_width }}%" title="{{ s.tip }}"><span class="nm">{{ s.first }}</span></div><span class="under" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%" hidden>{{ s.first }}</span>{% endfor %}
                     </div>
                 </div>
                 {% endfor %}
