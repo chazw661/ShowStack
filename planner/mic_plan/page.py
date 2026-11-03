@@ -50,8 +50,11 @@ def segment_rows(plan):
             ratio = busy / span
             meters.append({'a2': 'A2 {}'.format(k + 1) if a2 > 1 else 'A2', 'busy': round(busy),
                            'span': round(span), 'pct': min(100, round(ratio * 100)), 'level': _level(ratio)})
+        spill = ''
+        if s.get('spill'):
+            spill = '+{} min into {}'.format(s['spill'], s.get('spill_into') or 'the next segment')
         out[s['row']] = dict(s, meters=[m for m in meters if m['busy']], t0_label=hm(s['t0']),
-                             t1_label=hm(s['t1']))
+                             t1_label=hm(s['t1']), spill_text=spill)
     return out
 
 
@@ -218,7 +221,7 @@ def review_cards(parts, plan, apps, people, labels):
                 used.add((a.person_id, a.note_row_id))
                 break
     if plan is not None:
-        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'overload': 'A2 overload'}
+        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill'}
         for f in plan.flags:
             part, row = rows.get(f.get('row'), (None, None))
             cards.append(_card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,
@@ -248,8 +251,11 @@ def stats(plan):
     if plan is None:
         return None
     regular = [p for p in plan.packs if not p.get('spare')]
+    # A segment shorter than one mic is always "busy": left out of the count.
+    shortest = plan.settings.get('mic_min', 1)
     hot = sum(1 for s in plan.segments
-              if s['t1'] > s['t0'] and any(b / (s['t1'] - s['t0']) >= BUSY_HOT for b in (s.get('busy') or [])))
+              if s['t1'] - s['t0'] >= shortest
+              and any(b / (s['t1'] - s['t0']) >= BUSY_HOT for b in (s.get('busy') or [])))
     return {
         'body': sum(1 for p in regular if p['pool'] == 'body'),
         'hh': sum(1 for p in regular if p['pool'] == 'HH'),

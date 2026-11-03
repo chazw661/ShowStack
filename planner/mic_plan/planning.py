@@ -125,9 +125,14 @@ def generate(day, user=None):
     line = (lambda key: (rows[key].line_no or '#{}'.format(rows[key].order + 1))
             if key in rows else '')
     names = {p.key: p.name for p in data.people}
-    seg_out = [{'row': s.key, 'part': s.part, 'line': line(s.key), 'name': s.name, 't0': s.t0,
-                't1': s.t1, 'is_break': s.is_break, 'busy': result.busy.get(s.key, [])}
-               for s in data.segments]
+    seg_names = {s.key: s.name for s in data.segments}
+    seg_out = []
+    for s in data.segments:
+        spill = result.spill.get(s.key)
+        seg_out.append({'row': s.key, 'part': s.part, 'line': line(s.key), 'name': s.name, 't0': s.t0,
+                        't1': s.t1, 'is_break': s.is_break, 'busy': result.busy.get(s.key, []),
+                        'spill': spill['minutes'] if spill else 0,
+                        'spill_into': seg_names.get(spill['into'], '') if spill else ''})
     plan.generated_at = timezone.now()
     plan.generated_by = user
     plan.version += 1

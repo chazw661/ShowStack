@@ -263,10 +263,24 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - RF numbers: body, body backups, handheld, handheld backups, then the
   emergency spare handheld, which is never assigned and counts against the
   handheld total.
-- Over a set body or handheld count, the plan is still made and each pack
-  over is flagged at its line ("need 1 more body pack than the 8 set").
-- A2 busy: action minutes inside each segment, per A2. More than the segment
-  is long is flagged "A2 overload"; 90 % and over is counted in the stat tile.
+- Over a set body or handheld count, the plan is still made. Each stretch of
+  time with more packs of a pool in use than set gets one flag, at the line
+  where it starts, giving its peak ("Line 183: need 2 more body packs than the
+  9 set (11 in use from 11:35a)").
+
+### A2 busy and spill
+- Busy: the A2's action minutes inside each segment, per A2. Where segments
+  overlap (a "Doors" holding a "Pre-Show"), a minute counts in the one that
+  started later, so no minute is counted twice.
+- One A2 can never be busier than a segment is long, so "over 100 %" is
+  shown as spill instead: work the segment owes (de-mics released in it, mics
+  due in it) still going after it ends. It is shown on the segment's meter
+  ("+3 min into Lunch") and goes to Review when it is 5 min or more, or runs
+  into a segment with a mic due.
+- Segments shorter than one mic (a 1-minute video) are left out of the
+  "A2 ≥ 90 %" tile and of spill: nothing fits in them.
+- "Pack changes" (stat tile): times a pack goes to someone other than who wore
+  it last.
 
 ## Interactions with the plan
 

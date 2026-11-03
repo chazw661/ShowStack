@@ -193,12 +193,28 @@ class PackTests(TestCase):
         self.assertEqual(['shortage'], [f['kind'] for f in plan.flags])
         self.assertIn('need 1 more handheld than the 1 set', plan.flags[0]['text'])
 
-    def test_a_pack_shortage_is_flagged_at_its_line_and_the_plan_still_made(self):
+    def test_a_shortage_is_one_flag_per_stretch_with_its_peak(self):
         plan = solve(panel_day(3).day(), Settings(body_pack_count=1))
         shortages = [f for f in plan.flags if f['kind'] == 'shortage']
-        self.assertEqual(2, len(shortages))
-        self.assertTrue(shortages[0]['text'].startswith('Line 2: need 1 more body pack than the 1 set'))
-        self.assertEqual(3, len(plan.packs))
+        self.assertEqual(['Line 2: need 2 more body packs than the 1 set (3 in use from 9:00a).'],
+                         [f['text'] for f in shortages])
+        self.assertEqual(3, len(plan.packs))                 # the plan is still made
+
+    def test_separate_stretches_over_the_limit_get_a_flag_each_at_their_line(self):
+        s = (Show().line(1, '9:00').line(2).line(3, '10:00').line(4, '11:00').line(5).line(6, '12:00')
+             .segment(1, 2, 'A', '9:00', '10:00').segment(3, 3, 'Gap', '10:00', '11:00')
+             .segment(4, 5, 'B', '11:00', '12:00').segment(6, 6, 'End', '12:00', '12:30'))
+        for k, line in ((1, 2), (2, 2), (3, 5), (4, 5), (5, 5)):
+            s.person(k, 'Person {}'.format(k)).lists(k, line)
+        plan = solve(s.day(), Settings(body_pack_count=1))
+        texts = [f['text'] for f in plan.flags if f['kind'] == 'shortage']
+        self.assertEqual(['Line 2: need 1 more body pack than the 1 set (2 in use from 9:00a).',
+                          'Line 5: need 2 more body packs than the 1 set (3 in use from 11:00a).'], texts)
+
+    def test_handheld_shortages_are_counted_the_same_way(self):
+        plan = solve(panel_day(3, HH).day(), Settings(hh_count=2))
+        self.assertEqual(['Line 2: need 1 more handheld than the 2 set (3 in use from 9:00a).'],
+                         [f['text'] for f in plan.flags if f['kind'] == 'shortage'])
 
     def test_a_backup_reserves_its_own_pack_counted_and_mic_d_by_the_a2(self):
         s = panel_day(1)
@@ -269,6 +285,63 @@ class ScheduleTests(TestCase):
         self.assertEqual([0.0, 0.0], opening)          # both mics are done before 9:00
         self.assertEqual([3.0, 3.0], close)            # one de-mic each at 9:30
 
+    def test_overlapping_segments_never_count_a_minute_twice(self):
+        # "Doors" 8:00-9:00 holds "Pre-Show" 8:30-9:00: a mic at 8:30 counts in Pre-Show only.
+        s = (Show().line(1, '8:00').line(2, '8:30').line(3).line(4, '9:00').line(5)
+             .segment(1, 1, 'Doors', '8:00', '9:00').segment(2, 3, 'Pre-Show', '8:30', '9:00')
+             .segment(4, 5, 'Opening', '9:00', '9:30')
+             .person(1, 'Ana Bell').lists(1, 5))
+        plan = solve(s.day())
+        inside = sum(max(0, min(a.end_min, h('9:30')) - max(a.start_min, h('8:00'))) for a in plan.actions)
+        self.assertEqual(inside, sum(sum(m) for m in plan.busy.values()))
+        self.assertEqual([0.0], plan.busy[1])
+        self.assertEqual([3.0], plan.busy[2])
+
+    def spill_day(self, off_together, due_in_next=False, transition='9:35'):
+        # A: 9:00-9:30, everyone in it comes off at 9:30, into a short
+        # transition T (9:30-``transition``), then C until 10:00.
+        s = (Show().line(1, '9:00').line(2).line(3, '9:30').line(4, transition).line(5, '9:50')
+             .line(6, '10:00')
+             .segment(1, 2, 'A', '9:00', '9:30').segment(3, 3, 'T', '9:30', transition)
+             .segment(4, 6, 'C', transition, '10:00'))
+        for k in range(1, off_together + 1):
+            s.person(k, 'Person {}'.format(k)).lists(k, 2)
+        if due_in_next:
+            s.person(99, 'Late Comer').lists(99, 5)
+        return solve(s.day())
+
+    def test_de_mics_running_past_a_short_segment_are_spill_on_its_meter_and_in_review(self):
+        plan = self.spill_day(4)                          # 4 de-mics from 9:30: busy until 9:42
+        self.assertEqual({'minutes': 7, 'into': 4}, plan.spill[3])
+        self.assertEqual([5.0], plan.busy[3])             # the meter itself never passes 100 %
+        flag, = [f for f in plan.flags if f['kind'] == 'spill']
+        self.assertEqual('Line 3: the A2 is still busy 7 min after "T" ends at 9:35a, into "C".', flag['text'])
+        self.assertNotIn('overload', {f['kind'] for f in plan.flags})
+
+    def test_a_short_spill_stays_on_the_meter_unless_a_mic_is_due_next(self):
+        plan = self.spill_day(2)                          # busy until 9:36: 1 min over
+        self.assertEqual(1, plan.spill[3]['minutes'])
+        self.assertFalse([f for f in plan.flags if f['kind'] == 'spill'])
+        plan = self.spill_day(2, due_in_next=True)        # a mic is due in C at 9:45
+        flag, = [f for f in plan.flags if f['kind'] == 'spill']
+        self.assertIn('where a mic is due', flag['text'])
+
+    def test_segments_shorter_than_a_mic_never_spill(self):
+        plan = self.spill_day(4, transition='9:31')       # a 1-minute T
+        self.assertNotIn(3, plan.spill)
+        self.assertFalse([f for f in plan.flags if f['kind'] == 'spill'])
+
+    def test_the_same_day_gives_the_same_plan_whatever_order_people_were_created_in(self):
+        def signature(keys):
+            s = panel_day(0)
+            for key, name in zip(keys, ('Ana Bell', 'Cy Dunn', 'Eve Ford', 'Gus Hale')):
+                s.person(key, name).lists(key, 2)
+            plan = solve(s.day(), Settings(body_pack_count=2))
+            names = {p.key: p.name for p in s.people}
+            return ([(a.kind, a.start_min, names[a.person], a.rf_number) for a in plan.actions],
+                    [f['text'] for f in plan.flags])
+        self.assertEqual(signature([1, 2, 3, 4]), signature([4, 3, 2, 1]))
+
     def test_actions_read_the_same_everywhere(self):
         plan = solve(panel_day(1).day(), Settings(a2_count=2))
         f = format_action(plan.actions[0], 2)
@@ -295,3 +368,15 @@ class FixtureStrategyTests(DbTestCase):
                 self.assertLessEqual(sum(a.start_min for a in mics(early)),
                                      sum(a.start_min for a in mics(late)))
                 self.assertFalse(any(a.late for a in early.actions))
+
+
+class StatTileTests(TestCase):
+
+    def test_segments_shorter_than_a_mic_are_not_counted_as_busy(self):
+        from types import SimpleNamespace
+        from planner.mic_plan.page import stats
+        plan = SimpleNamespace(settings={'mic_min': 3}, packs=[], swaps=0, segments=[
+            {'t0': 600, 't1': 601, 'busy': [1.0]},        # 1-minute video: 100 %, left out
+            {'t0': 601, 't1': 631, 'busy': [28.0]},       # 93 %
+            {'t0': 631, 't1': 661, 'busy': [20.0]}])      # 67 %
+        self.assertEqual(1, stats(plan)['hot'])

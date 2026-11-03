@@ -99,7 +99,7 @@
         <div class="mp-stat"><b>{{ stats.body }}</b><span>Body packs</span></div>
         {% if stats.hh %}<div class="mp-stat"><b>{{ stats.hh }}</b><span>Handhelds</span></div>{% endif %}
         <div class="mp-stat"><b>{{ stats.hosts }}</b><span>Host packs</span></div>
-        <div class="mp-stat"><b>{{ stats.swaps }}</b><span>Swaps</span></div>
+        <div class="mp-stat" title="Times a pack goes to someone other than who wore it last"><b>{{ stats.swaps }}</b><span>Pack changes</span></div>
         <div class="mp-stat{% if stats.hot %} warn{% endif %}"><b>{{ stats.hot }}</b><span>Segments A2 ≥ 90%</span></div>
         {% endif %}
         <div class="mp-stat{% if cards %} warn{% endif %}"><b>{{ cards|length }}</b><span>To review</span></div>
@@ -161,6 +161,7 @@
                         {% if row.segment %}
                         <div><span class="sname">{{ row.segment.name|default:row.description }}</span> <span class="stime">{{ row.segment.t0_label }}–{{ row.segment.t1_label }}</span></div>
                         {% for m in row.segment.meters %}<div class="load {{ m.level }}"><span class="meter {{ m.level }}"><i style="width:{{ m.pct }}%"></i></span>{{ m.a2 }} busy {{ m.busy }} of {{ m.span }} min</div>{% endfor %}
+                        {% if row.segment.spill_text %}<div class="load spill">{{ row.segment.spill_text }}</div>{% endif %}
                         {% else %}<span{% if row.is_segment %} class="sname"{% endif %}>{{ row.description }}</span>{% endif %}
                         {% if row.speaker_text %}<span class="spk">{{ row.speaker_text }}</span>{% endif %}
                     </td>

@@ -23,6 +23,9 @@ Times are minutes from midnight. The logic follows the prototype solver
    longest, else a new one. Body and HH are separate pools; a "backup"
    person also wears their own backup pack. RF numbers: body, body
    backups, HH, HH backups, then the emergency spare HH (never assigned).
+5. Shortages are flagged once per stretch over a set pack count; A2 busy
+   minutes are counted once each, and work a segment owes that runs past
+   its end is "spill".
 """
 
 import math
@@ -137,6 +140,8 @@ class Action:
     tight: bool = False
     wait_min: int = 0
     backup: bool = False
+    released: float = None   # when it could first be done (not saved)
+    due: float = None        # mics: finish by (not saved)
 
 
 @dataclass
@@ -157,6 +162,9 @@ class Plan:
     packs: list = field(default_factory=list)
     flags: list = field(default_factory=list)    # {kind, text, row, person}
     busy: dict = field(default_factory=dict)     # segment key -> [minutes per A2]
+    # segment key -> {'minutes', 'into' (segment key)}: A2 work the segment
+    # owes (de-mics released in it, mics due in it) finishing after it ends.
+    spill: dict = field(default_factory=dict)
     swaps: int = 0
 
 
@@ -322,7 +330,9 @@ def appearances(day, ix=None):
         if row is not None:
             cues_by.setdefault((c.person, row.part), []).append(c)
     out, hosts = [], set()
-    for person in sorted(ix.people):
+    # Name order, not key order: keys follow the order a re-import happened to
+    # create people in, and ties must break the same way every time.
+    for person in sorted(ix.people, key=lambda k: (ix.people[k].name, k)):
         p = ix.people[person]
         listed = _listed_segments(ix, person)
         mine = []
@@ -342,7 +352,7 @@ def appearances(day, ix=None):
             mine = [Appearance(person, first.part, first.on, last.off, first.on_row, last.off_row, 'host',
                                mic_type=p.mic_type, is_host=True)]
         out += mine
-    out.sort(key=lambda a: (a.on, a.person))
+    out.sort(key=lambda a: (a.on, ix.people[a.person].name, a.person))
     for k, a in enumerate(out):
         a.key = k
     return out, hosts
@@ -445,7 +455,6 @@ def solve(day, settings=Settings()):
     backups = {}             # person -> backup pack
     limits = {BODY: S.body_pack_count,
               HH: None if S.hh_count is None else max(0, S.hh_count - (1 if S.emergency_spare_hh else 0))}
-    shortage_flagged = set()
 
     def pool_of(task):
         if task.backup:
@@ -480,17 +489,6 @@ def solve(day, settings=Settings()):
         pool = pool_of(task)
         p = _Pack(pool, backup_of=task.app.person if task.backup else None, tmp=len(packs))
         packs.append(p)
-        count = sum(1 for q in packs if q.pool == pool)
-        limit = limits[pool]
-        if limit is not None and count > limit and (pool, count) not in shortage_flagged:
-            shortage_flagged.add((pool, count))
-            what = 'body pack' if pool == BODY else 'handheld'
-            more = count - limit
-            plan.flags.append({
-                'kind': 'shortage', 'row': task.app.on_row, 'person': task.app.person,
-                'text': 'Line {}: need {} more {}{} than the {} set ({} in use from {}).'.format(
-                    ix.line(task.app.on_row), more, what, '' if more == 1 else 's', limit, count,
-                    hm(task.app.on))})
         return p
 
     def row_at(app, t):
@@ -539,7 +537,7 @@ def solve(day, settings=Settings()):
             a2_index=i + 1, seq=seqs[i], kind=task.kind, start_min=t, end_min=end, person=a.person,
             person_name=person.name, rf_number=0, appearance=a.key, row=row.key if row else None,
             segment=seg.key if seg else None, reason=reason, late=late, tight=tight, wait_min=wait,
-            backup=task.backup))
+            backup=task.backup, released=task.rel, due=task.due))
         plan.actions[-1]._pack = pack
         if task.kind == 'mic':
             plan.assignments.append(Assignment(a.key, 0, 'backup' if task.backup else
@@ -616,8 +614,52 @@ def solve(day, settings=Settings()):
         job.done = True
 
     _number(plan, packs, S, ix)
-    _busy(plan, day, n)
+    _shortages(plan, limits, ix)
+    _busy(plan, day, n, S)
     return plan
+
+
+def _shortages(plan, limits, ix):
+    """One flag per stretch of time with more packs of a pool in use than
+    set, at the line where it starts, giving that stretch's peak."""
+    worn = {}                 # (rf, appearance, backup) -> [start, end]
+    for a in plan.actions:
+        key = (a.rf_number, a.appearance, a.backup)
+        if a.kind == 'mic':
+            worn[key] = [a.start_min, INF, a]
+        elif key in worn:
+            worn[key][1] = a.end_min
+    pools = {p.rf: p.pool for p in plan.packs}
+    for pool, limit in limits.items():
+        if limit is None:
+            continue
+        events = []
+        for (rf, _, _), (t0, t1, mic) in worn.items():
+            if pools.get(rf) == pool:
+                events += [(t0, 1, mic), (t1, -1, None)]
+        events.sort(key=lambda e: (e[0], e[1]))     # off before on at the same minute
+        count, start, peak = 0, None, 0
+        for t, step, mic in events:
+            count += step
+            if count > limit and start is None:
+                start, peak = mic, count
+            elif start is not None and count > peak:
+                peak = count
+            if start is not None and count <= limit:
+                _flag_shortage(plan, ix, pool, limit, peak, start)
+                start = None
+        if start is not None:
+            _flag_shortage(plan, ix, pool, limit, peak, start)
+
+
+def _flag_shortage(plan, ix, pool, limit, peak, mic):
+    app = plan.appearances[mic.appearance]
+    more = peak - limit
+    what = 'body pack' if pool == BODY else 'handheld'
+    plan.flags.append({
+        'kind': 'shortage', 'row': app.on_row, 'person': app.person,
+        'text': 'Line {}: need {} more {}{} than the {} set ({} in use from {}).'.format(
+            ix.line(app.on_row), more, what, '' if more == 1 else 's', limit, peak, hm(app.on))})
 
 
 def _number(plan, packs, S, ix):
@@ -646,22 +688,69 @@ def _number(plan, packs, S, ix):
     plan.swaps = sum(1 for a in plan.actions if a.kind == 'mic' and a.reason == 'recycled')
 
 
-def _busy(plan, day, n):
+def _owners(segments):
+    """[(start, end, segment)] with no overlaps: where segments overlap (a
+    "Doors" 7:00-8:30 holding a "Pre-Show" 7:45-8:30), a minute belongs to the
+    one that started later, so no A2 minute is counted twice."""
+    cuts = sorted({t for s in segments for t in (s.t0, s.t1)})
+    out = []
+    for a, b in zip(cuts, cuts[1:]):
+        live = [s for s in segments if s.t0 <= a and b <= s.t1]
+        if live:
+            out.append((a, b, max(live, key=lambda s: (s.t0, s.start))))
+    return out
+
+
+SPILL_FLAG_MIN = 5            # spill this long (or into a segment with a mic due) goes to Review
+
+
+def _busy(plan, day, n, S):
+    mins = {s.key: [0.0] * n for s in day.segments}
+    by_part = {}
     for s in day.segments:
-        mins = [0.0] * n
-        for a in plan.actions:
-            overlap = min(a.end_min, s.t1) - max(a.start_min, s.t0)
+        by_part.setdefault(s.part, []).append(s)
+    pieces = {part: _owners(segs) for part, segs in by_part.items()}
+    for a in plan.actions:
+        part = plan.appearances[a.appearance].part
+        for t0, t1, s in pieces.get(part, ()):
+            overlap = min(a.end_min, t1) - max(a.start_min, t0)
             if overlap > 0:
-                mins[a.a2_index - 1] += overlap
-        plan.busy[s.key] = [round(m, 1) for m in mins]
-        span = s.t1 - s.t0
-        for k, m in enumerate(mins):
-            if span > 0 and m > span + 0.01:
+                mins[s.key][a.a2_index - 1] += overlap
+    for s in day.segments:
+        plan.busy[s.key] = [round(m, 1) for m in mins[s.key]]
+
+    # Spill: work a segment owes (de-mics released in it, mics due in it)
+    # still going after it ends. Segments shorter than a mic are left out:
+    # nothing fits in them, so they always "spill".
+    def owner(part, t):
+        return next((s for t0, t1, s in pieces.get(part, ()) if t0 <= t < t1), None)
+
+    for part, segs in by_part.items():
+        acts = [a for a in plan.actions if plan.appearances[a.appearance].part == part]
+        for s in segs:
+            if s.t1 - s.t0 < S.mic_min:
+                continue
+            owed = [a for a in acts if owner(part, a.released if a.kind == 'demic' else a.due) is s]
+            end = max((a.end_min for a in owed), default=s.t1)
+            if end <= s.t1 + 0.01:
+                continue
+            into = owner(part, s.t1)
+            minutes = int(round(end - s.t1))
+            plan.spill[s.key] = {'minutes': minutes, 'into': into.key if into else None}
+            mic_due = into is not None and any(
+                a.kind == 'mic' and a.due is not None and into.t0 <= a.due < into.t1 for a in acts)
+            if minutes >= SPILL_FLAG_MIN or mic_due:
                 plan.flags.append({
-                    'kind': 'overload', 'row': s.key, 'person': None,
-                    'text': '{}: {} needs {} min of mic work in a {}-min segment.'.format(
-                        s.name or 'Segment', 'A2 {}'.format(k + 1) if n > 1 else 'the A2',
-                        int(round(m)), int(round(span)))})
+                    'kind': 'spill', 'row': s.key, 'person': None,
+                    'text': 'Line {}: the A2 is still busy {} min after "{}" ends at {}{}{}.'.format(
+                        ix_line(day, s.key), minutes, s.name or 'this segment', hm(s.t1),
+                        ', into "{}"'.format(into.name) if into else '',
+                        ' where a mic is due' if mic_due else '')})
+
+
+def ix_line(day, key):
+    row = next((r for r in day.rows if r.key == key), None)
+    return (row.line or '#{}'.format(row.order + 1)) if row else '?'
 
 
 def summary(plan):
@@ -677,5 +766,5 @@ def summary(plan):
         'late': sum(1 for f in plan.flags if f['kind'] == 'late'),
         'tight': sum(1 for f in plan.flags if f['kind'] == 'tight'),
         'shortage': sum(1 for f in plan.flags if f['kind'] == 'shortage'),
-        'overload': sum(1 for f in plan.flags if f['kind'] == 'overload'),
+        'spill': sum(1 for f in plan.flags if f['kind'] == 'spill'),
     }
