@@ -25,7 +25,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from planner.models import (
-    Presenter, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
+    MicPlan, Presenter, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
 )
 
 from .extract import ShowflowError, extract
@@ -310,3 +310,5 @@ def rebuild_day(day):
             for kind, row, text, name in result.flags]
         part.save(update_fields=['warnings'])
     ShowflowEvent.objects.bulk_create(events)
+    # People, lines or cues may have changed: the day's plan no longer matches.
+    MicPlan.objects.filter(day=day, stale=False).update(stale=True)

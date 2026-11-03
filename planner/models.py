@@ -7096,6 +7096,9 @@ class ShowflowPerson(models.Model):
     mic_hint = models.CharField(max_length=10, choices=MIC_HINT_CHOICES, blank=True, default='')
     # Set once someone picks a hint by hand; a re-parse then leaves it alone.
     mic_hint_locked = models.BooleanField(default=False)
+    BACKUP_TYPE_CHOICES = [('HH', 'Handheld'), ('body', 'Body pack')]
+    # With mic_hint 'backup', the extra pack the plan reserves for them.
+    backup_mic_type = models.CharField(max_length=4, choices=BACKUP_TYPE_CHOICES, default='HH')
     # {'bsm_only': bool, 'rows': {import id: [row order, ...]}}
     flags = models.JSONField(default=dict, blank=True)
 
@@ -7138,6 +7141,13 @@ class MicPlanSettings(models.Model):
         'Pre-mic lead (min)', default=30, validators=[MinValueValidator(0), MaxValueValidator(240)])
     margin_min = models.PositiveSmallIntegerField(
         'Margin (min)', default=5, validators=[MinValueValidator(0), MaxValueValidator(60)])
+    # Blank: the plan reports the minimum it needs.
+    body_pack_count = models.PositiveSmallIntegerField(
+        'Body packs', null=True, blank=True, validators=[MaxValueValidator(200)])
+    hh_count = models.PositiveSmallIntegerField(
+        'Handhelds', null=True, blank=True, validators=[MaxValueValidator(200)])
+    # Reserves the last handheld: never assigned.
+    emergency_spare_hh = models.BooleanField('Emergency spare handheld', default=False)
 
     class Meta:
         verbose_name = 'Mic Plan settings'
@@ -7145,3 +7155,135 @@ class MicPlanSettings(models.Model):
 
     def __str__(self):
         return f'Mic Plan settings — {self.project}'
+
+
+class MicPlan(models.Model):
+    """The draft mic plan of a show day (planner.mic_plan.solver), as last
+    generated. Its A2 actions are the only source for the page, plan.json and
+    the A2 schedule: nothing re-solves to display them. Nothing here writes
+    to Mic Tracker."""
+    CUE_MODE_CHOICES = [('cues', 'Cues'), ('line estimates', 'Line estimates')]
+
+    day = models.OneToOneField(ShowDay, on_delete=models.CASCADE, related_name='mic_plan')
+    generated_at = models.DateTimeField()
+    generated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    # +1 on every generate (and, from PR 3, every edit).
+    version = models.PositiveIntegerField(default=0)
+    settings = models.JSONField(default=dict, blank=True)     # MicPlanSettings at generation
+    cue_mode = models.CharField(max_length=20, choices=CUE_MODE_CHOICES, default='cues')
+    # Set when the day's imports, people or mic hints change after generation.
+    stale = models.BooleanField(default=False)
+    # [{row, part, name, t0, t1, is_break, busy: [min per A2]}], as the plan saw them.
+    segments = models.JSONField(default=list, blank=True)
+    # The plan's own flags: [{kind, text, row, person}].
+    flags = models.JSONField(default=list, blank=True)
+    # [{rf, pool, label, host, backup_of, spare}], RF order.
+    packs = models.JSONField(default=list, blank=True)
+    swaps = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Mic plan'
+
+    def __str__(self):
+        return f'Mic plan — {self.day} v{self.version}'
+
+
+class MicPlanAppearance(models.Model):
+    """Someone on stage from on_min to off_min. Rows and people are snapshot
+    by label/name too, so a plan stays readable after a re-import."""
+    SOURCE_CHOICES = [('cue', 'Send/catch'), ('listed', 'Listed'), ('host', 'Host')]
+    MIC_TYPE_CHOICES = [('body', 'Body pack'), ('HH', 'Handheld')]
+
+    plan = models.ForeignKey(MicPlan, on_delete=models.CASCADE, related_name='appearances')
+    key = models.PositiveIntegerField()                  # the solver's index, for references
+    person = models.ForeignKey(ShowflowPerson, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='+')
+    person_name = models.CharField(max_length=200)
+    part = models.ForeignKey(ShowflowImport, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='+')
+    on_min = models.FloatField()
+    off_min = models.FloatField()
+    on_row = models.ForeignKey(ShowflowRow, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='+')
+    off_row = models.ForeignKey(ShowflowRow, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+')
+    on_line = models.CharField(max_length=20, blank=True)
+    off_line = models.CharField(max_length=20, blank=True)
+    mic_type = models.CharField(max_length=4, choices=MIC_TYPE_CHOICES, default='body')
+    source = models.CharField(max_length=6, choices=SOURCE_CHOICES, default='cue')
+    is_host = models.BooleanField(default=False)
+    # What the plan assumed, in words, and the row it is about.
+    assumed = models.CharField(max_length=200, blank=True)
+    note_row = models.ForeignKey(ShowflowRow, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='+')
+    pinned_rf = models.PositiveSmallIntegerField(null=True, blank=True)   # PR 3
+
+    class Meta:
+        ordering = ['plan', 'on_min', 'key']
+        constraints = [
+            UniqueConstraint(fields=['plan', 'key'], name='uniq_mic_plan_appearance_key'),
+        ]
+
+    def __str__(self):
+        return f'{self.person_name} {self.on_line}–{self.off_line}'
+
+
+class MicPlanAssignment(models.Model):
+    HOW_CHOICES = [('same as before', 'Same as before'), ('recycled', 'Recycled'), ('new', 'New'),
+                   ('host', 'Host'), ('backup', 'Backup')]
+
+    appearance = models.ForeignKey(MicPlanAppearance, on_delete=models.CASCADE,
+                                   related_name='assignments')
+    rf_number = models.PositiveSmallIntegerField()
+    how = models.CharField(max_length=20, choices=HOW_CHOICES)
+    backup = models.BooleanField(default=False)          # their backup pack, not their main one
+
+    class Meta:
+        ordering = ['appearance', 'backup']
+        constraints = [
+            UniqueConstraint(fields=['appearance', 'backup'], name='uniq_mic_plan_assignment'),
+        ]
+
+    def __str__(self):
+        return f'RF{self.rf_number} {self.appearance}'
+
+
+class MicPlanA2Action(models.Model):
+    """One mic or de-mic by one A2: the single source for the Showflow + plan
+    "A2 does here" column, plan.json and the A2 schedule / PDF (PR 4).
+    Formatted only by planner.mic_plan.display.format_action."""
+    KIND_CHOICES = [('mic', 'Mic'), ('demic', 'De-mic')]
+
+    plan = models.ForeignKey(MicPlan, on_delete=models.CASCADE, related_name='actions')
+    a2_index = models.PositiveSmallIntegerField(default=1)
+    seq = models.PositiveIntegerField()                  # order within that A2's day
+    kind = models.CharField(max_length=5, choices=KIND_CHOICES)
+    start_min = models.FloatField()
+    end_min = models.FloatField()
+    appearance = models.ForeignKey(MicPlanAppearance, on_delete=models.CASCADE,
+                                   related_name='actions')
+    person = models.ForeignKey(ShowflowPerson, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='+')
+    person_name = models.CharField(max_length=200)
+    rf_number = models.PositiveSmallIntegerField()
+    # The showflow line it sits on, and the segment that line is in.
+    row = models.ForeignKey(ShowflowRow, on_delete=models.SET_NULL, null=True, blank=True,
+                            related_name='+')
+    line = models.CharField(max_length=20, blank=True)
+    segment = models.ForeignKey(ShowflowRow, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+')
+    reason = models.CharField(max_length=40)
+    late = models.BooleanField(default=False)
+    tight = models.BooleanField(default=False)
+    wait_min = models.PositiveIntegerField(default=0)
+    backup = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['plan', 'start_min', 'a2_index', 'seq']
+        constraints = [
+            UniqueConstraint(fields=['plan', 'a2_index', 'seq'], name='uniq_mic_plan_action_seq'),
+        ]
+
+    def __str__(self):
+        return f'A2 {self.a2_index} #{self.seq} {self.kind} {self.person_name}'

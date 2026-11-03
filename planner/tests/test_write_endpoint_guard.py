@@ -181,6 +181,7 @@ KWARG_MODELS = {
     'project_id': [('', 'Project')],
     'session_id': [('multitrack', 'MultitrackSession'), ('', 'MicSession')],
     'pk': [('mic-plan/import', 'ShowflowImport'), ('mic-plan/person', 'ShowflowPerson'),
+           ('mic-plan/day', 'ShowDay'),
            ('console-patch', 'ConsoleInput'), ('predictions', 'SoundvisionPrediction'),
            ('console/', 'Console'), ('ampmodel', 'AmpModel'),
            ('systemprocessor', 'SystemProcessor')],

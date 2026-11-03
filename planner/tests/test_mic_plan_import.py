@@ -18,7 +18,7 @@ from django.urls import reverse
 from planner.admin_site import showstack_admin_site
 from planner.mic_plan import importer
 from planner.models import (
-    MicPlanSettings, Presenter, Project, ProjectMember, ShowDay, ShowflowEvent, ShowflowImport,
+    MicPlan, MicPlanA2Action, MicPlanSettings, Presenter, Project, ProjectMember, ShowDay, ShowflowEvent, ShowflowImport,
     ShowflowPerson, ShowflowRow, UserProfile,
 )
 from planner.tests import showflow_fixture as F
@@ -247,11 +247,13 @@ class PeopleAcrossPartsTests(MicPlanBase):
 
     def test_settings_save(self):
         resp = self.client.post(reverse('planner:mic_plan_settings'), {
-            'a2_count': 2, 'mic_min': 4, 'demic_min': 2, 'premic_lead_min': 45, 'margin_min': 10})
+            'a2_count': 2, 'mic_min': 4, 'demic_min': 2, 'premic_lead_min': 45, 'margin_min': 10,
+            'body_pack_count': '12', 'hh_count': '', 'emergency_spare_hh': '1'})
         self.assertEqual(302, resp.status_code)
         s = MicPlanSettings.objects.get(project=self.project)
-        self.assertEqual((2, 4, 2, 45, 10), (s.a2_count, s.mic_min, s.demic_min, s.premic_lead_min,
-                                             s.margin_min))
+        self.assertEqual((2, 4, 2, 45, 10, 12, None, True),
+                         (s.a2_count, s.mic_min, s.demic_min, s.premic_lead_min, s.margin_min,
+                          s.body_pack_count, s.hh_count, s.emergency_spare_hh))
         self.client.post(reverse('planner:mic_plan_settings'), {
             'a2_count': 0, 'mic_min': 4, 'demic_min': 2, 'premic_lead_min': 45, 'margin_min': 10})
         self.assertEqual(2, MicPlanSettings.objects.get(project=self.project).a2_count)
@@ -277,6 +279,7 @@ class AccessTests(MicPlanBase):
             (reverse('planner:mic_plan_merge', args=[person.pk]), {'into': into.pk}),
             (reverse('planner:mic_plan_unalias', args=[person.pk]), {'alias': 'x'}),
             (reverse('planner:mic_plan_settings'), {'a2_count': 3}),
+            (reverse('planner:mic_plan_generate', args=[self.day.pk]), {}),
         ]
 
     def test_viewer_reads_the_page_without_controls(self):
@@ -297,7 +300,8 @@ class AccessTests(MicPlanBase):
 
     def test_another_projects_ids_are_404(self):
         self.use(self.other_owner, self.other)
-        for url, data in self.writes()[1:-1]:
+        settings_url = reverse('planner:mic_plan_settings')    # the session's own project
+        for url, data in [w for w in self.writes()[1:] if w[0] != settings_url]:
             with self.subTest(url=url):
                 self.assertEqual(404, self.client.post(url, data).status_code)
         resp = self.client.post(reverse('planner:mic_plan_upload'), {
@@ -348,62 +352,47 @@ class SidebarTests(MicPlanBase):
 
 
 class ReviewPageTests(MicPlanBase):
-    """The review page: who's on stage, people, crew only with cues."""
+    """The page before and after a plan: showflow, Review cards, crew only with cues."""
 
     def setUp(self):
         super().setUp()
         self.use(self.owner)
 
-    def page(self):
-        return self.client.get(reverse('planner:mic_plan'))
+    def page(self, **query):
+        url = reverse('planner:mic_plan')
+        if query:
+            url += '?' + '&'.join('{}={}'.format(k, v) for k, v in query.items())
+        return self.client.get(url)
 
-    def test_who_is_on_stage_lists_segments_with_their_people_and_cues(self):
+    def test_before_a_plan_the_showflow_and_generate_are_shown(self):
         self.upload()
         resp = self.page()
-        self.assertContains(resp, "Who's on stage")
-        segments = resp.context['segments']
-        names = [s.name for s in segments]
-        self.assertIn('Keynote Conversation', names)
-        keynote = next(s for s in segments if s.name == 'Keynote')
-        on = {a.person.display_name: a for a in keynote.people}
-        self.assertTrue(on['Kim Keynote'].by_cue)             # sent 113, caught 115
-        self.assertEqual(('113', '115'), (on['Kim Keynote'].on_line, on['Kim Keynote'].off_line))
+        self.assertContains(resp, 'Showflow + plan')
+        self.assertContains(resp, 'Generate plan')
+        self.assertContains(resp, 'No plan yet.')
         self.assertContains(resp, 'id="mp-crew"')             # this file has cues
-        opening = next(s for s in segments if s.name == 'Opening')
-        on = {a.person.display_name: a for a in opening.people}
-        # Sent and caught on line 106, inside Opening: shown there, not in the next segment.
-        self.assertEqual(('106', '106', True), (on['Pat Guest'].on_line, on['Pat Guest'].off_line,
-                                                on['Pat Guest'].by_cue))
-        self.assertNotIn('Chris Baker', on)                    # sent on 108 for the next segment
-        nxt = next(s for s in segments if s.name == 'Building the Future')
-        self.assertNotIn('Pat Guest', [a.person.display_name for a in nxt.people])
+        self.assertIsNone(resp.context['plan'])
+        self.assertIsNone(resp.context['chart'])
 
-    def test_a_cue_free_file_says_so_and_has_no_crew_panel(self):
+    def test_a_cue_free_file_has_no_crew_panel(self):
         self.upload()                                          # the project now has crew names
         day2 = ShowDay.objects.create(project=self.project, date=date(2026, 3, 2))
         self.upload('CLIENT_E_PAGES', day=day2)
         self.assertTrue(ShowflowImport.objects.get(day=day2).crew_names)   # copied, yet no cues
-        resp = self.client.get(reverse('planner:mic_plan') + '?day={}'.format(day2.pk))
-        self.assertContains(resp, 'No send/catch cues in this showflow — on/off times come from '
-                                  'segment times.')
+        resp = self.page(day=day2.pk)
         self.assertNotContains(resp, 'id="mp-crew"')
-        opening = resp.context['segments'][0]
-        self.assertEqual('Opening Session', opening.name)
-        vic = next(a for a in opening.people if a.person.display_name == 'Vic Stone')
-        self.assertFalse(vic.by_cue)
-        self.assertEqual(('304', '305', '8:00a', '8:45a'),
-                         (vic.on_line, vic.off_line, vic.on_time, vic.off_time))
         self.assertContains(resp, "intro'd line 304")
-        self.assertEqual(['BREAK'], [s.name for s in resp.context['segments'] if s.is_break])
 
-    def test_flags_sit_at_their_line_in_plain_language(self):
+    def test_review_cards_carry_parser_flags_with_their_line(self):
         self.upload('CLIENT_E_PAGES')
-        segments = self.page().context['segments']
-        flags = [(s.name, i.line, i.text) for s in segments for i in s.items if not hasattr(i, 'person')]
-        self.assertIn(('Opening Session', '311', 'Line 311: description names people not in the '
-                       'Speaker column — check who goes on'), flags)
+        cards = self.page().context['cards']
+        texts = {(c['line'], c['text']) for c in cards}
+        self.assertIn(('311', 'Line 311: description names people not in the Speaker column — check '
+                              'who goes on'), texts)
         self.assertTrue(any(line == '319' and text.startswith('Line 319: which Vic?')
-                            for _, line, text in flags))
+                            for line, text in texts))
+        part = self.parts()[0]
+        self.assertContains(self.page(), '?day={}&amp;part={}#showflow:row-'.format(self.day.pk, part.pk))
 
     def test_intro_rows_are_stored_per_part(self):
         self.upload('CLIENT_E_PAGES')
@@ -412,11 +401,12 @@ class ReviewPageTests(MicPlanBase):
                                       order=self.person('Dr. Una Reyes').flags['intro'][str(part.pk)])
         self.assertEqual('306', row.line_no)
 
-    def test_settings_are_not_on_this_page(self):
+    def test_settings_are_in_the_drawer(self):
         self.upload()
         resp = self.page()
-        self.assertNotContains(resp, reverse('planner:mic_plan_settings'))
-        self.assertNotContains(resp, 'premic_lead_min')
+        self.assertContains(resp, reverse('planner:mic_plan_settings'))
+        self.assertContains(resp, 'name="body_pack_count"')
+        self.assertContains(resp, 'name="emergency_spare_hh"')
 
     def test_one_editor_for_the_selected_person_not_controls_on_every_row(self):
         self.upload()
@@ -579,13 +569,13 @@ class ProvenanceTests(MicPlanBase):
         resp = self.client.get(reverse('planner:mic_plan'))
         self.assertContains(resp, 'no longer in this showflow')
         self.assertContains(resp, reverse('planner:mic_plan_remove', args=[gone.pk]))
-        self.assertTrue(any(f.kind == 'gone' and f.person_id == gone.pk
-                            for f in resp.context['loose_flags']))
+        self.assertTrue(any(c['kind'] == 'gone' and c['person'] == gone.pk
+                            for c in resp.context['cards']))
 
         self.client.post(reverse('planner:mic_plan_remove', args=[gone.pk]))
         self.assertFalse(ShowflowPerson.objects.filter(pk=gone.pk).exists())
         resp = self.client.get(reverse('planner:mic_plan'))
-        self.assertFalse(any(f.kind == 'gone' for f in resp.context['loose_flags']))
+        self.assertFalse(any(c['kind'] == 'gone' for c in resp.context['cards']))
 
     def test_remove_refuses_someone_still_in_the_showflow(self):
         stone = self.person('Vic Stone')
@@ -609,3 +599,127 @@ class ProvenanceTests(MicPlanBase):
         self.assertTrue(ShowflowPerson.objects.filter(pk=gone.pk).exists())
         self.use(self.editor)
         self.assertContains(self.client.get(reverse('planner:mic_plan')), urls[0])
+
+
+class PlanTests(MicPlanBase):
+    """Generate, re-generate, stale marking and plan.json."""
+
+    def setUp(self):
+        super().setUp()
+        self.use(self.editor)
+        self.upload()
+        self.part = self.parts()[0]
+
+    def generate(self, replace=False):
+        return self.client.post(reverse('planner:mic_plan_generate', args=[self.day.pk]),
+                                {'replace': '1'} if replace else {})
+
+    def plan(self):
+        return MicPlan.objects.get(day=self.day)
+
+    def test_generate_saves_the_plan_and_the_page_shows_it(self):
+        resp = self.generate()
+        self.assertEqual(302, resp.status_code)
+        plan = self.plan()
+        self.assertEqual((1, False, 'cues'), (plan.version, plan.stale, plan.cue_mode))
+        self.assertTrue(plan.packs)
+        self.assertTrue(MicPlanA2Action.objects.filter(plan=plan, kind='mic').exists())
+        page = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(page, 'Re-generate')
+        self.assertContains(page, 'Replace the draft (v1)?')
+        self.assertIsNotNone(page.context['chart'])
+        self.assertContains(page, 'class="verb mic"')
+        self.assertContains(page, 'A2 busy')
+        self.assertEqual(len(plan.packs), len(page.context['chart']['lanes']))
+
+    def test_re_generate_needs_confirming_and_bumps_the_version(self):
+        self.generate()
+        self.generate()                                  # not confirmed
+        self.assertEqual(1, self.plan().version)
+        self.generate(replace=True)
+        self.assertEqual(2, self.plan().version)
+        self.assertEqual(1, MicPlan.objects.filter(day=self.day).count())
+
+    def test_backup_hint_adds_a_counted_pack_and_settings_are_snapshot(self):
+        jo = self.person('Jo Emcee')
+        self.client.post(reverse('planner:mic_plan_person', args=[jo.pk]),
+                         {'mic_hint': 'backup', 'backup_mic_type': 'body'})
+        self.generate()
+        plan = self.plan()
+        backups = [p for p in plan.packs if p['backup_of'] == jo.pk]
+        self.assertEqual(1, len(backups))
+        self.assertEqual(('body', 'Jo Emcee backup'), (backups[0]['pool'], backups[0]['label']))
+        stats = self.client.get(reverse('planner:mic_plan')).context['stats']
+        self.assertEqual(len([p for p in plan.packs if p['pool'] == 'body']), stats['body'])
+        self.assertEqual(1, plan.settings['a2_count'])
+
+    def test_changes_after_generating_mark_the_plan_stale(self):
+        kk, kim = self.person('KK'), self.person('Kim Keynote')
+        for change in (
+                lambda: self.client.post(reverse('planner:mic_plan_reread', args=[self.part.pk])),
+                lambda: self.client.post(reverse('planner:mic_plan_merge', args=[kk.pk]), {'into': kim.pk}),
+                lambda: self.client.post(reverse('planner:mic_plan_person', args=[kim.pk]),
+                                         {'mic_hint': 'HH'})):
+            with self.subTest(change=change):
+                self.generate(replace=True)
+                self.assertFalse(self.plan().stale)
+                change()
+                self.assertTrue(self.plan().stale)
+        self.assertContains(self.client.get(reverse('planner:mic_plan')), 'Re-generate to update it.')
+
+    def test_a_presenter_change_alone_does_not_make_it_stale(self):
+        self.generate()
+        presenter = Presenter.objects.create(project=self.project, name='Someone')
+        kim = self.person('Kim Keynote')
+        self.client.post(reverse('planner:mic_plan_person', args=[kim.pk]),
+                         {'presenter': presenter.pk, 'mic_hint': kim.mic_hint})
+        self.assertFalse(self.plan().stale)
+
+    def test_changed_settings_are_bannered(self):
+        self.generate()
+        self.client.post(reverse('planner:mic_plan_settings'), {
+            'a2_count': 2, 'mic_min': 3, 'demic_min': 3, 'premic_lead_min': 30, 'margin_min': 5})
+        self.assertContains(self.client.get(reverse('planner:mic_plan')),
+                            'Plan settings changed after this plan was made')
+
+    def test_plan_json_is_the_stored_plan(self):
+        self.generate()
+        url = reverse('planner:mic_plan_json', args=[self.day.pk])
+        self.use(self.viewer)
+        resp = self.client.get(url)
+        self.assertEqual(200, resp.status_code)
+        data = resp.json()
+        plan = self.plan()
+        self.assertEqual(plan.version, data['version'])
+        self.assertEqual(plan.actions.count(), len(data['actions']))
+        self.assertEqual(plan.appearances.count(), len(data['appearances']))
+        first = data['actions'][0]
+        self.assertEqual({'time', 'verb', 'name', 'rf', 'reason', 'a2', 'text', 'start_min', 'rf_number'},
+                         {'time', 'verb', 'name', 'rf', 'reason', 'a2', 'text', 'start_min', 'rf_number'} & set(first))
+        self.assertEqual(plan.segments, data['segments'])
+
+    def test_plan_json_is_scoped_and_needs_a_plan(self):
+        url = reverse('planner:mic_plan_json', args=[self.day.pk])
+        self.assertEqual(404, self.client.get(url).status_code)          # no plan yet
+        self.generate()
+        self.use(self.other_owner, self.other)
+        self.assertEqual(404, self.client.get(url).status_code)
+
+    def test_viewers_cannot_generate_and_see_no_generate_button(self):
+        self.use(self.viewer)
+        self.assertEqual(403, self.generate().status_code)
+        self.assertFalse(MicPlan.objects.filter(day=self.day).exists())
+        self.assertNotContains(self.client.get(reverse('planner:mic_plan')), 'Generate plan')
+
+    def test_another_project_cannot_generate_this_day(self):
+        self.use(self.other_owner, self.other)
+        self.assertEqual(404, self.generate().status_code)
+
+    def test_cue_free_day_is_built_from_line_estimates(self):
+        day2 = ShowDay.objects.create(project=self.project, date=date(2026, 3, 2))
+        self.upload('CLIENT_E_PAGES', day=day2)
+        self.client.post(reverse('planner:mic_plan_generate', args=[day2.pk]))
+        plan = MicPlan.objects.get(day=day2)
+        self.assertEqual('line estimates', plan.cue_mode)
+        self.assertContains(self.client.get(reverse('planner:mic_plan') + '?day={}'.format(day2.pk)),
+                            'Built from line estimates')
