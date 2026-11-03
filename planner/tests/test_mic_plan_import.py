@@ -447,3 +447,165 @@ class ReviewPageTests(MicPlanBase):
         resp = self.page()
         self.assertNotContains(resp, 'id="mp-editor"')
         self.assertNotContains(resp, 'id="mp-import"')
+
+
+class ProvenanceTests(MicPlanBase):
+    """A re-import or re-read keeps only what the user set; the parser's own
+    earlier output is rebuilt, so a parser fix is never undone by old state."""
+
+    # What the #160 parser made of CLIENT_E_PAGES: a title + surname person, and
+    # no Vic Stone. Fed back as known names, "Vic" on 304 went to Vic Dahl.
+    OLD_PARSE = ['Ann Pike', 'Dr Reyes', 'Dr. Lou Penn', 'Max Pine', 'Ned Quill', 'Ola Brand',
+                 'Vic Dahl', 'Zed Moss']
+
+    def setUp(self):
+        super().setUp()
+        self.use(self.editor)
+        self.upload('CLIENT_E_PAGES')
+        self.part = self.parts()[0]
+
+    def seed_old_parse(self):
+        from planner.mic_plan.parser import name_key
+        ShowflowPerson.objects.filter(day=self.day).delete()
+        for name in self.OLD_PARSE:
+            ShowflowPerson.objects.create(day=self.day, display_name=name, name_key=name_key(name))
+
+    def reread(self, part=None):
+        return self.client.post(reverse('planner:mic_plan_reread', args=[(part or self.part).pk]))
+
+    def lines(self, name, part=None):
+        part = part or self.part
+        orders = self.person(name).flags['rows'].get(str(part.pk), [])
+        return [r.line_no for r in ShowflowRow.objects.filter(showflow_import=part, order__in=orders)
+                .order_by('order')]
+
+    def flags(self, part=None):
+        part = part or self.parts()[0]
+        return [w for w in part.warnings if w['kind'] != 'parse']
+
+    def assert_current_rules(self, part=None):
+        part = part or self.parts()[0]
+        part.refresh_from_db()
+        self.assertEqual(['304', '305', '315', '318'], self.lines('Vic Stone', part))
+        self.assertEqual(['316', '317', '318'], self.lines('Vic Dahl', part))
+        names = set(ShowflowPerson.objects.filter(day=self.day).values_list('display_name', flat=True))
+        self.assertNotIn('Dr Reyes', names)
+        self.assertIn('Dr. Una Reyes', names)
+        self.assertEqual(['description_names', 'which_first'],
+                         sorted(w['kind'] for w in self.flags(part)))
+
+    def test_stale_parser_people_do_not_survive_a_replace(self):
+        self.seed_old_parse()
+        self.upload('CLIENT_E_PAGES', 'again.pdf')
+        pending = ShowflowImport.objects.get(status='pending')
+        self.client.post(reverse('planner:mic_plan_confirm', args=[pending.pk]),
+                         {'choice': f'replace:{self.part.pk}'})
+        self.assert_current_rules(pending)
+
+    def test_re_read_applies_the_current_rules(self):
+        self.seed_old_parse()
+        resp = self.reread()
+        self.assertEqual(302, resp.status_code)
+        self.assert_current_rules()
+
+    def test_re_read_recomputes_stored_times(self):
+        row = ShowflowRow.objects.get(showflow_import=self.part, line_no='304')
+        good = row.est_time
+        ShowflowRow.objects.filter(pk=row.pk).update(est_time=1, is_segment=not row.is_segment)
+        self.part.span_start = None
+        self.part.save()
+        self.reread()
+        row.refresh_from_db()
+        self.part.refresh_from_db()
+        self.assertEqual(good, row.est_time)
+        self.assertIsNotNone(self.part.span_start)
+
+    def test_a_user_merge_survives_a_re_read_and_still_wins(self):
+        stone, dahl = self.person('Vic Stone'), self.person('Vic Dahl')
+        self.client.post(reverse('planner:mic_plan_merge', args=[stone.pk]), {'into': dahl.pk})
+        self.reread()
+        dahl.refresh_from_db()
+        self.assertEqual(['Vic Stone'], dahl.aliases)
+        self.assertFalse(ShowflowPerson.objects.filter(day=self.day, display_name='Vic Stone').exists())
+        self.assertIn('304', self.lines('Vic Dahl'))
+
+    def test_a_user_presenter_link_survives_even_with_another_name(self):
+        presenter = Presenter.objects.create(project=self.project, name='Someone Else')
+        stone = self.person('Vic Stone')
+        self.client.post(reverse('planner:mic_plan_person', args=[stone.pk]),
+                         {'presenter': presenter.pk, 'mic_hint': ''})
+        self.seed_old_parse()        # the old parse never had Vic Stone...
+        ShowflowPerson.objects.filter(pk=stone.pk).delete()
+        stone = ShowflowPerson.objects.create(
+            day=self.day, display_name='Vic Stone', name_key='vic stone', presenter=presenter,
+            flags={'presenter_by': 'user'})                  # ...but the user linked them
+        self.reread()
+        stone.refresh_from_db()
+        self.assertEqual(presenter, stone.presenter)
+        self.assertEqual('user', stone.flags['presenter_by'])
+        self.assertEqual(['304', '305', '315', '318'], self.lines('Vic Stone'))
+
+    def test_an_automatic_presenter_link_is_matched_afresh(self):
+        presenter = Presenter.objects.create(project=self.project, name='Someone Else')
+        ShowflowPerson.objects.filter(day=self.day, display_name='Vic Stone').update(
+            presenter=presenter)                             # e.g. a link from before PR 1.2
+        Presenter.objects.create(project=self.project, name='Vic Dahl')
+        self.reread()
+        self.assertIsNone(self.person('Vic Stone').presenter)
+        self.assertEqual('Vic Dahl', self.person('Vic Dahl').presenter.name)
+
+    def test_saving_only_a_hint_does_not_lock_the_presenter(self):
+        stone = self.person('Vic Stone')
+        self.client.post(reverse('planner:mic_plan_person', args=[stone.pk]),
+                         {'presenter': '', 'mic_hint': 'HH'})
+        stone.refresh_from_db()
+        self.assertNotIn('presenter_by', stone.flags)
+        self.reread()
+        stone.refresh_from_db()
+        self.assertEqual(('HH', True), (stone.mic_hint, stone.mic_hint_locked))
+
+    def test_a_stale_person_without_user_state_is_deleted(self):
+        ShowflowPerson.objects.create(day=self.day, display_name='Dr Reyes', name_key='dr. reyes')
+        self.reread()
+        self.assertFalse(ShowflowPerson.objects.filter(day=self.day, display_name='Dr Reyes').exists())
+
+    def test_a_stale_person_with_user_state_is_kept_flagged_and_removable(self):
+        gone = ShowflowPerson.objects.create(day=self.day, display_name='Dr Reyes',
+                                             name_key='dr. reyes', mic_hint='HH',
+                                             mic_hint_locked=True)
+        self.reread()
+        gone.refresh_from_db()
+        self.assertTrue(gone.flags['gone'])
+        resp = self.client.get(reverse('planner:mic_plan'))
+        self.assertContains(resp, 'no longer in this showflow')
+        self.assertContains(resp, reverse('planner:mic_plan_remove', args=[gone.pk]))
+        self.assertTrue(any(f.kind == 'gone' and f.person_id == gone.pk
+                            for f in resp.context['loose_flags']))
+
+        self.client.post(reverse('planner:mic_plan_remove', args=[gone.pk]))
+        self.assertFalse(ShowflowPerson.objects.filter(pk=gone.pk).exists())
+        resp = self.client.get(reverse('planner:mic_plan'))
+        self.assertFalse(any(f.kind == 'gone' for f in resp.context['loose_flags']))
+
+    def test_remove_refuses_someone_still_in_the_showflow(self):
+        stone = self.person('Vic Stone')
+        self.client.post(reverse('planner:mic_plan_remove', args=[stone.pk]))
+        self.assertTrue(ShowflowPerson.objects.filter(pk=stone.pk).exists())
+
+    def test_re_read_and_remove_are_editor_only_and_project_scoped(self):
+        gone = ShowflowPerson.objects.create(day=self.day, display_name='Gone', name_key='gone',
+                                             flags={'gone': True}, mic_hint_locked=True)
+        urls = [reverse('planner:mic_plan_reread', args=[self.part.pk]),
+                reverse('planner:mic_plan_remove', args=[gone.pk])]
+        self.use(self.viewer)
+        self.assertNotContains(self.client.get(reverse('planner:mic_plan')), urls[0])
+        for url in urls:
+            with self.subTest(url=url, who='viewer'):
+                self.assertEqual(403, self.client.post(url).status_code)
+        self.use(self.other_owner, self.other)
+        for url in urls:
+            with self.subTest(url=url, who='other project'):
+                self.assertEqual(404, self.client.post(url).status_code)
+        self.assertTrue(ShowflowPerson.objects.filter(pk=gone.pk).exists())
+        self.use(self.editor)
+        self.assertContains(self.client.get(reverse('planner:mic_plan')), urls[0])

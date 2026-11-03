@@ -186,6 +186,39 @@ below is a placeholder, and the test fixture
   merge.
 - **Crew?:** a send/catch verb after a name that is not in the crew list.
 - **Times:** a Start time earlier than the one before it.
+- **Gone:** someone no part of the day mentions any more, kept because of a
+  merge, Presenter link or mic hint the user set. Shown in People with a
+  Remove button.
+
+## Re-import and re-read
+
+Every import, Replace, delete, merge, crew change and **Re-read with current
+rules** (part menu) re-parses the stored rows of every part of the day from
+scratch. Only what the user set is carried over:
+
+| Kept (user) | Rebuilt every time (parser) |
+|---|---|
+| Merges (aliases; only a merge writes them) | The people themselves, their lines and intro line |
+| A mic hint picked by hand (`mic_hint_locked`) | A hint read from a callout ("HH", "backup") |
+| A Presenter chosen by hand, including "no presenter" (`flags['presenter_by'] = 'user'`) | An automatic Presenter match by name |
+
+The parser is only told about merges (each alias and the name it points to).
+A hand-set hint or Presenter link stays with the person by name after the
+parse. People an older parse made are not fed back to it: they would count as merged spellings and
+override later rules (Client E: a first-name person from the #160 parser took
+an earlier line from the recency rule). A user alias still wins over the
+parser. Someone with no lines after a re-parse is deleted, unless they carry
+user state; then they stay, flagged **Gone**.
+
+Re-read also recomputes each stored row's times and segments (est_time,
+segment start/end) and the part's span. Presenter links that existed before
+this rule (PR 1.2) were all treated as automatic on the first rebuild.
+
+## Interactions with the plan
+
+- A re-read changes `est_time`, and with it every on/off time, so it must
+  mark the day's MicPlan stale (PR 2). So must an import, Replace, delete,
+  merge, crew change and mic hint change.
 
 ## Reading time
 
