@@ -403,3 +403,15 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-push .g-kept li { color: var(--mp-muted); }
 .mp-push input[type=checkbox] { accent-color: var(--mp-accent); }
 @media (max-width: 640px) { .mp-push { margin: 12px 16px; } .mp-push li { flex-wrap: wrap; } }
+
+/* PR 5.2: people added by hand (People drawer, "Not listed" cards). */
+.mp-people .mp-added { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.mp-people .mp-added .mp-tag { margin-left: 0; color: var(--mp-muted); }
+.mp-people .mp-added .mp-tag.missing { color: var(--mp-warn); }
+.mp-added details form, .mp-addperson form, .mp-addfrom form { display: grid; gap: 6px; margin-top: 6px; max-width: 420px; }
+.mp-addperson { margin: 10px 0; }
+.mp-addfrom { margin-top: 8px; }
+.mp-addfrom summary, .mp-addperson summary, .mp-added summary { list-style: none; display: inline-block; cursor: pointer; }
+.mp-addfrom summary::-webkit-details-marker, .mp-addperson summary::-webkit-details-marker,
+.mp-added summary::-webkit-details-marker { display: none; }
+.mp-addfrom input[type=text], .mp-addperson input[type=text], .mp-addperson select, .mp-added select { width: 100%; box-sizing: border-box; }

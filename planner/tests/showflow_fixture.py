@@ -166,7 +166,10 @@ CUE_FREE_PAGES = [LEGEND_9 + [
 # Client E layout: "LINE #" 14 columns, no send/catch cues, segment rows that
 # are VOG lines or "END RECORDS", "TITLE:" / "N-UP TITLE:" Speaker cells, a
 # "Dr." name later called "Dr. Reyes", first names that mean whoever was
-# introduced last, and presenters named only in a description.
+# introduced last, and presenters named only in a description. Exits as
+# Client E writes them (PR 5.2): on another person's walk-on row ("Ned
+# welcomes ... Ned exits"), "Max re-enters", "Ola exits when ...",
+# "Max and Dr. Reyes Exit", and a group with someone staying.
 HEADER_E = ['LINE #', 'Start', 'End', 'Duration', 'Description', 'Speaker Name', 'Enter Exit',
             'Video Preset', 'Background / Screen Notes', 'DSMs', 'Audio', 'Lighting', 'BSM', 'Notes']
 
@@ -176,13 +179,13 @@ CLIENT_E_PAGES = [[
     _row14('301', desc='Max enters', speaker='Max Pine'),
     _row14('302', desc='Ola enters', speaker='Ola Brand'),
     _row14('303', desc='Ned joins Max & Ola', speaker='Ned Quill'),
-    _row14('304', desc='Ned welcomes Vic to stage', speaker='TITLE: Vic Stone'),
+    _row14('304', desc='Ned welcomes Vic to stage Max exits', speaker='TITLE: Vic Stone'),
     _row14('305', desc='Scheduling demo', speaker='Ned, Ola, Vic'),
     _row14('306', desc='Max re-enters with Dr. Una Reyes', speaker='TITLE:\nDr. Una Reyes'),
-    _row14('307', desc='Exam demo', speaker='Ned, Max, Dr. Reyes'),
-    _row14('308', desc='Gil Ware enters', speaker='TITLE: Gil Ware'),
-    _row14('309', desc='Billing demo', speaker='Ned, Gil'),
-    _row14('310', desc='Ned welcomes Bo and Zed', speaker='2-UP TITLE: Bo Lark & Zed Moss'),
+    _row14('307', desc='Exam demo Ola exits when the exam is complete', speaker='Ned, Max, Dr. Reyes'),
+    _row14('308', desc='Max and Dr. Reyes Exit. Gil Ware enters', speaker='TITLE: Gil Ware'),
+    _row14('309', desc='Billing demo, then Gil Ware Exits', speaker='Ned, Gil'),
+    _row14('310', desc='Ned welcomes Bo and Zed to stage Ned exits', speaker='2-UP TITLE: Bo Lark & Zed Moss'),
     _row14('311', desc='Amy introduces the 3 presenters. Cy Dorn, Eli Fay, Hal Grey'),
 ], [
     _row14('312', '8:45 AM', '9:00 AM', '0:15:00', 'END RECORDS'),
@@ -195,6 +198,7 @@ CLIENT_E_PAGES = [[
     _row14('317', desc='Vic sits', speaker='Vic'),
     _row14('318', desc='Both on', speaker='Vic Stone & Vic Dahl'),
     _row14('319', desc='Q&A', speaker='Vic'),
+    _row14('320', desc='Panelists exit (Kit Ames stays)'),
 ]]
 
 NO_HEADER_PAGES = [[
@@ -239,3 +243,8 @@ def build_pdf(pages):
             story.append(PageBreak())
     doc.build(story)
     return buf.getvalue()
+
+
+# The same Client E part revised: line 311 (the "introduces the 3 presenters"
+# line people get added from) is gone.
+CLIENT_E_WITHOUT_311 = [[row for row in page if row[0] != '311'] for page in CLIENT_E_PAGES]

@@ -165,7 +165,7 @@
         {% if last_push %}<p class="mp-banner{% if push_behind %} warn{% endif %}" role="status" id="mp-pushed">Sent to Mic Tracker: v{{ last_push.plan_version }} at <time data-local datetime="{{ last_push.pushed_at|date:'c' }}">{{ last_push.pushed_at|date:"M j, H:i" }} UTC</time>{% if last_push.pushed_by %} by {{ last_push.pushed_by.get_username }}{% endif %}.{% if push_behind %} The plan has changed since (now v{{ plan.version }}){% if can_edit %} — send it again to update Mic Tracker{% endif %}.{% endif %}</p>
         {% elif last_reverted %}<p class="mp-banner" role="status" id="mp-reverted">The push of v{{ last_reverted.plan_version }} was reverted{% if last_reverted.summary.reverted.by %} by {{ last_reverted.summary.reverted.by }}{% endif %}: Mic Tracker is as it was before it.</p>
         {% elif plan and can_edit and push_refusal and not plan.stale %}<p class="mp-banner" role="status">Send to Mic Tracker is off: {{ push_refusal }}</p>{% endif %}
-        {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so on and off times come from the lines that name each person.</p>{% endif %}
+        {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so each person is on from a line naming them to an exit line or the end of their segment.</p>{% endif %}
         {% if not plan %}<p class="mp-banner" role="status">No plan yet.{% if can_edit %} Check the showflow and people, then press <b>Generate plan</b>.{% endif %}</p>{% endif %}
 
         <div class="mp-viewbar">
@@ -253,6 +253,20 @@
                     <div class="where">{% if c.line %}Line {{ c.line }}{% if parts|length > 1 %} · Part {{ c.part_no }}{% endif %}{% endif %}</div>
                     {% if c.part %}<a class="mp-btn small" href="?day={{ day.pk }}&amp;part={{ c.part }}#showflow:row-{{ c.row_order }}">Show in showflow</a>
                     {% elif c.person %}<button type="button" class="mp-btn small" data-open-person="{{ c.person }}">Show person</button>{% endif %}
+                    {% if can_edit and c.kind == 'description_names' and c.row_pk %}
+                    <details class="mp-addfrom">
+                        <summary class="mp-btn small">Add people from this line</summary>
+                        <form method="post" action="{% url 'planner:mic_plan_people_add' day.pk %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="row" value="{{ c.row_pk }}"><input type="hidden" name="from_flag" value="1">
+                            <p class="mp-note">On at line {{ c.line }}, off at an exit line or the end of its segment. Change, clear or add names before you confirm; a name already on the day is matched, not duplicated.</p>
+                            {% for n in c.candidates %}<input type="text" name="name" value="{{ n }}" aria-label="Name {{ forloop.counter }}">{% endfor %}
+                            <input type="text" name="name" placeholder="Another name" aria-label="Another name">
+                            <input type="text" name="name" placeholder="Another name" aria-label="Another name">
+                            <button class="mp-btn small primary" type="submit">Add these people</button>
+                        </form>
+                    </details>
+                    {% endif %}
                 </div>
             {% empty %}
                 <div class="mp-panel"><p class="mp-note">Nothing to review.</p></div>
@@ -278,6 +292,25 @@
                     data-presenter="{{ person.presenter_id|default:'' }}" data-hint="{{ person.mic_hint }}"
                     data-backup="{{ person.backup_mic_type }}" tabindex="0" aria-label="{{ person.display_name }}">
                     <td>{{ person.display_name }}{% if person.intro_line %} <span class="mp-intro">intro'd line {{ person.intro_line }}</span>{% endif %}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}
+                        {% for e in person.added_list %}
+                        <div class="mp-added" data-entry="{{ e.id }}">
+                            <span class="mp-tag{% if e.missing %} missing{% endif %}">added: line {{ e.line }}{% if e.off %}–{{ e.off }}{% endif %}{% if e.missing %} · no longer in this showflow{% endif %}</span>
+                            {% if can_edit %}
+                            <details><summary class="mp-btn small">Edit</summary>
+                                <form method="post" action="{% url 'planner:mic_plan_person_added' person.pk %}">
+                                    {% csrf_token %}<input type="hidden" name="entry" value="{{ e.id }}"><input type="hidden" name="part" value="{{ part.pk }}">
+                                    <label>On at <select name="row">{% for pk, label in line_choices %}<option value="{{ pk }}"{% if pk == e.on_pk %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                                    <label>Off at <select name="off"><option value="">Exit line or end of segment</option>{% for pk, label in line_choices %}<option value="{{ pk }}"{% if pk == e.off_pk %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                                    <button class="mp-btn small primary" type="submit">Save</button>
+                                </form>
+                            </details>
+                            <form class="mp-remove" method="post" action="{% url 'planner:mic_plan_person_added' person.pk %}">
+                                {% csrf_token %}<input type="hidden" name="entry" value="{{ e.id }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="part" value="{{ part.pk }}">
+                                <button type="submit" class="mp-btn small danger">Remove</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
                         {% if person.flags.gone %}<span class="mp-tag gone">no longer in this showflow</span>
                         {% if can_edit %}<form class="mp-remove" method="post" action="{% url 'planner:mic_plan_remove' person.pk %}">
                             {% csrf_token %}<input type="hidden" name="part" value="{{ part.pk }}">
@@ -292,6 +325,20 @@
                 {% endfor %}
                 </tbody>
             </table>
+
+            {% if can_edit %}
+            <details class="mp-addperson" id="mp-addperson">
+                <summary class="mp-btn small">Add person</summary>
+                <form method="post" action="{% url 'planner:mic_plan_people_add' day.pk %}">
+                    {% csrf_token %}
+                    <label>Name <input type="text" name="name" required maxlength="200"></label>
+                    <label>On at <select name="row" required>{% for pk, label in line_choices %}<option value="{{ pk }}">{{ label }}</option>{% endfor %}</select></label>
+                    <label>Off at <select name="off"><option value="">Exit line or end of segment</option>{% for pk, label in line_choices %}<option value="{{ pk }}">{{ label }}</option>{% endfor %}</select></label>
+                    <p class="mp-note">Kept when the showflow is re-read or replaced, by the line's number. Someone already on the day is matched by name.</p>
+                    <button class="mp-btn small primary" type="submit">Add</button>
+                </form>
+            </details>
+            {% endif %}
 
             {% if can_edit and people %}
             <div class="mp-editor" id="mp-editor" aria-live="polite">

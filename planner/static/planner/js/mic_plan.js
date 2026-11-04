@@ -229,7 +229,7 @@
         if (open) { openDrawer('people'); return select(open.dataset.openPerson, true); }
         var row = e.target.closest('.mp-people tr[data-person]');
         if (row) {
-            if (!e.target.closest('form, a, button, select, input')) select(row.dataset.person);
+            if (!e.target.closest('form, a, button, select, input, details')) select(row.dataset.person);
             return;
         }
         var rf = e.target.closest('[data-rf]');

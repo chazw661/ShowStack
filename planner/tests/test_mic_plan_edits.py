@@ -28,7 +28,7 @@ def relay_day(n=5):
         s.line(k + 1, t)
     for k in range(n):
         s.segment(2 * k + 1, 2 * k + 2, 'Seg {}'.format(k + 1), TIMES[2 * k], TIMES[2 * k + 2])
-        s.person(k + 1, 'Person {}'.format(k + 1)).lists(k + 1, 2 * k + 1)
+        s.person(k + 1, 'Person {}'.format(k + 1)).lists(k + 1, 2 * k + 1).exits(k + 1, 2 * k + 2)
     return s.day()
 
 

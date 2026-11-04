@@ -41,10 +41,11 @@ def h(text):
 
 class Show:
     """A one-part day built line by line: ``line(no, time)``, ``segment(...)``,
-    ``lists(person, *lines)``, ``cue(kind, person, line)``."""
+    ``lists(person, *lines)``, ``exits(person, *lines)``, ``cue(kind, person, line)``."""
 
     def __init__(self):
         self.rows, self.segments, self.people, self.cues, self.listings = [], [], [], [], {}
+        self.exit_rows, self.enter_rows, self.groups, self.added = {}, {}, [], []
         self.cued = False
 
     def line(self, no, time=None):
@@ -70,6 +71,23 @@ class Show:
         self.listings.setdefault(person, []).extend(self.key(n) for n in lines)
         return self
 
+    def exits(self, person, *lines):
+        """A description says ``person`` exits on these lines (cue-free parts)."""
+        self.exit_rows.setdefault(person, []).extend(self.key(n) for n in lines)
+        return self
+
+    def enters(self, person, *lines):
+        self.enter_rows.setdefault(person, []).extend(self.key(n) for n in lines)
+        return self
+
+    def group(self, line, kind, *stays):
+        self.groups.append(solver.GroupExit(self.key(line), kind, tuple(stays)))
+        return self
+
+    def add(self, person, on, off=None):
+        self.added.append(solver.Added(person, self.key(on), self.key(off) if off else None))
+        return self
+
     def cue(self, kind, person, line, time):
         self.cued = True
         self.cues.append(Cue(kind, person, self.key(line), h(time)))
@@ -77,7 +95,9 @@ class Show:
 
     def day(self):
         return Day(tuple(self.rows), tuple(self.segments), tuple(self.people), tuple(self.cues),
-                   dict(self.listings), frozenset([PART]) if self.cued else frozenset())
+                   dict(self.listings), frozenset([PART]) if self.cued else frozenset(),
+                   exits=dict(self.exit_rows), enters=dict(self.enter_rows), group_exits=tuple(self.groups),
+                   added=tuple(self.added))
 
 
 def panel_day(n_people=4, mic=BODY):
@@ -100,12 +120,124 @@ def rf(plan, person, backup=False):
 
 class AppearanceTests(TestCase):
 
-    def test_cue_free_on_is_the_first_row_and_off_the_next_rows_time(self):
+    def test_cue_free_a_panel_named_once_stays_on_to_the_end_of_its_segment(self):
+        # Client E line 204: five panelists named on the title row, the panel
+        # runs on with nobody named; before PR 5.2 they came off at the next row.
+        s = (Show().line(1, '10:30').line(2, '10:36').line(3, '10:43').line(4, '10:56').line(5, '11:15')
+             .segment(1, 4, 'Panel', '10:30', '11:15').segment(5, 5, 'Break', '11:15', '11:30', is_break=True))
+        for k in range(1, 6):
+            s.person(k, 'Panelist {}'.format(k)).lists(k, 2)
+        apps = solve(s.day()).appearances
+        self.assertEqual([(h('10:36'), h('11:15'), 'listed')] * 5, [(a.on, a.off, a.source) for a in apps])
+
+    def test_cue_free_an_exit_line_ends_the_appearance(self):
         s = (Show().line(1, '9:00').line(2, '9:05').line(3, '9:20').line(4, '9:30').line(5, '10:00')
              .segment(1, 3, 'Opening', '9:00', '9:30').segment(4, 5, 'Keynote', '9:30', '10:00')
-             .person(1, 'Ana Bell').lists(1, 2))
+             .person(1, 'Ana Bell').lists(1, 2).exits(1, 3))
         app, = solve(s.day()).appearances
         self.assertEqual((h('9:05'), h('9:20'), 'listed'), (app.on, app.off, app.source))
+        self.assertEqual(s.key(3), app.off_row)
+
+    def test_cue_free_an_exit_on_the_walk_on_row_ends_at_the_next_row(self):
+        # "Ned welcomes Bo and Cy to stage Ned exits"
+        s = (Show().line(1, '9:00').line(2, '9:05').line(3, '9:12').line(4, '9:30')
+             .segment(1, 3, 'A', '9:00', '9:30').segment(4, 4, 'B', '9:30', '10:00')
+             .person(1, 'Ned Hart').lists(1, 2).exits(1, 2))
+        app, = solve(s.day()).appearances
+        self.assertEqual((h('9:05'), h('9:12')), (app.on, app.off))
+
+    def test_cue_free_a_re_entry_or_being_named_after_an_exit_starts_a_new_appearance(self):
+        s = (Show().line(1, '9:00').line(2, '9:02').line(3, '9:10').line(4, '9:20').line(5, '9:25')
+             .line(6, '9:40').line(7, '9:50').line(8, '10:00')
+             .segment(1, 7, 'Demo', '9:00', '10:00').segment(8, 8, 'Break', '10:00', '10:15', is_break=True)
+             .person(1, 'Max Pine').lists(1, 2).exits(1, 3).enters(1, 4).exits(1, 5)   # "Max re-enters"
+             .person(2, 'Ola Brand').lists(2, 2, 6).exits(2, 3))                    # named again at 9:40
+        apps = solve(s.day()).appearances
+        self.assertEqual([(h('9:02'), h('9:10')), (h('9:20'), h('9:25'))],
+                         [(a.on, a.off) for a in apps if a.person == 1])
+        self.assertEqual([(h('9:02'), h('9:10')), (h('9:40'), h('10:00'))],
+                         [(a.on, a.off) for a in apps if a.person == 2])
+
+    def test_cue_free_named_in_the_next_segment_is_one_wearing(self):
+        s = (Show().line(1, '9:00').line(2).line(3, '9:30').line(4).line(5, '10:00')
+             .segment(1, 2, 'A', '9:00', '9:30').segment(3, 4, 'B', '9:30', '10:00')
+             .segment(5, 5, 'C', '10:00', '10:30')
+             .person(1, 'Ana Bell').lists(1, 2, 3))
+        apps = solve(s.day()).appearances
+        self.assertEqual([(h('9:00'), h('10:00'))], [(a.on, a.off) for a in apps])
+
+    def host_day(self):
+        """Hal hosts (listed in three segments); a panel of three in the middle."""
+        s = (Show().line(1, '9:00').line(2, '9:00').line(3, '9:30').line(4, '9:35').line(5, '9:50')
+             .line(6, '10:00').line(7, '10:00').line(8, '10:30')
+             .segment(1, 2, 'Open', '9:00', '9:30').segment(3, 5, 'Panel', '9:30', '10:00')
+             .segment(6, 7, 'Close', '10:00', '10:30').segment(8, 8, 'End', '10:30', '10:45')
+             .person(9, 'Hal Host').lists(9, 2, 3, 7))
+        for k, name in ((1, 'Ana Bell'), (2, 'Cy Dunn'), (3, 'Kit Lee')):
+            s.person(k, name).lists(k, 4)
+        return s
+
+    def test_presenters_exit_ends_everyone_but_hosts_and_whoever_stays(self):
+        s = self.host_day().group(5, 'all', 'kit')                 # "Panel Exits (Kit Stays)"
+        plan = solve(s.day())
+        apps = {a.person: a for a in plan.appearances}
+        self.assertEqual((h('9:50'), h('9:50')), (apps[1].off, apps[2].off))
+        self.assertEqual(h('10:00'), apps[3].off)                 # stays: to the segment end
+        self.assertTrue(apps[9].is_host)
+        self.assertEqual((h('9:00'), h('10:30')), (apps[9].on, apps[9].off))
+        self.assertEqual(((h('9:00'), h('10:30')),), apps[9].stage)   # on stage through the "exit"
+
+    def test_presenters_exit_keeps_a_host_on(self):
+        s = self.host_day().group(5, 'all')
+        apps = {a.person: a for a in solve(s.day()).appearances}
+        self.assertEqual({h('9:50')}, {apps[k].off for k in (1, 2, 3)})
+        self.assertEqual(h('10:30'), apps[9].off)
+        self.assertTrue(apps[9].is_host)
+
+    def test_both_exit_ends_the_two_non_hosts_on(self):
+        s = self.host_day()
+        s.listings[3] = []                                        # only Ana and Cy on with the host
+        plan = solve(s.group(5, 'both').day())
+        apps = {a.person: a for a in plan.appearances}
+        self.assertEqual((h('9:50'), h('9:50')), (apps[1].off, apps[2].off))
+        self.assertFalse([f for f in plan.flags if f['kind'] == 'who_both'])
+
+    def test_both_exit_with_three_on_is_flagged_not_guessed(self):
+        plan = solve(self.host_day().group(5, 'both').day())
+        apps = {a.person: a for a in plan.appearances}
+        self.assertEqual({h('10:00')}, {apps[k].off for k in (1, 2, 3)})
+        flag, = [f for f in plan.flags if f['kind'] == 'who_both']
+        self.assertEqual("Line 5: who are 'both'? 3 people other than hosts are on stage here, so nobody "
+                         "comes off.", flag['text'])
+
+    def test_exits_and_re_entries_never_make_a_host(self):
+        s = (Show().line(1, '9:00').line(2, '9:02').line(3, '9:05').line(4, '9:10').line(5, '9:15')
+             .line(6, '9:20').line(7, '9:25').line(8, '9:30')
+             .segment(1, 7, 'Demo', '9:00', '9:30').segment(8, 8, 'Break', '9:30', '9:45', is_break=True)
+             .person(1, 'Max Pine').lists(1, 2).exits(1, 3, 5, 7).enters(1, 4, 6))
+        plan = solve(s.day())
+        self.assertEqual(3, len(plan.appearances))
+        self.assertFalse(any(a.is_host for a in plan.appearances))
+
+    def test_hand_added_people_follow_the_rule_and_an_off_line_is_exact(self):
+        s = (Show().line(1, '9:00').line(2, '9:05').line(3, '9:15').line(4, '9:20').line(5, '9:30')
+             .segment(1, 4, 'Talk', '9:00', '9:30').segment(5, 5, 'Next', '9:30', '10:00')
+             .person(1, 'Lu Barr').add(1, 2)                            # to the segment end
+             .person(2, 'Qi Xu').add(2, 2, 3)                           # an off line: exactly that
+             .person(3, 'Jo Hu').add(3, 2).exits(3, 4))                 # an exit line ends it
+        apps = {a.person: a for a in solve(s.day()).appearances}
+        self.assertEqual((h('9:05'), h('9:30')), (apps[1].on, apps[1].off))
+        self.assertEqual((h('9:05'), h('9:15')), (apps[2].on, apps[2].off))
+        self.assertEqual(h('9:20'), apps[3].off)
+
+    def test_hand_added_people_in_a_cued_part_get_the_cue_free_rule(self):
+        s = (Show().line(1, '9:00').line(2, '9:05').line(3, '9:15').line(4, '9:30')
+             .segment(1, 3, 'Talk', '9:00', '9:30').segment(4, 4, 'Next', '9:30', '10:00')
+             .person(1, 'Ana Bell').cue('send', 1, 1, '9:00').cue('catch', 1, 3, '9:15')
+             .person(2, 'Lu Barr').add(2, 2))
+        apps = {a.person: a for a in solve(s.day()).appearances}
+        self.assertEqual((h('9:00'), h('9:15'), 'cue'), (apps[1].on, apps[1].off, apps[1].source))
+        self.assertEqual((h('9:05'), h('9:30')), (apps[2].on, apps[2].off))
 
     def test_cue_free_off_is_capped_at_the_end_of_the_segment(self):
         s = (Show().line(1, '9:00').line(2, '9:05').line(3, '10:00')
@@ -394,9 +526,12 @@ def morning_and_awards():
     s = (Show().line(1, '7:40').line(2, '7:40').line(3, '8:14').line(4, '8:16').line(5, '8:20')
          .line(6, '8:26').line(7, '8:30').line(8, '11:00').line(9, '11:41').line(10, '12:00')
          .segment(1, 7, 'Panel', '7:40', '8:30').segment(8, 10, 'Awards', '11:00', '12:00'))
-    for k, (name, lines) in enumerate((('Ana Bell', (2,)), ('Cy Dunn', (2, 3)), ('Dee Fox', (2, 3, 4)),
-                                       ('Gil Hart', (2, 3, 4)), ('Eve Ford', (6,)), ('Ivy Kerr', (2, 3, 4))), 1):
+    for k, (name, lines, out) in enumerate((('Ana Bell', (2,), 3), ('Cy Dunn', (2, 3), 4),
+                                            ('Dee Fox', (2, 3, 4), 5), ('Gil Hart', (2, 3, 4), 5),
+                                            ('Eve Ford', (6,), None), ('Ivy Kerr', (2, 3, 4), 5)), 1):
         s.person(k, name).lists(k, *lines)
+        if out:
+            s.exits(k, out)
     for k in range(10, 19):
         s.person(k, 'Winner {}'.format(k - 9)).lists(k, 9)
     return s
@@ -463,7 +598,7 @@ class LateCauseTests(TestCase):
         # Ana is on 9:00-9:15; Bo walks on at 9:22 and can only have her pack.
         return (Show().line(1, '9:00').line(2, '9:00').line(3, '9:15').line(4, '9:22').line(5, '9:30')
                 .segment(1, 5, 'Panel', '9:00', '9:30')
-                .person(1, 'Ana Bell').lists(1, 2).person(2, 'Bo Lane').lists(2, 4))
+                .person(1, 'Ana Bell').lists(1, 2).exits(1, 3).person(2, 'Bo Lane').lists(2, 4))
 
     def test_at_the_pack_limit_a_mic_waits_for_a_de_mic_and_names_the_limit(self):
         plan = solve(self.pack_day().day(), Settings(body_pack_count=1))
@@ -570,7 +705,7 @@ def mid_day(mic=BODY):
     return (Show().line(1, '9:00').line(2, '9:00').line(3, '9:15').line(4, '9:40').line(5, '9:50')
             .line(6, '10:00')
             .segment(1, 5, 'Panel', '9:00', '10:00').segment(6, 6, 'Close', '10:00', '10:30')
-            .person(1, 'Ana Bell', mic).lists(1, 2).person(2, 'Cy Dunn', mic).lists(2, 4))
+            .person(1, 'Ana Bell', mic).lists(1, 2).exits(1, 3).person(2, 'Cy Dunn', mic).lists(2, 4).exits(2, 5))
 
 
 def recycle(**kw):
@@ -645,7 +780,7 @@ class PackPolicyTests(TestCase):
                 for r in day.rows]
         segments = (Segment(1, PART, 0, 3, 'Panel', h('9:00'), h('9:30')),
                     Segment(4, 2, 0, 3, 'Talk', h('9:40'), h('10:00')))
-        day = Day(tuple(rows), segments, day.people, day.cues, day.listings, day.cued_parts)
+        day = Day(tuple(rows), segments, day.people, day.cues, day.listings, day.cued_parts, exits=day.exits)
         self.assertEqual([(h('9:40'), 4)], solver.session_starts(day))
         plan = _solve(day, recycle())
         self.assertEqual(({1}, {1}), (rf(plan, 1), rf(plan, 2)))
@@ -688,12 +823,13 @@ class FewestPacksNeverNeedsMoreTests(DbTestCase):
     def test_on_the_client_e_fixture_fewest_packs_takes_the_recycled_plan(self):
         # Fewest packs' own plan: line 310's two walk-ons wait idle for a pack
         # to free up, so the A2 has no time to de-mic before the 9:00 wave
-        # and opens an extra pack (11). Recycle at breaks needs 10.
+        # and opens extra packs (11). Recycle at breaks needs 9 (10 before
+        # PR 5.2's exit lines in the fixture).
         day = self.fixture_day('CLIENT_E_PAGES')
         own = solver.summary(solver._solve(day, _Settings(pack_policy=solver.FEWEST_PACKS), False))
         plan = _solve(day, _Settings(pack_policy=solver.FEWEST_PACKS))
         recycled = _solve(day, _Settings(pack_policy=RECYCLE))
-        self.assertEqual((11, 10, 10), (own['body'], solver.summary(plan)['body'],
+        self.assertEqual((11, 9, 9), (own['body'], solver.summary(plan)['body'],
                                         solver.summary(recycled)['body']))
         self.assertEqual(RECYCLE, plan.from_policy)
         self.assertFalse([f for f in plan.flags if f['kind'] in ('reuse', 'break')])

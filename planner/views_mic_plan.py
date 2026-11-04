@@ -51,6 +51,8 @@ FLAG_LABELS = {
     'bsm_only': 'BSM only',
     'which_first': 'Which?',
     'description_names': 'Not listed',
+    'who_exits': 'Exit?',
+    'added_missing': 'Added',
     'gone': 'Gone',
 }
 _CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
@@ -158,6 +160,23 @@ def mic_plan(request):
             person.lines = [line_of[o] for o in person.flags.get('rows', {}).get(str(part.pk), [])
                             if o in line_of]
             person.intro_line = line_of.get(person.flags.get('intro', {}).get(str(part.pk)), '')
+    # Lines for Add person, and each person's appearances added by hand.
+    line_choices, rows_by_part = [], {}
+    for k, p in enumerate(parts, 1):
+        rows_by_part[p.pk] = list(p.rows.order_by('order'))
+        for r in rows_by_part[p.pk]:
+            if r.is_blank:
+                continue
+            label = r.line_no or '#{}'.format(r.order + 1)
+            line_choices.append((r.pk, '{}Line {} · {}'.format(
+                'Part {} · '.format(k) if len(parts) > 1 else '', label, ' '.join(r.description.split())[:40])))
+    for person in people:
+        person.added_list = []
+        for entry in person.flags.get('added', []):
+            where = importer.resolve_added(entry, parts, rows_by_part)
+            person.added_list.append({**entry, 'on_pk': where[1].pk if where else None,
+                                      'off_pk': where[2].pk if where and where[2] else None,
+                                      'missing': where is None})
     current = planning.settings_dict(planning.project_settings(project))
     cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
     chart = page.pack_chart(plan, apps, actions, parts)
@@ -182,6 +201,7 @@ def mic_plan(request):
         'chart': chart,
         'lanes': page.lane_windows(chart),
         'cards': cards,
+        'line_choices': line_choices,
         'overlaps': page.overlap_warnings(plan, parts),
         'edit_count': len(edits),
         'undo_label': describe_edit(edits[-1]) if edits else '',
@@ -700,6 +720,64 @@ def person_remove(request, pk):
         return _back(day, _maybe_part(request, request.POST.get('part', '')))
     messages.success(request, 'Removed {}.'.format(name))
     return _back(day, _maybe_part(request, request.POST.get('part', '')), '#mp-people')
+
+
+def _day_row(day, value):
+    """A row of one of ``day``'s live parts, by pk, or None."""
+    return (ShowflowRow.objects.select_related('showflow_import')
+            .filter(pk=int(value), showflow_import__day=day, showflow_import__status='active').first()
+            if str(value).isdigit() else None)
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def people_add(request, pk):
+    """Add people by hand, on at a line (PR 5.2): from a "not listed" card
+    (several names, ``from_flag``) or People's Add person (one name, an
+    optional off line). The plan goes stale."""
+    day = _day(request, pk)
+    row = _day_row(day, request.POST.get('row', ''))
+    off = _day_row(day, request.POST.get('off', '')) if request.POST.get('off') else None
+    names = [' '.join(n.split()) for n in request.POST.getlist('name') if n.strip()]
+    if row is None or (request.POST.get('off') and off is None):
+        messages.error(request, 'Pick a line of this day.')
+        return _back(day)
+    try:
+        added = importer.add_people(day, names, row.showflow_import, row, request.user, off_row=off,
+                                    from_flag=request.POST.get('from_flag') == '1')
+    except ValueError as e:
+        messages.error(request, str(e))
+        return _back(day, row.showflow_import)
+    messages.success(request, 'Added {} on at line {}. Re-generate the plan to use {}.'.format(
+        ', '.join(p.display_name for p in added), row.line_no or '#{}'.format(row.order + 1),
+        'them' if len(added) > 1 else 'it'))
+    return _back(day, row.showflow_import, '#person-{}'.format(added[0].pk))
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def person_added(request, pk):
+    """Change (other lines) or remove one appearance added by hand."""
+    person = _person(request, pk)
+    day, name = person.day, person.display_name
+    entry = request.POST.get('entry', '')
+    try:
+        if request.POST.get('action') == 'remove':
+            importer.remove_added(person, entry)
+            messages.success(request, 'Removed the appearance of {} you added.'.format(name))
+            return _back(day, _maybe_part(request, request.POST.get('part', '')), '#mp-people')
+        row = _day_row(day, request.POST.get('row', ''))
+        off = _day_row(day, request.POST.get('off', '')) if request.POST.get('off') else None
+        if row is None or (request.POST.get('off') and off is None):
+            raise ValueError('Pick a line of this day.')
+        importer.update_added(person, entry, row.showflow_import, row, off, request.user)
+    except ValueError as e:
+        messages.error(request, str(e))
+        return _back(day, _maybe_part(request, request.POST.get('part', '')), '#mp-people')
+    messages.success(request, 'Saved {}.'.format(name))
+    return _back(day, row.showflow_import, '#person-{}'.format(person.pk))
 
 
 @staff_member_required

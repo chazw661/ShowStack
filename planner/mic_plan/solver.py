@@ -117,6 +117,22 @@ class Cue:
 
 
 @dataclass(frozen=True)
+class GroupExit:
+    """A cue-free row whose exit is said of a group (parser.group_exit)."""
+    row: int                 # row key
+    kind: str                # 'all': everyone on but hosts | 'both': the two non-hosts on
+    stays: tuple = ()        # lower-cased words naming who stays ("(Kit Stays)")
+
+
+@dataclass(frozen=True)
+class Added:
+    """An appearance the user added by hand (People, or a "not listed" line)."""
+    person: int
+    on_row: int              # row key
+    off_row: int = None      # row key; None: off by the cue-free rule
+
+
+@dataclass(frozen=True)
 class Day:
     rows: tuple
     segments: tuple
@@ -124,6 +140,10 @@ class Day:
     cues: tuple
     listings: dict           # person key -> row keys naming them (Speaker / welcome, not cues)
     cued_parts: frozenset    # parts whose on/off comes from cues
+    exits: dict = field(default_factory=dict)      # person key -> row keys saying they exit
+    enters: dict = field(default_factory=dict)     # person key -> row keys saying they re-enter
+    group_exits: tuple = ()  # GroupExit
+    added: tuple = ()        # Added
 
 
 @dataclass
@@ -337,7 +357,9 @@ def _cue_appearances(ix, person, part, cues, listed):
 
 
 def _listed_appearances(ix, person, part, listed):
-    """Cue-free: stretches of rows naming them in consecutive segments."""
+    """Before PR 5.2's rule: stretches of rows naming them in consecutive
+    segments, off when the row after the last one starts. Still what decides
+    who is a host, so exits and re-entries never make one."""
     rows = sorted((r for rows in listed.get(part, {}).values() for r in rows), key=lambda r: r.order)
     part_rows = ix.part_rows.get(part, [])
     by_order = {r.order: k for k, r in enumerate(part_rows)}
@@ -368,32 +390,153 @@ def _listed_appearances(ix, person, part, listed):
     return out
 
 
+def _staying(person, words):
+    """Is ``person`` one of the people a "(Name Stays)" names?"""
+    if not words:
+        return False
+    names = person.name.lower().replace('.', '').split()
+    names = [w for w in names if w not in ('dr', 'mr', 'mrs', 'ms', 'mx', 'prof')]
+    said = ' '.join(words)
+    return bool(names) and (names[0] in words or ' '.join(names) in said
+                            or bool(person.name_key) and person.name_key in said)
+
+
+def _staged(ix, part, hosts, people=None):
+    """Cue-free on/off (PR 5.2), all of a part's people walked through its
+    rows together: on at a row naming them (Speaker / welcome) or saying
+    they re-enter; off at the earliest of a row saying they exit (named, or
+    a group: everyone but hosts and anyone staying, or "both" = the two
+    non-hosts on), and the end of the segment they came on in. Named again
+    later: a new appearance. ``people``: only these (hand-added people in a
+    cued part), from their added rows alone. {person: [Appearance]}."""
+    day = ix.day
+    rows = ix.part_rows.get(part, [])
+    segs = ix.part_segs.get(part, [])
+    keys = {r.key for r in rows}
+    named, leave = {}, {}
+    if people is None:
+        for source in (day.listings, day.enters):
+            for person, row_keys in source.items():
+                for k in row_keys:
+                    if k in keys:
+                        named.setdefault(k, []).append(person)
+        for person, row_keys in day.exits.items():
+            for k in row_keys:
+                if k in keys:
+                    leave.setdefault(k, []).append(person)
+    for a in day.added:
+        if a.on_row in keys and a.off_row is None and (people is None or a.person in people):
+            named.setdefault(a.on_row, []).append(a.person)
+    groups = {g.row: g for g in day.group_exits if g.row in keys}
+    out, on = {}, {}
+
+    def off_after(k, st):
+        """Off when the next row with a later time starts, within their segment."""
+        cap = segs[st['seg']].t1 if st['seg'] >= 0 else None
+        nxt = next((x for x in rows[k + 1:] if x.minute is not None and x.minute > st['on']), None)
+        off = nxt.minute if nxt is not None else cap
+        if off is None or (cap is not None and off > cap):
+            off = cap if cap is not None else st['on']
+        return off
+
+    def close(person, off, off_row):
+        st = on.pop(person)
+        out.setdefault(person, []).append(Appearance(person, part, st['on'], max(off, st['on']), st['on_row'],
+                                                     off_row, 'listed'))
+
+    for k, r in enumerate(rows):
+        seg = ix.seg_index(r)
+        for person in [p for p, st in on.items() if st['seg'] != seg]:
+            st = on[person]
+            if st['seg'] >= 0:
+                close(person, segs[st['seg']].t1, st['last'])
+            else:                          # named before the first segment: the old rule
+                close(person, off_after(st['last_k'], st), st['last'])
+        t = ix.minute(r)
+        for n, person in enumerate(named.get(r.key, ())):
+            if person in on:
+                on[person].update(last=r.key, last_k=k)
+            elif t is not None:
+                on[person] = {'on': t, 'on_row': r.key, 'seg': seg, 'last': r.key, 'last_k': k,
+                              'since': (k, n)}
+        going = [p for p in leave.get(r.key, ()) if p in on]
+        g = groups.get(r.key)
+        if g is not None:
+            others = sorted((p for p in on if p not in hosts and p not in going
+                             and not _staying(ix.people[p], g.stays)), key=lambda p: on[p]['since'])
+            if g.kind == 'all':
+                going += others
+            elif len(others) == 2:
+                going += others
+            else:
+                ix.flags.append({'kind': 'who_both', 'row': r.key, 'person': None,
+                                 'text': "Line {}: who are 'both'? {} people other than hosts are on "
+                                         "stage here, so nobody comes off.".format(ix.line(r.key), len(others))})
+        for person in dict.fromkeys(going):
+            st = on[person]
+            # An exit on their walk-on row, or on a row with no time of its
+            # own later than the walk-on: off when the next row starts.
+            exact = r.minute is not None and r.minute > st['on'] and st['on_row'] != r.key
+            close(person, r.minute if exact else off_after(k, st), r.key)
+    for person in list(on):
+        st = on[person]
+        close(person, segs[st['seg']].t1 if st['seg'] >= 0 else off_after(st['last_k'], st), st['last'])
+    return out
+
+
 def appearances(day, ix=None):
-    """All appearances of the day, hosts folded into one; and host keys."""
+    """All appearances of the day, hosts folded into one; and host keys.
+    Flags about them (\"who are 'both'?\") go to ``ix.flags``."""
     ix = ix or _Index(day)
+    ix.flags = []
     cues_by = {}
     for c in day.cues:
         row = ix.row.get(c.row)
         if row is not None:
             cues_by.setdefault((c.person, row.part), []).append(c)
-    out, hosts = [], set()
+    # Hosts first, by the count before PR 5.2 (consecutive segments one
+    # stretch, exits ignored): exits and re-entries never make a host, and a
+    # group exit must know who the hosts are.
+    hosts = set()
+    for person in ix.people:
+        listed = _listed_segments(ix, person)
+        old = []
+        for part in ix.part_rows:
+            if part in day.cued_parts:
+                old += _cue_appearances(ix, person, part, cues_by.get((person, part), []), listed)
+            else:
+                old += _listed_appearances(ix, person, part, listed)
+        segments = sum(len([k for k in segs if k >= 0]) for segs in listed.values())
+        if old and (len(_merge_overlaps(old)) >= HOST_MIN or segments >= HOST_MIN):
+            hosts.add(person)
+    staged = {}
+    added_people = {a.person for a in day.added}
+    for part in sorted(ix.part_rows):
+        cued = part in day.cued_parts
+        for person, apps in _staged(ix, part, hosts, people=added_people if cued else None).items():
+            staged.setdefault(person, []).extend(apps)
+    for a in day.added:              # an explicit off line: exactly that
+        on_row, off_row = ix.row.get(a.on_row), ix.row.get(a.off_row) if a.off_row else None
+        if a.off_row is None or on_row is None or off_row is None:
+            continue
+        t0, t1 = ix.minute(on_row), ix.minute(off_row)
+        if t0 is not None and t1 is not None:
+            staged.setdefault(a.person, []).append(
+                Appearance(a.person, on_row.part, t0, max(t0, t1), a.on_row, a.off_row, 'listed'))
+    out = []
     # Name order, not key order: keys follow the order a re-import happened to
     # create people in, and ties must break the same way every time.
     for person in sorted(ix.people, key=lambda k: (ix.people[k].name, k)):
         p = ix.people[person]
         listed = _listed_segments(ix, person)
-        mine = []
+        mine = list(staged.get(person, ()))
         for part in sorted(ix.part_rows):
             if part in day.cued_parts:
                 mine += _cue_appearances(ix, person, part, cues_by.get((person, part), []), listed)
-            else:
-                mine += _listed_appearances(ix, person, part, listed)
         mine = _merge_overlaps(mine)
-        segments = sum(len([k for k in segs if k >= 0]) for segs in listed.values())
         for a in mine:
             a.mic_type = p.mic_type
-        if mine and (len(mine) >= HOST_MIN or segments >= HOST_MIN):
-            hosts.add(person)
+        if mine and person in hosts:
             first = min(mine, key=lambda a: a.on)
             last = max(mine, key=lambda a: a.off)
             mine = [Appearance(person, first.part, first.on, last.off, first.on_row, last.off_row, 'host',
@@ -525,6 +668,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     plan = Plan()
     apps, hosts = appearances(day, ix)
     plan.appearances = apps
+    plan.flags += ix.flags
     if not apps:
         return plan
     S = settings
