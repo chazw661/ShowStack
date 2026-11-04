@@ -3983,6 +3983,11 @@ class MicSession(models.Model):
     )
     order = models.IntegerField(default=0, help_text="Display order within the day")
 
+    # Written by Mic Plan's "Send to Mic Tracker": its RF numbers are the
+    # plan's packs (gaps and all), so nothing renumbers them to 1..N and no
+    # 1..num_mics rows are made for it (#171).
+    rf_from_plan = models.BooleanField(default=False, editable=False)
+
     # Optional highlight color for the session name in the Mic Tracker.
     # Blank = default styling.
     name_color = ColorField(
@@ -4018,7 +4023,7 @@ class MicSession(models.Model):
         super().save(*args, **kwargs)
         
         # Auto-create mic assignments if this is a new session
-        if is_new:
+        if is_new and not self.rf_from_plan:
             self.create_mic_assignments()
     
     def create_mic_assignments(self):
@@ -4036,6 +4041,13 @@ class MicSession(models.Model):
         existing = set(
             self.mic_assignments.values_list('rf_number', flat=True)
         )
+
+        if self.rf_from_plan:
+            # Fixed numbers: add rows above the highest, never remove any.
+            top = max(existing, default=0)
+            for k in range(self.num_mics - len(existing)):
+                MicAssignment.objects.create(session=self, rf_number=top + k + 1)
+            return
 
         for n in range(1, self.num_mics + 1):
             if n not in existing:
@@ -4088,6 +4100,8 @@ class MicSession(models.Model):
         """
         from django.db import transaction
 
+        if self.rf_from_plan:
+            return False
         assignments = list(
             self.mic_assignments.order_by('rf_number', 'id')
         )
@@ -7233,6 +7247,9 @@ class MicPlanAppearance(models.Model):
     # solver.Appearance.skey: what edits are keyed on (survives re-solves
     # and re-imports, unlike ``key``).
     skey = models.CharField(max_length=300, blank=True)
+    # A host's times on stage, [[on, off], ...] (the appearance itself spans
+    # the day). Empty for everyone else, and for hosts in plans from before PR 5.
+    stage = models.JSONField(default=list, blank=True)
     # From the edit log: the RF and/or body/HH type the A2 pinned it to.
     pinned_rf = models.PositiveSmallIntegerField(null=True, blank=True)
     pinned_type = models.CharField(max_length=4, choices=MIC_TYPE_CHOICES, blank=True)
@@ -7333,3 +7350,38 @@ class MicPlanA2Action(models.Model):
 
     def __str__(self):
         return f'A2 {self.a2_index} #{self.seq} {self.kind} {self.person_name}'
+
+
+class MicPlanPush(models.Model):
+    """One "Send to Mic Tracker" of a day's plan (planner.mic_plan.push).
+    The maps are what the next push matches on; the snapshots are what it
+    pushed, so a value that differs now was changed in Mic Tracker."""
+    day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='mic_plan_pushes')
+    plan = models.ForeignKey(MicPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name='pushes')
+    plan_version = models.PositiveIntegerField()
+    pushed_at = models.DateTimeField(auto_now_add=True)
+    pushed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    include_started = models.BooleanField(default=False)
+    # {session key: MicSession pk}, {session key|rf: MicAssignment pk},
+    # {slot key: PresenterSlot pk} (slot key: session key#appearance skey).
+    sessions = models.JSONField(default=dict, blank=True)
+    rows = models.JSONField(default=dict, blank=True)
+    slots = models.JSONField(default=dict, blank=True)
+    # As pushed: {pk: {name, start, end}}, {pk: {notes, mic_type}},
+    # {pk: {presenter, session, rf, order, mic_type, notes}}.
+    session_snapshot = models.JSONField(default=dict, blank=True)
+    row_snapshot = models.JSONField(default=dict, blank=True)
+    slot_snapshot = models.JSONField(default=dict, blank=True)
+    # Every Mic Tracker row this push changed, as it was before (for a
+    # revert): {'created': [[model, pk]], 'updated': [[model, pk, {field: old}]],
+    # 'deleted': [[model, pk, {field: value}]]}.
+    before = models.JSONField(default=dict, blank=True)
+    # What it did, for the page: counts, kept slots, skipped sessions, labels.
+    summary = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['day', '-pushed_at', '-id']
+        verbose_name = 'Mic Plan push'
+
+    def __str__(self):
+        return f'{self.day} v{self.plan_version} sent {self.pushed_at:%Y-%m-%d %H:%M}'

@@ -407,7 +407,8 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
             part_id=a.part, on_min=a.on, off_min=a.off, on_row_id=a.on_row, off_row_id=a.off_row,
             on_line=line(a.on_row), off_line=line(a.off_row), mic_type=a.mic_type, source=a.source,
             is_host=a.is_host, assumed=a.assumed[:200], note_row_id=a.note_row,
-            pinned_rf=fixed.pins.get(a.skey), pinned_type=fixed.types.get(a.skey, ''))
+            pinned_rf=fixed.pins.get(a.skey), pinned_type=fixed.types.get(a.skey, ''),
+            stage=[list(span) for span in a.stage])
     MicPlanAssignment.objects.bulk_create([
         MicPlanAssignment(appearance=apps[s.appearance], rf_number=s.rf, how=s.how, backup=s.backup)
         for s in result.assignments])

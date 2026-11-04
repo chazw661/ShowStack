@@ -1,0 +1,88 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Send to Mic Tracker — Mic Plan — ShowStack{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Mic Plan</a>
+    &rsaquo; Send to Mic Tracker
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'css/mic_plan.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="mp-page">
+    <div class="mp-toolbar">
+        <h1>Send plan v{{ plan.version }} to Mic Tracker &mdash; {{ day }}</h1>
+    </div>
+    <form class="mp-push" method="post" id="mp-push">
+        {% csrf_token %}
+        <input type="hidden" name="version" value="{{ plan.version }}">
+        <input type="hidden" name="digest" value="{{ preview.digest }}">
+
+        <p class="mp-banner" role="status">Nothing is written until you confirm. Photos, notes, placement, sensitivity, output level,
+            groups and MIC'D marks already in Mic Tracker are never changed; a slot that moves takes them with it.
+            {% if preview.last %}Last sent: v{{ preview.last.plan_version }}.{% endif %}</p>
+        {% for s in preview.started %}
+        <p class="mp-banner warn" role="status">Show has started in <b>{{ s.name }}</b> (a mic is MIC'D): it is skipped unless you tick <i>Include started sessions</i>.</p>
+        {% endfor %}
+
+        <div class="mp-panel">
+            <h2>Sessions <small>{{ sessions|length }}</small></h2>
+            <ul>
+                {% for s in sessions %}<li><span>{{ s.name }}</span><span class="mp-mono mp-muted">{{ s.rows|length }} RF{{ s.rows|length|pluralize }}</span></li>{% endfor %}
+            </ul>
+        </div>
+
+        {% if up_to_date %}
+        <p class="mp-banner" role="status">Mic Tracker already matches plan v{{ plan.version }}. Nothing to send.</p>
+        {% elif nothing %}
+        <p class="mp-banner" role="status">Nothing in Mic Tracker changes. Sending records plan v{{ plan.version }} as sent.</p>
+        {% endif %}
+
+        {% for g in groups %}
+        <div class="mp-panel g-{{ g.name }}">
+            <h2>{{ g.title }} <small>{{ g.items|length }}</small></h2>
+            {% if g.name == 'mt' %}<p class="mp-note">Each of these was changed in Mic Tracker after the last push. The plan's value replaces it unless you keep Mic Tracker's.</p>{% endif %}
+            {% if g.name == 'kept' %}<p class="mp-note">No longer in the plan, but the A2 has put something on them, so they stay.</p>{% endif %}
+            <ul>
+                {% for i in g.items %}
+                <li{% if i.started %} class="started"{% endif %}>
+                    <span>{{ i.text }}</span>
+                    {% if g.name == 'mt' and i.id %}<label><input type="checkbox" name="keep" value="{{ i.id }}"> Keep Mic Tracker's</label>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+
+        {% if preview.new_presenters or preview.matched_presenters %}
+        <div class="mp-panel">
+            <h2>Presenters</h2>
+            {% if preview.new_presenters %}<p class="mp-note"><b>New presenters</b> ({{ preview.new_presenters|length }}): {{ preview.new_presenters|join:", " }}</p>{% endif %}
+            {% if preview.matched_presenters %}<p class="mp-note"><b>Matched by name</b> to an existing Presenter ({{ preview.matched_presenters|length }}): {{ preview.matched_presenters|join:", " }}. Link someone else in People if that is the wrong person.</p>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if preview.labels or preview.new_sessions %}
+        <div class="mp-panel">
+            <h2>Labels</h2>
+            {% if preview.labels %}<p class="mp-note">Reprint labels for {{ preview.labels|join:", " }}.</p>{% endif %}
+            {% if preview.new_sessions %}<p class="mp-note">Print labels for the new session{{ preview.new_sessions|length|pluralize }}: {{ preview.new_sessions|join:", " }}.</p>{% endif %}
+        </div>
+        {% endif %}
+
+        <div class="mp-actions">
+            {% if preview.started %}<label class="mp-note"><input type="checkbox" name="include_started" value="1"> Include started sessions</label>{% endif %}
+            <button class="mp-btn primary" type="submit"{% if up_to_date %} disabled{% endif %}>Send to Mic Tracker</button>
+            <a class="mp-btn" href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

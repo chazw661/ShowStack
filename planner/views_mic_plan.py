@@ -4,7 +4,8 @@ generate the day's draft mic plan (packs and A2 actions).
 Everything is the current project's: every id in a URL or form is looked up
 through ``day__project`` of the session's project, so another tenant's id is
 a 404. Any member may see the page; changing anything needs edit rights,
-refused before the body is read. Nothing here touches Mic Tracker.
+refused before the body is read. Only "Send to Mic Tracker" (``plan_push``,
+planner.mic_plan.push) writes Mic Tracker data.
 
 The PDF is read in memory only (``_MemoryOnlyUpload``) and dropped at the end
 of the request: showflows can be under NDA and Railway's disk is ephemeral.
@@ -27,7 +28,7 @@ from django.utils.cache import add_never_cache_headers
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import importer, page, planning, schedule
+from planner.mic_plan import importer, page, planning, push, schedule
 from planner.mic_plan.display import describe_edit
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
@@ -162,6 +163,7 @@ def mic_plan(request):
     chart = page.pack_chart(plan, apps, actions, parts)
     edits = list(plan.edits.all()) if plan else []
     can_edit = can_edit_current_project(request)
+    last_push = push.last_push(day) if day else None
 
     from planner.views import _shared_header_context
     return render(request, 'planner/mic_plan.html', {
@@ -201,6 +203,9 @@ def mic_plan(request):
         'mic_hint_choices': ShowflowPerson.MIC_HINT_CHOICES,
         'backup_choices': ShowflowPerson.BACKUP_TYPE_CHOICES,
         'can_edit': can_edit,
+        'last_push': last_push,
+        'push_behind': bool(plan and last_push and last_push.plan_version != plan.version),
+        'push_refusal': push.refusal(plan, apps) if plan else '',
         'max_pages': importer.MAX_PAGES,
         'max_mb': importer.MAX_UPLOAD_BYTES // (1024 * 1024),
     })
@@ -305,6 +310,72 @@ def plan_json(request, pk):
         response = JsonResponse(page.plan_data(plan, apps, actions))
     add_never_cache_headers(response)
     return response
+
+
+@staff_member_required
+@edit_rights_required_page
+def plan_push(request, pk):
+    """Send to Mic Tracker. GET: the preview of every change (nothing is
+    written). POST: write it, if it is still what the preview showed."""
+    day = _day(request, pk)
+    if request.method == 'POST':
+        try:
+            version = int(request.POST.get('version', ''))
+        except ValueError:
+            messages.error(request, 'Reload the preview and try again.')
+            return redirect('planner:mic_plan_push', day.pk)
+        try:
+            done = push.apply(day, version, request.POST.get('digest', ''),
+                              keep=request.POST.getlist('keep'),
+                              include_started=request.POST.get('include_started') == '1', user=request.user)
+        except push.PushRefused as e:
+            messages.error(request, str(e))
+            if e.status == 409 and MicPlan.objects.filter(day=day, stale=False).exists():
+                return redirect('planner:mic_plan_push', day.pk)
+            return _back(day)
+        if done is None:
+            messages.info(request, 'Mic Tracker already matches plan v{}. Nothing was written.'.format(version))
+            return _back(day)
+        c = done.summary['counts']
+        text = 'Sent plan v{} to Mic Tracker: {} added, {} updated, {} removed'.format(
+            done.plan_version, c['create'], c['update'] + c['mt'], c['remove'])
+        if c['mt_kept']:
+            text += ', {} kept as Mic Tracker had {}'.format(c['mt_kept'], 'it' if c['mt_kept'] == 1 else 'them')
+        if done.summary['skipped']:
+            text += '; skipped (show has started): {}'.format(', '.join(done.summary['skipped']))
+        messages.success(request, text + '.')
+        if done.summary['labels']:
+            messages.warning(request, 'Reprint labels for {}.'.format(', '.join(done.summary['labels'])))
+        if done.summary['new_sessions']:
+            messages.warning(request, 'Print labels for the new session{}: {}.'.format(
+                '' if len(done.summary['new_sessions']) == 1 else 's', ', '.join(done.summary['new_sessions'])))
+        return _back(day)
+    if request.method != 'GET':
+        return HttpResponse(status=405)
+    try:
+        preview = push.preview(day)
+    except push.PushRefused as e:
+        messages.error(request, str(e))
+        return _back(day)
+    from planner.views import _shared_header_context
+    started = {s['pk'] for s in preview.started}
+    groups = []
+    for name, title in (('create', 'Create'), ('update', 'Update'), ('mt', 'Changed in Mic Tracker since the last push'),
+                        ('remove', 'Remove'), ('kept', 'Kept')):
+        items = [dict(i, started=bool(set(i['touch']) & started)) for i in preview.group(name, shown=True)]
+        if items:
+            groups.append({'name': name, 'title': title, 'items': items})
+    return render(request, 'planner/mic_plan_push.html', {
+        **_shared_header_context(request),
+        'day': day,
+        'plan': preview.plan,
+        'preview': preview,
+        'groups': groups,
+        'sessions': preview.targets,
+        'nothing': not preview.changes,
+        'up_to_date': not preview.changes and preview.last is not None
+        and preview.last.plan_version == preview.plan.version,
+    })
 
 
 def _zone(request):

@@ -4,7 +4,7 @@ Walks every MicSession and renumbers its MicAssignment rows to a clean
 consecutive 1..N (preserving current rf_number / id ordering so the
 visual sequence stays the same). Also syncs MicSession.num_mics to the
 actual row count so create_mic_assignments doesn't later resurrect or
-prune rows.
+prune rows. Sessions sent from Mic Plan (rf_from_plan) are skipped.
 
 Usage:
     # Dry-run — show which sessions would change, no writes:
@@ -39,7 +39,9 @@ class Command(BaseCommand):
         apply_changes = options['apply']
         session_id = options['session']
 
-        qs = MicSession.objects.all()
+        # Sessions sent from Mic Plan carry the plan's pack numbers, gaps
+        # and all: renumbering them would relabel real transmitters (#171).
+        qs = MicSession.objects.filter(rf_from_plan=False)
         if session_id is not None:
             qs = qs.filter(id=session_id)
 

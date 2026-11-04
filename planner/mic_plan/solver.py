@@ -143,6 +143,8 @@ class Appearance:
     # Survives re-solves and re-imports: name key | on line | how many of
     # their earlier appearances start on a line with that label.
     skey: str = ''
+    # A host's own times on stage, ((on, off), ...): the appearance spans the day.
+    stage: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -395,7 +397,8 @@ def appearances(day, ix=None):
             first = min(mine, key=lambda a: a.on)
             last = max(mine, key=lambda a: a.off)
             mine = [Appearance(person, first.part, first.on, last.off, first.on_row, last.off_row, 'host',
-                               mic_type=p.mic_type, is_host=True)]
+                               mic_type=p.mic_type, is_host=True,
+                               stage=tuple(sorted((a.on, a.off) for a in mine)))]
         out += mine
     out.sort(key=lambda a: (a.on, ix.people[a.person].name, a.person))
     seen = {}

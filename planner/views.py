@@ -1044,6 +1044,7 @@ def duplicate_session(request):
                 num_mics=source_session.num_mics,
                 column_position=source_session.column_position,
                 order=order,
+                rf_from_plan=source_session.rf_from_plan,
             )
 
             # MicSession.save() auto-created blank assignments; clear them so
