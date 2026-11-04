@@ -260,7 +260,13 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 /* -- Pack chart ------------------------------------------------------------------------ */
 .mp-chart-wrap { overflow-x: auto; border: 1px solid var(--mp-line); border-radius: 6px; background: var(--mp-panel); }
 .mp-chart { min-width: 1000px; padding: 8px 12px 12px; }
-.mp-chart .axis { position: relative; height: 40px; margin-left: 132px; border-bottom: 1px solid var(--mp-line); }
+/* One strip of segment bands, or one per part when parts overlap in time
+   (#168), then the hour ticks. */
+.mp-chart .axis { position: relative; height: calc(var(--strips, 1) * 24px + 18px); margin-left: 132px;
+    border-bottom: 1px solid var(--mp-line); }
+.mp-chart .strip { position: relative; height: 24px; }
+.mp-chart .slab { position: absolute; left: -132px; width: 124px; top: 4px; font: 600 10.5px var(--mp-mono);
+    letter-spacing: .06em; text-transform: uppercase; color: var(--mp-muted); }
 .mp-chart .band { position: absolute; top: 0; height: 22px; border-left: 1px solid var(--mp-line); overflow: hidden;
     font: 500 10.5px var(--mp-mono); color: var(--mp-muted); padding: 3px 4px; white-space: nowrap; }
 .mp-chart .band.brk { background: var(--mp-break); color: var(--mp-break-text); border-top: 2px solid var(--mp-break-edge); }

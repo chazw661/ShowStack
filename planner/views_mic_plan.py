@@ -12,18 +12,22 @@ of the request: showflows can be under NDA and Railway's disk is ephemeral.
 
 import html
 import re
+from io import BytesIO
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import ValidationError
 from django.core.files.uploadhandler import MemoryFileUploadHandler
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.cache import add_never_cache_headers
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import importer, page, planning
+from planner.mic_plan import importer, page, planning, schedule
 from planner.mic_plan.display import describe_edit
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
@@ -155,7 +159,7 @@ def mic_plan(request):
             person.intro_line = line_of.get(person.flags.get('intro', {}).get(str(part.pk)), '')
     current = planning.settings_dict(planning.project_settings(project))
     cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
-    chart = page.pack_chart(plan, apps, actions)
+    chart = page.pack_chart(plan, apps, actions, parts)
     edits = list(plan.edits.all()) if plan else []
     can_edit = can_edit_current_project(request)
 
@@ -176,6 +180,7 @@ def mic_plan(request):
         'chart': chart,
         'lanes': page.lane_windows(chart),
         'cards': cards,
+        'overlaps': page.overlap_warnings(plan, parts),
         'edit_count': len(edits),
         'undo_label': describe_edit(edits[-1]) if edits else '',
         # Moves need a plan that matches the showflow.
@@ -286,12 +291,81 @@ def plan_undo(request, pk):
 @staff_member_required
 @require_GET
 def plan_json(request, pk):
+    """The day's stored plan. ``?head=1``: only its version and stale flag,
+    for the A2 schedule's poll (never cached: Safari would answer from its
+    cache and the "Plan updated" banner would never show)."""
     day = _day(request, pk)
     plan = MicPlan.objects.filter(day=day).first()
     if plan is None:
         raise Http404('No plan for this day.')
+    if request.GET.get('head') == '1':
+        response = JsonResponse({'version': plan.version, 'stale': plan.stale})
+    else:
+        apps, actions = page.load(plan)
+        response = JsonResponse(page.plan_data(plan, apps, actions))
+    add_never_cache_headers(response)
+    return response
+
+
+def _zone(request):
+    """The viewer's time zone from ``?tz=`` (the links fill it in from the
+    browser), else UTC: the server's own zone. Only for printed clock times."""
+    try:
+        return ZoneInfo(request.GET.get('tz', '') or 'UTC')
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo('UTC')
+
+
+@staff_member_required
+@require_GET
+def plan_a2(request, pk):
+    """The A2 schedule: one A2's actions by session and segment, for a second
+    window or an iPad. Read-only for everyone; built from the stored plan."""
+    day = _day(request, pk)
+    plan = MicPlan.objects.filter(day=day).first()
+    parts = importer.active_parts(day)
+    context = {'project': day.project, 'day': day, 'plan': plan}
+    if plan is not None:
+        _, actions = page.load(plan)
+        a2_count = max(1, plan.settings.get('a2_count', 1))
+        context.update(
+            head=page.plan_header(plan, parts),
+            sched=schedule.build(plan, actions, schedule.a2_choice(request.GET.get('a2'), a2_count), parts),
+            a2_links=range(1, a2_count + 1),
+        )
+    response = render(request, 'planner/mic_plan_a2.html', context)
+    add_never_cache_headers(response)
+    return response
+
+
+@staff_member_required
+@require_GET
+def plan_pdf(request, pk):
+    """The plan as a PDF: A2 schedule (one A2 with ``?a2=N``, else each),
+    pack sheet and review list."""
+    from planner.utils.labels.brand import brand_for
+    from planner.utils.pdf_exports.mic_plan_pdf import build_mic_plan_pdf
+
+    day = _day(request, pk)
+    plan = MicPlan.objects.filter(day=day).first()
+    if plan is None:
+        raise Http404('No plan for this day.')
+    parts = importer.active_parts(day)
     apps, actions = page.load(plan)
-    return JsonResponse(page.plan_data(plan, apps, actions))
+    a2_count = max(1, plan.settings.get('a2_count', 1))
+    only = schedule.a2_choice(request.GET['a2'], a2_count) if request.GET.get('a2') and a2_count > 1 else None
+    people = list(day.showflow_people.all())
+    cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS)
+    zone = _zone(request)
+    pdf = build_mic_plan_pdf(
+        BytesIO(), project=day.project, day=day, plan=plan, apps=apps, actions=actions, parts=parts,
+        cards=cards, a2s=[only] if only else list(range(1, a2_count + 1)),
+        brand=brand_for(day.project), printed_at=timezone.now().astimezone(zone), zone=zone).getvalue()
+    response = HttpResponse(pdf, content_type='application/pdf')
+    name = 'mic-plan-{}-v{}{}.pdf'.format(day.date.isoformat(), plan.version, '-a2-{}'.format(only) if only else '')
+    response['Content-Disposition'] = 'inline; filename="{}"'.format(name)
+    add_never_cache_headers(response)
+    return response
 
 
 # --------------------------------------------------------------------------

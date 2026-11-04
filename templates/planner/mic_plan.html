@@ -61,6 +61,12 @@
                 {% if undo_label %}<button type="button" class="mp-btn" id="mp-undo"{% if not editable %} disabled{% endif %}>Undo: {{ undo_label }}</button>{% endif %}
             </span>
             {% endif %}
+            {% if plan %}
+            <a class="mp-btn" href="{% url 'planner:mic_plan_a2' day.pk %}" target="_blank" rel="noopener"
+               title="The A2's mics and de-mics by segment, in a new window: for a second screen or an iPad.">A2 schedule ↗</a>
+            <a class="mp-btn" data-tz-link href="{% url 'planner:mic_plan_pdf' day.pk %}" target="_blank" rel="noopener"
+               title="A2 schedule, pack sheet and review list.">PDF</a>
+            {% endif %}
             <a class="mp-btn" href="{% url 'planner:mic_tracker' %}">Mic Tracker →</a>
             {% tutorial_button 'mic_plan' quiet=True %}
         </div>
@@ -143,6 +149,7 @@
         {% if plan.stale %}<p class="mp-banner warn" role="status">The showflow, its people or their mic hints changed after this plan was made (v{{ plan.version }}). Re-generate to update it.{% if can_edit %} Moving packs is off until then.{% endif %}</p>{% endif %}
         {% if settings_changed %}<p class="mp-banner warn" role="status">Plan settings changed after this plan was made (v{{ plan.version }}). Re-generate to use them.</p>{% endif %}
         {% if plan %}<p class="mp-banner" role="status">Pack use: <b>{{ policy_name }}</b>{% if policy == 'recycle_at_breaks' %}. A pack worn this session goes to someone else only after a break.{% else %}. A freed pack goes to the next person who needs one.{% endif %}</p>{% endif %}
+        {% for w in overlaps %}<p class="mp-banner warn" role="status">{{ w }}</p>{% endfor %}
         {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so on and off times come from the lines that name each person.</p>{% endif %}
         {% if not plan %}<p class="mp-banner" role="status">No plan yet.{% if can_edit %} Check the showflow and people, then press <b>Generate plan</b>.{% endif %}</p>{% endif %}
 
@@ -199,8 +206,8 @@
             {% if chart %}
             {% if editable %}<p class="mp-note mp-movehint" id="mp-movehint">Drag a bar up or down to another RF, or tap it and then tap a lane. Its times stay the same; everyone else keeps their RF wherever they can.</p>{% endif %}
             <div class="mp-chart-wrap"><div class="mp-chart{% if editable %} editable{% endif %}" id="mp-chart">
-                <div class="axis">
-                    {% for b in chart.bands %}<div class="band{% if b.is_break %} brk{% endif %}" style="left:{{ b.left }}%;width:{{ b.width }}%" title="{{ b.tip }}"><span>{{ b.label }}</span></div>{% endfor %}
+                <div class="axis" style="--strips:{{ chart.strips|length }}">
+                    {% for strip in chart.strips %}<div class="strip">{% if strip.label %}<span class="slab">{{ strip.label }}</span>{% endif %}{% for b in strip.bands %}<div class="band{% if b.is_break %} brk{% endif %}" style="left:{{ b.left }}%;width:{{ b.width }}%" title="{{ b.tip }}"><span>{{ b.label }}</span></div>{% endfor %}</div>{% endfor %}
                     {% for t in chart.ticks %}<span class="tick" style="left:{{ t.left }}%">{{ t.label }}</span>{% endfor %}
                 </div>
                 {% for lane in chart.lanes %}

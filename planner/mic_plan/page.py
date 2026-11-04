@@ -5,7 +5,7 @@ stat tiles. plan.json is built from the same pieces (``plan_data``).
 
 from planner.models import MicPlanA2Action, MicPlanAppearance
 
-from .display import first_name, format_action
+from .display import first_name, format_action, overlap_warning
 from .solver import hm
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
@@ -129,8 +129,42 @@ def showflow_rows(part, rows, events, plan, apps, actions):
     return rows
 
 
-def pack_chart(plan, apps, actions):
-    """Lanes for the pack chart: one per RF, bars as percentages of the day."""
+def part_spans(segments):
+    """{part pk: (first minute, last minute)} of a plan's segments."""
+    spans = {}
+    for s in segments:
+        a, b = spans.get(s['part'], (s['t0'], s['t1']))
+        spans[s['part']] = (min(a, s['t0']), max(b, s['t1']))
+    return spans
+
+
+def overlapping_parts(segments):
+    """[(part pk, part pk)] of parts whose segments run at the same time
+    (one ending as the next starts is not an overlap)."""
+    spans = sorted(part_spans(segments).items(), key=lambda kv: (kv[1], kv[0]))
+    return [(p, q) for k, (p, (a0, a1)) in enumerate(spans) for q, (b0, b1) in spans[k + 1:]
+            if b0 < a1 and a0 < b1]
+
+
+def part_numbers(parts):
+    return {p.pk: k + 1 for k, p in enumerate(parts)}
+
+
+def overlap_warnings(plan, parts):
+    """The plan treats every part of a day as one stage (#169): a warning
+    for each pair of parts that overlap in time."""
+    if plan is None:
+        return []
+    numbers = part_numbers(parts)
+    pairs = {tuple(sorted((numbers[p], numbers[q]))) for p, q in overlapping_parts(plan.segments)
+             if p in numbers and q in numbers}
+    return [overlap_warning(n, m) for n, m in sorted(pairs)]
+
+
+def pack_chart(plan, apps, actions, parts=()):
+    """Lanes for the pack chart: one per RF, bars as percentages of the day.
+    Segment bands sit in one header strip, or one strip per part when parts
+    overlap in time (#168)."""
     if plan is None or not plan.packs:
         return None
     mic = {}
@@ -192,9 +226,18 @@ def pack_chart(plan, apps, actions):
               'is_break': s['is_break'], 'label': ' '.join((s['name'] or '').split()[:3])
               if s['t1'] - s['t0'] >= 14 else '', 'tip': '{} {}–{}'.format(s['name'], hm(s['t0']), hm(s['t1']))}
              for s in plan.segments]
+    if overlapping_parts(plan.segments):
+        numbers = part_numbers(parts)
+        seen = list(dict.fromkeys(s['part'] for s in plan.segments))
+        order = sorted(seen, key=lambda pk: (numbers.get(pk, len(seen) + 1), seen.index(pk)))
+        strips = [{'label': 'Part {}'.format(numbers[pk]) if pk in numbers else 'Part',
+                   'bands': [b for b, s in zip(bands, plan.segments) if s['part'] == pk]} for pk in order]
+    else:
+        strips = [{'label': '', 'bands': bands}]
     ticks = [{'left': pct(t), 'label': hm(t)} for t in range(t0, t1 + 1, 60)]
     regular = [p['rf'] for p in plan.packs if not p.get('spare') and not p.get('backup_of')]
-    return {'lanes': lanes, 'bands': bands, 'ticks': ticks, 'new_rf': max(regular, default=0) + 1}
+    return {'lanes': lanes, 'bands': bands, 'strips': strips, 'ticks': ticks,
+            'new_rf': max(regular, default=0) + 1}
 
 
 def lane_windows(chart):
@@ -345,4 +388,34 @@ def plan_data(plan, apps, actions):
             'rf_number': act.rf_number, 'row': act.row_id, 'line_no': act.line, 'segment': act.segment_id,
             'late': act.late, 'tight': act.tight, 'wait_min': act.wait_min, 'backup': act.backup,
         }) for act in actions],
+    }
+
+
+ESTIMATE_WARNING = ('Based on line estimates: part of this day has no send/catch cues, so on and off '
+                    'times come from the lines that name each person.')
+STALE_WARNING = 'The showflow changed after this plan was made. Re-generate it on the Mic Plan page.'
+
+
+def plan_header(plan, parts):
+    """What the A2 schedule and the PDF print about the plan: version,
+    when it was made and last edited, the settings and every warning.
+    "Edited" is the latest edit still in the log (an undo removes its edit)."""
+    edits = list(plan.edits.order_by('seq'))
+    values = {'pack_policy': 'fewest_packs', **plan.settings}
+    warnings = []
+    if plan.stale:
+        warnings.append(STALE_WARNING)
+    if plan.cue_mode == 'line estimates':
+        warnings.append(ESTIMATE_WARNING)
+    warnings += overlap_warnings(plan, parts)
+    return {
+        'version': plan.version,
+        'generated_at': plan.generated_at,
+        'edited_at': max((e.created_at for e in edits), default=None),
+        'edit_count': len(edits),
+        'policy': POLICY_NAMES[values['pack_policy']],
+        'settings': settings_summary(values),
+        'cue_mode': plan.cue_mode,
+        'stale': plan.stale,
+        'warnings': warnings,
     }

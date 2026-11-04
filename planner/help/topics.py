@@ -183,6 +183,17 @@ TOPICS = (
                   'conflict', 'handheld', 'renumber'),
     ),
     Topic(
+        slug='mic-plan-a2-schedule',
+        title='Run the A2 schedule and print the mic plan',
+        section='Show day',
+        summary="Open one A2's mics and de-mics on a second screen or iPad, and print the schedule, pack sheet and review list.",
+        pages=(
+            'planner:mic_plan',
+        ),
+        keywords=('mic plan', 'a2', 'schedule', 'ipad', 'second screen', 'pdf', 'print', 'pack sheet',
+                  'current segment', 'next', 'plan updated'),
+    ),
+    Topic(
         slug='mic-photos',
         title='Add presenter photos',
         section='Show day',
