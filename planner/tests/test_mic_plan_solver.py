@@ -538,7 +538,7 @@ class StatTileTests(TestCase):
     def test_segments_shorter_than_a_mic_are_not_counted_as_busy(self):
         from types import SimpleNamespace
         from planner.mic_plan.page import stats
-        plan = SimpleNamespace(settings={'mic_min': 3}, packs=[], swaps=0, segments=[
+        plan = SimpleNamespace(settings={'mic_min': 3}, packs=[], swaps=0, flags=[], segments=[
             {'t0': 600, 't1': 601, 'busy': [1.0]},        # 1-minute video: 100 %, left out
             {'t0': 601, 't1': 631, 'busy': [28.0]},       # 93 %
             {'t0': 631, 't1': 661, 'busy': [20.0]}])      # 67 %

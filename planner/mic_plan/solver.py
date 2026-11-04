@@ -37,6 +37,16 @@ Times are minutes from midnight. The logic follows the prototype solver
    pools; a "backup" person also wears their own backup pack. RF numbers:
    body, body backups, HH, HH backups, then the emergency spare HH (never
    assigned).
+6. Edits (``Fixed``, by appearance key ``Appearance.skey``). A pinned
+   appearance wears its RF for its whole wearing: it never waits on the pack
+   count, waits for its pack only when that pack's wearer comes off before
+   its walk-on, and otherwise takes it while worn ("conflict", flagged).
+   A pinned body/HH type moves it to that pool. Every other appearance
+   prefers the RF it had in the previous version, before any rule above,
+   and the rules above avoid packs another appearance is pinned or
+   preferred to over the same stretch, so one move changes only what it
+   must. Pinned and preferred RFs keep their numbers; any other pack takes
+   the lowest number free, in the order above.
 5. Shortages are flagged once per stretch over a set pack count; A2 busy
    minutes are counted once each, and work a segment owes that runs past
    its end is "spill".
@@ -95,6 +105,7 @@ class Person:
     name: str
     mic_type: str = BODY     # BODY or HH
     backup: str = None       # None, BODY or HH: an extra pack of their own
+    name_key: str = ''       # ShowflowPerson.name_key: what an edit is keyed on
 
 
 @dataclass(frozen=True)
@@ -129,13 +140,28 @@ class Appearance:
     note_row: int = None     # the row that assumption is about
     is_host: bool = False
     key: int = 0             # index in Plan.appearances
+    # Survives re-solves and re-imports: name key | on line | how many of
+    # their earlier appearances start on a line with that label.
+    skey: str = ''
+
+
+@dataclass(frozen=True)
+class Fixed:
+    """What the A2 fixed by editing, by appearance key (``Appearance.skey``)."""
+    pins: dict = field(default_factory=dict)      # skey -> RF (hard)
+    types: dict = field(default_factory=dict)     # skey -> BODY | HH
+    prefer: dict = field(default_factory=dict)    # skey -> RF (soft: the previous version's)
+    pools: dict = field(default_factory=dict)     # RF -> BODY | HH, for pinned and preferred RFs
+
+
+NOTHING_FIXED = Fixed()
 
 
 @dataclass
 class Assignment:
     appearance: int
     rf: int
-    how: str                 # 'host' | 'same as before' | 'recycled' | 'new' | 'backup'
+    how: str                 # 'host' | 'same as before' | 'recycled' | 'new' | 'backup' | 'pinned'
     backup: bool = False
 
 
@@ -372,8 +398,13 @@ def appearances(day, ix=None):
                                mic_type=p.mic_type, is_host=True)]
         out += mine
     out.sort(key=lambda a: (a.on, ix.people[a.person].name, a.person))
+    seen = {}
     for k, a in enumerate(out):
         a.key = k
+        p = ix.people[a.person]
+        line = ix.line(a.on_row)
+        n = seen[(a.person, line)] = seen.get((a.person, line), -1) + 1
+        a.skey = '{}|{}|{}'.format(p.name_key or ' '.join(p.name.lower().split()), line, n)
     return out, hosts
 
 
@@ -418,6 +449,10 @@ class _Pack:
     rf: int = 0
     off: float = INF         # while worn: when its wearer comes off (INF for a host)
     session: int = -1        # the last session it was worn in
+    fixed: int = None        # its RF, when pinned or preferred to
+    # Wearings not yet de-mic'd (two only on a conflicting pin):
+    # [{'start', 'off', 'head'}].
+    open: list = field(default_factory=list)
 
 
 def _overrun(frees, mics, mic_min):
@@ -453,22 +488,23 @@ def session_starts(day):
     return sorted(set(out))
 
 
-def solve(day, settings=Settings(), suggest=True):
+def solve(day, settings=Settings(), suggest=True, fixed=NOTHING_FIXED):
     """The day's plan. ``suggest``: work out the fix for each run of late
     mics the A2 can't reach (re-solves the day, so off inside that).
+    ``fixed``: the A2's edits and the previous version's RFs.
 
     fewest_packs never needs more packs than recycle_at_breaks: its greedy
     reuse can cost a pack (a mic waiting idle for a pack to free up leaves
     the A2 no time for de-mics later), so the day is also solved with
     recycle_at_breaks, and that plan is used when it needs fewer body packs
     (or as many, and fewer HH) and has no more late, tight or short flags."""
-    plan = _solve(day, settings, suggest)
+    plan = _solve(day, settings, suggest, fixed)
     if settings.pack_policy != FEWEST_PACKS:
         return plan
-    alt = _solve(day, replace(settings, pack_policy=RECYCLE_AT_BREAKS), suggest)
+    alt = _solve(day, replace(settings, pack_policy=RECYCLE_AT_BREAKS), suggest, fixed)
     if _fewer_packs(alt, plan):
         # Mid-session reuse and break turnover are no concern of fewest_packs.
-        alt.flags = [f for f in alt.flags if f['kind'] not in ('reuse', 'break')]
+        alt.flags = [f for f in alt.flags if f['kind'] not in ('reuse', 'break', 'pin_reuse')]
         alt.from_policy = RECYCLE_AT_BREAKS
         return alt
     return plan
@@ -476,12 +512,12 @@ def solve(day, settings=Settings(), suggest=True):
 
 def _fewer_packs(a, b):
     sa, sb = summary(a), summary(b)
-    if any(sa[k] > sb[k] for k in ('late', 'tight', 'shortage')):
+    if any(sa[k] > sb[k] for k in ('late', 'tight', 'shortage', 'conflict')):
         return False
     return (sa['body'], sa['hh']) < (sb['body'], sb['hh'])
 
 
-def _solve(day, settings, suggest):
+def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     ix = _Index(day)
     plan = Plan()
     apps, hosts = appearances(day, ix)
@@ -490,20 +526,62 @@ def _solve(day, settings, suggest):
         return plan
     S = settings
     n = max(1, S.a2_count)
+    for a in apps:
+        pin = fixed.pins.get(a.skey)
+        if pin is not None and pin in fixed.pools:
+            a.mic_type = fixed.pools[pin]
+        elif a.skey in fixed.types:
+            a.mic_type = fixed.types[a.skey]
 
     # Back on within the pre-mic lead of coming off: they keep the pack on
-    # (no de-mic, no new mic) rather than being de-mic'd and mic'd again.
+    # (no de-mic, no new mic) rather than being de-mic'd and mic'd again --
+    # unless the A2 pinned the two to different RFs or types.
     by_person = {}
     for a in apps:
         by_person.setdefault(a.person, []).append(a)
     kept_next = {}           # appearance key -> the next one wearing the same pack
     for mine in by_person.values():
         mine.sort(key=lambda a: a.on)
+        pin = fixed.pins.get(mine[0].skey)
         for prev, nxt in zip(mine, mine[1:]):
-            if nxt.on - prev.off < S.premic_lead_min:
+            other = fixed.pins.get(nxt.skey)
+            if (nxt.on - prev.off < S.premic_lead_min and prev.mic_type == nxt.mic_type
+                    and (pin is None or other is None or pin == other)):
                 kept_next[prev.key] = nxt.key
+                pin = other if pin is None else pin
+            else:
+                pin = other
     kept = set(kept_next.values())
     app_by_key = {a.key: a for a in apps}
+
+    # One wearing per chain of kept appearances, keyed by its first: the RF
+    # it is pinned or preferred to, when it ends, and which RFs are claimed
+    # by whom over which stretch.
+    chain_pin, chain_prefer, chain_end, head_of = {}, {}, {}, {}
+    claims = {}              # RF -> [(start, end, head key, hard)]
+    for a in apps:
+        if a.key in kept:
+            continue
+        members = [a]
+        while members[-1].key in kept_next:
+            members.append(app_by_key[kept_next[members[-1].key]])
+        for m in members:
+            head_of[m.key] = a.key
+        pin = next((fixed.pins[m.skey] for m in members if m.skey in fixed.pins), None)
+        want = next((fixed.prefer[m.skey] for m in members if m.skey in fixed.prefer), None)
+        end = INF if a.is_host else members[-1].off + S.demic_min
+        chain_end[a.key] = end
+        if pin is not None:
+            chain_pin[a.key] = pin
+        elif want is not None:
+            chain_prefer[a.key] = want
+        # A pin claims its RF from the latest on-time mic (it waits for its
+        # pack until then); a preference from the earliest, so nobody wears
+        # it into the stretch its previous wearer will want it.
+        if pin is not None:
+            claims.setdefault(pin, []).append((a.on - S.margin_min - S.mic_min, end, a.key, True))
+        elif want is not None:
+            claims.setdefault(want, []).append((a.on - S.premic_lead_min, end, a.key, False))
 
     tasks = []
     for a in apps:
@@ -530,6 +608,8 @@ def _solve(day, settings, suggest):
     marks = [m for m, _ in starts]
     turnover = {}            # session start index -> {'mics': set, 'packs': set} (break too short)
     reuse_flags = []         # (flag, pack): mid-session reuse at a set count, RF filled in later
+    by_rf = {}               # fixed RF -> its pack, once worn
+    wearings = []            # (pack, start, end, head key, off) for conflicts
 
     def session_of(on):
         """A walk-on at or after a session start is in that session."""
@@ -549,6 +629,23 @@ def _solve(day, settings, suggest):
             return ix.people[task.app.person].backup
         return task.app.mic_type
 
+    def claimed(rf, task, t):
+        """'hard' or 'soft' when another wearing is pinned or preferred to
+        ``rf`` over the stretch ``task``'s would wear it; else None."""
+        out = None
+        for start, end, head, hard in claims.get(rf, ()):
+            if head != task.app.key and start < chain_end[task.app.key] and t < end:
+                if hard:
+                    return 'hard'
+                out = 'soft'
+        return out
+
+    def fixed_pack(rf, pool):
+        """The pack numbered ``rf``: worn before, or new (not in ``packs``
+        until it is first worn)."""
+        p = by_rf.get(rf)
+        return p if p is not None else _Pack(fixed.pools.get(rf, pool), tmp=-1, fixed=rf)
+
     def free_pack(task, t, fallback=False):
         """(pack, how) for ``task`` now, or (None, None). ``fallback``: at a
         set count under recycle_at_breaks, the pack free longest even if it
@@ -556,19 +653,37 @@ def _solve(day, settings, suggest):
         if task.backup:
             return backups.get(task.app.person), 'backup'
         pool = pool_of(task)
-        free = [p for p in packs if p.pool == pool and p.backup_of is None and p.free_at <= t]
         mine = last.get(task.app.person)
-        if mine in free:
+        head = task.app.key
+        if head in chain_pin:
+            return fixed_pack(chain_pin[head], pool), 'pinned'
+        want = chain_prefer.get(head)
+        if want is not None and claimed(want, task, t) != 'hard':
+            p = fixed_pack(want, pool)
+            # Only where the pack policy allows it: a policy change still applies.
+            if p.pool == pool and p.backup_of is None and p.free_at <= t and allowed(p, task) and \
+                    (p.tmp >= 0 or not at_limit(task)):
+                return p, 'same as before' if p is mine else 'recycled' if p.wearers else 'new'
+        free = [p for p in packs if p.pool == pool and p.backup_of is None and p.free_at <= t]
+        # Packs nobody else is pinned or preferred to over this stretch first,
+        # then ones only preferred to (that person moves), never pinned ones.
+        level = {id(p): claimed(p.fixed, task, t) if p.fixed is not None else None for p in free}
+        tiers = [[p for p in free if level[id(p)] is None], [p for p in free if level[id(p)] == 'soft']]
+        if any(p is mine for p in tiers[0] + tiers[1]):
             return mine, 'same as before'
         if not recycle:
-            if free:
-                return min(free, key=lambda p: (p.free_at, p.tmp)), 'recycled'
+            for tier in tiers:
+                if tier:
+                    return min(tier, key=lambda p: (p.free_at, p.tmp)), 'recycled'
             return None, None
-        ok = [p for p in free if allowed(p, task)]
-        if ok:
-            return min(ok, key=lambda p: p.tmp), 'recycled'      # down the line
-        if fallback and free:
-            return min(free, key=lambda p: (p.free_at, p.tmp)), 'mid-session'
+        for tier in tiers:
+            ok = [p for p in tier if allowed(p, task)]
+            if ok:
+                return min(ok, key=lambda p: p.tmp), 'recycled'      # down the line
+        if fallback:
+            for tier in tiers:
+                if tier:
+                    return min(tier, key=lambda p: (p.free_at, p.tmp)), 'mid-session'
         return None, None
 
     def can_free_in_time(task, t, by=None, any_pack=False):
@@ -582,6 +697,8 @@ def _solve(day, settings, suggest):
                 continue
             if not any_pack and not allowed(p, task):
                 continue
+            if p.fixed is not None and claimed(p.fixed, task, t) == 'hard':
+                continue
             ready_at = p.free_at if p.free_at < INF else max(t, p.off) + S.demic_min
             if ready_at + S.mic_min <= by:
                 return True
@@ -592,6 +709,11 @@ def _solve(day, settings, suggest):
         unless no pack can free up before the walk-on (then it goes over the
         count, and the shortage is flagged)."""
         pool = pool_of(task)
+        if not task.backup and task.app.key in chain_pin:
+            # Pinned: waits for its RF only when that RF's wearer comes off
+            # before this walk-on; else takes it worn (a conflict).
+            p = by_rf.get(chain_pin[task.app.key])
+            return p is not None and p.free_at > t and p.off < task.app.on
         if task.backup or limits[pool] is None:
             return False
         if sum(1 for p in packs if p.pool == pool) < limits[pool] or free_pack(task, t)[0] is not None:
@@ -634,11 +756,20 @@ def _solve(day, settings, suggest):
         person = ix.people[a.person]
         late = tight = False
         wait = 0
+        if pack.tmp < 0:                    # first worn
+            pack.tmp = len(packs)
+            packs.append(pack)
+        if pack.fixed is not None:
+            by_rf[pack.fixed] = pack
         if task.kind == 'mic':
             here = session_of(a.on)
             if not task.backup:
                 if how in ('recycled', 'mid-session') and pack.session >= here:
                     plan.mid_session += 1
+                if how == 'pinned' and recycle and not pack.open and pack.session >= here and \
+                        any(app_by_key[k].person != a.person for k in pack.wearers):
+                    plan.mid_session += 1
+                    reuse_flags.append(({'kind': 'pin_reuse', 'row': a.on_row, 'person': a.person}, pack, task))
                 if how == 'mid-session':
                     reuse_flags.append(({'kind': 'reuse', 'row': a.on_row, 'person': a.person}, pack, task))
                 elif how == 'new' and recycle and here > 0:
@@ -658,19 +789,27 @@ def _solve(day, settings, suggest):
             k = a.key
             while k in kept_next:
                 k = kept_next[k]
-            pack.off = INF if a.is_host else app_by_key[k].off
-            pack.session = len(marks) if a.is_host else bisect_left(marks, pack.off)
+            pack.open.append({'start': t, 'off': INF if a.is_host else app_by_key[k].off, 'head': a.key,
+                              'backup': task.backup})
+            pack.off = max(w['off'] for w in pack.open)
+            pack.session = len(marks) if pack.off == INF else bisect_left(marks, pack.off)
             if task.backup:
                 backups[a.person] = pack
                 reason = 'backup'
             else:
                 last[a.person] = pack
                 reason = 'host' if a.is_host else {'same as before': 'same pack', 'recycled': 'recycled',
-                                                    'new': 'new pack'}[how]
+                                                    'new': 'new pack', 'pinned': 'pinned'}[how]
             late = end > a.on
             tight = not late and end > task.due
         else:
-            pack.free_at = end
+            head = head_of[a.key]
+            mine = next(w for w in pack.open if w['head'] == head and w['backup'] == task.backup)
+            pack.open.remove(mine)
+            wearings.append((pack, mine['start'], end, head, a.off))
+            pack.free_at = end if not pack.open else INF
+            if pack.open:
+                pack.off = max(w['off'] for w in pack.open)
             wait = int(round(t - task.rel))
             reason = 'at catch' if wait <= 1 else '{} min after catch'.format(wait)
             if a.source != 'cue':
@@ -696,7 +835,7 @@ def _solve(day, settings, suggest):
                                                    backup=task.backup))
                 plan.assignments[-1]._pack = pack
         if late or tight:
-            cause = 'pack' if task.pack_wait else 'a2'
+            cause = 'pin' if task.pack_wait and how == 'pinned' else 'pack' if task.pack_wait else 'a2'
             if late:
                 text = "Line {}: {} is mic'd {}-{} but walks on at {}{}.".format(
                     ix.line(a.on_row), person.name, hm(t), hm(end), hm(a.on), ' (backup)' if task.backup else '')
@@ -704,11 +843,17 @@ def _solve(day, settings, suggest):
                 text = 'Line {}: {} is ready at {}, {} min before walking on (margin {}).'.format(
                     ix.line(a.on_row), person.name, hm(end), int(round(a.on - end)), S.margin_min)
             plan.flags.append({'kind': 'late' if late else 'tight', 'row': a.on_row, 'person': a.person,
-                               'cause': cause, 'text': '{} Cause: {}.'.format(text, cause_text(task))})
+                               'cause': cause, 'text': '{} Cause: {}.'.format(text, cause_text(task, cause))})
             behind.append((plan.actions[-1], plan.flags[-1]))
         return end
 
-    def cause_text(task):
+    def cause_text(task, cause):
+        if cause == 'pin':
+            rf = chain_pin[task.app.key]
+            before = max((w for w in wearings if w[0] is by_rf.get(rf)), key=lambda w: w[2], default=None)
+            return 'RF {} is with {} until {} (your change at line {})'.format(
+                rf, ix.people[app_by_key[before[3]].person].name if before else 'someone else',
+                hm(before[2]) if before else '?', ix.line(task.app.on_row))
         if not task.pack_wait:
             return 'A2 time'
         pool = pool_of(task)
@@ -777,14 +922,22 @@ def _solve(day, settings, suggest):
         job.done = True
 
     if suggest:
-        _suggest(day, S, behind, ix)
+        _suggest(day, S, behind, ix, fixed)
     _number(plan, packs, S, ix)
     for flag, pack, task in reuse_flags:
         pool = pool_of(task)
-        flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {} count ({}) reached.'.format(
-            ix.line(task.app.on_row), pack.rf, *(('body pack', S.body_pack_count) if pool == BODY
-                                                  else ('handheld', S.hh_count)))
+        if flag['kind'] == 'pin_reuse':
+            flag['text'] = 'Line {}: RF {} goes to {} mid-session because of your change ({}).'.format(
+                ix.line(task.app.on_row), pack.rf, ix.people[task.app.person].name,
+                'recycle at breaks' if recycle else 'fewest packs')
+        else:
+            flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {} count ({}) reached.'.format(
+                ix.line(task.app.on_row), pack.rf, *(('body pack', S.body_pack_count) if pool == BODY
+                                                      else ('handheld', S.hh_count)))
         plan.flags.append(flag)
+    for p in packs:
+        wearings += [(p, w['start'], INF, w['head'], w['off']) for w in p.open]
+    _conflicts(plan, wearings, chain_pin, app_by_key, ix)
     for k, slot in sorted(turnover.items()):
         n_packs = min(len(slot['mics']), len(slot['packs']))
         minute, key = starts[k]
@@ -797,7 +950,7 @@ def _solve(day, settings, suggest):
     return plan
 
 
-def _suggest(day, S, behind, ix):
+def _suggest(day, S, behind, ix, fixed=NOTHING_FIXED):
     """For each run of late or tight mics short of A2 time (mics whose
     release-to-finish windows overlap), the smallest pre-mic lead that puts
     every one of them on time with the same A2s, and whether one more A2
@@ -822,11 +975,11 @@ def _suggest(day, S, behind, ix):
     for minutes in range(S.premic_lead_min + 1, LEAD_MAX + 1):
         if len(lead) == len(runs):
             break
-        trial = solve(day, replace(S, premic_lead_min=minutes), suggest=False)
+        trial = solve(day, replace(S, premic_lead_min=minutes), suggest=False, fixed=fixed)
         for k, run in enumerate(runs):
             if k not in lead and on_time(trial, run):
                 lead[k] = minutes
-    more = solve(day, replace(S, a2_count=S.a2_count + 1), suggest=False)
+    more = solve(day, replace(S, a2_count=S.a2_count + 1), suggest=False, fixed=fixed)
     another = 'a second A2' if S.a2_count == 1 else 'one more A2'
     for k, run in enumerate(runs):
         a2 = on_time(more, run)
@@ -889,13 +1042,48 @@ def _flag_shortage(plan, ix, pool, limit, peak, mic):
             ix.line(app.on_row), more, what, '' if more == 1 else 's', limit, peak, hm(app.on))})
 
 
+def _conflicts(plan, wearings, pins, apps, ix):
+    """One flag for each two wearings of one RF that overlap (only a pin
+    makes them), at the pinned appearance."""
+    by_pack = {}
+    for w in wearings:
+        by_pack.setdefault(id(w[0]), []).append(w)
+    for ws in by_pack.values():
+        ws.sort(key=lambda w: w[1])
+        for k, (pack, start, end, head, off) in enumerate(ws):
+            for other in ws[k + 1:]:
+                if other[1] >= end:
+                    break
+                mine = other if other[3] in pins else (pack, start, end, head, off)
+                a, b = apps[head], apps[other[3]]
+                until = min(e if e < INF else o for _, _, e, _, o in ((pack, start, end, head, off), other))
+                text = 'RF {} on two people {}\u2013{} ({} and {})'.format(
+                    pack.rf, hm(other[1]), hm(max(until, other[1])), ix.people[a.person].name,
+                    ix.people[b.person].name)
+                if mine[3] in pins:
+                    text += ' \u2014 your change at line {}'.format(ix.line(apps[mine[3]].on_row))
+                plan.flags.append({'kind': 'conflict', 'row': apps[mine[3]].on_row,
+                                   'person': apps[mine[3]].person, 'rf': pack.rf, 'text': text + '.'})
+
+
 def _number(plan, packs, S, ix):
+    """RF numbers: a pinned or preferred pack keeps its number; the rest
+    take the lowest free, body, body backups, HH, HH backups."""
     order = ([p for p in packs if p.pool == BODY and p.backup_of is None]
              + [p for p in packs if p.pool == BODY and p.backup_of is not None]
              + [p for p in packs if p.pool == HH and p.backup_of is None]
              + [p for p in packs if p.pool == HH and p.backup_of is not None])
-    for k, p in enumerate(order, 1):
+    taken = {p.fixed for p in packs if p.fixed is not None}
+    k = 0
+    for p in order:
+        if p.fixed is not None:
+            p.rf = p.fixed
+            continue
+        k += 1
+        while k in taken:
+            k += 1
         p.rf = k
+    order.sort(key=lambda p: p.rf)
     for a in plan.actions:
         a.rf_number = a._pack.rf
         del a._pack
@@ -910,7 +1098,7 @@ def _number(plan, packs, S, ix):
             label = ''
         plan.packs.append(Pack(p.rf, p.pool, backup_of=p.backup_of, host=p.rf in hosts, label=label))
     if S.emergency_spare_hh:
-        plan.packs.append(Pack(len(order) + 1, HH, spare=True, label='Spare'))
+        plan.packs.append(Pack(max((p.rf for p in order), default=0) + 1, HH, spare=True, label='Spare'))
     # A swap: a pack going to someone other than who wore it last.
     plan.swaps = sum(1 for a in plan.actions if a.kind == 'mic' and a.reason == 'recycled')
 
@@ -995,4 +1183,5 @@ def summary(plan):
         'tight': sum(1 for f in plan.flags if f['kind'] == 'tight'),
         'shortage': sum(1 for f in plan.flags if f['kind'] == 'shortage'),
         'spill': sum(1 for f in plan.flags if f['kind'] == 'spill'),
+        'conflict': sum(1 for f in plan.flags if f['kind'] == 'conflict'),
     }
