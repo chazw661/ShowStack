@@ -77,7 +77,7 @@ class ChartStripTests(PlainTestCase):
     """#168: bands of different parts never share a strip when parts overlap."""
 
     def chart(self, segments):
-        plan = SimpleNamespace(segments=segments, packs=[{'rf': 1, 'pool': 'body'}], changes=[])
+        plan = SimpleNamespace(segments=segments, packs=[{'rf': 1, 'pool': 'body'}], changes=[], settings={})
         parts = [SimpleNamespace(pk=10), SimpleNamespace(pk=11)]
         return page.pack_chart(plan, [], [], parts)
 

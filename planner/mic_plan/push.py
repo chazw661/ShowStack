@@ -39,6 +39,8 @@ from planner.models import (
 from planner.utils.typed_names import loose
 
 from . import mt_rows
+from .display import rig_text
+from .planning import BEFORE_RIG, before_rig, plan_values
 from .importer import active_parts
 from .schedule import segment_key, sessions as session_numbers
 from .solver import HH, hm
@@ -78,7 +80,27 @@ def refusal(plan, apps):
             conflicts, '' if conflicts == 1 else 's', 'it' if conflicts == 1 else 'them')
     if any(a.is_host and not a.stage for a in apps):
         return 'This plan was made before Send to Mic Tracker existed. Re-generate it first.'
+    if before_rig(plan):
+        return BEFORE_RIG
     return ''
+
+
+def short_of_rig(plan):
+    """'The rig is short by 2 body packs (RF 25–26). ...' while the plan
+    has packs past the rig's end (solver: over), or ''. The preview shows it
+    and cannot be confirmed."""
+    over = sorted((p for p in plan.packs if p.get('over')), key=lambda p: p['rf'])
+    if not over:
+        return ''
+    what = []
+    for pool, word in (('body', 'body pack'), (HH, 'handheld')):
+        n = sum(1 for p in over if p['pool'] == pool)
+        if n:
+            what.append('{} {}{}'.format(n, word, '' if n == 1 else 's'))
+    rfs = [p['rf'] for p in over]
+    span = str(rfs[0]) if len(rfs) == 1 else ('{}\u2013{}'.format(rfs[0], rfs[-1]) if rfs[-1] - rfs[0] == len(rfs) - 1
+                                              else ', '.join(map(str, rfs)))
+    return 'The rig is short by {} (RF {}). Add channels, or move people, then send.'.format(' and '.join(what), span)
 
 
 # --------------------------------------------------------------------------
@@ -192,6 +214,9 @@ class Preview:
     labels: list = field(default_factory=list)     # ['RF 3 (Opening Session (8:00-8:45))', ...]
     new_sessions: list = field(default_factory=list)   # names: print all their labels
     targets: list = field(default_factory=list)
+    short: str = ''                                # short_of_rig: no confirm
+    rig: str = ''                                  # the plan's rig, in words
+    rig_was: str = ''                              # the last push's, when it differs
     matched: dict = field(default_factory=dict)    # session key -> MicSession pk
     claims: dict = field(default_factory=dict)     # slot key -> existing PresenterSlot pk
     refs: dict = field(default_factory=dict)       # person key -> presenter ref
@@ -295,7 +320,10 @@ def preview(day, plan=None):
             raise PushRefused('{} needs {} RFs; Mic Tracker holds at most {} per session.'.format(
                 t['name'], len(t['rows']), MAX_ROWS))
     last = last_push(day)
-    out = Preview(plan=plan, last=last, targets=targets)
+    out = Preview(plan=plan, last=last, targets=targets, short=short_of_rig(plan), rig=rig_text(plan_values(plan)))
+    was = (last.summary or {}).get('rig') if last else None
+    if was and was != out.rig:
+        out.rig_was = was
     prev_sessions = dict(last.sessions) if last else {}
     prev_rows = dict(last.rows) if last else {}
     prev_slots = dict(last.slots) if last else {}
@@ -538,7 +566,9 @@ def _slot_change(slot, snap, w, ref, t, row, spk, mt_sessions, names):
         bits.append('Mic Tracker has {}, the plan {}'.format(who_now, who))
     elif 'presenter' in changes:
         bits.append('{} → {}'.format(who_now, who))
-    if 'row' in changes:
+    if 'row' in changes and cur['row'][0] == spk:
+        bits.append('{} RF {} \u2192 RF {}'.format(who, cur['row'][1], row['rf']))
+    elif 'row' in changes:
         bits.append('{} moves from {}'.format(who, _label(names.get(cur['row'][0], 'another session'), cur['row'][1])))
     if 'order' in changes and not bits:
         bits.append('{} {} in the rotation'.format(who, 'first' if w['order'] == 0 else 'number {}'.format(w['order'] + 1)))
@@ -589,6 +619,8 @@ def apply(day, version, digest, keep=(), include_started=False, user=None):
         raise PushRefused('The plan changed while you were looking at the preview (now v{}). '
                           'Review it again.'.format(plan.version), 409)
     p = preview(day, plan)
+    if p.short:
+        raise PushRefused(p.short, 409)
     if digest != p.digest:
         raise PushRefused('Mic Tracker or the plan changed since the preview. Review it again.', 409)
     if not p.changes and p.last is not None and p.last.plan_version == plan.version:
@@ -848,6 +880,7 @@ def _record(day, plan, p, sessions, slot_keys, skipped, include_started, user, b
         'kept': [i['text'] for i in items if i['group'] == 'kept'],
         'skipped': [s['name'] for s in p.started if s['pk'] in skipped],
         'labels': p.labels,
+        'rig': p.rig,
         'new_sessions': p.new_sessions,
         'new_presenters': p.new_presenters,
     }

@@ -29,7 +29,7 @@ from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
 from planner.mic_plan import importer, page, planning, push, revert, schedule
-from planner.mic_plan.display import describe_edit
+from planner.mic_plan.display import describe_edit, rig_text
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
 from planner.mic_plan.solver import SolverError
@@ -57,7 +57,8 @@ FLAG_LABELS = {
 }
 _CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
 INT_SETTINGS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
-OPTIONAL_SETTINGS = ('body_pack_count', 'hh_count')     # blank: report the minimum needed
+RIG_SETTINGS = ('wireless_channels', 'handheld_channels', 'spare_handhelds')
+OPTIONAL_SETTINGS = ('wireless_channels',)     # blank: no rig, the plan reports the packs needed
 
 
 def _project_or_404(request):
@@ -178,6 +179,7 @@ def mic_plan(request):
                                       'off_pk': where[2].pk if where and where[2] else None,
                                       'missing': where is None})
     current = planning.settings_dict(planning.project_settings(project))
+    plan_values = planning.plan_values(plan) if plan else current
     cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
     chart = page.pack_chart(plan, apps, actions, parts)
     edits = list(plan.edits.all()) if plan else []
@@ -206,13 +208,15 @@ def mic_plan(request):
         'edit_count': len(edits),
         'undo_label': describe_edit(edits[-1]) if edits else '',
         # Moves need a plan that matches the showflow.
-        'editable': bool(can_edit and plan and not plan.stale),
+        'editable': bool(can_edit and plan and not plan.stale and not planning.before_rig(plan)),
+        'before_rig': bool(plan and planning.before_rig(plan)),
         'changes': plan.changes if plan else [],
         'settings': current,
-        'settings_summary': page.settings_summary(plan.settings if plan else current),
-        'settings_changed': bool(plan and {'pack_policy': 'fewest_packs', **plan.settings} != current),
-        'policy': (plan.settings if plan else current).get('pack_policy', 'fewest_packs'),
-        'policy_name': page.POLICY_NAMES[(plan.settings if plan else current).get('pack_policy', 'fewest_packs')],
+        'settings_summary': page.settings_summary(plan_values),
+        'settings_changed': bool(plan and plan_values != current),
+        'rig_text': rig_text(current),
+        'policy': plan_values['pack_policy'],
+        'policy_name': page.POLICY_NAMES[plan_values['pack_policy']],
         'policy_counts': page.policy_counts_text(plan.policy_counts) if plan else '',
         'policy_choices': MicPlanSettings.PACK_POLICY_CHOICES,
         'flag_labels': FLAG_LABELS,
@@ -787,12 +791,14 @@ def mic_plan_settings(request):
     project = _project_or_404(request)
     settings_obj = planning.project_settings(project)
     day = _maybe_day(request)
-    for name in INT_SETTINGS + OPTIONAL_SETTINGS:
+    for name in INT_SETTINGS + RIG_SETTINGS:
         field = MicPlanSettings._meta.get_field(name)
         raw = request.POST.get(name, '').strip()
         if raw == '' and name in OPTIONAL_SETTINGS:
             setattr(settings_obj, name, None)
             continue
+        if raw == '' and name in RIG_SETTINGS:
+            raw = '0'
         try:
             value = int(raw)
             if value < 0:
@@ -804,7 +810,10 @@ def mic_plan_settings(request):
                 field.verbose_name, ', or leave it blank' if name in OPTIONAL_SETTINGS else ''))
             return _back(day)
         setattr(settings_obj, name, value)
-    settings_obj.emergency_spare_hh = request.POST.get('emergency_spare_hh') == '1'
+    why = rig_refusal(settings_obj.wireless_channels, settings_obj.handheld_channels, settings_obj.spare_handhelds)
+    if why:
+        messages.error(request, why)
+        return _back(day)
     policy = request.POST.get('pack_policy', settings_obj.pack_policy)
     if policy not in dict(MicPlanSettings.PACK_POLICY_CHOICES):
         messages.error(request, 'Pack use: choose one of the options.')
@@ -813,6 +822,17 @@ def mic_plan_settings(request):
     settings_obj.save()
     messages.success(request, 'Mic Plan settings saved. Re-generate to use them.')
     return _back(day, _maybe_part(request, request.POST.get('part', '')))
+
+
+def rig_refusal(channels, handhelds, spares):
+    """Why the rig settings can't be saved, or ''."""
+    if channels is None:
+        return 'Handhelds are the last channels of the rig: set Wireless channels first.' if handhelds else ''
+    if handhelds > channels:
+        return 'Handhelds: at most the {} wireless channels.'.format(channels)
+    if spares > handhelds:
+        return 'Spare handhelds: at most the {} handhelds.'.format(handhelds)
+    return ''
 
 
 def _maybe_part(request, pk):

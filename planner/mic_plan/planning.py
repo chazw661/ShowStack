@@ -31,7 +31,7 @@ from .parser import NO_CUE_MIN_COVERAGE, group_exit, segment_heading
 logger = logging.getLogger(__name__)
 
 SETTINGS_FIELDS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min',
-                   'body_pack_count', 'hh_count', 'emergency_spare_hh', 'pack_policy')
+                   'wireless_channels', 'handheld_channels', 'spare_handhelds', 'pack_policy')
 POLICIES = ('recycle_at_breaks', 'fewest_packs')
 
 
@@ -172,6 +172,38 @@ def build_day(day):
     return data, rows_by_part, mode
 
 
+def plan_values(plan):
+    """The settings ``plan`` was made with, in today's fields. Plans from
+    before PR 2.2 have no pack_policy: they used fewest_packs. Plans from
+    before the rig (PR 5.1) had pack counts: converted as migration 0225
+    converts the project's settings."""
+    values = {'pack_policy': solver.FEWEST_PACKS, **plan.settings}
+    if 'wireless_channels' not in values:
+        body, hh = values.pop('body_pack_count', None), values.pop('hh_count', None)
+        spare = values.pop('emergency_spare_hh', False)
+        if body is not None and hh is not None and body + hh:
+            values.update(wireless_channels=body + hh, handheld_channels=hh,
+                          spare_handhelds=min(1, hh) if spare else 0)
+        else:
+            values.update(wireless_channels=None, handheld_channels=0, spare_handhelds=1 if spare else 0)
+    return values
+
+
+def plan_rig(plan):
+    """The solver.Rig ``plan`` was numbered on."""
+    v = plan_values(plan)
+    return solver.Rig(v.get('wireless_channels'), v.get('handheld_channels') or 0, v.get('spare_handhelds') or 0)
+
+
+def before_rig(plan):
+    """Was ``plan`` numbered before the rig, with a rig its numbers do not
+    follow? Edits and Send to Mic Tracker wait for a Re-generate."""
+    return 'wireless_channels' not in plan.settings and plan_values(plan)['wireless_channels'] is not None
+
+
+BEFORE_RIG = 'This plan was made before rig channels. Re-generate it first.'
+
+
 def solver_settings(values):
     return solver.Settings(**{k: values[k] for k in SETTINGS_FIELDS})
 
@@ -182,7 +214,7 @@ def policy_counts(data, settings):
     out = {}
     for policy in POLICIES:
         s = solver.summary(solver.solve(
-            data, replace(settings, pack_policy=policy, body_pack_count=None, hh_count=None), suggest=False))
+            data, replace(settings, pack_policy=policy, wireless_channels=None), suggest=False))
         out[policy] = {'body': s['body'], 'hh': s['hh'], 'mid_session': s['mid_session']}
     return out
 
@@ -224,11 +256,34 @@ def replay(edits):
     return pins, types, pools
 
 
-def _fixed(edits, prefer, packs):
+def _fixed(edits, prefer, packs, R):
+    """(solver.Fixed, misfits {skey: (rf, pool)}). With a rig, a pin keeps
+    its RF only where that channel is still of its pool; else (misfit) the
+    pin keeps its type and the solver gives it a channel. A preferred RF
+    that does not fit is dropped."""
     pins, types, pin_pools = replay(edits)
-    pools = {p['rf']: p['pool'] for p in packs or () if not p.get('spare') and not p.get('backup_of')}
-    pools.update(pin_pools)
-    return solver.Fixed(pins=pins, types=types, prefer={k: v[0] for k, v in prefer.items()}, pools=pools)
+    if not R.set:
+        pools = {p['rf']: p['pool'] for p in packs or () if not p.get('spare') and not p.get('backup_of')}
+        pools.update(pin_pools)
+        return solver.Fixed(pins=pins, types=types, prefer={k: v[0] for k, v in prefer.items()}, pools=pools), {}
+    misfits = {}
+    for key, rf in list(pins.items()):
+        if not R.fits(rf, types[key]):
+            misfits[key] = (rf, types[key])
+            del pins[key]
+    prefer = {k: v[0] for k, v in prefer.items() if R.fits(v[0], v[1])}
+    pools = {rf: R.pool_at(rf) for rf in list(pins.values()) + list(prefer.values())}
+    return solver.Fixed(pins=pins, types=types, prefer=prefer, pools=pools), misfits
+
+
+def misfit_text(rf, pool, R):
+    """Why a pin no longer fits the rig: 'a body channel', 'kept spare'."""
+    at = R.pool_at(rf)
+    if at is None:
+        return 'not in the rig (1\u2013{})'.format(R.channels)
+    if at == 'spare':
+        return 'kept spare'
+    return 'a {} channel'.format('handheld' if at == solver.HH else 'body')
 
 
 @transaction.atomic
@@ -242,8 +297,8 @@ def generate(day, user=None, mode='keep'):
     keep = plan is not None and mode == 'keep'
     prev = snapshot(plan) if keep else {}
     edits = list(plan.edits.all()) if plan is not None else []
-    fixed = _fixed(edits, prev, plan.packs if keep else ())
     values = settings_dict(project_settings(day.project))
+    fixed, misfits = _fixed(edits, prev, plan.packs if keep else (), solver.rig(solver_settings(values)))
     data, rows_by_part, mode_label = build_day(day)
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values), fixed=fixed)
@@ -255,26 +310,22 @@ def generate(day, user=None, mode='keep'):
     plan.generated_at = timezone.now()
     plan.generated_by = user
     plan.cue_mode = mode_label
-    return _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prev)
-
-
-def _plan_values(plan):
-    # Plans from before PR 2.2 have no pack_policy: they used fewest_packs.
-    return {'pack_policy': solver.FEWEST_PACKS, **plan.settings}
+    return _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prev, misfits)
 
 
 def _resolve(plan, prefer):
     """Re-solve after an edit or undo: the plan's own settings, the log's
     pins, ``prefer``'s RFs, no lead-fix search."""
-    values = _plan_values(plan)
+    values = plan_values(plan)
     data, rows_by_part, _ = build_day(plan.day)
     edits = list(plan.edits.all())
-    fixed = _fixed(edits, prefer, plan.packs)
+    fixed, misfits = _fixed(edits, prefer, plan.packs, solver.rig(solver_settings(values)))
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values), suggest=False, fixed=fixed)
     logger.info('Mic Plan edit re-solve: %d appearances, %.3fs (project %s, day %s)',
                 len(result.appearances), time.monotonic() - started, plan.day.project_id, plan.day_id)
-    return _save(plan, data, rows_by_part, result, values, plan.policy_counts, fixed, edits, snapshot(plan), prefer)
+    return _save(plan, data, rows_by_part, result, values, plan.policy_counts, fixed, edits, snapshot(plan), prefer,
+                 misfits)
 
 
 def _locked(day, version):
@@ -286,6 +337,8 @@ def _locked(day, version):
                           'then make your change again.'.format(plan.version), 409)
     if plan.stale:
         raise EditRefused('The showflow changed after this plan was made. Re-generate it first.', 409)
+    if before_rig(plan):
+        raise EditRefused(BEFORE_RIG, 409)
     return plan
 
 
@@ -307,9 +360,16 @@ def edit(day, version, kind, key, value, user=None):
         if not 1 <= rf <= 999:
             raise EditRefused('Choose an RF from 1 to 999.')
         lane = pools.get(rf)
+        R = plan_rig(plan)
         if lane is not None and lane.get('backup_of'):
             raise EditRefused('RF {} is a backup pack.'.format(rf))
-        if lane is not None and not lane.get('spare'):
+        if R.set and R.pool_at(rf) is None:
+            raise EditRefused("RF {} isn't in the rig (1\u2013{}).".format(rf, R.channels))
+        if R.set and R.pool_at(rf) == 'spare':
+            raise EditRefused('RF {} is kept spare \u2014 lower the spare count in settings to use it.'.format(rf))
+        if R.set:
+            pool = R.pool_at(rf)
+        elif lane is not None and not lane.get('spare'):
             pool = lane['pool']
         else:
             pool = value.get('pool') or app.mic_type
@@ -355,10 +415,11 @@ def display_pool(pool):
     return 'handheld' if pool == solver.HH else 'body pack'
 
 
-def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prefer):
+def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prefer, misfits=None):
     """Store ``result`` as ``plan`` (version + 1), with what changed against
     ``prev`` ({skey: [rf, pool]}), who could not keep the RF ``prefer``
-    gave them, and the edit log's Review flags."""
+    gave them, and the edit log's Review flags (``misfits``: pins the rig
+    no longer fits, see _fixed)."""
     if plan.pk:
         plan.appearances.all().delete()       # cascades assignments and actions
     rows = {r.pk: r for part_rows in rows_by_part.values() for r in part_rows}
@@ -392,6 +453,14 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
     if moved:
         flags.append({'kind': 'moved', 'row': None, 'person': None,
                       'text': 'Moved from the RF they had: {}.'.format('; '.join(c['text'] for c in moved))})
+    R = solver.rig(solver_settings(values))
+    for a in result.appearances:
+        if a.skey in (misfits or {}):
+            rf, pool = misfits[a.skey]
+            flags.append({'kind': 'rig', 'row': a.on_row, 'person': a.person,
+                          'text': 'Line {}: your RF {} pin is {} on this rig \u2014 now RF {} ({}).'.format(
+                              line(a.on_row) or '?', rf, misfit_text(rf, pool, R), main.get(a.skey),
+                              display_pool(pool))})
     keys = {a.skey for a in result.appearances}
     last = {}
     for e in edits:
@@ -410,7 +479,7 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
     plan.segments = seg_out
     plan.flags = flags
     plan.packs = [{'rf': p.rf, 'pool': p.pool, 'label': p.label, 'host': p.host,
-                   'backup_of': p.backup_of, 'spare': p.spare} for p in result.packs]
+                   'backup_of': p.backup_of, 'spare': p.spare, 'over': p.over} for p in result.packs]
     plan.swaps = result.swaps
     plan.policy_counts = counts
     plan.changes = changes

@@ -26,6 +26,28 @@
                                                       minute: '2-digit', hour12: false});
     });
 
+    // Settings: the rig in one line as it is typed, worded as display.rig_text.
+    var rigForm = $('mp-settings'), rigOut = $('mp-rig');
+    if (rigForm && rigOut && rigForm.elements.wireless_channels) {
+        var rigUpdate = function () {
+            function n(name) { var v = rigForm.elements[name].value.trim(); return v === '' ? null : parseInt(v, 10) || 0; }
+            function span(a, b) { return b < a ? '' : a === b ? String(a) : a + '–' + b; }
+            var ch = n('wireless_channels'), hh = n('handheld_channels') || 0, sp = n('spare_handhelds') || 0;
+            if (ch === null) {
+                rigOut.textContent = 'No rig set: body from 1, handhelds after the last body pack' +
+                    (sp ? ', ' + sp + ' spare' + (sp === 1 ? '' : 's') + ' after them' : '');
+            } else if (hh > ch || sp > hh) {
+                rigOut.textContent = hh > ch ? 'Handhelds: at most the ' + ch + ' wireless channels.'
+                    : 'Spare handhelds: at most the ' + hh + ' handhelds.';
+            } else {
+                rigOut.textContent = [['Body', span(1, ch - hh)], ['Handheld', span(ch - hh + 1, ch - sp)],
+                                      ['Spare', span(ch - sp + 1, ch)]]
+                    .filter(function (x) { return x[1]; }).map(function (x) { return x[0] + ' ' + x[1]; }).join(' · ');
+            }
+        };
+        rigForm.addEventListener('input', rigUpdate);
+    }
+
     // Import: the header button opens the file picker, choosing a file submits.
     var file = $('mp-file'), importBtn = $('mp-import-btn');
     if (file && importBtn) {
@@ -461,8 +483,12 @@
             html += '<button type="button" class="mp-btn small' + (busy.length ? ' busy' : '') + '" role="menuitem" data-rf="' + l.rf +
                 '" data-pool="' + l.pool + '"' + (own ? ' disabled' : '') + '>' + label + ' <span>' + state + '</span></button>';
         });
-        html += '<button type="button" class="mp-btn small" role="menuitem" data-rf="' + editBox.dataset.newRf + '" data-pool="' + pool +
-            '">New pack <span>RF ' + editBox.dataset.newRf + '</span></button></div>';
+        // No rig: a new pack. With one, every channel is already a lane.
+        if (editBox.dataset.newRf) {
+            html += '<button type="button" class="mp-btn small" role="menuitem" data-rf="' + editBox.dataset.newRf + '" data-pool="' + pool +
+                '">New pack <span>RF ' + editBox.dataset.newRf + '</span></button>';
+        }
+        html += '</div>';
         var other = pool === 'HH' ? 'body' : 'HH';
         html += '<button type="button" class="mp-btn small" role="menuitem" data-switch="' + other + '">Switch to ' + poolWord(other) + '</button>';
         if (chip.classList.contains('pinned')) html += '<button type="button" class="mp-btn small" role="menuitem" data-unpin="1">Unpin</button>';

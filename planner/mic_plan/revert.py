@@ -207,6 +207,8 @@ def preview(day):
             diff = {f: v for f, v in old.items() if cur.get(f) != v}
             if diff:
                 out.actions.append('Put back {}: {}'.format(names.thing(model, pk, cur), ', '.join(
+                    # A row reads 'RF 20 · <session>' already: 'back to' it, not 'RF RF 20'.
+                    'back to {}'.format(_word(f, v, names)) if f == 'assignment_id' else
                     '{} {}'.format(FIELD_WORDS.get(f, f.replace('_', ' ')), _word(f, v, names)) for f, v in diff.items())))
     for model, pk, values in b.get('deleted', []):
         if model in ORDER:
