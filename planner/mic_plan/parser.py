@@ -95,6 +95,25 @@ TITLE_WORDS = {
 }
 TITLE_CONNECTORS = {'&', 'and', 'of', '/', 'the'}                  # Client A: "President & CEO"
 
+# -- Exits and re-entries (cue-free parts) -------------------------------------
+# Client E: "Max Exits", "Ola exit after ...", "Gil exits when ...",
+# "Max and Dr. Reyes Exit", "both exit". Client C: "Panel Exits (Kit Stays)".
+# A verb followed by ":" is a stage note ("Exit: BSR"), not an exit.
+_EXIT = re.compile(r'(?i)\b(?:exit(?:s|ing)?|leaves?|leaving|walks?\s+off|goe?s?\s+off\s*stage|off\s*stage)\b(?!\s*:)')
+_REENTER = re.compile(r'(?i)\b(?:re-?\s?enter(?:s|ing)?|returns?)\b(?!\s*:)')
+_STAYS = re.compile(r'(?i)\b(?:stays?|remains?)\b')
+# Group words before an exit: everyone on stage, except hosts and anyone
+# named as staying ("Presenters Exit", "Panel Exits (Kit Stays)") ...
+GROUP_ALL = {'all', 'everyone', 'everybody', 'panel', 'panelist', 'panelists', 'panellists',
+             'presenter', 'presenters', 'speakers', 'guests'}
+# ... or the two people most recently brought on ("Bo thanks Zed; both exit").
+GROUP_BOTH = {'both'}
+
+# -- Names in a "not listed" description, for "Add people from this line" ------
+# Client E "Name, Name, MD, Name": a suffix after a comma belongs to the name before it.
+NAME_SUFFIXES = {'md', 'do', 'phd', 'rn', 'np', 'pa-c', 'pa', 'dnp', 'dds', 'mba', 'jr', 'sr',
+                 'ii', 'iii', 'iv', 'esq', 'cpa', 'facs', 'faad'}
+
 # -- Send / catch cues ---------------------------------------------------------
 _VERB = re.compile(r'(?i)^(?:sends?|sending|catch(?:es)?|catching)$')  # Client A
 CUE_FILLERS = ('to', 'will')        # Client A: "Lee to send ...", "Sam will ..."
@@ -857,14 +876,25 @@ def analyse(rows, crew=None, known=()):
     # Final pass with the whole roster known, rows in order: who each cell
     # names (a short name is whoever was introduced last), and what is left.
     speakers = {}
+    exits, enters, unknown_exits = {}, {}, []
     refs = Refs(roster)
     for i, row in enumerate(rows):
         refs.row = i
         for raw in _welcome_names(row['description'], speaker_text):
             refs.saw(roster.resolve(raw))
+        if row['speaker']:
+            names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs)
+        else:
+            names, leftovers = [], []
+        out, back, unknown = exits_and_entries(row['description'], roster, refs)
+        for name in out:
+            exits.setdefault(name, set()).add(i)
+        for name in back:
+            enters.setdefault(name, set()).add(i)
+        for word in unknown:
+            unknown_exits.append((i, word))
         if not row['speaker']:
             continue
-        names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs)
         speakers[i] = names
         for name in names:
             mention(name, i)
@@ -908,6 +938,11 @@ def analyse(rows, crew=None, known=()):
     if not listed or len(listed & cued) < NO_CUE_MIN_COVERAGE * len(listed):
         # Cues are absent or too sparse to mean anything: on/off comes from segment times.
         window_flags = [f for f in window_flags if f[0] != 'no_cue']
+        # Exits decide off times only where there are no cues: say which
+        # exit lines name nobody ShowStack knows.
+        for i, word in unknown_exits:
+            flags.append(('who_exits', i, 'Line {}: who exits? "{}" is not a person ShowStack '
+                          'recognised, so nobody comes off here.'.format(rows[i]['line'] or '?', word), None))
     flags += window_flags
     for name in sorted(roster.bsm_only):
         first = min(mentions.get(name, {None}) - {None}, default=None)
@@ -916,7 +951,8 @@ def analyse(rows, crew=None, known=()):
                           (rows[first]['line'] if first is not None else '') or '?', name), name))
 
     people = {name: {'rows': sorted(mentions.get(name, ())), 'mic_hint': hints.get(name, ''),
-                     'bsm_only': name in roster.bsm_only, 'intro': refs.intro.get(name)}
+                     'bsm_only': name in roster.bsm_only, 'intro': refs.intro.get(name),
+                     'exits': sorted(exits.get(name, ())), 'enters': sorted(enters.get(name, ()))}
               for name in roster.found | set(mentions)}
     starts = [times[i].t0 for i in segments]
     ends = [times[i].t1 for i in segments]
@@ -982,6 +1018,144 @@ def _description_flags(rows, roster, speakers):
             flags.append(('description_names', i, 'Line {}: description names people not in the '
                           'Speaker column — check who goes on'.format(row['line'] or '?'), None))
     return flags
+
+
+def _verbs(text):
+    """[(kind, start, end)] of exit / re-entry / stays words in ``text``, in order."""
+    found = [(kind, m.start(), m.end()) for kind, rx in (('exit', _EXIT), ('enter', _REENTER), ('stay', _STAYS))
+             for m in rx.finditer(text or '')]
+    return sorted(found, key=lambda v: v[1])
+
+
+def _trailing_names(toks, roster, refs):
+    """Names ending the token list, joined by "," "and" "&": who an exit verb
+    right after them is about. (names, unresolved last word or None)."""
+    end = len(toks)
+    while end and toks[end - 1] in (',', ';'):
+        end -= 1
+    names = []
+    while end:
+        hit = None
+        for start in range(max(0, end - 5), end):
+            name, used = roster.match_at(toks, start)
+            if name and start + used == end:
+                hit = (start, name)
+                break
+        if hit is None and refs is not None:
+            for start in (end - 2, end - 1):
+                if start < 0:
+                    continue
+                name, used = refs.short_at(toks, start)
+                if name and name is not AMBIGUOUS and start + used == end:
+                    hit = (start, name)
+                    break
+        if hit is None:
+            break
+        names.insert(0, hit[1])
+        end = hit[0]
+        if end and toks[end - 1].lower() in (',', '&', 'and'):
+            end -= 1
+            continue
+        break
+    unresolved = None
+    if not names and toks:
+        last = _clean_token(toks[-1])
+        if last and _is_name_word(last) and last.lower() not in GROUP_ALL | GROUP_BOTH \
+                and not (last.isupper() and len(last) <= 4):
+            unresolved = last
+    return names, unresolved
+
+
+def group_exit(text):
+    """('all' | 'both', [lower-cased words named as staying]) for a
+    description whose exit is said of a group, else None. Pure: the plan
+    reads it straight from the stored rows."""
+    verbs = _verbs(text)
+    kind, stays = None, []
+    prev = 0
+    for verb, start, end in verbs:
+        words = [_clean_token(t).lower() for t in _tokens(text[prev:start]) if _clean_token(t)]
+        if verb == 'exit' and words:
+            if words[-1] in GROUP_ALL:
+                kind = kind or 'all'
+            elif words[-1] in GROUP_BOTH:
+                kind = kind or 'both'
+        elif verb == 'stay':
+            run = []
+            for w in reversed(words):
+                if w in (',', '&', 'and'):
+                    continue
+                if not w[:1].isalpha() or w in NOT_NAMES:
+                    break
+                run.insert(0, w)
+            stays += run
+        prev = end
+    return (kind, stays) if kind else None
+
+
+def exits_and_entries(text, roster, refs=None):
+    """(names exiting, names re-entering, words not recognised before an exit)
+    in one description. Names are read as in Speaker cells: full names, a
+    first name meaning whoever was introduced last, "Dr. Surname"."""
+    exits, enters, unknown = [], [], []
+    prev = 0
+    for verb, start, end in _verbs(text):
+        toks = _tokens(text[prev:start])
+        prev = end
+        if verb == 'stay' or not toks:
+            continue
+        if _clean_token(toks[-1]).lower() in GROUP_ALL | GROUP_BOTH:
+            continue
+        names, unresolved = _trailing_names(toks, roster, refs)
+        (exits if verb == 'exit' else enters).extend(names)
+        if unresolved and verb == 'exit':
+            unknown.append(unresolved)
+    return list(dict.fromkeys(exits)), list(dict.fromkeys(enters)), unknown
+
+
+def description_candidates(text):
+    """The names a "not listed" description brings on, for the user to check:
+    the text after the welcome / introduce wording (else all of it), split on
+    "," "and" "&", a suffix such as "MD" kept on the name before it, and only
+    items of two to four capitalised words ("Title - Name" keeps the name)."""
+    text = re.sub(r'\([^)]*\)', ' ', text or '')
+    m = _BRINGS_ON.search(text)
+    rest = text[m.end():] if m else text
+    # "the 3 presenters. Name, Name": what follows the last full stop or colon
+    # before the first name list.
+    pieces, piece = [], ''
+    for chunk in re.split(r'(\.\.\.|…|:|\.\s)', rest):
+        last = piece.split()[-1].lower() if piece.split() else ''
+        if chunk in ('...', '…', ':') or (chunk == '. ' or chunk.startswith('.') and not chunk.strip('. ')) \
+                and not (last in HONORIFICS or len(last) == 1):
+            pieces.append(piece)
+            piece = ''
+        else:
+            piece += chunk
+    pieces = [p for p in pieces + [piece] if p.strip()]
+    out = []
+    for piece in pieces:
+        items = [i.strip() for i in re.split(r',|&|\band\b', piece)]
+        for item in items:
+            if not item:
+                continue
+            if out and item.strip('. ').lower() in NAME_SUFFIXES:
+                out[-1] = '{}, {}'.format(out[-1], item.strip(' .'))
+                continue
+            item = re.split(r'\s[-–—]\s', item)[-1]       # "your MC's - Name"
+            words = item.split()
+            while words and not _is_name_word(words[0]) and not _honorific(words[0]):
+                words = words[1:]
+            while words and not _is_name_part(words[-1]):
+                words = words[:-1]
+            if not 2 <= len(words) <= 4 or len(words) == 2 and _honorific(words[0]):
+                continue
+            if not all(_is_name_part(w) or _honorific(w) for w in words):
+                continue
+            if any(_clean_token(w).lower() in TITLE_WORDS | ORG_WORDS for w in words):
+                continue
+            out.append(' '.join(w.strip(',;:!?"“”') for w in words))
+    return list(dict.fromkeys(out))
 
 
 def segment_heading(rows, start, end, named=(), minutes=None):

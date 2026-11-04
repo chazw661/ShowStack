@@ -6,6 +6,7 @@ stat tiles. plan.json is built from the same pieces (``plan_data``).
 from planner.models import MicPlanA2Action, MicPlanAppearance
 
 from .display import first_name, format_action, overlap_warning
+from .parser import description_candidates
 from .solver import hm
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
@@ -272,8 +273,12 @@ def review_cards(parts, plan, apps, people, labels):
             note = assumed.get((w.get('person'), row.pk)) if row else None
             if note:
                 used.add((w.get('person'), row.pk))
-            cards.append(_card(w['kind'], labels.get(w['kind'], w['kind']), w['text'], part, row,
-                               w.get('person'), numbers, note))
+            card = _card(w['kind'], labels.get(w['kind'], w['kind']), w['text'], part, row,
+                         w.get('person'), numbers, note)
+            if w['kind'] == 'description_names' and row is not None:
+                # "Add people from this line": the names it brings on, to check.
+                card['candidates'] = description_candidates(row.description)
+            cards.append(card)
     # An assumption about a line the parser did not flag goes on the parser's
     # card for the same person inside that appearance (e.g. "No cue" two
     # lines further down), and only otherwise gets a card of its own.
@@ -290,7 +295,7 @@ def review_cards(parts, plan, apps, people, labels):
                 used.add((a.person_id, a.note_row_id))
                 break
     if plan is not None:
-        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill',
+        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill', 'who_both': 'Both?',
                        'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
                        'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved'}
         for f in plan.flags:
@@ -303,6 +308,11 @@ def review_cards(parts, plan, apps, people, labels):
                 cards.append(_card('assumed', 'Assumed', '{}: {}'.format(a.person_name, a.assumed),
                                    part, row, a.person_id, numbers, None, plan=True))
     for p in people:
+        for line in p.flags.get('added_missing', []):
+            cards.append(_card('added_missing', labels.get('added_missing', 'Added'),
+                               'Line {} no longer in this showflow: {} was added on at it by hand. Kept, but '
+                               'not in the plan until you move or remove it in People.'.format(line, p.display_name),
+                               None, None, p.pk, numbers, None))
         if p.flags.get('gone'):
             cards.append(_card('gone', labels.get('gone', 'Gone'),
                                '{} is no longer in this showflow but has a merge, Presenter link or '
@@ -313,6 +323,7 @@ def review_cards(parts, plan, apps, people, labels):
 
 def _card(kind, label, text, part, row, person, numbers, note, plan=False):
     return {'kind': kind, 'label': label, 'text': text, 'part': part.pk if part else None,
+            'row_pk': row.pk if row else None,
             'part_no': numbers.get(part.pk) if part else None, 'row_order': row.order if row else None,
             'line': (row.line_no or '#{}'.format(row.order + 1)) if row else '', 'person': person,
             'note': note, 'plan': plan}
@@ -391,8 +402,8 @@ def plan_data(plan, apps, actions):
     }
 
 
-ESTIMATE_WARNING = ('Based on line estimates: part of this day has no send/catch cues, so on and off '
-                    'times come from the lines that name each person.')
+ESTIMATE_WARNING = ('Based on line estimates: part of this day has no send/catch cues, so each person is '
+                    'on from a line naming them to an exit line or the end of their segment.')
 STALE_WARNING = 'The showflow changed after this plan was made. Re-generate it on the Mic Plan page.'
 
 

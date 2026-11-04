@@ -9,8 +9,10 @@ over the stored rows of every part and reconciles the day's people with what
 it found.
 
 Only what the user set survives a rebuild: merges (``aliases``; only
-``merge`` writes them), a mic hint picked by hand (``mic_hint_locked``) and a
-Presenter link chosen by hand (``flags['presenter_by'] == 'user'``).
+``merge`` writes them), a mic hint picked by hand (``mic_hint_locked``), a
+Presenter link chosen by hand (``flags['presenter_by'] == 'user'``) and
+appearances added by hand (``flags['added']``, PR 5.2: kept by the label of
+their line, so they survive Re-read and Replace).
 Everything the parser derived -- the people themselves, their lines, an
 automatic Presenter match, a hint read from a callout -- is worked out again
 from scratch, so a parser fix is never undone by the state an older parse
@@ -18,6 +20,7 @@ left behind.
 """
 
 import logging
+import secrets
 import time
 from datetime import timedelta
 
@@ -29,9 +32,9 @@ from planner.models import (
 )
 
 from .extract import ShowflowError, extract
-from .parser import analyse, name_key
+from .parser import NAME_SUFFIXES, analyse, name_key
 
-USER_FLAGS = ('presenter_by',)   # keys of ShowflowPerson.flags a rebuild keeps
+USER_FLAGS = ('presenter_by', 'added')   # keys of ShowflowPerson.flags a rebuild keeps
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +179,9 @@ def merge(source, target):
         target.flags = {**target.flags, **_user_flags(source)}
     if not target.mic_hint_locked and source.mic_hint_locked:
         target.mic_hint, target.mic_hint_locked = source.mic_hint, True
+    if source.flags.get('added'):
+        target.flags = {**target.flags,
+                        'added': list(target.flags.get('added', [])) + list(source.flags['added'])}
     source.delete()
     target.save()
     rebuild_day(target.day)
@@ -217,6 +223,85 @@ def remove_person(person):
     rebuild_day(day)
 
 
+def _entry(part, row, off_row, user, from_flag):
+    line = lambda r: r.line_no or '#{}'.format(r.order + 1)
+    return {'id': secrets.token_hex(4), 'part': part.pk, 'line': line(row),
+            'off': line(off_row) if off_row is not None else None, 'from_flag': from_flag,
+            'by': user.pk if user else None, 'by_name': user.get_username() if user else '',
+            'at': timezone.now().isoformat()}
+
+
+def _person_for(day, name):
+    """The day's person ``name`` means (by name, an alias, or the name
+    without a title or suffix), or a new one."""
+    name = ' '.join(name.split())[:200]
+    key, loose = name_key(name), match_key(name)
+    for p in day.showflow_people.all():
+        if (p.name_key == key or key in {name_key(a) for a in p.aliases}
+                or match_key(p.display_name) == loose):
+            return p
+    return ShowflowPerson.objects.create(day=day, display_name=name, name_key=key[:200])
+
+
+@transaction.atomic
+def add_people(day, names, part, row, user, off_row=None, from_flag=False):
+    """Add an appearance by hand for each of ``names`` (PR 5.2), on at
+    ``row``: from a "not listed" line (``from_flag``) or People's Add person.
+    Returns the people."""
+    if part.day_id != day.pk or row.showflow_import_id != part.pk:
+        raise ValueError('Not a line of this day.')
+    if off_row is not None and (off_row.showflow_import_id != part.pk or off_row.order <= row.order):
+        raise ValueError('The off line must come after the on line, in the same showflow.')
+    out = []
+    for name in names:
+        if not name.strip():
+            continue
+        person = _person_for(day, name)
+        person.flags = {**person.flags, 'added': list(person.flags.get('added', []))
+                        + [_entry(part, row, off_row, user, from_flag)]}
+        person.save(update_fields=['flags'])
+        out.append(person)
+    if not out:
+        raise ValueError('Give at least one name.')
+    rebuild_day(day)
+    return out
+
+
+def _find_entry(person, entry_id):
+    entry = next((e for e in person.flags.get('added', []) if e['id'] == entry_id), None)
+    if entry is None:
+        raise ValueError('That appearance is no longer there.')
+    return entry
+
+
+@transaction.atomic
+def update_added(person, entry_id, part, row, off_row, user):
+    """Move a hand-added appearance to other lines."""
+    entry = _find_entry(person, entry_id)
+    if part.day_id != person.day_id or row.showflow_import_id != part.pk:
+        raise ValueError('Not a line of this day.')
+    if off_row is not None and (off_row.showflow_import_id != part.pk or off_row.order <= row.order):
+        raise ValueError('The off line must come after the on line, in the same showflow.')
+    new = _entry(part, row, off_row, user, entry.get('from_flag', False))
+    new['id'] = entry['id']
+    person.flags = {**person.flags, 'added': [new if e['id'] == entry_id else e
+                                              for e in person.flags['added']]}
+    person.save(update_fields=['flags'])
+    rebuild_day(person.day)
+
+
+@transaction.atomic
+def remove_added(person, entry_id):
+    """Drop a hand-added appearance; the person too if nothing else keeps them."""
+    _find_entry(person, entry_id)
+    day = person.day
+    person.flags = {**person.flags, 'added': [e for e in person.flags['added'] if e['id'] != entry_id]}
+    if not person.flags['added']:
+        del person.flags['added']
+    person.save(update_fields=['flags'])
+    rebuild_day(day)          # someone only hand-added, with nothing else set, is deleted here
+
+
 def _merges(people):
     """What the parser is told about the day's people: merges only. A hint
     or Presenter link set by hand stays with the person by name after the
@@ -230,7 +315,36 @@ def _user_flags(person):
 
 def has_user_state(person):
     return bool(person.aliases or person.mic_hint_locked
-                or person.flags.get('presenter_by') == 'user')
+                or person.flags.get('presenter_by') == 'user' or person.flags.get('added'))
+
+
+def match_key(name):
+    """A name compared without a title or a suffix: "Dr. Ann Lee, MD" and
+    "Ann Lee" are the same person when adding people by hand."""
+    words = name_key(name).replace(',', ' ').split()
+    while words and words[-1].strip('.') in NAME_SUFFIXES:
+        words.pop()
+    if len(words) > 2 and words[0].rstrip('.') in ('dr', 'mr', 'mrs', 'ms', 'mx', 'prof'):
+        words = words[1:]
+    return ' '.join(words)
+
+
+def resolve_added(entry, parts, rows_by_part):
+    """(part, on row, off row or None) for a hand-added appearance, by the
+    label of its line: in its own part, else (a Replace made a new part) the
+    first part of the day with that line. None: the line is gone."""
+    ordered = sorted(parts, key=lambda p: (p.pk != entry.get('part'), p.part_order, p.pk))
+    for part in ordered:
+        rows = rows_by_part[part.pk]
+        on = next((r for r in rows if (r.line_no or '#{}'.format(r.order + 1)) == entry['line']), None)
+        if on is None:
+            continue
+        off = None
+        if entry.get('off'):
+            off = next((r for r in rows if (r.line_no or '#{}'.format(r.order + 1)) == entry['off']
+                        and r.order > on.order), None)
+        return part, on, off
+    return None
 
 
 def _hint_rank(hint):
@@ -274,25 +388,48 @@ def rebuild_day(day):
                 by_key[person.name_key] = person
             found[person.name_key] = person
             state = states.setdefault(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': True,
-                                                  'hint': ''})
+                                                  'hint': '', 'exits': {}, 'enters': {}})
             state['rows'][str(part.pk)] = [rows[i].order for i in info['rows']]
+            for kind in ('exits', 'enters'):
+                if info.get(kind):
+                    state[kind][str(part.pk)] = [rows[i].order for i in info[kind]]
             if info.get('intro') is not None:
                 state['intro'][str(part.pk)] = rows[info['intro']].order
             state['bsm_only'] = state['bsm_only'] and info['bsm_only']
             if _hint_rank(info['mic_hint']) > _hint_rank(state['hint']):
                 state['hint'] = info['mic_hint']
 
+    # People added by hand are on the day whether or not a showflow names them.
+    for p in people:
+        if p.flags.get('added') and p.name_key not in found:
+            found[p.name_key] = p
     keep = {p.pk for p in found.values()}
     gone = [p for p in people if p.pk not in keep and has_user_state(p)]
     day.showflow_people.exclude(pk__in=keep | {p.pk for p in gone}).delete()
+    rows_by_part = {part.pk: rows for part, rows, result in results}
+    loose = {}
+    for p in presenters.values():
+        loose.setdefault(match_key(p.name), p)
+    cleared = set()          # (part pk, row order) of "not listed" lines people were added from
     for person in found.values():
-        state = states[person.pk]
-        person.flags = {'rows': state['rows'], 'intro': state['intro'],
-                        'bsm_only': state['bsm_only'], **_user_flags(person)}
+        state = states.get(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': False, 'hint': person.mic_hint,
+                                       'exits': {}, 'enters': {}})
+        missing = []
+        for entry in person.flags.get('added', []):
+            where = resolve_added(entry, parts, rows_by_part)
+            if where is None:
+                missing.append(entry['line'])
+            elif entry.get('from_flag'):
+                cleared.add((where[0].pk, where[1].order))
+        person.flags = {'rows': state['rows'], 'intro': state['intro'], 'bsm_only': state['bsm_only'],
+                        'exits': state['exits'], 'enters': state['enters'], **_user_flags(person)}
+        if missing:
+            person.flags['added_missing'] = missing
         if not person.mic_hint_locked:
             person.mic_hint = state['hint']
         if person.flags.get('presenter_by') != 'user':
-            person.presenter = presenters.get(person.name_key)   # automatic: matched afresh
+            # Automatic: matched afresh, by name (a title or suffix aside).
+            person.presenter = presenters.get(person.name_key) or loose.get(match_key(person.display_name))
         person.save(update_fields=['flags', 'mic_hint', 'presenter'])
     for person in gone:
         person.flags = {'rows': {}, 'intro': {}, 'bsm_only': False, 'gone': True,
@@ -309,7 +446,9 @@ def rebuild_day(day):
             {'kind': kind, 'text': text,
              'row_order': rows[row].order if row is not None else None,
              'person': by_key[name_key(name)].pk if name else None}
-            for kind, row, text, name in result.flags]
+            for kind, row, text, name in result.flags
+            # People were added from this "not listed" line: it is dealt with.
+            if not (kind == 'description_names' and row is not None and (part.pk, rows[row].order) in cleared)]
         part.save(update_fields=['warnings'])
     ShowflowEvent.objects.bulk_create(events)
     # People, lines or cues may have changed: the day's plan no longer matches.

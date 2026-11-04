@@ -24,8 +24,9 @@ from planner.models import (
 
 from . import solver
 from .display import describe_change, describe_edit
+from . import importer
 from .importer import active_parts
-from .parser import NO_CUE_MIN_COVERAGE, segment_heading
+from .parser import NO_CUE_MIN_COVERAGE, group_exit, segment_heading
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ def build_day(day):
     for e in events:
         cue_rows.setdefault((e.person_id, e.row.showflow_import_id), set()).add(e.row.order)
 
-    people, listings = [], {}
+    people, listings, exits, enters, added = [], {}, {}, {}, []
     for p in day.showflow_people.all():
         if p.flags.get('gone'):
             continue
@@ -138,7 +139,21 @@ def build_day(day):
             skip = cue_rows.get((p.pk, part.pk), set())
             keys += [by_order[o] for o in p.flags.get('rows', {}).get(str(part.pk), [])
                      if o in by_order and o not in skip]
+            for kind, into in (('exits', exits), ('enters', enters)):
+                orders = p.flags.get(kind, {}).get(str(part.pk), [])
+                if orders:
+                    into.setdefault(p.pk, []).extend(by_order[o] for o in orders if o in by_order)
         listings[p.pk] = keys
+        for entry in p.flags.get('added', []):
+            where = importer.resolve_added(entry, parts, rows_by_part)
+            if where is not None:
+                added.append(solver.Added(p.pk, where[1].pk, where[2].pk if where[2] is not None else None))
+    groups = []
+    for part in parts:
+        for r in rows_by_part[part.pk]:
+            g = group_exit(r.description)
+            if g is not None:
+                groups.append(solver.GroupExit(r.pk, g[0], tuple(g[1])))
 
     # A part's on/off comes from its cues when they cover at least half of
     # the people it lists (the parser's "No cue" rule); otherwise from lines.
@@ -151,7 +166,8 @@ def build_day(day):
             cued.add(part.pk)
     cues = tuple(solver.Cue(e.kind, e.person_id, e.row_id, e.event_min) for e in events)
     data = solver.Day(rows=tuple(rows), segments=tuple(segments), people=tuple(people), cues=cues,
-                      listings=listings, cued_parts=frozenset(cued))
+                      listings=listings, cued_parts=frozenset(cued), exits=exits, enters=enters,
+                      group_exits=tuple(groups), added=tuple(added))
     mode = 'cues' if parts and len(cued) == len(parts) else 'line estimates'
     return data, rows_by_part, mode
 

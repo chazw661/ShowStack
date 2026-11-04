@@ -181,6 +181,36 @@ below is a placeholder, and the test fixture
 - If someone is missing, the line is flagged "description names people not
   in the Speaker column — check who goes on". They are not made into people.
 
+## Exits and re-entries
+
+- A description says who exits: names joined by `,` `and` `&` right before
+  exit / exits / exiting / leave(s) / walk(s) off / off stage ("Ola exits
+  when the exam is complete", "Max and Dr. Reyes Exit", "Ned welcomes Bo
+  and Zed to stage Ned exits"). The names are read as in Speaker cells: a
+  full name, a first name meaning whoever was introduced last, "Dr. Surname".
+- Re-enter(s) / reenter(s) / returns brings someone back on ("Max re-enters
+  with Dr. Una Reyes").
+- A verb followed by ":" is a stage note ("Exit: BSR"), not an exit.
+- A group before the exit verb: all / everyone / panel / panelists /
+  presenters / speakers exit ends everyone on stage in that part except
+  hosts and anyone named as staying ("Panel Exits (Kit Stays)"). "both
+  exit" ends the two non-hosts on stage, and only when exactly two are on.
+- They decide off times only in parts without cues (see The plan).
+
+## Adding people by hand
+
+- A **Not listed** card offers "Add people from this line": the names after
+  the welcome / introduce wording, split on `,` `and` `&`, with a suffix
+  such as "MD" or "PhD" kept on the name before it ("Name, Name, MD, Name"),
+  and a label before " - " dropped ("your MC'S - Name & Name"). The list is
+  edited before confirming. Adding clears the card.
+- People's **Add person** takes a name, an on line and an optional off line.
+- A name already on the day (by name, an alias, or the name without a title
+  or suffix) is matched, not duplicated; a Presenter is linked the same way.
+- Each added appearance is user state (`flags['added']`), kept on Re-read
+  and Replace by the label of its line. If that line is gone it stays, flagged
+  "Line N no longer in this showflow", and is left out of the plan.
+
 ## Flags
 
 - **Not caught:** sent, but never caught afterwards.
@@ -201,6 +231,11 @@ below is a placeholder, and the test fixture
 - **Gone:** someone no part of the day mentions any more, kept because of a
   merge, Presenter link or mic hint the user set. Shown in People with a
   Remove button.
+- **Exit?:** a part without cues has an exit line naming nobody ShowStack
+  recognises ("who exits?"). Nobody comes off there.
+- **Both?** (plan): "both exit" with other than two non-hosts on stage. Nobody
+  comes off there.
+- **Added:** a line someone was added on by hand is no longer in the showflow.
 
 ## Re-import and re-read
 
@@ -214,6 +249,7 @@ scratch. Only what the user set is carried over:
 | A mic hint picked by hand (`mic_hint_locked`) | A hint read from a callout ("HH", "backup") |
 | A Presenter chosen by hand, including "no presenter" (`flags['presenter_by'] = 'user'`) | An automatic Presenter match by name |
 | A segment set to break or not by hand (`ShowflowImport.break_overrides`, by line) | Break detection |
+| Appearances added by hand (`flags['added']`, by line label) | Exit and re-entry lines (`flags['exits']`, `flags['enters']`) |
 
 The parser is only told about merges (each alias and the name it points to).
 A hand-set hint or Presenter link stays with the person by name after the
@@ -243,12 +279,21 @@ from the database and saves the day's `MicPlan`). Times are minutes.
     parser's "No cue" rule, "listed in a segment" means named by the
     segment's heading row (its Speaker cell), not by a welcome line just
     before it.
-- **A part without cues:** on at the first row naming them; off when the row
-  after their last naming row starts, at most the end of that segment (the
-  end of the segment when that row has no later time). Rows in the same or the
-  next segment are one appearance; a segment without them splits it.
+- **A part without cues** (PR 5.2): on at a row naming them (Speaker /
+  welcome) or saying they re-enter. Off at the earliest of a row saying they
+  exit (by name, or a group: see Exits) and the end of the segment they came
+  on in. An exit on their walk-on row, or on a row with no time of its own
+  later than the walk-on, ends when the next row with a later time starts.
+  Named again after an exit, or in a later segment: a new appearance (back
+  on at once in the next segment: one wearing, the pack stays on). Before
+  PR 5.2 they came off when the row after their last naming row started, so
+  a panel named once on its title row was de-mic'd minutes into the panel.
+- **Added by hand:** on at the line; off at the off line if one was given,
+  else by the rule above, in any part, cued or not.
 - **Hosts:** 3+ appearances, or listed in 3+ segments: one appearance from
-  their first on to their last off, one pack, never de-mic'd.
+  their first on to their last off, one pack, never de-mic'd. Counted the way
+  appearances were before PR 5.2 (consecutive segments one stretch, exits
+  ignored), so exits and re-entries never make someone a host.
 - **Back on within the pre-mic lead** of coming off: the pack stays on (no
   de-mic, no new mic).
 
