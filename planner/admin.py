@@ -3,6 +3,7 @@
 # Django imports
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
+from django.contrib.admin.utils import unquote
 from django.contrib import messages
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
@@ -7927,20 +7928,31 @@ showstack_admin_site.register(CommCrewName, CommCrewNameAdmin)
 showstack_admin_site.register(CommBeltPack, CommBeltPackAdmin)
 class ShowflowImportAdmin(BaseEquipmentAdmin):
     """Mic Plan's sidebar entry. Imports are made and reviewed on the Mic Plan
-    page (planner.views_mic_plan); the admin only routes there."""
+    page (planner.views_mic_plan); the admin only routes there.
+
+    Delete permission follows the project role (BaseEquipmentAdmin) rather
+    than being refused: deleting a ShowDay cascades to its imports, and the
+    admin's delete confirmation asks this class about every one of them, so
+    a flat False blocked every owner and editor from deleting a day that had
+    Mic Plan data. An import is never deleted on its own here: once the usual
+    checks pass, its delete page routes to the Mic Plan page like the list
+    does (a viewer still gets 403 and another project's import not-found)."""
 
     project_scoped_fks = {'day': 'project'}
 
     def changelist_view(self, request, extra_context=None):
         return redirect('planner:mic_plan')
 
+    def delete_view(self, request, object_id, extra_context=None):
+        obj = self.get_object(request, unquote(object_id))
+        if obj is not None and self.has_delete_permission(request, obj):
+            return redirect('planner:mic_plan')
+        return super().delete_view(request, object_id, extra_context)
+
     def has_add_permission(self, request):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
         return False
 
 
