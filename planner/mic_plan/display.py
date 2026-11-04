@@ -60,3 +60,25 @@ def describe_change(c):
     MicPlan.changes."""
     now = ', now {}'.format(POOL_WORDS[c['to_pool']]) if c['to_pool'] != c['from_pool'] else ''
     return '{} (line {}) RF {} \u2192 RF {}{}'.format(first_name(c['name']), c['line'] or '?', c['from'], c['to'], now)
+
+
+# Marks on an A2 action, in words (the schedule and its PDF must read in
+# black and white). Late and tight are already in the reason.
+MARKS = {'host': 'HOST', 'backup': 'BACKUP', 'pinned': 'PINNED', 'mid_session': 'MID-SESSION',
+         'conflict': 'CONFLICT'}
+
+
+def overlap_warning(n, m):
+    """Parts ``n`` and ``m`` (numbers) run at the same time."""
+    return ('Parts {} and {} overlap in time — this plan treats them as one stage with shared A2s and packs. '
+            "If they're separate rooms, plan each room on its own day for now.").format(n, m)
+
+
+def turnover_text(mics, demics):
+    """"Turn over: 3 de-mics, 2 mics" for a break, or ''."""
+    out = []
+    if demics:
+        out.append('{} de-mic{}'.format(demics, '' if demics == 1 else 's'))
+    if mics:
+        out.append('{} mic{}'.format(mics, '' if mics == 1 else 's'))
+    return 'Turn over: ' + ', '.join(out) if out else ''

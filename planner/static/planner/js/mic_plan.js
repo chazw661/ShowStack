@@ -10,6 +10,14 @@
     function $(id) { return document.getElementById(id); }
     function all(sel, el) { return Array.prototype.slice.call((el || root).querySelectorAll(sel)); }
 
+    // The PDF link carries the browser's time zone, for its printed clock times.
+    try {
+        var zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (zone) all('a[data-tz-link]').forEach(function (a) {
+            a.href += (a.href.indexOf('?') < 0 ? '?' : '&') + 'tz=' + encodeURIComponent(zone);
+        });
+    } catch (e) { /* UTC on the server */ }
+
     // Import: the header button opens the file picker, choosing a file submits.
     var file = $('mp-file'), importBtn = $('mp-import-btn');
     if (file && importBtn) {

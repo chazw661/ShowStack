@@ -1,0 +1,90 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>A2 schedule{% if sched and sched.a2_count > 1 %} {{ sched.a2 }}{% endif %} — {{ day }} — ShowStack</title>
+<link rel="stylesheet" href="{% static 'css/mic_plan.css' %}">
+<link rel="stylesheet" href="{% static 'css/mic_plan_a2.css' %}">
+</head>
+{% comment %}
+The A2 schedule: one A2's mics and de-mics for a show day, grouped by session
+and segment, for a second window or an iPad at the stage. Read-only for
+everyone. The A2 taps a segment to make it current (kept in this browser);
+the clock never moves it. plan.json?head=1 is polled every 30 s and a newer
+version only raises a banner: the list is never reshuffled on its own.
+{% endcomment %}
+<body class="a2-body">
+<div class="mp-page a2" id="a2-root"
+     {% if plan %}data-version="{{ plan.version }}" data-stale="{{ plan.stale|yesno:'1,' }}"
+     data-head="{% url 'planner:mic_plan_json' day.pk %}?head=1"
+     data-store="mp-a2-current:{{ day.pk }}:{{ sched.a2 }}"{% endif %}>
+    <header class="a2-bar" id="a2-bar">
+        <div class="a2-title">
+            <h1>A2 schedule{% if sched and sched.a2_count > 1 %} <span class="a2-who">A2 {{ sched.a2 }}</span>{% endif %}</h1>
+            <p class="a2-sub">{{ day.project.name }} · {{ day }}{% if plan %} · Plan v{{ plan.version }}{% if head.edit_count %} · edited: {{ head.edit_count }} change{{ head.edit_count|pluralize }}{% endif %}{% endif %}</p>
+        </div>
+        <nav class="a2-tools" aria-label="Schedule">
+            {% if sched and sched.a2_count > 1 %}
+            <span class="a2-pick" role="group" aria-label="Which A2">
+                {% for n in a2_links %}<a class="mp-btn small{% if n == sched.a2 %} primary{% endif %}" href="?a2={{ n }}"{% if n == sched.a2 %} aria-current="page"{% endif %}>A2 {{ n }}</a>{% endfor %}
+            </span>
+            {% endif %}
+            {% if plan %}<a class="mp-btn small" data-tz-link href="{% url 'planner:mic_plan_pdf' day.pk %}{% if sched.a2_count > 1 %}?a2={{ sched.a2 }}{% endif %}" target="_blank" rel="noopener">PDF</a>{% endif %}
+        </nav>
+        <p class="a2-banner updated" id="a2-updated" role="status" hidden>
+            <button type="button" id="a2-refresh">Plan updated — tap to refresh</button>
+        </p>
+        <p class="a2-banner stale" id="a2-stale" role="status"{% if not plan.stale %} hidden{% endif %}>
+            STALE: the showflow changed after this plan was made. Re-generate it on the Mic Plan page.
+        </p>
+    </header>
+
+    {% if not plan %}
+    <p class="a2-empty">No plan for {{ day }} yet. Generate it on the Mic Plan page.</p>
+    {% else %}
+    {% for w in head.warnings %}{% if not forloop.first or not plan.stale %}<p class="mp-banner warn a2-warn" role="note">{{ w }}</p>{% endif %}{% endfor %}
+    <p class="a2-hint">Tap a segment to make it current. {{ head.settings }}</p>
+    <main class="a2-list" id="a2-list">
+        {% for sess in sched.sessions %}
+        <section class="a2-session" aria-label="Session {{ sess.number }}">
+            <h2 class="a2-session-head">Session {{ sess.number }} <span>{{ sess.time }}</span></h2>
+            {% for seg in sess.segments %}
+            <div class="a2-seg{% if seg.is_break %} brk{% endif %}{% if not seg.actions %} quiet{% endif %}" data-key="{{ seg.key }}" data-i="{{ seg.i }}" data-acts="{{ seg.actions|length }}">
+                <button type="button" class="a2-seg-head" aria-pressed="false">
+                    <span class="a2-seg-name">{% if seg.is_break and seg.name|upper != 'BREAK' %}<b class="a2-tag brk">BREAK</b> {% endif %}{{ seg.name }}</span>
+                    <span class="a2-seg-meta">
+                        <span class="mono">{{ seg.time }}</span>
+                        {% if seg.line %}<span class="mono">line {{ seg.line }}</span>{% endif %}
+                        {% if seg.busy %}<span class="mono">busy {{ seg.busy }} of {{ seg.span }} min</span>{% endif %}
+                        <b class="a2-tag now">CURRENT</b><b class="a2-tag next">NEXT</b>
+                    </span>
+                </button>
+                {% for note in seg.notes %}<p class="a2-note">{{ note }}</p>{% endfor %}
+                {% if seg.actions %}
+                <ol class="a2-acts">
+                    {% for a in seg.actions %}
+                    <li class="a2-act {{ a.kind }}{% if a.late %} late{% elif a.tight %} tight{% endif %}">
+                        <span class="t mono">{{ a.time }}</span>
+                        <span class="verb">{{ a.verb }}</span>
+                        <span class="name">{{ a.name }}</span>
+                        <span class="rf">{{ a.rf }}</span>
+                        <span class="why">{{ a.reason }}{% for m in a.marks %} <b class="a2-tag m">{{ m }}</b>{% endfor %}</span>
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% empty %}
+        <p class="a2-empty">This plan has no segments.</p>
+        {% endfor %}
+        {% if not sched.count and sched.sessions %}<p class="a2-empty">No mics or de-mics for {% if sched.a2_count > 1 %}A2 {{ sched.a2 }}{% else %}the A2{% endif %} in this plan.</p>{% endif %}
+    </main>
+    {% endif %}
+</div>
+<script src="{% static 'planner/js/mic_plan_a2.js' %}"></script>
+</body>
+</html>
