@@ -73,6 +73,10 @@
             <a class="mp-btn{% if not last_push or push_behind %} primary{% endif %}" href="{% url 'planner:mic_plan_push' day.pk %}"
                title="Preview every change to this day's Mic Tracker sessions. Nothing is written until you confirm.">Send to Mic Tracker</a>
             {% endif %}
+            {% if last_push %}
+            <a class="mp-btn" href="{% url 'planner:mic_plan_revert' day.pk %}"
+               title="Preview putting Mic Tracker back as it was before the last push. Nothing is written until you confirm.">Revert last push</a>
+            {% endif %}
             {% endif %}
             {% endif %}
             <a class="mp-btn" href="{% url 'planner:mic_tracker' %}">Mic Tracker →</a>
@@ -159,6 +163,7 @@
         {% if plan %}<p class="mp-banner" role="status">Pack use: <b>{{ policy_name }}</b>{% if policy == 'recycle_at_breaks' %}. A pack worn this session goes to someone else only after a break.{% else %}. A freed pack goes to the next person who needs one.{% endif %}</p>{% endif %}
         {% for w in overlaps %}<p class="mp-banner warn" role="status">{{ w }}</p>{% endfor %}
         {% if last_push %}<p class="mp-banner{% if push_behind %} warn{% endif %}" role="status" id="mp-pushed">Sent to Mic Tracker: v{{ last_push.plan_version }} at <time data-local datetime="{{ last_push.pushed_at|date:'c' }}">{{ last_push.pushed_at|date:"M j, H:i" }} UTC</time>{% if last_push.pushed_by %} by {{ last_push.pushed_by.get_username }}{% endif %}.{% if push_behind %} The plan has changed since (now v{{ plan.version }}){% if can_edit %} — send it again to update Mic Tracker{% endif %}.{% endif %}</p>
+        {% elif last_reverted %}<p class="mp-banner" role="status" id="mp-reverted">The push of v{{ last_reverted.plan_version }} was reverted{% if last_reverted.summary.reverted.by %} by {{ last_reverted.summary.reverted.by }}{% endif %}: Mic Tracker is as it was before it.</p>
         {% elif plan and can_edit and push_refusal and not plan.stale %}<p class="mp-banner" role="status">Send to Mic Tracker is off: {{ push_refusal }}</p>{% endif %}
         {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so on and off times come from the lines that name each person.</p>{% endif %}
         {% if not plan %}<p class="mp-banner" role="status">No plan yet.{% if can_edit %} Check the showflow and people, then press <b>Generate plan</b>.{% endif %}</p>{% endif %}

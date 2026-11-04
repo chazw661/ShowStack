@@ -36,6 +36,9 @@ from planner.models import (
     ShowflowPerson,
 )
 
+from planner.utils.typed_names import loose
+
+from . import mt_rows
 from .importer import active_parts
 from .schedule import segment_key, sessions as session_numbers
 from .solver import HH, hm
@@ -59,7 +62,8 @@ class PushRefused(Exception):
 
 
 def last_push(day):
-    return MicPlanPush.objects.filter(day=day).first()
+    """The day's latest push that has not been reverted (revert.py)."""
+    return MicPlanPush.objects.filter(day=day).exclude(summary__has_key='reverted').first()
 
 
 def refusal(plan, apps):
@@ -98,7 +102,7 @@ def plan_sessions(plan, parts):
         t1 = max(s['t1'] for s in segs)
         out.append({'key': segment_key(segs[0], numbers), 't0': head['t0'], 't1': t1,
                     'first': min(s['t0'] for s in segs),
-                    'name': '{} ({}–{})'.format(head['name'] or 'Session', clock(head['t0']), clock(t1))[:NAME_MAX]})
+                    'name': '{} ({}-{})'.format(head['name'] or 'Session', clock(head['t0']), clock(t1))[:NAME_MAX]})
     for k, s in enumerate(out):
         s['start'] = s['first'] if k else -INF
         s['end'] = out[k + 1]['first'] if k + 1 < len(out) else INF
@@ -185,7 +189,7 @@ class Preview:
     started: list = field(default_factory=list)    # [{pk, name}] sessions with a MIC'D mic
     new_presenters: list = field(default_factory=list)
     matched_presenters: list = field(default_factory=list)
-    labels: list = field(default_factory=list)     # ['RF 3 (Opening Session (8:00–8:45))', ...]
+    labels: list = field(default_factory=list)     # ['RF 3 (Opening Session (8:00-8:45))', ...]
     new_sessions: list = field(default_factory=list)   # names: print all their labels
     targets: list = field(default_factory=list)
     matched: dict = field(default_factory=dict)    # session key -> MicSession pk
@@ -302,7 +306,8 @@ def preview(day, plan=None):
     mt_sessions = {s.pk: s for s in MicSession.objects.filter(day=day)}
     names = {s.pk: s.name for s in mt_sessions.values()}
 
-    # Sessions: through the last push's map, then by exact name.
+    # Sessions: through the last push's map, then by name (case, dashes and
+    # spaces aside: pushes before #174 wrote an en dash).
     matched, claimed = {}, set()
     for t in targets:
         pk = prev_sessions.get(t['key'])
@@ -313,7 +318,7 @@ def preview(day, plan=None):
         if t['key'] in matched:
             continue
         pk = next((s.pk for s in sorted(mt_sessions.values(), key=lambda s: (s.order, s.pk))
-                   if s.name == t['name'] and s.pk not in claimed), None)
+                   if loose(s.name) == loose(t['name']) and s.pk not in claimed), None)
         if pk is not None:
             matched[t['key']] = pk
             claimed.add(pk)
@@ -706,21 +711,21 @@ def apply(day, version, digest, keep=(), include_started=False, user=None):
         if i['kind'] == 'slot_remove':
             s = PresenterSlot.objects.filter(pk=i['data']['pk']).first()
             if s is not None:
-                before['deleted'].append(['presenterslot', s.pk, _values(s, SLOT_FIELDS)])
+                before['deleted'].append(['presenterslot', s.pk, mt_rows.full(s)])
                 s.delete()
     removed_rows = set()
     for i in items:
         if i['kind'] == 'row_remove':
             r = MicAssignment.objects.filter(pk=i['data']['pk']).first()
             if r is not None and not r.presenter_slots.exists():
-                before['deleted'].append(['micassignment', r.pk, _values(r, ROW_FIELDS)])
+                before['deleted'].append(['micassignment', r.pk, mt_rows.full(r)])
                 removed_rows.add(r.pk)
                 r.delete()
     for i in items:
         if i['kind'] == 'session_remove':
             s = MicSession.objects.filter(pk=i['data']['pk']).first()
             if s is not None and not s.mic_assignments.exists():
-                before['deleted'].append(['micsession', s.pk, _values(s, SESSION_FIELDS)])
+                before['deleted'].append(['micsession', s.pk, mt_rows.full(s)])
                 s.delete()
 
     # Links back to People, where there was none.
@@ -739,6 +744,16 @@ def apply(day, version, digest, keep=(), include_started=False, user=None):
             updated(s, ('num_mics',), 'micsession')
             MicSession.objects.filter(pk=pk).update(num_mics=n)
 
+    # What this push left in every session it touched: a revert compares
+    # Mic Tracker with it to list what changed there since.
+    touched = set(sessions.values()) - skipped
+    touched |= {pk for model, pk, *_ in before['created'] + before['updated'] + before['deleted']
+                if model == 'micsession'}
+    for model, pk, *rest in before['deleted']:
+        if model == 'micassignment':
+            touched.add(rest[0]['session_id'])
+    before['scope'] = sorted(touched)
+    before['after'] = mt_rows.state(touched)
     push = _record(day, plan, p, sessions, slot_keys, skipped, include_started, user, before, items, keep)
     return push
 

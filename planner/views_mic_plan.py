@@ -28,7 +28,7 @@ from django.utils.cache import add_never_cache_headers
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import importer, page, planning, push, schedule
+from planner.mic_plan import importer, page, planning, push, revert, schedule
 from planner.mic_plan.display import describe_edit
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
@@ -204,6 +204,7 @@ def mic_plan(request):
         'backup_choices': ShowflowPerson.BACKUP_TYPE_CHOICES,
         'can_edit': can_edit,
         'last_push': last_push,
+        'last_reverted': revert.last_reverted(day) if day and last_push is None else None,
         'push_behind': bool(plan and last_push and last_push.plan_version != plan.version),
         'push_refusal': push.refusal(plan, apps) if plan else '',
         'max_pages': importer.MAX_PAGES,
@@ -375,6 +376,44 @@ def plan_push(request, pk):
         'nothing': not preview.changes,
         'up_to_date': not preview.changes and preview.last is not None
         and preview.last.plan_version == preview.plan.version,
+    })
+
+
+@staff_member_required
+@edit_rights_required_page
+def plan_revert(request, pk):
+    """Revert the last Send to Mic Tracker. GET: what it would do (nothing is
+    written). POST: do it, if it is still what the preview showed."""
+    day = _day(request, pk)
+    if request.method == 'POST':
+        try:
+            push_pk = int(request.POST.get('push', ''))
+        except ValueError:
+            messages.error(request, 'Reload the preview and try again.')
+            return redirect('planner:mic_plan_revert', day.pk)
+        try:
+            done = revert.apply(day, push_pk, request.POST.get('digest', ''),
+                                anyway=request.POST.get('anyway') == '1', user=request.user)
+        except push.PushRefused as e:
+            messages.error(request, str(e))
+            if e.status == 409:
+                return redirect('planner:mic_plan_revert', day.pk)
+            return _back(day)
+        messages.success(request, 'Reverted the push of plan v{}: Mic Tracker is back as it was before it.'.format(
+            done.plan_version))
+        return _back(day)
+    if request.method != 'GET':
+        return HttpResponse(status=405)
+    try:
+        preview = revert.preview(day)
+    except push.PushRefused as e:
+        messages.error(request, str(e))
+        return _back(day)
+    from planner.views import _shared_header_context
+    return render(request, 'planner/mic_plan_revert.html', {
+        **_shared_header_context(request),
+        'day': day,
+        'preview': preview,
     })
 
 

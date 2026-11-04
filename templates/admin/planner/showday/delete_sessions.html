@@ -1,0 +1,79 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+Delete every Mic Tracker session of one Show Day (ShowDayAdmin.delete_sessions_view).
+One typed confirmation, the day's date or DELETE, checked on the server; the
+copy button and paste are there so nobody has to type it out.
+{% endcomment %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+    .sd-del { max-width: 720px; }
+    .sd-del table { width: 100%; margin: 12px 0 18px; }
+    .sd-del td.n, .sd-del th.n { text-align: right; font-variant-numeric: tabular-nums; }
+    .sd-del .a2 { color: #ffb86b; }
+    #sd-del-gate {
+        margin: 18px 0; padding: 14px 16px; border: 1px solid var(--ss-field-border, #42454d);
+        border-left: 3px solid #ff6b6b; border-radius: 5px; background: var(--ss-surface, #1e1f23);
+    }
+    #sd-del-gate label { display: block; font-size: 13px; line-height: 1.5; margin-bottom: 9px; }
+    #sd-del-gate code { font-weight: 700; padding: 1px 5px; border-radius: 3px; user-select: all;
+                        background: var(--ss-raised, #26282d); }
+    #sd-del-confirm { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 14px; border-radius: 4px; }
+    .sd-copy { margin-left: 6px; font-size: 12px; padding: 2px 8px; cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; <a href="{% url 'admin:planner_showday_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; <a href="{% url 'admin:planner_showday_change' day.pk %}">{{ day }}</a>
+    &rsaquo; Delete all sessions
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="sd-del">
+    <h1>Delete all sessions for {{ day }}</h1>
+    {% if rows %}
+    <p>This deletes these {{ rows|length }} Mic Tracker session{{ rows|length|pluralize }} and every RF, presenter slot, note
+        and session photo in them. The day, its presenters and its Mic Plan stay.</p>
+    <table>
+        <thead><tr><th>Session</th><th class="n">RFs</th><th class="n">Presenters</th><th class="n">Photos</th><th class="n">MIC'D</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+            <tr><td>{{ r.session.name }}</td><td class="n">{{ r.rfs }}</td><td class="n">{{ r.slots }}</td>
+                <td class="n{% if r.photos %} a2{% endif %}">{{ r.photos }}</td>
+                <td class="n{% if r.micd %} a2{% endif %}">{{ r.micd }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <form method="post">{% csrf_token %}
+        <div id="sd-del-gate">
+            <label for="sd-del-confirm">Type the day's date <code id="sd-del-expected">{{ expected }}</code><button type="button" class="sd-copy" data-copy="{{ expected }}">Copy</button> or <code>DELETE</code> to confirm.</label>
+            <input type="text" name="confirm" id="sd-del-confirm" autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="{{ expected }} or DELETE">
+        </div>
+        <input type="submit" class="button deletelink" value="Delete {{ rows|length }} session{{ rows|length|pluralize }}" style="background:#ba2121;color:#fff;">
+        <a class="button cancel-link" href="{% url 'admin:planner_showday_change' day.pk %}">Cancel</a>
+    </form>
+    {% else %}
+    <p>{{ day }} has no sessions.</p>
+    <p><a class="button" href="{% url 'admin:planner_showday_change' day.pk %}">Back</a></p>
+    {% endif %}
+</div>
+<script>
+document.querySelectorAll('.sd-copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+        var text = b.getAttribute('data-copy');
+        var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () {});
+        } else {
+            var input = document.getElementById('sd-del-confirm');
+            input.value = text; input.focus(); input.select(); done();
+        }
+    });
+});
+</script>
+{% endblock %}

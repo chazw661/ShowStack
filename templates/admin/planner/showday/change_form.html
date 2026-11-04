@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+{% if original and has_delete_permission and original.sessions.exists %}
+<li>
+    <a href="{% url 'admin:planner_showday_delete_sessions' original.pk %}" id="showday-delete-sessions"
+       title="Delete every Mic Tracker session of this day after one typed confirmation. The day itself stays."
+       style="color:#ff8a8a;">Delete all sessions for this day</a>
+</li>
+{% endif %}
+{{ block.super }}
+{% endblock %}
