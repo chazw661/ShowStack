@@ -7175,7 +7175,7 @@ class MicPlan(models.Model):
     generated_at = models.DateTimeField()
     generated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name='+')
-    # +1 on every generate (and, from PR 3, every edit).
+    # +1 on every generate, edit and undo.
     version = models.PositiveIntegerField(default=0)
     settings = models.JSONField(default=dict, blank=True)     # MicPlanSettings at generation
     cue_mode = models.CharField(max_length=20, choices=CUE_MODE_CHOICES, default='cues')
@@ -7191,6 +7191,9 @@ class MicPlan(models.Model):
     # Packs each policy needs for this day at the plan's other settings, pack
     # counts blank: {policy: {body, hh, mid_session}}.
     policy_counts = models.JSONField(default=dict, blank=True)
+    # What the latest generate, edit or undo changed against the version
+    # before it: [{key, name, line, from, to, from_pool, to_pool, pinned}].
+    changes = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name = 'Mic plan'
@@ -7227,7 +7230,12 @@ class MicPlanAppearance(models.Model):
     assumed = models.CharField(max_length=200, blank=True)
     note_row = models.ForeignKey(ShowflowRow, on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='+')
-    pinned_rf = models.PositiveSmallIntegerField(null=True, blank=True)   # PR 3
+    # solver.Appearance.skey: what edits are keyed on (survives re-solves
+    # and re-imports, unlike ``key``).
+    skey = models.CharField(max_length=300, blank=True)
+    # From the edit log: the RF and/or body/HH type the A2 pinned it to.
+    pinned_rf = models.PositiveSmallIntegerField(null=True, blank=True)
+    pinned_type = models.CharField(max_length=4, choices=MIC_TYPE_CHOICES, blank=True)
 
     class Meta:
         ordering = ['plan', 'on_min', 'key']
@@ -7241,7 +7249,7 @@ class MicPlanAppearance(models.Model):
 
 class MicPlanAssignment(models.Model):
     HOW_CHOICES = [('same as before', 'Same as before'), ('recycled', 'Recycled'), ('new', 'New'),
-                   ('host', 'Host'), ('backup', 'Backup')]
+                   ('host', 'Host'), ('backup', 'Backup'), ('pinned', 'Pinned')]
 
     appearance = models.ForeignKey(MicPlanAppearance, on_delete=models.CASCADE,
                                    related_name='assignments')
@@ -7257,6 +7265,34 @@ class MicPlanAssignment(models.Model):
 
     def __str__(self):
         return f'RF{self.rf_number} {self.appearance}'
+
+
+class MicPlanEdit(models.Model):
+    """One change the A2 made to a day's plan, in order. Replayed (by
+    appearance key) on every re-solve; an edit whose key no longer matches
+    is kept and reported, not applied. Undo deletes the last one."""
+    KIND_CHOICES = [('move_rf', 'Move to RF'), ('set_mic_type', 'Switch body/HH'), ('unpin', 'Unpin')]
+
+    plan = models.ForeignKey(MicPlan, on_delete=models.CASCADE, related_name='edits')
+    seq = models.PositiveIntegerField()
+    kind = models.CharField(max_length=12, choices=KIND_CHOICES)
+    key = models.CharField(max_length=300)               # MicPlanAppearance.skey
+    # move_rf: {rf, pool}; set_mic_type: {mic_type}; all: {name, line, from_rf, from_pool}
+    # as it was when made, for Undo and Review.
+    value = models.JSONField(default=dict, blank=True)
+    # The plan's RFs just before: {skey: [rf, pool]}. Undo re-solves preferring these.
+    before = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['plan', 'seq']
+        constraints = [
+            UniqueConstraint(fields=['plan', 'seq'], name='uniq_mic_plan_edit_seq'),
+        ]
+
+    def __str__(self):
+        return f'{self.plan} edit {self.seq} {self.kind} {self.key}'
 
 
 class MicPlanA2Action(models.Model):

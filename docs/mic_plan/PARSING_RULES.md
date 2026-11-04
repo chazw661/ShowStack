@@ -343,14 +343,52 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - "Pack changes" (stat tile): times a pack goes to someone other than who wore
   it last.
 
+### Edits (moves, pins, undo)
+- Every change the A2 makes is one entry in the day plan's edit log
+  (`MicPlanEdit`): Move to RF (drag a pack chart bar to a lane, tap a bar then
+  a lane, or a pack chip's menu), Switch body/HH, Unpin. Each is one POST
+  against the plan's version; a stale version is refused ("reload").
+- Edits are keyed by appearance, not by pk: the person's name key, the label
+  of the line they come on at, and how many of their earlier appearances
+  start on a line with that label (`kim keynote|113|0`). The key survives
+  re-solves, Re-read and Replace. An edit whose key no longer matches is kept,
+  not applied, and shown in Review ("Your change to <name> at line N no
+  longer matches the showflow").
+- Pins (the log replayed in order) are hard: a pinned appearance wears its RF
+  for its whole wearing (all appearances sharing that pack). It never waits
+  on the pack count. If its RF's wearer comes off before its walk-on it waits
+  for that de-mic (tight/late flags then say "RF 3 is with <name> until 8:57a
+  (your change at line 316)"); otherwise it takes the RF while it is still
+  worn, and Review shows a red conflict: "RF 5 on two people 9:05a–9:12a
+  (<name> and <name>) — your change at line 171." A pin that reuses a pack
+  mid-session under Recycle at breaks is an info card. A move onto a handheld
+  lane makes them handheld ("→ RF 13, now handheld").
+- Minimal change: every re-solve except Start over prefers each appearance's
+  RF from the version it replaces, before any other pack rule; the other
+  rules avoid RFs someone else is pinned or preferred to over the same
+  stretch. Pinned and preferred RFs keep their numbers; other packs take the
+  lowest free number. Appearances that could not keep their RF are listed on
+  one info card ("Moved"); the "N changed" pill lists every RF change of the
+  latest generate, edit or undo.
+- An edit or undo re-solves with the plan's own settings and skips the
+  lead-fix search (fix suggestions come back on the next Generate). Undo
+  removes the last edit and re-solves preferring the RFs from just before
+  it, which gives back that plan. No redo.
+- Re-generate offers "keeping my changes" (the log replayed, previous RFs
+  preferred: only what new data or settings force moves) and "Start over"
+  (clears the log, numbers every pack afresh; confirmed inline).
+- A stale plan takes no edits until it is re-generated. Viewers see pins and
+  changes, no controls.
+
 ## Interactions with the plan
 
 - A re-read changes `est_time`, and with it every on/off time, so it marks
   the day's MicPlan stale. So do an import, Replace, delete, merge, alias
   removal, crew change, Remove and a mic hint or backup type change. A plan
   settings change is shown as a banner (the plan keeps its settings snapshot).
-- PR 5: once a plan has been applied to Mic Tracker, Re-generate must treat
-  the current RF numbers as soft pins, so labels already printed stay valid.
+- PR 5: once a plan has been applied to Mic Tracker, Re-generate keeps the
+  applied RF numbers through the same path as "keeping my changes" (previous
+  RFs as soft preferences), so labels already printed stay valid.
 
 ## Reading time
 

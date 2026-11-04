@@ -5,16 +5,11 @@ stat tiles. plan.json is built from the same pieces (``plan_data``).
 
 from planner.models import MicPlanA2Action, MicPlanAppearance
 
-from .display import format_action
+from .display import first_name, format_action
 from .solver import hm
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
 LONG_WAIT = 10                       # a de-mic this long after the catch is shown in amber
-
-
-def first_name(name):
-    words = (name or '').replace('Dr. ', '').split()
-    return words[0] if words else name
 
 
 def _level(ratio):
@@ -58,9 +53,22 @@ def segment_rows(plan):
     return out
 
 
+def changed_keys(plan):
+    return {c['key'] for c in (plan.changes if plan else ())}
+
+
+def _edit_attrs(app, changed):
+    """What a bar or chip needs to be moved, and its marks."""
+    if app is None:
+        return {'key': '', 'pinned': False, 'changed': False, 'pool': ''}
+    return {'key': app.skey, 'pinned': app.pinned_rf is not None or bool(app.pinned_type),
+            'changed': app.skey in changed, 'pool': app.mic_type, 'on': app.on_min}
+
+
 def showflow_rows(part, rows, events, plan, apps, actions):
     """Annotate ``rows`` (one part, in order) for the Showflow + plan table."""
     a2_count = max(1, plan.settings.get('a2_count', 1)) if plan else 1
+    changed = changed_keys(plan)
     by_person = {}
     for a in apps:
         if a.person_id:
@@ -83,7 +91,7 @@ def showflow_rows(part, rows, events, plan, apps, actions):
         app = app_at(e.person_id, e.event_min, e.row_id)
         chips.setdefault(e.row_id, []).append({
             'kind': e.kind, 'person': e.person_id, 'name': first_name(e.person.display_name),
-            'rf': rf_of(app) if app else None})
+            'rf': rf_of(app) if app else None, **_edit_attrs(app, changed)})
     def cued_here(row_pk, person_id):
         return any(c['person'] == person_id and c['kind'] in ('send', 'catch') for c in chips.get(row_pk, ()))
 
@@ -93,10 +101,12 @@ def showflow_rows(part, rows, events, plan, apps, actions):
         rf = rf_of(a)
         if not cued_here(a.on_row_id, a.person_id):
             chips.setdefault(a.on_row_id, []).append(
-                {'kind': 'on', 'person': a.person_id, 'name': first_name(a.person_name), 'rf': rf})
+                {'kind': 'on', 'person': a.person_id, 'name': first_name(a.person_name), 'rf': rf,
+                 **_edit_attrs(a, changed)})
         if a.off_row_id and not a.is_host and not cued_here(a.off_row_id, a.person_id):
             chips.setdefault(a.off_row_id, []).append(
-                {'kind': 'off', 'person': a.person_id, 'name': first_name(a.person_name), 'rf': rf})
+                {'kind': 'off', 'person': a.person_id, 'name': first_name(a.person_name), 'rf': rf,
+                 **_edit_attrs(a, changed)})
 
     acts = {}
     for act in actions:
@@ -132,6 +142,7 @@ def pack_chart(plan, apps, actions):
         else:
             demic[key] = act.end_min
     slots = {}
+    changed = changed_keys(plan)
     for a in apps:
         for s in a.assignments.all():
             key = (a.pk, s.backup)
@@ -139,7 +150,8 @@ def pack_chart(plan, apps, actions):
             worn_to = demic.get(key, a.off_min)
             slots.setdefault(s.rf_number, []).append({
                 'person': a.person_id, 'name': a.person_name, 'first': first_name(a.person_name),
-                'on': a.on_min, 'off': a.off_min, 'from': worn_from, 'to': worn_to, 'backup': s.backup})
+                'on': a.on_min, 'off': a.off_min, 'from': worn_from, 'to': worn_to, 'backup': s.backup,
+                **_edit_attrs(a, changed)})
     times = [t for ss in slots.values() for s in ss for t in (s['from'], s['to'])]
     times += [s['t0'] for s in plan.segments] + [s['t1'] for s in plan.segments]
     if not times:
@@ -171,14 +183,28 @@ def pack_chart(plan, apps, actions):
                 s['name'], p['rf'], hm(s['from']), hm(s['on']), hm(s['off']), hm(s['to']))
             bars.append(dict(s, worn_left=pct(s['from']), worn_width=width(s['from'], s['to']),
                              stage_left=pct(s['on']), stage_width=width(s['on'], s['off']), tip=tip))
+        conflict = any(a['from'] < b['to'] and b['from'] < a['to'] for k, a in enumerate(slots.get(p['rf'], []))
+                       for b in slots.get(p['rf'], [])[k + 1:] if not a['backup'] and not b['backup'])
         lanes.append({'rf': p['rf'], 'pool': p['pool'], 'sub': sub, 'bars': bars,
-                      'host': p.get('host'), 'spare': p.get('spare')})
+                      'host': p.get('host'), 'spare': p.get('spare'), 'backup': bool(p.get('backup_of')),
+                      'conflict': conflict})
     bands = [{'name': s['name'], 'left': pct(s['t0']), 'width': width(s['t0'], s['t1']),
               'is_break': s['is_break'], 'label': ' '.join((s['name'] or '').split()[:3])
               if s['t1'] - s['t0'] >= 14 else '', 'tip': '{} {}–{}'.format(s['name'], hm(s['t0']), hm(s['t1']))}
              for s in plan.segments]
     ticks = [{'left': pct(t), 'label': hm(t)} for t in range(t0, t1 + 1, 60)]
-    return {'lanes': lanes, 'bands': bands, 'ticks': ticks}
+    regular = [p['rf'] for p in plan.packs if not p.get('spare') and not p.get('backup_of')]
+    return {'lanes': lanes, 'bands': bands, 'ticks': ticks, 'new_rf': max(regular, default=0) + 1}
+
+
+def lane_windows(chart):
+    """For the move menus and drag targets: each lane that can take a move,
+    with when it is worn and by whom (minutes; JSON for mic_plan.js)."""
+    if chart is None:
+        return []
+    return [{'rf': lane['rf'], 'pool': lane['pool'],
+             'worn': [[b['from'], b['to'], b['key'], b['first']] for b in lane['bars']]}
+            for lane in chart['lanes'] if not lane['spare'] and not lane['backup']]
 
 
 def review_cards(parts, plan, apps, people, labels):
@@ -222,7 +248,8 @@ def review_cards(parts, plan, apps, people, labels):
                 break
     if plan is not None:
         plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill',
-                       'reuse': 'Mid-session', 'break': 'Turnover'}
+                       'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
+                       'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved'}
         for f in plan.flags:
             part, row = rows.get(f.get('row'), (None, None))
             cards.append(_card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,
@@ -265,6 +292,7 @@ def stats(plan):
         'spare': sum(1 for p in plan.packs if p.get('spare')),
         'swaps': plan.swaps,
         'hot': hot,
+        'conflicts': sum(1 for f in plan.flags if f['kind'] == 'conflict'),
     }
 
 
@@ -301,11 +329,13 @@ def plan_data(plan, apps, actions):
         'packs': plan.packs,
         'swaps': plan.swaps,
         'flags': plan.flags,
+        'changes': plan.changes,
         'appearances': [{
             'key': a.key, 'person': a.person_id, 'name': a.person_name, 'part': a.part_id,
             'on_min': a.on_min, 'off_min': a.off_min, 'on_row': a.on_row_id, 'off_row': a.off_row_id,
             'on_line': a.on_line, 'off_line': a.off_line, 'mic_type': a.mic_type, 'source': a.source,
-            'is_host': a.is_host, 'assumed': a.assumed, 'pinned_rf': a.pinned_rf,
+            'is_host': a.is_host, 'assumed': a.assumed, 'skey': a.skey, 'pinned_rf': a.pinned_rf,
+            'pinned_type': a.pinned_type,
         } for a in apps],
         'assignments': [{'appearance': a.key, 'rf_number': s.rf_number, 'how': s.how, 'backup': s.backup}
                         for a in apps for s in a.assignments.all()],

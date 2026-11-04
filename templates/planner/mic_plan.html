@@ -38,15 +38,28 @@
                 <button type="button" class="mp-btn" id="mp-regen">Re-generate</button>
                 <span class="mp-ask" id="mp-regen-ask" hidden>
                     Replace the draft (v{{ plan.version }})?
-                    <button type="submit" class="mp-btn small primary">Re-generate</button>
+                    <button type="submit" name="mode" value="keep" class="mp-btn small primary"
+                            title="Your moves are kept, and everyone else keeps their RF wherever the showflow and settings allow.">Re-generate keeping my changes</button>
+                    <button type="button" class="mp-btn small" id="mp-over">Start over</button>
                     <button type="button" class="mp-btn small" id="mp-regen-cancel">Cancel</button>
                 </span>
-                <noscript><button type="submit" class="mp-btn">Replace the draft (v{{ plan.version }})</button></noscript>
+                <span class="mp-ask" id="mp-over-ask" hidden>
+                    {% if edit_count %}Clears your {{ edit_count }} change{{ edit_count|pluralize }} and numbers{% else %}Numbers{% endif %} every pack afresh. Start over?
+                    <button type="submit" name="mode" value="over" class="mp-btn small danger">Start over</button>
+                    <button type="button" class="mp-btn small" id="mp-over-cancel">Cancel</button>
+                </span>
+                <noscript><button type="submit" name="mode" value="keep" class="mp-btn">Replace the draft (v{{ plan.version }}), keeping my changes</button></noscript>
                 {% else %}
                 <button type="submit" class="mp-btn">Generate plan</button>
                 {% endif %}
             </form>
             {% endif %}
+            {% endif %}
+            {% if plan and can_edit %}
+            <span class="mp-edits" id="mp-edits">
+                <span class="mp-count">{{ edit_count }} change{{ edit_count|pluralize }}</span>
+                {% if undo_label %}<button type="button" class="mp-btn" id="mp-undo"{% if not editable %} disabled{% endif %}>Undo: {{ undo_label }}</button>{% endif %}
+            </span>
             {% endif %}
             <a class="mp-btn" href="{% url 'planner:mic_tracker' %}">Mic Tracker →</a>
             {% tutorial_button 'mic_plan' quiet=True %}
@@ -101,6 +114,7 @@
         <div class="mp-stat"><b>{{ stats.hosts }}</b><span>Host packs</span></div>
         <div class="mp-stat" title="Times a pack goes to someone other than who wore it last"><b>{{ stats.swaps }}</b><span>Pack changes</span></div>
         <div class="mp-stat{% if stats.hot %} warn{% endif %}"><b>{{ stats.hot }}</b><span>Segments A2 ≥ 90%</span></div>
+        {% if stats.conflicts %}<a class="mp-stat crit" href="#review"><b>{{ stats.conflicts }}</b><span>RF conflict{{ stats.conflicts|pluralize }}</span></a>{% endif %}
         {% endif %}
         <div class="mp-stat{% if cards %} warn{% endif %}"><b>{{ cards|length }}</b><span>To review</span></div>
         <button type="button" class="mp-stat mp-stat-settings" data-drawer="settings" title="Plan settings">
@@ -126,7 +140,7 @@
             <p class="mp-note">Import the day's showflow PDF (up to {{ max_pages }} pages and {{ max_mb }} MB). It is read now and not kept: only its rows are saved.</p>
         </div>
     {% else %}
-        {% if plan.stale %}<p class="mp-banner warn" role="status">The showflow, its people or their mic hints changed after this plan was made (v{{ plan.version }}). Re-generate to update it.</p>{% endif %}
+        {% if plan.stale %}<p class="mp-banner warn" role="status">The showflow, its people or their mic hints changed after this plan was made (v{{ plan.version }}). Re-generate to update it.{% if can_edit %} Moving packs is off until then.{% endif %}</p>{% endif %}
         {% if settings_changed %}<p class="mp-banner warn" role="status">Plan settings changed after this plan was made (v{{ plan.version }}). Re-generate to use them.</p>{% endif %}
         {% if plan %}<p class="mp-banner" role="status">Pack use: <b>{{ policy_name }}</b>{% if policy == 'recycle_at_breaks' %}. A pack worn this session goes to someone else only after a break.{% else %}. A freed pack goes to the next person who needs one.{% endif %}</p>{% endif %}
         {% if plan and plan.cue_mode == 'line estimates' %}<p class="mp-banner" role="status">Built from line estimates: {% if parts|length > 1 %}a part of this day has{% else %}this showflow has{% endif %} no send/catch cues, so on and off times come from the lines that name each person.</p>{% endif %}
@@ -144,6 +158,10 @@
                     <button type="button" class="mp-btn small" id="mp-pill-details" hidden>Details</button>
                     <button type="button" class="mp-btn small" id="mp-pill-clear">Clear</button>
                 </div>
+                {% if changes %}<details class="mp-changed" id="mp-changed">
+                    <summary>{{ changes|length }} changed</summary>
+                    <ul>{% for c in changes %}<li><button type="button" class="chip{% if c.pinned %} pinned{% endif %}" data-key="{{ c.key }}">{% if c.pinned %}{% include "planner/_mic_plan_pin.svg" %}{% endif %}{{ c.text }}</button></li>{% endfor %}</ul>
+                </details>{% endif %}
                 {% if blank_count %}<label id="mp-empty-wrap" class="mp-muted"><input type="checkbox" id="mp-show-empty"> Show {{ blank_count }} empty line{{ blank_count|pluralize }}</label>{% endif %}
             </div>
         </div>
@@ -168,7 +186,7 @@
                         {% if row.brk %}{% if can_edit %}<form class="mp-brk" method="post" action="{% url 'planner:mic_plan_break' part.pk %}">{% csrf_token %}<input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="is_break" value="{% if row.brk.is_break %}0{% else %}1{% endif %}"><button type="submit" class="mp-brk-toggle" aria-pressed="{% if row.brk.is_break %}true{% else %}false{% endif %}" title="{% if row.brk.is_break %}Packs worn before this segment can go to someone else after it. Press to make it not a break.{% else %}Press to make this segment a break: packs can go to someone else after it.{% endif %}">Break</button>{% if row.brk.set %} <span class="mp-brk-by">{% if row.brk.is_break %}break{% else %}not a break{% endif %} · set by {{ row.brk.by }}</span>{% endif %}</form>{% elif row.brk.is_break or row.brk.set %}<span class="mp-brk-by">{% if row.brk.is_break %}break{% else %}not a break{% endif %}{% if row.brk.set %} · set by {{ row.brk.by }}{% endif %}</span>{% endif %}{% endif %}
                     </td>
                     <td class="bsm">{{ row.bsm_html|safe }}</td>
-                    <td class="plan packs"><div class="cell">{% for c in row.chips %}{% if c.kind == 'send' or c.kind == 'on' %}<button type="button" class="chip send" data-who="{{ c.person }}">{{ c.name }}{% if c.kind == 'on' %} on{% endif %} <span class="rf" data-rf="{{ c.rf|default:'' }}">→{% if c.rf %} RF {{ c.rf }}{% endif %}</span></button>{% else %}<button type="button" class="chip catch" data-who="{{ c.person }}"><span class="rf" data-rf="{{ c.rf|default:'' }}">{% if c.rf %}RF {{ c.rf }} {% endif %}←</span> {{ c.name }}{% if c.kind == 'off' %} off{% endif %}</button>{% endif %}{% endfor %}</div></td>
+                    <td class="plan packs"><div class="cell">{% for c in row.chips %}{% if c.kind == 'send' or c.kind == 'on' %}<button type="button" class="chip send{% if c.pinned %} pinned{% endif %}{% if c.changed %} changed{% endif %}" data-who="{{ c.person }}" data-key="{{ c.key }}" data-pool="{{ c.pool }}" data-name="{{ c.name }}">{% if c.pinned %}{% include "planner/_mic_plan_pin.svg" %}{% endif %}{{ c.name }}{% if c.kind == 'on' %} on{% endif %} <span class="rf" data-rf="{{ c.rf|default:'' }}">→{% if c.rf %} RF {{ c.rf }}{% endif %}</span></button>{% else %}<button type="button" class="chip catch{% if c.pinned %} pinned{% endif %}{% if c.changed %} changed{% endif %}" data-who="{{ c.person }}" data-key="{{ c.key }}" data-pool="{{ c.pool }}" data-name="{{ c.name }}"><span class="rf" data-rf="{{ c.rf|default:'' }}">{% if c.rf %}RF {{ c.rf }} {% endif %}←</span> {% if c.pinned %}{% include "planner/_mic_plan_pin.svg" %}{% endif %}{{ c.name }}{% if c.kind == 'off' %} off{% endif %}</button>{% endif %}{% endfor %}</div></td>
                     <td class="plan acts">{% if row.acts %}<div class="act">{% for a in row.acts %}<span class="t">{{ a.time }}</span><span>{% if a.a2 %}<span class="a2">{{ a.a2 }}</span> {% endif %}<span class="verb {{ a.kind }}">{{ a.verb }}</span><button type="button" class="chip" data-who="{{ a.person }}">{{ a.name }} <span class="rf" data-rf="{{ a.rf_number }}">{{ a.rf }}</span></button> <span class="note{% if a.late %} crit{% elif a.long_wait or a.tight %} warn{% endif %}">{{ a.reason }}</span></span>{% endfor %}</div>{% endif %}</td>
                 </tr>
                 {% endfor %}
@@ -179,22 +197,24 @@
 
         <section id="v-packs" role="tabpanel" aria-labelledby="t-packs" hidden>
             {% if chart %}
-            <div class="mp-chart-wrap"><div class="mp-chart" id="mp-chart">
+            {% if editable %}<p class="mp-note mp-movehint" id="mp-movehint">Drag a bar up or down to another RF, or tap it and then tap a lane. Its times stay the same; everyone else keeps their RF wherever they can.</p>{% endif %}
+            <div class="mp-chart-wrap"><div class="mp-chart{% if editable %} editable{% endif %}" id="mp-chart">
                 <div class="axis">
                     {% for b in chart.bands %}<div class="band{% if b.is_break %} brk{% endif %}" style="left:{{ b.left }}%;width:{{ b.width }}%" title="{{ b.tip }}"><span>{{ b.label }}</span></div>{% endfor %}
                     {% for t in chart.ticks %}<span class="tick" style="left:{{ t.left }}%">{{ t.label }}</span>{% endfor %}
                 </div>
                 {% for lane in chart.lanes %}
-                <div class="lane{% if lane.spare %} spare{% endif %}" data-rf="{{ lane.rf }}">
+                <div class="lane{% if lane.spare %} spare{% endif %}{% if editable and not lane.spare and not lane.backup %} target{% endif %}{% if lane.conflict %} conflict{% endif %}" data-rf="{{ lane.rf }}" data-pool="{{ lane.pool }}">
                     <button type="button" class="rflab" data-rf="{{ lane.rf }}">RF {{ lane.rf }}<small>{% if lane.pool == 'HH' %}HH · {% endif %}{{ lane.sub }}</small></button>
                     <div class="track">
                         {% for b in chart.bands %}{% if b.is_break %}<div class="bg" style="left:{{ b.left }}%;width:{{ b.width }}%"></div>{% endif %}{% endfor %}
-                        {% for s in lane.bars %}<div class="worn" data-who="{{ s.person }}" style="left:{{ s.worn_left }}%;width:{{ s.worn_width }}%" title="{{ s.tip }}"></div><div class="stage" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%;width:{{ s.stage_width }}%" title="{{ s.tip }}"><span class="nm">{{ s.first }}</span></div><span class="under" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%" hidden>{{ s.first }}</span>{% endfor %}
+                        {% for s in lane.bars %}{% with mv=editable|yesno:"1," %}<div class="worn{% if mv and not s.backup %} movable{% endif %}{% if s.changed %} changed{% endif %}" data-who="{{ s.person }}" data-key="{% if not s.backup %}{{ s.key }}{% endif %}" style="left:{{ s.worn_left }}%;width:{{ s.worn_width }}%" title="{{ s.tip }}"></div><div class="stage{% if mv and not s.backup %} movable{% endif %}{% if s.pinned and not s.backup %} pinned{% endif %}{% if s.changed %} changed{% endif %}" data-who="{{ s.person }}" data-key="{% if not s.backup %}{{ s.key }}{% endif %}" style="left:{{ s.stage_left }}%;width:{{ s.stage_width }}%" title="{{ s.tip }}{% if s.pinned and not s.backup %} (pinned){% endif %}"><span class="nm">{% if s.pinned and not s.backup %}{% include "planner/_mic_plan_pin.svg" %}{% endif %}{{ s.first }}</span></div><span class="under" data-who="{{ s.person }}" style="left:{{ s.stage_left }}%" hidden>{{ s.first }}</span>{% endwith %}{% endfor %}
                     </div>
                 </div>
                 {% endfor %}
+                {% if editable %}<div class="lane target newlane" data-rf="{{ chart.new_rf }}" data-new="1"><span class="rflab">New pack<small>RF {{ chart.new_rf }}</small></span><div class="track"><span class="drop">Drop here for a new pack</span></div></div>{% endif %}
             </div></div>
-            <div class="mp-legend"><span><i class="k-stage"></i>On stage</span><span><i class="k-worn"></i>Mic'd off stage (mic → de-mic)</span><span><i class="k-break"></i>Break / lunch</span></div>
+            <div class="mp-legend"><span><i class="k-stage"></i>On stage</span><span><i class="k-worn"></i>Mic'd off stage (mic → de-mic)</span><span><i class="k-break"></i>Break / lunch</span><span>{% include "planner/_mic_plan_pin.svg" %}Pinned (moved by you)</span>{% if changes %}<span><i class="k-changed"></i>Changed by the last re-solve</span>{% endif %}</div>
             {% else %}
             <div class="mp-panel"><p class="mp-note">The pack chart appears once a plan is generated.</p></div>
             {% endif %}
@@ -343,6 +363,13 @@
         </form>
     </aside>
     {% endif %}
+    {% if editable %}
+    <div id="mp-edit" hidden data-version="{{ plan.version }}" data-new-rf="{{ chart.new_rf }}"
+         data-edit-url="{% url 'planner:mic_plan_edit' day.pk %}" data-undo-url="{% url 'planner:mic_plan_undo' day.pk %}">{% csrf_token %}</div>
+    {{ lanes|json_script:"mp-lanes" }}
+    <div class="mp-menu mp-movemenu" id="mp-movemenu" role="menu" hidden></div>
+    {% endif %}
+    <p class="mp-banner warn mp-toast" id="mp-edit-msg" role="alert" hidden></p>
 </div>
 <script src="{% static 'planner/js/mic_plan.js' %}"></script>
 {% endblock %}

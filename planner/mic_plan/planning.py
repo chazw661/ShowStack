@@ -2,6 +2,13 @@
 the importer stored, run ``solver.solve`` and save the result as the day's
 MicPlan (replacing the last draft, version + 1). Nothing here writes to Mic
 Tracker.
+
+Edits (PR 3): the A2's moves are an ordered log (MicPlanEdit) replayed as
+pins on every re-solve, keyed by appearance key, never by pk. Every re-solve
+but "Start over" also prefers the RFs of the version it replaces, so a move
+changes only what it must and a re-generate only what the new data forces.
+An edit or undo re-solves with the plan's own settings and skips the
+lead-fix search (fix suggestions return on the next Generate).
 """
 
 import logging
@@ -12,10 +19,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from planner.models import (
-    MicPlan, MicPlanA2Action, MicPlanAppearance, MicPlanAssignment, MicPlanSettings, ShowflowEvent,
+    MicPlan, MicPlanA2Action, MicPlanAppearance, MicPlanAssignment, MicPlanEdit, MicPlanSettings, ShowflowEvent,
 )
 
 from . import solver
+from .display import describe_change, describe_edit
 from .importer import active_parts
 from .parser import NO_CUE_MIN_COVERAGE, segment_heading
 
@@ -123,7 +131,7 @@ def build_day(day):
         people.append(solver.Person(
             key=p.pk, name=p.display_name, mic_type=solver.HH if p.mic_hint == 'HH' else solver.BODY,
             backup=(solver.HH if p.backup_mic_type == 'HH' else solver.BODY)
-            if p.mic_hint == 'backup' else None))
+            if p.mic_hint == 'backup' else None, name_key=p.name_key))
         keys = []
         for part in parts:
             by_order = {r.order: r.pk for r in rows_by_part[part.pk]}
@@ -163,22 +171,179 @@ def policy_counts(data, settings):
     return out
 
 
+class EditRefused(Exception):
+    """An edit or undo that was not applied: ``str(e)`` says why, ``status``
+    is the HTTP status for it."""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
+
+
+def snapshot(plan):
+    """{appearance key: [RF, pool]} of the plan's main (not backup) packs."""
+    if plan is None:
+        return {}
+    return {skey: [rf, pool] for skey, rf, pool in MicPlanAssignment.objects.filter(
+        appearance__plan=plan, backup=False).values_list('appearance__skey', 'rf_number', 'appearance__mic_type')
+        if skey}
+
+
+def replay(edits):
+    """(pins {skey: RF}, types {skey: pool}, pin pools {RF: pool}) from the
+    edit log in order; the last edit about a key wins."""
+    pins, types, pools = {}, {}, {}
+    for e in edits:
+        if e.kind == 'move_rf':
+            pins[e.key] = e.value['rf']
+            types[e.key] = e.value['pool']
+        elif e.kind == 'set_mic_type':
+            pins.pop(e.key, None)
+            types[e.key] = e.value['mic_type']
+        elif e.kind == 'unpin':
+            pins.pop(e.key, None)
+            types.pop(e.key, None)
+    for key, rf in pins.items():
+        pools[rf] = types[key]
+    return pins, types, pools
+
+
+def _fixed(edits, prefer, packs):
+    pins, types, pin_pools = replay(edits)
+    pools = {p['rf']: p['pool'] for p in packs or () if not p.get('spare') and not p.get('backup_of')}
+    pools.update(pin_pools)
+    return solver.Fixed(pins=pins, types=types, prefer={k: v[0] for k, v in prefer.items()}, pools=pools)
+
+
 @transaction.atomic
-def generate(day, user=None):
-    """Solve ``day`` with its project's settings and save it as the day's plan."""
+def generate(day, user=None, mode='keep'):
+    """Solve ``day`` with its project's settings and save it as the day's
+    plan. ``mode`` 'keep': replay the edit log and prefer the current
+    version's RFs; 'over': clear the log and number every pack afresh."""
+    plan = MicPlan.objects.select_for_update().filter(day=day).first()
+    if plan is not None and mode == 'over':
+        plan.edits.all().delete()
+    keep = plan is not None and mode == 'keep'
+    prev = snapshot(plan) if keep else {}
+    edits = list(plan.edits.all()) if plan is not None else []
+    fixed = _fixed(edits, prev, plan.packs if keep else ())
     values = settings_dict(project_settings(day.project))
-    data, rows_by_part, mode = build_day(day)
+    data, rows_by_part, mode_label = build_day(day)
     started = time.monotonic()
-    result = solver.solve(data, solver_settings(values))
+    result = solver.solve(data, solver_settings(values), fixed=fixed)
     counts = policy_counts(data, solver_settings(values))
     logger.info('Mic Plan generate: %d appearances, %d actions, %.3fs (project %s, day %s)',
                 len(result.appearances), len(result.actions), time.monotonic() - started,
                 day.project_id, day.pk)
+    plan = plan or MicPlan(day=day)
+    plan.generated_at = timezone.now()
+    plan.generated_by = user
+    plan.cue_mode = mode_label
+    return _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prev)
 
+
+def _plan_values(plan):
+    # Plans from before PR 2.2 have no pack_policy: they used fewest_packs.
+    return {'pack_policy': solver.FEWEST_PACKS, **plan.settings}
+
+
+def _resolve(plan, prefer):
+    """Re-solve after an edit or undo: the plan's own settings, the log's
+    pins, ``prefer``'s RFs, no lead-fix search."""
+    values = _plan_values(plan)
+    data, rows_by_part, _ = build_day(plan.day)
+    edits = list(plan.edits.all())
+    fixed = _fixed(edits, prefer, plan.packs)
+    started = time.monotonic()
+    result = solver.solve(data, solver_settings(values), suggest=False, fixed=fixed)
+    logger.info('Mic Plan edit re-solve: %d appearances, %.3fs (project %s, day %s)',
+                len(result.appearances), time.monotonic() - started, plan.day.project_id, plan.day_id)
+    return _save(plan, data, rows_by_part, result, values, plan.policy_counts, fixed, edits, snapshot(plan), prefer)
+
+
+def _locked(day, version):
     plan = MicPlan.objects.select_for_update().filter(day=day).first()
     if plan is None:
-        plan = MicPlan(day=day)
+        raise EditRefused('There is no plan for this day yet.', 404)
+    if version != plan.version:
+        raise EditRefused('The plan changed while you were looking at it (now v{}). Reload to see it, '
+                          'then make your change again.'.format(plan.version), 409)
+    if plan.stale:
+        raise EditRefused('The showflow changed after this plan was made. Re-generate it first.', 409)
+    return plan
+
+
+@transaction.atomic
+def edit(day, version, kind, key, value, user=None):
+    """Add one edit to the log and re-solve. ``value``: move_rf {rf, pool},
+    set_mic_type {mic_type}, unpin {}. Returns (plan, edit)."""
+    plan = _locked(day, version)
+    app = plan.appearances.filter(skey=key).prefetch_related('assignments').first() if key else None
+    if app is None:
+        raise EditRefused('That appearance is not in this plan.')
+    main = next((s for s in app.assignments.all() if not s.backup), None)
+    pools = {p['rf']: p for p in plan.packs}
+    if kind == 'move_rf':
+        try:
+            rf = int(value.get('rf'))
+        except (TypeError, ValueError):
+            raise EditRefused('Choose an RF.')
+        if not 1 <= rf <= 999:
+            raise EditRefused('Choose an RF from 1 to 999.')
+        lane = pools.get(rf)
+        if lane is not None and lane.get('backup_of'):
+            raise EditRefused('RF {} is a backup pack.'.format(rf))
+        if lane is not None and not lane.get('spare'):
+            pool = lane['pool']
+        else:
+            pool = value.get('pool') or app.mic_type
+        if pool not in (solver.BODY, solver.HH):
+            raise EditRefused('Choose body pack or handheld.')
+        clean = {'rf': rf, 'pool': pool}
+    elif kind == 'set_mic_type':
+        pool = value.get('mic_type')
+        if pool not in (solver.BODY, solver.HH):
+            raise EditRefused('Choose body pack or handheld.')
+        if pool == app.mic_type:
+            raise EditRefused('{} already has a {}.'.format(app.person_name, display_pool(pool)))
+        clean = {'mic_type': pool}
+    elif kind == 'unpin':
+        if app.pinned_rf is None and not app.pinned_type:
+            raise EditRefused('{} is not pinned.'.format(app.person_name))
+        clean = {}
     else:
+        raise EditRefused('Unknown change.')
+    clean.update(name=app.person_name, line=app.on_line, from_rf=main.rf_number if main else None,
+                 from_pool=app.mic_type)
+    before = snapshot(plan)
+    seq = (plan.edits.order_by('-seq').values_list('seq', flat=True).first() or 0) + 1
+    made = MicPlanEdit.objects.create(plan=plan, seq=seq, kind=kind, key=key, value=clean, before=before,
+                                      created_by=user)
+    return _resolve(plan, before), made
+
+
+@transaction.atomic
+def undo(day, version, user=None):
+    """Remove the last edit and re-solve, preferring the RFs from just before
+    it, so the plan returns to what it was. Returns (plan, removed edit)."""
+    plan = _locked(day, version)
+    last = plan.edits.order_by('-seq').first()
+    if last is None:
+        raise EditRefused('Nothing to undo.')
+    before = last.before
+    last.delete()
+    return _resolve(plan, before), last
+
+
+def display_pool(pool):
+    return 'handheld' if pool == solver.HH else 'body pack'
+
+
+def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prefer):
+    """Store ``result`` as ``plan`` (version + 1), with what changed against
+    ``prev`` ({skey: [rf, pool]}), who could not keep the RF ``prefer``
+    gave them, and the edit log's Review flags."""
+    if plan.pk:
         plan.appearances.all().delete()       # cascades assignments and actions
     rows = {r.pk: r for part_rows in rows_by_part.values() for r in part_rows}
     line = (lambda key: (rows[key].line_no or '#{}'.format(rows[key].order + 1))
@@ -192,27 +357,57 @@ def generate(day, user=None):
                         't1': s.t1, 'is_break': s.is_break, 'busy': result.busy.get(s.key, []),
                         'spill': spill['minutes'] if spill else 0,
                         'spill_into': seg_names.get(spill['into'], '') if spill else ''})
-    plan.generated_at = timezone.now()
-    plan.generated_by = user
+
+    # What changed, and the Review flags only edits make.
+    main = {result.appearances[a.appearance].skey: a.rf for a in result.assignments if not a.backup}
+    def change(a, was):
+        c = {'key': a.skey, 'name': names.get(a.person, ''), 'line': line(a.on_row), 'from': was[0],
+             'to': main.get(a.skey), 'from_pool': was[1], 'to_pool': a.mic_type, 'pinned': a.skey in fixed.pins}
+        c['text'] = describe_change(c)
+        return c
+
+    changes, moved = [], []
+    for a in result.appearances:
+        for was, out in ((prev.get(a.skey), changes), (prefer.get(a.skey), moved)):
+            if was is not None and (was[0], was[1]) != (main.get(a.skey), a.mic_type):
+                if out is changes or (a.skey not in fixed.pins and a.skey not in fixed.types):
+                    out.append(change(a, was))
+    flags = list(result.flags)
+    if moved:
+        flags.append({'kind': 'moved', 'row': None, 'person': None,
+                      'text': 'Moved from the RF they had: {}.'.format('; '.join(c['text'] for c in moved))})
+    keys = {a.skey for a in result.appearances}
+    last = {}
+    for e in edits:
+        last[e.key] = e
+    for key, e in last.items():
+        if key not in keys and (key in fixed.pins or key in fixed.types):
+            flags.append({'kind': 'unmatched', 'row': None, 'person': None,
+                          'text': 'Your change to {} at line {} no longer matches the showflow ({}); '
+                                  'it is kept but not applied.'.format(e.value.get('name', '?'),
+                                                                       e.value.get('line', '?'),
+                                                                       describe_edit(e))})
+
     plan.version += 1
     plan.settings = values
-    plan.cue_mode = mode
     plan.stale = False
     plan.segments = seg_out
-    plan.flags = result.flags
+    plan.flags = flags
     plan.packs = [{'rf': p.rf, 'pool': p.pool, 'label': p.label, 'host': p.host,
                    'backup_of': p.backup_of, 'spare': p.spare} for p in result.packs]
     plan.swaps = result.swaps
     plan.policy_counts = counts
+    plan.changes = changes
     plan.save()
 
     apps = {}
     for a in result.appearances:
         apps[a.key] = MicPlanAppearance.objects.create(
-            plan=plan, key=a.key, person_id=a.person, person_name=names.get(a.person, '')[:200],
+            plan=plan, key=a.key, skey=a.skey[:300], person_id=a.person, person_name=names.get(a.person, '')[:200],
             part_id=a.part, on_min=a.on, off_min=a.off, on_row_id=a.on_row, off_row_id=a.off_row,
             on_line=line(a.on_row), off_line=line(a.off_row), mic_type=a.mic_type, source=a.source,
-            is_host=a.is_host, assumed=a.assumed[:200], note_row_id=a.note_row)
+            is_host=a.is_host, assumed=a.assumed[:200], note_row_id=a.note_row,
+            pinned_rf=fixed.pins.get(a.skey), pinned_type=fixed.types.get(a.skey, ''))
     MicPlanAssignment.objects.bulk_create([
         MicPlanAssignment(appearance=apps[s.appearance], rf_number=s.rf, how=s.how, backup=s.backup)
         for s in result.assignments])

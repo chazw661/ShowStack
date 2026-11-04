@@ -172,6 +172,17 @@ TOPICS = (
                   'crew', 'merge', 'alias', 'flags', 'on stage', 'title'),
     ),
     Topic(
+        slug='mic-plan-edits',
+        title='Move packs in the mic plan',
+        section='Show day',
+        summary='Move someone to another RF, switch body/handheld, undo, and re-generate without losing your moves.',
+        pages=(
+            'planner:mic_plan',
+        ),
+        keywords=('mic plan', 'move', 'drag', 'pin', 'rf', 'pack', 'undo', 're-generate', 'start over',
+                  'conflict', 'handheld', 'renumber'),
+    ),
+    Topic(
         slug='mic-photos',
         title='Add presenter photos',
         section='Show day',

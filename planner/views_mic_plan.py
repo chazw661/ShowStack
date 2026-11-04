@@ -24,6 +24,7 @@ from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
 from planner.mic_plan import importer, page, planning
+from planner.mic_plan.display import describe_edit
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
 from planner.mic_plan.solver import SolverError
@@ -154,6 +155,9 @@ def mic_plan(request):
             person.intro_line = line_of.get(person.flags.get('intro', {}).get(str(part.pk)), '')
     current = planning.settings_dict(planning.project_settings(project))
     cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
+    chart = page.pack_chart(plan, apps, actions)
+    edits = list(plan.edits.all()) if plan else []
+    can_edit = can_edit_current_project(request)
 
     from planner.views import _shared_header_context
     return render(request, 'planner/mic_plan.html', {
@@ -169,8 +173,14 @@ def mic_plan(request):
         'people': sorted(people, key=lambda p: p.display_name.lower()),
         'plan': plan,
         'stats': page.stats(plan),
-        'chart': page.pack_chart(plan, apps, actions),
+        'chart': chart,
+        'lanes': page.lane_windows(chart),
         'cards': cards,
+        'edit_count': len(edits),
+        'undo_label': describe_edit(edits[-1]) if edits else '',
+        # Moves need a plan that matches the showflow.
+        'editable': bool(can_edit and plan and not plan.stale),
+        'changes': plan.changes if plan else [],
         'settings': current,
         'settings_summary': page.settings_summary(plan.settings if plan else current),
         'settings_changed': bool(plan and {'pack_policy': 'fewest_packs', **plan.settings} != current),
@@ -185,7 +195,7 @@ def mic_plan(request):
         'presenters': Presenter.objects.filter(project=project).order_by('name'),
         'mic_hint_choices': ShowflowPerson.MIC_HINT_CHOICES,
         'backup_choices': ShowflowPerson.BACKUP_TYPE_CHOICES,
-        'can_edit': can_edit_current_project(request),
+        'can_edit': can_edit,
         'max_pages': importer.MAX_PAGES,
         'max_mb': importer.MAX_UPLOAD_BYTES // (1024 * 1024),
     })
@@ -208,13 +218,69 @@ def plan_generate(request, pk):
     if not importer.active_parts(day):
         messages.error(request, 'Import a showflow for this day first.')
         return _back(day)
+    mode = 'over' if request.POST.get('mode') == 'over' else 'keep'
     try:
-        plan = planning.generate(day, request.user)
+        plan = planning.generate(day, request.user, mode=mode)
     except SolverError:
         messages.error(request, 'The plan could not be worked out for this day. Nothing was changed.')
         return _back(day, part)
-    messages.success(request, 'Draft plan v{} generated.'.format(plan.version))
+    if existing is None or mode == 'over':
+        messages.success(request, 'Draft plan v{} generated.'.format(plan.version))
+    else:
+        n = plan.edits.count()
+        messages.success(request, 'Draft plan v{} generated{}{}.'.format(
+            plan.version, ', keeping your {} change{}'.format(n, '' if n == 1 else 's') if n else '',
+            ' \u2014 {} moved'.format(len(plan.changes)) if plan.changes else ''))
     return _back(day, part, '#showflow')
+
+
+def _edit_response(request, day, apply):
+    """Run ``apply(version)`` (planning.edit or undo) and answer in JSON; the
+    page reloads and shows the message."""
+    try:
+        version = int(request.POST.get('version', ''))
+    except ValueError:
+        return JsonResponse({'error': 'Reload the page and try again.'}, status=400)
+    try:
+        plan, text = apply(version)
+    except planning.EditRefused as e:
+        return JsonResponse({'error': str(e)}, status=e.status)
+    except SolverError:
+        return JsonResponse({'error': 'The plan could not be worked out with that change. Nothing was changed.'},
+                            status=422)
+    conflicts = sum(1 for f in plan.flags if f['kind'] == 'conflict')
+    messages.success(request, '{}{}.'.format(text, ' \u2014 {} conflict{} in Review'.format(
+        conflicts, '' if conflicts == 1 else 's') if conflicts else ''))
+    return JsonResponse({'ok': True, 'version': plan.version, 'changed': len(plan.changes),
+                         'conflicts': conflicts})
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def plan_edit(request, pk):
+    """One move: kind move_rf (rf, pool), set_mic_type (mic_type) or unpin,
+    for appearance ``key``, against plan ``version``."""
+    day = _day(request, pk)
+
+    def apply(version):
+        plan, made = planning.edit(day, version, request.POST.get('kind', ''), request.POST.get('key', ''),
+                                   {k: request.POST.get(k) for k in ('rf', 'pool', 'mic_type') if k in request.POST},
+                                   request.user)
+        return plan, describe_edit(made)
+    return _edit_response(request, day, apply)
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def plan_undo(request, pk):
+    day = _day(request, pk)
+
+    def apply(version):
+        plan, removed = planning.undo(day, version, request.user)
+        return plan, 'Undone: ' + describe_edit(removed)
+    return _edit_response(request, day, apply)
 
 
 @staff_member_required
