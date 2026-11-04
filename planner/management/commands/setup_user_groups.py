@@ -48,6 +48,10 @@ class Command(BaseCommand):
             # Mic Tracker
             'showday', 'micsession', 'micassignment', 'micgroup',
             'presenter', 'presenterslot', 'micshowinfo', 'sharedpresenterassignment',
+            # Mic Plan
+            'showflowimport', 'showflowrow', 'showflowperson', 'showflowevent',
+            'micplansettings', 'micplan', 'micplanappearance', 'micplanassignment',
+            'micplanedit', 'micplana2action', 'micplanpush',
             # Power
             'powerdistributionplan',
             # Sound Vision
