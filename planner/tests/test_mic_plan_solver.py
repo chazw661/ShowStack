@@ -175,6 +175,8 @@ class PackTests(TestCase):
         self.assertEqual(['mic'], [a.kind for a in plan.actions])
         self.assertEqual('host', plan.actions[0].reason)
         self.assertTrue(plan.packs[0].host)
+        # Mic Tracker (PR 5) needs when they are actually on stage.
+        self.assertEqual(((540, 570), (600, 630), (660, 690)), app.stage)
 
     def test_a_returner_gets_the_same_pack(self):
         s = (Show().line(1, '9:00').line(2).line(3, '10:00').line(4).line(5, '11:00').line(6)

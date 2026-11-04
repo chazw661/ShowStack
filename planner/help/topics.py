@@ -194,6 +194,18 @@ TOPICS = (
                   'current segment', 'next', 'plan updated'),
     ),
     Topic(
+        slug='mic-plan-push',
+        title='Send the mic plan to Mic Tracker',
+        section='Show day',
+        summary="Write the plan's sessions, RFs and presenters into Mic Tracker, and send it again after changes.",
+        pages=(
+            'planner:mic_plan',
+            'planner:mic_plan_push',
+        ),
+        keywords=('mic plan', 'mic tracker', 'send', 'push', 'sessions', 'rf', 'presenter', 'labels', 'reprint',
+                  'started', "mic'd", 'keep'),
+    ),
+    Topic(
         slug='mic-photos',
         title='Add presenter photos',
         section='Show day',

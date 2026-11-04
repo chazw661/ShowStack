@@ -18,6 +18,14 @@
         });
     } catch (e) { /* UTC on the server */ }
 
+    // Times stored in UTC ("Sent to Mic Tracker at"), in the browser's zone.
+    all('time[data-local]').forEach(function (t) {
+        var d = new Date(t.getAttribute('datetime'));
+        if (isNaN(d)) return;
+        t.textContent = d.toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit',
+                                                      minute: '2-digit', hour12: false});
+    });
+
     // Import: the header button opens the file picker, choosing a file submits.
     var file = $('mp-file'), importBtn = $('mp-import-btn');
     if (file && importBtn) {

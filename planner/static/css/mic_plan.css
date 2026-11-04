@@ -384,3 +384,22 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-movemenu .mp-btn span { font: 500 10.5px var(--mp-mono); color: var(--mp-on); overflow: hidden; text-overflow: ellipsis; }
 .mp-movemenu .mp-btn.busy span { color: var(--mp-crit); }
 .mp-toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: min(560px, calc(100% - 32px)); }
+
+/* Send to Mic Tracker: the preview (PR 5) */
+.mp-push { max-width: 900px; margin: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.mp-push h2 small { font: 500 12px var(--mp-mono); color: var(--mp-muted); letter-spacing: 0; margin-left: 6px; }
+.mp-push ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.mp-push li { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: 5px;
+    background: var(--mp-raise); font: 500 13px var(--mp-body); }
+.mp-push li .mp-mono { font-size: 12px; }
+.mp-push li.started { opacity: .6; }
+.mp-push li.started::after { content: "started session"; margin-left: auto; font: 600 10.5px var(--mp-mono);
+    text-transform: uppercase; letter-spacing: .06em; color: var(--mp-warn); white-space: nowrap; }
+.mp-push li label { margin-left: auto; white-space: nowrap; font: 600 12px var(--mp-body); color: var(--mp-warn); }
+.mp-push .g-create li { box-shadow: inset 3px 0 0 var(--mp-on); }
+.mp-push .g-update li { box-shadow: inset 3px 0 0 var(--mp-off); }
+.mp-push .g-mt li { box-shadow: inset 3px 0 0 var(--mp-warn); }
+.mp-push .g-remove li { box-shadow: inset 3px 0 0 var(--mp-crit); }
+.mp-push .g-kept li { color: var(--mp-muted); }
+.mp-push input[type=checkbox] { accent-color: var(--mp-accent); }
+@media (max-width: 640px) { .mp-push { margin: 12px 16px; } .mp-push li { flex-wrap: wrap; } }
