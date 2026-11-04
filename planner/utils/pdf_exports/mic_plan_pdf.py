@@ -238,6 +238,8 @@ def _pack_story(plan, apps, actions, S):
             role = p.get('label') or 'BACKUP'
         elif p.get('host'):
             role = 'HOST'
+        elif p.get('over'):
+            role = 'OVER — past the rig: add channels'
         else:
             role = ''
         lines = ['{}. <b>{}</b> — mic {} · on stage {}–{}{} · de-mic {}{}'.format(
@@ -251,6 +253,10 @@ def _pack_story(plan, apps, actions, S):
                        data, widths)
     story = [Paragraph('One row per RF. Times are mic → on stage → de-mic. PINNED: moved by an A2. '
                        'MID-SESSION: goes to someone else within a session.', S['meta'])]
+    unused = page.unused_channels(plan)
+    if unused:
+        story.append(Paragraph('Rig: {} · Unused: {}'.format(escape(page.rig_text(page.plan_values(plan))),
+                                                            escape(unused)), S['meta']))
     return story + ([table] if table else [Paragraph('No packs in this plan.', S['empty'])])
 
 

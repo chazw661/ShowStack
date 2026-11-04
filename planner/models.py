@@ -7158,13 +7158,17 @@ class MicPlanSettings(models.Model):
         'Pre-mic lead (min)', default=30, validators=[MinValueValidator(0), MaxValueValidator(240)])
     margin_min = models.PositiveSmallIntegerField(
         'Margin (min)', default=5, validators=[MinValueValidator(0), MaxValueValidator(60)])
-    # Blank: the plan reports the minimum it needs.
-    body_pack_count = models.PositiveSmallIntegerField(
-        'Body packs', null=True, blank=True, validators=[MaxValueValidator(200)])
-    hh_count = models.PositiveSmallIntegerField(
-        'Handhelds', null=True, blank=True, validators=[MaxValueValidator(200)])
-    # Reserves the last handheld: never assigned.
-    emergency_spare_hh = models.BooleanField('Emergency spare handheld', default=False)
+    # The wireless rig, numbered 1..wireless_channels as patched on the
+    # console: body packs first, the last handheld_channels are handhelds,
+    # and the last spare_handhelds of those are kept unassigned. Blank
+    # channels: no rig, the plan reports the packs it needs (body from 1,
+    # handhelds after the last body pack, spares after them).
+    wireless_channels = models.PositiveSmallIntegerField(
+        'Wireless channels', null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(200)])
+    handheld_channels = models.PositiveSmallIntegerField(
+        'Handhelds (last N channels)', default=0, validators=[MaxValueValidator(200)])
+    spare_handhelds = models.PositiveSmallIntegerField(
+        'Spare handhelds (kept unassigned at the end)', default=0, validators=[MaxValueValidator(200)])
     PACK_POLICY_CHOICES = [('recycle_at_breaks', 'Recycle at breaks'), ('fewest_packs', 'Fewest packs')]
     # recycle_at_breaks: a worn pack goes to someone else only after a break.
     pack_policy = models.CharField('Pack use', max_length=20, choices=PACK_POLICY_CHOICES,

@@ -34,9 +34,13 @@ Times are minutes from midnight. The logic follows the prototype solver
    for a pack from before the break if one frees by its deadline, then
    reuses the pack free longest mid-session (flagged). A break too short to
    free the packs worn before it is flagged once. Body and HH are separate
-   pools; a "backup" person also wears their own backup pack. RF numbers:
-   body, body backups, HH, HH backups, then the emergency spare HH (never
-   assigned).
+   pools; a "backup" person also wears their own backup pack. RF numbers
+   are the rig's channels (``Rig``): body, then body backups, from 1; HH,
+   then HH backups, from the first handheld channel; the spare channels at
+   the end are never assigned. A pool short of channels numbers its extra
+   packs past the rig end ("over"), never in the other pool's channels.
+   With no rig set: body from 1, HH after the last body pack, the spares
+   after them.
 6. Edits (``Fixed``, by appearance key ``Appearance.skey``). A pinned
    appearance wears its RF for its whole wearing: it never waits on the pack
    count, waits for its pack only when that pack's wearer comes off before
@@ -69,9 +73,9 @@ class Settings:
     demic_min: int = 3
     premic_lead_min: int = 30
     margin_min: int = 5
-    body_pack_count: int = None     # None: report the minimum needed
-    hh_count: int = None
-    emergency_spare_hh: bool = False
+    wireless_channels: int = None   # None: no rig, report the packs needed
+    handheld_channels: int = 0      # the last N channels
+    spare_handhelds: int = 0        # the last N of those, never assigned
     pack_policy: str = RECYCLE_AT_BREAKS
     # 'earliest' (mic people as they arrive) or 'latest' (the prototype's
     # latest-safe mics; kept to check 'earliest' never needs more packs).
@@ -179,6 +183,77 @@ class Fixed:
 NOTHING_FIXED = Fixed()
 
 
+@dataclass(frozen=True)
+class Rig:
+    """The wireless rig: channels 1..N, the last ``handhelds`` of them
+    handhelds, the last ``spares`` of those kept unassigned. ``channels``
+    None: no rig (packs numbered as needed)."""
+    channels: int = None
+    handhelds: int = 0
+    spares: int = 0
+
+    @property
+    def set(self):
+        return self.channels is not None
+
+    @property
+    def first_hh(self):
+        return self.channels - self.handhelds + 1
+
+    @property
+    def first_spare(self):
+        return self.channels - self.spares + 1
+
+    def channels_of(self, pool):
+        """The channels a pool's packs may take (spares aside)."""
+        if pool == BODY:
+            return range(1, self.first_hh)
+        return range(self.first_hh, self.first_spare)
+
+    def spare_channels(self):
+        return range(self.first_spare, self.channels + 1)
+
+    def limit(self, pool):
+        return len(self.channels_of(pool)) if self.set else None
+
+    def pool_at(self, rf):
+        """BODY, HH or 'spare' for a channel of the rig; None past its end."""
+        if not 1 <= rf <= self.channels:
+            return None
+        if rf < self.first_hh:
+            return BODY
+        return HH if rf < self.first_spare else 'spare'
+
+    def fits(self, rf, pool):
+        """May a ``pool`` pack be numbered ``rf``? Always, with no rig."""
+        return not self.set or self.pool_at(rf) == pool
+
+
+def rig(settings):
+    return Rig(settings.wireless_channels, settings.handheld_channels or 0, settings.spare_handhelds or 0)
+
+
+def capacity(pool, R):
+    """'20 body channels', '3 handheld channels, 1 kept spare'."""
+    n = R.limit(pool)
+    what = '{} {} channel{}'.format(n, 'body' if pool == BODY else 'handheld', '' if n == 1 else 's')
+    if pool == HH and R.spares:
+        what += ', {} kept spare'.format(R.spares)
+    return what
+
+
+def full(pool, R):
+    """Why a mic waits at the rig's limit: 'all 20 body channels in use'."""
+    n = R.limit(pool)
+    word = 'body' if pool == BODY else 'handheld'
+    spare = ' ({} kept spare)'.format(R.spares) if pool == HH and R.spares else ''
+    if not n:
+        return 'no {} channel in the rig{}'.format(word, spare)
+    if n == 1:
+        return 'the 1 {} channel is in use{}'.format(word, spare)
+    return 'all {} {} channels in use{}'.format(n, word, spare)
+
+
 @dataclass
 class Assignment:
     appearance: int
@@ -217,6 +292,7 @@ class Pack:
     host: bool = False
     spare: bool = False
     label: str = ''
+    over: bool = False       # past the rig's end: the rig is short of this pool's channels
 
 
 @dataclass
@@ -748,8 +824,8 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     behind = []              # (late or tight mic action, its flag)
     last = {}                # person -> their last regular pack
     backups = {}             # person -> backup pack
-    limits = {BODY: S.body_pack_count,
-              HH: None if S.hh_count is None else max(0, S.hh_count - (1 if S.emergency_spare_hh else 0))}
+    R = rig(S)
+    limits = {BODY: R.limit(BODY), HH: R.limit(HH)}
     recycle = S.pack_policy == RECYCLE_AT_BREAKS
     starts = session_starts(day)
     marks = [m for m, _ in starts]
@@ -1003,11 +1079,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
                 hm(before[2]) if before else '?', ix.line(task.app.on_row))
         if not task.pack_wait:
             return 'A2 time'
-        pool = pool_of(task)
-        if pool == BODY:
-            return 'no pack free (body limit {})'.format(S.body_pack_count)
-        return 'no pack free (handheld limit {}{})'.format(
-            S.hh_count, ', 1 kept spare' if S.emergency_spare_hh else '')
+        return full(pool_of(task), R)
 
     guard = 0
     while not all(t.done for t in tasks):
@@ -1078,9 +1150,8 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
                 ix.line(task.app.on_row), pack.rf, ix.people[task.app.person].name,
                 'recycle at breaks' if recycle else 'fewest packs')
         else:
-            flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {} count ({}) reached.'.format(
-                ix.line(task.app.on_row), pack.rf, *(('body pack', S.body_pack_count) if pool == BODY
-                                                      else ('handheld', S.hh_count)))
+            flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {}.'.format(
+                ix.line(task.app.on_row), pack.rf, full(pool, R))
         plan.flags.append(flag)
     for p in packs:
         wearings += [(p, w['start'], INF, w['head'], w['off']) for w in p.open]
@@ -1092,7 +1163,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         plan.flags.append({'kind': 'break', 'row': key, 'person': None, 'text': '{} at line {} too short to turn over {} pack{}.'.format(
             'Break' if brk is not None and brk.is_break else 'Gap before the part', ix.line(key), n_packs,
             '' if n_packs == 1 else 's')})
-    _shortages(plan, limits, ix)
+    _shortages(plan, limits, ix, R)
     _busy(plan, day, n, S)
     return plan
 
@@ -1146,7 +1217,7 @@ def _suggest(day, S, behind, ix, fixed=NOTHING_FIXED):
                 other['text'] += ' Fix: see line {}.'.format(first)
 
 
-def _shortages(plan, limits, ix):
+def _shortages(plan, limits, ix, R):
     """One flag per stretch of time with more packs of a pool in use than
     set, at the line where it starts, giving that stretch's peak."""
     worn = {}                 # (rf, appearance, backup) -> [start, end]
@@ -1173,20 +1244,20 @@ def _shortages(plan, limits, ix):
             elif start is not None and count > peak:
                 peak = count
             if start is not None and count <= limit:
-                _flag_shortage(plan, ix, pool, limit, peak, start)
+                _flag_shortage(plan, ix, pool, R, peak, start)
                 start = None
         if start is not None:
-            _flag_shortage(plan, ix, pool, limit, peak, start)
+            _flag_shortage(plan, ix, pool, R, peak, start)
 
 
-def _flag_shortage(plan, ix, pool, limit, peak, mic):
+def _flag_shortage(plan, ix, pool, R, peak, mic):
     app = plan.appearances[mic.appearance]
-    more = peak - limit
+    more = peak - R.limit(pool)
     what = 'body pack' if pool == BODY else 'handheld'
     plan.flags.append({
         'kind': 'shortage', 'row': app.on_row, 'person': app.person,
-        'text': 'Line {}: need {} more {}{} than the {} set ({} in use from {}).'.format(
-            ix.line(app.on_row), more, what, '' if more == 1 else 's', limit, peak, hm(app.on))})
+        'text': 'Line {}: need {} more {}{} than the rig has \u2014 {} ({} in use from {}).'.format(
+            ix.line(app.on_row), more, what, '' if more == 1 else 's', capacity(pool, R), peak, hm(app.on))})
 
 
 def _conflicts(plan, wearings, pins, apps, ix):
@@ -1215,21 +1286,37 @@ def _conflicts(plan, wearings, pins, apps, ix):
 
 def _number(plan, packs, S, ix):
     """RF numbers: a pinned or preferred pack keeps its number; the rest
-    take the lowest free, body, body backups, HH, HH backups."""
+    take the lowest free, body, body backups, HH, HH backups -- in their
+    pool's channels of the rig, then past its end (over)."""
+    R = rig(S)
     order = ([p for p in packs if p.pool == BODY and p.backup_of is None]
              + [p for p in packs if p.pool == BODY and p.backup_of is not None]
              + [p for p in packs if p.pool == HH and p.backup_of is None]
              + [p for p in packs if p.pool == HH and p.backup_of is not None])
     taken = {p.fixed for p in packs if p.fixed is not None}
-    k = 0
-    for p in order:
-        if p.fixed is not None:
-            p.rf = p.fixed
-            continue
-        k += 1
-        while k in taken:
+    over = set()
+    if R.set:
+        free = {pool: [c for c in R.channels_of(pool) if c not in taken] for pool in (BODY, HH)}
+        k = max([R.channels] + list(taken))
+        for p in order:
+            if p.fixed is not None:
+                p.rf = p.fixed
+            elif free[p.pool]:
+                p.rf = free[p.pool].pop(0)
+            else:
+                k += 1
+                p.rf = k
+                over.add(p.rf)
+    else:
+        k = 0
+        for p in order:
+            if p.fixed is not None:
+                p.rf = p.fixed
+                continue
             k += 1
-        p.rf = k
+            while k in taken:
+                k += 1
+            p.rf = k
     order.sort(key=lambda p: p.rf)
     for a in plan.actions:
         a.rf_number = a._pack.rf
@@ -1243,9 +1330,27 @@ def _number(plan, packs, S, ix):
             label = '{} backup'.format(ix.people[p.backup_of].name)
         else:
             label = ''
-        plan.packs.append(Pack(p.rf, p.pool, backup_of=p.backup_of, host=p.rf in hosts, label=label))
-    if S.emergency_spare_hh:
-        plan.packs.append(Pack(max((p.rf for p in order), default=0) + 1, HH, spare=True, label='Spare'))
+        plan.packs.append(Pack(p.rf, p.pool, backup_of=p.backup_of, host=p.rf in hosts, label=label,
+                               over=p.rf in over))
+    # A backup's pack is its own, never shared, so it can be over the rig
+    # with no stretch of too many in use (_shortages): say so here.
+    for p in order:
+        if p.rf in over and p.backup_of is not None:
+            app = min((a for a in plan.appearances if a.person == p.backup_of), key=lambda a: a.on)
+            plan.flags.append({
+                'kind': 'shortage', 'row': app.on_row, 'person': p.backup_of,
+                'text': "Line {}: no {} channel left for {}'s backup, RF {} is past the rig \u2014 {}.".format(
+                    ix.line(app.on_row), 'body' if p.pool == BODY else 'handheld', ix.people[p.backup_of].name,
+                    p.rf, capacity(p.pool, R))})
+    used = {p.rf for p in order}
+    if R.set:
+        spares = [c for c in R.spare_channels() if c not in used]
+    else:
+        end = max(used, default=0)
+        spares = range(end + 1, end + 1 + R.spares)
+    for rf in spares:
+        plan.packs.append(Pack(rf, HH, spare=True, label='Spare'))
+    plan.packs.sort(key=lambda p: p.rf)
     # A swap: a pack going to someone other than who wore it last.
     plan.swaps = sum(1 for a in plan.actions if a.kind == 'mic' and a.reason == 'recycled')
 
@@ -1324,6 +1429,7 @@ def summary(plan):
         'hosts': sum(1 for p in regular if p.host),
         'backups': sum(1 for p in regular if p.backup_of is not None),
         'spare': sum(1 for p in plan.packs if p.spare),
+        'over': sum(1 for p in plan.packs if p.over),
         'swaps': plan.swaps,
         'mid_session': plan.mid_session,
         'late': sum(1 for f in plan.flags if f['kind'] == 'late'),

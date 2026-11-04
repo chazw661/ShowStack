@@ -164,6 +164,7 @@ body:has(.mp-page) { background: var(--mp-bg, #16171a); }
 .mp-banner { margin: 0; padding: 8px 12px; border-radius: 5px; border-left: 3px solid var(--mp-off);
     background: var(--mp-panel); font-size: 13px; }
 .mp-banner.warn { border-left-color: var(--mp-warn); background: rgba(255, 171, 0, 0.07); }
+.mp-banner.bad { border-left-color: var(--mp-crit); background: rgba(255, 107, 107, 0.08); }
 .mp-ask { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 .mp-ask[hidden], .mp-page [hidden] { display: none !important; }
 .mp-generate { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
@@ -274,6 +275,10 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-chart .lane { display: flex; align-items: flex-start; min-height: 30px; border-bottom: 1px solid var(--mp-line); }
 .mp-chart .lane.hit { background: var(--mp-accent-tint); }
 .mp-chart .lane.spare .rflab { color: var(--mp-muted); }
+.mp-chart .lane.unused .rflab { color: var(--mp-muted); opacity: 0.6; }
+.mp-chart .lane.unused .track { opacity: 0.5; }
+.mp-chart .lane.short { box-shadow: inset 3px 0 0 var(--mp-crit); }
+.mp-chart .lane.short .rflab { color: var(--mp-crit); }
 .mp-page button.rflab { all: unset; cursor: pointer; width: 132px; flex: none; font: 600 13px var(--mp-mono); color: var(--mp-fg);
     display: flex; flex-direction: column; justify-content: center; height: 30px; line-height: 1.1; }
 .mp-page button.rflab small { font: 500 10px var(--mp-mono); color: var(--mp-muted); text-transform: uppercase;

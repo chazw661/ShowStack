@@ -4,7 +4,7 @@ action here so they never drift apart. Likewise the wording of an edit
 (Undo button, message after a move) and of what a re-solve changed.
 """
 
-from .solver import hm
+from .solver import Rig, hm
 
 VERBS = {'mic': 'MIC', 'demic': 'DE-MIC'}
 
@@ -35,6 +35,24 @@ def format_action(action, a2_count=1):
 
 
 POOL_WORDS = {'body': 'body pack', 'HH': 'handheld'}
+
+
+def _span(r):
+    return '' if not r else str(r[0]) if len(r) == 1 else '{}\u2013{}'.format(r[0], r[-1])
+
+
+def rig_text(values):
+    """"Body 1–20 · Handheld 21–23 · Spare 24" for settings values (mic_plan.js
+    writes the same line live in the settings form)."""
+    R = Rig(values.get('wireless_channels'), values.get('handheld_channels') or 0,
+            values.get('spare_handhelds') or 0)
+    if not R.set:
+        spare = R.spares
+        return 'No rig set: body from 1, handhelds after the last body pack{}'.format(
+            ', {} spare{} after them'.format(spare, '' if spare == 1 else 's') if spare else '')
+    out = [(word, _span(r)) for word, r in (('Body', R.channels_of('body')), ('Handheld', R.channels_of('HH')),
+                                             ('Spare', R.spare_channels()))]
+    return ' \u00b7 '.join('{} {}'.format(word, span) for word, span in out if span)
 
 
 def first_name(name):

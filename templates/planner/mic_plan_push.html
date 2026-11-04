@@ -29,6 +29,8 @@
         <p class="mp-banner" role="status">Nothing is written until you confirm. Photos, notes, placement, sensitivity, output level,
             groups and MIC'D marks already in Mic Tracker are never changed; a slot that moves takes them with it.
             {% if preview.last %}Last sent: v{{ preview.last.plan_version }}.{% endif %}</p>
+        {% if preview.short %}<p class="mp-banner bad" role="alert" id="mp-short">{{ preview.short }}</p>{% endif %}
+        {% if preview.rig_was %}<p class="mp-banner warn" role="status">Rig changed since the last push: {{ preview.rig_was }} &rarr; {{ preview.rig }}. Slots on a new channel are listed as <i>RF old &rarr; RF new</i>; reprint their labels.</p>{% endif %}
         {% for s in preview.started %}
         <p class="mp-banner warn" role="status">Show has started in <b>{{ s.name }}</b> (a mic is MIC'D): it is skipped unless you tick <i>Include started sessions</i>.</p>
         {% endfor %}
@@ -79,8 +81,10 @@
         {% endif %}
 
         <div class="mp-actions">
+            {% if not preview.short %}
             {% if preview.started %}<label class="mp-note"><input type="checkbox" name="include_started" value="1"> Include started sessions</label>{% endif %}
             <button class="mp-btn primary" type="submit"{% if up_to_date %} disabled{% endif %}>Send to Mic Tracker</button>
+            {% endif %}
             <a class="mp-btn" href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Cancel</a>
         </div>
     </form>

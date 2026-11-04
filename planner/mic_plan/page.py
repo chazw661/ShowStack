@@ -5,8 +5,9 @@ stat tiles. plan.json is built from the same pieces (``plan_data``).
 
 from planner.models import MicPlanA2Action, MicPlanAppearance
 
-from .display import first_name, format_action, overlap_warning
+from .display import first_name, format_action, overlap_warning, rig_text
 from .parser import description_candidates
+from .planning import plan_rig, plan_values
 from .solver import hm
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
@@ -164,8 +165,9 @@ def overlap_warnings(plan, parts):
 
 def pack_chart(plan, apps, actions, parts=()):
     """Lanes for the pack chart: one per RF, bars as percentages of the day.
-    Segment bands sit in one header strip, or one strip per part when parts
-    overlap in time (#168)."""
+    With a rig, one per channel of it (unused ones too, spares as SPARE),
+    then any the rig is short of (over). Segment bands sit in one header
+    strip, or one strip per part when parts overlap in time (#168)."""
     if plan is None or not plan.packs:
         return None
     mic = {}
@@ -201,14 +203,26 @@ def pack_chart(plan, apps, actions, parts=()):
     def width(a, b):
         return round(max(0.2, (b - a) / span * 100), 3)
 
+    R = plan_rig(plan)
+    packs = list(plan.packs)
+    if R.set:
+        have = {p['rf'] for p in packs}
+        packs += [{'rf': c, 'pool': pool, 'unused': True} for pool in ('body', 'HH')
+                  for c in R.channels_of(pool) if c not in have]
+        packs += [{'rf': c, 'pool': 'HH', 'spare': True} for c in R.spare_channels() if c not in have]
+        packs.sort(key=lambda p: p['rf'])
     lanes = []
-    for p in plan.packs:
+    for p in packs:
         if p.get('spare'):
             sub = 'SPARE'
         elif p.get('backup_of'):
             sub = p.get('label') or 'BACKUP'
         elif p.get('host'):
             sub = 'HOST'
+        elif p.get('unused'):
+            sub = 'unused'
+        elif p.get('over'):
+            sub = 'OVER the rig'
         else:
             n = len({s['person'] for s in slots.get(p['rf'], [])})
             sub = '{} {}'.format(n, 'person' if n == 1 else 'people')
@@ -222,7 +236,7 @@ def pack_chart(plan, apps, actions, parts=()):
                        for b in slots.get(p['rf'], [])[k + 1:] if not a['backup'] and not b['backup'])
         lanes.append({'rf': p['rf'], 'pool': p['pool'], 'sub': sub, 'bars': bars,
                       'host': p.get('host'), 'spare': p.get('spare'), 'backup': bool(p.get('backup_of')),
-                      'conflict': conflict})
+                      'unused': p.get('unused', False), 'over': p.get('over', False), 'conflict': conflict})
     bands = [{'name': s['name'], 'left': pct(s['t0']), 'width': width(s['t0'], s['t1']),
               'is_break': s['is_break'], 'label': ' '.join((s['name'] or '').split()[:3])
               if s['t1'] - s['t0'] >= 14 else '', 'tip': '{} {}–{}'.format(s['name'], hm(s['t0']), hm(s['t1']))}
@@ -237,8 +251,26 @@ def pack_chart(plan, apps, actions, parts=()):
         strips = [{'label': '', 'bands': bands}]
     ticks = [{'left': pct(t), 'label': hm(t)} for t in range(t0, t1 + 1, 60)]
     regular = [p['rf'] for p in plan.packs if not p.get('spare') and not p.get('backup_of')]
+    # A new pack lane only with no rig: with one, every channel has a lane.
     return {'lanes': lanes, 'bands': bands, 'strips': strips, 'ticks': ticks,
-            'new_rf': max(regular, default=0) + 1}
+            'new_rf': None if R.set else max(regular, default=0) + 1}
+
+
+def unused_channels(plan):
+    """'15–20, 23': the rig's channels the plan leaves unused (spares
+    aside), or '' (none, or no rig)."""
+    R = plan_rig(plan)
+    if not R.set:
+        return ''
+    have = {p['rf'] for p in plan.packs}
+    free = [c for c in range(1, R.first_spare) if c not in have]
+    runs = []
+    for c in free:
+        if runs and c == runs[-1][1] + 1:
+            runs[-1][1] = c
+        else:
+            runs.append([c, c])
+    return ', '.join(str(a) if a == b else '{}\u2013{}'.format(a, b) for a, b in runs)
 
 
 def lane_windows(chart):
@@ -248,7 +280,7 @@ def lane_windows(chart):
         return []
     return [{'rf': lane['rf'], 'pool': lane['pool'],
              'worn': [[b['from'], b['to'], b['key'], b['first']] for b in lane['bars']]}
-            for lane in chart['lanes'] if not lane['spare'] and not lane['backup']]
+            for lane in chart['lanes'] if not lane['spare'] and not lane['backup'] and not lane['over']]
 
 
 def review_cards(parts, plan, apps, people, labels):
@@ -354,10 +386,10 @@ POLICY_NAMES = {'recycle_at_breaks': 'Recycle at breaks', 'fewest_packs': 'Fewes
 
 
 def settings_summary(values):
-    # Plans from before PR 2.2 have no pack_policy: they used fewest_packs.
-    return '{} · {} A2 · mic {} · de-mic {} · lead {} · margin {} min'.format(
-        POLICY_NAMES[values.get('pack_policy', 'fewest_packs')], values.get('a2_count'),
-        values.get('mic_min'), values.get('demic_min'), values.get('premic_lead_min'), values.get('margin_min'))
+    """``values``: planning.plan_values (or the project's settings)."""
+    return '{} · {} A2 · mic {} · de-mic {} · lead {} · margin {} min · {}'.format(
+        POLICY_NAMES[values['pack_policy']], values.get('a2_count'), values.get('mic_min'),
+        values.get('demic_min'), values.get('premic_lead_min'), values.get('margin_min'), rig_text(values))
 
 
 def policy_counts_text(counts):
@@ -412,7 +444,7 @@ def plan_header(plan, parts):
     when it was made and last edited, the settings and every warning.
     "Edited" is the latest edit still in the log (an undo removes its edit)."""
     edits = list(plan.edits.order_by('seq'))
-    values = {'pack_policy': 'fewest_packs', **plan.settings}
+    values = plan_values(plan)
     warnings = []
     if plan.stale:
         warnings.append(STALE_WARNING)

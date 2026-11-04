@@ -248,12 +248,12 @@ class PeopleAcrossPartsTests(MicPlanBase):
     def test_settings_save(self):
         resp = self.client.post(reverse('planner:mic_plan_settings'), {
             'a2_count': 2, 'mic_min': 4, 'demic_min': 2, 'premic_lead_min': 45, 'margin_min': 10,
-            'body_pack_count': '12', 'hh_count': '', 'emergency_spare_hh': '1'})
+            'wireless_channels': '24', 'handheld_channels': '4', 'spare_handhelds': '1'})
         self.assertEqual(302, resp.status_code)
         s = MicPlanSettings.objects.get(project=self.project)
-        self.assertEqual((2, 4, 2, 45, 10, 12, None, True),
+        self.assertEqual((2, 4, 2, 45, 10, 24, 4, 1),
                          (s.a2_count, s.mic_min, s.demic_min, s.premic_lead_min, s.margin_min,
-                          s.body_pack_count, s.hh_count, s.emergency_spare_hh))
+                          s.wireless_channels, s.handheld_channels, s.spare_handhelds))
         self.client.post(reverse('planner:mic_plan_settings'), {
             'a2_count': 0, 'mic_min': 4, 'demic_min': 2, 'premic_lead_min': 45, 'margin_min': 10})
         self.assertEqual(2, MicPlanSettings.objects.get(project=self.project).a2_count)
@@ -406,8 +406,8 @@ class ReviewPageTests(MicPlanBase):
         self.upload()
         resp = self.page()
         self.assertContains(resp, reverse('planner:mic_plan_settings'))
-        self.assertContains(resp, 'name="body_pack_count"')
-        self.assertContains(resp, 'name="emergency_spare_hh"')
+        self.assertContains(resp, 'name="wireless_channels"')
+        self.assertContains(resp, 'name="spare_handhelds"')
 
     def test_one_editor_for_the_selected_person_not_controls_on_every_row(self):
         self.upload()
@@ -779,7 +779,7 @@ class PackPolicyPageTests(MicPlanBase):
         self.assertContains(page, 'Plan settings changed after this plan was made')
 
     def test_both_policy_counts_match_two_separate_solves(self):
-        self.save_settings(body_pack_count=2)
+        self.save_settings(wireless_channels=2)
         self.generate()
         plan = MicPlan.objects.get(day=self.day)
         data, _, _ = planning.build_day(self.day)
@@ -787,7 +787,7 @@ class PackPolicyPageTests(MicPlanBase):
         for policy in ('recycle_at_breaks', 'fewest_packs'):
             with self.subTest(policy=policy):
                 s = solver.summary(solver.solve(data, planning.solver_settings(
-                    {**values, 'pack_policy': policy, 'body_pack_count': None, 'hh_count': None})))
+                    {**values, 'pack_policy': policy, 'wireless_channels': None})))
                 self.assertEqual({'body': s['body'], 'hh': s['hh'], 'mid_session': s['mid_session']},
                                  plan.policy_counts[policy])
         counts = plan.policy_counts
