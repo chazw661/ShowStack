@@ -113,7 +113,7 @@ class FirstPushTests(PushBase):
                    ('Casey Cole', 560, 580, 3, {'hh': True})])
         self.send()
         s1, s2 = self.sessions()
-        self.assertEqual(['Opening Session (8:00–9:00)', 'Panel (9:15–10:00)'], [s1.name, s2.name])
+        self.assertEqual(['Opening Session (8:00-9:00)', 'Panel (9:15-10:00)'], [s1.name, s2.name])
         self.assertTrue(s1.rf_from_plan and s2.rf_from_plan)
         self.assertEqual((time(8, 0), time(9, 0)), (s1.start_time, s1.end_time))
         self.assertEqual({1: [('Avery Able', 0, '', ''), ('Blake Bond', 1, '', '')]}, self.table(s1))
@@ -334,7 +334,7 @@ class RePushTests(PushBase):
     def test_labels_list_every_rf_whose_presenter_changes(self):
         self.plan([('Avery Able', 490, 500, 1, {}), ('Dana Dunn', 505, 520, 2, {}),
                    ('Casey Cole', 560, 580, 3, {})])
-        self.assertEqual(['RF 2 (Opening Session (8:00–9:00))'], push.preview(self.day).labels)
+        self.assertEqual(['RF 2 (Opening Session (8:00-9:00))'], push.preview(self.day).labels)
 
     def test_before_snapshot_records_changed_rows(self):
         old_row = self.slot['Avery Able'].assignment_id
@@ -371,7 +371,7 @@ class RefusalAndAccessTests(PushBase):
     def test_a_preview_that_no_longer_matches_is_refused(self):
         self.plan([('Avery Able', 490, 500, 1, {})])
         p = push.preview(self.day)
-        MicSession.objects.create(day=self.day, name='Opening Session (8:00–9:00)', num_mics=1)
+        MicSession.objects.create(day=self.day, name='Opening Session (8:00-9:00)', num_mics=1)
         resp = self.client.post(self.url(), {'version': p.plan.version, 'digest': p.digest})
         self.assertRedirects(resp, self.url(), fetch_redirect_response=False)
         self.assertFalse(MicPlanPush.objects.exists())

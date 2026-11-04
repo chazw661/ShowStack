@@ -13,9 +13,11 @@ you type the session's name before the button will submit. Django's own summary
 of what is about to be deleted is left exactly as it is above the gate.
 
 This is a guard against a mis-tap, not an access control -- who may delete is
-decided by BaseEquipmentAdmin.has_delete_permission, server side. Hence a
-JavaScript gate: it is applied on load, so a browser without JS simply gets
-Django's normal confirmation page rather than an unusable one.
+decided by BaseEquipmentAdmin.has_delete_permission, server side. The typed
+name is posted as `confirm_name` and MicSessionAdmin.delete_view checks it
+too, the same way this page does (planner/utils/typed_names.py): case, any
+dash and spaces don't count, so "8:00-8:45" matches "8:00–8:45". The name is
+selectable, with a Copy button, and pasting is fine.
 {% endcomment %}
 
 {% block extrahead %}{{ block.super }}
@@ -53,6 +55,8 @@ Django's normal confirmation page rather than an unusable one.
         border: 1px solid var(--ss-field-border, #42454d);
         color: var(--ss-field-text, #e8e8ea);
     }
+    #mtt-delete-gate code { user-select: all; }
+    .mtt-copy { margin-left: 6px; font-size: 12px; padding: 2px 8px; cursor: pointer; }
     #mtt-delete-hint { font-size: 12px; margin-top: 8px; color: #8b8f98; }
     #mtt-delete-hint.ready { color: #4fae6a; }
     /* The disabled state has to read as "not yet", not as "broken". */
@@ -86,11 +90,17 @@ Django's normal confirmation page rather than an unusable one.
     var code = document.createElement('code');
     code.textContent = EXPECTED;
     label.appendChild(code);
+    var copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'mtt-copy';
+    copy.textContent = 'Copy';
+    label.appendChild(copy);
     label.appendChild(document.createTextNode(' to confirm.'));
 
     var input = document.createElement('input');
     input.type = 'text';
     input.id = 'mtt-delete-name';
+    input.name = 'confirm_name';
     input.autocomplete = 'off';
     input.setAttribute('autocapitalize', 'off');
     input.setAttribute('spellcheck', 'false');
@@ -105,12 +115,25 @@ Django's normal confirmation page rather than an unusable one.
     gate.appendChild(hint);
     submit.parentNode.insertBefore(gate, submit);
 
-    function matches() {
-        // Trimmed, but case-sensitive: the point is to make you read the name,
-        // and session names differ by case more often than they differ at all
-        // ("GS 1" / "gs 1" are two sessions on the same day).
-        return input.value.trim() === EXPECTED.trim();
+    // As planner/utils/typed_names.py `loose`: any dash is "-", runs of
+    // space are one, none around a dash, and case doesn't count.
+    function loose(s) {
+        return (s || '').replace(/[\u2010-\u2015\u2212\ufe58\ufe63\uff0d-]/g, '-')
+            .replace(/\s+/g, ' ').trim().replace(/\s*-\s*/g, '-').toLowerCase();
     }
+
+    function matches() {
+        return loose(EXPECTED) !== '' && loose(input.value) === loose(EXPECTED);
+    }
+
+    copy.addEventListener('click', function () {
+        var done = function () { copy.textContent = 'Copied'; setTimeout(function () { copy.textContent = 'Copy'; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(EXPECTED).then(done, function () {});
+        } else {
+            input.value = EXPECTED; sync(); done();
+        }
+    });
 
     function sync() {
         var ok = matches();

@@ -4,6 +4,8 @@
 from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
 from django.contrib.admin.utils import unquote
+from planner.utils.typed_names import loose, same_name
+from planner.models import PresenterSlot
 from django.contrib import messages
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
@@ -6479,6 +6481,50 @@ class ShowDayAdmin(BaseEquipmentAdmin):
         return format_html('<a href="{}" class="button">View Day</a>', url)
     view_day_link.short_description = "View"
 
+    def get_urls(self):
+        return [
+            path('<path:object_id>/delete-sessions/',
+                 self.admin_site.admin_view(self.delete_sessions_view),
+                 name='planner_showday_delete_sessions'),
+        ] + super().get_urls()
+
+    def delete_sessions_view(self, request, object_id):
+        """Delete every Mic Tracker session of one day (the day itself stays),
+        after one typed confirmation: the day's date, or DELETE."""
+        day = self.get_object(request, unquote(object_id))
+        if day is None:
+            return self._get_obj_does_not_exist_redirect(request, self.opts, object_id)
+        if not self.has_delete_permission(request, day):
+            raise PermissionDenied
+        sessions = list(day.sessions.order_by('order', 'start_time', 'pk'))
+        expected = day.date.isoformat()
+        if request.method == 'POST':
+            typed = request.POST.get('confirm', '')
+            if same_name(typed, expected) or loose(typed) == 'delete':
+                n = len(sessions)
+                MicSession.objects.filter(day=day).delete()
+                messages.success(request, 'Deleted {} session{} from {}.'.format(n, '' if n == 1 else 's', day))
+                return redirect('admin:planner_showday_change', day.pk)
+            messages.error(request, 'Type {} or DELETE to delete the sessions.'.format(expected))
+        rows = []
+        for s in sessions:
+            slots = PresenterSlot.objects.filter(assignment__session=s)
+            rows.append({
+                'session': s,
+                'rfs': s.mic_assignments.count(),
+                'slots': slots.exclude(presenter__isnull=True).count(),
+                'photos': slots.exclude(photo_data='').exclude(photo_data__isnull=True).count(),
+                'micd': slots.filter(is_micd=True).count() + s.mic_assignments.filter(is_micd=True).count(),
+            })
+        return render(request, 'admin/planner/showday/delete_sessions.html', {
+            **self.admin_site.each_context(request),
+            'opts': self.opts,
+            'title': 'Delete all sessions for {}'.format(day),
+            'day': day,
+            'rows': rows,
+            'expected': expected,
+        })
+
 
     def get_queryset(self, request):
         """Filter by current project"""
@@ -6690,6 +6736,17 @@ class MicSessionAdmin(BaseEquipmentAdmin):
         if hasattr(request, 'current_project') and request.current_project:
             return qs.filter(day__project=request.current_project)
         return qs.none()
+
+    def delete_view(self, request, object_id, extra_context=None):
+        """The typed session name (delete_confirmation.html) is checked here
+        too, the way the page checks it: case, dashes and spaces aside."""
+        if request.method == 'POST' and request.POST.get('post'):
+            obj = self.get_object(request, unquote(object_id))
+            if (obj is not None and self.has_delete_permission(request, obj)
+                    and not same_name(request.POST.get('confirm_name', ''), obj.name)):
+                messages.error(request, 'Type the session name to delete it.')
+                return redirect(request.path)
+        return super().delete_view(request, object_id, extra_context)
 
     def has_view_permission(self, request, obj=None):
         if request.user.is_superuser:
