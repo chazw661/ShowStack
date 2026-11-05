@@ -38,7 +38,7 @@
         <div class="mp-panel">
             <h2>Sessions <small>{{ sessions|length }}</small></h2>
             <ul>
-                {% for s in sessions %}<li><span>{{ s.name }}</span><span class="mp-mono mp-muted">{{ s.rows|length }} RF{{ s.rows|length|pluralize }}</span></li>{% endfor %}
+                {% for s in sessions %}<li><span>{{ s.name }}</span><span class="mp-mono mp-muted">{{ s.cards }}</span></li>{% endfor %}
             </ul>
         </div>
 

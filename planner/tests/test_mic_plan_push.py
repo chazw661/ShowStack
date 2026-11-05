@@ -13,7 +13,7 @@ from unittest import mock
 from django.urls import reverse
 from django.utils import timezone
 
-from planner.mic_plan import push
+from planner.mic_plan import push, revert
 from planner.models import (
     MicAssignment, MicPlan, MicPlanAppearance, MicPlanAssignment, MicPlanPush, MicSession, Presenter, PresenterSlot,
     ShowDay, ShowflowPerson,
@@ -116,10 +116,13 @@ class FirstPushTests(PushBase):
         self.assertEqual(['Opening Session (8:00-9:00)', 'Panel (9:15-10:00)'], [s1.name, s2.name])
         self.assertTrue(s1.rf_from_plan and s2.rf_from_plan)
         self.assertEqual((time(8, 0), time(9, 0)), (s1.start_time, s1.end_time))
-        self.assertEqual({1: [('Avery Able', 0, '', ''), ('Blake Bond', 1, '', '')]}, self.table(s1))
-        self.assertEqual({3: [('Casey Cole', 0, 'HH', '')]}, self.table(s2))
-        self.assertEqual((1, 1), (s1.num_mics, s2.num_mics))
-        first = s1.mic_assignments.get().presenter_slots.order_by('order')
+        # A card for every RF up to the day's highest (no rig): the rest empty.
+        self.assertEqual({1: [('Avery Able', 0, '', ''), ('Blake Bond', 1, '', '')], 2: [], 3: []}, self.table(s1))
+        self.assertEqual({1: [], 2: [], 3: [('Casey Cole', 0, 'HH', '')]}, self.table(s2))
+        self.assertEqual((3, 3), (s1.num_mics, s2.num_mics))
+        self.assertEqual({'', 'HH'}, set(s2.mic_assignments.values_list('mic_type', flat=True)))
+        self.assertEqual('', s2.mic_assignments.get(rf_number=1).mic_type)     # an empty card: blank type
+        first = s1.mic_assignments.get(rf_number=1).presenter_slots.order_by('order')
         self.assertEqual([True, False], [s.is_active for s in first])
 
     def test_new_sessions_go_after_the_highest_order_even_after_a_delete(self):
@@ -140,7 +143,7 @@ class FirstPushTests(PushBase):
         self.send()
         s1, s2, s3 = self.sessions()
         self.assertEqual([('Harper Host', 0, '', 'host')], self.table(s1)[9])
-        self.assertNotIn(9, self.table(s2))
+        self.assertEqual([], self.table(s2)[9])                           # an empty card there
         self.assertEqual([('Harper Host', 0, '', 'host')], self.table(s3)[9])
 
     def test_a_host_newly_in_a_middle_session_never_takes_another_sessions_slot(self):
@@ -165,11 +168,12 @@ class FirstPushTests(PushBase):
         self.plan([('Avery Able', 490, 500, 1, {'backup': 2}), ('Casey Cole', 560, 580, 1, {})], packs=packs)
         self.send()
         s1, s2 = self.sessions()
+        empty = {rf: [] for rf in range(3, 8)}
         self.assertEqual({1: [('Avery Able', 0, '', '')], 2: [('Avery Able', 0, 'HH', 'backup for Avery Able')],
-                          8: [(None, 0, 'HH', 'SPARE')]}, self.table(s1))
-        self.assertEqual({1: [('Casey Cole', 0, '', '')], 8: [(None, 0, 'HH', 'SPARE')]},
+                          **empty, 8: [(None, 0, 'HH', 'SPARE')]}, self.table(s1))
+        self.assertEqual({1: [('Casey Cole', 0, '', '')], 2: [], **empty, 8: [(None, 0, 'HH', 'SPARE')]},
                          self.table(s2))                                   # no backup where Avery is not on
-        self.assertEqual({1: '', 2: '', 8: ''}, self.row_notes(s1))
+        self.assertEqual({rf: '' for rf in range(1, 9)}, self.row_notes(s1))
 
     def test_new_presenters_created_listed_and_linked_back(self):
         person = ShowflowPerson.objects.create(day=self.day, display_name='Avery Able', name_key='avery able')
@@ -210,9 +214,10 @@ class FirstPushTests(PushBase):
         t = self.table(hand)
         self.assertEqual([('Avery Able', 0, '', '')], t[1])                 # the empty slot was filled
         self.assertEqual([], t[2])                                         # not the plan's: left alone
+        self.assertEqual(([], []), (t[3], t[4]))                           # empty cards up to the highest RF
         self.assertEqual([('Blake Bond', 0, '', '')], t[5])
         self.assertTrue(hand.rf_from_plan)
-        self.assertEqual(3, hand.num_mics)
+        self.assertEqual(5, hand.num_mics)
 
 
 class RePushTests(PushBase):
@@ -243,7 +248,9 @@ class RePushTests(PushBase):
                          (avery.photo_data, avery.notes, avery.placement))
         self.assertEqual({p.pk for p in self.slot.values()},
                          set(PresenterSlot.objects.filter(assignment__session__day=self.day).values_list('pk', flat=True)))
-        self.assertEqual([2, 4], sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))  # RF 1 removed
+        # RF 1 stays, an empty card; RF 4 is a new card (PR 5.4).
+        self.assertEqual([1, 2, 3, 4], sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual([], self.table(self.s1)[1])
 
     def test_nothing_to_send_when_mic_tracker_matches(self):
         p = push.preview(self.day)
@@ -323,18 +330,51 @@ class RePushTests(PushBase):
         p = push.preview(self.day)
         self.assertEqual([self.s1.pk], [s['pk'] for s in p.started])
         self.send()
-        self.assertEqual([1, 2], sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))
-        self.assertEqual([7], list(self.s2.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual([1, 2, 3], sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual(list(range(1, 8)), sorted(self.s2.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual([('Casey Cole', 0, '', '')], self.table(self.s2)[7])
         last = push.last_push(self.day)
         self.assertEqual([self.s1.name], last.summary['skipped'])
         self.assertIn(str(self.slot['Blake Bond'].pk), last.slot_snapshot)    # still known next time
         self.send(include_started=True)
-        self.assertEqual([1, 6], sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual(list(range(1, 8)), sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual([('Blake Bond', 0, '', '')], self.table(self.s1)[6])
 
     def test_labels_list_every_rf_whose_presenter_changes(self):
         self.plan([('Avery Able', 490, 500, 1, {}), ('Dana Dunn', 505, 520, 2, {}),
                    ('Casey Cole', 560, 580, 3, {})])
         self.assertEqual(['RF 2 (Opening Session (8:00-9:00))'], push.preview(self.day).labels)
+
+    def test_re_push_fills_an_empty_card_and_empties_one_keeping_its_row(self):
+        rows = set(MicAssignment.objects.filter(session=self.s1).values_list('pk', flat=True))
+        self.assertEqual([], self.table(self.s1)[3])                       # Casey's RF 3 is in the Panel
+        self.plan([('Avery Able', 490, 500, 1, {}), ('Blake Bond', 505, 520, 3, {}),
+                   ('Casey Cole', 560, 580, 3, {})])
+        p = push.preview(self.day)
+        self.assertFalse([i for i in p.items if i['kind'] in ('row_create', 'row_remove', 'cards_added')])
+        self.send()
+        self.assertEqual({1: [('Avery Able', 0, '', '')], 2: [], 3: [('Blake Bond', 0, '', '')]}, self.table(self.s1))
+        self.assertEqual(rows, set(MicAssignment.objects.filter(session=self.s1).values_list('pk', flat=True)))
+        self.assertEqual(self.slot['Blake Bond'].pk, self.s1.mic_assignments.get(rf_number=3).presenter_slots.get().pk)
+
+    def test_a_session_pushed_with_gaps_gets_its_missing_cards(self):
+        # Pushes before PR 5.4 made rows only for the RFs worn.
+        self.s1.mic_assignments.get(rf_number=3).delete()
+        p = push.preview(self.day)
+        self.assertEqual(['Opening Session (8:00-9:00): 1 empty card added (RF 3)'],
+                         [i['text'] for i in p.items if i['kind'] == 'cards_added'])
+        self.send()
+        self.assertEqual({1: [('Avery Able', 0, '', '')], 2: [('Blake Bond', 0, '', '')], 3: []}, self.table(self.s1))
+        self.assertEqual(3, MicSession.objects.get(pk=self.s1.pk).num_mics)
+        self.assertEqual([], push.preview(self.day).changes)
+        r = revert.preview(self.day)                                       # the revert takes the card back out
+        self.client.post(reverse('planner:mic_plan_revert', args=[self.day.pk]), {'push': r.push.pk, 'digest': r.digest})
+        self.assertEqual([1, 2], sorted(self.s1.mic_assignments.values_list('rf_number', flat=True)))
+
+    def test_preview_counts_cards(self):
+        resp = self.client.get(self.url())
+        self.assertContains(resp, '3 cards: 2 with presenters, 1 empty')
+        self.assertContains(resp, '3 cards: 1 with presenter, 2 empty')
 
     def test_before_snapshot_records_changed_rows(self):
         old_row = self.slot['Avery Able'].assignment_id
@@ -343,7 +383,7 @@ class RePushTests(PushBase):
         self.send()
         before = push.last_push(self.day).before
         self.assertIn(['presenterslot', self.slot['Avery Able'].pk, {'assignment_id': old_row}], before['updated'])
-        self.assertIn(old_row, [d[1] for d in before['deleted'] if d[0] == 'micassignment'])
+        self.assertNotIn(old_row, [d[1] for d in before['deleted'] if d[0] == 'micassignment'])   # an empty card now
         self.assertTrue(any(c[0] == 'micassignment' for c in before['created']))
 
 
@@ -409,25 +449,31 @@ class FixedNumberTests(PushBase):
     def rfs(self):
         return sorted(self.s1.mic_assignments.values_list('rf_number', flat=True))
 
+    def all_but(self, *gone):
+        return [n for n in range(1, 22) if n not in gone]
+
     def test_deleting_a_row_does_not_renumber(self):
+        self.assertEqual(self.all_but(), self.rfs())                   # a card per RF up to the highest (PR 5.4)
         self.s1.mic_assignments.get(rf_number=7).delete()
-        self.assertEqual([3, 21], self.rfs())
+        self.assertEqual(self.all_but(7), self.rfs())
 
     def test_num_mics_change_adds_above_and_never_deletes(self):
+        self.s1.mic_assignments.get(rf_number=7).delete()
         self.s1.refresh_from_db()
-        self.s1.num_mics = 4
+        self.s1.num_mics = 21
         self.s1.save()
         self.s1.create_mic_assignments()
-        self.assertEqual([3, 7, 21, 22], self.rfs())
+        self.assertEqual(self.all_but(7) + [22], self.rfs())
         self.s1.num_mics = 1
         self.s1.save()
         self.s1.create_mic_assignments()
-        self.assertEqual([3, 7, 21, 22], self.rfs())
+        self.assertEqual(self.all_but(7) + [22], self.rfs())
 
     def test_renumber_command_skips_it(self):
         from django.core.management import call_command
+        self.s1.mic_assignments.get(rf_number=7).delete()
         call_command('renumber_mic_assignments', '--apply', stdout=open('/dev/null', 'w'))
-        self.assertEqual([3, 7, 21], self.rfs())
+        self.assertEqual(self.all_but(7), self.rfs())
 
     def test_hand_made_sessions_still_renumber(self):
         hand = MicSession.objects.create(day=self.day, name='Hand made', num_mics=3)

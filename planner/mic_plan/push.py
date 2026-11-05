@@ -13,7 +13,9 @@ PresenterSlot per wearing of that RF, in wearing order. A host's row is in
 the sessions they are on stage in only; a backup is its own row ("backup
 for <name>"); the emergency spare is a row with no presenter ("SPARE") in
 every session. Those words and "host" go in the slot's notes, which the A1
-and A2 views show. Sessions it
+and A2 views show. Every pushed session has a card for each channel (PR
+5.4): RF 1..N of the rig (1..the day's highest RF with no rig), the ones
+nobody wears in it an empty row, as a hand-built session's are. Sessions it
 writes are ``rf_from_plan``: nothing renumbers them.
 
 A push stores what it matched (MicPlanPush maps) and what it wrote
@@ -97,10 +99,29 @@ def short_of_rig(plan):
         n = sum(1 for p in over if p['pool'] == pool)
         if n:
             what.append('{} {}{}'.format(n, word, '' if n == 1 else 's'))
-    rfs = [p['rf'] for p in over]
-    span = str(rfs[0]) if len(rfs) == 1 else ('{}\u2013{}'.format(rfs[0], rfs[-1]) if rfs[-1] - rfs[0] == len(rfs) - 1
-                                              else ', '.join(map(str, rfs)))
-    return 'The rig is short by {} (RF {}). Add channels, or move people, then send.'.format(' and '.join(what), span)
+    return 'The rig is short by {} (RF {}). Add channels, or move people, then send.'.format(
+        ' and '.join(what), rf_span([p['rf'] for p in over]))
+
+
+def rf_span(rfs):
+    """'25', '25–26', '1–7, 10, 14–23' for sorted RFs."""
+    runs = []
+    for rf in rfs:
+        if runs and rf == runs[-1][1] + 1:
+            runs[-1][1] = rf
+        else:
+            runs.append([rf, rf])
+    return ', '.join(str(a) if a == b else '{}\u2013{}'.format(a, b) for a, b in runs)
+
+
+def cards_text(rows):
+    """'12 cards: 9 with presenters, 3 empty' (', 1 spare' when there is one)."""
+    spare = sum(1 for r in rows if r['label'] == 'SPARE')
+    empty = sum(1 for r in rows if not r['wearings'])
+    out = '{} card{}: {} with presenter{}, {} empty'.format(
+        len(rows), '' if len(rows) == 1 else 's', len(rows) - spare - empty, '' if len(rows) - spare - empty == 1 else 's',
+        empty)
+    return out + (', {} spare'.format(spare) if spare else '')
 
 
 # --------------------------------------------------------------------------
@@ -165,6 +186,8 @@ def wanted(plan, apps, parts):
                 if ons:
                     worn.setdefault((k, a.rf_number), []).append((min(ons), app.key, app, a.backup))
     spares = [p['rf'] for p in plan.packs if p.get('spare')]
+    # A card for every channel: the rig's, or (no rig) up to the day's highest RF.
+    top = R.channels if R.set else max((p['rf'] for p in plan.packs), default=0)
     out = []
     for k, sess in enumerate(sessions):
         rows = []
@@ -192,6 +215,11 @@ def wanted(plan, apps, parts):
             rows.append({'rf': rf, 'pool': HH, 'notes': '', 'label': 'SPARE',
                          'wearings': [{'keys': ['{}#spare|{}'.format(sess['key'], rf)], 'person': None,
                                        'name': '', 'host': False, 'backup': False, 'pool': HH, 'apps': []}]})
+        # The channels nobody wears in this session: empty cards (no slot,
+        # blank mic type), as Mic Tracker makes them for a session by hand.
+        have = {r['rf'] for r in rows}
+        rows += [{'rf': rf, 'pool': '', 'notes': '', 'label': '', 'wearings': [], 'empty': True}
+                 for rf in range(1, top + 1) if rf not in have]
         rows.sort(key=lambda r: r['rf'])
         for row in rows:
             zone = R.pool_at(row['rf']) if R.set else None
@@ -209,7 +237,7 @@ def wanted(plan, apps, parts):
                     if swap is not None:
                         notes.append('{} {}'.format(swap_line(row['rf'], swap['to']), swap_words(swap)))
                 w['notes'] = ' \u00b7 '.join(n for n in notes if n)
-        out.append(dict(sess, rows=rows))
+        out.append(dict(sess, rows=rows, cards=cards_text(rows)))
     return out
 
 
@@ -389,11 +417,13 @@ def preview(day, plan=None):
             # One line: its rows and slots are listed in it, not one by one.
             what = []
             for row in t['rows']:
+                if not row['wearings']:
+                    continue                 # an empty card: counted, not listed
                 who = ', '.join((_ref_of(refs, w) or {}).get('name', '') + (' (host)' if w['notes'] == 'host' else '')
                                 for w in row['wearings'] if _ref_of(refs, w))
                 what.append('RF {} {}'.format(row['rf'], ' — '.join(x for x in (who, row['label']) if x)))
-            out.items.append(_item('create', 'session_create', 'New session {} ({} RF{}): {}'.format(
-                t['name'], len(t['rows']), '' if len(t['rows']) == 1 else 's', ' · '.join(what)),
+            out.items.append(_item('create', 'session_create', 'New session {} ({}): {}'.format(
+                t['name'], t['cards'], ' · '.join(what)),
                 session=t['key'], name=t['name'], t0=t['t0'], t1=t['t1']))
             out.new_sessions.append(t['name'])
             continue
@@ -492,6 +522,15 @@ def preview(day, plan=None):
                     continue
                 slot = slots[pk]
                 out.items.extend(_slot_change(slot, slot_snap.get(str(pk)), w, ref, t, row, spk, mt_sessions, names))
+
+    # Empty cards a session already in Mic Tracker gains (one line each).
+    for t in targets:
+        spk = matched.get(t['key'])
+        added = [r['rf'] for r in t['rows'] if spk and not r['wearings'] and (spk, r['rf']) not in rows]
+        if added:
+            out.items.append(_item('create', 'cards_added', '{}: {} empty card{} added (RF {})'.format(
+                t['name'], len(added), '' if len(added) == 1 else 's', rf_span(added)), session=t['key'],
+                touch=[spk]))
 
     # What the plan no longer has.
     for pk, slot in slots.items():

@@ -22,7 +22,7 @@ from django.urls import reverse
 from planner.mic_plan import page, planning, push, revert
 from planner.mic_plan.display import rig_text
 from planner.mic_plan.solver import BODY, HH, Person, Rig, summary
-from planner.models import MicAssignment, MicPlan, MicPlanSettings, PresenterSlot
+from planner.models import MicAssignment, MicPlan, MicPlanSettings, MicSession, PresenterSlot
 from planner.tests.test_mic_plan_edits import EditBase
 from planner.tests.test_mic_plan_solver import Settings, Show, panel_day, rf, solve
 
@@ -364,6 +364,50 @@ class RigPushTests(RigBase):
         self.assertEqual(after_first, sorted(MicAssignment.objects.filter(session__day=self.day)
                                              .values_list('session_id', 'rf_number')))
 
+    def cards(self):
+        """{session name: {rf: [presenter names or None]}} of the day."""
+        out = {}
+        for r in MicAssignment.objects.filter(session__day=self.day).select_related('session'):
+            out.setdefault(r.session.name, {})[r.rf_number] = [
+                sl.presenter.name if sl.presenter else sl.notes for sl in r.presenter_slots.order_by('order')]
+        return out
+
+    def test_every_session_has_a_card_for_every_channel(self):
+        self.rig(12, 3, 1)
+        self.generate()
+        resp = self.client.get(reverse('planner:mic_plan_push', args=[self.day.pk]))
+        self.assertContains(resp, ', 1 spare')
+        self.send()
+        cards = self.cards()
+        self.assertTrue(cards)
+        for name, rows in cards.items():
+            with self.subTest(session=name):
+                self.assertEqual(list(range(1, 13)), sorted(rows))
+                self.assertEqual(['SPARE'], rows[12])
+                self.assertEqual(12, MicSession.objects.get(day=self.day, name=name).num_mics)
+        # Unused channels (8-9 on this rig) are empty cards: a row, no slot, blank type.
+        empty = MicAssignment.objects.filter(session__day=self.day, rf_number=8)
+        self.assertTrue(empty.exists())
+        self.assertFalse(PresenterSlot.objects.filter(assignment__in=empty).exists())
+        self.assertEqual({''}, set(empty.values_list('mic_type', flat=True)))
+
+    def test_a_smaller_rig_removes_empty_rows_above_it_and_keeps_rows_with_a2_data(self):
+        self.rig(16, 3, 1)
+        self.generate()
+        self.send()
+        first = MicSession.objects.filter(day=self.day).order_by('order').first()
+        MicAssignment.objects.filter(session=first, rf_number=13).update(notes='batteries swapped')
+        self.rig(12, 3, 1)
+        self.generate()
+        p = self.preview()
+        self.assertIn('{}: row kept — has A2 data (notes)'.format(push._label(first.name, 13)),
+                      [i['text'] for i in p.group('kept')])
+        self.send()
+        self.assertEqual(list(range(1, 14)), sorted(first.mic_assignments.values_list('rf_number', flat=True)))
+        for s in MicSession.objects.filter(day=self.day).exclude(pk=first.pk):
+            self.assertEqual(list(range(1, 13)), sorted(s.mic_assignments.values_list('rf_number', flat=True)))
+        self.assertEqual(['SPARE'], self.cards()[first.name][12])
+
     def test_slot_notes_say_which_transmitter_and_the_swap(self):
         self.rig(12, 3, 1)
         self.generate()
@@ -425,6 +469,7 @@ class RigSettingsTests(RigBase):
         for rig, text in ((('8', '9', '0'), 'Handhelds: at most the 8 wireless channels.'),
                           (('8', '2', '3'), 'Spare handhelds: at most the 2 handhelds.'),
                           (('', '2', '0'), 'set Wireless channels first'),
+                          (('101', '0', '0'), 'Mic Tracker holds at most 100 channels per session'),
                           (('0', '0', '0'), 'Wireless channels: enter a whole number in range')):
             with self.subTest(rig=rig):
                 resp = self.save(wireless_channels=rig[0], handheld_channels=rig[1], spare_handhelds=rig[2])
