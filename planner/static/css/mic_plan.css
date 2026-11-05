@@ -280,9 +280,10 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-chart .lane.short { box-shadow: inset 3px 0 0 var(--mp-crit); }
 .mp-chart .lane.short .rflab { color: var(--mp-crit); }
 .mp-page button.rflab { all: unset; cursor: pointer; width: 132px; flex: none; font: 600 13px var(--mp-mono); color: var(--mp-fg);
-    display: flex; flex-direction: column; justify-content: center; height: 30px; line-height: 1.1; }
+    display: flex; flex-direction: column; justify-content: center; height: 30px; line-height: 1.1;
+    box-sizing: border-box; padding-left: 8px; }   /* clear of the red edge on an OVER or conflict lane */
 .mp-page button.rflab small { font: 500 10px var(--mp-mono); color: var(--mp-muted); text-transform: uppercase;
-    letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 124px; }
+    letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .mp-chart .track { position: relative; flex: 1; align-self: stretch; min-height: 30px; }
 .mp-chart .bg { position: absolute; top: 0; bottom: 0; background: var(--mp-break);
     box-shadow: inset 1px 0 0 var(--mp-break-edge), inset -1px 0 0 var(--mp-break-edge); }
@@ -311,8 +312,9 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-card { background: var(--mp-panel); border: 1px solid var(--mp-line); border-left: 3px solid var(--mp-warn);
     border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .mp-card.k-late, .mp-card.k-shortage, .mp-card.k-conflict { border-left-color: var(--mp-crit); }
-.mp-card.k-moved, .mp-card.k-pin_reuse, .mp-card.k-unmatched { border-left-color: var(--mp-off); }
-.mp-card.k-moved .mp-kind, .mp-card.k-pin_reuse .mp-kind, .mp-card.k-unmatched .mp-kind { color: var(--mp-off); }
+.mp-card.k-moved, .mp-card.k-pin_reuse, .mp-card.k-unmatched, .mp-card.k-rig_use, .mp-card.k-swap { border-left-color: var(--mp-off); }
+.mp-card.k-moved .mp-kind, .mp-card.k-pin_reuse .mp-kind, .mp-card.k-unmatched .mp-kind,
+.mp-card.k-rig_use .mp-kind, .mp-card.k-swap .mp-kind { color: var(--mp-off); }
 .mp-card .mp-kind { font: 600 10.5px var(--mp-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mp-warn); }
 .mp-card.k-late .mp-kind, .mp-card.k-shortage .mp-kind, .mp-card.k-conflict .mp-kind { color: var(--mp-crit); }
 .mp-card .what { font-size: 13.5px; }
@@ -375,7 +377,7 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-chart .lane.busy { background: color-mix(in srgb, var(--mp-crit) 9%, transparent); }
 .mp-chart .lane.over { outline: 2px solid var(--mp-accent); outline-offset: -2px; }
 .mp-chart .lane.own { background: var(--mp-accent-tint); }
-.mp-chart .newlane .rflab { all: unset; width: 132px; flex: none; font: 600 13px var(--mp-mono); color: var(--mp-muted);
+.mp-chart .newlane .rflab { all: unset; box-sizing: border-box; padding-left: 8px; width: 132px; flex: none; font: 600 13px var(--mp-mono); color: var(--mp-muted);
     display: flex; flex-direction: column; justify-content: center; height: 30px; line-height: 1.1; }
 .mp-chart .newlane .rflab small { font: 500 10px var(--mp-mono); text-transform: uppercase; letter-spacing: .04em; }
 .mp-chart .newlane .track { border: 1px dashed var(--mp-line); border-radius: 4px; margin: 3px 0; display: flex; align-items: center; }

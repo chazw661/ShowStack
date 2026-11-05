@@ -28,24 +28,30 @@ Times are minutes from midnight. The logic follows the prototype solver
    when that needs fewer packs); ``recycle_at_breaks`` (the
    default): a pack last worn before the latest break (or the start of a
    later part), lowest RF first, so within a session a worn pack never goes
-   to someone else. Else a new one. A set pack count is binding: at it, a
-   mic waits for a de-mic, and goes over (a shortage) only when no pack can
-   free up before its walk-on; under ``recycle_at_breaks`` it first waits
-   for a pack from before the break if one frees by its deadline, then
-   reuses the pack free longest mid-session (flagged). A break too short to
-   free the packs worn before it is flagged once. Body and HH are separate
-   pools; a "backup" person also wears their own backup pack. RF numbers
-   are the rig's channels (``Rig``): body, then body backups, from 1; HH,
-   then HH backups, from the first handheld channel; the spare channels at
-   the end are never assigned. A pool short of channels numbers its extra
-   packs past the rig end ("over"), never in the other pool's channels.
-   With no rig set: body from 1, HH after the last body pack, the spares
-   after them.
+   to someone else. Else a new one. With a rig, its channels but the
+   spares are one pool either type takes, and binding: at the limit a mic
+   waits for a pack of its type that frees by its deadline (under
+   ``recycle_at_breaks`` first one from before the break, then one free
+   longest mid-session, flagged); else takes a free pack of the other type
+   (its transmitter is swapped: at the break when one lies between, else
+   mid-session; flagged); else waits for either type up to its walk-on;
+   and goes over the rig (a shortage) only when none frees by then. A break
+   too short to free the packs worn before it is flagged once. A "backup"
+   person also wears their own backup pack. RF numbers are the rig's
+   channels (``Rig``), by the type of each pack's first wearer: body, then
+   body backups, the lowest free channel (the body zone, then on up into
+   the handheld zone); HH, then HH backups, the highest (the handheld zone
+   counting down, then on down into the body zone); the spares at the end
+   are never assigned; past the rig's end ("over") only when every other
+   channel is taken. A channel used outside its zone, and each transmitter
+   swap, is an info flag. With no rig set: body from 1, HH after the last
+   body pack, the spares after them.
 6. Edits (``Fixed``, by appearance key ``Appearance.skey``). A pinned
    appearance wears its RF for its whole wearing: it never waits on the pack
    count, waits for its pack only when that pack's wearer comes off before
    its walk-on, and otherwise takes it while worn ("conflict", flagged).
-   A pinned body/HH type moves it to that pool. Every other appearance
+   A pin keeps the wearer's type (a pack of the other type swaps its
+   transmitter); only a pinned body/HH type changes it. Every other appearance
    prefers the RF it had in the previous version, before any rule above,
    and the rules above avoid packs another appearance is pinned or
    preferred to over the same stretch, so one move changes only what it
@@ -173,11 +179,12 @@ class Appearance:
 
 @dataclass(frozen=True)
 class Fixed:
-    """What the A2 fixed by editing, by appearance key (``Appearance.skey``)."""
+    """What the A2 fixed by editing, by appearance key (``Appearance.skey``).
+    A pin never changes the wearer's type: a body pack pinned to a channel
+    last worn as a handheld swaps that channel's transmitter."""
     pins: dict = field(default_factory=dict)      # skey -> RF (hard)
     types: dict = field(default_factory=dict)     # skey -> BODY | HH
     prefer: dict = field(default_factory=dict)    # skey -> RF (soft: the previous version's)
-    pools: dict = field(default_factory=dict)     # RF -> BODY | HH, for pinned and preferred RFs
 
 
 NOTHING_FIXED = Fixed()
@@ -185,9 +192,11 @@ NOTHING_FIXED = Fixed()
 
 @dataclass(frozen=True)
 class Rig:
-    """The wireless rig: channels 1..N, the last ``handhelds`` of them
-    handhelds, the last ``spares`` of those kept unassigned. ``channels``
-    None: no rig (packs numbered as needed)."""
+    """The wireless rig: channels 1..N, the last ``spares`` kept unassigned.
+    The rest are one pool either type can take; the last ``handhelds``
+    (spares included) are the handheld zone, the others the body zone, which
+    each type tries first. ``channels`` None: no rig (packs numbered as
+    needed)."""
     channels: int = None
     handhelds: int = 0
     spares: int = 0
@@ -205,7 +214,7 @@ class Rig:
         return self.channels - self.spares + 1
 
     def channels_of(self, pool):
-        """The channels a pool's packs may take (spares aside)."""
+        """A type's zone (spares aside): the channels it takes first."""
         if pool == BODY:
             return range(1, self.first_hh)
         return range(self.first_hh, self.first_spare)
@@ -213,45 +222,49 @@ class Rig:
     def spare_channels(self):
         return range(self.first_spare, self.channels + 1)
 
-    def limit(self, pool):
-        return len(self.channels_of(pool)) if self.set else None
+    @property
+    def limit(self):
+        """How many packs the rig holds at once (spares aside); None: no rig."""
+        return self.first_spare - 1 if self.set else None
 
     def pool_at(self, rf):
-        """BODY, HH or 'spare' for a channel of the rig; None past its end."""
+        """The zone (BODY, HH) or 'spare' of a channel of the rig; None past its end."""
         if not 1 <= rf <= self.channels:
             return None
         if rf < self.first_hh:
             return BODY
         return HH if rf < self.first_spare else 'spare'
 
-    def fits(self, rf, pool):
-        """May a ``pool`` pack be numbered ``rf``? Always, with no rig."""
-        return not self.set or self.pool_at(rf) == pool
+    def usable(self, rf):
+        """May a pack be numbered ``rf``? Any channel but a spare; any RF with no rig."""
+        return not self.set or self.pool_at(rf) in (BODY, HH)
 
 
 def rig(settings):
     return Rig(settings.wireless_channels, settings.handheld_channels or 0, settings.spare_handhelds or 0)
 
 
-def capacity(pool, R):
-    """'20 body channels', '3 handheld channels, 1 kept spare'."""
-    n = R.limit(pool)
-    what = '{} {} channel{}'.format(n, 'body' if pool == BODY else 'handheld', '' if n == 1 else 's')
-    if pool == HH and R.spares:
+def capacity(R):
+    """'13 channels', '13 channels, 1 kept spare'."""
+    n = R.limit
+    what = '{} channel{}'.format(n, '' if n == 1 else 's')
+    if R.spares:
         what += ', {} kept spare'.format(R.spares)
     return what
 
 
-def full(pool, R):
-    """Why a mic waits at the rig's limit: 'all 20 body channels in use'."""
-    n = R.limit(pool)
-    word = 'body' if pool == BODY else 'handheld'
-    spare = ' ({} kept spare)'.format(R.spares) if pool == HH and R.spares else ''
+def full(R):
+    """Why a mic waits at the rig's limit: 'all 13 channels in use'."""
+    n = R.limit
+    spare = ' ({} kept spare)'.format(R.spares) if R.spares else ''
     if not n:
-        return 'no {} channel in the rig{}'.format(word, spare)
+        return 'no channel in the rig{}'.format(spare)
     if n == 1:
-        return 'the 1 {} channel is in use{}'.format(word, spare)
-    return 'all {} {} channels in use{}'.format(n, word, spare)
+        return 'the 1 channel is in use{}'.format(spare)
+    return 'all {} channels in use{}'.format(n, spare)
+
+
+TX_WORDS = {BODY: 'beltpack', HH: 'handheld'}     # the transmitter a type needs
 
 
 @dataclass
@@ -292,7 +305,11 @@ class Pack:
     host: bool = False
     spare: bool = False
     label: str = ''
-    over: bool = False       # past the rig's end: the rig is short of this pool's channels
+    over: bool = False       # past the rig's end: the rig is short of channels
+    # Its transmitter changes type: [{'at', 'to', 'from', 'brk', 'when', 'a2',
+    # 'appearance'}]: ``brk`` the minute of the break it is done at (None
+    # mid-session), ``when`` that in words (swap_when).
+    swaps: list = field(default_factory=list)
 
 
 @dataclass
@@ -662,7 +679,7 @@ class _Task:
 
 @dataclass
 class _Pack:
-    pool: str
+    pool: str                # its transmitter's type now (BODY | HH)
     free_at: float = 0
     backup_of: int = None
     host: bool = False
@@ -675,6 +692,8 @@ class _Pack:
     # Wearings not yet de-mic'd (two only on a conflicting pin):
     # [{'start', 'off', 'head'}].
     open: list = field(default_factory=list)
+    first: str = None        # the type of its first wearer (numbering)
+    swaps: list = field(default_factory=list)
 
 
 def _overrun(frees, mics, mic_min):
@@ -750,10 +769,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     S = settings
     n = max(1, S.a2_count)
     for a in apps:
-        pin = fixed.pins.get(a.skey)
-        if pin is not None and pin in fixed.pools:
-            a.mic_type = fixed.pools[pin]
-        elif a.skey in fixed.types:
+        if a.skey in fixed.types:
             a.mic_type = fixed.types[a.skey]
 
     # Back on within the pre-mic lead of coming off: they keep the pack on
@@ -825,7 +841,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     last = {}                # person -> their last regular pack
     backups = {}             # person -> backup pack
     R = rig(S)
-    limits = {BODY: R.limit(BODY), HH: R.limit(HH)}
+    limit = R.limit          # one pool: every pack, either type, backups too
     recycle = S.pack_policy == RECYCLE_AT_BREAKS
     starts = session_starts(day)
     marks = [m for m, _ in starts]
@@ -843,9 +859,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         return not recycle or p is last.get(task.app.person) or p.session < session_of(task.app.on)
 
     def at_limit(task):
-        pool = pool_of(task)
-        return (not task.backup and limits[pool] is not None
-                and sum(1 for p in packs if p.pool == pool) >= limits[pool])
+        return not task.backup and limit is not None and len(packs) >= limit
 
     def pool_of(task):
         if task.backup:
@@ -867,12 +881,13 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         """The pack numbered ``rf``: worn before, or new (not in ``packs``
         until it is first worn)."""
         p = by_rf.get(rf)
-        return p if p is not None else _Pack(fixed.pools.get(rf, pool), tmp=-1, fixed=rf)
+        return p if p is not None else _Pack(pool, tmp=-1, fixed=rf)
 
-    def free_pack(task, t, fallback=False):
+    def free_pack(task, t, fallback=False, cross=False):
         """(pack, how) for ``task`` now, or (None, None). ``fallback``: at a
         set count under recycle_at_breaks, the pack free longest even if it
-        was worn this session (how 'mid-session')."""
+        was worn this session (how 'mid-session'). ``cross``: at the rig's
+        limit, a pack of the other type too (its transmitter is swapped)."""
         if task.backup:
             return backups.get(task.app.person), 'backup'
         pool = pool_of(task)
@@ -884,10 +899,10 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         if want is not None and claimed(want, task, t) != 'hard':
             p = fixed_pack(want, pool)
             # Only where the pack policy allows it: a policy change still applies.
-            if p.pool == pool and p.backup_of is None and p.free_at <= t and allowed(p, task) and \
+            if (p.pool == pool or cross) and p.backup_of is None and p.free_at <= t and allowed(p, task) and \
                     (p.tmp >= 0 or not at_limit(task)):
                 return p, 'same as before' if p is mine else 'recycled' if p.wearers else 'new'
-        free = [p for p in packs if p.pool == pool and p.backup_of is None and p.free_at <= t]
+        free = [p for p in packs if (p.pool == pool or cross) and p.backup_of is None and p.free_at <= t]
         # Packs nobody else is pinned or preferred to over this stretch first,
         # then ones only preferred to (that person moves), never pinned ones.
         level = {id(p): claimed(p.fixed, task, t) if p.fixed is not None else None for p in free}
@@ -909,14 +924,15 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
                     return min(tier, key=lambda p: (p.free_at, p.tmp)), 'mid-session'
         return None, None
 
-    def can_free_in_time(task, t, by=None, any_pack=False):
-        """Could a pack of the task's pool (one the policy allows, unless
-        ``any_pack``) be free in time for it to be mic'd by ``by`` (its
-        deadline), if this A2 de-mic'd it as soon as possible?"""
+    def can_free_in_time(task, t, by=None, any_pack=False, cross=False):
+        """Could a pack of the task's type (either type when ``cross``; one
+        the policy allows, unless ``any_pack``) be free in time for it to be
+        mic'd by ``by`` (its deadline), if this A2 de-mic'd it as soon as
+        possible?"""
         pool = pool_of(task)
         by = task.due if by is None else by
         for p in packs:
-            if p.pool != pool or p.backup_of is not None:
+            if (p.pool != pool and not cross) or p.backup_of is not None:
                 continue
             if not any_pack and not allowed(p, task):
                 continue
@@ -928,33 +944,35 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         return False
 
     def blocked(task, t):
-        """At a set pack count with none free: the mic waits for a de-mic,
-        unless no pack can free up before the walk-on (then it goes over the
-        count, and the shortage is flagged)."""
-        pool = pool_of(task)
+        """At the rig's limit with none of its type free: the mic waits for
+        one that frees by its deadline; else takes a free pack of the other
+        type (a transmitter swap); else waits for either type up to the
+        walk-on; and goes over the rig (flagged) only when none frees by
+        then."""
         if not task.backup and task.app.key in chain_pin:
             # Pinned: waits for its RF only when that RF's wearer comes off
             # before this walk-on; else takes it worn (a conflict).
             p = by_rf.get(chain_pin[task.app.key])
             return p is not None and p.free_at > t and p.off < task.app.on
-        if task.backup or limits[pool] is None:
+        if task.backup or limit is None:
             return False
-        if sum(1 for p in packs if p.pool == pool) < limits[pool] or free_pack(task, t)[0] is not None:
+        if len(packs) < limit or free_pack(task, t)[0] is not None:
             return False
-        if recycle:
-            # A pack from before the break, if one frees by the deadline;
-            # else one free now, reused mid-session; else as fewest_packs.
-            if can_free_in_time(task, t):
-                return True
-            if free_pack(task, t, fallback=True)[0] is not None:
-                return False
-            return can_free_in_time(task, t, by=task.app.on, any_pack=True)
-        return can_free_in_time(task, t, by=task.app.on)
+        # Its own type (under recycle_at_breaks a pack from before the
+        # break), if one frees by the deadline; else one free now (reused
+        # mid-session, then the other type's); else either, by the walk-on.
+        if can_free_in_time(task, t):
+            return True
+        if pack_for(task, t)[0] is not None:
+            return False
+        return can_free_in_time(task, t, by=task.app.on, any_pack=True, cross=True)
 
     def pack_for(task, t):
         p, h = free_pack(task, t)
         if p is None and at_limit(task):
             p, h = free_pack(task, t, fallback=True)
+            if p is None:
+                p, h = free_pack(task, t, fallback=True, cross=True)
         return p, h
 
     def new_pack(task):
@@ -986,6 +1004,18 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
             by_rf[pack.fixed] = pack
         if task.kind == 'mic':
             here = session_of(a.on)
+            pool = pool_of(task)
+            if not pack.wearers:
+                pack.first = pool
+            elif pack.pool != pool:
+                # Its transmitter changes type: at the latest break (or gap
+                # before a part) between its last wearer coming off and this
+                # mic, if there is one; else mid-session.
+                brk = None if pack.open else next(
+                    (st for st in reversed(starts) if pack.off <= st[0] <= t + 0.01), None)
+                pack.swaps.append({'at': t, 'to': pool, 'from': pack.pool, 'brk': brk and brk[0], 'a2': i + 1,
+                                   'appearance': a.key, 'when': swap_when(brk, day)})
+            pack.pool = pool
             if not task.backup:
                 if how in ('recycled', 'mid-session') and pack.session >= here:
                     plan.mid_session += 1
@@ -1079,7 +1109,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
                 hm(before[2]) if before else '?', ix.line(task.app.on_row))
         if not task.pack_wait:
             return 'A2 time'
-        return full(pool_of(task), R)
+        return full(R)
 
     guard = 0
     while not all(t.done for t in tasks):
@@ -1144,14 +1174,13 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         _suggest(day, S, behind, ix, fixed)
     _number(plan, packs, S, ix)
     for flag, pack, task in reuse_flags:
-        pool = pool_of(task)
         if flag['kind'] == 'pin_reuse':
             flag['text'] = 'Line {}: RF {} goes to {} mid-session because of your change ({}).'.format(
                 ix.line(task.app.on_row), pack.rf, ix.people[task.app.person].name,
                 'recycle at breaks' if recycle else 'fewest packs')
         else:
             flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {}.'.format(
-                ix.line(task.app.on_row), pack.rf, full(pool, R))
+                ix.line(task.app.on_row), pack.rf, full(R))
         plan.flags.append(flag)
     for p in packs:
         wearings += [(p, w['start'], INF, w['head'], w['off']) for w in p.open]
@@ -1163,7 +1192,8 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         plan.flags.append({'kind': 'break', 'row': key, 'person': None, 'text': '{} at line {} too short to turn over {} pack{}.'.format(
             'Break' if brk is not None and brk.is_break else 'Gap before the part', ix.line(key), n_packs,
             '' if n_packs == 1 else 's')})
-    _shortages(plan, limits, ix, R)
+    _shortages(plan, ix, R)
+    _rig_cards(plan, ix, R)
     _busy(plan, day, n, S)
     return plan
 
@@ -1217,47 +1247,39 @@ def _suggest(day, S, behind, ix, fixed=NOTHING_FIXED):
                 other['text'] += ' Fix: see line {}.'.format(first)
 
 
-def _shortages(plan, limits, ix, R):
-    """One flag per stretch of time with more packs of a pool in use than
-    set, at the line where it starts, giving that stretch's peak."""
-    worn = {}                 # (rf, appearance, backup) -> [start, end]
+def _shortages(plan, ix, R):
+    """One flag per stretch of time with more packs in use (either type,
+    backups too) than the rig holds, at the line where it starts, giving
+    that stretch's peak."""
+    if not R.set:
+        return
+    # Each mic puts a pack in use and each de-mic frees one: by action, not
+    # by appearance, as a pack kept on is de-mic'd at a later appearance.
+    events = []
     for a in plan.actions:
-        key = (a.rf_number, a.appearance, a.backup)
-        if a.kind == 'mic':
-            worn[key] = [a.start_min, INF, a]
-        elif key in worn:
-            worn[key][1] = a.end_min
-    pools = {p.rf: p.pool for p in plan.packs}
-    for pool, limit in limits.items():
-        if limit is None:
-            continue
-        events = []
-        for (rf, _, _), (t0, t1, mic) in worn.items():
-            if pools.get(rf) == pool:
-                events += [(t0, 1, mic), (t1, -1, None)]
-        events.sort(key=lambda e: (e[0], e[1]))     # off before on at the same minute
-        count, start, peak = 0, None, 0
-        for t, step, mic in events:
-            count += step
-            if count > limit and start is None:
-                start, peak = mic, count
-            elif start is not None and count > peak:
-                peak = count
-            if start is not None and count <= limit:
-                _flag_shortage(plan, ix, pool, R, peak, start)
-                start = None
-        if start is not None:
-            _flag_shortage(plan, ix, pool, R, peak, start)
+        events.append((a.start_min, 1, a) if a.kind == 'mic' else (a.end_min, -1, None))
+    events.sort(key=lambda e: (e[0], e[1]))     # off before on at the same minute
+    count, start, peak = 0, None, 0
+    for t, step, mic in events:
+        count += step
+        if count > R.limit and start is None:
+            start, peak = mic, count
+        elif start is not None and count > peak:
+            peak = count
+        if start is not None and count <= R.limit:
+            _flag_shortage(plan, ix, R, peak, start)
+            start = None
+    if start is not None:
+        _flag_shortage(plan, ix, R, peak, start)
 
 
-def _flag_shortage(plan, ix, pool, R, peak, mic):
+def _flag_shortage(plan, ix, R, peak, mic):
     app = plan.appearances[mic.appearance]
-    more = peak - R.limit(pool)
-    what = 'body pack' if pool == BODY else 'handheld'
+    more = peak - R.limit
     plan.flags.append({
         'kind': 'shortage', 'row': app.on_row, 'person': app.person,
-        'text': 'Line {}: need {} more {}{} than the rig has \u2014 {} ({} in use from {}).'.format(
-            ix.line(app.on_row), more, what, '' if more == 1 else 's', capacity(pool, R), peak, hm(app.on))})
+        'text': 'Line {}: need {} more pack{} than the rig has \u2014 {} ({} in use from {}).'.format(
+            ix.line(app.on_row), more, '' if more == 1 else 's', capacity(R), peak, hm(app.on))})
 
 
 def _conflicts(plan, wearings, pins, apps, ix):
@@ -1285,24 +1307,32 @@ def _conflicts(plan, wearings, pins, apps, ix):
 
 
 def _number(plan, packs, S, ix):
-    """RF numbers: a pinned or preferred pack keeps its number; the rest
-    take the lowest free, body, body backups, HH, HH backups -- in their
-    pool's channels of the rig, then past its end (over)."""
+    """RF numbers: a pinned or preferred pack keeps its number; the rest,
+    by the type of their first wearer (body, body backups, HH, HH backups):
+    with a rig, body packs the lowest free channel (the body zone, then on
+    up through the handheld zone), handhelds the highest (the handheld zone
+    counting down, then on down through the body zone); past the rig's end
+    (over) only when every channel but the spares is taken. With no rig,
+    the lowest free number in that order."""
     R = rig(S)
-    order = ([p for p in packs if p.pool == BODY and p.backup_of is None]
-             + [p for p in packs if p.pool == BODY and p.backup_of is not None]
-             + [p for p in packs if p.pool == HH and p.backup_of is None]
-             + [p for p in packs if p.pool == HH and p.backup_of is not None])
+
+    def first(p):
+        return p.first or p.pool
+
+    order = ([p for p in packs if first(p) == BODY and p.backup_of is None]
+             + [p for p in packs if first(p) == BODY and p.backup_of is not None]
+             + [p for p in packs if first(p) == HH and p.backup_of is None]
+             + [p for p in packs if first(p) == HH and p.backup_of is not None])
     taken = {p.fixed for p in packs if p.fixed is not None}
     over = set()
     if R.set:
-        free = {pool: [c for c in R.channels_of(pool) if c not in taken] for pool in (BODY, HH)}
+        free = [c for c in range(1, R.first_spare) if c not in taken]
         k = max([R.channels] + list(taken))
         for p in order:
             if p.fixed is not None:
                 p.rf = p.fixed
-            elif free[p.pool]:
-                p.rf = free[p.pool].pop(0)
+            elif free:
+                p.rf = free.pop(0) if first(p) == BODY else free.pop()
             else:
                 k += 1
                 p.rf = k
@@ -1330,8 +1360,8 @@ def _number(plan, packs, S, ix):
             label = '{} backup'.format(ix.people[p.backup_of].name)
         else:
             label = ''
-        plan.packs.append(Pack(p.rf, p.pool, backup_of=p.backup_of, host=p.rf in hosts, label=label,
-                               over=p.rf in over))
+        plan.packs.append(Pack(p.rf, first(p), backup_of=p.backup_of, host=p.rf in hosts, label=label,
+                               over=p.rf in over, swaps=p.swaps))
     # A backup's pack is its own, never shared, so it can be over the rig
     # with no stretch of too many in use (_shortages): say so here.
     for p in order:
@@ -1339,9 +1369,8 @@ def _number(plan, packs, S, ix):
             app = min((a for a in plan.appearances if a.person == p.backup_of), key=lambda a: a.on)
             plan.flags.append({
                 'kind': 'shortage', 'row': app.on_row, 'person': p.backup_of,
-                'text': "Line {}: no {} channel left for {}'s backup, RF {} is past the rig \u2014 {}.".format(
-                    ix.line(app.on_row), 'body' if p.pool == BODY else 'handheld', ix.people[p.backup_of].name,
-                    p.rf, capacity(p.pool, R))})
+                'text': "Line {}: no channel left for {}'s backup, RF {} is past the rig \u2014 {}.".format(
+                    ix.line(app.on_row), ix.people[p.backup_of].name, p.rf, capacity(R))})
     used = {p.rf for p in order}
     if R.set:
         spares = [c for c in R.spare_channels() if c not in used]
@@ -1353,6 +1382,49 @@ def _number(plan, packs, S, ix):
     plan.packs.sort(key=lambda p: p.rf)
     # A swap: a pack going to someone other than who wore it last.
     plan.swaps = sum(1 for a in plan.actions if a.kind == 'mic' and a.reason == 'recycled')
+
+
+POOL_NAMES = {BODY: 'body pack', HH: 'handheld'}
+
+
+def swap_when(start, day):
+    """When a transmitter swap is done, in words: at session start ``start``
+    ((minute, row key), session_starts) 'at the 1:45p break' or 'before the
+    part at 1:45p'; with none (None) 'mid-session'."""
+    if start is None:
+        return 'mid-session'
+    if any(s.key == start[1] and s.is_break for s in day.segments):
+        return 'at the {} break'.format(hm(start[0]))
+    return 'before the part at {}'.format(hm(start[0]))
+
+
+def _rig_cards(plan, ix, R):
+    """Info flags: a channel whose first transmitter is not its zone's type
+    ('rig_use'), and each transmitter swap ('swap' at a break, 'swap_mid'
+    mid-session), at the wearing that needs it."""
+    first_mic = {}
+    for a in sorted(plan.actions, key=lambda a: (a.start_min, a.seq)):
+        if a.kind == 'mic':
+            first_mic.setdefault(a.rf_number, a)
+    for p in plan.packs:
+        if p.spare:
+            continue
+        zone = R.pool_at(p.rf) if R.set else None
+        if zone in (BODY, HH) and p.pool != zone and p.rf in first_mic:
+            app = plan.appearances[first_mic[p.rf].appearance]
+            plan.flags.append({
+                'kind': 'rig_use', 'row': app.on_row, 'person': app.person, 'rf': p.rf,
+                'text': 'RF {} used as a {} \u2014 needs a {} transmitter'.format(
+                    p.rf, POOL_NAMES[p.pool], TX_WORDS[p.pool])})
+        for w in p.swaps:
+            app = plan.appearances[w['appearance']]
+            how = ('swap the transmitter ' + w['when'] if w['brk'] is not None
+                   else "swap mid-session (A2 is mic'ing others then)")
+            plan.flags.append({
+                'kind': 'swap' if w['brk'] is not None else 'swap_mid', 'row': app.on_row,
+                'person': app.person, 'rf': p.rf,
+                'text': 'RF {}: {} from {} after a {} \u2014 {}'.format(
+                    p.rf, POOL_NAMES[w['to']], hm(w['at']), POOL_NAMES[w['from']], how)})
 
 
 def _owners(segments):
@@ -1430,6 +1502,7 @@ def summary(plan):
         'backups': sum(1 for p in regular if p.backup_of is not None),
         'spare': sum(1 for p in plan.packs if p.spare),
         'over': sum(1 for p in plan.packs if p.over),
+        'tx_swaps': sum(len(p.swaps) for p in plan.packs),
         'swaps': plan.swaps,
         'mid_session': plan.mid_session,
         'late': sum(1 for f in plan.flags if f['kind'] == 'late'),

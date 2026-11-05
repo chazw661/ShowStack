@@ -55,6 +55,29 @@ def rig_text(values):
     return ' \u00b7 '.join('{} {}'.format(word, span) for word, span in out if span)
 
 
+TX_WORDS = {'body': 'beltpack', 'HH': 'handheld'}
+ZONE_WORDS = {'body': 'body', 'HH': 'HH'}
+
+
+def swap_line(rf, to):
+    """The A2's line for a transmitter swap: 'Swap RF 9 to handheld transmitter'."""
+    return 'Swap RF {} to {} transmitter'.format(rf, TX_WORDS[to])
+
+
+def swap_words(swap):
+    """When a swap (an entry of a plan pack's 'swaps') is done: 'at the 1:45p
+    break', 'mid-session'."""
+    return swap.get('when') or 'mid-session'
+
+
+def tx_note(pool, zone):
+    """'beltpack on HH channel' for a ``pool`` wearing on a channel of
+    ``zone`` (Rig.pool_at), or '' when it is that zone's type (or no rig)."""
+    if zone not in TX_WORDS or zone == pool:
+        return ''
+    return '{} on {} channel'.format(TX_WORDS[pool], ZONE_WORDS[zone])
+
+
 def first_name(name):
     words = (name or '').replace('Dr. ', '').split()
     return words[0] if words else name
