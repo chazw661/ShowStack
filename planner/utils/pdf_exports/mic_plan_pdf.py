@@ -285,7 +285,7 @@ def _review_story(cards, S):
 
 def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, cards, a2s, brand, printed_at, zone):
     """Write the PDF into ``buffer`` and return it. ``a2s``: the A2 numbers
-    whose schedules to include."""
+    whose schedules to include, and HELPERS for the de-mic helpers' list."""
     S = styles()
     head = page.plan_header(plan, parts)
     title, lines, warnings = header_lines(head, project, day, zone)
@@ -298,10 +298,14 @@ def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, card
     story = []
     for n, a2 in enumerate(a2s):
         sched = schedule.build(plan, actions, a2, parts)
-        label = 'A2 {}'.format(a2) if a2_count > 1 else ''
+        if sched['helpers']:
+            label, title = 'Helper', 'De-mic helpers'
+        else:
+            label = 'A2 {}'.format(a2) if a2_count > 1 else ''
+            title = 'A2 schedule' + (' — ' + label if label else '')
         if n:
             story.append(Spacer(1, 14))
-        story.append(section_banner('A2 schedule' + (' — ' + label if label else ''), pagesize=LANDSCAPE_PAGE, S=S))
+        story.append(section_banner(title, pagesize=LANDSCAPE_PAGE, S=S))
         story += _schedule_story(sched, S, label)
     story += [Spacer(1, 14), section_banner('Pack sheet', pagesize=LANDSCAPE_PAGE, S=S)]
     story += _pack_story(plan, apps, actions, S)

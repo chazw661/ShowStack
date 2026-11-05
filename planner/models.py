@@ -7317,7 +7317,8 @@ class MicPlanEdit(models.Model):
 
 
 class MicPlanA2Action(models.Model):
-    """One mic or de-mic by one A2: the single source for the Showflow + plan
+    """One mic or de-mic by one A2 (or, a2_index 0, a de-mic helper's: see
+    solver.is_helper): the single source for the Showflow + plan
     "A2 does here" column, plan.json and the A2 schedule / PDF (PR 4).
     Formatted only by planner.mic_plan.display.format_action."""
     KIND_CHOICES = [('mic', 'Mic'), ('demic', 'De-mic')]
@@ -7353,7 +7354,9 @@ class MicPlanA2Action(models.Model):
         ]
 
     def __str__(self):
-        return f'A2 {self.a2_index} #{self.seq} {self.kind} {self.person_name}'
+        from planner.mic_plan.solver import is_helper
+        who = 'Helper' if is_helper(self) else f'A2 {self.a2_index}'
+        return f'{who} #{self.seq} {self.kind} {self.person_name}'
 
 
 class MicPlanPush(models.Model):

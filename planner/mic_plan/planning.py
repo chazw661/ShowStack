@@ -64,8 +64,12 @@ def named_orders(day, part):
 
 def part_segments(part, rows, named):
     """Each segment heading of ``part`` (rows in order) that has a time:
-    {row, name, t0, t1, end, detected, override, is_break}. ``override`` is
-    the stored hand-set value, or None."""
+    {row, name, t0, t1, end, detected, override, is_break, helpers,
+    helpers_set}. ``override`` is the stored hand-set break value, or None;
+    ``helpers`` the de-mic helpers set for it (0), ``helpers_set`` who set
+    them ({'n', 'by', 'by_name', 'at'}, or None). Both are stored in
+    ``part.break_overrides`` by the heading's line, so they follow it into
+    a re-read or a replacing file."""
     parser_rows = [r.as_parser_row() for r in rows]
     by_order = {r.order: k for k, r in enumerate(rows)}
     named = {by_order[o] for o in named if o in by_order}
@@ -78,36 +82,67 @@ def part_segments(part, rows, named):
             continue
         t1 = head.segment_t1 if head.segment_t1 is not None else head.segment_t0
         name, detected = segment_heading(parser_rows, a, b, named=named, minutes=t1 - head.segment_t0)
-        override = (part.break_overrides or {}).get(segment_line(head))
+        entry = (part.break_overrides or {}).get(segment_line(head)) or {}
+        override = entry if 'is_break' in entry else None
+        helpers = entry.get('helpers')
         out.append({'row': head, 'name': name, 't0': head.segment_t0, 't1': max(t1, head.segment_t0 + 1),
                     'end': rows[b - 1].order + 1, 'detected': detected, 'override': override,
-                    'is_break': override['is_break'] if override else detected})
+                    'is_break': override['is_break'] if override else detected,
+                    'helpers': helpers['n'] if helpers else 0, 'helpers_set': helpers})
     return out
 
 
-def set_break(part, row, is_break, user):
-    """Mark segment ``row`` of ``part`` a break or not. Back to the detected
-    value clears the override. The day's plan no longer matches."""
+def _segment(part, row):
     seg = next((s for s in part_segments(part, list(part.rows.order_by('order')), named_orders(part.day, part))
                 if s['row'].pk == row.pk), None)
     if seg is None:
         raise ValueError('Not a segment heading.')
+    return seg
+
+
+def _by(user):
+    return {'by': user.pk if user else None, 'by_name': user.get_username() if user else '',
+            'at': timezone.now().isoformat()}
+
+
+def _store(part, row, entry):
+    """Save the stored entry for segment ``row`` (dropped when empty)."""
     overrides = dict(part.break_overrides or {})
-    if is_break == seg['detected']:
-        overrides.pop(segment_line(row), None)
+    if entry:
+        overrides[segment_line(row)] = entry
     else:
-        overrides[segment_line(row)] = {'is_break': is_break, 'by': user.pk if user else None,
-                                        'by_name': user.get_username() if user else '',
-                                        'at': timezone.now().isoformat()}
+        overrides.pop(segment_line(row), None)
     part.break_overrides = overrides
     part.save(update_fields=['break_overrides'])
     mark_stale(part.day)
 
 
+def set_break(part, row, is_break, user):
+    """Mark segment ``row`` of ``part`` a break or not. Back to the detected
+    value clears the override. The day's plan no longer matches."""
+    seg = _segment(part, row)
+    entry = {'helpers': seg['helpers_set']} if seg['helpers_set'] else {}
+    if is_break != seg['detected']:
+        entry.update(is_break=is_break, **_by(user))
+    _store(part, row, entry)
+
+
+def set_helpers(part, row, n, user):
+    """Set the de-mic helpers for segment ``row`` of ``part`` (0 clears
+    them). The day's plan no longer matches."""
+    if not 0 <= n <= solver.MAX_HELPERS:
+        raise ValueError('De-mic helpers: 0 to {}.'.format(solver.MAX_HELPERS))
+    seg = _segment(part, row)
+    entry = {k: v for k, v in (seg['override'] or {}).items() if k != 'helpers'}
+    if n:
+        entry['helpers'] = dict(n=n, **_by(user))
+    _store(part, row, entry)
+
+
 def _segments(part, rows, named):
     """solver.Segment for each segment heading of ``part`` (rows in order)."""
     return [solver.Segment(key=s['row'].pk, part=part.pk, start=s['row'].order, end=s['end'], name=s['name'],
-                           t0=s['t0'], t1=s['t1'], is_break=s['is_break'])
+                           t0=s['t0'], t1=s['t1'], is_break=s['is_break'], helpers=s['helpers'])
             for s in part_segments(part, rows, named)]
 
 
@@ -421,6 +456,7 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
         spill = result.spill.get(s.key)
         seg_out.append({'row': s.key, 'part': s.part, 'line': line(s.key), 'name': s.name, 't0': s.t0,
                         't1': s.t1, 'is_break': s.is_break, 'busy': result.busy.get(s.key, []),
+                        'helpers': s.helpers, 'helper_busy': result.helper_busy.get(s.key, 0),
                         'spill': spill['minutes'] if spill else 0,
                         'spill_into': seg_names.get(spill['into'], '') if spill else ''})
 

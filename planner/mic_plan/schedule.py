@@ -7,11 +7,15 @@ from bisect import bisect_right
 from types import SimpleNamespace
 
 from .display import MARKS, format_action, swap_line, swap_words, turnover_text
-from .solver import hm, session_starts
+from .solver import HELPERS, hm, is_helper, session_starts
 
 
-def a2_choice(value, a2_count):
-    """The A2 asked for (``?a2=N``), or 1 when it is missing or out of range."""
+def a2_choice(value, a2_count, helpers=False):
+    """The A2 asked for (``?a2=N``), or 1 when it is missing or out of range;
+    HELPERS for ``?a2=helpers`` when the plan has helpers. Never 0: that is
+    the helpers' a2_index, not an A2."""
+    if value == HELPERS and helpers:
+        return HELPERS
     try:
         n = int(value)
     except (TypeError, ValueError):
@@ -56,10 +60,16 @@ def _marks(act, reuse, conflicts):
     return out
 
 
+def has_helpers(actions):
+    return any(is_helper(a) for a in actions)
+
+
 def build(plan, actions, a2, parts):
-    """{'a2', 'a2_count', 'sessions': [{'n', 't0', 't1', 'segments': [...]}]}
-    for A2 ``a2``. Each segment: name, times, busy minutes, break and its
+    """{'a2', 'a2_count', 'helpers', 'sessions': [{'n', 't0', 't1',
+    'segments': [...]}]} for A2 ``a2`` (1..n), or the de-mic helpers'
+    list (HELPERS). Each segment: name, times, busy minutes, break and its
     turnover, and its action rows."""
+    helpers = a2 == HELPERS
     a2_count = max(1, plan.settings.get('a2_count', 1))
     numbers = {p.pk: k + 1 for k, p in enumerate(parts)}
     session_of = sessions(plan.segments)
@@ -78,7 +88,8 @@ def build(plan, actions, a2, parts):
         seg = {'row': s['row'], 'key': segment_key(s, numbers), 'name': s['name'] or 'Segment',
                'line': s.get('line') or '', 'part_no': numbers.get(s['part']), 't0': s['t0'], 't1': s['t1'],
                'time': '{}–{}'.format(hm(s['t0']), hm(s['t1'])), 'is_break': s['is_break'],
-               'busy': round(busy[a2 - 1]) if len(busy) >= a2 else 0, 'span': round(span),
+               'busy': round(s.get('helper_busy') or 0) if helpers else round(busy[a2 - 1]) if len(busy) >= a2 else 0,
+               'span': round(span),
                'session': session_of[s['row']], 'notes': list(turnover_flags.get(s['row'], ())), 'actions': []}
         segs.append(seg)
         by_row[s['row']] = seg
@@ -97,7 +108,7 @@ def build(plan, actions, a2, parts):
     swaps = {(w['appearance'], p['rf']): w for p in plan.packs for w in p.get('swaps') or ()}
 
     for act in sorted(actions, key=lambda a: (a.start_min, a.seq)):
-        if act.a2_index != a2:
+        if helpers != is_helper(act) or (not helpers and act.a2_index != a2):
             continue
         seg = home(act)
         if seg is None:
@@ -138,5 +149,5 @@ def build(plan, actions, a2, parts):
         sess['t0'] = min(s['t0'] for s in sess['segments'])
         sess['t1'] = max(s['t1'] for s in sess['segments'])
         sess['time'] = '{}–{}'.format(hm(sess['t0']), hm(sess['t1']))
-    return {'a2': a2, 'a2_count': a2_count, 'sessions': out,
+    return {'a2': a2, 'a2_count': a2_count, 'helpers': helpers, 'sessions': out,
             'count': sum(len(s['actions']) for s in segs)}

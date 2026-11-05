@@ -8,7 +8,7 @@ from planner.models import MicPlanA2Action, MicPlanAppearance
 from .display import TX_WORDS, first_name, format_action, overlap_warning, rig_text
 from .parser import description_candidates
 from .planning import plan_rig, plan_values
-from .solver import hm
+from .solver import hm, is_helper
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
 LONG_WAIT = 10                       # a de-mic this long after the catch is shown in amber
@@ -50,7 +50,9 @@ def segment_rows(plan):
         spill = ''
         if s.get('spill'):
             spill = '+{} min into {}'.format(s['spill'], s.get('spill_into') or 'the next segment')
-        out[s['row']] = dict(s, meters=[m for m in meters if m['busy']], t0_label=hm(s['t0']),
+        # The de-mic helpers' minutes, never in an A2's meter.
+        out[s['row']] = dict(s, meters=[m for m in meters if m['busy']], helper=round(s.get('helper_busy') or 0),
+                             t0_label=hm(s['t0']),
                              t1_label=hm(s['t1']), spill_text=spill)
     return out
 
@@ -438,7 +440,8 @@ def plan_data(plan, apps, actions):
         'assignments': [{'appearance': a.key, 'rf_number': s.rf_number, 'how': s.how, 'backup': s.backup}
                         for a in apps for s in a.assignments.all()],
         'actions': [dict(format_action(act, a2_count), **{
-            'a2_index': act.a2_index, 'seq': act.seq, 'kind': act.kind, 'start_min': act.start_min,
+            'a2_index': act.a2_index, 'helper': is_helper(act), 'seq': act.seq, 'kind': act.kind,
+            'start_min': act.start_min,
             'end_min': act.end_min, 'appearance': act.appearance.key, 'person': act.person_id,
             'rf_number': act.rf_number, 'row': act.row_id, 'line_no': act.line, 'segment': act.segment_id,
             'late': act.late, 'tight': act.tight, 'wait_min': act.wait_min, 'backup': act.backup,

@@ -4,7 +4,7 @@ action here so they never drift apart. Likewise the wording of an edit
 (Undo button, message after a move) and of what a re-solve changed.
 """
 
-from .solver import Rig, hm
+from .solver import Rig, hm, is_helper
 
 VERBS = {'mic': 'MIC', 'demic': 'DE-MIC'}
 
@@ -13,16 +13,20 @@ def format_action(action, a2_count=1):
     """``action``: a MicPlanA2Action or a solver.Action (same field names).
 
     {'time', 'verb', 'name', 'rf', 'reason', 'a2', 'text'}; ``a2`` is '' with
-    one A2.
+    one A2, 'Helper' for a de-mic helper's.
     """
     rf = 'RF {}'.format(action.rf_number) + (' (backup)' if action.backup else '')
+    if is_helper(action):
+        who = 'Helper'
+    else:
+        who = 'A2 {}'.format(action.a2_index) if a2_count > 1 else ''
     out = {
         'time': hm(action.start_min),
         'verb': VERBS[action.kind],
         'name': action.person_name,
         'rf': rf,
         'reason': action.reason,
-        'a2': 'A2 {}'.format(action.a2_index) if a2_count > 1 else '',
+        'a2': who,
     }
     if action.late:
         out['reason'] += ', late'

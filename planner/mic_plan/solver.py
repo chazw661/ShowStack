@@ -107,6 +107,7 @@ class Segment:
     t0: int
     t1: int
     is_break: bool = False
+    helpers: int = 0         # de-mic helpers the editor set for its time (PR 5.3)
 
 
 @dataclass(frozen=True)
@@ -275,9 +276,21 @@ class Assignment:
     backup: bool = False
 
 
+HELPER = 0                   # Action.a2_index of a de-mic helper's action (A2s are 1..n)
+HELPERS = 'helpers'          # the schedule's ?a2= value for the helpers' list
+
+
+def is_helper(action):
+    """Is ``action`` (solver.Action, MicPlanA2Action or its plan.json dict) a
+    de-mic helper's? Every per-A2 lookup goes through this: a helper's
+    a2_index is 0 and must never index an A2's list."""
+    index = action['a2_index'] if isinstance(action, dict) else action.a2_index
+    return index == HELPER
+
+
 @dataclass
 class Action:
-    a2_index: int
+    a2_index: int            # 1..n, or HELPER
     seq: int
     kind: str                # 'mic' | 'demic'
     start_min: float
@@ -319,7 +332,8 @@ class Plan:
     actions: list = field(default_factory=list)
     packs: list = field(default_factory=list)
     flags: list = field(default_factory=list)    # {kind, text, row, person}
-    busy: dict = field(default_factory=dict)     # segment key -> [minutes per A2]
+    busy: dict = field(default_factory=dict)     # segment key -> [minutes per A2], A2 1 first
+    helper_busy: dict = field(default_factory=dict)  # segment key -> de-mic helpers' minutes (all of them)
     # segment key -> {'minutes', 'into' (segment key)}: A2 work the segment
     # owes (de-mics released in it, mics due in it) finishing after it ends.
     spill: dict = field(default_factory=dict)
@@ -710,6 +724,7 @@ def _overrun(frees, mics, mic_min):
 
 
 LEAD_MAX = 240               # MicPlanSettings.premic_lead_min's upper bound
+MAX_HELPERS = 3              # de-mic helpers per segment
 
 
 def session_starts(day):
@@ -740,14 +755,15 @@ def solve(day, settings=Settings(), suggest=True, fixed=NOTHING_FIXED):
     recycle_at_breaks, and that plan is used when it needs fewer body packs
     (or as many, and fewer HH) and has no more late, tight or short flags."""
     plan = _solve(day, settings, suggest, fixed)
-    if settings.pack_policy != FEWEST_PACKS:
-        return plan
-    alt = _solve(day, replace(settings, pack_policy=RECYCLE_AT_BREAKS), suggest, fixed)
-    if _fewer_packs(alt, plan):
-        # Mid-session reuse and break turnover are no concern of fewest_packs.
-        alt.flags = [f for f in alt.flags if f['kind'] not in ('reuse', 'break', 'pin_reuse')]
-        alt.from_policy = RECYCLE_AT_BREAKS
-        return alt
+    if settings.pack_policy == FEWEST_PACKS:
+        alt = _solve(day, replace(settings, pack_policy=RECYCLE_AT_BREAKS), suggest, fixed)
+        if _fewer_packs(alt, plan):
+            # Mid-session reuse and break turnover are no concern of fewest_packs.
+            alt.flags = [f for f in alt.flags if f['kind'] not in ('reuse', 'break', 'pin_reuse')]
+            alt.from_policy = RECYCLE_AT_BREAKS
+            plan = alt
+    if suggest:
+        _suggest_helpers(day, settings, plan, fixed)
     return plan
 
 
@@ -835,6 +851,11 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     start = min(t.rel for t in tasks)
     frees = [start] * n
     seqs = [0] * n
+    # De-mic helpers (PR 5.3): one worker per helper per segment, who may
+    # start de-mics (only) from its start until its end.
+    helper_win = [(seg.t0, seg.t1) for seg in day.segments for _ in range(min(MAX_HELPERS, seg.helpers or 0))]
+    helper_free = [w[0] for w in helper_win]
+    helper_seq = [0]
     packs = []
     worn = {}                # (appearance key, backup) -> _Pack
     behind = []              # (late or tight mic action, its flag)
@@ -991,6 +1012,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         return best
 
     def record(task, i, t, pack, how):
+        """``i``: the A2 (0-based), or None for a de-mic helper."""
         dur = S.mic_min if task.kind == 'mic' else S.demic_min
         end = t + dur
         a = task.app
@@ -1069,9 +1091,13 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
                 reason = 'when off' if wait <= 1 else '{} min after off'.format(wait)
         row = row_at(a, t)
         seg = ix.seg_of(row) if row else None
-        seqs[i] += 1
+        if i is None:
+            helper_seq[0] += 1
+        else:
+            seqs[i] += 1
         plan.actions.append(Action(
-            a2_index=i + 1, seq=seqs[i], kind=task.kind, start_min=t, end_min=end, person=a.person,
+            a2_index=HELPER if i is None else i + 1, seq=helper_seq[0] if i is None else seqs[i],
+            kind=task.kind, start_min=t, end_min=end, person=a.person,
             person_name=person.name, rf_number=0, appearance=a.key, row=row.key if row else None,
             segment=seg.key if seg else None, reason=reason, late=late, tight=tight, wait_min=wait,
             backup=task.backup, released=task.rel, due=task.due))
@@ -1111,12 +1137,36 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
             return 'A2 time'
         return full(R)
 
+    def helper_step(k):
+        """Helper ``k`` at its free time: the de-mic released longest ago,
+        if any; returns when it is next free (INF: done for the day)."""
+        t = helper_free[k]
+        w0, w1 = helper_win[k]
+        if t >= w1:
+            return INF
+        demics = [x for x in tasks if x.kind == 'demic' and not x.done and x.rel <= t
+                  and (x.app.key, x.backup) in worn]
+        if demics:
+            job = min(demics, key=lambda x: (x.rel, x.app.key))
+            end = record(job, None, t, worn[(job.app.key, job.backup)], None)
+            job.done = True
+            return end
+        if any(x.kind == 'demic' and not x.done and x.rel <= t for x in tasks):
+            return t + 1                     # released, not mic'd yet
+        nxt = min((x.rel for x in tasks if x.kind == 'demic' and not x.done and x.rel > t), default=INF)
+        return nxt if nxt < w1 else INF
+
     guard = 0
     while not all(t.done for t in tasks):
         guard += 1
         if guard > 200000:
             raise SolverError('The schedule did not finish.')
         i = min(range(n), key=frees.__getitem__)
+        if helper_free:
+            k = min(range(len(helper_free)), key=helper_free.__getitem__)
+            if helper_free[k] <= frees[i]:   # a helper first at a tie: the A2 stays free for mics
+                helper_free[k] = helper_step(k)
+                continue
         t = frees[i]
         open_mics = [x for x in tasks if x.kind == 'mic' and not x.done]
         ready = [m for m in open_mics if m.rel <= t]
@@ -1245,6 +1295,61 @@ def _suggest(day, S, behind, ix, fixed=NOTHING_FIXED):
         for _, other in run['items'][1:]:
             if ix.line(other['row']) != first:
                 other['text'] += ' Fix: see line {}.'.format(first)
+
+
+HELPER_FIXES = ('late', 'tight', 'break', 'shortage')
+HELPER_TRIES = 6             # segments tried per flag
+
+
+def _suggest_helpers(day, S, plan, fixed):
+    """For each late, tight, break-too-short and rig-shortage flag, the first
+    segment where one more de-mic helper alone clears it (breaks first, then
+    the nearest of those overlapping the time before it), found by solving
+    the day again with that helper. Added to the flag's text and ``fix``."""
+    flags = [f for f in plan.flags if f['kind'] in HELPER_FIXES]
+    if not flags:
+        return
+    apps = {(a.on_row, a.person): a for a in plan.appearances}
+    shortages = summary(plan)['shortage']
+    trials = {}
+
+    def trial(seg):
+        if seg.key not in trials:
+            more = replace(day, segments=tuple(replace(x, helpers=x.helpers + 1) if x.key == seg.key else x
+                                               for x in day.segments))
+            trials[seg.key] = solve(more, S, suggest=False, fixed=fixed)
+        return trials[seg.key]
+
+    def cleared(f, other):
+        if f['kind'] in ('late', 'tight'):
+            return not any(g['kind'] in ('late', 'tight') and (g['row'], g['person']) == (f['row'], f['person'])
+                           for g in other.flags)
+        if f['kind'] == 'break':
+            return not any(g['kind'] == 'break' and g['row'] == f['row'] for g in other.flags)
+        return (summary(other)['shortage'] < shortages
+                and not any(g['kind'] == 'shortage' and g['row'] == f['row'] for g in other.flags))
+
+    for f in flags:
+        if f['kind'] == 'break':
+            window = next(((x.t0, x.t1) for x in day.segments if x.key == f['row']), None)
+        else:
+            app = apps.get((f['row'], f['person']))
+            extra = 30 if f['kind'] == 'shortage' else 0
+            window = (app.on - S.premic_lead_min - extra, app.on) if app else None
+        if window is None:
+            continue
+        w0, w1 = window
+        segs = sorted((x for x in day.segments if x.t0 < w1 and x.t1 > w0 and x.helpers < MAX_HELPERS),
+                      key=lambda x: (not x.is_break, abs((x.t0 + x.t1) / 2 - w1), x.t0))
+        seg = next((x for x in segs[:HELPER_TRIES] if cleared(f, trial(x))), None)
+        if seg is None:
+            continue
+        where = ('the {} break'.format(hm(seg.t0)) if seg.is_break
+                 else '"{}" at {}'.format(seg.name or 'the segment', hm(seg.t0)))
+        what = '{} de-mic helper at {} (line {})'.format('1' if not seg.helpers else 'one more', where,
+                                                         ix_line(day, seg.key))
+        f['text'] += (' Or {}.' if 'Fix' in f['text'] else ' Fix: {}.').format(what)
+        f['fix'] = dict(f.get('fix') or {}, helper=seg.key)
 
 
 def _shortages(plan, ix, R):
@@ -1445,6 +1550,7 @@ SPILL_FLAG_MIN = 5            # spill this long (or into a segment with a mic du
 
 def _busy(plan, day, n, S):
     mins = {s.key: [0.0] * n for s in day.segments}
+    helper = {s.key: 0.0 for s in day.segments}
     by_part = {}
     for s in day.segments:
         by_part.setdefault(s.part, []).append(s)
@@ -1454,9 +1560,14 @@ def _busy(plan, day, n, S):
         for t0, t1, s in pieces.get(part, ()):
             overlap = min(a.end_min, t1) - max(a.start_min, t0)
             if overlap > 0:
-                mins[s.key][a.a2_index - 1] += overlap
+                if is_helper(a):
+                    helper[s.key] += overlap
+                else:
+                    mins[s.key][a.a2_index - 1] += overlap
     for s in day.segments:
         plan.busy[s.key] = [round(m, 1) for m in mins[s.key]]
+        if helper[s.key]:
+            plan.helper_busy[s.key] = round(helper[s.key], 1)
 
     # Spill: work a segment owes (de-mics released in it, mics due in it)
     # still going after it ends. Segments shorter than a mic are left out:
@@ -1465,7 +1576,8 @@ def _busy(plan, day, n, S):
         return next((s for t0, t1, s in pieces.get(part, ()) if t0 <= t < t1), None)
 
     for part, segs in by_part.items():
-        acts = [a for a in plan.actions if plan.appearances[a.appearance].part == part]
+        # The A2's work only: a helper's de-mics are not the A2 running late.
+        acts = [a for a in plan.actions if plan.appearances[a.appearance].part == part and not is_helper(a)]
         for s in segs:
             if s.t1 - s.t0 < S.mic_min:
                 continue

@@ -177,6 +177,7 @@ urlpatterns = [
     path('mic-plan/import/<int:pk>/reread/', views_mic_plan.showflow_reread, name='mic_plan_reread'),
     path('mic-plan/import/<int:pk>/crew/', views_mic_plan.showflow_crew, name='mic_plan_crew'),
     path('mic-plan/import/<int:pk>/break/', views_mic_plan.showflow_break, name='mic_plan_break'),
+    path('mic-plan/import/<int:pk>/helpers/', views_mic_plan.showflow_helpers, name='mic_plan_helpers'),
     path('mic-plan/person/<int:pk>/', views_mic_plan.person_save, name='mic_plan_person'),
     path('mic-plan/person/<int:pk>/merge/', views_mic_plan.person_merge, name='mic_plan_merge'),
     path('mic-plan/person/<int:pk>/unalias/', views_mic_plan.person_unalias, name='mic_plan_unalias'),
