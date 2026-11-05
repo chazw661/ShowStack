@@ -824,10 +824,15 @@ def mic_plan_settings(request):
     return _back(day, _maybe_part(request, request.POST.get('part', '')))
 
 
+MAX_CHANNELS = 100                   # push.MAX_ROWS: a pushed session has a card per channel
+
+
 def rig_refusal(channels, handhelds, spares):
     """Why the rig settings can't be saved, or ''."""
     if channels is None:
         return 'Handhelds are the last channels of the rig: set Wireless channels first.' if handhelds else ''
+    if channels > MAX_CHANNELS:
+        return 'Mic Tracker holds at most {} channels per session.'.format(MAX_CHANNELS)
     if handhelds > channels:
         return 'Handhelds: at most the {} wireless channels.'.format(channels)
     if spares > handhelds:
