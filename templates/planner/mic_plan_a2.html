@@ -38,12 +38,12 @@ version only raises a banner: the list is never reshuffled on its own.
             <button type="button" id="a2-refresh">Plan updated — tap to refresh</button>
         </p>
         <p class="a2-banner stale" id="a2-stale" role="status"{% if not plan.stale %} hidden{% endif %}>
-            STALE: the showflow changed after this plan was made. Re-generate it on the Mic Plan page.
+            STALE: the showflow changed after this plan was made. Re-generate it on the Mic Planner page.
         </p>
     </header>
 
     {% if not plan %}
-    <p class="a2-empty">No plan for {{ day }} yet. Generate it on the Mic Plan page.</p>
+    <p class="a2-empty">No plan for {{ day }} yet. Generate it on the Mic Planner page.</p>
     {% else %}
     {% for w in head.warnings %}{% if not forloop.first or not plan.stale %}<p class="mp-banner warn a2-warn" role="note">{{ w }}</p>{% endif %}{% endfor %}
     <p class="a2-hint">Tap a segment to make it current. {{ head.settings }}</p>

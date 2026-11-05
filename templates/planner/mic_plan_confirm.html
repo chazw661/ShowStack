@@ -1,12 +1,12 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}Replace or add — Mic Plan — ShowStack{% endblock %}
+{% block title %}Replace or add — Mic Planner — ShowStack{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">Home</a>
-    &rsaquo; <a href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Mic Plan</a>
+    &rsaquo; <a href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Mic Planner</a>
     &rsaquo; Replace or add
 </div>
 {% endblock %}
@@ -19,7 +19,7 @@
 {% block content %}
 <div class="mp-page">
     <div class="mp-toolbar">
-        <h1>Mic Plan &mdash; replace or add?</h1>
+        <h1>Mic Planner &mdash; replace or add?</h1>
     </div>
     <form class="mp-panel mp-confirm" method="post">
         {% csrf_token %}

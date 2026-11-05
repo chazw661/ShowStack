@@ -111,6 +111,13 @@ below still names the project.
 
   .ss-card.comm { border-left: 3px solid var(--amber); }
   .ss-card.mic { border-left: 3px solid var(--purple); }
+  .ss-card.micplan { border-left: 3px solid var(--purple); }
+  .ss-mp-day { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .ss-mp-day > span:first-child { color: #c0c0d0; }
+  .ss-mp-line { display: block; color: #9090b0; font-family: 'DM Mono', monospace; font-size: 0.72rem; margin-top: 2px; }
+  .ss-mp-over { color: var(--amber); }
+  .ss-mp-sent { color: #4a9eff; }
+  .ss-mp-planned { display: block; color: var(--purple); font-size: 0.68rem; }
   .ss-card.power { border-left: 3px solid var(--red); }
   .ss-card.check { border-left: 3px solid var(--accent); }
   .ss-card.net { border-left: 3px solid #6b7280; }
@@ -280,6 +287,16 @@ below still names the project.
         <a href="/audiopatch/comm-config/" style="flex:1;padding:7px 10px;background:var(--ss-raised);border:1px solid var(--ss-border);border-radius:6px;font-size:0.78rem;color:#a0a0cc;text-decoration:none;text-align:center;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#a78bfa'" onmouseout="this.style.borderColor='rgba(255,255,255,0.10)'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> Config</a>
       </div>
     </div>
+    <a class="ss-card micplan" href="{% url 'planner:mic_plan' %}">
+      <div class="ss-card-header">
+        <svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
+        <span class="ss-card-label">Wireless</span>
+      </div>
+      <div class="ss-card-title">Mic Planner</div>
+      <div id="mic-planner-list" style="font-size:0.78rem;color:#9090b0;">
+        <span style="color:#5555aa;">Loading...</span>
+      </div>
+    </a>
     <a class="ss-card mic" href="/audiopatch/mic-tracker/">
       <div class="ss-card-header">
         <svg class="ss-card-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
@@ -347,15 +364,58 @@ async function loadStats() {
       } else {
         micList.innerHTML = d.show_days.map(day => {
           const date = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
-          return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
-            + '<span style="color:#c0c0d0;">' + date + ' — ' + day.name + '</span>'
+          return '<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
+            + '<div style="display:flex;justify-content:space-between;">'
+            + '<span style="color:#c0c0d0;">' + date + ' — ' + esc(day.name) + '</span>'
             + '<span style="color:#4a9eff;font-family:DM Mono,monospace;">' + day.mic_count + '</span>'
+            + '</div>'
+            + (day.planned ? '<span class="ss-mp-planned">Planned in Mic Planner</span>' : '')
             + '</div>';
         }).join('');
       }
     }
+    const planList = document.getElementById('mic-planner-list');
+    if (planList && d.mic_planner) {
+      if (!d.mic_planner.some(day => day.state !== 'none')) {
+        planList.innerHTML = '<span style="color:#5555aa;">Import a showflow to plan mics</span>';
+      } else {
+        planList.innerHTML = d.mic_planner.map(plannerDay).join('');
+      }
+    }
     setVal('m-plans', d.power_plans); setVal('m-amps-power', d.power_amps);
   } catch(e) { console.log('Stats error:', e); }
+}
+function esc(t) { const el = document.createElement('span'); el.textContent = t == null ? '' : t; return el.innerHTML; }
+// "2:05p", in the browser's zone, as the Mic Planner page shows times.
+function shortTime(iso) {
+  const t = new Date(iso);
+  const h = t.getHours(), m = String(t.getMinutes()).padStart(2, '0');
+  return ((h + 11) % 12 + 1) + ':' + m + (h < 12 ? 'a' : 'p');
+}
+// One show day on the Mic Planner card (mic_plan/status.py day_status).
+function plannerDay(day) {
+  const date = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  const lines = [];
+  if (day.state === 'none') {
+    lines.push('Not imported');
+  } else if (day.state === 'imported') {
+    lines.push('Imported, no plan yet');
+  } else {
+    const ch = day.channels;
+    lines.push('v' + day.version + ' · <span' + (ch.over ? ' class="ss-mp-over"' : '') + '>' + esc(ch.text) + '</span>'
+               + ' · ' + day.review + ' to review');
+    if (day.stale) {
+      lines.push('<span class="ss-mp-over">Stale — re-generate</span>');
+    } else if (day.sent && day.changed_since_sent) {
+      lines.push('<span class="ss-mp-over">Plan changed since last send (sent v' + day.sent.version + ')</span>');
+    } else if (day.sent) {
+      lines.push('<span class="ss-mp-sent">Sent to Mic Tracker v' + day.sent.version + ' at ' + shortTime(day.sent.at) + '</span>');
+    } else {
+      lines.push('Not sent to Mic Tracker');
+    }
+  }
+  return '<div class="ss-mp-day"><span>' + date + ' — ' + esc(day.name) + '</span>'
+    + lines.map(l => '<span class="ss-mp-line">' + l + '</span>').join('') + '</div>';
 }
 function setVal(id, val) { const el = document.getElementById(id); if (el && val !== undefined) el.textContent = val; }
 function setDot(id, active) { const el = document.getElementById(id); if (el) el.className = 'ss-status-dot' + (active ? '' : ' empty'); }

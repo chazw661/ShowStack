@@ -160,7 +160,7 @@ TOPICS = (
     ),
     Topic(
         slug='mic-plan-import',
-        title='Import a showflow into Mic Plan',
+        title='Import a showflow into Mic Planner',
         section='Show day',
         summary="Read a run-of-show PDF for a day, then check who's on stage, its people and flags.",
         pages=(
@@ -168,7 +168,7 @@ TOPICS = (
             'planner:mic_plan_confirm',
             'admin:planner_showflowimport_changelist',
         ),
-        keywords=('mic plan', 'showflow', 'run of show', 'ros', 'pdf', 'import', 'bsm', 'send', 'catch',
+        keywords=('mic plan', 'mic planner', 'showflow', 'run of show', 'ros', 'pdf', 'import', 'bsm', 'send', 'catch',
                   'crew', 'merge', 'alias', 'flags', 'on stage', 'title'),
     ),
     Topic(
@@ -179,7 +179,7 @@ TOPICS = (
         pages=(
             'planner:mic_plan',
         ),
-        keywords=('mic plan', 'move', 'drag', 'pin', 'rf', 'pack', 'undo', 're-generate', 'start over',
+        keywords=('mic plan', 'mic planner', 'move', 'drag', 'pin', 'rf', 'pack', 'undo', 're-generate', 'start over',
                   'conflict', 'handheld', 'renumber'),
     ),
     Topic(
@@ -190,7 +190,7 @@ TOPICS = (
         pages=(
             'planner:mic_plan',
         ),
-        keywords=('mic plan', 'a2', 'schedule', 'ipad', 'second screen', 'pdf', 'print', 'pack sheet',
+        keywords=('mic plan', 'mic planner', 'a2', 'schedule', 'ipad', 'second screen', 'pdf', 'print', 'pack sheet',
                   'current segment', 'next', 'plan updated'),
     ),
     Topic(
@@ -202,7 +202,7 @@ TOPICS = (
             'planner:mic_plan',
             'planner:mic_plan_push',
         ),
-        keywords=('mic plan', 'mic tracker', 'send', 'push', 'sessions', 'rf', 'presenter', 'labels', 'reprint',
+        keywords=('mic plan', 'mic planner', 'mic tracker', 'send', 'push', 'sessions', 'rf', 'presenter', 'labels', 'reprint',
                   'started', "mic'd", 'keep'),
     ),
     Topic(
@@ -834,3 +834,12 @@ TOPICS = (
 )
 
 TOPICS_BY_SLUG = {t.slug: t for t in TOPICS}
+
+# Other names for a topic, sent on to its slug: Mic Plan became Mic Planner,
+# and its slugs stay so old links keep working.
+SLUG_ALIASES = {
+    'mic-planner-import': 'mic-plan-import',
+    'mic-planner-edits': 'mic-plan-edits',
+    'mic-planner-a2-schedule': 'mic-plan-a2-schedule',
+    'mic-planner-push': 'mic-plan-push',
+}

@@ -451,7 +451,7 @@ def plan_data(plan, apps, actions):
 
 ESTIMATE_WARNING = ('Based on line estimates: part of this day has no send/catch cues, so each person is '
                     'on from a line naming them to an exit line or the end of their segment.')
-STALE_WARNING = 'The showflow changed after this plan was made. Re-generate it on the Mic Plan page.'
+STALE_WARNING = 'The showflow changed after this plan was made. Re-generate it on the Mic Planner page.'
 
 
 def plan_header(plan, parts):

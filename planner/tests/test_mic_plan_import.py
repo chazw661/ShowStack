@@ -342,7 +342,7 @@ class SidebarTests(MicPlanBase):
                 planner = next(a for a in resp.context['available_apps']
                                if a['app_label'] == 'planner')
                 row = next(m for m in planner['models'] if m['object_name'] == 'ShowflowImport')
-                self.assertEqual('Mic Plan', str(row['name']))
+                self.assertEqual('Mic Planner', str(row['name']))
                 self.assertEqual(reverse('planner:mic_plan'), row['admin_url'])
                 self.assertIsNone(row['add_url'])
 

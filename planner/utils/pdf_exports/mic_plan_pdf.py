@@ -62,7 +62,7 @@ def _logo(brand):
 
 def header_lines(head, project, day, zone):
     """(title, [plain lines], [warning lines]) printed at the top of every page."""
-    title = 'Mic Plan — {} · {}'.format(project.name, day)
+    title = 'Mic Planner — {} · {}'.format(project.name, day)
     made = 'Plan v{} · generated {}'.format(head['version'], stamp(head['generated_at'], zone))
     if head['edited_at']:
         made += ' · edited {}'.format(stamp(head['edited_at'], zone))
@@ -293,7 +293,7 @@ def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, card
     doc = SimpleDocTemplate(
         buffer, pagesize=LANDSCAPE_PAGE, leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN + header.height + 6, bottomMargin=FOOTER_MARGIN,
-        title='Mic Plan — {} — {}'.format(project.name, day))
+        title='Mic Planner — {} — {}'.format(project.name, day))
     a2_count = max(1, plan.settings.get('a2_count', 1))
     story = []
     for n, a2 in enumerate(a2s):
