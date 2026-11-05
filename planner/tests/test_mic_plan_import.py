@@ -276,6 +276,7 @@ class AccessTests(MicPlanBase):
             (reverse('planner:mic_plan_delete', args=[part.pk]), {}),
             (reverse('planner:mic_plan_crew', args=[part.pk]), {'crew': ['X']}),
             (reverse('planner:mic_plan_break', args=[part.pk]), {'row': part.rows.first().pk, 'is_break': '1'}),
+            (reverse('planner:mic_plan_helpers', args=[part.pk]), {'row': part.rows.first().pk, 'helpers': '1'}),
             (reverse('planner:mic_plan_person', args=[person.pk]), {'mic_hint': 'HH'}),
             (reverse('planner:mic_plan_merge', args=[person.pk]), {'into': into.pk}),
             (reverse('planner:mic_plan_unalias', args=[person.pk]), {'alias': 'x'}),

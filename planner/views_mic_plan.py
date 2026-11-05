@@ -32,6 +32,7 @@ from planner.mic_plan import importer, page, planning, push, revert, schedule
 from planner.mic_plan.display import describe_edit, rig_text
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
+from planner.mic_plan import solver
 from planner.mic_plan.solver import SolverError
 from planner.models import (
     MicPlan, MicPlanSettings, Presenter, ShowDay, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
@@ -149,8 +150,12 @@ def mic_plan(request):
             seg = breaks.get(row.pk)
             if seg is not None:
                 by = seg['override'] or {}
+                helped = seg['helpers_set'] or {}
                 row.brk = {'is_break': seg['is_break'], 'set': bool(seg['override']),
-                           'by': 'you' if by.get('by') == request.user.pk else by.get('by_name') or 'an editor'}
+                           'by': 'you' if by.get('by') == request.user.pk else by.get('by_name') or 'an editor',
+                           'helpers': seg['helpers'],
+                           'helpers_by': 'you' if helped.get('by') == request.user.pk
+                           else helped.get('by_name') or 'an editor'}
             row.bsm_html = _bsm_html(row.bsm_text, part.crew_names)
             row.time_label = ('' if row.est_time is None
                               else hm(row.est_time) if row.time_exact else '≈' + hm(row.est_time))
@@ -462,10 +467,12 @@ def plan_a2(request, pk):
     if plan is not None:
         _, actions = page.load(plan)
         a2_count = max(1, plan.settings.get('a2_count', 1))
+        helpers = schedule.has_helpers(actions)
         context.update(
             head=page.plan_header(plan, parts),
-            sched=schedule.build(plan, actions, schedule.a2_choice(request.GET.get('a2'), a2_count), parts),
+            sched=schedule.build(plan, actions, schedule.a2_choice(request.GET.get('a2'), a2_count, helpers), parts),
             a2_links=range(1, a2_count + 1),
+            helper_link=helpers,
         )
     response = render(request, 'planner/mic_plan_a2.html', context)
     add_never_cache_headers(response)
@@ -487,13 +494,18 @@ def plan_pdf(request, pk):
     parts = importer.active_parts(day)
     apps, actions = page.load(plan)
     a2_count = max(1, plan.settings.get('a2_count', 1))
-    only = schedule.a2_choice(request.GET['a2'], a2_count) if request.GET.get('a2') and a2_count > 1 else None
+    helpers = schedule.has_helpers(actions)
+    asked = request.GET.get('a2')
+    only = (schedule.a2_choice(asked, a2_count, helpers)
+            if asked and (a2_count > 1 or asked == solver.HELPERS) else None)
+    # Every A2's schedule, then the helpers' list when there is one.
+    every = list(range(1, a2_count + 1)) + ([solver.HELPERS] if helpers else [])
     people = list(day.showflow_people.all())
     cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS)
     zone = _zone(request)
     pdf = build_mic_plan_pdf(
         BytesIO(), project=day.project, day=day, plan=plan, apps=apps, actions=actions, parts=parts,
-        cards=cards, a2s=[only] if only else list(range(1, a2_count + 1)),
+        cards=cards, a2s=[only] if only else every,
         brand=brand_for(day.project), printed_at=timezone.now().astimezone(zone), zone=zone).getvalue()
     response = HttpResponse(pdf, content_type='application/pdf')
     name = 'mic-plan-{}-v{}{}.pdf'.format(day.date.isoformat(), plan.version, '-a2-{}'.format(only) if only else '')
@@ -648,6 +660,26 @@ def showflow_break(request, pk):
         planning.set_break(part, row, request.POST['is_break'] == '1', request.user)
     except ValueError:
         messages.error(request, 'That line is not a segment heading.')
+        return _back(part.day, part)
+    return _back(part.day, part, '#showflow:row-{}'.format(row.order))
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def showflow_helpers(request, pk):
+    """Set a segment's de-mic helpers (the plan goes stale)."""
+    part = _part(request, pk)
+    row_pk = request.POST.get('row', '')
+    row = get_object_or_404(ShowflowRow, pk=int(row_pk), showflow_import=part) if row_pk.isdigit() else None
+    n = request.POST.get('helpers', '')
+    if row is None or not n.isdigit():
+        messages.error(request, 'De-mic helpers: enter 0 to {}.'.format(solver.MAX_HELPERS))
+        return _back(part.day, part)
+    try:
+        planning.set_helpers(part, row, int(n), request.user)
+    except ValueError as e:
+        messages.error(request, str(e) if int(n) > solver.MAX_HELPERS else 'That line is not a segment heading.')
         return _back(part.day, part)
     return _back(part.day, part, '#showflow:row-{}'.format(row.order))
 

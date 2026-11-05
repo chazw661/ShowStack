@@ -223,6 +223,9 @@ body:has(.mp-page) { background: var(--mp-bg, #16171a); }
 .mp-page .mp-rows .mp-brk-toggle[aria-pressed="true"] { color: var(--mp-fg); background: var(--mp-break); border-color: var(--mp-muted); }
 .mp-page .mp-rows .mp-brk-toggle:focus-visible { outline: 2px solid var(--mp-accent); outline-offset: 2px; }
 .mp-rows .mp-brk-by { font: 11px var(--mp-mono); color: var(--mp-muted); }
+.mp-rows .mp-help label { font: 500 10.5px var(--mp-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--mp-muted); }
+.mp-rows .mp-help input[type=number] { width: 3.2em; margin-left: 4px; background: var(--ss-field-bg, #2a2c31); color: var(--mp-fg);
+    border: 1px solid var(--ss-field-border, #42454d); border-radius: 4px; padding: 2px 4px; font: 12px var(--mp-mono); }
 .mp-rows tr.blank { display: none; }
 .mp-rows.show-blank tr.blank { display: table-row; }
 .mp-rows tr.target td { box-shadow: inset 0 2px 0 var(--mp-accent), inset 0 -2px 0 var(--mp-accent); }
