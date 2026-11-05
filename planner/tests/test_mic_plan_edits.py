@@ -48,8 +48,7 @@ def edited(day, base, pins=None, types=None, settings=S):
     """``day`` re-solved with ``pins`` and every other RF preferred as in ``base``."""
     pins = pins or {}
     return solve(day, settings, suggest=False, fixed=Fixed(
-        pins=pins, types=types or {}, prefer=rfs(base), pools={**pools(base), **{rf: BODY for rf in pins.values()
-                                                                               if rf not in pools(base)}}))
+        pins=pins, types=types or {}, prefer=rfs(base)))
 
 
 class PinTests(TestCase):
@@ -75,7 +74,7 @@ class PinTests(TestCase):
         day = s.day()
         base = solve(day, Settings(premic_lead_min=30))
         second = [a.skey for a in base.appearances if a.person == 1][-1]
-        plan = solve(day, Settings(premic_lead_min=30), fixed=Fixed(pins={second: 7}, pools={7: BODY}))
+        plan = solve(day, Settings(premic_lead_min=30), fixed=Fixed(pins={second: 7}))
         self.assertEqual({7}, {a.rf_number for a in plan.actions if a.person == 1})
         self.assertEqual(1, len([a for a in plan.actions if a.person == 1 and a.kind == 'mic']))
 
@@ -83,7 +82,7 @@ class PinTests(TestCase):
         day = relay_day(3)
         base = solve(day, S)
         k2 = key_of(base, 2)
-        plan = solve(day, S, fixed=Fixed(types={k2: HH}, prefer=rfs(base), pools=pools(base)))
+        plan = solve(day, S, fixed=Fixed(types={k2: HH}, prefer=rfs(base)))
         hh = {p.rf for p in plan.packs if p.pool == HH}
         self.assertEqual(1, len(hh))
         self.assertIn(rfs(plan)[k2], hh)
@@ -102,7 +101,7 @@ class MinimalChangeTests(TestCase):
         self.assertEqual([1, 2, 3, 4, 5], [rfs(base)[key_of(base, k)] for k in range(1, 6)])
         k1 = key_of(base, 1)
         # A plain re-solve with only the pin renumbers everyone after it...
-        naive = solve(day, S, fixed=Fixed(pins={k1: 6}, pools={6: BODY}))
+        naive = solve(day, S, fixed=Fixed(pins={k1: 6}))
         self.assertGreaterEqual(sum(1 for k, rf in rfs(naive).items() if k != k1 and rf != rfs(base)[k]), 3)
         # ...preferring the previous RFs moves nobody else.
         plan = edited(day, base, {k1: 6})
@@ -228,13 +227,26 @@ class EditViewTests(EditBase):
         self.assertContains(page, 'class="mp-pin"')
         self.assertContains(page, 'Kim → RF 7.')                # the message after the reload
 
-    def test_a_cross_pool_move_switches_the_type_and_says_so(self):
+    def test_a_cross_pool_move_keeps_the_type(self):
+        # PR 5.1b: a body pack dropped on a handheld's lane stays a body pack;
+        # only "Switch body/HH" changes the type.
         key = self.key('Kim Keynote')
-        self.edit('move_rf', key, rf=8, pool='body')                 # RF 8 is a handheld: its pool wins
+        self.assertEqual(200, self.edit('move_rf', key, rf=8, pool='HH').status_code)     # RF 8 is Pat's handheld
         app = self.plan().appearances.get(skey=key)
-        self.assertEqual(('HH', 8), (app.mic_type, app.pinned_rf))
-        self.assertEqual('Kim (line 113) RF 1 → RF 8, now handheld', self.plan().changes[0]['text'])
-        self.assertContains(self.client.get(reverse('planner:mic_plan')), 'Kim → RF 8, now handheld')
+        self.assertEqual(('body', 8, 'body'), (app.mic_type, app.pinned_rf, app.pinned_type))
+        self.assertEqual('Kim (line 113) RF 1 → RF 8', self.plan().changes[0]['text'])
+        self.assertEqual({'rf': 8, 'pool': 'body'}, {k: self.plan().edits.get().value[k] for k in ('rf', 'pool')})
+        self.assertContains(self.client.get(reverse('planner:mic_plan')), 'Kim → RF 8')
+
+    def test_an_old_cross_pool_move_stays_switched(self):
+        # Before PR 5.1b a cross-pool move stored the lane's type: replayed as stored.
+        key = self.key('Kim Keynote')
+        self.edit('move_rf', key, rf=8)
+        e = self.plan().edits.get()
+        e.value = dict(e.value, pool='HH')
+        e.save()
+        self.generate()
+        self.assertEqual('HH', self.plan().appearances.get(skey=key).mic_type)
 
     def test_switch_body_hh_and_unpin(self):
         key = self.key('Kim Keynote')
@@ -252,7 +264,7 @@ class EditViewTests(EditBase):
         self.edit('move_rf', self.key('Kim Keynote'), rf=8, pool='HH')
         self.assertNotEqual(rfs, self.rfs())
         self.undo()
-        self.assertContains(self.client.get(reverse('planner:mic_plan')), 'Undone: Kim → RF 8, now handheld')
+        self.assertContains(self.client.get(reverse('planner:mic_plan')), 'Undone: Kim → RF 8')
         self.undo()
         self.assertEqual(rfs, self.rfs())
         self.assertEqual(actions, self.actions())

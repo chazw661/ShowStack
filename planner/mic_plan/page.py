@@ -5,7 +5,7 @@ stat tiles. plan.json is built from the same pieces (``plan_data``).
 
 from planner.models import MicPlanA2Action, MicPlanAppearance
 
-from .display import first_name, format_action, overlap_warning, rig_text
+from .display import TX_WORDS, first_name, format_action, overlap_warning, rig_text
 from .parser import description_candidates
 from .planning import plan_rig, plan_values
 from .solver import hm
@@ -234,7 +234,18 @@ def pack_chart(plan, apps, actions, parts=()):
                              stage_left=pct(s['on']), stage_width=width(s['on'], s['off']), tip=tip))
         conflict = any(a['from'] < b['to'] and b['from'] < a['to'] for k, a in enumerate(slots.get(p['rf'], []))
                        for b in slots.get(p['rf'], [])[k + 1:] if not a['backup'] and not b['backup'])
-        lanes.append({'rf': p['rf'], 'pool': p['pool'], 'sub': sub, 'bars': bars,
+        # With a rig a lane is its channel's zone; the transmitter it needs
+        # is shown when that is the other type, or changes during the day.
+        zone = R.pool_at(p['rf']) if R.set else p['pool']
+        pool = zone if zone in ('body', 'HH') else p['pool']
+        tx = ''
+        if not p.get('spare') and not p.get('unused'):
+            kinds = [p['pool']] + [w['to'] for w in p.get('swaps') or ()]
+            if len(kinds) > 1:
+                tx = ' \u2192 '.join(TX_WORDS[k] for k in kinds)
+            elif R.set and p['pool'] != pool:
+                tx = 'needs ' + TX_WORDS[p['pool']]
+        lanes.append({'rf': p['rf'], 'pool': pool, 'tx': tx, 'sub': sub, 'bars': bars,
                       'host': p.get('host'), 'spare': p.get('spare'), 'backup': bool(p.get('backup_of')),
                       'unused': p.get('unused', False), 'over': p.get('over', False), 'conflict': conflict})
     bands = [{'name': s['name'], 'left': pct(s['t0']), 'width': width(s['t0'], s['t1']),
@@ -329,7 +340,8 @@ def review_cards(parts, plan, apps, people, labels):
     if plan is not None:
         plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill', 'who_both': 'Both?',
                        'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
-                       'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved'}
+                       'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved',
+                       'rig_use': 'Transmitter', 'swap': 'Swap', 'swap_mid': 'Swap mid-session', 'rig': 'Rig'}
         for f in plan.flags:
             part, row = rows.get(f.get('row'), (None, None))
             cards.append(_card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,

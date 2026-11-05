@@ -39,8 +39,8 @@ from planner.models import (
 from planner.utils.typed_names import loose
 
 from . import mt_rows
-from .display import rig_text
-from .planning import BEFORE_RIG, before_rig, plan_values
+from .display import rig_text, swap_line, swap_words, tx_note
+from .planning import BEFORE_RIG, before_rig, plan_rig, plan_values
 from .importer import active_parts
 from .schedule import segment_key, sessions as session_numbers
 from .solver import HH, hm
@@ -154,6 +154,9 @@ def wanted(plan, apps, parts):
     order}; ``keys`` are its slot keys, the first one its own."""
     sessions = plan_sessions(plan, parts)
     packs = {p['rf']: p for p in plan.packs}
+    R = plan_rig(plan)
+    # (rf, appearance key) -> the transmitter swap that wearing needs.
+    swaps = {(p['rf'], w['appearance']): w for p in plan.packs for w in p.get('swaps') or ()}
     worn = {}                        # (session index, rf) -> [(on, app key, app, backup)]
     for app in apps:
         for a in app.assignments.all():
@@ -170,15 +173,17 @@ def wanted(plan, apps, parts):
             for on, _, app, backup in sorted(worn[(k, rf)], key=lambda w: (w[0], w[1])):
                 key = '{}#{}{}'.format(sess['key'], app.skey, '#backup' if backup else '')
                 last = wearings[-1] if wearings else None
+                pool = packs.get(rf, {}).get('pool', 'body') if backup else app.mic_type
                 if last and (last['person'], last['name']) == (app.person_id, app.person_name):
                     last['keys'].append(key)
                     last['host'] = last['host'] or app.is_host
+                    last['apps'].append(app.key)
                     continue
                 wearings.append({'keys': [key], 'person': app.person_id, 'name': app.person_name,
-                                 'host': app.is_host and not backup, 'backup': backup})
+                                 'host': app.is_host and not backup, 'backup': backup, 'pool': pool,
+                                 'apps': [app.key]})
             backup = all(w['backup'] for w in wearings)
-            pool = packs.get(rf, {}).get('pool', 'body')
-            rows.append({'rf': rf, 'pool': pool, 'notes': '',
+            rows.append({'rf': rf, 'pool': wearings[0]['pool'], 'notes': '',
                          'label': 'backup for {}'.format(wearings[0]['name']) if backup else '',
                          'wearings': wearings})
         if not rows:
@@ -186,15 +191,24 @@ def wanted(plan, apps, parts):
         for rf in spares:
             rows.append({'rf': rf, 'pool': HH, 'notes': '', 'label': 'SPARE',
                          'wearings': [{'keys': ['{}#spare|{}'.format(sess['key'], rf)], 'person': None,
-                                       'name': '', 'host': False, 'backup': False}]})
+                                       'name': '', 'host': False, 'backup': False, 'pool': HH, 'apps': []}]})
         rows.sort(key=lambda r: r['rf'])
         for row in rows:
+            zone = R.pool_at(row['rf']) if R.set else None
             for k2, w in enumerate(row['wearings']):
                 w['order'] = k2
-                w['mic_type'] = 'HH' if row['pool'] == HH else ''
+                w['mic_type'] = 'HH' if w['pool'] == HH else ''
                 # On the slot, not the row: the A1 Notes column and the A2
                 # card both show the slot's notes (the row's shows on /m/ only).
-                w['notes'] = 'host' if w['host'] else row['label']
+                # Then the transmitter it needs, when not its channel's zone
+                # type, and the swap to it.
+                notes = ['host' if w['host'] else row['label']]
+                if w['person'] is not None:
+                    notes.append(tx_note(w['pool'], zone))
+                    swap = next((swaps[(row['rf'], k3)] for k3 in w['apps'] if (row['rf'], k3) in swaps), None)
+                    if swap is not None:
+                        notes.append('{} {}'.format(swap_line(row['rf'], swap['to']), swap_words(swap)))
+                w['notes'] = ' \u00b7 '.join(n for n in notes if n)
         out.append(dict(sess, rows=rows))
     return out
 

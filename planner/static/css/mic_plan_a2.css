@@ -68,6 +68,7 @@ html, body.a2-body { margin: 0; background: var(--ss-bg, #16171a); }
 .a2-act .verb { grid-area: verb; font: 700 19px/1 var(--mp-display); letter-spacing: .06em; }
 .a2-act.mic .verb { color: var(--mp-on); }
 .a2-act.demic .verb { color: var(--mp-off); }
+.a2-act.swap .verb { color: var(--mp-warn); }
 .a2-act .name { grid-area: name; font-weight: 600; font-size: 20px; color: var(--mp-fg); overflow-wrap: anywhere; }
 .a2-act .rf { grid-area: rf; font: 700 34px/1 var(--mp-display); letter-spacing: .02em; color: var(--mp-fg);
     white-space: nowrap; text-align: right; }

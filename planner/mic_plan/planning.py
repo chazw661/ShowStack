@@ -238,9 +238,11 @@ def snapshot(plan):
 
 
 def replay(edits):
-    """(pins {skey: RF}, types {skey: pool}, pin pools {RF: pool}) from the
-    edit log in order; the last edit about a key wins."""
-    pins, types, pools = {}, {}, {}
+    """(pins {skey: RF}, types {skey: pool}) from the edit log in order; the
+    last edit about a key wins. A move keeps the type it stored (since PR
+    5.1b the wearer's own; before, a move to a lane of the other type
+    switched it, and those stay switched)."""
+    pins, types = {}, {}
     for e in edits:
         if e.kind == 'move_rf':
             pins[e.key] = e.value['rf']
@@ -251,39 +253,32 @@ def replay(edits):
         elif e.kind == 'unpin':
             pins.pop(e.key, None)
             types.pop(e.key, None)
-    for key, rf in pins.items():
-        pools[rf] = types[key]
-    return pins, types, pools
+    return pins, types
 
 
-def _fixed(edits, prefer, packs, R):
-    """(solver.Fixed, misfits {skey: (rf, pool)}). With a rig, a pin keeps
-    its RF only where that channel is still of its pool; else (misfit) the
-    pin keeps its type and the solver gives it a channel. A preferred RF
-    that does not fit is dropped."""
-    pins, types, pin_pools = replay(edits)
-    if not R.set:
-        pools = {p['rf']: p['pool'] for p in packs or () if not p.get('spare') and not p.get('backup_of')}
-        pools.update(pin_pools)
-        return solver.Fixed(pins=pins, types=types, prefer={k: v[0] for k, v in prefer.items()}, pools=pools), {}
+def _fixed(edits, prefer, R, rezone=False):
+    """(solver.Fixed, misfits {skey: (rf, pool)}). A pin keeps its RF on any
+    channel of the rig but a spare (either type takes either zone); on a
+    spare or past the rig's end (misfit) the pin keeps its type and the
+    solver gives it a channel. A preferred RF there is dropped, and with
+    ``rezone`` (the rig changed) one outside its type's zone too, so a rig
+    change puts each type back in its zone where it can."""
+    pins, types = replay(edits)
     misfits = {}
     for key, rf in list(pins.items()):
-        if not R.fits(rf, types[key]):
+        if not R.usable(rf):
             misfits[key] = (rf, types[key])
             del pins[key]
-    prefer = {k: v[0] for k, v in prefer.items() if R.fits(v[0], v[1])}
-    pools = {rf: R.pool_at(rf) for rf in list(pins.values()) + list(prefer.values())}
-    return solver.Fixed(pins=pins, types=types, prefer=prefer, pools=pools), misfits
+    prefer = {k: v[0] for k, v in prefer.items()
+              if R.usable(v[0]) and not (rezone and R.set and R.pool_at(v[0]) != v[1])}
+    return solver.Fixed(pins=pins, types=types, prefer=prefer), misfits
 
 
-def misfit_text(rf, pool, R):
-    """Why a pin no longer fits the rig: 'a body channel', 'kept spare'."""
-    at = R.pool_at(rf)
-    if at is None:
-        return 'not in the rig (1\u2013{})'.format(R.channels)
-    if at == 'spare':
+def misfit_text(rf, R):
+    """Why a pin no longer fits the rig: 'kept spare', 'not in the rig (1–13)'."""
+    if R.pool_at(rf) == 'spare':
         return 'kept spare'
-    return 'a {} channel'.format('handheld' if at == solver.HH else 'body')
+    return 'not in the rig (1\u2013{})'.format(R.channels)
 
 
 @transaction.atomic
@@ -298,7 +293,8 @@ def generate(day, user=None, mode='keep'):
     prev = snapshot(plan) if keep else {}
     edits = list(plan.edits.all()) if plan is not None else []
     values = settings_dict(project_settings(day.project))
-    fixed, misfits = _fixed(edits, prev, plan.packs if keep else (), solver.rig(solver_settings(values)))
+    R = solver.rig(solver_settings(values))
+    fixed, misfits = _fixed(edits, prev, R, rezone=keep and plan_rig(plan) != R)
     data, rows_by_part, mode_label = build_day(day)
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values), fixed=fixed)
@@ -319,7 +315,7 @@ def _resolve(plan, prefer):
     values = plan_values(plan)
     data, rows_by_part, _ = build_day(plan.day)
     edits = list(plan.edits.all())
-    fixed, misfits = _fixed(edits, prefer, plan.packs, solver.rig(solver_settings(values)))
+    fixed, misfits = _fixed(edits, prefer, solver.rig(solver_settings(values)))
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values), suggest=False, fixed=fixed)
     logger.info('Mic Plan edit re-solve: %d appearances, %.3fs (project %s, day %s)',
@@ -344,7 +340,8 @@ def _locked(day, version):
 
 @transaction.atomic
 def edit(day, version, kind, key, value, user=None):
-    """Add one edit to the log and re-solve. ``value``: move_rf {rf, pool},
+    """Add one edit to the log and re-solve. ``value``: move_rf {rf} (the
+    wearer keeps their type on any lane: only set_mic_type changes it),
     set_mic_type {mic_type}, unpin {}. Returns (plan, edit)."""
     plan = _locked(day, version)
     app = plan.appearances.filter(skey=key).prefetch_related('assignments').first() if key else None
@@ -367,15 +364,7 @@ def edit(day, version, kind, key, value, user=None):
             raise EditRefused("RF {} isn't in the rig (1\u2013{}).".format(rf, R.channels))
         if R.set and R.pool_at(rf) == 'spare':
             raise EditRefused('RF {} is kept spare \u2014 lower the spare count in settings to use it.'.format(rf))
-        if R.set:
-            pool = R.pool_at(rf)
-        elif lane is not None and not lane.get('spare'):
-            pool = lane['pool']
-        else:
-            pool = value.get('pool') or app.mic_type
-        if pool not in (solver.BODY, solver.HH):
-            raise EditRefused('Choose body pack or handheld.')
-        clean = {'rf': rf, 'pool': pool}
+        clean = {'rf': rf, 'pool': app.mic_type}
     elif kind == 'set_mic_type':
         pool = value.get('mic_type')
         if pool not in (solver.BODY, solver.HH):
@@ -459,7 +448,7 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
             rf, pool = misfits[a.skey]
             flags.append({'kind': 'rig', 'row': a.on_row, 'person': a.person,
                           'text': 'Line {}: your RF {} pin is {} on this rig \u2014 now RF {} ({}).'.format(
-                              line(a.on_row) or '?', rf, misfit_text(rf, pool, R), main.get(a.skey),
+                              line(a.on_row) or '?', rf, misfit_text(rf, R), main.get(a.skey),
                               display_pool(pool))})
     keys = {a.skey for a in result.appearances}
     last = {}
@@ -479,7 +468,8 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
     plan.segments = seg_out
     plan.flags = flags
     plan.packs = [{'rf': p.rf, 'pool': p.pool, 'label': p.label, 'host': p.host,
-                   'backup_of': p.backup_of, 'spare': p.spare, 'over': p.over} for p in result.packs]
+                   'backup_of': p.backup_of, 'spare': p.spare, 'over': p.over, 'swaps': p.swaps}
+                  for p in result.packs]
     plan.swaps = result.swaps
     plan.policy_counts = counts
     plan.changes = changes

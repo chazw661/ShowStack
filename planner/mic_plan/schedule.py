@@ -6,7 +6,7 @@ both group and mark the same way. Never re-solves.
 from bisect import bisect_right
 from types import SimpleNamespace
 
-from .display import MARKS, format_action, turnover_text
+from .display import MARKS, format_action, swap_line, swap_words, turnover_text
 from .solver import hm, session_starts
 
 
@@ -92,12 +92,24 @@ def build(plan, actions, a2, parts):
         before = [s for s in segs if s['t0'] <= act.start_min]
         return max(before, key=lambda s: s['t0']) if before else (segs[0] if segs else None)
 
+    # A transmitter swap is a line of its own just before the mic that needs
+    # it, at the break it is done in (or the mic's time, mid-session).
+    swaps = {(w['appearance'], p['rf']): w for p in plan.packs for w in p.get('swaps') or ()}
+
     for act in sorted(actions, key=lambda a: (a.start_min, a.seq)):
         if act.a2_index != a2:
             continue
         seg = home(act)
         if seg is None:
             continue
+        swap = swaps.get((act.appearance.key, act.rf_number)) if act.kind == 'mic' and not act.backup else None
+        if swap is not None:
+            seg['actions'].append({'time': hm(swap['brk'] if swap['brk'] is not None else swap['at']),
+                                   'verb': 'SWAP', 'name': swap_line(act.rf_number, swap['to']),
+                                   'rf': 'RF {}'.format(act.rf_number), 'reason': swap_words(swap), 'a2': '',
+                                   'kind': 'swap', 'rf_number': act.rf_number, 'line': act.line,
+                                   'late': False, 'tight': False, 'marks': [],
+                                   'mid': swap['brk'] is None})
         f = format_action(act, a2_count)
         # A mark the row already says ("host" reason, "RF 21 (backup)") is not repeated.
         said = (f['reason'] + ' ' + f['rf']).lower()

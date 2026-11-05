@@ -22,7 +22,7 @@ from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from planner.mic_plan import page, schedule
-from planner.mic_plan.display import MARKS
+from planner.mic_plan.display import MARKS, tx_note
 from planner.mic_plan.solver import hm
 from planner.utils.pdf_exports.report_kit import (
     BLUE, FOOTER_MARGIN, HAIRLINE, INK, LANDSCAPE_PAGE, MARGIN, MUTED, NAVY,
@@ -231,6 +231,7 @@ def _pack_story(plan, apps, actions, S):
     widths.append(W - sum(widths))
     cell = S['body'].clone('MpPack', fontSize=9, leading=12)
     data = []
+    R = page.plan_rig(plan)
     for p, wearers in _pack_rows(plan, apps, actions):
         if p.get('spare'):
             role = 'SPARE — never assigned'
@@ -242,12 +243,17 @@ def _pack_story(plan, apps, actions, S):
             role = 'OVER — past the rig: add channels'
         else:
             role = ''
+        if R.set and not p.get('spare') and not p.get('over'):
+            # The transmitter it starts with, when not its channel's zone type.
+            note = tx_note(p['pool'], R.pool_at(p['rf']))
+            role = ' · '.join(x for x in (role, note) if x)
         lines = ['{}. <b>{}</b> — mic {} · on stage {}–{}{} · de-mic {}{}'.format(
             k + 1, escape(w['name']), hm(w['from']), hm(w['on']), hm(w['off']),
             ' (line {})'.format(escape(w['line'])) if w['line'] else '', hm(w['to']),
             '  <b>{}</b>'.format(' · '.join(w['marks'])) if w['marks'] else '')
             for k, w in enumerate(wearers)]
-        data.append(['RF {}'.format(p['rf']), 'Handheld' if p['pool'] == 'HH' else 'Body pack',
+        kinds = [p['pool']] + [w['to'] for w in p.get('swaps') or ()]
+        data.append(['RF {}'.format(p['rf']), ' → '.join('Handheld' if k == 'HH' else 'Body pack' for k in kinds),
                      _p(role, cell), Paragraph('<br/>'.join(lines) or '—', cell)])
     table = data_table(['RF', 'Type', 'Role', 'Order and times (wearer order = Mic Tracker slot order)'],
                        data, widths)

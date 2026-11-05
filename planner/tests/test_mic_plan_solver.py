@@ -337,13 +337,13 @@ class PackTests(TestCase):
         self.assertNotIn(2, {s.rf for s in plan.assignments})
         self.assertEqual([3], [p.rf for p in plan.packs if p.over])  # the second handheld is past the rig
         self.assertEqual(['shortage'], [f['kind'] for f in plan.flags])
-        self.assertIn('need 1 more handheld than the rig has — 1 handheld channel, 1 kept spare',
+        self.assertIn('need 1 more pack than the rig has — 1 channel, 1 kept spare',
                       plan.flags[0]['text'])
 
     def test_a_shortage_is_one_flag_per_stretch_with_its_peak(self):
         plan = solve(panel_day(3).day(), Settings(wireless_channels=1))
         shortages = [f for f in plan.flags if f['kind'] == 'shortage']
-        self.assertEqual(['Line 2: need 2 more body packs than the rig has — 1 body channel (3 in use from 9:00a).'],
+        self.assertEqual(['Line 2: need 2 more packs than the rig has — 1 channel (3 in use from 9:00a).'],
                          [f['text'] for f in shortages])
         self.assertEqual(3, len(plan.packs))                 # the plan is still made
 
@@ -355,13 +355,13 @@ class PackTests(TestCase):
             s.person(k, 'Person {}'.format(k)).lists(k, line)
         plan = solve(s.day(), Settings(wireless_channels=1))
         texts = [f['text'] for f in plan.flags if f['kind'] == 'shortage']
-        self.assertEqual(['Line 2: need 1 more body pack than the rig has — 1 body channel (2 in use from 9:00a).',
-                          'Line 5: need 2 more body packs than the rig has — 1 body channel (3 in use from 11:00a).'],
+        self.assertEqual(['Line 2: need 1 more pack than the rig has — 1 channel (2 in use from 9:00a).',
+                          'Line 5: need 2 more packs than the rig has — 1 channel (3 in use from 11:00a).'],
                          texts)
 
     def test_handheld_shortages_are_counted_the_same_way(self):
         plan = solve(panel_day(3, HH).day(), Settings(wireless_channels=2, handheld_channels=2))
-        self.assertEqual(['Line 2: need 1 more handheld than the rig has — 2 handheld channels (3 in use from 9:00a).'],
+        self.assertEqual(['Line 2: need 1 more pack than the rig has — 2 channels (3 in use from 9:00a).'],
                          [f['text'] for f in plan.flags if f['kind'] == 'shortage'])
 
     def test_a_backup_reserves_its_own_pack_counted_and_mic_d_by_the_a2(self):
@@ -609,7 +609,7 @@ class LateCauseTests(TestCase):
         flag, = [f for f in plan.flags if f['kind'] in ('late', 'tight')]
         self.assertEqual(('tight', 'pack'), (flag['kind'], flag['cause']))
         self.assertEqual('Line 4: Bo Lane is ready at 9:21a, 1 min before walking on (margin 5). '
-                         'Cause: the 1 body channel is in use.', flag['text'])
+                         'Cause: the 1 channel is in use.', flag['text'])
         self.assertNotIn('fix', flag)
         self.assertEqual(1, len(plan.packs))
         self.assertFalse([f for f in plan.flags if f['kind'] == 'shortage'])
@@ -619,7 +619,7 @@ class LateCauseTests(TestCase):
         s.people[:] = [Person(1, 'Ana Bell', HH), Person(2, 'Bo Lane', HH)]
         plan = solve(s.day(), Settings(wireless_channels=2, handheld_channels=2, spare_handhelds=1))
         flag, = [f for f in plan.flags if f['kind'] in ('late', 'tight')]
-        self.assertTrue(flag['text'].endswith('Cause: the 1 handheld channel is in use (1 kept spare).'))
+        self.assertTrue(flag['text'].endswith('Cause: the 1 channel is in use (1 kept spare).'))
 
     def test_without_a_limit_the_same_mic_gets_a_new_pack_on_time(self):
         plan = solve(self.pack_day().day())
@@ -749,7 +749,7 @@ class PackPolicyTests(TestCase):
         plan = _solve(mid_day().day(), recycle(wireless_channels=1))
         self.assertEqual(({1}, {1}), (rf(plan, 1), rf(plan, 2)))
         reuse = [f['text'] for f in plan.flags if f['kind'] == 'reuse']
-        self.assertEqual(['Line 4: RF 1 reused mid-session — the 1 body channel is in use.'], reuse)
+        self.assertEqual(['Line 4: RF 1 reused mid-session — the 1 channel is in use.'], reuse)
         self.assertEqual(1, solver.summary(plan)['mid_session'])
         self.assertFalse([f for f in plan.flags if f['kind'] in ('late', 'tight', 'shortage')])
 
@@ -771,7 +771,7 @@ class PackPolicyTests(TestCase):
         self.assertEqual(({1}, {1}), (rf(plan, 1), rf(plan, 2)))
         spare, = [p for p in plan.packs if p.spare]
         self.assertNotIn(spare.rf, {s.rf for s in plan.assignments})
-        self.assertEqual(['Line 4: RF 1 reused mid-session — the 1 handheld channel is in use (1 kept spare).'],
+        self.assertEqual(['Line 4: RF 1 reused mid-session — the 1 channel is in use (1 kept spare).'],
                          [f['text'] for f in plan.flags if f['kind'] == 'reuse'])
 
     def test_a_later_part_that_starts_after_the_earlier_one_ends_starts_a_session(self):
