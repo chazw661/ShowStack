@@ -1,12 +1,12 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}Send to Mic Tracker — Mic Plan — ShowStack{% endblock %}
+{% block title %}Send to Mic Tracker — Mic Planner — ShowStack{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">Home</a>
-    &rsaquo; <a href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Mic Plan</a>
+    &rsaquo; <a href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Mic Planner</a>
     &rsaquo; Send to Mic Tracker
 </div>
 {% endblock %}

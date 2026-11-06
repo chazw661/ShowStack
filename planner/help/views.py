@@ -8,13 +8,14 @@ these views like any other.
 """
 
 from django.http import Http404, HttpResponse
+from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 
 from planner.tutorials import tutorial
 
 from .context import topics_for
-from .topics import SECTIONS, TOPICS, TOPICS_BY_SLUG
+from .topics import SECTIONS, SLUG_ALIASES, TOPICS, TOPICS_BY_SLUG
 
 
 def _body(topic):
@@ -44,6 +45,8 @@ def help_index(request):
 
 
 def help_topic(request, slug):
+    if slug in SLUG_ALIASES:
+        return redirect('help:topic', slug=SLUG_ALIASES[slug], permanent=True)
     topic = TOPICS_BY_SLUG.get(slug)
     if topic is None:
         raise Http404('No such help topic')

@@ -7179,7 +7179,7 @@ class MicPlanSettings(models.Model):
         verbose_name_plural = 'Mic Plan settings'
 
     def __str__(self):
-        return f'Mic Plan settings — {self.project}'
+        return f'Mic Planner settings — {self.project}'
 
 
 class MicPlan(models.Model):

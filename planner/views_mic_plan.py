@@ -852,7 +852,7 @@ def mic_plan_settings(request):
         return _back(day)
     settings_obj.pack_policy = policy
     settings_obj.save()
-    messages.success(request, 'Mic Plan settings saved. Re-generate to use them.')
+    messages.success(request, 'Mic Planner settings saved. Re-generate to use them.')
     return _back(day, _maybe_part(request, request.POST.get('part', '')))
 
 

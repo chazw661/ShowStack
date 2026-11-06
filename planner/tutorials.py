@@ -7,7 +7,7 @@ Help), so a video can be pulled by emptying its entry here.
 TUTORIAL_VIDEOS = {
     'power': '2okDyuSFzNQ',
     'labels': 'uCbxrglI4Dc',
-    'mic_plan': '',   # placeholder: the Mic Plan header shows its button once an ID is here
+    'mic_plan': '',   # placeholder: the Mic Planner header shows its button once an ID is here
 }
 
 # Each video's subject -- the button reads "▶ <title> (<minutes> min)" and
@@ -15,7 +15,7 @@ TUTORIAL_VIDEOS = {
 TUTORIAL_DETAILS = {
     'power': {'title': 'Power plan tutorial', 'minutes': '1½'},
     'labels': {'title': 'Label printing tutorial', 'minutes': '2'},
-    'mic_plan': {'title': 'Mic Plan tutorial', 'minutes': ''},
+    'mic_plan': {'title': 'Mic Planner tutorial', 'minutes': ''},
 }
 
 # Played from the privacy-enhanced domain: no YouTube cookies until the

@@ -232,7 +232,7 @@ class PdfTests(A2Base):
         # Header and footer on every page.
         for p in pages:
             t = p.extract_text()
-            self.assertIn('Mic Plan — MP Show', t)
+            self.assertIn('Mic Planner — MP Show', t)
             self.assertIn('Plan v{} · Printed'.format(plan.version), t)
         self.assertGreaterEqual(len(pages), 1)
 

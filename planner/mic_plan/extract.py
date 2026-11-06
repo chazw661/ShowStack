@@ -131,7 +131,7 @@ def rows_from_tables(pages):
         _find_line_column(rows, raw, mapping, columns)
     if mapping is None:
         raise ShowflowError(
-            "Couldn't find the column header on any page. Mic Plan looks for a row that "
+            "Couldn't find the column header on any page. Mic Planner looks for a row that "
             "names Start and Description, plus End, Speaker Name or BSM.")
     fields = set(mapping.values())
     if 'bsm' not in fields:
@@ -167,7 +167,7 @@ def extract(data, max_pages=MAX_PAGES_DEFAULT, time_budget=TIME_BUDGET_S):
     with pdf:
         count = len(pdf.pages)
         if count > max_pages:
-            raise ShowflowError('That PDF has {} pages; Mic Plan reads up to {}. Split it into '
+            raise ShowflowError('That PDF has {} pages; Mic Planner reads up to {}. Split it into '
                                 'parts (an AM and a PM file, say) and import each.'.format(
                                     count, max_pages))
         pages = []

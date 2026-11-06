@@ -117,13 +117,13 @@ def ordered_get_app_list(request, app_label=None):
         'commchannel': 15,
         'commdevicemodel': 15.5,   # hardware catalogue behind the Model dropdown
 
-        # Show Mic Tracker (16-20)
+        # Mic Planner, then Show Mic Tracker (16-20): plan, then track
+        'showflowimport': 15.9,   # Mic Planner: opens the review page
         'showday': 16,
         'micsession': 17,
         'micassignment': 18,
         'presenter': 19,
         'micshowinfo': 20,
-        'showflowimport': 20.5,   # Mic Plan: opens the review page
         
         # PA Zones (21)
         'pazone': 21,
@@ -183,8 +183,10 @@ def ordered_get_app_list(request, app_label=None):
                     model['admin_url'] = reverse('planner:power_distribution_calculator')
                     model['add_url'] = None
                 if model_name == 'showflowimport':
-                    # "Mic Plan" opens the import + review page; the admin
-                    # list itself only redirects there.
+                    # "Mic Planner" opens the import + review page; the admin
+                    # list itself only redirects there. Named here, not by
+                    # verbose_name_plural, so the rename needs no migration.
+                    model['name'] = 'Mic Planner'
                     model['admin_url'] = reverse('planner:mic_plan')
                     model['add_url'] = None
                 filtered_models.append(model)

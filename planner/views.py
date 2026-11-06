@@ -7189,15 +7189,21 @@ def dashboard_stats(request):
 
     try:
         # Show days with mic counts
-        show_days = []
+        show_days, mic_planner = [], []
         if cp:
+            from .mic_plan import status as mic_plan_status
+            pushed = mic_plan_status.pushed_days(cp)
             for day in ShowDay.objects.filter(project=cp).order_by('date')[:5]:
                 mic_count = MicAssignment.objects.filter(session__day=day).count()
                 show_days.append({
                     'date': str(day.date),
                     'name': day.name,
                     'mic_count': mic_count,
+                    # Mic Tracker card: "Planned in Mic Planner"
+                    'planned': day.pk in pushed,
                 })
+                mic_planner.append({**mic_plan_status.day_status(day),
+                                    'date': str(day.date), 'name': day.name})
 
         from .models import MultitrackSession
         data = {
@@ -7220,6 +7226,7 @@ def dashboard_stats(request):
             'power_plans': PowerDistributionPlan.objects.filter(**p).count(),
             'power_amps': 0,
             'show_days': show_days,
+            'mic_planner': mic_planner,
         }
         return JsonResponse(data)
     except Exception as e:

@@ -1,12 +1,12 @@
 {% extends "admin/base_site.html" %}
 {% load static tutorial_tags custom_tags %}
 
-{% block title %}Mic Plan{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
+{% block title %}Mic Planner{% if current_project %} — {{ current_project.name }}{% endif %} — ShowStack{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">Home</a>
-    &rsaquo; Mic Plan
+    &rsaquo; Mic Planner
 </div>
 {% endblock %}
 
@@ -19,7 +19,7 @@
 {% tutorial_assets %}
 <div class="mp-page" id="mp-root" data-can-edit="{{ can_edit|yesno:'1,' }}">
     <div class="mp-toolbar">
-        <h1>Mic Plan{% if project %} &mdash; {{ project.name }}{% endif %}</h1>
+        <h1>Mic Planner{% if project %} &mdash; {{ project.name }}{% endif %}</h1>
         <div class="mp-actions">
             {% if can_edit and day %}
             <form id="mp-import" method="post" action="{% url 'planner:mic_plan_upload' %}" enctype="multipart/form-data">
@@ -144,13 +144,13 @@
 
     <div class="mp-body">
     {% if not can_edit %}
-        <p class="mp-note">You can view this project's Mic Plan. Only its owner and editors can import or change it.</p>
+        <p class="mp-note">You can view this project's plan in Mic Planner. Only its owner and editors can import or change it.</p>
     {% endif %}
 
     {% if not day %}
         <div class="mp-panel">
             <h2>No show days yet</h2>
-            <p class="mp-note">Mic Plan imports a showflow into a show day. Add the day in the <a href="{% url 'planner:mic_tracker' %}">Mic Tracker</a> first.</p>
+            <p class="mp-note">Mic Planner imports a showflow into a show day. Add the day in the <a href="{% url 'planner:mic_tracker' %}">Mic Tracker</a> first.</p>
         </div>
     {% elif not part %}
         <div class="mp-panel">
