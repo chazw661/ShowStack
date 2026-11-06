@@ -10,7 +10,7 @@ from django.contrib import messages
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse, path
 from django.utils import timezone
-from django.utils.html import format_html, format_html_join
+from django.utils.html import escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.shortcuts import get_object_or_404, render, redirect
 from django.template.loader import render_to_string
@@ -5505,6 +5505,7 @@ class CommBeltPackAdmin(BaseEquipmentAdmin):
         for ch in channels[:12]:
             if ch.channel:
                 ch_abbrev = ch.channel.abbreviation if hasattr(ch.channel, 'abbreviation') and ch.channel.abbreviation else ch.channel.name[:4]
+                ch_abbrev = escape(ch_abbrev)     # typed by users; this HTML is mark_safe'd below
                 badge = (f'<span class="ch-badge assigned" data-bpc-id="{ch.id}" '
                          f'data-ch-num="{ch.channel_number}" data-bp-id="{obj.id}" '
                          f'title="Channel {ch.channel_number}: {ch_abbrev}">'

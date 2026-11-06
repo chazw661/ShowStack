@@ -1264,6 +1264,12 @@ function submitSaveTemplate() {
   });
 }
 
+// Template, crew and partyline names are typed by users: escaped for markup
+// and attribute values alike.
+function ccEsc(t) {
+  return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
 function loadTemplateDropdown() {
   fetch('{% url "planner:comm_config_list_templates" %}')
     .then(r => r.json())
@@ -1272,7 +1278,7 @@ function loadTemplateDropdown() {
       if (!el || !data.templates || data.templates.length === 0) return;
       let html = '<div style="padding:6px 12px;font-size:0.7rem;color:#5555aa;text-transform:uppercase;letter-spacing:0.05em;">From Template</div>';
       data.templates.forEach(t => {
-        html += `<div class="cc-dropdown-item" onclick="loadTemplate(${t.id}, '${t.template_name.replace(/'/g, "\'")}')">📋 ${t.template_name}</div>`;
+        html += `<div class="cc-dropdown-item" data-name="${ccEsc(t.template_name)}" onclick="loadTemplate(${Number(t.id)}, this.dataset.name)">📋 ${ccEsc(t.template_name)}</div>`;
       });
       html += '<div style="border-top:1px solid #2a2a4a;margin:4px 0;"></div>';
       el.innerHTML = html;
@@ -1291,9 +1297,9 @@ function openLoadTemplateModal() {
       }
       container.innerHTML = data.templates.map(t => `
         <div style="display:flex;align-items:center;background:#1a1a3a;border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;margin-bottom:6px;gap:10px;">
-          <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">📋 ${t.template_name}</span>
+          <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">📋 ${ccEsc(t.template_name)}</span>
           <button class="cc-btn cc-btn-secondary" style="padding:4px 12px;font-size:0.8rem;"
-                  onclick="loadTemplate(${t.id}, '${t.template_name.replace(/'/g, "\'")}')">Load</button>
+                  data-name="${ccEsc(t.template_name)}" onclick="loadTemplate(${Number(t.id)}, this.dataset.name)">Load</button>
         </div>
       `).join('');
     });
@@ -1527,7 +1533,7 @@ function saveKeyset(keyId, field, value) {
 }
 
 // ── Crew name dropdown for role rename ──
-const allCrewNames = [{% for cn in crew_names %}"{{ cn.name }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+const allCrewNames = [{% for cn in crew_names %}"{{ cn.name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
 
 function buildCrewDropdown(roleId, filter) {
   const dd = document.getElementById('crew-dd-' + roleId);
@@ -1585,7 +1591,7 @@ function hideCrewDropdown(roleId) {
             const row = document.createElement('div');
             row.className = 'cc-crew-name-row';
             row.id = 'crew-name-' + data.id;
-            row.innerHTML = `<span class="cc-crew-name-text">${name}</span><button class="cc-pl-delete" onclick="deleteCrewName(${data.id})">✕</button>`;
+            row.innerHTML = `<span class="cc-crew-name-text">${ccEsc(name)}</span><button class="cc-pl-delete" onclick="deleteCrewName(${Number(data.id)})">✕</button>`;
             list.appendChild(row);
           }
         }
@@ -1638,7 +1644,7 @@ function refreshRoleChips(roleId) {
       const chipsEl = document.getElementById('role-chips-' + roleId);
       if (!chipsEl || !data.chips) return;
       chipsEl.innerHTML = data.chips.map(c =>
-        `<span class="cc-key-chip ${c.assigned ? 'assigned' : ''}">${c.letter}${c.label ? ': ' + c.label : ''}</span>`
+        `<span class="cc-key-chip ${c.assigned ? 'assigned' : ''}">${ccEsc(c.letter)}${c.label ? ': ' + ccEsc(c.label) : ''}</span>`
       ).join('');
     });
 }
@@ -1690,7 +1696,7 @@ function addCrewName() {
       const row = document.createElement('div');
       row.className = 'cc-crew-name-row';
       row.id = 'crew-name-' + data.id;
-      row.innerHTML = `<span class="cc-crew-name-text">${name}</span><button class="cc-pl-delete" onclick="deleteCrewName(${data.id})">✕</button>`;
+      row.innerHTML = `<span class="cc-crew-name-text">${ccEsc(name)}</span><button class="cc-pl-delete" onclick="deleteCrewName(${Number(data.id)})">✕</button>`;
       list.appendChild(row);
       // Add to datalist
       const dl = document.getElementById('crewNamesList');

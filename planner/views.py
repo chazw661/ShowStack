@@ -7,6 +7,7 @@ from planner.tenancy import (
     edit_rights_required_page,
 )
 from planner.utils.presenter_photos import PhotoIndex, photo_url_for_slot
+from planner.utils.script_json import script_json
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden, HttpResponseBadRequest, Http404
 from django.contrib.admin.views.decorators import staff_member_required
@@ -7931,7 +7932,8 @@ def _editor_context(session, tracks=None, current_project=None, **extras):
     ctx = {
         'session': session,
         'tracks': tracks,
-        'picker_data_json': json.dumps(
+        # Inside <script> with |safe: a track named "</script>" must not end it.
+        'picker_data_json': script_json(
             _build_picker_data(session, tracks, current_project=current_project)
         ),
         'auto_open_picker': total_count == 0,   # D-12

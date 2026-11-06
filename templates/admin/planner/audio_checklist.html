@@ -530,6 +530,11 @@ async function apiCall(url, data) {
     }
 }
 
+// Task text, day labels and template names are typed by users: escaped for
+// markup and attribute values alike.
+function esc(t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
 function getDayLabel(sectionName, dayNum) {
     return localStorage.getItem('dayLabel_' + sectionName + '_' + dayNum) || ('Day ' + dayNum);
 }
@@ -687,7 +692,7 @@ function createDailyTable(sectionName, type, tasks, taskStatuses, numDays) {
         const label = getDayLabel(sectionName, d);
         dayHeadersHtml += `<th style="background-color: #ffc107; color: #000; min-width:104px;">
             <input class="day-label-input"
-                   value="${label}"
+                   value="${esc(label)}"
                    data-section="${sectionName}" data-day="${d}"
                    onblur="setDayLabel('${sectionName}', ${d}, this.value); this.closest('table').querySelectorAll('.day-col-${d}').forEach(el => el.setAttribute('data-label', this.value));"
                    onkeydown="if(event.key==='Enter') this.blur()"
@@ -719,7 +724,7 @@ function createSetupRow(sectionName, type, task, taskStatus) {
 
     row.innerHTML = `
         <td>
-            <input type="text" class="task-input" value="${task.task}" 
+            <input type="text" class="task-input" value="${esc(task.task)}" 
                    onchange="updateTask(${task.id}, 'task', this.value)">
         </td>
         <td>
@@ -756,7 +761,7 @@ function createDailyRow(sectionName, type, task, taskStatus, numDays) {
     const days = (taskStatus && taskStatus.days) || {};
     let cells = `
         <td>
-            <input type="text" class="task-input" value="${task.task}"
+            <input type="text" class="task-input" value="${esc(task.task)}"
                    onchange="updateTask(${task.id}, 'task', this.value)">
         </td>
     `;
@@ -1046,11 +1051,11 @@ async function loadTemplateList() {
     }
     container.innerHTML = data.templates.map(t => `
       <div style="display:flex;align-items:center;background: var(--ss-bg);border:1px solid #2a2a4a;border-radius:6px;padding:10px 14px;margin-bottom:6px;gap:10px;">
-        <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">${t.name}</span>
+        <span style="flex:1;color:#c0c0c0;font-size:0.875rem;">${esc(t.name)}</span>
         <button class="btn" style="padding:4px 12px;font-size:0.8rem;background:#1a3a1a;border-color:#4acc4a;color:#4acc4a;"
-                onclick="confirmLoadTemplate(${t.id}, '${t.name.replace(/'/g, "\'")}')">Load</button>
+                data-name="${esc(t.name)}" onclick="confirmLoadTemplate(${Number(t.id)}, this.dataset.name)">Load</button>
         <button class="btn danger" style="padding:4px 10px;font-size:0.8rem;"
-                onclick="confirmDeleteTemplate(${t.id}, '${t.name.replace(/'/g, "\'")}')">🗑</button>
+                data-name="${esc(t.name)}" onclick="confirmDeleteTemplate(${Number(t.id)}, this.dataset.name)">🗑</button>
       </div>
     `).join('');
   } catch(e) {

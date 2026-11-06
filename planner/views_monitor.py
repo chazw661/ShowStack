@@ -26,6 +26,8 @@ from planner.tenancy import can_edit_current_project, edit_rights_required
 from django.db import close_old_connections
 from django.utils import timezone
 
+from planner.utils.script_json import script_json
+
 from .models import (
     Project, MonitorSession, DiscoveredDevice, PollResult, DeviceEvent,
     ProjectSNMPConfig, SwitchPortSnapshot,
@@ -113,11 +115,11 @@ def network_monitor_view(request):
         'current_project': current_project,
         'active_session': active_session,
         'devices': devices,
-        'devices_json': json.dumps([d.as_status_dict() for d in devices]),
+        'devices_json': script_json([d.as_status_dict() for d in devices]),
         'domain_counts': domain_counts,
-        'domain_counts_json': json.dumps(domain_counts),
+        'domain_counts_json': script_json(domain_counts),
         'recent_events': recent_events,
-        'recent_events_json': json.dumps([e.as_sse_dict() for e in recent_events]),
+        'recent_events_json': script_json([e.as_sse_dict() for e in recent_events]),
         'active_alerts': active_alerts,
         'has_project': current_project is not None,
         'monitor_running': active_session is not None,

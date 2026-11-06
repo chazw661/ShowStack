@@ -203,10 +203,12 @@ function updateSharedPresentersList() {
     currentSharedPresenters.forEach((presenter, index) => {
         const item = document.createElement('div');
         item.className = 'shared-presenter-item';
+        // A presenter name is typed by users: text, never markup.
         item.innerHTML = `
-            <span>${presenter}</span>
+            <span></span>
             <button type="button" class="remove-btn" onclick="removeSharedPresenterModal(${index})" title="Remove">×</button>
         `;
+        item.querySelector('span').textContent = presenter;
         listContainer.appendChild(item);
     });
 }
@@ -1184,9 +1186,11 @@ function refreshGroupManagerList(sessionId) {
         groups.forEach(function(g) {
             var item = document.createElement('div');
             item.className = 'group-manage-item';
+            // The group name is typed by users: text, never markup.
             item.innerHTML = '<span style="width:14px;height:14px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span>' +
-                '<span class="group-manage-name">' + g.name + '</span>' +
-                '<button class="group-manage-delete" onclick="deleteGroup(' + g.id + ',' + sessionId + ')">✕</button>';
+                '<span class="group-manage-name"></span>' +
+                '<button class="group-manage-delete" onclick="deleteGroup(' + Number(g.id) + ',' + Number(sessionId) + ')">✕</button>';
+            item.querySelector('.group-manage-name').textContent = g.name;
             list.appendChild(item);
         });
     });

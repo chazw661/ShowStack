@@ -352,7 +352,7 @@
                         <form method="post" action="{% url 'crew_delete' crew.id %}" style="display:inline;">
                             {% csrf_token %}
                             <button type="submit" class="btn-delete"
-                                    onclick="return confirm('Delete crew \'{{ crew.name }}\'? Existing project memberships will not be affected.')">
+                                    onclick="return confirm('Delete crew \'{{ crew.name|escapejs }}\'? Existing project memberships will not be affected.')">
                                 Delete
                             </button>
                         </form>
