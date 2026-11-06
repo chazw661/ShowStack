@@ -1840,7 +1840,8 @@ function openSlotGroupPicker(slotId, sessionId, dotEl) {
         groups.forEach(function(g) {
             const item = document.createElement('div');
             item.className = 'group-picker-item';
-            item.innerHTML = '<span style="width:12px;height:12px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span> ' + g.name;
+            item.innerHTML = '<span style="width:12px;height:12px;border-radius:50%;background:' + GROUP_COLORS[g.color] + ';display:inline-block;flex-shrink:0;"></span> ';
+            item.appendChild(document.createTextNode(g.name));    // typed by users: text, never markup
             item.onmousedown = function(e) { e.preventDefault(); assignSlotGroup(slotId, g.id, g.name, g.color, dotEl); picker.classList.remove('open'); };
             picker.appendChild(item);
         });

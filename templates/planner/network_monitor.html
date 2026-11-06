@@ -2809,6 +2809,8 @@ function updateDanteCards(danteData, devices) {
 
 function createDanteCard(dev, dd) {
     var clockRole = (dd && dd.clock_role) || 'unknown';
+    // Read from the network: anything else goes into the markup below as text.
+    if (['master', 'locked', 'unlocked', 'unknown'].indexOf(clockRole) === -1) clockRole = 'unknown';
     var card = document.createElement('div');
     card.className = 'nhm-card';
     card.id = 'nhm-device-' + dev.device_id;
@@ -2829,7 +2831,7 @@ function createDanteCard(dev, dd) {
 
     card.innerHTML =
         '<div class="nhm-card-header">' +
-            '<span class="nhm-dot nhm-dot--' + (dev.status || 'unknown') + '" aria-label="' + escapeHtml(dev.label || dev.ip) + ': ' + (dev.status || 'unknown') + '"></span>' +
+            '<span class="nhm-dot nhm-dot--' + escapeHtml(dev.status || 'unknown') + '" aria-label="' + escapeHtml(dev.label || dev.ip) + ': ' + escapeHtml(dev.status || 'unknown') + '"></span>' +
             '<span class="nhm-card-name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(dev.label || dev.ip) + '</span>' +
             '<span class="nhm-clock-badge nhm-clock-badge--' + clockRole + '" id="nhm-clock-' + dev.device_id + '" aria-label="Clock role: ' + clockRole.charAt(0).toUpperCase() + clockRole.slice(1) + '">' + clockRole.toUpperCase() + '</span>' +
             '<span class="nhm-card-channels" id="nhm-channels-' + dev.device_id + '">' + escapeHtml(chText) + '</span>' +
@@ -2841,17 +2843,19 @@ function createDanteCard(dev, dd) {
                 '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Clock</span><span class="nhm-card-detail-value" id="nhm-clock-detail-' + dev.device_id + '">' + clockRole.charAt(0).toUpperCase() + clockRole.slice(1) + '</span></div>' +
                 '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Channels</span><span class="nhm-card-detail-value" id="nhm-channels-detail-' + dev.device_id + '">' + (chText ? 'TX: ' + dd.tx_channels + ' / RX: ' + dd.rx_channels : '&mdash;') + '</span></div>' +
                 '<div class="nhm-card-detail-row"><span class="nhm-card-detail-label">Last Seen</span><span class="nhm-card-detail-value">' + (dev.last_seen ? new Date(dev.last_seen).toLocaleTimeString() : 'never') + '</span></div>' +
-                (CAN_EDIT ? '<button class="nhm-card-remove" onclick="event.stopPropagation(); removeDevice(' + dev.device_id + ', \'' + (dev.label || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" aria-label="Remove ' + escapeHtml(dev.label || dev.ip) + ' from monitor">Remove from monitor</button>' : '') +
+                (CAN_EDIT ? '<button class="nhm-card-remove" aria-label="Remove ' + escapeHtml(dev.label || dev.ip) + ' from monitor">Remove from monitor</button>' : '') +
             '</div>' +
         '</div>';
+    var removeBtn = card.querySelector('.nhm-card-remove');
+    if (removeBtn) removeBtn.onclick = function(e) { e.stopPropagation(); removeDevice(dev.device_id, dev.label || ''); };
 
     return card;
 }
 
+// Text for markup, attributes included: quotes are escaped too (a device
+// label from the network can carry any character).
 function escapeHtml(text) {
-    var div = document.createElement('div');
-    div.appendChild(document.createTextNode(text));
-    return div.innerHTML;
+    return escHtml(text).replace(/'/g, '&#39;');
 }
 
 // ===== BOOT =====

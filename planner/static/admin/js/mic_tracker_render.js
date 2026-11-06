@@ -144,7 +144,8 @@
     function setTypeBadge(badge, micType) {
         if (!badge) return;
         badge.className = 'mic-type-badge type-' + (micType || 'empty');
-        badge.innerHTML = '<span class="type-dot"></span>' + (micType || '—');
+        badge.innerHTML = '<span class="type-dot"></span>';
+        badge.appendChild(document.createTextNode(micType || '—'));
     }
 
     /* The presenter cell is a SPAN SWAP, not a text update. .a1-unassigned
