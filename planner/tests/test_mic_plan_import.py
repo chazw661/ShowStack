@@ -93,7 +93,7 @@ class UploadTests(MicPlanBase):
         with self.assertLogs('planner.mic_plan.importer', level='INFO') as logs:
             self.upload(filename='secret-client.pdf')
         line = logs.output[0]
-        self.assertRegex(line, r'Mic Plan import: 3 pages, 19 rows, extract \d+\.\d\ds, parse')
+        self.assertRegex(line, r'Mic Plan import: layout table, 3 pages, 19 rows, extract \d+\.\d\ds, parse')
         self.assertNotIn('secret-client', line)
 
     def test_the_pdf_never_touches_disk(self):

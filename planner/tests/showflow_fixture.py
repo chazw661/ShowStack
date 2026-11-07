@@ -207,6 +207,72 @@ NO_HEADER_PAGES = [[
 ]]
 
 
+# Client F: CUE / Event / Presenter headers, no BSM column, a show title and date
+# above a header repeated on every page, "X" for nobody, mic callouts in Audio,
+# and a preset list continuing the same grid after the last line.
+HEADER_F = ['CUE', 'Start', 'End', 'Duration', 'Event', 'Presenter', 'Speaker Timer', 'Screen Preset',
+            'DSM Preset', 'Screens', 'Cameras', 'Audio', 'FOH Stage LIGHTS', 'Notes']
+
+
+def _row_f(line='', start='', end='', dur='', event='', presenter='', audio='', notes=''):
+    return [line, start, end, dur, event, presenter, '', '', '', '', '', audio, '', notes]
+
+
+TITLES_F = [_row_f('Acme Forum Day 1'), _row_f('Thursday, March 5')]
+CLIENT_F_PAGES = [
+    TITLES_F + [
+        HEADER_F,
+        _row_f(event='Program speaker timer settings'),
+        _row_f('100', '8:15 AM', '8:30 AM', '0:15:00', 'Doors Open', 'X',
+               'Walk-In Playlist A2: Mic Presenters Lav #1: Ann Reed Lav #2: Bo Lund'),
+        _row_f('', 'Roll Records'),
+        _row_f('101', '', '', '', 'VOG: Please welcome, Acme President, Ann Reed', 'Ann Reed'),
+        _row_f('102', '8:30 AM', '9:00 AM', '0:30:00', 'Ann Reed - Opening (20 slides)',
+               'Ann Reed (Prompter Script)', 'Lav 1', 'No clicker'),
+        _row_f(event='Ann departs'),
+        _row_f('103', '9:00 AM', '9:30 AM', '0:30:00', 'Bo Lund - Keynote', 'Bo Lund', 'Lav 2', 'Clicker'),
+        _row_f(event='Slide 40 - Video embedded, Bo walks off stage, Preset 5'),
+    ],
+    TITLES_F + [
+        HEADER_F,
+        _row_f('', '9:30 AM', '9:45 AM', '0:15:00', 'Break', 'X', 'Walk-In Playlist'),
+        _row_f('104', '', '', '', 'VOG: Please welcome Cleo Hart, Tom Kerr and Ned Marsh',
+               'Cleo Hart Tom Kerr Ned Marsh'),
+        _row_f('105', '9:45 AM', '10:15 AM', '0:30:00', 'Fireside Chat',
+               'Cleo (SL chair) Tom K. (loveseat) Ned (SR chair)', 'Lav 3,4,5'),
+        _row_f(event='Cleo intros Sue, shakes hands, then departs stage'),
+        _row_f('106', '10:15 AM', '10:45 AM', '0:30:00', 'Sue Tran - Closing', 'Sue Tran', 'Lav 1'),
+        _row_f(event='Sue Tran exits'),
+        _row_f('', 'PRESETS'),
+        _row_f('', 'Preset', 'Nickname', 'STAGE RIGHT', 'Arches', 'STAGE LEFT Outboard', 'DSM 5 / 6'),
+        _row_f('', '1', 'MoGFX - Full Canvas', 'Millumin', 'Millumin', 'Millumin', 'Prompter'),
+    ],
+    TITLES_F + [
+        HEADER_F,
+        _row_f('', '2', '3:1 Content (Main)', '1:1 IMAG', 'Millumin', '3:1 GFX1 / 1:1 IMAG', 'Current'),
+    ],
+]
+
+# Client G: a Word-style document, no table. Each date repeats the headings.
+DOCUMENT_LINES = [
+    'Acme Leadership Meeting', 'Showflow #6', 'Wednesday, March 4', 'TIME EVENT/ PRESENTER SUPPORT',
+    '8:00 am Crew Call', '2:02 VOG: Ladies & Gentlemen please welcome Ann Reed Play-on',
+    '2:02 \u2013 2:15 Ann Reed Title', '-Welcome',
+]
+
+
+def build_document_pdf(lines):
+    """PDF bytes: plain paragraphs, portrait letter, no table."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate
+
+    style = getSampleStyleSheet()['BodyText']
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=letter).build([Paragraph(escape(line), style) for line in lines])
+    return buf.getvalue()
+
+
 def _cell(cell, style):
     from reportlab.platypus import Image, Paragraph
     if cell is IMAGE:
