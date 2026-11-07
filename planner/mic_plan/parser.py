@@ -1,7 +1,7 @@
 """Showflow rows -> timeline, people, send/catch events and flags.
 
 Pure functions over the row dicts ``extract`` produces (keys: line, start,
-end, duration, description, speaker, bsm, notes). No Django, no pdfplumber:
+end, duration, description, speaker, bsm, audio, notes). No Django, no pdfplumber:
 the importer re-runs ``analyse`` from stored rows whenever crew names or
 merges change, and the tests feed it rows directly.
 
@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 # export), Client B (9-column, no send/catch cues), Client C (14-column,
 # panels), Client D (27-column, line numbers under an "a" header), Client E
 # (14-column, no send/catch cues, "TITLE:" Speaker cells, first names
-# after an intro). The fixtures in planner/tests/showflow_fixture.py copy
+# after an intro), Client F (14-column under CUE / Event / Presenter, no BSM
+# column, "X" for nobody). The fixtures in planner/tests/showflow_fixture.py copy
 # each layout with made-up names. Change a rule here, not in the code below.
 
 # -- Speaker separators ----------------------------------------------------
@@ -98,8 +99,10 @@ TITLE_CONNECTORS = {'&', 'and', 'of', '/', 'the'}                  # Client A: "
 # -- Exits and re-entries (cue-free parts) -------------------------------------
 # Client E: "Max Exits", "Ola exit after ...", "Gil exits when ...",
 # "Max and Dr. Reyes Exit", "both exit". Client C: "Panel Exits (Kit Stays)".
+# Client F: "Gil departs", "Bo walks off stage".
 # A verb followed by ":" is a stage note ("Exit: BSR"), not an exit.
-_EXIT = re.compile(r'(?i)\b(?:exit(?:s|ing)?|leaves?|leaving|walks?\s+off|goe?s?\s+off\s*stage|off\s*stage)\b(?!\s*:)')
+_EXIT = re.compile(r'(?i)\b(?:exit(?:s|ing)?|depart(?:s|ing)?|leaves?|leaving|walks?\s+off|goe?s?\s+off\s*stage'
+                   r'|off\s*stage)\b(?!\s*:)')
 _REENTER = re.compile(r'(?i)\b(?:re-?\s?enter(?:s|ing)?|returns?)\b(?!\s*:)')
 _STAYS = re.compile(r'(?i)\b(?:stays?|remains?)\b')
 # Group words before an exit: everyone on stage, except hosts and anyone
@@ -639,6 +642,10 @@ def split_cell(text, roster, discover, refs=None):
             if refs is not None and used > 1:
                 refs.saw(name)
             i += used
+            # Client F "Tom K.": a first name and the initial of their surname.
+            if used == 1 and i < len(toks) and re.fullmatch(r'[A-Z]\.?', toks[i]) \
+                    and (_surname(name) or '').startswith(toks[i][0]):
+                i += 1
             # "Name, President & CEO" / "Name - Patient": a title, not text to flag.
             if i < len(toks) and toks[i] in (',', '-', '–'):
                 j = i + 1
@@ -1093,6 +1100,14 @@ def group_exit(text):
     return (kind, stays) if kind else None
 
 
+def _subject(toks, roster, refs):
+    """The name opening a sentence, for "Ann intros Bo, then departs"."""
+    name, _ = roster.match_at(toks, 0)
+    if not name and refs is not None:
+        name, _ = refs.short_at(toks, 0)
+    return [name] if name and name is not AMBIGUOUS else []
+
+
 def exits_and_entries(text, roster, refs=None):
     """(names exiting, names re-entering, words not recognised before an exit)
     in one description. Names are read as in Speaker cells: full names, a
@@ -1107,6 +1122,8 @@ def exits_and_entries(text, roster, refs=None):
         if _clean_token(toks[-1]).lower() in GROUP_ALL | GROUP_BOTH:
             continue
         names, unresolved = _trailing_names(toks, roster, refs)
+        if not names and toks[-1].lower() == 'then':
+            names = _subject(toks, roster, refs)
         (exits if verb == 'exit' else enters).extend(names)
         if unresolved and verb == 'exit':
             unknown.append(unresolved)

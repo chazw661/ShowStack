@@ -7071,6 +7071,7 @@ class ShowflowRow(models.Model):
     description = models.TextField(blank=True)
     speaker_text = models.TextField(blank=True)
     bsm_text = models.TextField(blank=True)
+    audio_text = models.TextField(blank=True)
     notes_text = models.TextField(blank=True)
     is_segment = models.BooleanField(default=False)
     segment_t0 = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -7096,7 +7097,8 @@ class ShowflowRow(models.Model):
     def as_parser_row(self):
         return {'line': self.line_no, 'start': self.start_text, 'end': self.end_text,
                 'duration': self.duration_text, 'description': self.description,
-                'speaker': self.speaker_text, 'bsm': self.bsm_text, 'notes': self.notes_text}
+                'speaker': self.speaker_text, 'bsm': self.bsm_text, 'audio': self.audio_text,
+                'notes': self.notes_text}
 
 
 class ShowflowPerson(models.Model):

@@ -31,7 +31,7 @@ from planner.models import (
     MicPlan, Presenter, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
 )
 
-from .extract import ShowflowError, extract
+from .extract import DOCUMENT_LAYOUT, ShowflowError, extract
 from .parser import NAME_SUFFIXES, analyse, name_key
 
 USER_FLAGS = ('presenter_by', 'added')   # keys of ShowflowPerson.flags a rebuild keeps
@@ -45,6 +45,10 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 # extract.TIME_BUDGET_S stops any file at 15 s whatever its page count.
 MAX_PAGES = 60
 STALE_PENDING = timedelta(hours=6)
+# After extract.DOCUMENT_LAYOUT. Add person needs a line of a part, so it is
+# only offered on a day that has one.
+DOCUMENT_NEXT_PARTS = 'You can still plan this day by adding people by hand (People \u2192 Add person).'
+DOCUMENT_NEXT_NO_PARTS = "For now, build this day's sessions directly in Mic Tracker."
 
 
 def _minute(value):
@@ -66,7 +70,17 @@ def stage_upload(day, data, filename, user):
     ShowflowImport.objects.filter(status='pending',
                                   imported_at__lt=timezone.now() - STALE_PENDING).delete()
     started = time.monotonic()
-    rows, columns, warnings, pages = extract(data, max_pages=MAX_PAGES)
+    try:
+        rows, columns, warnings, pages = extract(data, max_pages=MAX_PAGES)
+    except ShowflowError as error:
+        if error.layout:
+            # No file name: showflows can be under NDA.
+            logger.info('Mic Plan import: layout %s, not read (project %s, day %s)', error.layout,
+                        day.project_id, day.pk)
+        if error.layout == 'document':
+            raise ShowflowError('{} {}'.format(DOCUMENT_LAYOUT, DOCUMENT_NEXT_PARTS if active_parts(day)
+                                               else DOCUMENT_NEXT_NO_PARTS), layout='document')
+        raise
     extracted = time.monotonic()
     if not rows:
         raise ShowflowError('Found the column header but no rows under it.')
@@ -74,7 +88,7 @@ def stage_upload(day, data, filename, user):
     known = _merges(day.showflow_people.all())
     result = analyse(rows, crew=crew, known=known)
     # No file name: showflows can be under NDA.
-    logger.info('Mic Plan import: %d pages, %d rows, extract %.2fs, parse %.2fs '
+    logger.info('Mic Plan import: layout table, %d pages, %d rows, extract %.2fs, parse %.2fs '
                 '(project %s, day %s)', pages, len(rows), extracted - started,
                 time.monotonic() - extracted, day.project_id, day.pk)
     with transaction.atomic():
@@ -90,7 +104,8 @@ def stage_upload(day, data, filename, user):
                 showflow_import=imp, order=i, page_no=row['page_no'], line_no=row['line'][:20],
                 start_text=row['start'][:50], end_text=row['end'][:50],
                 duration_text=row['duration'][:50], description=row['description'],
-                speaker_text=row['speaker'], bsm_text=row['bsm'], notes_text=row['notes'],
+                speaker_text=row['speaker'], bsm_text=row['bsm'], audio_text=row['audio'],
+                notes_text=row['notes'],
                 is_segment=t.is_segment, segment_t0=_minute(t.t0), segment_t1=_minute(t.t1),
                 est_time=_minute(t.minute), time_exact=t.exact,
             ) for i, (row, t) in enumerate(zip(rows, result.times))

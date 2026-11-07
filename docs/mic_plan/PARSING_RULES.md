@@ -17,19 +17,42 @@ below is a placeholder, and the test fixture
     Preset, DSM's, BSM.
   A third, upper-case layout adds LINE #, SCENE #, PROPS and STAGE LOCATION
   columns. A fourth heads the line column "a"; a fifth uses LINE # with
-  "Enter Exit" and "DSMs" and has no send/catch cues at all.
-- A header row names Start and Description, plus End, Speaker Name or BSM.
-  If no row on any page does, the import fails with a clear message. Mic
+  "Enter Exit" and "DSMs" and has no send/catch cues at all. A sixth (Client
+  F) is CUE, Start, End, Duration, Event, Presenter, ..., Audio, ..., Notes,
+  with no BSM column.
+- Header names, any of:
+  - line: CUE, Cue #, Line, Line #, #, or a blank cell
+  - description: Description, Event, Segment, Item, Content
+  - speaker: Speaker Name, Speaker(s), Presenter(s), Talent
+  - audio: Audio, Audio Notes (stored with the row)
+- A header row names Start and a description, plus End, a speaker column or
+  BSM. If no row on any page does, the import fails with a clear message. Mic
   Plan does not guess.
-- Header matching ignores case and also tries the text with its spaces
-  removed, because a narrow column wraps its header mid-word ("DURATIO N").
-  The speaker column can be headed SPEAKER, Speaker or Speaker Name.
+- Header matching looks only at letters and digits, so case, spaces and
+  punctuation don't matter, and a narrow column can wrap its header mid-word
+  ("DURATIO N").
+- When no header is found, the message names the row closest to one (two or
+  more columns recognised) and what it lacks: "Found a header row with Cue,
+  Start, ... but no column Mic Planner recognises as the description."
+- A page with no table but with TIME / EVENT / PRESENTER / SUPPORT headings
+  (any three, on one short line) is a document-style showflow (Client G). It is
+  not read: the message says so, and offers Add person only on a day that
+  already has a part, since a hand-added appearance needs a line. Mic Tracker
+  otherwise. The layout kind is logged at INFO, with no file name.
 - Legend rows above the header ("SESSION SEGMENT", "VOG", colour keys) are
   ignored.
 - If the column the header marks for line numbers is empty, the line numbers
   are found in whichever unmapped column holds them (one file heads it "a").
 - The header is usually on page 1 only, and later pages continue the same
   table. The column mapping carries over while the column count matches.
+- A header repeated on a later page can have the show title and date above it
+  (Client F). Those rows have one cell filled, which is no line number, and
+  are dropped.
+- A row with text in both Start and End, neither a time, after the first
+  clock time starts another table in the same grid (Client F's preset list).
+  It and every row after it are skipped, with a warning.
+- A Speaker cell that is only X, -, – , — or n/a means nobody: it is read as
+  blank, so it neither flags nor stops a break being detected.
 - A missing BSM or Speaker column is a warning, not an error.
 
 ## Times
@@ -92,6 +115,8 @@ below is a placeholder, and the test fixture
   Merges on the review page add aliases ("KK" → Kim Keynote).
 - A job title after `Name,` or `Name -` is dropped ("Alex Host, President &
   CEO").
+- A known first name followed by the initial of that person's surname is that
+  person ("Tom K. Ned" is two people, not "K Ned").
 - A title before a name stays part of it: "Dr. Ann Lee" (written with a full
   stop whether or not the file has one). "Ann Lee" without it is the same
   person. In a run-together cell a title starts the next name ("Kit Ames Dr.
@@ -184,10 +209,13 @@ below is a placeholder, and the test fixture
 ## Exits and re-entries
 
 - A description says who exits: names joined by `,` `and` `&` right before
-  exit / exits / exiting / leave(s) / walk(s) off / off stage ("Ola exits
-  when the exam is complete", "Max and Dr. Reyes Exit", "Ned welcomes Bo
-  and Zed to stage Ned exits"). The names are read as in Speaker cells: a
-  full name, a first name meaning whoever was introduced last, "Dr. Surname".
+  exit / exits / exiting / depart(s) / leave(s) / walk(s) off / off stage ("Ola
+  exits when the exam is complete", "Max and Dr. Reyes Exit", "Ned welcomes Bo
+  and Zed to stage Ned exits", "Gil departs"). The names are read as in
+  Speaker cells: a full name, a first name meaning whoever was introduced
+  last, "Dr. Surname".
+- "then" right before the verb means the sentence's opening name ("Ann
+  intros Bo, shakes hands, then departs stage").
 - Re-enter(s) / reenter(s) / returns brings someone back on ("Max re-enters
   with Dr. Una Reyes").
 - A verb followed by ":" is a stage note ("Exit: BSR"), not an exit.
