@@ -206,6 +206,7 @@
                         {% if row.segment.spill_text %}<div class="load spill">{{ row.segment.spill_text }}</div>{% endif %}
                         {% else %}<span{% if row.is_segment %} class="sname"{% endif %}>{{ row.description }}</span>{% endif %}
                         {% if row.speaker_text %}<span class="spk">{{ row.speaker_text }}</span>{% endif %}
+                        {% if row.mic_notes %}<div class="mp-micnotes">{% for m in row.mic_notes %}<span class="mp-micnote" title="Mic number written in the showflow">{{ m.name }} · {{ m.label }}</span>{% endfor %}</div>{% endif %}
                         {% if row.brk %}{% if can_edit %}<form class="mp-brk" method="post" action="{% url 'planner:mic_plan_break' part.pk %}">{% csrf_token %}<input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="is_break" value="{% if row.brk.is_break %}0{% else %}1{% endif %}"><button type="submit" class="mp-brk-toggle" aria-pressed="{% if row.brk.is_break %}true{% else %}false{% endif %}" title="{% if row.brk.is_break %}Packs worn before this segment can go to someone else after it. Press to make it not a break.{% else %}Press to make this segment a break: packs can go to someone else after it.{% endif %}">Break</button>{% if row.brk.set %} <span class="mp-brk-by">{% if row.brk.is_break %}break{% else %}not a break{% endif %} · set by {{ row.brk.by }}</span>{% endif %}</form><form class="mp-brk mp-help" method="post" action="{% url 'planner:mic_plan_helpers' part.pk %}">{% csrf_token %}<input type="hidden" name="row" value="{{ row.pk }}"><label title="People who only de-mic, during this segment">De-mic helpers <input type="number" name="helpers" min="0" max="3" value="{{ row.brk.helpers }}"></label><button type="submit" class="mp-btn small">Save</button>{% if row.brk.helpers %} <span class="mp-brk-by">{{ row.brk.helpers }} helper{{ row.brk.helpers|pluralize }} · set by {{ row.brk.helpers_by }}</span>{% endif %}</form>{% elif row.brk.is_break or row.brk.set or row.brk.helpers %}<span class="mp-brk-by">{% if row.brk.is_break or row.brk.set %}{% if row.brk.is_break %}break{% else %}not a break{% endif %}{% if row.brk.set %} · set by {{ row.brk.by }}{% endif %}{% endif %}{% if row.brk.helpers %}{% if row.brk.is_break or row.brk.set %} · {% endif %}{{ row.brk.helpers }} de-mic helper{{ row.brk.helpers|pluralize }}{% endif %}</span>{% endif %}{% endif %}
                     </td>
                     <td class="bsm">{{ row.bsm_html|safe }}</td>
@@ -249,7 +250,9 @@
             {% for c in cards %}
                 <div class="mp-card{% if c.plan %} plan{% endif %} k-{{ c.kind }}">
                     <span class="mp-kind">{{ c.label }}</span>
-                    <div class="what">{{ c.text }}</div>
+                    {% if c.mics %}<ul class="what mp-mics">{% for i in c.mics %}<li>{{ i.text }}</li>{% endfor %}</ul>
+                    {% if can_edit and editable and c.can_use %}<button type="button" class="mp-btn small" id="mp-use-showflow" data-url="{% url 'planner:mic_plan_use_showflow' day.pk %}">Use the showflow's numbers</button>{% endif %}
+                    {% else %}<div class="what">{{ c.text }}</div>{% endif %}
                     {% if c.note %}<div class="assume">Plan: {{ c.note }}</div>{% endif %}
                     <div class="where">{% if c.line %}Line {{ c.line }}{% if parts|length > 1 %} · Part {{ c.part_no }}{% endif %}{% endif %}</div>
                     {% if c.part %}<a class="mp-btn small" href="?day={{ day.pk }}&amp;part={{ c.part }}#showflow:row-{{ c.row_order }}">Show in showflow</a>
@@ -292,7 +295,7 @@
                 <tr id="person-{{ person.pk }}" data-person="{{ person.pk }}" data-name="{{ person.display_name }}"
                     data-presenter="{{ person.presenter_id|default:'' }}" data-hint="{{ person.mic_hint }}"
                     data-backup="{{ person.backup_mic_type }}" tabindex="0" aria-label="{{ person.display_name }}">
-                    <td>{{ person.display_name }}{% if person.intro_line %} <span class="mp-intro">intro'd line {{ person.intro_line }}</span>{% endif %}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}
+                    <td>{{ person.display_name }}{% if person.intro_line %} <span class="mp-intro">intro'd line {{ person.intro_line }}</span>{% endif %}{% if person.mic_lines %} <span class="mp-intro">showflow mic: {{ person.mic_lines|join:", " }}</span>{% endif %}{% if person.flags.bsm_only %}<span class="mp-tag">BSM only</span>{% endif %}
                         {% for e in person.added_list %}
                         <div class="mp-added" data-entry="{{ e.id }}">
                             <span class="mp-tag{% if e.missing %} missing{% endif %}">added: line {{ e.line }}{% if e.off %}–{{ e.off }}{% endif %}{% if e.missing %} · no longer in this showflow{% endif %}</span>
@@ -428,6 +431,10 @@
                     <legend>Pack use</legend>
                     {% for value, label in policy_choices %}<label class="mp-check"><input type="radio" name="pack_policy" value="{{ value }}"{% if settings.pack_policy == value %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> {{ label }}<span class="mp-muted">{% if value == 'recycle_at_breaks' %}a pack worn this session goes to someone else only after a break{% else %}a freed pack goes to the next person who needs one{% endif %}</span></label>{% endfor %}
                     {% if policy_counts %}<p class="mp-note">For this day at plan v{{ plan.version }}'s settings, no rig set: {{ policy_counts }}.</p>{% endif %}
+                </fieldset>
+                <fieldset class="mp-policy">
+                    <legend>Showflow mic numbers</legend>
+                    {% for value, label in number_choices %}<label class="mp-check"><input type="radio" name="showflow_numbers" value="{{ value }}"{% if settings.showflow_numbers == value %} checked{% endif %}{% if not can_edit %} disabled{% endif %}> {{ label }}</label>{% endfor %}
                 </fieldset>
             </div>
             {% if can_edit %}<button class="mp-btn small primary" type="submit">Save settings</button>{% endif %}

@@ -7,7 +7,7 @@ from planner.models import MicPlanA2Action, MicPlanAppearance
 
 from .display import TX_WORDS, first_name, format_action, overlap_warning, rig_text
 from .parser import description_candidates
-from .planning import plan_rig, plan_values
+from .planning import SHOWFLOW_CARD, plan_rig, plan_values
 from .solver import hm, is_helper
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
@@ -343,11 +343,16 @@ def review_cards(parts, plan, apps, people, labels):
         plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill', 'who_both': 'Both?',
                        'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
                        'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved',
-                       'rig_use': 'Transmitter', 'swap': 'Swap', 'swap_mid': 'Swap mid-session', 'rig': 'Rig'}
+                       'rig_use': 'Transmitter', 'swap': 'Swap', 'swap_mid': 'Swap mid-session', 'rig': 'Rig',
+                       SHOWFLOW_CARD: 'Showflow'}
         for f in plan.flags:
             part, row = rows.get(f.get('row'), (None, None))
-            cards.append(_card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,
-                               f.get('person'), numbers, None, plan=True))
+            card = _card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,
+                         f.get('person'), numbers, None, plan=True)
+            if f['kind'] == SHOWFLOW_CARD:
+                card['mics'] = [i for i in f['items'] if not i['repeat']]
+                card['can_use'] = any(i['fits'] for i in f['items'])
+            cards.append(card)
         for a in apps:
             if a.assumed and (a.person_id, a.note_row_id) not in used:
                 part, row = rows.get(a.note_row_id, (None, None))
@@ -401,9 +406,10 @@ POLICY_NAMES = {'recycle_at_breaks': 'Recycle at breaks', 'fewest_packs': 'Fewes
 
 def settings_summary(values):
     """``values``: planning.plan_values (or the project's settings)."""
-    return '{} · {} A2 · mic {} · de-mic {} · lead {} · margin {} min · {}'.format(
+    return '{} · {} A2 · mic {} · de-mic {} · lead {} · margin {} min · {}{}'.format(
         POLICY_NAMES[values['pack_policy']], values.get('a2_count'), values.get('mic_min'),
-        values.get('demic_min'), values.get('premic_lead_min'), values.get('margin_min'), rig_text(values))
+        values.get('demic_min'), values.get('premic_lead_min'), values.get('margin_min'), rig_text(values),
+        " · following the showflow's mic numbers" if values.get('showflow_numbers') == 'follow' else '')
 
 
 def policy_counts_text(counts):
