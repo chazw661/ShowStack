@@ -29,7 +29,7 @@ from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
 from planner.mic_plan import importer, page, planning, push, revert, schedule
-from planner.mic_plan.display import describe_edit, rig_text
+from planner.mic_plan.display import describe_edit, first_name, rig_text
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
 from planner.mic_plan import solver
@@ -55,6 +55,8 @@ FLAG_LABELS = {
     'who_exits': 'Exit?',
     'added_missing': 'Added',
     'gone': 'Gone',
+    'mic_name': 'Mic?',
+    'mic_which': 'Mic?',
 }
 _CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
 INT_SETTINGS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
@@ -86,6 +88,18 @@ def _part(request, pk, status='active'):
 
 def _person(request, pk):
     return get_object_or_404(ShowflowPerson, pk=pk, day__project=_project_or_404(request))
+
+
+def _mic_lines(person, parts, rows_by_part):
+    """"Lav 2 (line 100)", one for each change of showflow number, in order."""
+    out, last = [], None
+    for p in parts:
+        lines = {r.order: r.line_no or '#{}'.format(r.order + 1) for r in rows_by_part[p.pk]}
+        for e in person.flags.get('mics', {}).get(str(p.pk), []):
+            if e['label'] != last:
+                last = e['label']
+                out.append('{} (line {})'.format(last, lines.get(e['row'], '?')))
+    return out
 
 
 def _span(part):
@@ -145,6 +159,10 @@ def mic_plan(request):
         for person in people:
             for o in person.flags.get('rows', {}).get(str(part.pk), []):
                 names_by_row.setdefault(o, []).append(person.pk)
+        mics_by_row = {}
+        for person in people:
+            for e in person.flags.get('mics', {}).get(str(part.pk), []):
+                mics_by_row.setdefault(e['row'], []).append({'name': first_name(person.display_name), 'label': e['label']})
         breaks = {s['row'].pk: s for s in planning.part_segments(part, rows, planning.named_orders(day, part))}
         for row in rows:
             seg = breaks.get(row.pk)
@@ -160,6 +178,7 @@ def mic_plan(request):
             row.time_label = ('' if row.est_time is None
                               else hm(row.est_time) if row.time_exact else '≈' + hm(row.est_time))
             row.people_ids = names_by_row.get(row.order, [])
+            row.mic_notes = mics_by_row.get(row.order, [])
         page.showflow_rows(part, rows, events, plan, apps, actions)
         line_of = {r.order: r.line_no or '#{}'.format(r.order + 1) for r in rows}
         for person in people:
@@ -177,6 +196,7 @@ def mic_plan(request):
             line_choices.append((r.pk, '{}Line {} · {}'.format(
                 'Part {} · '.format(k) if len(parts) > 1 else '', label, ' '.join(r.description.split())[:40])))
     for person in people:
+        person.mic_lines = _mic_lines(person, parts, rows_by_part)
         person.added_list = []
         for entry in person.flags.get('added', []):
             where = importer.resolve_added(entry, parts, rows_by_part)
@@ -224,6 +244,7 @@ def mic_plan(request):
         'policy_name': page.POLICY_NAMES[plan_values['pack_policy']],
         'policy_counts': page.policy_counts_text(plan.policy_counts) if plan else '',
         'policy_choices': MicPlanSettings.PACK_POLICY_CHOICES,
+        'number_choices': MicPlanSettings.SHOWFLOW_NUMBERS_CHOICES,
         'flag_labels': FLAG_LABELS,
         # Crew names only matter when this file has send/catch cues to read. Not
         # "has crew names": a new part starts with the project's last ones.
@@ -320,6 +341,20 @@ def plan_undo(request, pk):
     def apply(version):
         plan, removed = planning.undo(day, version, request.user)
         return plan, 'Undone: ' + describe_edit(removed)
+    return _edit_response(request, day, apply)
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def plan_use_showflow(request, pk):
+    """Review's "Use the showflow's numbers", against plan ``version``."""
+    day = _day(request, pk)
+
+    def apply(version):
+        plan, count = planning.use_showflow(day, version, request.user)
+        return plan, "Pinned {} to the showflow's numbers".format(
+            '1 person' if count == 1 else '{} wearings'.format(count))
     return _edit_response(request, day, apply)
 
 
@@ -851,6 +886,11 @@ def mic_plan_settings(request):
         messages.error(request, 'Pack use: choose one of the options.')
         return _back(day)
     settings_obj.pack_policy = policy
+    numbers = request.POST.get('showflow_numbers', settings_obj.showflow_numbers)
+    if numbers not in dict(MicPlanSettings.SHOWFLOW_NUMBERS_CHOICES):
+        messages.error(request, 'Showflow mic numbers: choose one of the options.')
+        return _back(day)
+    settings_obj.showflow_numbers = numbers
     settings_obj.save()
     messages.success(request, 'Mic Planner settings saved. Re-generate to use them.')
     return _back(day, _maybe_part(request, request.POST.get('part', '')))

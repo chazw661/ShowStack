@@ -403,11 +403,14 @@ def rebuild_day(day):
                 by_key[person.name_key] = person
             found[person.name_key] = person
             state = states.setdefault(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': True,
-                                                  'hint': '', 'exits': {}, 'enters': {}})
+                                                  'hint': '', 'exits': {}, 'enters': {}, 'mics': {}})
             state['rows'][str(part.pk)] = [rows[i].order for i in info['rows']]
             for kind in ('exits', 'enters'):
                 if info.get(kind):
                     state[kind][str(part.pk)] = [rows[i].order for i in info[kind]]
+            if info.get('mics'):
+                state['mics'].setdefault(str(part.pk), []).extend(
+                    dict(e, row=rows[e['row']].order) for e in info['mics'])
             if info.get('intro') is not None:
                 state['intro'][str(part.pk)] = rows[info['intro']].order
             state['bsm_only'] = state['bsm_only'] and info['bsm_only']
@@ -428,7 +431,7 @@ def rebuild_day(day):
     cleared = set()          # (part pk, row order) of "not listed" lines people were added from
     for person in found.values():
         state = states.get(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': False, 'hint': person.mic_hint,
-                                       'exits': {}, 'enters': {}})
+                                       'exits': {}, 'enters': {}, 'mics': {}})
         missing = []
         for entry in person.flags.get('added', []):
             where = resolve_added(entry, parts, rows_by_part)
@@ -437,7 +440,8 @@ def rebuild_day(day):
             elif entry.get('from_flag'):
                 cleared.add((where[0].pk, where[1].order))
         person.flags = {'rows': state['rows'], 'intro': state['intro'], 'bsm_only': state['bsm_only'],
-                        'exits': state['exits'], 'enters': state['enters'], **_user_flags(person)}
+                        'exits': state['exits'], 'enters': state['enters'], 'mics': state['mics'],
+                        **_user_flags(person)}
         if missing:
             person.flags['added_missing'] = missing
         if not person.mic_hint_locked:

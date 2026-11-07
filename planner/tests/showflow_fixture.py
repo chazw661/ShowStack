@@ -253,6 +253,26 @@ CLIENT_F_PAGES = [
     ],
 ]
 
+# Client F's numbering: each block's list reuses numbers. Kit changes number
+# (Lav 2, then Lav 4), Lee's Lav 1 goes to Dee after the break, and Pia keeps
+# Lav 5 alone. The Fireside row writes its numbers in another order.
+MIC_NUMBER_PAGES = [[
+    HEADER_F,
+    _row_f('100', '8:00 AM', '8:30 AM', '0:30:00', 'Doors Open', 'X',
+           'A2: Mic Presenters Lav #1: Lee Voss Lav #2: Kit Mosse Lav #5: Pia Wren'),
+    _row_f('101', '8:30 AM', '8:50 AM', '0:20:00', 'Lee Voss - Opening', 'Lee Voss', 'Lav 1'),
+    _row_f('102', '8:50 AM', '9:10 AM', '0:20:00', 'Kit Moss - Intro', 'Kit Moss', 'Lav 2'),
+    _row_f('103', '9:10 AM', '9:30 AM', '0:20:00', 'Lee Voss - Update', 'Lee Voss'),
+    _row_f('104', '9:30 AM', '9:50 AM', '0:20:00', 'Lee Voss - Close', 'Lee Voss'),
+    _row_f('105', '9:50 AM', '10:00 AM', '0:10:00', 'Pia Wren - Note', 'Pia Wren', 'Lav 5'),
+    _row_f('', '10:00 AM', '10:30 AM', '0:30:00', 'Break', 'X'),
+    _row_f('200', '10:00 AM', '10:30 AM', '0:30:00', 'Doors Open', 'X',
+           'A2: Mic Presenters Lav #1: Dee Hall Lav #3: Moe Lark Lav #4: Kit Moss'),
+    _row_f('201', '10:30 AM', '11:00 AM', '0:30:00', 'Fireside', 'Moe Lark Dee Hall', 'Lav 1,3'),
+    _row_f('202', '11:00 AM', '11:20 AM', '0:20:00', 'Kit Moss - Close', 'Kit Moss', 'Lav 4'),
+    _row_f('203', '11:20 AM', '11:40 AM', '0:20:00', 'Moe Lark - Thanks', 'Moe Lark', 'Lav 3'),
+]]
+
 # Client G: a Word-style document, no table. Each date repeats the headings.
 DOCUMENT_LINES = [
     'Acme Leadership Meeting', 'Showflow #6', 'Wednesday, March 4', 'TIME EVENT/ PRESENTER SUPPORT',

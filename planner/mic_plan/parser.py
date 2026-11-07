@@ -8,6 +8,7 @@ merges change, and the tests feed it rows directly.
 The rules are written up in docs/mic_plan/PARSING_RULES.md.
 """
 
+import difflib
 import re
 from dataclasses import dataclass, field
 
@@ -126,6 +127,24 @@ CUE_VERB_OPENS_CELL = True
 # -- Mic hints -------------------------------------------------------------------
 _HH = re.compile(r'(?i)\bHH\b|\bhand-?helds?\b')    # Client B "handheld(s)", Client B "Need HH"
 _BACKUP = re.compile(r'(?i)\bback-?up\s+mic\b')     # Client A "Sam with Name Backup mic"
+
+# -- Mic numbers in the showflow ---------------------------------------------------
+# Client F, Audio column: an "A2: Mic Presenters" list ("Lav #1: Name Lav #5 - Name")
+# and number-only cells ("Lav 2", "Lav 3,6"). The word gives the kind; a list item
+# has one number, then ":" or a dash, then a name. "Lav 1-3" is a range.
+MIC_KINDS = {'lav': 'Lav', 'lavalier': 'Lav', 'headset': 'Headset', 'hh': 'HH', 'handheld': 'HH',
+             'mic': 'Mic', 'rf': 'RF'}
+MIC_POOLS = {'Lav': 'body', 'Headset': 'body', 'HH': 'HH'}        # 'Mic', 'RF': no type said
+_CALLOUT = re.compile(r'(?i)(?<![\w-])(lavalier|lav|headset|hand-?held|hh|mic|rf)s?\s*#?\s*'
+                      r'(\d{1,3}(?:\s*(?:,|&|and|-|\u2013|/)\s*#?\s*\d{1,3})*)(?![\d.:]*\d)')
+_NUMBERS = re.compile(r'\d{1,3}')
+_RANGE = re.compile(r'^(\d{1,3})\s*[-\u2013]\s*(\d{1,3})$')
+_NAME_FOLLOWS = re.compile(r'\s*[:\-\u2013\u2014]\s*')
+# A wired mic has a number too: not a pack.
+_WIRED = re.compile(r'(?i)\b(?:podium|lectern|stand|aisle|table|floor|wired|choir|vog|boom)\s*$')
+MIC_RANGE_MAX = 20
+# How close a list's spelling must be to a name in the Speaker column.
+MIC_NAME_CUTOFF = 0.85
 
 # -- Flags -----------------------------------------------------------------------
 # Client B (no cues), Client C (one stray cue in 171 rows): "No cue" means
@@ -916,6 +935,8 @@ def analyse(rows, crew=None, known=()):
                           rows[i]['line'] or '?', word, ' and '.join(owners) or 'Several people',
                           'both' if len(owners) == 2 else 'all'), None))
     flags += _description_flags(rows, roster, speakers)
+    mics, mic_flags = _mic_numbers(rows, roster, speakers)
+    flags += mic_flags
 
     sends = {(name, row) for kind, name, row in events_raw if kind == 'send'}
     events = [Event(kind, name, row, event_minute(
@@ -959,7 +980,8 @@ def analyse(rows, crew=None, known=()):
 
     people = {name: {'rows': sorted(mentions.get(name, ())), 'mic_hint': hints.get(name, ''),
                      'bsm_only': name in roster.bsm_only, 'intro': refs.intro.get(name),
-                     'exits': sorted(exits.get(name, ())), 'enters': sorted(enters.get(name, ()))}
+                     'exits': sorted(exits.get(name, ())), 'enters': sorted(enters.get(name, ())),
+                     'mics': mics.get(name, [])}
               for name in roster.found | set(mentions)}
     starts = [times[i].t0 for i in segments]
     ends = [times[i].t1 for i in segments]
@@ -1098,6 +1120,108 @@ def group_exit(text):
             stays += run
         prev = end
     return (kind, stays) if kind else None
+
+
+def mic_callouts(text):
+    """[(kind, [numbers], name text or '')] in one cell, in order. ``kind`` is
+    a value of MIC_KINDS; a name comes with a list item only ("Lav #1: Ann
+    Reed", up to the next callout). A wired mic ("Podium mic 1") is skipped."""
+    text = text or ''
+    found = [m for m in _CALLOUT.finditer(text) if not _WIRED.search(text[:m.start()])]
+    out = []
+    for k, m in enumerate(found):
+        kind = MIC_KINDS[m[1].lower().replace('-', '')]
+        numbers = [int(n) for n in _NUMBERS.findall(m[2])]
+        span = _RANGE.match(m[2])
+        if span and int(span[1]) < int(span[2]) <= int(span[1]) + MIC_RANGE_MAX:
+            numbers = list(range(int(span[1]), int(span[2]) + 1))
+        name = ''
+        rest = text[m.end():found[k + 1].start() if k + 1 < len(found) else len(text)]
+        after = _NAME_FOLLOWS.match(rest)
+        if after and len(numbers) == 1:
+            name = rest[after.end():].strip()
+        out.append((kind, numbers, name))
+    return out
+
+
+def mic_label(kind, number):
+    return '{} {}'.format(kind, number)
+
+
+def _list_name(text, roster):
+    """Who a list item means: (display name or None, the words read). The
+    words at its start that could be a name, then any trailing cell text is
+    ignored ("Ann Reed Fade music"). A spelling a little off a known full
+    name is that person when only one is that close (Client F: a surname
+    with an extra s); nobody is made from a list."""
+    toks = _tokens(text)
+    words = []
+    for tok in toks:
+        if tok in SEPARATORS or tok in PUNCT or not (_is_name_part(tok) or _honorific(tok)) or len(words) == 4:
+            break
+        words.append(_clean_token(tok))
+    if not words:
+        return None, []
+    name, used = roster.match_at(words, 0)
+    if name and (used > 1 or len(words) == 1):
+        return name, words
+    if len(words) < 2:
+        return None, words
+    full = {name_key(n): n for n in roster.names if len(_bare(n).split()) > 1}
+    full.update({name_key(_bare(n)): n for n in roster.names if len(_bare(n).split()) > 1})
+    for size in sorted({len(words), 2}, reverse=True):
+        near = difflib.get_close_matches(name_key(' '.join(words[:size])), full, n=3, cutoff=MIC_NAME_CUTOFF)
+        owners = {full[k] for k in near}
+        if len(owners) == 1:
+            return owners.pop(), words
+    return None, words
+
+
+def _mic_entry(row, kind, number, via):
+    return {'row': row, 'kind': kind, 'n': number, 'label': mic_label(kind, number),
+            'pool': MIC_POOLS.get(kind), 'via': via}
+
+
+def _mic_numbers(rows, roster, speakers):
+    """({display name: [entries]}, flags). Lists first, over every row, then
+    number-only cells, which need them. One number and one speaker on a row
+    is that speaker's; any other mix is never matched by position (Client F
+    writes "Lav 3,6" over two people in the other order): it agrees with the
+    lists, or it is flagged. A list name nobody has is flagged, no one is made."""
+    entries, flags, bare = {}, [], {}
+    for i, row in enumerate(rows):
+        seen = set()
+        for cell in (row.get('audio'), row.get('bsm'), row.get('notes')):
+            for kind, numbers, text in mic_callouts(cell):
+                if not text:
+                    bare.setdefault(i, [])
+                    bare[i] += [(kind, n) for n in numbers if (kind, n) not in bare[i]]
+                    continue
+                name, words = _list_name(text, roster)
+                if name is None:
+                    if len(words) > 1:
+                        flags.append(('mic_name', i, 'Line {}: {} is listed for "{}", who is not in the Speaker '
+                                      'column. Merge or add them to use this number.'.format(
+                                          row['line'] or '?', mic_label(kind, numbers[0]), ' '.join(words)), None))
+                elif (name, kind, numbers[0]) not in seen:
+                    seen.add((name, kind, numbers[0]))
+                    entries.setdefault(name, []).append(_mic_entry(i, kind, numbers[0], 'list'))
+    for i, called in sorted(bare.items()):
+        who = speakers.get(i, [])
+        if not who:
+            continue
+        if len(who) == 1 and len(called) == 1:
+            entries.setdefault(who[0], []).append(_mic_entry(i, called[0][0], called[0][1], 'cell'))
+            continue
+        latest = {max((e for e in entries.get(name, ()) if e['row'] <= i), key=lambda e: e['row'])['label']
+                  for name in who if any(e['row'] <= i for e in entries.get(name, ()))}
+        labels = {mic_label(*c) for c in called}
+        if labels != latest or len(latest) != len(who):
+            flags.append(('mic_which', i, 'Line {}: {} for {} people \u2014 which is which? Not used.'.format(
+                rows[i]['line'] or '?', ', '.join(mic_label(*c) for c in called), len(who)), None))
+    for found in entries.values():
+        found.sort(key=lambda e: e['row'])
+    return entries, flags
 
 
 def _subject(toks, roster, refs):

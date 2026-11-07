@@ -79,6 +79,7 @@ class Settings:
     demic_min: int = 3
     premic_lead_min: int = 30
     margin_min: int = 5
+    showflow_numbers: str = 'compare'   # read by planning.py: 'follow' pins the showflow's mic numbers
     wireless_channels: int = None   # None: no rig, report the packs needed
     handheld_channels: int = 0      # the last N channels
     spare_handhelds: int = 0        # the last N of those, never assigned
@@ -117,6 +118,7 @@ class Person:
     mic_type: str = BODY     # BODY or HH
     backup: str = None       # None, BODY or HH: an extra pack of their own
     name_key: str = ''       # ShowflowPerson.name_key: what an edit is keyed on
+    no_host: bool = False    # following the showflow, their mic changes: never one all-day pack
 
 
 @dataclass(frozen=True)
@@ -186,6 +188,7 @@ class Fixed:
     pins: dict = field(default_factory=dict)      # skey -> RF (hard)
     types: dict = field(default_factory=dict)     # skey -> BODY | HH
     prefer: dict = field(default_factory=dict)    # skey -> RF (soft: the previous version's)
+    showflow: frozenset = frozenset()             # skeys pinned by the showflow's numbers, not an edit
 
 
 NOTHING_FIXED = Fixed()
@@ -614,7 +617,8 @@ def appearances(day, ix=None):
             else:
                 old += _listed_appearances(ix, person, part, listed)
         segments = sum(len([k for k in segs if k >= 0]) for segs in listed.values())
-        if old and (len(_merge_overlaps(old)) >= HOST_MIN or segments >= HOST_MIN):
+        if old and not ix.people[person].no_host and (len(_merge_overlaps(old)) >= HOST_MIN
+                                                      or segments >= HOST_MIN):
             hosts.add(person)
     staged = {}
     added_people = {a.person for a in day.added}
@@ -1042,7 +1046,7 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
                 if how in ('recycled', 'mid-session') and pack.session >= here:
                     plan.mid_session += 1
                 if how == 'pinned' and recycle and not pack.open and pack.session >= here and \
-                        any(app_by_key[k].person != a.person for k in pack.wearers):
+                        pack.wearers and app_by_key[pack.wearers[-1]].person != a.person:
                     plan.mid_session += 1
                     reuse_flags.append(({'kind': 'pin_reuse', 'row': a.on_row, 'person': a.person}, pack, task))
                 if how == 'mid-session':
@@ -1130,9 +1134,9 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
         if cause == 'pin':
             rf = chain_pin[task.app.key]
             before = max((w for w in wearings if w[0] is by_rf.get(rf)), key=lambda w: w[2], default=None)
-            return 'RF {} is with {} until {} (your change at line {})'.format(
+            return 'RF {} is with {} until {} ({} at line {})'.format(
                 rf, ix.people[app_by_key[before[3]].person].name if before else 'someone else',
-                hm(before[2]) if before else '?', ix.line(task.app.on_row))
+                hm(before[2]) if before else '?', _pinned_by(task.app.skey, fixed), ix.line(task.app.on_row))
         if not task.pack_wait:
             return 'A2 time'
         return full(R)
@@ -1225,16 +1229,16 @@ def _solve(day, settings, suggest, fixed=NOTHING_FIXED):
     _number(plan, packs, S, ix)
     for flag, pack, task in reuse_flags:
         if flag['kind'] == 'pin_reuse':
-            flag['text'] = 'Line {}: RF {} goes to {} mid-session because of your change ({}).'.format(
+            flag['text'] = 'Line {}: RF {} goes to {} mid-session because of {} ({}).'.format(
                 ix.line(task.app.on_row), pack.rf, ix.people[task.app.person].name,
-                'recycle at breaks' if recycle else 'fewest packs')
+                _pinned_by(task.app.skey, fixed), 'recycle at breaks' if recycle else 'fewest packs')
         else:
             flag['text'] = 'Line {}: RF {} reused mid-session \u2014 {}.'.format(
                 ix.line(task.app.on_row), pack.rf, full(R))
         plan.flags.append(flag)
     for p in packs:
         wearings += [(p, w['start'], INF, w['head'], w['off']) for w in p.open]
-    _conflicts(plan, wearings, chain_pin, app_by_key, ix)
+    _conflicts(plan, wearings, chain_pin, app_by_key, ix, fixed)
     for k, slot in sorted(turnover.items()):
         n_packs = min(len(slot['mics']), len(slot['packs']))
         minute, key = starts[k]
@@ -1387,7 +1391,11 @@ def _flag_shortage(plan, ix, R, peak, mic):
             ix.line(app.on_row), more, '' if more == 1 else 's', capacity(R), peak, hm(app.on))})
 
 
-def _conflicts(plan, wearings, pins, apps, ix):
+def _pinned_by(skey, fixed):
+    return "the showflow's number" if skey in fixed.showflow else 'your change'
+
+
+def _conflicts(plan, wearings, pins, apps, ix, fixed=NOTHING_FIXED):
     """One flag for each two wearings of one RF that overlap (only a pin
     makes them), at the pinned appearance."""
     by_pack = {}
@@ -1406,7 +1414,8 @@ def _conflicts(plan, wearings, pins, apps, ix):
                     pack.rf, hm(other[1]), hm(max(until, other[1])), ix.people[a.person].name,
                     ix.people[b.person].name)
                 if mine[3] in pins:
-                    text += ' \u2014 your change at line {}'.format(ix.line(apps[mine[3]].on_row))
+                    text += ' \u2014 {} at line {}'.format(_pinned_by(apps[mine[3]].skey, fixed),
+                                                           ix.line(apps[mine[3]].on_row))
                 plan.flags.append({'kind': 'conflict', 'row': apps[mine[3]].on_row,
                                    'person': apps[mine[3]].person, 'rf': pack.rf, 'text': text + '.'})
 
