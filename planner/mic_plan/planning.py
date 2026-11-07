@@ -12,6 +12,7 @@ lead-fix search (fix suggestions return on the next Generate).
 """
 
 import logging
+import secrets
 import time
 from dataclasses import replace
 
@@ -31,7 +32,8 @@ from .parser import NO_CUE_MIN_COVERAGE, group_exit, segment_heading
 logger = logging.getLogger(__name__)
 
 SETTINGS_FIELDS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min',
-                   'wireless_channels', 'handheld_channels', 'spare_handhelds', 'pack_policy')
+                   'wireless_channels', 'handheld_channels', 'spare_handhelds', 'pack_policy',
+                   'showflow_numbers')
 POLICIES = ('recycle_at_breaks', 'fewest_packs')
 
 
@@ -146,6 +148,64 @@ def _segments(part, rows, named):
             for s in part_segments(part, rows, named)]
 
 
+def _mic_changes(people, parts):
+    """Keys of the people the showflow says lose their mic during the day,
+    whatever the hosts rule says: on two numbers, or their number goes to
+    someone else after their last mention of it (Client F reuses Lav 1 each
+    block). An all-day pack would run into that next wearer."""
+    place = {part.pk: k for k, part in enumerate(parts)}
+    number = {}          # number -> {person key: last place it is theirs}
+    mine = {}            # person key -> their numbers
+    for p in people:
+        for pk, found in p.flags.get('mics', {}).items():
+            for e in found if int(pk) in place else ():
+                key = (e['kind'] == 'HH', e['n'])
+                mine.setdefault(p.pk, set()).add(key)
+                at = (place[int(pk)], e['row'])
+                number.setdefault(key, {})
+                number[key][p.pk] = max(at, number[key].get(p.pk, at))
+    out = {pk for pk, keys in mine.items() if len(keys) > 1}
+    for owners in number.values():
+        out |= {pk for pk, at in owners.items() if any(other > at for other in owners.values())}
+    return out
+
+
+def showflow_rf(entry, R):
+    """The RF a showflow mic number means on rig ``R``: HH n is the nth
+    channel of the handheld zone, anything else channel n (and HH n too
+    with no handheld zone). Past the zone it is a misfit like any pin."""
+    if entry['kind'] == 'HH' and R.set and R.handhelds:
+        return R.first_hh + entry['n'] - 1
+    return entry['n']
+
+
+def showflow_numbers(day, rows_by_part, apps):
+    """{appearance key: the showflow's mic entry for it}: the person's latest
+    entry at or before the appearance's off line. A list at the doors covers
+    that block; the next list or a cell on their row takes over from there."""
+    where = {r.pk: (k, r.order) for k, part in enumerate(active_parts(day)) for r in rows_by_part[part.pk]}
+    place = {part.pk: k for k, part in enumerate(active_parts(day))}
+    mine = {}
+    for p in day.showflow_people.all():
+        found = [((place[int(pk)], e['row']), e) for pk, entries in p.flags.get('mics', {}).items()
+                 if int(pk) in place for e in entries]
+        mine[p.pk] = sorted(found, key=lambda f: f[0])
+    out = {}
+    for a in apps:
+        end = where.get(a.off_row) or where.get(a.on_row)
+        before = [e for at, e in mine.get(a.person, ()) if end is not None and at <= end]
+        if before:
+            out[a.skey] = before[-1]
+    return out
+
+
+def _follow(values, day, data, rows_by_part):
+    """The numbers to pin: with 'follow', every one, else none."""
+    if values.get('showflow_numbers') != 'follow':
+        return {}
+    return showflow_numbers(day, rows_by_part, solver.appearances(data)[0])
+
+
 def build_day(day):
     """(solver.Day, {part pk: rows}, cue_mode)."""
     parts = active_parts(day)
@@ -161,13 +221,14 @@ def build_day(day):
         cue_rows.setdefault((e.person_id, e.row.showflow_import_id), set()).add(e.row.order)
 
     people, listings, exits, enters, added = [], {}, {}, {}, []
+    changes = _mic_changes(day.showflow_people.all(), parts)
     for p in day.showflow_people.all():
         if p.flags.get('gone'):
             continue
         people.append(solver.Person(
             key=p.pk, name=p.display_name, mic_type=solver.HH if p.mic_hint == 'HH' else solver.BODY,
             backup=(solver.HH if p.backup_mic_type == 'HH' else solver.BODY)
-            if p.mic_hint == 'backup' else None, name_key=p.name_key))
+            if p.mic_hint == 'backup' else None, name_key=p.name_key, no_host=p.pk in changes))
         keys = []
         for part in parts:
             by_order = {r.order: r.pk for r in rows_by_part[part.pk]}
@@ -212,7 +273,7 @@ def plan_values(plan):
     before PR 2.2 have no pack_policy: they used fewest_packs. Plans from
     before the rig (PR 5.1) had pack counts: converted as migration 0225
     converts the project's settings."""
-    values = {'pack_policy': solver.FEWEST_PACKS, **plan.settings}
+    values = {'pack_policy': solver.FEWEST_PACKS, 'showflow_numbers': 'compare', **plan.settings}
     if 'wireless_channels' not in values:
         body, hh = values.pop('body_pack_count', None), values.pop('hh_count', None)
         spare = values.pop('emergency_spare_hh', False)
@@ -254,6 +315,9 @@ def policy_counts(data, settings):
     return out
 
 
+SHOWFLOW_CARD = 'showflow_mics'
+
+
 class EditRefused(Exception):
     """An edit or undo that was not applied: ``str(e)`` says why, ``status``
     is the HTTP status for it."""
@@ -291,22 +355,33 @@ def replay(edits):
     return pins, types
 
 
-def _fixed(edits, prefer, R, rezone=False):
+def _fixed(edits, prefer, R, rezone=False, numbers=None):
     """(solver.Fixed, misfits {skey: (rf, pool)}). A pin keeps its RF on any
     channel of the rig but a spare (either type takes either zone); on a
     spare or past the rig's end (misfit) the pin keeps its type and the
     solver gives it a channel. A preferred RF there is dropped, and with
     ``rezone`` (the rig changed) one outside its type's zone too, so a rig
-    change puts each type back in its zone where it can."""
+    change puts each type back in its zone where it can. ``numbers``
+    ({skey: showflow entry}, 'follow') are pins too, except where the log
+    has said something about that appearance: a move, a Switch or an Unpin
+    beats the showflow."""
     pins, types = replay(edits)
+    touched = {e.key for e in edits}
+    shown = set()
+    for key, entry in (numbers or {}).items():
+        if key not in touched:
+            shown.add(key)
+            pins[key] = showflow_rf(entry, R)
+            if entry['pool']:
+                types[key] = entry['pool']
     misfits = {}
     for key, rf in list(pins.items()):
         if not R.usable(rf):
-            misfits[key] = (rf, types[key])
+            misfits[key] = (rf, types.get(key))
             del pins[key]
     prefer = {k: v[0] for k, v in prefer.items()
               if R.usable(v[0]) and not (rezone and R.set and R.pool_at(v[0]) != v[1])}
-    return solver.Fixed(pins=pins, types=types, prefer=prefer), misfits
+    return solver.Fixed(pins=pins, types=types, prefer=prefer, showflow=frozenset(shown)), misfits
 
 
 def misfit_text(rf, R):
@@ -329,8 +404,9 @@ def generate(day, user=None, mode='keep'):
     edits = list(plan.edits.all()) if plan is not None else []
     values = settings_dict(project_settings(day.project))
     R = solver.rig(solver_settings(values))
-    fixed, misfits = _fixed(edits, prev, R, rezone=keep and plan_rig(plan) != R)
     data, rows_by_part, mode_label = build_day(day)
+    fixed, misfits = _fixed(edits, prev, R, rezone=keep and plan_rig(plan) != R,
+                            numbers=_follow(values, day, data, rows_by_part))
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values), fixed=fixed)
     counts = policy_counts(data, solver_settings(values))
@@ -350,7 +426,8 @@ def _resolve(plan, prefer):
     values = plan_values(plan)
     data, rows_by_part, _ = build_day(plan.day)
     edits = list(plan.edits.all())
-    fixed, misfits = _fixed(edits, prefer, solver.rig(solver_settings(values)))
+    fixed, misfits = _fixed(edits, prefer, solver.rig(solver_settings(values)),
+                            numbers=_follow(values, plan.day, data, rows_by_part))
     started = time.monotonic()
     result = solver.solve(data, solver_settings(values), suggest=False, fixed=fixed)
     logger.info('Mic Plan edit re-solve: %d appearances, %.3fs (project %s, day %s)',
@@ -431,12 +508,73 @@ def undo(day, version, user=None):
     if last is None:
         raise EditRefused('Nothing to undo.')
     before = last.before
-    last.delete()
+    batch = last.value.get('batch')
+    if batch:        # "Use the showflow's numbers": its edits go together
+        plan.edits.filter(pk__in=[e.pk for e in plan.edits.all() if e.value.get('batch') == batch]).delete()
+    else:
+        last.delete()
     return _resolve(plan, before), last
+
+
+@transaction.atomic
+def use_showflow(day, version, user=None):
+    """Pin everyone on the compare card to the showflow's number, as normal
+    move edits sharing a batch: one re-solve, one Undo. Numbers the rig has
+    no channel for stay on the card. Returns (plan, count)."""
+    plan = _locked(day, version)
+    card = next((f for f in plan.flags if f['kind'] == SHOWFLOW_CARD), None)
+    items = [i for i in (card['items'] if card else ()) if i['fits']]
+    if not items:
+        raise EditRefused('Nothing here differs from the showflow.')
+    apps = {a.skey: a for a in plan.appearances.filter(skey__in=[i['key'] for i in items])
+            .prefetch_related('assignments')}
+    before = snapshot(plan)
+    batch = secrets.token_hex(4)
+    seq = plan.edits.order_by('-seq').values_list('seq', flat=True).first() or 0
+    made = []
+    for item in items:
+        app = apps.get(item['key'])
+        if app is None:
+            continue
+        seq += 1
+        made.append(MicPlanEdit(plan=plan, seq=seq, kind='move_rf', key=item['key'], before=before, created_by=user,
+                                value={'rf': item['want'], 'pool': item['pool'] or app.mic_type,
+                                       'name': app.person_name, 'line': app.on_line, 'from_rf': item['plan'],
+                                       'from_pool': app.mic_type, 'batch': batch, 'count': len(items)}))
+    MicPlanEdit.objects.bulk_create(made)
+    return _resolve(plan, before), len(made)
 
 
 def display_pool(pool):
     return 'handheld' if pool == solver.HH else 'body pack'
+
+
+def _compare_card(day, rows_by_part, result, main, names, line, R):
+    """The Review flag listing every appearance whose plan differs from the
+    showflow's number, or None. ``items`` carry what "Use the showflow's
+    numbers" needs; a person on one number in several wearings reads once."""
+    numbers = showflow_numbers(day, rows_by_part, result.appearances)
+    items, seen = [], set()
+    for a in result.appearances:
+        entry = numbers.get(a.skey)
+        have = main.get(a.skey)
+        if entry is None or have is None:
+            continue
+        want = showflow_rf(entry, R)
+        if want == have and entry['pool'] in (None, a.mic_type):
+            continue
+        label = entry['label'] if want == entry['n'] else '{} (RF {})'.format(entry['label'], want)
+        fits = R.usable(want)
+        text = 'Showflow: {} on {} \u00b7 Plan: RF {}{}'.format(names.get(a.person, ''), label, have,
+                                                               '' if fits else ' (not on this rig)')
+        items.append({'key': a.skey, 'name': names.get(a.person, ''), 'label': label, 'want': want,
+                      'pool': entry['pool'], 'plan': have, 'line': line(a.on_row), 'fits': fits, 'text': text,
+                      'repeat': text in seen})
+        seen.add(text)
+    if not items:
+        return None
+    return {'kind': SHOWFLOW_CARD, 'row': None, 'person': None, 'items': items,
+            'text': '; '.join(i['text'] for i in items if not i['repeat']) + '.'}
 
 
 def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, prefer, misfits=None):
@@ -483,9 +621,14 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
         if a.skey in (misfits or {}):
             rf, pool = misfits[a.skey]
             flags.append({'kind': 'rig', 'row': a.on_row, 'person': a.person,
-                          'text': 'Line {}: your RF {} pin is {} on this rig \u2014 now RF {} ({}).'.format(
-                              line(a.on_row) or '?', rf, misfit_text(rf, R), main.get(a.skey),
-                              display_pool(pool))})
+                          'text': 'Line {}: {} RF {} {} {} on this rig \u2014 now RF {} ({}).'.format(
+                              line(a.on_row) or '?', "the showflow's" if a.skey in fixed.showflow else 'your',
+                              rf, 'number' if a.skey in fixed.showflow else 'pin', 'is ' + misfit_text(rf, R),
+                              main.get(a.skey), display_pool(pool or a.mic_type))})
+    if values.get('showflow_numbers') != 'follow':
+        card = _compare_card(plan.day, rows_by_part, result, main, names, line, R)
+        if card:
+            flags.append(card)
     keys = {a.skey for a in result.appearances}
     last = {}
     for e in edits:

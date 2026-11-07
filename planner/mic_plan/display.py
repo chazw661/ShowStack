@@ -91,6 +91,8 @@ def describe_edit(edit):
     """"Alex → RF 13, now handheld", for a MicPlanEdit (or anything with
     ``kind`` and ``value``)."""
     v = edit.value
+    if v.get('batch'):
+        return "the showflow's numbers ({} {})".format(v['count'], 'pin' if v['count'] == 1 else 'pins')
     who = first_name(v.get('name', ''))
     if edit.kind == 'move_rf':
         now = ', now {}'.format(POOL_WORDS[v['pool']]) if v.get('from_pool') and v['pool'] != v['from_pool'] else ''

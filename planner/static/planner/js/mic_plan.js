@@ -517,6 +517,9 @@
     if ($('mp-undo') && editBox) {
         $('mp-undo').addEventListener('click', function () { post(editBox.dataset.undoUrl, {}); });
     }
+    if ($('mp-use-showflow') && editBox) {
+        $('mp-use-showflow').addEventListener('click', function () { post(this.dataset.url, {}); });
+    }
     // The "N changed" list: a name shows that person.
     all('.mp-changed .chip[data-key]').forEach(function (chip) {
         chip.addEventListener('click', function () {

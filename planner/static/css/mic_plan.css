@@ -248,6 +248,9 @@ body:has(.mp-page) { background: var(--mp-bg, #16171a); }
 .mp-page button.chip.send { border-color: color-mix(in srgb, var(--mp-on) 60%, transparent); }
 .mp-page button.chip.catch { border-color: color-mix(in srgb, var(--mp-off) 60%, transparent); }
 .chip .rf { font: 600 11px var(--mp-mono); color: var(--mp-accent-text); }
+.mp-micnotes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.mp-micnote { font: 500 11px var(--mp-mono); color: var(--mp-muted); padding: 1px 6px; border: 1px dashed var(--mp-muted); border-radius: 4px; }
+.mp-mics { margin: 0; padding-left: 16px; }
 .act { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: baseline; }
 .act .t { font: 500 11.5px var(--mp-mono); color: var(--mp-muted); font-variant-numeric: tabular-nums; }
 .act .verb { font: 600 10.5px var(--mp-mono); letter-spacing: .06em; margin-right: 4px; }

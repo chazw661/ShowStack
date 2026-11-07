@@ -7175,6 +7175,11 @@ class MicPlanSettings(models.Model):
     # recycle_at_breaks: a worn pack goes to someone else only after a break.
     pack_policy = models.CharField('Pack use', max_length=20, choices=PACK_POLICY_CHOICES,
                                    default='recycle_at_breaks')
+    SHOWFLOW_NUMBERS_CHOICES = [('compare', 'Compare in Review'), ('follow', 'Follow them (pin from the start)')]
+    # Mic numbers the showflow calls out. compare: plan as usual and list the
+    # differences in Review. follow: each is a pin from the start.
+    showflow_numbers = models.CharField('Showflow mic numbers', max_length=10, choices=SHOWFLOW_NUMBERS_CHOICES,
+                                        default='compare')
 
     class Meta:
         verbose_name = 'Mic Plan settings'

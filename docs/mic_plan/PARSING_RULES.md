@@ -147,6 +147,43 @@ below is a placeholder, and the test fixture
   cell. If the cell names nobody ("no clicker, handheld"), it goes to that
   row's speakers. Anything else is left for the A2 to decide.
 
+## Mic numbers in the showflow
+
+- Read from the Audio, BSM and Notes cells: Lav, Lavalier, HH, Handheld,
+  Headset, Mic and RF, then a number ("Lav 2", "Lav #2", "HH3", "Lav 1,2,3",
+  "Lav 1-3"). Wired mics are not packs ("Podium mic 1", also lectern, stand,
+  aisle, table, floor, boom, choir, VOG). A time or decimal after the word is
+  not a number ("Mic 5:30", "Mic 1.2").
+- A list item has one number, ":" or a dash, then a name, up to the next
+  callout ("A2: Mic Presenters Lav #1: Alex Host Lav #5 - Dana Able"). The name
+  is matched against the Speaker column: exactly, by alias, or a spelling
+  within 85 % of one full name only (a surname with an extra s). Nobody is
+  made from a list: otherwise the line is flagged **Mic?**, to merge or add.
+- A number-only cell on a row with one speaker and one number is that speaker's.
+  A cell on a row with no speaker is ignored ("Lav 1" on a slide line).
+- Any other mix is never matched by position. Client F writes "Lav 3,6" over
+  two people in the other order. If the lists already give those people those
+  numbers it is quiet, otherwise **Mic?** ("which is which?") and it is not used.
+- Numbers are stored by line (`flags['mics']`, parser provenance, rebuilt on
+  every re-read), because they belong to a block: Client F reuses Lav 1 in each
+  block and moves people between numbers. A wearing uses the person's latest
+  entry at or before its off line.
+- They never change a mic hint. In the plan: Lav and Headset mean body pack, HH
+  handheld, Mic and RF say nothing about type.
+- RF: Lav / Headset / Mic / RF n is channel n. HH n is the nth channel of the
+  rig's handheld zone, or channel n with no zone or no rig. A number on a
+  spare or off the rig gets the usual rig card.
+- Plan settings, "Showflow mic numbers":
+  - **Compare** (default): plan as usual. One Review card lists each difference
+    ("Showflow: <name> on Lav 2 · Plan: RF 3"), with "Use the showflow's
+    numbers": move edits sharing a batch, one re-solve, one Undo for the lot.
+    Numbers the rig can't hold stay on the card.
+  - **Follow**: each number is a pin from the start, not in the edit log. A
+    move, Switch or Unpin of that appearance beats it. Cards say "the showflow's
+    number" where they would say "your change".
+- Imports from before the Audio column was stored have no numbers from it:
+  Replace them with the PDF.
+
 ## Send / catch
 
 - A cue is `<crew> (to) send(s) / catch(es) <names>`. Crew names come from
@@ -255,6 +292,8 @@ below is a placeholder, and the test fixture
 - **BSM only:** a name that only ever appears in a cue, usually a nickname to
   merge.
 - **Crew?:** a send/catch verb after a name that is not in the crew list.
+- **Mic?:** a mic list names someone not in the Speaker column, or a row's
+  numbers can't be matched to its speakers.
 - **Times:** a Start time earlier than the one before it.
 - **Gone:** someone no part of the day mentions any more, kept because of a
   merge, Presenter link or mic hint the user set. Shown in People with a
@@ -278,6 +317,7 @@ scratch. Only what the user set is carried over:
 | A Presenter chosen by hand, including "no presenter" (`flags['presenter_by'] = 'user'`) | An automatic Presenter match by name |
 | A segment set to break or not by hand (`ShowflowImport.break_overrides`, by line) | Break detection |
 | Appearances added by hand (`flags['added']`, by line label) | Exit and re-entry lines (`flags['exits']`, `flags['enters']`) |
+| | Mic numbers (`flags['mics']`, by line) |
 
 The parser is only told about merges (each alias and the name it points to).
 A hand-set hint or Presenter link stays with the person by name after the
@@ -321,7 +361,9 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - **Hosts:** 3+ appearances, or listed in 3+ segments: one appearance from
   their first on to their last off, one pack, never de-mic'd. Counted the way
   appearances were before PR 5.2 (consecutive segments one stretch, exits
-  ignored), so exits and re-entries never make someone a host.
+  ignored), so exits and re-entries never make someone a host. Not a host if
+  the showflow says their mic comes off: two mic numbers, or their number
+  going to someone else after their last mention of it.
 - **Back on within the pre-mic lead** of coming off: the pack stays on (no
   de-mic, no new mic).
 
@@ -434,7 +476,8 @@ from the database and saves the day's `MicPlan`). Times are minutes.
   (your change at line 316)"); otherwise it takes the RF while it is still
   worn, and Review shows a red conflict: "RF 5 on two people 9:05a–9:12a
   (<name> and <name>) — your change at line 171." A pin that reuses a pack
-  mid-session under Recycle at breaks is an info card. A move onto a handheld
+  mid-session under Recycle at breaks is an info card (not when the wearer
+  goes back to the pack they wore last). A move onto a handheld
   lane makes them handheld ("→ RF 13, now handheld").
 - Minimal change: every re-solve except Start over prefers each appearance's
   RF from the version it replaces, before any other pack rule; the other
