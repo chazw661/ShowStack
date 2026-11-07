@@ -150,7 +150,7 @@ def _segments(part, rows, named):
 
 def _mic_changes(people, parts):
     """Keys of the people the showflow says lose their mic during the day,
-    whatever the hosts rule says: on two numbers, or their number goes to
+    whatever the hosts rule says (follow only, see build_day): on two numbers, or their number goes to
     someone else after their last mention of it (Client F reuses Lav 1 each
     block). An all-day pack would run into that next wearer."""
     place = {part.pk: k for k, part in enumerate(parts)}
@@ -199,6 +199,13 @@ def showflow_numbers(day, rows_by_part, apps):
     return out
 
 
+def _showflow_hosts(values, edits):
+    """Does the showflow's hosts rule apply (build_day ``follow``)? Following
+    its numbers, or once "Use the showflow's numbers" is in the log: a host
+    whose number goes to someone else could not take it otherwise."""
+    return values.get('showflow_numbers') == 'follow' or any(e.value.get('batch') for e in edits)
+
+
 def _follow(values, day, data, rows_by_part):
     """The numbers to pin: with 'follow', every one, else none."""
     if values.get('showflow_numbers') != 'follow':
@@ -206,8 +213,10 @@ def _follow(values, day, data, rows_by_part):
     return showflow_numbers(day, rows_by_part, solver.appearances(data)[0])
 
 
-def build_day(day):
-    """(solver.Day, {part pk: rows}, cue_mode)."""
+def build_day(day, follow=False):
+    """(solver.Day, {part pk: rows}, cue_mode). ``follow``: the plan follows
+    the showflow's mic numbers, so its mic changes rule out hosts; compare
+    keeps the normal hosts rule, so its plan stays independent."""
     parts = active_parts(day)
     rows_by_part, rows, segments = {}, [], []
     for part in parts:
@@ -221,7 +230,7 @@ def build_day(day):
         cue_rows.setdefault((e.person_id, e.row.showflow_import_id), set()).add(e.row.order)
 
     people, listings, exits, enters, added = [], {}, {}, {}, []
-    changes = _mic_changes(day.showflow_people.all(), parts)
+    changes = _mic_changes(day.showflow_people.all(), parts) if follow else set()
     for p in day.showflow_people.all():
         if p.flags.get('gone'):
             continue
@@ -404,7 +413,7 @@ def generate(day, user=None, mode='keep'):
     edits = list(plan.edits.all()) if plan is not None else []
     values = settings_dict(project_settings(day.project))
     R = solver.rig(solver_settings(values))
-    data, rows_by_part, mode_label = build_day(day)
+    data, rows_by_part, mode_label = build_day(day, follow=_showflow_hosts(values, edits))
     fixed, misfits = _fixed(edits, prev, R, rezone=keep and plan_rig(plan) != R,
                             numbers=_follow(values, day, data, rows_by_part))
     started = time.monotonic()
@@ -424,8 +433,8 @@ def _resolve(plan, prefer):
     """Re-solve after an edit or undo: the plan's own settings, the log's
     pins, ``prefer``'s RFs, no lead-fix search."""
     values = plan_values(plan)
-    data, rows_by_part, _ = build_day(plan.day)
     edits = list(plan.edits.all())
+    data, rows_by_part, _ = build_day(plan.day, follow=_showflow_hosts(values, edits))
     fixed, misfits = _fixed(edits, prefer, solver.rig(solver_settings(values)),
                             numbers=_follow(values, plan.day, data, rows_by_part))
     started = time.monotonic()
@@ -518,29 +527,41 @@ def undo(day, version, user=None):
 
 @transaction.atomic
 def use_showflow(day, version, user=None):
-    """Pin everyone on the compare card to the showflow's number, as normal
-    move edits sharing a batch: one re-solve, one Undo. Numbers the rig has
-    no channel for stay on the card. Returns (plan, count)."""
+    """Pin every wearing the showflow numbers to its number, as normal move
+    edits sharing a batch: one re-solve, one Undo. The wearings are the ones
+    the showflow's hosts rule gives (the batch keeps that rule on, see
+    _showflow_hosts), so a host whose number goes to someone else is split.
+    Numbers the rig has no channel for stay on the card. Returns (plan, count)."""
     plan = _locked(day, version)
     card = next((f for f in plan.flags if f['kind'] == SHOWFLOW_CARD), None)
-    items = [i for i in (card['items'] if card else ()) if i['fits']]
-    if not items:
+    if not any(i['fits'] for i in (card['items'] if card else ())):
         raise EditRefused('Nothing here differs from the showflow.')
-    apps = {a.skey: a for a in plan.appearances.filter(skey__in=[i['key'] for i in items])
-            .prefetch_related('assignments')}
+    R = solver.rig(solver_settings(plan_values(plan)))
+    data, rows_by_part, _ = build_day(day, follow=True)
+    apps = solver.appearances(data)[0]
+    numbers = showflow_numbers(day, rows_by_part, apps)
+    names = {p.key: p.name for p in data.people}
+    lines = {r.pk: r.line_no for part_rows in rows_by_part.values() for r in part_rows}
     before = snapshot(plan)
+    wanted = []
+    for a in apps:
+        entry = numbers.get(a.skey)
+        want = showflow_rf(entry, R) if entry else None
+        pool = (entry or {}).get('pool') or a.mic_type
+        if want is not None and R.usable(want) and before.get(a.skey) != [want, pool]:
+            wanted.append((a, want, pool))
+    if not wanted:
+        raise EditRefused('Nothing here differs from the showflow.')
     batch = secrets.token_hex(4)
     seq = plan.edits.order_by('-seq').values_list('seq', flat=True).first() or 0
     made = []
-    for item in items:
-        app = apps.get(item['key'])
-        if app is None:
-            continue
+    for a, want, pool in wanted:
         seq += 1
-        made.append(MicPlanEdit(plan=plan, seq=seq, kind='move_rf', key=item['key'], before=before, created_by=user,
-                                value={'rf': item['want'], 'pool': item['pool'] or app.mic_type,
-                                       'name': app.person_name, 'line': app.on_line, 'from_rf': item['plan'],
-                                       'from_pool': app.mic_type, 'batch': batch, 'count': len(items)}))
+        was = before.get(a.skey, [None, a.mic_type])
+        made.append(MicPlanEdit(plan=plan, seq=seq, kind='move_rf', key=a.skey, before=before, created_by=user,
+                                value={'rf': want, 'pool': pool, 'name': names.get(a.person, ''),
+                                       'line': lines.get(a.on_row, ''), 'from_rf': was[0], 'from_pool': was[1],
+                                       'batch': batch, 'count': len(wanted)}))
     MicPlanEdit.objects.bulk_create(made)
     return _resolve(plan, before), len(made)
 

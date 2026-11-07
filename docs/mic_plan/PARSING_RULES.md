@@ -177,7 +177,10 @@ below is a placeholder, and the test fixture
   - **Compare** (default): plan as usual. One Review card lists each difference
     ("Showflow: <name> on Lav 2 · Plan: RF 3"), with "Use the showflow's
     numbers": move edits sharing a batch, one re-solve, one Undo for the lot.
-    Numbers the rig can't hold stay on the card.
+    Numbers the rig can't hold stay on the card. Hosts are found as usual, so
+    the card shows the real differences; while the batch is in the log the
+    day uses follow's hosts rule (see Hosts), so a host whose number goes to
+    someone else is split and Use matches follow. Undo brings the hosts back.
   - **Follow**: each number is a pin from the start, not in the edit log. A
     move, Switch or Unpin of that appearance beats it. Cards say "the showflow's
     number" where they would say "your change".
@@ -361,9 +364,11 @@ from the database and saves the day's `MicPlan`). Times are minutes.
 - **Hosts:** 3+ appearances, or listed in 3+ segments: one appearance from
   their first on to their last off, one pack, never de-mic'd. Counted the way
   appearances were before PR 5.2 (consecutive segments one stretch, exits
-  ignored), so exits and re-entries never make someone a host. Not a host if
-  the showflow says their mic comes off: two mic numbers, or their number
-  going to someone else after their last mention of it.
+  ignored), so exits and re-entries never make someone a host. Following the
+  showflow's numbers only: not a host if the showflow says their mic comes
+  off (two mic numbers, or their number going to someone else after their
+  last mention of it). Compare keeps this rule as is, so its plan stays
+  independent and the card shows the real differences.
 - **Back on within the pre-mic lead** of coming off: the pack stays on (no
   de-mic, no new mic).
 

@@ -118,7 +118,7 @@ class Person:
     mic_type: str = BODY     # BODY or HH
     backup: str = None       # None, BODY or HH: an extra pack of their own
     name_key: str = ''       # ShowflowPerson.name_key: what an edit is keyed on
-    no_host: bool = False    # the showflow has them on two mic numbers: never one all-day pack
+    no_host: bool = False    # following the showflow, their mic changes: never one all-day pack
 
 
 @dataclass(frozen=True)

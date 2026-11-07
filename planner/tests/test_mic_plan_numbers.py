@@ -188,13 +188,25 @@ class StorageTests(FixtureBase):
 
 class HostTests(FixtureBase):
 
-    def test_two_numbers_is_no_host(self):
+    def test_two_numbers_is_no_host_when_following(self):
+        self.set(showflow_numbers='follow')
         apps = self.plan().appearances.filter(person_name='Kit Moss')
         self.assertGreater(apps.count(), 1)
         self.assertFalse(apps.filter(is_host=True).exists())
 
-    def test_a_number_given_to_someone_later_is_no_host(self):
+    def test_a_number_given_to_someone_later_is_no_host_when_following(self):
+        self.set(showflow_numbers='follow')
         self.assertFalse(self.plan().appearances.filter(person_name='Lee Voss', is_host=True).exists())
+
+    def test_compare_keeps_the_hosts_rule(self):
+        self.assertTrue(self.plan().appearances.filter(person_name='Lee Voss', is_host=True).exists())
+
+    def test_use_turns_the_showflow_rule_on_until_undone(self):
+        plan = self.plan()
+        plan, _ = planning.use_showflow(self.day, plan.version, self.owner)
+        self.assertFalse(plan.appearances.filter(person_name='Lee Voss', is_host=True).exists())
+        plan, _ = planning.undo(self.day, plan.version, self.owner)
+        self.assertTrue(plan.appearances.filter(person_name='Lee Voss', is_host=True).exists())
 
     def test_one_number_nobody_else_gets_can_host(self):
         changes = planning._mic_changes(self.day.showflow_people.all(), importer.active_parts(self.day))
