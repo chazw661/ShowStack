@@ -541,6 +541,17 @@ TOPICS = (
         keywords=('csv', 'import', 'spreadsheet', 'bulk', 'sample csv', 'cable schedule',),
     ),
     Topic(
+        slug='pa-cable-import-vwx',
+        title='Import cable runs from Vectorworks',
+        section='Amps & PA',
+        summary='Preview and load the cable worksheet exported from Vectorworks.',
+        pages=(
+            'planner:import_pa_cables_vwx',
+            'admin:planner_pacableschedule_changelist',
+        ),
+        keywords=('vectorworks', 'vwx', 'import', 'worksheet', 'csv', 'cable schedule', 'extension of',),
+    ),
+    Topic(
         slug='pa-cable-totals-print',
         title='Read the cable totals and print the schedule',
         section='Amps & PA',

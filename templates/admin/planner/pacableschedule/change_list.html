@@ -168,6 +168,14 @@
             Import CSV
         </a>
     </li>
+    {% if can_import_vwx %}
+    <li>
+        <a href="{% url 'planner:import_pa_cables_vwx' %}"
+           class="export-pdf-btn">
+            Import from VWX
+        </a>
+    </li>
+    {% endif %}
     <li>
         <a href="{% url 'planner:all_pa_cables_pdf_export' %}"
            class="export-pdf-btn"
