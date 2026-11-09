@@ -405,6 +405,54 @@ class ConfirmTests(Base):
         self.assertFalse(PACableSchedule.objects.filter(project=self.project).exists())
 
 
+class ProjectOwnershipTests(Base):
+    """A paid owner who is not a superuser imports into their own project,
+    and no way of asking reaches someone else's."""
+
+    BODY = HEADER + 'HL,R,SC32,,30,\n'
+
+    def setUp(self):
+        super().setUp()
+        self.outsider = User.objects.create_user('vwx_outsider', password='pw', is_staff=True)
+        UserProfile.objects.update_or_create(user=self.outsider, defaults={'account_type': 'paid'})
+        self.own = Project.objects.create(name='Outsider own', owner=self.outsider)
+
+    def assert_nothing_in(self, project):
+        self.assertFalse(PACableSchedule.objects.filter(project=project).exists())
+        self.assertFalse(PAZone.objects.filter(project=project).exists())
+
+    def test_a_paid_owner_imports_into_their_own_project(self):
+        self.assertFalse(self.owner.is_superuser)
+        response = self.confirm(self.BODY)
+        self.assertIn('1 created', self.messages(response))
+        self.assertEqual(self.entry('HL').project, self.project)
+
+    def test_pointing_the_session_at_someone_elses_project_does_not_reach_it(self):
+        # The middleware drops a project the user has no access to and falls
+        # back to their own, so this import lands there.
+        self.login(self.outsider, self.project)
+        self.confirm(self.BODY)
+        self.assert_nothing_in(self.project)
+        self.assertTrue(PACableSchedule.objects.filter(project=self.own, label__name='HL').exists())
+
+    def test_a_confirm_form_built_for_someone_elses_project_is_refused(self):
+        plan = vwx.build_plan(vwx.parse(self.BODY), self.project, 'plot.csv')
+        form = {'csv_text': self.BODY, 'filename': 'plot.csv', 'digest': vwx.digest(plan, self.project)}
+        self.login(self.outsider, self.project)
+        response = self.client.post(self.CONFIRM, form, follow=True)
+        self.assertIn('nothing was imported', self.messages(response))
+        self.assert_nothing_in(self.project)
+        self.assert_nothing_in(self.own)
+
+    def test_a_user_with_no_project_of_their_own_gets_403(self):
+        stranger = User.objects.create_user('vwx_stranger', password='pw', is_staff=True)
+        UserProfile.objects.update_or_create(user=stranger, defaults={'account_type': 'paid'})
+        self.login(stranger, self.project)
+        self.assertEqual(self.upload(self.BODY).status_code, 403)
+        self.assertEqual(self.client.post(self.CONFIRM, {'csv_text': self.BODY}).status_code, 403)
+        self.assert_nothing_in(self.project)
+
+
 class PermissionAndPageTests(Base):
 
     def make_member(self, role):

@@ -1,4 +1,4 @@
-# ShowStack cable linker for Vectorworks (v0.3 - DRY RUN by default)
+# ShowStack cable linker for Vectorworks (v0.3 - writes fields by default)
 #
 # MAIN RUN  = a cable with one end at an amp rack.
 #   CableObject.UserField_1 <- fan-out at the other end (ShowStack name)
@@ -17,7 +17,7 @@ import vs
 import os
 import math
 
-DRY_RUN = True
+DRY_RUN = False
 TOL = 36.0  # max distance (inches) from a cable end to a fan-out / rack
 
 # Vectorworks symbol name -> ShowStack fan-out name

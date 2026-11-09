@@ -6,7 +6,11 @@ A cable with an amp rack at one end is a main run. A cable with no rack, startin
 
 ## DRY_RUN
 
-`DRY_RUN = True` at the top of the script is the default. It only writes a report to `~/Desktop/showstack_link_report.txt`. Set it to `False` to also write the fields. A field is only overwritten when a match is found, so manual entries survive.
+`DRY_RUN = False` at the top of the script is the default, so a run writes the fields on each cable. A field is only overwritten when a match is found, so manual entries survive. Set it to `True` to change nothing and get only the report.
+
+## Report
+
+Every run writes a report to `~/Desktop/showstack_link_report.txt`. `WARNING` lines show what didn't match, such as a cable with no rack or fan-out near its end.
 
 ## Field map
 
