@@ -10,6 +10,7 @@ Run with::
         --settings=audiopatch.test_settings
 """
 
+from dataclasses import fields as dataclass_fields
 from io import BytesIO
 from unittest.mock import patch
 
@@ -28,7 +29,7 @@ from planner.utils.labels.brand import (
 from planner.utils.labels.data import RunningUnit, SingleItem
 from planner.utils.labels.render import (
     Options, corner_bars, corner_bars_zone, edge_stripe, generate_labels_pdf, paint_for,
-    render_alignment_pdf, render_preview_pdf,
+    render_alignment_pdf, render_labels_pdf, render_preview_pdf,
 )
 from planner.utils.labels.stock import STOCKS, Rect
 
@@ -228,44 +229,94 @@ class BlackAndWhiteAccentTests(SimpleTestCase):
         self.assertEqual(greys, (10, 20, 30, 70, 80))
 
 
+def text_fills(stream):
+    """{text shown: the fill in force when it was drawn}, a fill being
+    ('rg', r, g, b) or ('k', c, m, y, k) rounded to 3 places."""
+    import re
+    fills, fill = {}, None
+    for line in stream.splitlines():
+        op = re.fullmatch(r'([\d. ]+) (rg|k)', line.strip())
+        if op:
+            fill = (op.group(2),) + tuple(round(float(v), 3) for v in op.group(1).split())
+        for text in re.findall(r'\((.*?)\) Tj', line):
+            fills[text] = fill
+    return fills
+
+
+def fill_of(color):
+    from reportlab.lib.colors import CMYKColor
+    values = color.cmyk() if isinstance(color, CMYKColor) else color.rgb()
+    return ('k' if isinstance(color, CMYKColor) else 'rg',) + tuple(round(v, 3) for v in values)
+
+
 class AccentColourTests(SimpleTestCase):
+    """Accent 1 may colour the session dividers; never any text. The RF
+    strip ("1/2", "RF 02" and the day) is the contrast text colour, like
+    the names."""
 
-    def test_accent_1_colours_the_number_and_dividers_when_it_stands_out(self):
+    # Each accent 1 stands out from its background (>= 3:1), so it would
+    # have coloured the RF number under the old rule.
+    BRANDS = {
+        'dark': Brand(bg=NAVY, accents=('#F39200', '#0096D6', '#7AB800'),
+                      accent_style='corner_bars'),
+        'light': Brand(bg='#FFFFFF', accents=('#C8102E', '#0096D6', '#7AB800'),
+                       accent_style='corner_bars'),
+        'mid': Brand(bg='#808080', accents=('#FFFF00', '#0096D6'),
+                     accent_style='edge_stripe'),
+    }
+
+    def render(self, brand, color):
+        page = running_page(['Ann Lee', 'Bob Ray'], header=('Day 1',), part=(1, 2),
+                            dividers=True)
+        layout = L.layout_running(page, OL, brand.frame())
+        pdf = render_labels_pdf([layout], OL, Options(color=color, brand=brand))
+        (_, stream), = page_streams(pdf)
+        fills = text_fills(stream)
+        for text in ('1/2', 'RF 02', 'Ann Lee', 'Bob Ray'):
+            self.assertIn(text, fills)
+        return fills
+
+    def test_rf_strip_is_the_text_colour_on_dark_light_and_mid(self):
         from reportlab.lib.colors import HexColor
-        brand = Brand(bg=NAVY, accents=('#F39200', '#0096D6'), accent_style='corner_bars')
-        self.assertGreaterEqual(contrast(luminance('#F39200'), luminance(NAVY)), 3)
-        self.assertEqual(brand.accent_for_text, '#F39200')
-        paint = paint_for(brand, color=True)
-        orange, navy = HexColor('#F39200'), HexColor(NAVY)
-        self.assertEqual(paint.number.rgb(), orange.rgb())
-        for got, a, b in zip(paint.rule.rgb(), orange.rgb(), navy.rgb()):
-            self.assertAlmostEqual(got, 0.6 * a + 0.4 * b, places=6)
-        self.assertEqual(paint.text.rgb(), (1, 1, 1))           # names never change
+        expected = {'dark': (1, 1, 1), 'light': (0, 0, 0), 'mid': (0, 0, 0)}
+        for name, brand in self.BRANDS.items():
+            with self.subTest(name):
+                self.assertGreaterEqual(
+                    contrast(luminance(brand.accents[0]), brand.bg_luminance), 3)
+                paint = paint_for(brand, color=True)
+                self.assertEqual(paint.text.rgb(), expected[name])
+                fills = self.render(brand, color=True)
+                self.assertEqual(set(fills.values()), {fill_of(paint.text)})
+                self.assertFalse(set(fills.values()) & {fill_of(HexColor(a)) for a in brand.accents})
 
-    def test_low_contrast_accent_1_keeps_the_text_colour(self):
+    def test_no_accent_colour_on_any_text_in_black_and_white(self):
+        for name, brand in self.BRANDS.items():
+            with self.subTest(name):
+                paint = paint_for(brand, color=False)
+                fills = self.render(brand, color=False)
+                self.assertEqual(set(fills.values()), {fill_of(paint.text)})
+
+    def test_paint_has_one_text_colour(self):
+        self.assertNotIn('number', {f.name for f in dataclass_fields(paint_for(DEFAULT, True))})
+        self.assertFalse(hasattr(L.Run, 'emphasis'))
+
+    def test_accent_1_still_colours_the_dividers_when_it_stands_out(self):
+        from reportlab.lib.colors import HexColor
+        brand = self.BRANDS['dark']
+        self.assertEqual(brand.accent_for_rules, '#F39200')
+        paint = paint_for(brand, color=True)
+        for got, a, b in zip(paint.rule.rgb(), HexColor('#F39200').rgb(), HexColor(NAVY).rgb()):
+            self.assertAlmostEqual(got, 0.6 * a + 0.4 * b, places=6)
+
+    def test_low_contrast_accent_1_keeps_the_plain_dividers(self):
         brand = Brand(bg=NAVY, accents=('#1B3A6B', '#F39200'), accent_style='corner_bars')
         self.assertLess(contrast(luminance('#1B3A6B'), luminance(NAVY)), 3)
-        self.assertIsNone(brand.accent_for_text)
-        paint = paint_for(brand, color=True)
-        self.assertEqual(paint.number.rgb(), paint.text.rgb())
-        self.assertEqual(paint.rule.rgb(), paint_for(Brand(bg=NAVY), True).rule.rgb())
+        self.assertIsNone(brand.accent_for_rules)
+        self.assertEqual(paint_for(brand, True).rule.rgb(), paint_for(Brand(bg=NAVY), True).rule.rgb())
 
-    def test_black_and_white_never_uses_the_accent(self):
+    def test_black_and_white_dividers_never_use_the_accent(self):
         brand = Brand(bg=NAVY, accents=('#F39200',), accent_style='edge_stripe')
-        paint = paint_for(brand, color=False)
-        self.assertEqual(paint.number, paint.text)
-        self.assertEqual(paint.rule, paint_for(Brand(bg=NAVY), False).rule)
-
-    def test_only_the_rf_column_and_number_take_it(self):
-        brand = Brand(bg=NAVY, accents=('#F39200',), accent_style='corner_bars')
-        page = running_page(['Ann Lee', 'Bob Ray'], header=('Day 1', '9:00a', 'Keynote'),
-                            part=(1, 2), dividers=True)
-        layout = L.layout_running(page, OL, brand.frame())
-        emphasised = sorted(r.text for r in layout.runs if r.emphasis)
-        self.assertEqual(emphasised, ['1/2', 'RF 02'])
-        pdf = render_preview_pdf(brand, OL)
-        (_, stream), = page_streams(pdf)
-        self.assertIn('.952941 .572549 0 rg', stream)            # #F39200 text fill
+        self.assertEqual(paint_for(brand, False).rule, paint_for(Brand(bg=NAVY), False).rule)
 
 
 # ---------------------------------------------------------------- layout with a brand
@@ -824,12 +875,12 @@ class BrandingViewTests(TestCase):
             self.assertEqual(r['Content-Type'], 'application/pdf', url)
             self.assertEqual(r['Cache-Control'], 'no-store', url)
 
-    def test_page_has_the_unsaved_changes_marker_and_accent_hint(self):
+    def test_page_has_the_unsaved_changes_marker_and_no_rf_accent_hint(self):
         self.login(self.owner)
         r = self.client.get(reverse('planner:project_branding'))
         self.assertContains(r, 'id="pb-dirty" hidden>Unsaved changes')
         self.assertContains(r, "beforeunload")
-        self.assertContains(r, "Accent 1 also colours the RF number when it's readable")
+        self.assertNotContains(r, 'RF number')
         self.login(self.viewer)
         r = self.client.get(reverse('planner:project_branding'))
         self.assertNotContains(r, 'id="pb-dirty"')
