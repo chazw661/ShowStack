@@ -773,6 +773,8 @@ def _label_options(request, project, with_logo_content=True):
     never disagree about what was asked for. The project's branding comes
     with them: it decides how many names fit a label.
     """
+    from dataclasses import replace
+
     from planner.utils.labels.brand import brand_for
     from planner.utils.labels.layout import running_order_available
     from planner.utils.labels.render import Options
@@ -796,6 +798,9 @@ def _label_options(request, project, with_logo_content=True):
         raise Http404('No such session.')
 
     brand = brand_for(project, with_logo_content)
+    if request.GET.get('logo') == '0':
+        # "Include logo" unticked: this print run only, colours unchanged.
+        brand = replace(brand, logos=())
     mode = request.GET.get('mode', 'single')
     if mode not in ('single', 'running'):
         return None, HttpResponseBadRequest('Unknown mode.')
@@ -870,6 +875,7 @@ def mic_tracker_print_view(request):
     context = {
         **_shared_header_context(request),
         'brand': brand,
+        'has_logo': bool(brand.logo_candidates()),
         'can_edit_branding': _can_edit_current_project(request),
         'days': days,
         'selected_session': selected_session,

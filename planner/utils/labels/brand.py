@@ -238,7 +238,8 @@ class Brand:
 
     def frame(self):
         return Frame(footer=float(mm(ACCENT_FOOTER_MM[self.style])),
-                     logos=tuple((logo.kind, logo.aspect) for logo in self.logo_candidates()))
+                     logos=tuple((logo.kind, logo.aspect) for logo in self.logo_candidates()),
+                     bars=len(self.accents) if self.style == 'corner_bars' else 0)
 
     def bw_accents(self):
         """(K greys, separated) for the accents in black & white."""
