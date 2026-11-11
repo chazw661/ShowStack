@@ -277,42 +277,47 @@ class CapacityTests(SimpleTestCase):
         start in one session, and when every one opens a new session."""
         frame = brand.frame()
 
-        def one_label(n):
-            unit = RunningUnit(pack=1, header=('Day 1',), groups=(('Ann Lee',) * n,))
+        def one_label(groups):
+            unit = RunningUnit(pack=1, header=('Day 1',), groups=groups)
             return len(L.paginate_running(unit, OL, frame)) == 1
-        one = 1
-        while one_label(one + 1):
+        one = worst = 1
+        while one_label((('Ann Lee',) * (one + 1),)):
             one += 1
-        return one, L.running_order_capacity(OL, frame)
+        while one_label((('Ann Lee',),) * (worst + 1)):
+            worst += 1
+        return one, worst
 
-    def test_capacity_with_each_accent_style(self):
-        mark = logo('mark', 100, 100)
-        full = logo('on_dark', 200, 150)        # 4:3 prints the full 16 mm
+    def test_capacity_table(self):
+        full = logo('on_dark', 200, 150)        # 4:3: the full 18 mm
+        wide = logo('on_dark', 300, 100)        # 3:1: 14.8 mm
         expected = {
-            'none': {(): (7, 6), (full, mark): (5, 4)},
-            'edge_stripe': {(): (7, 6), (full, mark): (5, 4)},
-            'corner_bars': {(): (6, 5), (full, mark): (4, 3)},
+            # logos: (corner bars, no bars)
+            (full,): ((4, 3), (4, 3)),
+            (wide,): ((4, 3), (4, 4)),
+            (): ((8, 6), (8, 7)),
         }
-        for style, by_logos in expected.items():
-            for logos, caps in by_logos.items():
+        for logos, (bars, none) in expected.items():
+            for style, caps in (('corner_bars', bars), ('none', none)):
                 brand = Brand(bg=NAVY, accents=ACCENTS, accent_style=style, logos=logos)
-                self.assertEqual(self.capacities(brand), caps, (style, bool(logos)))
-                self.assertTrue(L.running_order_available(OL, brand.frame())[0])
+                self.assertEqual(self.capacities(brand), caps, (style, logos))
+                available, _ = L.running_order_available(OL, brand.frame())
+                self.assertTrue(available)
 
-    def test_a_shorter_logo_leaves_more_room(self):
-        wide = Brand(bg=NAVY, logos=(logo('on_dark', 300, 100),))     # 3:1, 8 mm
-        # 8 mm is no taller than the RF block, so it costs no names; the
-        # worst case, which decides whether running order is offered,
-        # assumes 16 mm.
-        self.assertEqual(self.capacities(wide), (7, 4))
+    def test_worst_case_with_an_18mm_logo_is_at_least_three(self):
+        for style in ('corner_bars', 'edge_stripe', 'none'):
+            frame = Brand(bg=NAVY, accents=ACCENTS, accent_style=style,
+                          logos=(logo('on_dark', 100, 100),)).frame()
+            self.assertGreaterEqual(L.running_order_capacity(OL, frame), L.RUNNING_MIN_NAMES)
+        self.assertAlmostEqual(L.LOGO_HEIGHT, 18 * 72 / 25.4, places=9)
 
     def test_accent_style_without_accents_is_none(self):
         brand = Brand(bg=NAVY, accent_style='corner_bars')
         self.assertEqual(brand.style, 'none')
         self.assertEqual(brand.frame().footer, 0)
+        self.assertEqual(brand.frame().bars, 0)
 
     def test_pagination_follows_the_brand(self):
-        unit = RunningUnit(pack=1, header=('Day 1',), groups=(('Ann Lee',) * 7,))
+        unit = RunningUnit(pack=1, header=('Day 1',), groups=(('Ann Lee',),) * 7)
         plain = Brand(bg=NAVY)
         bars = Brand(bg=NAVY, accents=ACCENTS, accent_style='corner_bars')
         self.assertEqual(len(L.paginate_running(unit, OL, plain.frame())), 1)
@@ -321,11 +326,8 @@ class CapacityTests(SimpleTestCase):
 
 class LogoLayoutTests(SimpleTestCase):
 
-    def header_runs(self, layout):
+    def strip(self, layout):
         return [r for r in layout.runs if r.role == 'header']
-
-    def rf_run(self, layout):
-        return next(r for r in layout.runs if r.text.startswith('RF '))
 
     def test_fallback_chain_full_mark_none(self):
         page = running_page(['Ann Lee'])
@@ -339,36 +341,32 @@ class LogoLayoutTests(SimpleTestCase):
             layout = L.layout_running(page, OL, L.Frame(logos=logos))
             self.assertEqual(layout.logo[0] if layout.logo else None, expected, logos)
 
-    def test_rf_top_right_and_a_4_3_logo_16mm_centred_left_of_it(self):
-        layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', 4 / 3),)))
-        g = layout.geometry
-        rf = self.rf_run(layout)
-        self.assertEqual(rf.size, 14)
-        self.assertAlmostEqual(rf.x + rf.width, g.safe.right, places=6)
-        self.assertAlmostEqual(rf.bbox.top, g.safe.top, places=6)
-        _, rect = layout.logo
-        self.assertAlmostEqual(rect.h, L.LOGO_HEIGHT, places=9)
-        self.assertAlmostEqual(rect.h, 16 * 72 / 25.4, places=9)
-        self.assertAlmostEqual(rect.top, g.safe.top, places=9)
-        # Centred in the width left of the RF block's reserved width.
-        right = g.safe.right - L.block_width(g) - L.LOGO_GAP
-        self.assertAlmostEqual(rect.x - g.safe.x, right - rect.right, places=6)
-        self.assertLess(rect.right, rf.x)
-        self.assertTrue(g.safe.contains(rect, 1e-6))
-        for run in layout.runs:
-            self.assertFalse(overlaps(run.bbox, rect), run.text)
-        # The names start under the logo.
-        self.assertAlmostEqual(layout.names.top, rect.y - g.names_gap, places=6)
-        self.assertTrue(all(r.bbox.top <= rect.y for r in layout.runs if r.role == 'name'))
+    def test_logo_size_and_position_per_ratio(self):
+        mm = 72 / 25.4
+        g = L.geometry(OL)
+        # aspect: (width, height) in mm
+        for aspect, size in ((4 / 3, (24.0, 18.0)), (1.5, (27.0, 18.0)),
+                             (3.0, (44.4, 14.8)), (5.5, (44.4, 8.07))):
+            layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', aspect),)))
+            _, rect = layout.logo
+            self.assertAlmostEqual(rect.w / mm, size[0], places=1)
+            self.assertAlmostEqual(rect.h / mm, size[1], places=1)
+            self.assertAlmostEqual(rect.top, g.safe.top, places=9)
+            self.assertAlmostEqual(rect.x - g.safe.x, g.safe.right - rect.right, places=6)
+            self.assertTrue(g.safe.contains(rect, 1e-6))
+            self.assertAlmostEqual(layout.names.top, rect.y - g.names_gap, places=6)
+            for run in layout.runs:
+                self.assertFalse(overlaps(run.bbox, rect), run.text)
+            # The biggest thing on the label.
+            self.assertGreater(rect.h, max(r.size for r in layout.runs))
 
     def test_wider_logos_shrink_to_fit_down_to_8mm(self):
         widest = L.max_logo_aspect(OL)
+        self.assertAlmostEqual(widest, 5.55, places=2)
+        self.assertAlmostEqual(L.max_logo_aspect(OL, height=L.LOGO_HEIGHT), 2.47, places=2)
         layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', widest - 0.01),)))
-        _, rect = layout.logo
-        self.assertGreaterEqual(rect.h, L.LOGO_MIN_HEIGHT - 1e-9)
+        self.assertGreaterEqual(layout.logo[1].h, L.LOGO_MIN_HEIGHT - 1e-9)
         self.assertAlmostEqual(L.LOGO_MIN_HEIGHT, 8 * 72 / 25.4, places=9)
-        self.assertLess(rect.h, L.LOGO_HEIGHT)
-        self.assertTrue(layout.geometry.safe.contains(rect, 1e-6))
         # Any wider and it would go under 8 mm: no logo, not a smaller one.
         layout = L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', widest + 0.01),)))
         self.assertIsNone(layout.logo)
@@ -377,67 +375,139 @@ class LogoLayoutTests(SimpleTestCase):
         self.assertEqual(layout.logo[0], 'mark')
         self.assertAlmostEqual(layout.logo[1].h, L.LOGO_HEIGHT, places=9)
 
-    def test_max_aspect(self):
-        self.assertAlmostEqual(L.max_logo_aspect(OL), 3.01, places=2)                  # at 8 mm
-        self.assertAlmostEqual(L.max_logo_aspect(OL, part=True), 3.01, places=2)
-        self.assertAlmostEqual(L.max_logo_aspect(OL, height=L.LOGO_HEIGHT), 1.51, places=2)
-        self.assertIsNotNone(L.printed_logo_height(OL, 3.0))
-
-    def test_every_label_on_a_sheet_gets_the_same_logo(self):
-        frame = L.Frame(logos=(('on_dark', 3.0),))
-        rects = set()
-        for day in ('Mon', 'Day 1', 'Wednesday', 'Tue Nov 30', 'A day name far too long to fit'):
+    def test_every_label_on_a_sheet_gets_the_same_logo_and_names_box(self):
+        frame = Brand(bg=NAVY, accents=ACCENTS, accent_style='corner_bars',
+                      logos=(logo('on_dark', 300, 100),)).frame()
+        boxes = set()
+        for day in ('Mon', 'Wednesday', 'A day name far too long to fit'):
             for part in (None, (1, 2), (3, 3)):
                 for pack in (1, 88):
                     page = running_page(['Ann Lee'], header=(day,), part=part, pack=pack)
                     layout = L.layout_running(page, OL, frame)
-                    rects.add(layout.logo[1])
-                    # "1/2" never costs a pack's continuation labels room.
-                    self.assertEqual(layout.names, L.layout_running(
-                        running_page(['Ann Lee'], header=(day,)), OL, frame).names)
+                    boxes.add((layout.logo[1], layout.names))
             item = SingleItem(pack=3, day_label=day, name='Ann Lee', time='', session='')
-            rects.add(L.layout_single(item, OL, frame).logo[1])
-        self.assertEqual(len(rects), 1, rects)
+            boxes.add((L.layout_single(item, OL, frame).logo[1], L.layout_single(item, OL, frame).names))
+        self.assertEqual(len(boxes), 1, boxes)
 
-    def test_day_under_rf_or_dropped_when_wider_than_the_block(self):
-        page = running_page(['Ann Lee'], header=('Wednesday',), part=(1, 2))
-        layout = L.layout_running(page, OL)
+    def test_unbranded_rf_bottom_left(self):
+        layout = L.layout_single(SINGLE, OL)
         g = layout.geometry
-        day = [r for r in self.header_runs(layout) if r.text == 'Wednesday'][0]
-        self.assertEqual(day.size, 9)
-        self.assertAlmostEqual(day.x + day.width, g.safe.right, places=6)
-        self.assertLess(day.bbox.top, min(r.bbox.y for r in self.header_runs(layout) if r.emphasis))
-        page = running_page(['Ann Lee'], header=('Wednesday Breakout Track Day',), part=(1, 2))
-        texts = [r.text for r in self.header_runs(L.layout_running(page, OL))]
-        self.assertEqual(texts, ['RF 02', '1/2'])
+        self.assertIsNone(layout.logo)
+        rf, day = self.strip(layout)
+        self.assertEqual((rf.text, rf.size, rf.font), ('RF 01', 14, fonts.BOLD))
+        self.assertEqual((day.text, day.size), ('· Day 1', 9))
+        self.assertAlmostEqual(rf.x, g.safe.x, places=9)
+        self.assertEqual(rf.y, day.y)
+        self.assertAlmostEqual(min(r.bbox.y for r in (rf, day)), g.safe.y, places=6)
+        self.assertGreater(day.x, rf.x + rf.width)
+        self.assertAlmostEqual(layout.names.y, g.strip.top + 0.03 * g.size, places=6)
+        self.assertTrue(all(r.bbox.y >= layout.names.y for r in layout.runs if r.role == 'name'))
+
+    def test_part_marker_comes_first(self):
+        page = running_page(['Ann Lee'], header=('Day 1',), part=(1, 2))
+        texts = [r.text for r in self.strip(L.layout_running(page, OL))]
+        self.assertEqual(texts, ['1/2', 'RF 02', '· Day 1'])
 
     def test_running_header_is_rf_and_day_only(self):
         page = running_page(['Ann Lee'], header=('Day 1', '9:00a', 'Keynote'),
                             compact=('Day 1', '9:00a'))
         for frame in (L.PLAIN, L.Frame(logos=(('on_dark', 2.5),))):
-            texts = [r.text for r in self.header_runs(L.layout_running(page, OL, frame))]
-            self.assertEqual(texts, ['RF 02', 'Day 1'])
+            texts = [r.text for r in self.strip(L.layout_running(page, OL, frame))]
+            self.assertEqual(texts, ['RF 02', '· Day 1'])
 
     def test_single_name_has_no_meta_lines(self):
         for frame in (L.PLAIN, L.Frame(logos=(('on_dark', 2.5),))):
             layout = L.layout_single(SINGLE, OL, frame)
             self.assertEqual({r.role for r in layout.runs}, {'header', 'name'})
             self.assertEqual([r.text for r in layout.runs],
-                             ['RF 01', 'Day 1', 'Sarah', 'McMillan'])
+                             ['RF 01', '· Day 1', 'Sarah', 'McMillan'])
             names = [r for r in layout.runs if r.role == 'name']
-            self.assertEqual({r.size for r in names}, {20})
+            self.assertEqual({r.size for r in names}, {16})
             box = layout.names
             for run in names:
                 self.assertAlmostEqual(run.x + run.width / 2, box.x + box.w / 2, places=6)
 
-    def test_without_a_logo_names_start_under_the_rf_block(self):
-        layout = L.layout_single(SINGLE, OL)
-        g = layout.geometry
-        self.assertIsNone(layout.logo)
-        bottom = min(r.bbox.y for r in self.header_runs(layout))
-        self.assertAlmostEqual(layout.names.top, bottom - g.names_gap, places=6)
-        self.assertGreater(layout.names.h,
-                           L.layout_single(SINGLE, OL, L.Frame(logos=(('on_dark', 1.0),))).names.h)
+    def test_running_names_and_dividers_are_centred(self):
+        page = running_page(['Ann Lee', 'Bartholomew Smith', 'Cy'], dividers=True)
+        layout = L.layout_running(page, OL, L.Frame(logos=(('on_dark', 3.0),)))
+        box = layout.names
+        for run in (r for r in layout.runs if r.role == 'name'):
+            self.assertAlmostEqual(run.x + run.width / 2, box.x + box.w / 2, places=6)
+        self.assertEqual(len(layout.rules), 2)
+        for x1, _, x2 in layout.rules:
+            self.assertAlmostEqual((x1 + x2) / 2, box.x + box.w / 2, places=6)
+
+
+class DayRuleTests(SimpleTestCase):
+    """The strip's day: the label, then weekdays shortened, then M/D --
+    whatever fits short of the corner bars."""
+
+    THREE = Brand(bg=NAVY, accents=ACCENTS, accent_style='corner_bars').frame()
+
+    def day(self, day, frame=L.PLAIN, part=None, date='11/12'):
+        unit = RunningUnit(pack=7, header=(day,), groups=(('Ann Lee',),), day_date=date)
+        page = L.RunningPage(7, unit.header, (L.Row('Ann Lee'),), part, None, unit.day_date)
+        runs = [r for r in L.layout_running(page, OL, frame).runs if r.role == 'header']
+        self.assert_clear_of_bars(runs, frame)
+        return runs[-1].text
+
+    def assert_clear_of_bars(self, runs, frame):
+        g = L.geometry(OL, frame.footer)
+        for run in runs:
+            box = run.bbox
+            for bar in corner_bars(g, frame.bars):
+                (x0, y0), _, _, (_, y1) = bar
+                if y1 <= box.y or y0 >= box.top:
+                    continue
+                left = x0 + L.BAR_SLANT * (max(box.y, y0) - y0)
+                self.assertGreaterEqual(left - box.right, L.STRIP_GAP - 1e-6, run.text)
+
+    def test_short_weekdays(self):
+        self.assertEqual(L.short_weekdays('Wednesday'), 'Wed')
+        self.assertEqual(L.short_weekdays('wednesday Show'), 'wed Show')
+        self.assertEqual(L.short_weekdays('Load-In THURSDAY'), 'Load-In THU')
+        self.assertEqual(L.short_weekdays('Mondays'), 'Mondays')        # not a weekday word
+        self.assertEqual(L.day_options('Day 1', '1/5'), ['Day 1', '1/5'])
+
+    def test_day_01_prints_as_is(self):
+        self.assertEqual(self.day('Day 01', self.THREE), '· Day 01')
+
+    def test_wednesday_beside_three_bars_on_a_continuation_is_wed(self):
+        self.assertEqual(self.day('Wednesday', self.THREE, part=(1, 2)), '· Wed')
+
+    def test_long_day_name_falls_back_to_the_date(self):
+        self.assertEqual(self.day('Wednesday Load-In Rehearsal', self.THREE), '· 11/12')
+
+    def test_ten_character_name_that_does_not_fit_falls_back_to_the_date(self):
+        self.assertEqual(len('Production'), 10)
+        self.assertEqual(self.day('Production', self.THREE), '· 11/12')
+
+    def test_without_bars_the_full_name_prints(self):
+        for frame in (L.PLAIN, Brand(bg=NAVY, accents=ACCENTS, accent_style='edge_stripe').frame(),
+                      Brand(bg=NAVY, accents=ACCENTS[:1], accent_style='corner_bars').frame()):
+            self.assertEqual(self.day('Production', frame), '· Production')
+            self.assertEqual(self.day('Wednesday', frame, part=(1, 2)), '· Wednesday')
+
+    def test_the_day_is_never_dropped(self):
+        # A continuation label beside the bars with a two-digit date: the
+        # separator goes rather than the date.
+        self.assertEqual(self.day('Production', self.THREE, part=(1, 2)), '11/12')
+        for day in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+                    'Sunday', 'Tue Nov 3', 'Wednesday Load-In Rehearsal', 'Rehearsals'):
+            for part in (None, (1, 2)):
+                text = self.day(day, self.THREE, part=part)
+                self.assertIn(text.replace('· ', ''), L.day_options(day, '11/12'), (day, part))
+
+    def test_scope_data_carries_the_date(self):
+        from planner.utils.labels.data import ScopeData, SessionInfo, running_units, single_name_items
+        s = SessionInfo(id=1, day_id=1, day_label='Wednesday', index=0, name='Keynote', time='',
+                        day_date='11/12')
+        d = ScopeData(sessions=[s], packs={3: {1: [(1, 'Ann Lee')]}})
+        self.assertEqual(single_name_items(d)[0].day_date, '11/12')
+        self.assertEqual(running_units(d)[0].day_date, '11/12')
+        layout = L.layout_single(single_name_items(d)[0], OL,
+                                 Brand(bg=NAVY, accents=ACCENTS, accent_style='corner_bars').frame())
+        self.assertEqual(layout.runs[1].text, '· Wed')
 
 
 class AccentClearanceTests(SimpleTestCase):
@@ -468,10 +538,17 @@ class AccentClearanceTests(SimpleTestCase):
         for layout in self.layouts(brand):
             g = layout.geometry
             zone = corner_bars_zone(g)
-            boxes = [r.bbox for r in layout.runs] + ([layout.logo[1]] if layout.logo else [])
+            # The logo and the names clear the bars' whole zone; the RF
+            # strip runs beside them, STRIP_GAP short of each bar.
+            boxes = [r.bbox for r in layout.runs if r.role == 'name']
+            boxes += [layout.logo[1]] if layout.logo else []
             for box in boxes:
                 self.assertFalse(overlaps(box, zone), box)
                 self.assertTrue(g.safe.contains(box, 1e-6), box)
+            strip = [r for r in layout.runs if r.role == 'header']
+            DayRuleTests.assert_clear_of_bars(self, strip, brand.frame())
+            for run in strip:
+                self.assertTrue(g.safe.contains(run.bbox, 1e-6), run.text)
             for bar in corner_bars(g, 3):
                 xs, ys = [p[0] for p in bar], [p[1] for p in bar]
                 self.assertTrue(zone.contains(Rect(min(xs), min(ys), max(xs) - min(xs),

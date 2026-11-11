@@ -291,20 +291,25 @@ class LayoutTests(SimpleTestCase):
                 self.assertTrue(layout.names.contains(run.bbox, 1e-6),
                                 (run.text, run.bbox, layout.names))
             else:
+                # The RF strip, under the names.
                 self.assertEqual(run.role, 'header', run)
-                self.assertGreater(run.bbox.y, layout.names.top, run)
+                self.assertLess(run.bbox.top, layout.names.y, run)
             self.assertGreaterEqual(run.size, run.floor - 1e-9, run)
 
     def test_text_box_numbers_for_ol3016lp(self):
         g = L.geometry(OL)
         self.assertAlmostEqual(g.safe.x, 3.2 * 72 / 25.4, places=6)
         self.assertEqual(g.rf, 14)
-        self.assertEqual(g.single_name_max, 20)
-        self.assertAlmostEqual(L.block_width(g), 53.557, places=2)
+        self.assertEqual(g.single_name_max, 16)
+        self.assertEqual(L.SINGLE_NAME_FLOOR, 12)
         self.assertAlmostEqual(g.text.w, 105.698, places=2)
-        # Without a logo the names start under the RF block and its day line.
+        self.assertAlmostEqual(g.strip.h, 12.633, places=2)
+        # Without a logo the names run from the top of the safe zone down
+        # to 0.03 S above the RF strip.
         item = single_name_items(data({4: {1: [ZOE]}}, sessions=[KEYNOTE]))[0]
-        self.assertAlmostEqual(L.layout_single(item, OL).names.h, 94.647, places=2)
+        names = L.layout_single(item, OL).names
+        self.assertAlmostEqual(names.top, g.safe.top, places=6)
+        self.assertAlmostEqual(names.h, 108.905, places=2)
 
     def test_proportional_on_a_bigger_stock(self):
         small, big = L.geometry(OL), L.geometry(big_stock())
@@ -336,14 +341,15 @@ class LayoutTests(SimpleTestCase):
                         self.assert_contained(L.layout_running(page, stock))
 
     def test_running_capacity_on_ol3016lp(self):
-        # No logo: the names have everything under the RF block.
-        self.assertEqual(L.running_order_capacity(OL), 6)          # worst case
-        self.assertEqual(len(running_pages(['Ann Lee'] * 7)), 1)    # one session
-        self.assertEqual(len(running_pages(['Ann Lee'] * 8)), 2)
-        six = (KEYNOTE, PANEL, BREAKOUT, S(5, 3, 'D', ''), S(6, 4, 'E', ''), S(7, 5, 'F', ''))
-        seven = six + (S(8, 6, 'G', ''),)
-        self.assertEqual(len(running_pages(['Ann Lee'] * 6, sessions=six)), 1)
-        self.assertEqual(len(running_pages(['Ann Lee'] * 7, sessions=seven)), 2)
+        # No logo: the names have everything above the RF strip.
+        self.assertEqual(L.running_order_capacity(OL), 7)          # worst case
+        self.assertEqual(len(running_pages(['Ann Lee'] * 8)), 1)    # one session
+        self.assertEqual(len(running_pages(['Ann Lee'] * 9)), 2)
+        seven = (KEYNOTE, PANEL, BREAKOUT) + tuple(S(5 + i, 3 + i, 'S{}'.format(i), '')
+                                                   for i in range(4))
+        eight = seven + (S(9, 7, 'H', ''),)
+        self.assertEqual(len(running_pages(['Ann Lee'] * 7, sessions=seven)), 1)
+        self.assertEqual(len(running_pages(['Ann Lee'] * 8, sessions=eight)), 2)
 
     def test_divider_clears_real_glyphs_at_the_floor(self):
         # The worst pair: the J of "Phil Jacobs" above, the stacked accents
@@ -384,7 +390,7 @@ class LayoutTests(SimpleTestCase):
             layout = L.layout_running(running_pages(names)[0], OL)
             lines = [r for r in layout.runs if r.role == 'name']
             size = lines[0].size
-            self.assertGreater(size, 16, names)
+            self.assertGreater(size, 12, names)
             self.assertLessEqual(size, g.single_name_max)
             self.assertLessEqual(layout.name_lines, 2 * len(names))
             self.assertFalse(layout.truncated)
@@ -395,7 +401,7 @@ class LayoutTests(SimpleTestCase):
             for r in lines:
                 self.assertAlmostEqual(r.x + r.width / 2, box.x + box.w / 2, places=3)
         # A full label grows only by the little height it has spare.
-        layout = L.layout_running(running_pages(['Ann Lee'] * 7)[0], OL)
+        layout = L.layout_running(running_pages(['Ann Lee'] * 8)[0], OL)
         self.assertLess(max(r.size for r in layout.runs if r.role == 'name'), 12)
 
     def test_real_day_packs_each_fit_one_label(self):
@@ -464,9 +470,9 @@ class LayoutTests(SimpleTestCase):
             self.assertAlmostEqual(r.x + r.width / 2, centre, places=3)
 
     def test_wrapped_name_counts_toward_capacity(self):
-        self.assertEqual(len(running_pages(['Ann Lee'] * 7)), 1)
-        # Six one-line names and one two-line name are eight lines: too many.
-        pages = running_pages(['Ann Lee'] * 6 + ['WILLIAM M. MORROW'])
+        self.assertEqual(len(running_pages(['Ann Lee'] * 8)), 1)
+        # Seven one-line names and one two-line name are nine lines: too many.
+        pages = running_pages(['Ann Lee'] * 7 + ['WILLIAM M. MORROW'])
         self.assertEqual(len(pages), 2)
         self.assertEqual([p.part for p in pages], [(1, 2), (2, 2)])
 
@@ -494,8 +500,8 @@ class LayoutTests(SimpleTestCase):
     def test_header_numbers_match_the_tracker_badge(self):
         item = single_name_items(data({4: {1: [ZOE]}}, sessions=[KEYNOTE]))[0]
         texts = [r.text for r in L.layout_single(item, OL).runs if r.role == 'header']
-        self.assertEqual(texts, ['RF 04', DAY1])
-        page = running_pages(['Ann Lee'] * 8)[1]
+        self.assertEqual(texts, ['RF 04', '· ' + DAY1])
+        page = running_pages(['Ann Lee'] * 9)[1]
         texts = [r.text for r in L.layout_running(page, OL).runs if r.role == 'header']
         self.assertIn('2/2', texts)
 

@@ -6,26 +6,26 @@ because a 9 pt line is the smallest that reads at arm's length whatever the
 label. For OL3016LP (S = 144 pt) the numbers come out as:
 
     safe inset      max(S/16, 3.2 mm)   9.07 pt  3.2 mm
-    "RF 07"         14 pt bold, top-right on the safe zone's corner
-    day             9 pt bold, right-aligned under it
-    RF block        53.6 pt wide on every label ("2/2 RF 00", "Wednesday")
-    logo box        68.3 pt (24.1 mm) wide left of the block, up to 16 mm high
-    header->names   0.03 S               4.32 pt
-    text inset      0.07 S each side    10.08 pt
+    logo            top of the safe zone, centred, up to 44.4 mm wide and
+                    18 mm high, never under 8 mm (so at most ~5.5:1)
+    logo->names     0.03 S               4.32 pt
+    names           centred; text inset 0.07 S each side, 105.7 pt wide
+    names->strip    0.03 S               4.32 pt
+    RF strip        "1/2 RF 07 · Monday" bottom-left: RF 14 pt bold, the
+                    rest 9 pt; 12.6 pt tall, or the 5 mm corner-bar footer
 
 The label is one full-bleed colour with no panel. The logo is the biggest
-thing on it: 16 mm high when its width allows, shorter for a wider logo,
-never under 8 mm (about 3:1); see header(). The names are centred in
-everything under the logo and the RF block, down to the bottom of the safe
-zone -- unless a Frame reserves a footer there for accent bars, which takes
-the footer and a 0.02 S gap off the bottom. Without a logo the names start
-under the RF block.
+thing on it: 18 mm high when the safe zone's width allows, shorter for a
+wider logo; see header(). The RF strip shares the bottom of the label with
+the corner bars and stops STRIP_GAP short of them, so the day it shows is
+the first of day_options() that fits: the day's own label, then with
+weekdays shortened ("Wed"), then the date (M/D). The names are centred in
+everything between the logo (or the top of the safe zone) and the strip.
 
-A single-name label carries the RF number, the day, the logo and the name;
-nothing else. A running order fits, at the 11 pt floor, under a full-height
-logo: four one-line names, three when every name opens a new session and so
-brings a divider; with a 5 mm corner-bar footer, four and three. Without a
-logo: seven and six; with the footer, six and five.
+A single-name label carries the logo, the name, and RF and day: nothing
+else. Running order, at the 11 pt floor, one session / every name a new
+session: under an 18 mm logo 4 / 3, with or without corner bars; with no
+logo 8 / 7, or 8 / 6 with corner bars.
 
 Text is stacked with the font's real ascent and descent, so a line's box --
 what the tests check against the safe zone and the text box -- holds stacked
@@ -40,12 +40,12 @@ from dataclasses import dataclass, field
 
 from planner.utils.labels import fonts
 from planner.utils.labels.data import pack_label
-from planner.utils.labels.stock import Rect, mm
+from planner.utils.labels.stock import BLEED_MM, Rect, mm
 
 ELLIPSIS = '…'
 
 # Floors, in points, whatever the stock.
-SINGLE_NAME_FLOOR = 14
+SINGLE_NAME_FLOOR = 12
 RUNNING_NAME_FLOOR = 11
 OTHER_FLOOR = 9
 SIZE_STEP = 0.5
@@ -65,27 +65,30 @@ WRAP_INDENT = 6
 # of "Phil Jacobs" above and the stacked accents of "Nguyễn Đặng" below.
 DIVIDER_GAP = 0.3
 
-# "RF 07", top-right on the safe zone's corner, on a 144 pt label; other
-# stocks scale it. The day prints under it at OTHER_FLOOR.
+# "RF 07 · Monday" on one baseline in a strip along the bottom-left of the
+# safe zone, beside the corner bars: the number at RF_SIZE (for a 144 pt
+# label; other stocks scale it), the day and a pack's "1/2" at OTHER_FLOOR.
 RF_SIZE = 14
-# Space above the day line, under the RF line's lowest point.
-DAY_GAP = 2
-# The RF block is this wide on every label, so every logo on a sheet prints
-# the same size: room for "Wednesday", or for "2/2 RF 00". A day label wider
-# than the block is dropped rather than squeeze the logo.
-BLOCK_SAMPLES = ('Wednesday', '2/2', 'RF 00')
+DAY_SEPARATOR = ' · '
+# Kept clear between the strip's text and the nearest corner bar.
+STRIP_GAP = 3
 
-# A client logo is the biggest thing on the label: top of the label, centred
-# in the width left of the RF block, LOGO_HEIGHT tall when that width allows.
-# A wider one shrinks to fit the width, but never below LOGO_MIN_HEIGHT -- a
-# logo that would have to go smaller falls back to the mark, then to no logo
-# at all.
-LOGO_HEIGHT = float(mm(16))
+# Corner bars, as fractions of the label side S: three "/" parallelograms
+# from the bottom-right corner into the bleed. The first sits on the bottom
+# edge and runs into the bleed below it too. Here, not in render, because
+# the RF strip has to stop short of them.
+BAR_LEFTS = (0.50, 0.64, 0.78)
+BAR_PITCH = 8.4 / 144
+BAR_HEIGHT = 6.2 / 144
+BAR_SLANT = 0.75
+
+# A client logo is the biggest thing on the label: across the top of the
+# safe zone, centred, LOGO_HEIGHT tall when the full width allows. A wider
+# one shrinks to fit the width, but never below LOGO_MIN_HEIGHT -- a logo
+# that would have to go smaller falls back to the mark, then to no logo at
+# all. 18 mm still leaves RUNNING_MIN_NAMES in the worst case.
+LOGO_HEIGHT = float(mm(18))
 LOGO_MIN_HEIGHT = float(mm(8))
-
-# Between the logo box and the RF block. With the block's width this lets
-# a 3:1 logo print at LOGO_MIN_HEIGHT.
-LOGO_GAP = 4
 
 # Running order is only offered where the worst case -- a full-height logo,
 # and every name opening a new session, so every name brings a divider --
@@ -99,22 +102,26 @@ class Geometry:
     corner_r: float
     label: Rect
     safe: Rect
-    text: Rect              # the names' sides and bottom; its top is the
-                            # safe zone's, the header decides the real one
+    text: Rect              # the names' box without a logo: from the top of
+                            # the safe zone down to the RF strip or footer
+    strip: Rect             # the RF strip, full safe width; the bars cut it short
     single_name_max: float
     small: float            # the day and "1/2": the 9 pt tier
     rf: float               # "RF 07"
-    names_gap: float        # header bottom to the top of the names
+    names_gap: float        # logo bottom to the top of the names
+    baseline: float         # the RF strip's
 
 
 @dataclass(frozen=True)
 class Frame:
     """What a project's branding takes from the label, as far as layout is
     concerned: a footer above the safe zone's bottom edge kept clear for
-    accent bars, and the logos that may go in the header as (kind, aspect)
-    in order of preference -- the full logo, then the mark."""
+    accent bars, how many corner bars there are (the RF strip stops short
+    of them), and the logos that may go at the top as (kind, aspect) in
+    order of preference -- the full logo, then the mark."""
     footer: float = 0.0
     logos: tuple = ()
+    bars: int = 0
 
 
 PLAIN = Frame()
@@ -125,15 +132,18 @@ def geometry(stock, footer=0.0):
     inset = max(s / 16, float(mm('3.2')))
     label = Rect(0.0, 0.0, s, float(stock.label_h))
     safe = label.inset(inset)
+    small, rf = max(OTHER_FLOOR, s / 16), RF_SIZE / 144 * s
+    # The day's descent under the baseline, the number's cap height over it.
+    baseline = safe.y + fonts.descent(fonts.BOLD, small)
+    strip_h = max(baseline + CAP_HEIGHT * rf, baseline + fonts.ascent(fonts.BOLD, small)) - safe.y
+    strip = Rect(safe.x, safe.y, safe.w, strip_h)
     side = 0.07 * s
-    bottom = safe.y + (footer + 0.02 * s if footer else 0)
+    bottom = safe.y + max(footer, strip_h) + 0.03 * s
     text = Rect(safe.x + side, bottom, safe.w - 2 * side, safe.top - bottom)
     return Geometry(
-        size=s, corner_r=float(stock.corner_r), label=label, safe=safe, text=text,
-        single_name_max=max(SINGLE_NAME_FLOOR, 20 / 144 * s),
-        small=max(OTHER_FLOOR, s / 16),
-        rf=RF_SIZE / 144 * s,
-        names_gap=0.03 * s,
+        size=s, corner_r=float(stock.corner_r), label=label, safe=safe, text=text, strip=strip,
+        single_name_max=max(SINGLE_NAME_FLOOR, 16 / 144 * s),
+        small=small, rf=rf, names_gap=0.03 * s, baseline=baseline,
     )
 
 
@@ -257,49 +267,88 @@ def _sizes(maximum, floor):
     yield floor
 
 
+# ---------------------------------------------------------------- corner bars
+
+def corner_bars(g, n, top):
+    """Label-local polygons for ``n`` bars, bottom first, none above
+    ``top``."""
+    b, s = float(mm(BLEED_MM)), g.size
+    bars = []
+    for i in range(min(n, len(BAR_LEFTS))):
+        y0 = -b if i == 0 else i * BAR_PITCH * s
+        y1 = min(i * BAR_PITCH * s + BAR_HEIGHT * s, top)
+        x0 = BAR_LEFTS[i] * s
+        bars.append([(x0, y0), (g.label.right + b, y0), (g.label.right + b, y1),
+                     (x0 + BAR_SLANT * (y1 - y0), y1)])
+    return bars
+
+
+def strip_right(g, frame):
+    """Where the RF strip's text must stop: STRIP_GAP short of the nearest
+    corner bar at the strip's height, or the safe zone's right edge."""
+    right = g.safe.right
+    for bar in corner_bars(g, frame.bars, g.safe.y + frame.footer):
+        (x0, y0), _, _, (_, y1) = bar
+        if y1 <= g.strip.y or y0 >= g.strip.top:
+            continue
+        # A "/" bar's left edge is furthest left at its lowest point.
+        x = x0 + BAR_SLANT * (max(g.strip.y, y0) - y0)
+        right = min(right, x - STRIP_GAP)
+    return right
+
+
 # ---------------------------------------------------------------- header
 
 @dataclass(frozen=True)
 class Header:
     runs: tuple
-    left: float             # the RF block's left edge
-    bottom: float           # its lowest point
     logo: tuple = None      # (kind, Rect)
 
-    @property
-    def names_top(self):
-        """The lowest of the RF block and the logo: the names go under it."""
-        return min(self.bottom, self.logo[1].y if self.logo else self.bottom)
+
+_WEEKDAYS = re.compile(r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+                       re.IGNORECASE)
 
 
-def block_width(g):
-    """The RF block's reserved width: see BLOCK_SAMPLES."""
-    day, part, rf = BLOCK_SAMPLES
-    return max(fonts.string_width(day, fonts.BOLD, g.small),
-               fonts.string_width(part, fonts.BOLD, g.small) + 3
-               + fonts.string_width(rf, fonts.BOLD, g.rf))
+def short_weekdays(text):
+    """Every weekday word cut to its first three letters, case kept:
+    "Wednesday Show" -> "Wed Show"."""
+    return _WEEKDAYS.sub(lambda m: m.group(0)[:3], text)
 
 
-def _rf_block(g, pack, part=None, day=''):
-    """"RF 07" right-aligned on the safe zone's top-right corner, with a
-    pack's "1/2" just left of it, and the day right-aligned under them
-    unless it is wider than the block."""
+def day_options(day, date=''):
+    """What the strip may say for the day, in order: the day's own label,
+    the same with weekdays shortened, the date as M/D."""
+    options = []
+    for text in (day, short_weekdays(day), date):
+        if text and text not in options:
+            options.append(text)
+    return options
+
+
+def _rf_strip(g, frame, pack, part=None, day='', date=''):
+    """"1/2 RF 07 · Monday" left-aligned on the strip's baseline, stopping
+    STRIP_GAP short of the corner bars. The day is the first of
+    day_options() that fits. Only the date on a continuation label beside
+    the bars can be too wide even so ("1/2 RF 07 · 11/12" is 84 pt of the
+    81 on OL3016LP); it then loses the " · " for a space. The day is never
+    dropped while that fits."""
     rf = 'RF ' + pack_label(pack)
-    baseline = g.safe.top - CAP_HEIGHT * g.rf
-    x = g.safe.right - fonts.string_width(rf, fonts.BOLD, g.rf)
-    runs = [Run(rf, fonts.BOLD, g.rf, x, baseline, 'header', OTHER_FLOOR, True)]
+    right = strip_right(g, frame)
+    runs, x = [], g.safe.x
     if part:
-        text = '{}/{}'.format(*part)
-        x -= 3 + fonts.string_width(text, fonts.BOLD, g.small)
-        runs.append(Run(text, fonts.BOLD, g.small, x, baseline, 'header', OTHER_FLOOR, True))
-    if day and _fits(day, fonts.BOLD, g.small, block_width(g)):
-        # Under "1/2"'s descent whether or not there is one, so every label
-        # of a pack has the same room for names.
-        y = (baseline - fonts.descent(fonts.BOLD, g.small) - DAY_GAP
-             - fonts.ascent(fonts.BOLD, g.small))
-        runs.append(Run(day, fonts.BOLD, g.small,
-                        g.safe.right - fonts.string_width(day, fonts.BOLD, g.small), y,
-                        'header', OTHER_FLOOR))
+        text = '{}/{} '.format(*part)
+        runs.append(Run(text.rstrip(), fonts.BOLD, g.small, x, g.baseline, 'header',
+                        OTHER_FLOOR, True))
+        x += fonts.string_width(text, fonts.BOLD, g.small)
+    runs.append(Run(rf, fonts.BOLD, g.rf, x, g.baseline, 'header', OTHER_FLOOR, True))
+    x += fonts.string_width(rf, fonts.BOLD, g.rf) + fonts.string_width(' ', fonts.BOLD, g.small)
+    options = [DAY_SEPARATOR.lstrip() + text for text in day_options(day, date)]
+    if date:
+        options.append(date)
+    for text in options:
+        if x + fonts.string_width(text, fonts.BOLD, g.small) <= right + 1e-6:
+            runs.append(Run(text, fonts.BOLD, g.small, x, g.baseline, 'header', OTHER_FLOOR))
+            break
     return runs
 
 
@@ -313,34 +362,23 @@ def logo_height(aspect, room):
     return height if height >= LOGO_MIN_HEIGHT - 1e-9 else None
 
 
-def logo_room(g, left):
-    """The logo box's width: from the safe zone's left edge to LOGO_GAP
-    short of ``left``, the RF block's left edge."""
-    return max(0.0, left - LOGO_GAP - g.safe.x)
-
-
-def header(g, pack, part=None, day='', logos=()):
-    """The RF block, and the first of ``logos`` that fits at
-    LOGO_MIN_HEIGHT or taller: top of the label, centred in the width left
-    of the RF block's reserved width (or of the block itself, should a
-    "12/12" ever run past it)."""
-    runs = _rf_block(g, pack, part, day)
-    left = g.safe.right - block_width(g)
-    if min(run.x for run in runs) < left - 1e-6:
-        left = min(run.x for run in runs)
-    bottom = min(run.bbox.y for run in runs)
-    room = logo_room(g, left)
-    for kind, aspect in logos:
-        h = logo_height(aspect, room)
+def header(g, pack, part=None, day='', frame=PLAIN, date=''):
+    """The RF strip, and the first of ``frame.logos`` that fits at
+    LOGO_MIN_HEIGHT or taller: on the safe zone's top edge, centred across
+    its full width."""
+    runs = tuple(_rf_strip(g, frame, pack, part, day, date))
+    for kind, aspect in frame.logos:
+        h = logo_height(aspect, g.safe.w)
         if h:
             w = h * aspect
-            rect = Rect(g.safe.x + (room - w) / 2, g.safe.top - h, w, h)
-            return Header(tuple(runs), left, bottom, (kind, rect))
-    return Header(tuple(runs), left, bottom)
+            return Header(runs, (kind, Rect(g.safe.x + (g.safe.w - w) / 2, g.safe.top - h, w, h)))
+    return Header(runs)
 
 
 def _names_box(g, head):
-    top = head.names_top - g.names_gap
+    if not head.logo:
+        return g.text
+    top = head.logo[1].y - g.names_gap
     return Rect(g.text.x, g.text.y, g.text.w, top - g.text.y)
 
 
@@ -352,21 +390,21 @@ def _place_header(layout, g, head):
 
 
 def header_logo_room(stock, part=False):
-    """(geometry, room): the logo width the header has. The same on every
-    label, continuation or not; ``part`` is kept for callers."""
+    """(geometry, room): the logo's width, the safe zone's, on every label;
+    ``part`` is kept for callers."""
     g = geometry(stock)
-    return g, logo_room(g, header(g, 0, (1, 2) if part else None, BLOCK_SAMPLES[0]).left)
+    return g, g.safe.w
 
 
 def max_logo_aspect(stock, part=False, height=LOGO_MIN_HEIGHT):
-    """The widest logo (width / height) the header takes at ``height``:
-    by default the minimum, so anything wider cannot print."""
+    """The widest logo (width / height) that prints at ``height``: by
+    default the minimum, so anything wider cannot print."""
     _, room = header_logo_room(stock, part)
     return room / height
 
 
 def printed_logo_height(stock, aspect, part=False):
-    """How tall a logo of ``aspect`` prints in the header; None if it cannot."""
+    """How tall a logo of ``aspect`` prints; None if it cannot."""
     _, room = header_logo_room(stock, part)
     return logo_height(aspect, room)
 
@@ -374,11 +412,12 @@ def printed_logo_height(stock, aspect, part=False):
 # ---------------------------------------------------------------- single name
 
 def layout_single(item, stock, frame=PLAIN):
-    """RF, day, logo and the name: nothing else. The name is centred in
-    everything under the header, as big as SINGLE_NAME_MAX on two lines."""
+    """Logo, the name, and RF and day: nothing else. The name is centred
+    between the logo and the RF strip, up to SINGLE_NAME_MAX on two lines."""
     g = geometry(stock, frame.footer)
     layout = LabelLayout(g)
-    box = _place_header(layout, g, header(g, item.pack, day=item.day_label, logos=frame.logos))
+    box = _place_header(layout, g, header(g, item.pack, day=item.day_label, frame=frame,
+                                          date=item.day_date))
 
     chosen = None
     for size in _sizes(g.single_name_max, SINGLE_NAME_FLOOR):
@@ -422,6 +461,7 @@ class RunningPage:
     rows: tuple
     part: tuple = None      # (i, n) when the pack needs more than one label
     compact: tuple = None   # unused by the layout; kept with the unit's
+    date: str = ''          # the day as M/D
 
     @property
     def day(self):
@@ -458,11 +498,10 @@ def paginate_running(unit, stock, frame=PLAIN):
     the floor size (wrapped names take their two lines). A divider that
     would start a continuation label is simply not drawn.
 
-    The header is the same height with or without "1/2", so the room
+    The logo and the RF strip are the same on every page, so the room
     measured here is every page's."""
     g = geometry(stock, frame.footer)
-    day = unit.header[0] if unit.header else ''
-    height = _names_box(g, header(g, unit.pack, day=day, logos=frame.logos)).h
+    height = _names_box(g, header(g, unit.pack, frame=frame)).h
     rows = [Row(name, divider=bool(i) and j == 0)
             for i, names in enumerate(unit.groups) for j, name in enumerate(names)]
     pages, current = [], []
@@ -475,14 +514,14 @@ def paginate_running(unit, stock, frame=PLAIN):
         pages.append(current)
     n = len(pages)
     return [RunningPage(unit.pack, unit.header, tuple(p), (i + 1, n) if n > 1 else None,
-                        unit.compact)
+                        unit.compact, unit.day_date)
             for i, p in enumerate(pages)]
 
 
 def layout_running(page, stock, frame=PLAIN):
     g = geometry(stock, frame.footer)
     layout = LabelLayout(g)
-    box = _place_header(layout, g, header(g, page.pack, page.part, page.day, frame.logos))
+    box = _place_header(layout, g, header(g, page.pack, page.part, page.day, frame, page.date))
     rows = page.rows
 
     # The largest size, up to the single-name maximum, where everything
@@ -537,9 +576,7 @@ def running_order_capacity(stock, frame=PLAIN):
     when the frame has any, and every name opens a new session, so each
     brings a divider."""
     g = geometry(stock, frame.footer)
-    head = header(g, 0, day=BLOCK_SAMPLES[0])
-    top = min(head.bottom, g.safe.top - LOGO_HEIGHT) if frame.logos else head.bottom
-    height = top - g.names_gap - g.text.y
+    height = g.text.h - (LOGO_HEIGHT + g.names_gap if frame.logos else 0)
     k = 0
     while _rows_fit([Row('Name', divider=True)] * (k + 1), g, RUNNING_NAME_FLOOR, height):
         k += 1

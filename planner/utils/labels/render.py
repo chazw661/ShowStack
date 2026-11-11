@@ -7,7 +7,7 @@ Each label is painted back to front:
 2. accents    -- ACCENT_STYLES[brand.style]: angled bars in the bottom-right
    corner, in the footer the layout keeps clear of text, or a stripe along
    the bottom edge, outside the safe zone.
-3. logo       -- top-left of the RF number, where the layout placed it.
+3. logo       -- across the top, where the layout placed it.
 4. text       -- white or black by the brand's contrast rule; session
    dividers half way between the text colour and the background. In
    colour, accent 1 may take the RF number and the dividers (paint_for).
@@ -129,13 +129,8 @@ def _polygon(c, points):
     c.drawPath(p, fill=1, stroke=0)
 
 
-# Corner bars, as fractions of the label side S: three "/" parallelograms
-# from the bottom-right corner into the bleed. The first sits on the bottom
-# edge and runs into the bleed below it too.
-BAR_LEFTS = (0.50, 0.64, 0.78)
-BAR_PITCH = 8.4 / 144
-BAR_HEIGHT = 6.2 / 144
-BAR_SLANT = 0.75
+# Corner bars: their shape is planner.utils.labels.layout's (BAR_LEFTS and
+# on), since the RF strip has to stop short of them.
 STRIPE_MM = 2
 
 
@@ -144,22 +139,13 @@ def corner_bars_zone(g):
     to the right bleed, from the bottom bleed to the top of the footer."""
     b = bleed()
     top = g.safe.y + float(mm(ACCENT_FOOTER_MM['corner_bars']))
-    x = BAR_LEFTS[0] * g.size
+    x = L.BAR_LEFTS[0] * g.size
     return Rect(x, -b, g.label.right + b - x, top + b)
 
 
 def corner_bars(g, n):
     """Label-local polygons for ``n`` bars, bottom first."""
-    b, s = bleed(), g.size
-    zone = corner_bars_zone(g)
-    bars = []
-    for i in range(min(n, len(BAR_LEFTS))):
-        y0 = -b if i == 0 else i * BAR_PITCH * s
-        y1 = min(i * BAR_PITCH * s + BAR_HEIGHT * s, zone.top)
-        x0 = BAR_LEFTS[i] * s
-        bars.append([(x0, y0), (g.label.right + b, y0), (g.label.right + b, y1),
-                     (x0 + BAR_SLANT * (y1 - y0), y1)])
-    return bars
+    return L.corner_bars(g, n, corner_bars_zone(g).top)
 
 
 def edge_stripe(g, n):

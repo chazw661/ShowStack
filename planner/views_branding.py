@@ -68,10 +68,10 @@ def logo_notes(brand, stock):
                                 'most {:.1f}:1, so {}.'.format(low, logo.aspect, widest, instead)))
             continue
         if height < L.LOGO_HEIGHT - 1e-6:
-            out.append(('ok', 'Prints at the top beside the RF number, {:.1f} mm high: as tall '
-                              'as its width allows (up to {:.0f} mm).'.format(_mm(height), high)))
+            out.append(('ok', 'Prints across the top of the label, {:.1f} mm high: as tall '
+                              'as the label\'s width allows (up to {:.0f} mm).'.format(_mm(height), high)))
         else:
-            out.append(('ok', 'Prints at the top beside the RF number, {:.0f} mm high.'.format(high)))
+            out.append(('ok', 'Prints across the top of the label, {:.0f} mm high.'.format(high)))
     return notes
 
 

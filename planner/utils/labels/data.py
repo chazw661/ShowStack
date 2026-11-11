@@ -42,6 +42,7 @@ class SessionInfo:
     index: int          # position within its whole day, selected or not, 0-based
     name: str
     time: str           # "9:00a", or '' when the session has no start time
+    day_date: str = ''  # "11/12": what the label falls back to for the day
 
 
 @dataclass
@@ -76,6 +77,7 @@ class SingleItem:
     name: str
     time: str
     session: str                        # "Keynote" or "Keynote +2"
+    day_date: str = ''                  # "11/12"
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,7 @@ class RunningUnit:
     # The one header line that fits under a client logo: (day, time) when
     # the header names one session, else (day,). Never the session name.
     compact: tuple = ()
+    day_date: str = ''                  # "11/12"
 
 
 # ---------------------------------------------------------------- formatting
@@ -108,6 +111,11 @@ def day_label(day_name, day_date):
     if name:
         return name
     return '{} {} {}'.format(day_date.strftime('%a'), day_date.strftime('%b'), day_date.day)
+
+
+def day_date(d):
+    """M/D, no leading zeros: 11/12, 1/5."""
+    return '{}/{}'.format(d.month, d.day)
 
 
 def pack_label(pack):
@@ -154,6 +162,7 @@ def scope_data(project, session_ids):
         sessions.append(SessionInfo(
             id=s.id, day_id=s.day_id, day_label=day_label(s.day.name, s.day.date),
             index=index, name=normalise(s.name), time=format_time(s.start_time),
+            day_date=day_date(s.day.date),
         ))
 
     data = ScopeData(sessions=sessions)
@@ -209,6 +218,7 @@ def single_name_items(data):
                 pack=pack, day_label=entry.first.day_label, name=entry.name,
                 time=entry.first.time,
                 session=with_extra(entry.first.name, entry.extra),
+                day_date=entry.first.day_date,
             ))
     return items
 
@@ -245,5 +255,5 @@ def running_units(data):
                 groups[-1].append(entry.name)
             units.append(RunningUnit(pack=pack, header=header,
                                      groups=tuple(tuple(names) for names in groups),
-                                     compact=compact))
+                                     compact=compact, day_date=first.day_date))
     return units
