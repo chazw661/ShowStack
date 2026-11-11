@@ -65,10 +65,11 @@ BW_SEPARATION = 20
 # Below this at its printed size a logo looks soft; the branding page warns.
 MIN_PRINT_DPI = 250
 
-# Accent 1 colours the RF number and the session dividers when it stands out
-# from the background by at least this much (WCAG's figure for large text
-# and graphics); otherwise they keep the text colour.
-ACCENT_TEXT_CONTRAST = 3.0
+# Accent 1 colours the session dividers when it stands out from the
+# background by at least this much (WCAG's figure for graphics); otherwise
+# they stay half way between the text colour and the background. All text,
+# the RF strip included, keeps the contrast text colour.
+ACCENT_RULE_CONTRAST = 3.0
 
 # A logo mark is used as uploaded on any background; below this contrast
 # with the background (its opaque pixels' mean luminance) the page warns.
@@ -215,11 +216,11 @@ class Brand:
         return contrast(1.0 if self.text_white else 0.0, self.bg_luminance)
 
     @property
-    def accent_for_text(self):
-        """Accent 1 if it may colour the RF number and dividers, else None."""
+    def accent_for_rules(self):
+        """Accent 1 if it may colour the session dividers, else None."""
         if not self.accents:
             return None
-        if contrast(luminance(self.accents[0]), self.bg_luminance) < ACCENT_TEXT_CONTRAST:
+        if contrast(luminance(self.accents[0]), self.bg_luminance) < ACCENT_RULE_CONTRAST:
             return None
         return self.accents[0]
 

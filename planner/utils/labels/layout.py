@@ -168,7 +168,6 @@ class Run:
     y: float                # baseline
     role: str               # 'header' | 'name'
     floor: float = 0
-    emphasis: bool = False  # "RF 07" and "1/2": may take accent 1
 
     @property
     def width(self):
@@ -343,9 +342,9 @@ def _rf_strip(g, frame, pack, part=None, day='', date=''):
     if part:
         text = '{}/{} '.format(*part)
         runs.append(Run(text.rstrip(), fonts.BOLD, g.small, x, g.baseline, 'header',
-                        STRIP_FLOOR, True))
+                        STRIP_FLOOR))
         x += fonts.string_width(text, fonts.BOLD, g.small)
-    runs.append(Run(rf, fonts.BOLD, g.rf, x, g.baseline, 'header', STRIP_FLOOR, True))
+    runs.append(Run(rf, fonts.BOLD, g.rf, x, g.baseline, 'header', STRIP_FLOOR))
     x += fonts.string_width(rf, fonts.BOLD, g.rf) + fonts.string_width(' ', fonts.BOLD, g.small)
     options = [DAY_SEPARATOR.lstrip() + text for text in day_options(day, date)]
     if date:

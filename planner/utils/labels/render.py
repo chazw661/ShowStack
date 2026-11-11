@@ -10,7 +10,7 @@ Each label is painted back to front:
 3. logo       -- across the top, where the layout placed it.
 4. text       -- white or black by the brand's contrast rule; session
    dividers half way between the text colour and the background. In
-   colour, accent 1 may take the RF number and the dividers (paint_for).
+   colour, accent 1 may take the dividers (paint_for); never the text.
 
 In black & white everything is black toner only: the background and accents
 become greys (planner.utils.labels.brand) and the logo greyscale. The default
@@ -55,8 +55,7 @@ def K(percent):
 @dataclass(frozen=True)
 class Paint:
     bg: object
-    text: object            # names, day and time, meta: always this
-    number: object          # "RF", "1/2" and the RF number
+    text: object            # every run, the RF strip included
     rule: object            # session dividers
     accents: tuple
     grey_logos: bool
@@ -72,35 +71,30 @@ def paint_for(brand, color):
     background is RGB; everything else -- the default theme, and black &
     white -- is black toner only, apart from colour-mode accents.
 
-    In colour, accent 1 also colours the RF column and number, and the
-    session dividers (60% accent, 40% background), when it stands out from
-    the background by ACCENT_TEXT_CONTRAST; names, day, time and meta lines
-    always keep the contrast text colour. Black & white never uses it."""
+    In colour, accent 1 colours the session dividers (60% accent, 40%
+    background) when it stands out from the background by
+    ACCENT_RULE_CONTRAST. Text -- names, RF strip, day -- always keeps the
+    contrast text colour. Black & white never uses the accent."""
     text_k = 0 if brand.text_white else 100
-    accent = brand.accent_for_text if color else None
+    accent = brand.accent_for_rules if color else None
     if color and brand.bg:
         bg = HexColor(brand.bg)
         text = Color(1, 1, 1) if brand.text_white else Color(0, 0, 0)
-        number, rule = text, _mix(bg, text)
-        if accent:
-            number = HexColor(accent)
-            rule = _mix(number, bg, 0.6)
-        return Paint(bg, text, number, rule,
+        rule = _mix(HexColor(accent), bg, 0.6) if accent else _mix(bg, text)
+        return Paint(bg, text, rule,
                      tuple(HexColor(a) for a in brand.accents), False)
     bg_k = brand.bg_k
     text, rule = K(text_k), K((bg_k + text_k) / 2)
-    number = text
     if color:
         accents = tuple(HexColor(a) for a in brand.accents)
         if accent:
             # The default charcoal is K85: as RGB, so the divider can mix.
             grey = Color(*(1 - bg_k / 100,) * 3)
-            number = HexColor(accent)
-            rule = _mix(number, grey, 0.6)
+            rule = _mix(HexColor(accent), grey, 0.6)
     else:
         greys, _ = brand.bw_accents()
         accents = tuple(K(k) for k in greys)
-    return Paint(K(bg_k), text, number, rule, accents, not color)
+    return Paint(K(bg_k), text, rule, accents, not color)
 
 
 class _Logos:
@@ -198,8 +192,8 @@ def draw_label(c, layout, options, paint=None, logos=None):
         logos = logos or _Logos(brand, paint.grey_logos)
         c.drawImage(logos[kind], r.x, r.y, r.w, r.h, mask='auto')
 
+    c.setFillColor(paint.text)
     for run in layout.runs:
-        c.setFillColor(paint.number if run.emphasis else paint.text)
         c.setFont(run.font, run.size)
         c.drawString(run.x, run.y, run.text)
 
