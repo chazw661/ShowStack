@@ -299,17 +299,18 @@ class LayoutTests(SimpleTestCase):
     def test_text_box_numbers_for_ol3016lp(self):
         g = L.geometry(OL)
         self.assertAlmostEqual(g.safe.x, 3.2 * 72 / 25.4, places=6)
-        self.assertEqual(g.rf, 14)
+        self.assertEqual(g.rf, 11)
+        self.assertEqual(g.small, 8)
         self.assertEqual(g.single_name_max, 16)
         self.assertEqual(L.SINGLE_NAME_FLOOR, 12)
         self.assertAlmostEqual(g.text.w, 105.698, places=2)
-        self.assertAlmostEqual(g.strip.h, 12.633, places=2)
+        self.assertAlmostEqual(g.strip.h, 10.896, places=2)
         # Without a logo the names run from the top of the safe zone down
         # to 0.03 S above the RF strip.
         item = single_name_items(data({4: {1: [ZOE]}}, sessions=[KEYNOTE]))[0]
         names = L.layout_single(item, OL).names
         self.assertAlmostEqual(names.top, g.safe.top, places=6)
-        self.assertAlmostEqual(names.h, 108.905, places=2)
+        self.assertAlmostEqual(names.h, 110.642, places=2)
 
     def test_proportional_on_a_bigger_stock(self):
         small, big = L.geometry(OL), L.geometry(big_stock())
@@ -402,7 +403,7 @@ class LayoutTests(SimpleTestCase):
                 self.assertAlmostEqual(r.x + r.width / 2, box.x + box.w / 2, places=3)
         # A full label grows only by the little height it has spare.
         layout = L.layout_running(running_pages(['Ann Lee'] * 8)[0], OL)
-        self.assertLess(max(r.size for r in layout.runs if r.role == 'name'), 12)
+        self.assertLessEqual(max(r.size for r in layout.runs if r.role == 'name'), 12)
 
     def test_real_day_packs_each_fit_one_label(self):
         # Printed on a real day, these split onto 1/2 + 2/2 with separator

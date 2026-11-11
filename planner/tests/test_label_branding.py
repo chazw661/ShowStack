@@ -293,7 +293,7 @@ class CapacityTests(SimpleTestCase):
         expected = {
             # logos: (corner bars, no bars)
             (full,): ((4, 3), (4, 3)),
-            (wide,): ((4, 3), (4, 4)),
+            (wide,): ((4, 3), (5, 4)),
             (): ((8, 6), (8, 7)),
         }
         for logos, (bars, none) in expected.items():
@@ -394,8 +394,10 @@ class LogoLayoutTests(SimpleTestCase):
         g = layout.geometry
         self.assertIsNone(layout.logo)
         rf, day = self.strip(layout)
-        self.assertEqual((rf.text, rf.size, rf.font), ('RF 01', 14, fonts.BOLD))
-        self.assertEqual((day.text, day.size), ('· Day 1', 9))
+        self.assertEqual((rf.text, rf.size, rf.font), ('RF 01', 11, fonts.BOLD))
+        self.assertEqual((day.text, day.size), ('· Day 1', 8))
+        # Descenders on the safe zone's bottom edge.
+        self.assertAlmostEqual(g.baseline - fonts.descent(fonts.BOLD, 8), g.safe.y, places=9)
         self.assertAlmostEqual(rf.x, g.safe.x, places=9)
         self.assertEqual(rf.y, day.y)
         self.assertAlmostEqual(min(r.bbox.y for r in (rf, day)), g.safe.y, places=6)
@@ -479,8 +481,16 @@ class DayRuleTests(SimpleTestCase):
         self.assertEqual(self.day('Wednesday Load-In Rehearsal', self.THREE), '· 11/12')
 
     def test_ten_character_name_that_does_not_fit_falls_back_to_the_date(self):
-        self.assertEqual(len('Production'), 10)
-        self.assertEqual(self.day('Production', self.THREE), '· 11/12')
+        self.assertEqual(len('MAIN STAGE'), 10)
+        self.assertEqual(self.day('MAIN STAGE', self.THREE), '· 11/12')
+        # On a continuation label even a name that fits alone gives way.
+        self.assertEqual(self.day('Production', self.THREE, part=(1, 2)), '· 11/12')
+
+    def test_more_full_names_fit_beside_three_bars(self):
+        for day in ('Monday', 'Tuesday', 'Thursday', 'Saturday', 'Tue Nov 3', 'Production'):
+            self.assertEqual(self.day(day, self.THREE), '· ' + day)
+        # Wednesday misses by half a point.
+        self.assertEqual(self.day('Wednesday', self.THREE), '· Wed')
 
     def test_without_bars_the_full_name_prints(self):
         for frame in (L.PLAIN, Brand(bg=NAVY, accents=ACCENTS, accent_style='edge_stripe').frame(),
@@ -489,9 +499,6 @@ class DayRuleTests(SimpleTestCase):
             self.assertEqual(self.day('Wednesday', frame, part=(1, 2)), '· Wednesday')
 
     def test_the_day_is_never_dropped(self):
-        # A continuation label beside the bars with a two-digit date: the
-        # separator goes rather than the date.
-        self.assertEqual(self.day('Production', self.THREE, part=(1, 2)), '11/12')
         for day in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
                     'Sunday', 'Tue Nov 3', 'Wednesday Load-In Rehearsal', 'Rehearsals'):
             for part in (None, (1, 2)):
