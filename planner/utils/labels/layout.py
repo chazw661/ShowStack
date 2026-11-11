@@ -11,8 +11,9 @@ label. For OL3016LP (S = 144 pt) the numbers come out as:
     logo->names     0.03 S               4.32 pt
     names           centred; text inset 0.07 S each side, 105.7 pt wide
     names->strip    0.03 S               4.32 pt
-    RF strip        "1/2 RF 07 · Monday" bottom-left: RF 14 pt bold, the
-                    rest 9 pt; 12.6 pt tall, or the 5 mm corner-bar footer
+    RF strip        "1/2 RF 07 · Monday" bottom-left: RF 11 pt bold, the
+                    rest 8 pt, descenders on the safe edge; 10.9 pt tall,
+                    or the 5 mm corner-bar footer
 
 The label is one full-bleed colour with no panel. The logo is the biggest
 thing on it: 18 mm high when the safe zone's width allows, shorter for a
@@ -48,6 +49,9 @@ ELLIPSIS = '…'
 SINGLE_NAME_FLOOR = 12
 RUNNING_NAME_FLOOR = 11
 OTHER_FLOOR = 9
+# The RF strip's day and "1/2": one short line read up close, beside the
+# 11 pt number.
+STRIP_FLOOR = 8
 SIZE_STEP = 0.5
 
 NAME_LEADING = 1.12
@@ -67,8 +71,10 @@ DIVIDER_GAP = 0.3
 
 # "RF 07 · Monday" on one baseline in a strip along the bottom-left of the
 # safe zone, beside the corner bars: the number at RF_SIZE (for a 144 pt
-# label; other stocks scale it), the day and a pack's "1/2" at OTHER_FLOOR.
-RF_SIZE = 14
+# label; other stocks scale it), the day and a pack's "1/2" at STRIP_FLOOR.
+# The baseline sits as low as the safe zone allows: the day's descenders on
+# its bottom edge.
+RF_SIZE = 11
 DAY_SEPARATOR = ' · '
 # Kept clear between the strip's text and the nearest corner bar.
 STRIP_GAP = 3
@@ -106,7 +112,7 @@ class Geometry:
                             # the safe zone down to the RF strip or footer
     strip: Rect             # the RF strip, full safe width; the bars cut it short
     single_name_max: float
-    small: float            # the day and "1/2": the 9 pt tier
+    small: float            # the day and "1/2": STRIP_FLOOR
     rf: float               # "RF 07"
     names_gap: float        # logo bottom to the top of the names
     baseline: float         # the RF strip's
@@ -132,7 +138,7 @@ def geometry(stock, footer=0.0):
     inset = max(s / 16, float(mm('3.2')))
     label = Rect(0.0, 0.0, s, float(stock.label_h))
     safe = label.inset(inset)
-    small, rf = max(OTHER_FLOOR, s / 16), RF_SIZE / 144 * s
+    small, rf = max(STRIP_FLOOR, STRIP_FLOOR / 144 * s), RF_SIZE / 144 * s
     # The day's descent under the baseline, the number's cap height over it.
     baseline = safe.y + fonts.descent(fonts.BOLD, small)
     strip_h = max(baseline + CAP_HEIGHT * rf, baseline + fonts.ascent(fonts.BOLD, small)) - safe.y
@@ -328,26 +334,25 @@ def day_options(day, date=''):
 def _rf_strip(g, frame, pack, part=None, day='', date=''):
     """"1/2 RF 07 · Monday" left-aligned on the strip's baseline, stopping
     STRIP_GAP short of the corner bars. The day is the first of
-    day_options() that fits. Only the date on a continuation label beside
-    the bars can be too wide even so ("1/2 RF 07 · 11/12" is 84 pt of the
-    81 on OL3016LP); it then loses the " · " for a space. The day is never
-    dropped while that fits."""
+    day_options() that fits. Should even the date not fit (it does on
+    OL3016LP: "1/2 RF 07 · 11/12" is 71 pt of the 81 beside three bars), it
+    loses the " · " for a space. The day is never dropped while that fits."""
     rf = 'RF ' + pack_label(pack)
     right = strip_right(g, frame)
     runs, x = [], g.safe.x
     if part:
         text = '{}/{} '.format(*part)
         runs.append(Run(text.rstrip(), fonts.BOLD, g.small, x, g.baseline, 'header',
-                        OTHER_FLOOR, True))
+                        STRIP_FLOOR, True))
         x += fonts.string_width(text, fonts.BOLD, g.small)
-    runs.append(Run(rf, fonts.BOLD, g.rf, x, g.baseline, 'header', OTHER_FLOOR, True))
+    runs.append(Run(rf, fonts.BOLD, g.rf, x, g.baseline, 'header', STRIP_FLOOR, True))
     x += fonts.string_width(rf, fonts.BOLD, g.rf) + fonts.string_width(' ', fonts.BOLD, g.small)
     options = [DAY_SEPARATOR.lstrip() + text for text in day_options(day, date)]
     if date:
         options.append(date)
     for text in options:
         if x + fonts.string_width(text, fonts.BOLD, g.small) <= right + 1e-6:
-            runs.append(Run(text, fonts.BOLD, g.small, x, g.baseline, 'header', OTHER_FLOOR))
+            runs.append(Run(text, fonts.BOLD, g.small, x, g.baseline, 'header', STRIP_FLOOR))
             break
     return runs
 
