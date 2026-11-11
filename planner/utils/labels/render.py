@@ -7,7 +7,7 @@ Each label is painted back to front:
 2. accents    -- ACCENT_STYLES[brand.style]: angled bars in the bottom-right
    corner, in the footer the layout keeps clear of text, or a stripe along
    the bottom edge, outside the safe zone.
-3. logo       -- top-right in the header, where the layout placed it.
+3. logo       -- top-left of the RF number, where the layout placed it.
 4. text       -- white or black by the brand's contrast rule; session
    dividers half way between the text colour and the background. In
    colour, accent 1 may take the RF number and the dividers (paint_for).

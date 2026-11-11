@@ -157,6 +157,7 @@
                 <h3>Colour</h3>
                 <label><input type="radio" name="color" value="1" checked> Colour</label>
                 <label><input type="radio" name="color" value="0"> Black &amp; white</label>
+                {% if has_logo %}<label><input type="checkbox" name="logo" value="1" checked autocomplete="off"> Include logo</label>{% endif %}
             </div>
 
             <div class="mtp-group">
@@ -229,6 +230,8 @@
         p.set('sessions', selectedSessions().join(','));
         p.set('mode', checked('mode'));
         p.set('color', checked('color'));
+        // Only this print run: the saved branding keeps its logo.
+        if (form.logo && !form.logo.checked) p.set('logo', '0');
         p.set('start', start);
         p.set('dx', clamp(form.dx.value));
         p.set('dy', clamp(form.dy.value));

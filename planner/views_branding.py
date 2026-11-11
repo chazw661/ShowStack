@@ -37,7 +37,8 @@ def logo_notes(brand, stock):
     'warn' means it will not print as uploaded."""
     notes = {kind: [] for kind in B.LOGO_KINDS}
     full = brand.full_logo_kind
-    widest, widest_part = L.max_logo_aspect(stock), L.max_logo_aspect(stock, part=True)
+    widest = L.max_logo_aspect(stock)
+    low, high = _mm(L.LOGO_MIN_HEIGHT), _mm(L.LOGO_HEIGHT)
     mark = brand.logo('mark')
     for logo in brand.logos:
         out = notes[logo.kind]
@@ -53,8 +54,8 @@ def logo_notes(brand, stock):
                 out.append(('warn', 'Low contrast against the background (under {:.0f}:1): '
                                     'the mark may barely show.'.format(B.MARK_MIN_CONTRAST)))
             if not height:
-                out.append(('warn', 'Too wide for the header even at 6 mm high (at most '
-                                    '{:.2f}:1), so no logo prints.'.format(widest)))
+                out.append(('warn', 'Too wide to print even at {:.0f} mm high (at most '
+                                    '{:.1f}:1), so no logo prints.'.format(low, widest)))
             continue
         if logo.kind != full:
             out.append(('info', 'Not used: the background is {}, so the logo for {} backgrounds '
@@ -63,17 +64,14 @@ def logo_notes(brand, stock):
             continue
         instead = 'the mark prints instead' if mark else 'no logo prints (upload a mark)'
         if not height:
-            out.append(('warn', 'Too wide for the header even at 6 mm high: {:.2f}:1 against at '
-                                'most {:.2f}:1, so {}.'.format(logo.aspect, widest, instead)))
+            out.append(('warn', 'Too wide to print even at {:.0f} mm high: {:.1f}:1 against at '
+                                'most {:.1f}:1, so {}.'.format(low, logo.aspect, widest, instead)))
             continue
-        if logo.aspect > widest_part:
-            out.append(('info', 'On a pack\'s continuation labels ("1/2") there is room for '
-                                '{:.2f}:1, so {} there.'.format(widest_part, instead)))
         if height < L.LOGO_HEIGHT - 1e-6:
-            out.append(('ok', 'Prints top-right, shrunk to {:.1f} mm high to fit the width.'
-                              .format(_mm(height))))
+            out.append(('ok', 'Prints at the top beside the RF number, {:.1f} mm high: as tall '
+                              'as its width allows (up to {:.0f} mm).'.format(_mm(height), high)))
         else:
-            out.append(('ok', 'Prints top-right, 8 mm high.'))
+            out.append(('ok', 'Prints at the top beside the RF number, {:.0f} mm high.'.format(high)))
     return notes
 
 

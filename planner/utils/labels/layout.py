@@ -6,23 +6,26 @@ because a 9 pt line is the smallest that reads at arm's length whatever the
 label. For OL3016LP (S = 144 pt) the numbers come out as:
 
     safe inset      max(S/16, 3.2 mm)   9.07 pt  3.2 mm
-    header band     0.26 S              37.44 pt 13.2 mm
+    "RF 07"         14 pt bold, top-right on the safe zone's corner
+    day             9 pt bold, right-aligned under it
+    RF block        53.6 pt wide on every label ("2/2 RF 00", "Wednesday")
+    logo box        68.3 pt (24.1 mm) wide left of the block, up to 16 mm high
     header->names   0.03 S               4.32 pt
     text inset      0.07 S each side    10.08 pt
-    text box                            105.70 x 84.10 pt  (37.3 x 29.7 mm)
 
-The label is one full-bleed colour with no panel, so the names run from just
-under the header band to the bottom of the safe zone -- unless a Frame
-reserves a footer there for accent bars, which takes the footer and a
-0.02 S gap off the bottom of the text box.
+The label is one full-bleed colour with no panel. The logo is the biggest
+thing on it: 16 mm high when its width allows, shorter for a wider logo,
+never under 8 mm (about 3:1); see header(). The names are centred in
+everything under the logo and the RF block, down to the bottom of the safe
+zone -- unless a Frame reserves a footer there for accent bars, which takes
+the footer and a 0.02 S gap off the bottom. Without a logo the names start
+under the RF block.
 
-A running order fits six one-line names on a label, and five when every
-name opens a new session and so brings a divider; with a 5 mm corner-bar
-footer, five and four.
-
-A client logo goes in the header, top-right, never in the text box, so it
-costs no names: 8 mm high, or shrunk to fit the width down to 6 mm. See
-_header_logo.
+A single-name label carries the RF number, the day, the logo and the name;
+nothing else. A running order fits, at the 11 pt floor, under a full-height
+logo: four one-line names, three when every name opens a new session and so
+brings a divider; with a 5 mm corner-bar footer, four and three. Without a
+logo: seven and six; with the footer, six and five.
 
 Text is stacked with the font's real ascent and descent, so a line's box --
 what the tests check against the safe zone and the text box -- holds stacked
@@ -48,13 +51,12 @@ OTHER_FLOOR = 9
 SIZE_STEP = 0.5
 
 NAME_LEADING = 1.12
-META_LEADING = 1.15
-HEADER_LEADING = 1.1
 
 # Noto Sans cap height (and lining-figure height), em.
 CAP_HEIGHT = 0.714
 
-# Second line of a wrapped running-order name, so it reads as the same row.
+# A wrapped running-order name's second line is broken this much narrower,
+# so it sits inside the first when both are centred.
 WRAP_INDENT = 6
 
 # Extra space where a running order moves to the next session, x the name
@@ -63,19 +65,31 @@ WRAP_INDENT = 6
 # of "Phil Jacobs" above and the stacked accents of "Nguyễn Đặng" below.
 DIVIDER_GAP = 0.3
 
-# A client logo prints this tall when its width allows; a wider one shrinks
-# to fit the header's width, but never below LOGO_MIN_HEIGHT -- a logo that
-# would have to go smaller falls back to the mark, then to no logo at all.
-# The day line sits under it.
-LOGO_HEIGHT = float(mm(8))
-LOGO_MIN_HEIGHT = float(mm(6))
+# "RF 07", top-right on the safe zone's corner, on a 144 pt label; other
+# stocks scale it. The day prints under it at OTHER_FLOOR.
+RF_SIZE = 14
+# Space above the day line, under the RF line's lowest point.
+DAY_GAP = 2
+# The RF block is this wide on every label, so every logo on a sheet prints
+# the same size: room for "Wednesday", or for "2/2 RF 00". A day label wider
+# than the block is dropped rather than squeeze the logo.
+BLOCK_SAMPLES = ('Wednesday', '2/2', 'RF 00')
 
-# Between the RF number (or its "1/2") and anything right of it in the
-# header: the day lines or the logo. At least 4 pt.
-HEADER_GAP = 6
+# A client logo is the biggest thing on the label: top of the label, centred
+# in the width left of the RF block, LOGO_HEIGHT tall when that width allows.
+# A wider one shrinks to fit the width, but never below LOGO_MIN_HEIGHT -- a
+# logo that would have to go smaller falls back to the mark, then to no logo
+# at all.
+LOGO_HEIGHT = float(mm(16))
+LOGO_MIN_HEIGHT = float(mm(8))
 
-# Running order is only offered where the worst case -- every name opening a
-# new session, so every name brings a divider -- still shows this many.
+# Between the logo box and the RF block. With the block's width this lets
+# a 3:1 logo print at LOGO_MIN_HEIGHT.
+LOGO_GAP = 4
+
+# Running order is only offered where the worst case -- a full-height logo,
+# and every name opening a new session, so every name brings a divider --
+# still shows this many.
 RUNNING_MIN_NAMES = 3
 
 
@@ -85,14 +99,12 @@ class Geometry:
     corner_r: float
     label: Rect
     safe: Rect
-    band: Rect
-    text: Rect
-    header_pad: float
+    text: Rect              # the names' sides and bottom; its top is the
+                            # safe zone's, the header decides the real one
     single_name_max: float
-    meta_max: float
-    small: float            # header lines and "RF": the 9 pt tier
-    number: float           # the RF number in the header
-    logo_gap: float         # logo bottom to the top of the day line under it
+    small: float            # the day and "1/2": the 9 pt tier
+    rf: float               # "RF 07"
+    names_gap: float        # header bottom to the top of the names
 
 
 @dataclass(frozen=True)
@@ -113,24 +125,23 @@ def geometry(stock, footer=0.0):
     inset = max(s / 16, float(mm('3.2')))
     label = Rect(0.0, 0.0, s, float(stock.label_h))
     safe = label.inset(inset)
-    band_h = 0.26 * s
-    band = Rect(safe.x, safe.top - band_h, safe.w, band_h)
     side = 0.07 * s
-    top = band.y - 0.03 * s
     bottom = safe.y + (footer + 0.02 * s if footer else 0)
-    text = Rect(safe.x + side, bottom, safe.w - 2 * side, top - bottom)
+    text = Rect(safe.x + side, bottom, safe.w - 2 * side, safe.top - bottom)
     return Geometry(
-        size=s, corner_r=float(stock.corner_r), label=label, safe=safe, band=band,
-        text=text, header_pad=0.04 * s,
-        single_name_max=max(SINGLE_NAME_FLOOR, 0.18 * s),
-        meta_max=max(OTHER_FLOOR, 0.07 * s),
+        size=s, corner_r=float(stock.corner_r), label=label, safe=safe, text=text,
+        single_name_max=max(SINGLE_NAME_FLOOR, 20 / 144 * s),
         small=max(OTHER_FLOOR, s / 16),
-        number=0.75 * band_h,
-        logo_gap=0.01 * s,
+        rf=RF_SIZE / 144 * s,
+        names_gap=0.03 * s,
     )
 
 
 # ---------------------------------------------------------------- text runs
+
+# Capitals and figures that sit on the baseline (no J or Q).
+_CAPS = re.compile(r'[0-9A-IK-PR-Z ]+')
+
 
 @dataclass(frozen=True)
 class Run:
@@ -139,9 +150,9 @@ class Run:
     size: float
     x: float                # left edge
     y: float                # baseline
-    role: str               # 'header' | 'name' | 'meta'
+    role: str               # 'header' | 'name'
     floor: float = 0
-    emphasis: bool = False  # the RF column and number: may take accent 1
+    emphasis: bool = False  # "RF 07" and "1/2": may take accent 1
 
     @property
     def width(self):
@@ -149,9 +160,12 @@ class Run:
 
     @property
     def bbox(self):
-        if self.text.isascii() and self.text.isdigit():
-            # Lining figures: cap height, nothing below the baseline. The
-            # font's ascent makes room for stacked accents a number never has.
+        if (self.text.isascii() and self.text.isdigit()
+                or self.role == 'header' and _CAPS.fullmatch(self.text)):
+            # Lining figures, and "RF 07": cap height, nothing below the
+            # baseline. The font's ascent makes room for stacked accents
+            # these never have. (A name in capitals keeps the font's box,
+            # so names centre the same whatever their case.)
             return Rect(self.x, self.y, self.width, CAP_HEIGHT * self.size)
         d = fonts.descent(self.font, self.size)
         return Rect(self.x, self.y - d, self.width, d + fonts.ascent(self.font, self.size))
@@ -165,6 +179,7 @@ class LabelLayout:
     name_lines: int = 0                          # for tests: lines of presenter text
     truncated: bool = False
     logo: tuple = None                           # (kind, Rect) when a logo is placed
+    names: Rect = None                           # where the names may go
 
 
 def _fits(text, font, size, width):
@@ -244,117 +259,103 @@ def _sizes(maximum, floor):
 
 # ---------------------------------------------------------------- header
 
-def _header(layout, g, lines, pack, part=None, compact=None, logos=()):
-    """RF number on the left; on the right either the header lines, or a
-    logo with one day line under it. ``compact`` is what that one line may
-    say: (day, time) for a running order of one session, else (day,)."""
-    band, pad = g.band, g.header_pad
-    cap = CAP_HEIGHT
-    baseline = band.y + (band.h - cap * g.number) / 2
-    x = band.x + pad
-    # A small column left of the number: "RF" level with the number's cap
-    # height, and on a pack's continuation labels "1/2" level with its
-    # baseline. Stacked rather than strung out after the number, so the
-    # right block keeps the width for "Tue Nov 3".
-    column = [Run('RF', fonts.BOLD, g.small, x,
-                  baseline + cap * (g.number - g.small), 'header', OTHER_FLOOR, True)]
+@dataclass(frozen=True)
+class Header:
+    runs: tuple
+    left: float             # the RF block's left edge
+    bottom: float           # its lowest point
+    logo: tuple = None      # (kind, Rect)
+
+    @property
+    def names_top(self):
+        """The lowest of the RF block and the logo: the names go under it."""
+        return min(self.bottom, self.logo[1].y if self.logo else self.bottom)
+
+
+def block_width(g):
+    """The RF block's reserved width: see BLOCK_SAMPLES."""
+    day, part, rf = BLOCK_SAMPLES
+    return max(fonts.string_width(day, fonts.BOLD, g.small),
+               fonts.string_width(part, fonts.BOLD, g.small) + 3
+               + fonts.string_width(rf, fonts.BOLD, g.rf))
+
+
+def _rf_block(g, pack, part=None, day=''):
+    """"RF 07" right-aligned on the safe zone's top-right corner, with a
+    pack's "1/2" just left of it, and the day right-aligned under them
+    unless it is wider than the block."""
+    rf = 'RF ' + pack_label(pack)
+    baseline = g.safe.top - CAP_HEIGHT * g.rf
+    x = g.safe.right - fonts.string_width(rf, fonts.BOLD, g.rf)
+    runs = [Run(rf, fonts.BOLD, g.rf, x, baseline, 'header', OTHER_FLOOR, True)]
     if part:
-        column.append(Run('{}/{}'.format(*part), fonts.BOLD, g.small, x, baseline,
-                          'header', OTHER_FLOOR, True))
-    layout.runs.extend(column)
-    x += max(run.width for run in column) + 2
-    number = pack_label(pack)
-    layout.runs.append(Run(number, fonts.BOLD, g.number, x, baseline, 'header', OTHER_FLOOR, True))
-    x += fonts.string_width(number, fonts.BOLD, g.number)
-
-    if logos and _header_logo(layout, g, x + HEADER_GAP, compact or tuple(lines[:1]), logos):
-        return
-
-    right = band.right - pad
-    width = right - (x + HEADER_GAP)
-    if len(lines) == 1:
-        texts, _ = wrap(lines[0], fonts.BOLD, g.small, width)
-    else:
-        texts = [ellipsize(line, fonts.BOLD, g.small, width) for line in lines[:3]]
-    advance = g.small * HEADER_LEADING
-    height = _stack_height([(fonts.BOLD, g.small, advance)] * len(texts))
-    y = band.y + (band.h + height) / 2 - fonts.ascent(fonts.BOLD, g.small)
-    for text in texts:
-        w = fonts.string_width(text, fonts.BOLD, g.small)
-        layout.runs.append(Run(text, fonts.BOLD, g.small, right - w, y, 'header', OTHER_FLOOR))
-        y -= advance
+        text = '{}/{}'.format(*part)
+        x -= 3 + fonts.string_width(text, fonts.BOLD, g.small)
+        runs.append(Run(text, fonts.BOLD, g.small, x, baseline, 'header', OTHER_FLOOR, True))
+    if day and _fits(day, fonts.BOLD, g.small, block_width(g)):
+        # Under "1/2"'s descent whether or not there is one, so every label
+        # of a pack has the same room for names.
+        y = (baseline - fonts.descent(fonts.BOLD, g.small) - DAY_GAP
+             - fonts.ascent(fonts.BOLD, g.small))
+        runs.append(Run(day, fonts.BOLD, g.small,
+                        g.safe.right - fonts.string_width(day, fonts.BOLD, g.small), y,
+                        'header', OTHER_FLOOR))
+    return runs
 
 
-def _day_line(g):
-    return fonts.ascent(fonts.BOLD, g.small) + fonts.descent(fonts.BOLD, g.small)
-
-
-def logo_room(g, left):
-    """Widest logo, in points, that fits right of ``left`` in the header with
-    a day line under it; 0 when the band is too short for a minimum-height
-    logo and the line."""
-    if LOGO_MIN_HEIGHT + g.logo_gap + _day_line(g) > g.band.h + 1e-6:
-        return 0.0
-    return max(0.0, g.safe.right - left)
-
-
-def logo_height(g, aspect, room):
+def logo_height(aspect, room):
     """How tall a logo of ``aspect`` prints in ``room`` points of width:
     LOGO_HEIGHT if it fits, else as tall as the width allows; None below
     LOGO_MIN_HEIGHT."""
     if aspect <= 0 or room <= 0:
         return None
-    tallest = min(LOGO_HEIGHT, g.band.h - g.logo_gap - _day_line(g))
-    height = min(tallest, room / aspect)
+    height = min(LOGO_HEIGHT, room / aspect)
     return height if height >= LOGO_MIN_HEIGHT - 1e-9 else None
 
 
-def _header_logo(layout, g, left, compact, logos):
-    """Place the first of ``logos`` that fits at LOGO_MIN_HEIGHT or taller,
-    top-right on the safe zone's corner, with one day line right-aligned
-    under it. False, and nothing placed, when none fits: the caller lays
-    out the header without a logo."""
+def logo_room(g, left):
+    """The logo box's width: from the safe zone's left edge to LOGO_GAP
+    short of ``left``, the RF block's left edge."""
+    return max(0.0, left - LOGO_GAP - g.safe.x)
+
+
+def header(g, pack, part=None, day='', logos=()):
+    """The RF block, and the first of ``logos`` that fits at
+    LOGO_MIN_HEIGHT or taller: top of the label, centred in the width left
+    of the RF block's reserved width (or of the block itself, should a
+    "12/12" ever run past it)."""
+    runs = _rf_block(g, pack, part, day)
+    left = g.safe.right - block_width(g)
+    if min(run.x for run in runs) < left - 1e-6:
+        left = min(run.x for run in runs)
+    bottom = min(run.bbox.y for run in runs)
     room = logo_room(g, left)
     for kind, aspect in logos:
-        h = logo_height(g, aspect, room)
+        h = logo_height(aspect, room)
         if h:
             w = h * aspect
-            rect = Rect(g.safe.right - w, g.safe.top - h, w, h)
-            break
-    else:
-        return False
-    layout.logo = (kind, rect)
+            rect = Rect(g.safe.x + (room - w) / 2, g.safe.top - h, w, h)
+            return Header(tuple(runs), left, bottom, (kind, rect))
+    return Header(tuple(runs), left, bottom)
 
-    # "Day 1 · 9:00a"; if that is too wide, the day alone; only a day too
-    # wide on its own is cut short. Dropping words is not marked with an
-    # ellipsis -- the session name is never on this line in the first place.
-    parts = [p for p in compact if p]
-    text = ''
-    for candidate in (' · '.join(parts), parts[0] if parts else ''):
-        if candidate and _fits(candidate, fonts.BOLD, g.small, room):
-            text = candidate
-            break
-    else:
-        if parts:
-            text = ellipsize(parts[0], fonts.BOLD, g.small, room)
-    if text:
-        w = fonts.string_width(text, fonts.BOLD, g.small)
-        y = rect.y - g.logo_gap - fonts.ascent(fonts.BOLD, g.small)
-        layout.runs.append(Run(text, fonts.BOLD, g.small, g.safe.right - w, y,
-                               'header', OTHER_FLOOR))
-    return True
+
+def _names_box(g, head):
+    top = head.names_top - g.names_gap
+    return Rect(g.text.x, g.text.y, g.text.w, top - g.text.y)
+
+
+def _place_header(layout, g, head):
+    layout.runs.extend(head.runs)
+    layout.logo = head.logo
+    layout.names = _names_box(g, head)
+    return layout.names
 
 
 def header_logo_room(stock, part=False):
-    """(geometry, room): the logo width the header has beside RF 00, or
-    beside "1/2" on a continuation label."""
+    """(geometry, room): the logo width the header has. The same on every
+    label, continuation or not; ``part`` is kept for callers."""
     g = geometry(stock)
-    widths = [fonts.string_width('RF', fonts.BOLD, g.small)]
-    if part:
-        widths.append(fonts.string_width('1/2', fonts.BOLD, g.small))
-    left = (g.band.x + g.header_pad + max(widths) + 2
-            + fonts.string_width(pack_label(0), fonts.BOLD, g.number) + HEADER_GAP)
-    return g, logo_room(g, left)
+    return g, logo_room(g, header(g, 0, (1, 2) if part else None, BLOCK_SAMPLES[0]).left)
 
 
 def max_logo_aspect(stock, part=False, height=LOGO_MIN_HEIGHT):
@@ -366,42 +367,24 @@ def max_logo_aspect(stock, part=False, height=LOGO_MIN_HEIGHT):
 
 def printed_logo_height(stock, aspect, part=False):
     """How tall a logo of ``aspect`` prints in the header; None if it cannot."""
-    g, room = header_logo_room(stock, part)
-    return logo_height(g, aspect, room)
+    _, room = header_logo_room(stock, part)
+    return logo_height(aspect, room)
 
 
 # ---------------------------------------------------------------- single name
 
 def layout_single(item, stock, frame=PLAIN):
+    """RF, day, logo and the name: nothing else. The name is centred in
+    everything under the header, as big as SINGLE_NAME_MAX on two lines."""
     g = geometry(stock, frame.footer)
     layout = LabelLayout(g)
-    _header(layout, g, [item.day_label], item.pack, logos=frame.logos)
-    box = g.text
+    box = _place_header(layout, g, header(g, item.pack, day=item.day_label, logos=frame.logos))
 
-    meta = [t for t in (item.time, item.session) if t]
-    meta_size = OTHER_FLOOR
-    for size in _sizes(g.meta_max, OTHER_FLOOR):
-        if all(_fits(t, fonts.REGULAR, size, box.w) for t in meta):
-            meta_size = size
-            break
-    meta = [ellipsize(t, fonts.REGULAR, meta_size, box.w) for t in meta]
-    advance = meta_size * META_LEADING
-    y = box.y + fonts.descent(fonts.REGULAR, meta_size) + advance * (len(meta) - 1)
-    for t in meta:
-        # Centred, like the name above them.
-        w = fonts.string_width(t, fonts.REGULAR, meta_size)
-        layout.runs.append(Run(t, fonts.REGULAR, meta_size, box.x + (box.w - w) / 2, y,
-                               'meta', OTHER_FLOOR))
-        y -= advance
-    meta_top = box.y + _stack_height([(fonts.REGULAR, meta_size, advance)] * len(meta))
-
-    area_bottom = meta_top + 0.02 * g.size if meta else box.y
-    area_h = box.top - area_bottom
     chosen = None
     for size in _sizes(g.single_name_max, SINGLE_NAME_FLOOR):
         lines, truncated = wrap(item.name, fonts.BOLD, size, box.w)
         height = _stack_height([(fonts.BOLD, size, size * NAME_LEADING)] * len(lines))
-        if not truncated and height <= area_h and _whole_words(item.name, fonts.BOLD, size, box.w):
+        if not truncated and height <= box.h and _whole_words(item.name, fonts.BOLD, size, box.w):
             chosen = (size, lines, truncated, height)
             break
     if chosen is None:
@@ -410,7 +393,7 @@ def layout_single(item, stock, frame=PLAIN):
         chosen = (size, lines, truncated,
                   _stack_height([(fonts.BOLD, size, size * NAME_LEADING)] * len(lines)))
     size, lines, truncated, height = chosen
-    y = area_bottom + (area_h + height) / 2 - fonts.ascent(fonts.BOLD, size)
+    y = box.y + (box.h + height) / 2 - fonts.ascent(fonts.BOLD, size)
     for line in lines:
         w = fonts.string_width(line, fonts.BOLD, size)
         layout.runs.append(Run(line, fonts.BOLD, size, box.x + (box.w - w) / 2, y,
@@ -438,7 +421,11 @@ class RunningPage:
     header: tuple
     rows: tuple
     part: tuple = None      # (i, n) when the pack needs more than one label
-    compact: tuple = None   # the header beside a logo: (day, time) or (day,)
+    compact: tuple = None   # unused by the layout; kept with the unit's
+
+    @property
+    def day(self):
+        return self.header[0] if self.header else ''
 
 
 def _row_lines(row, g, size, first=False):
@@ -462,20 +449,25 @@ def _rows_height(rows, g, size):
     return _stack_height([(fonts.SEMIBOLD, size, a) for a in advances])
 
 
-def _rows_fit(rows, g, size):
-    return _rows_height(rows, g, size) <= g.text.h + 1e-6
+def _rows_fit(rows, g, size, height):
+    return _rows_height(rows, g, size) <= height + 1e-6
 
 
 def paginate_running(unit, stock, frame=PLAIN):
     """Split a unit's names onto as many labels as they need, measured at
     the floor size (wrapped names take their two lines). A divider that
-    would start a continuation label is simply not drawn."""
+    would start a continuation label is simply not drawn.
+
+    The header is the same height with or without "1/2", so the room
+    measured here is every page's."""
     g = geometry(stock, frame.footer)
+    day = unit.header[0] if unit.header else ''
+    height = _names_box(g, header(g, unit.pack, day=day, logos=frame.logos)).h
     rows = [Row(name, divider=bool(i) and j == 0)
             for i, names in enumerate(unit.groups) for j, name in enumerate(names)]
     pages, current = [], []
     for row in rows:
-        if current and not _rows_fit(current + [row], g, RUNNING_NAME_FLOOR):
+        if current and not _rows_fit(current + [row], g, RUNNING_NAME_FLOOR, height):
             pages.append(current)
             current = []
         current.append(row)
@@ -490,8 +482,7 @@ def paginate_running(unit, stock, frame=PLAIN):
 def layout_running(page, stock, frame=PLAIN):
     g = geometry(stock, frame.footer)
     layout = LabelLayout(g)
-    _header(layout, g, list(page.header), page.pack, page.part, page.compact, frame.logos)
-    box = g.text
+    box = _place_header(layout, g, header(g, page.pack, page.part, page.day, frame.logos))
     rows = page.rows
 
     # The largest size, up to the single-name maximum, where everything
@@ -512,12 +503,12 @@ def layout_running(page, stock, frame=PLAIN):
         counts, truncated = shape(candidate)
         whole = all(_whole_words(row.text, fonts.SEMIBOLD, candidate, box.w - WRAP_INDENT)
                     for row in rows)
-        if (_rows_fit(rows, g, candidate) and not truncated and whole
+        if (_rows_fit(rows, g, candidate, box.h) and not truncated and whole
                 and (lone or counts == at_floor)):
             size = candidate
             break
 
-    # Centre the block in the text box.
+    # Centre the block in the names box.
     top = box.y + (box.h + _rows_height(rows, g, size)) / 2
     ascent = fonts.ascent(fonts.SEMIBOLD, size)
     descent = fonts.descent(fonts.SEMIBOLD, size)
@@ -525,10 +516,13 @@ def layout_running(page, stock, frame=PLAIN):
     for i, row in enumerate(rows):
         lines, truncated = _row_lines(row, g, size, first=i == 0)
         layout.truncated = layout.truncated or truncated
-        for j, (text, indent, advance) in enumerate(lines):
+        for j, (text, _, advance) in enumerate(lines):
             above = y
             y = top - ascent if y is None else y - advance
-            layout.runs.append(Run(text, fonts.SEMIBOLD, size, box.x + indent, y,
+            # Centred like a single name; a wrapped line's indent only
+            # narrows the width it was broken to.
+            w = fonts.string_width(text, fonts.SEMIBOLD, size)
+            layout.runs.append(Run(text, fonts.SEMIBOLD, size, box.x + (box.w - w) / 2, y,
                                    'name', RUNNING_NAME_FLOOR))
             layout.name_lines += 1
             if j == 0 and row.divider and above is not None:
@@ -539,11 +533,15 @@ def layout_running(page, stock, frame=PLAIN):
 
 
 def running_order_capacity(stock, frame=PLAIN):
-    """Names per label in the worst case at the floor: every name opens a
-    new session, so each brings a divider."""
+    """Names per label in the worst case at the floor: a full-height logo
+    when the frame has any, and every name opens a new session, so each
+    brings a divider."""
     g = geometry(stock, frame.footer)
+    head = header(g, 0, day=BLOCK_SAMPLES[0])
+    top = min(head.bottom, g.safe.top - LOGO_HEIGHT) if frame.logos else head.bottom
+    height = top - g.names_gap - g.text.y
     k = 0
-    while _rows_fit([Row('Name', divider=True)] * (k + 1), g, RUNNING_NAME_FLOOR):
+    while _rows_fit([Row('Name', divider=True)] * (k + 1), g, RUNNING_NAME_FLOOR, height):
         k += 1
     return k
 
