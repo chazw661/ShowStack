@@ -1,0 +1,24 @@
+<p class="help-lede">Bring cable runs drawn in Vectorworks into the schedule from a worksheet export.</p>
+
+<h3>Steps</h3>
+<ol>
+  <li>In <em>PA Cable Entries</em>, tap <em>Import from VWX</em>.</li>
+  <li>Choose the CSV exported from your Vectorworks cable worksheet and tap <em>Preview import</em>.</li>
+  <li>Check each row: <em>new</em>, <em>update</em>, <em>error</em> or <em>warning</em>. Nothing is saved yet.</li>
+  <li>Tap <em>Confirm import</em>. A message gives the number created, updated and skipped.</li>
+</ol>
+
+<h3>How rows are read</h3>
+<ul>
+  <li>Every run needs a unique Cable Label of 20 characters or fewer. Each new label becomes a zone.</li>
+  <li>Lengths round up to whole feet. The 20% spare is still added only in the Quick Order List.</li>
+  <li>A row with <em>Extension Of</em> becomes an extension on that run's fan-out, rounded up to 25', 50', 100' or 150'.</li>
+</ul>
+
+<h3>Importing again</h3>
+<ul>
+  <li>Runs are matched by label, and runs not in the file are left alone.</li>
+  <li>An import updates cable type, length, destination and fan-out. A blank Destination or Fan-Out keeps what the entry has.</li>
+  <li>The file replaces a fan-out's extensions, including any added by hand. The preview lists what will be replaced.</li>
+  <li>A label on two or more entries, or on an entry linked to Soundvision / Amps, is refused.</li>
+</ul>

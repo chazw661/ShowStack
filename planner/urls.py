@@ -11,6 +11,7 @@ from . import views_listen
 from . import views_console_patch
 from . import views_branding
 from . import views_mic_plan
+from . import views_pa_cable_vwx
 
 from .views import (
      audio_checklist_view,
@@ -303,6 +304,8 @@ urlpatterns = [
     path('pa-cables/array/<int:array_id>/speakers/', views.pa_cable_array_speakers, name='pa_cable_array_speakers'),
     # Issue #51: CSV import for PA Cable entries (with fan-outs, extensions, couplers).
     path('pa-cables/import-csv/', views.import_pa_cables_csv, name='import_pa_cables_csv'),
+    path('pa-cables/import-vwx/', views_pa_cable_vwx.import_pa_cables_vwx, name='import_pa_cables_vwx'),
+    path('pa-cables/import-vwx/confirm/', views_pa_cable_vwx.import_pa_cables_vwx_confirm, name='import_pa_cables_vwx_confirm'),
     path('comm-beltpacks/all/pdf/', views.all_comm_beltpacks_pdf_export, name='all_comm_beltpacks_pdf_export'),
     path('comm-crew-names/import-csv/', views.import_comm_crew_names_csv, name='import_comm_crew_names_csv'),
     path('export/system-processors-pdf/', views.export_system_processor_pdf, name='export_system_processor_pdf'),

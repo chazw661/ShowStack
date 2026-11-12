@@ -34,12 +34,16 @@ from planner.models import (
     SystemProcessor,
 )
 from planner.tests.test_write_endpoint_guard import NOT_A_WRITE, WriteGuardBase
+from planner.utils import pa_cable_vwx
 
 
 def png():
     buffer = BytesIO()
     Image.new('RGB', (4, 4), 'red').save(buffer, 'PNG')
     return SimpleUploadedFile('p.png', buffer.getvalue(), content_type='image/png')
+
+
+VWX_CSV = 'Cable Label,Destination,Connector,Fan-Out,Length (ft)\nHL,SL Rack,Speaker Twist 4,,50\n'
 
 
 def csv_file(text, name='import.csv'):
@@ -203,6 +207,9 @@ CASES = [
     Case('audiopatch/pa-cables/import-csv/', lambda t: ('/audiopatch/pa-cables/import-csv/', {
         'data': {'csv_file': csv_file(
             'label,destination,cable,count,length\nSL,Hang,NL4,1,25\n')}})),
+    Case('audiopatch/pa-cables/import-vwx/', lambda t: ('/audiopatch/pa-cables/import-vwx/', {
+        'data': {'csv_file': csv_file(VWX_CSV)}}), reads=True),
+    Case('audiopatch/pa-cables/import-vwx/confirm/', lambda t: t.vwx_confirm()),
     Case('audiopatch/predictions/upload/', lambda t: t.prediction_upload()),
     Case('audiopatch/ip-addresses/save/', lambda t: js('/audiopatch/ip-addresses/save/', {
         'model_name': 'console', 'object_id': t.console.pk, 'field_name': 'primary_ip_address',
@@ -295,6 +302,11 @@ class EditRightsPositiveBase(WriteGuardBase):
             form[field] = MultitrackSession._meta.get_field(field).choices[0][0]
         form['recorder_capacity'] = 64
         return form
+
+    def vwx_confirm(self):
+        plan = pa_cable_vwx.build_plan(pa_cable_vwx.parse(VWX_CSV), self.project, 'import.csv')
+        return '/audiopatch/pa-cables/import-vwx/confirm/', {'data': {
+            'csv_text': VWX_CSV, 'filename': 'import.csv', 'digest': pa_cable_vwx.digest(plan, self.project)}}
 
     def prediction_upload(self):
         # The upload, not Soundvision's PDF parser, is what's under test.

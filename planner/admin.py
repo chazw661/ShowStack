@@ -3967,6 +3967,8 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     def changelist_view(self, request, extra_context=None):
         """Add cable and fan out summary to the list view"""
+        extra_context = {**(extra_context or {}),
+                         'can_import_vwx': self._can_edit_current_project(request)}
         response = super().changelist_view(request, extra_context=extra_context)
         
         try:

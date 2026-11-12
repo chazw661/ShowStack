@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .vwx-wrap { overflow-x: auto; margin: 20px 0; }
+    table.vwx { width: 100%; border-collapse: collapse; background: #1e1e1e; color: #eee; }
+    table.vwx th { background: #417690; color: #fff; padding: 6px 8px; text-align: left; border: 1px solid #356683; }
+    table.vwx td { padding: 6px 8px; border: 1px solid #333; vertical-align: top; color: #eee; }
+    table.vwx tr.vwx-extension td { background: #262626; }
+    table.vwx tr.vwx-extension td.vwx-indent { padding-left: 28px; }
+    .vwx-status { display: inline-block; padding: 1px 8px; border-radius: 3px; font-size: 12px; font-weight: 600; color: #111; }
+    .vwx-new { background: #7fd18b; }
+    .vwx-update { background: #79aec8; }
+    .vwx-extensions { background: #bbb; }
+    .vwx-error { background: #f08a8a; }
+    .vwx-warning { background: #f0c674; }
+    .vwx-note { margin: 2px 0 0; color: #f0c674; }
+    .vwx-note.vwx-problem { color: #f08a8a; }
+    .vwx-muted { color: #aaa; }
+</style>
+{% endblock %}
+
+{% block content %}
+<p>Nothing has been saved yet. <strong>{{ plan.filename }}</strong>: {{ plan.created }} new, {{ plan.updated }} to update, {{ plan.skipped }} skipped.</p>
+
+<div class="vwx-wrap">
+<table class="vwx">
+    <thead>
+        <tr><th>Row</th><th>Status</th><th>Label</th><th>Destination</th><th>Cable</th><th>Length (ft)</th><th>Fan-out / extension</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+    {% for run in plan.runs %}
+        <tr>
+            <td>{{ run.row.line|default:"" }}</td>
+            <td>
+                <span class="vwx-status vwx-{{ run.status }}">{% if run.status == 'extensions' %}existing{% else %}{{ run.status }}{% endif %}</span>
+                {% if run.warnings and not run.errors %}<span class="vwx-status vwx-warning">warning</span>{% endif %}
+            </td>
+            <td>{{ run.label|default:"—" }}</td>
+            <td>{{ run.destination }}</td>
+            <td>{% if run.row %}{{ run.cable_display|default:run.row.connector }}{% endif %}</td>
+            <td>{% if run.row %}{{ run.row.length }}{% if run.feet %} <span class="vwx-muted">→ {{ run.feet }}</span>{% endif %}{% endif %}</td>
+            <td>{% if run.fan_display %}{{ run.fan_display }}{% elif run.row %}{{ run.row.fan_out }}{% endif %}{% if run.groups_display %}<div class="vwx-muted">Saved as {{ run.groups_display }}</div>{% endif %}</td>
+            <td>
+                {% for message in run.errors %}<p class="vwx-note vwx-problem">{{ message }}</p>{% endfor %}
+                {% for message in run.warnings %}<p class="vwx-note">{{ message }}</p>{% endfor %}
+            </td>
+        </tr>
+        {% for extension in run.extensions %}
+        <tr class="vwx-extension">
+            <td>{{ extension.row.line }}</td>
+            <td>{% if extension.error %}<span class="vwx-status vwx-error">error</span>{% endif %}</td>
+            <td class="vwx-indent" colspan="2">Extension of {{ run.label }}</td>
+            <td>{{ extension.cable|default:extension.row.connector }}</td>
+            <td>{{ extension.row.length }}{% if extension.stock %} <span class="vwx-muted">→ {{ extension.stock }}'</span>{% endif %}</td>
+            <td></td>
+            <td>{% if extension.error %}<p class="vwx-note vwx-problem">{{ extension.error }}</p>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    {% endfor %}
+    {% for extension in plan.orphans %}
+        <tr class="vwx-extension">
+            <td>{{ extension.row.line }}</td>
+            <td><span class="vwx-status vwx-error">error</span></td>
+            <td colspan="2">Extension of {{ extension.row.extension_of }}</td>
+            <td>{{ extension.cable|default:extension.row.connector }}</td>
+            <td>{{ extension.row.length }}</td>
+            <td></td>
+            <td><p class="vwx-note vwx-problem">{{ extension.error }}</p></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<form method="post" action="{% url 'planner:import_pa_cables_vwx_confirm' %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    <textarea name="csv_text" hidden>{{ csv_text }}</textarea>
+    <input type="hidden" name="filename" value="{{ plan.filename }}">
+    <input type="hidden" name="digest" value="{{ digest }}">
+    <div style="margin: 20px 0;">
+        {% if plan.has_changes %}
+        <input type="submit" value="Confirm import" class="default"
+               style="padding: 10px 22px; background: #417690; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+        {% else %}
+        <span>Nothing in this file can be imported.</span>
+        {% endif %}
+        <a href="{% url 'planner:import_pa_cables_vwx' %}" style="margin-left: 12px;">Choose another file</a>
+        <a href="{% url 'admin:planner_pacableschedule_changelist' %}" style="margin-left: 12px;">Cancel</a>
+    </div>
+</form>
+{% endblock %}
