@@ -59,8 +59,22 @@ else
 fi
 codesign --verify --deep --strict --verbose=1 "$APP"
 
-rm -f "$ZIP"
-ditto -c -k --keepParent "$APP" "$ZIP"
+# --norsrc: macOS tags every file it writes with a com.apple.provenance xattr,
+# and plain `ditto -c -k` stores each one as a "._name" AppleDouble entry.
+# Finder's Archive Utility can't put an xattr back on a symlink, so it leaves
+# "._Python" / "._Resources" in Python.framework's root: "unsealed contents
+# present in the root directory of an embedded framework", and Gatekeeper
+# calls the app damaged. Nothing the signature or stapled ticket needs lives
+# in xattrs.
+make_zip() {
+    rm -f "$ZIP"
+    ditto -c -k --norsrc --keepParent "$APP" "$ZIP"
+    if zipinfo -1 "$ZIP" | grep -Eq '(^|/)\._|^__MACOSX/'; then
+        echo "error: $ZIP contains AppleDouble (._*) entries" >&2
+        exit 1
+    fi
+}
+make_zip
 
 if [[ -n "$SIGN_IDENTITY" && -n "$NOTARY_PROFILE" ]]; then
     echo "Submitting for notarization (usually a few minutes)…"
@@ -68,8 +82,7 @@ if [[ -n "$SIGN_IDENTITY" && -n "$NOTARY_PROFILE" ]]; then
     xcrun stapler staple "$APP"
     xcrun stapler validate "$APP"
     # Re-zip so the download carries the stapled ticket (works offline).
-    rm -f "$ZIP"
-    ditto -c -k --keepParent "$APP" "$ZIP"
+    make_zip
     spctl --assess --type execute --verbose=2 "$APP"
 fi
 
