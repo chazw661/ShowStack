@@ -134,7 +134,7 @@
         <div class="mp-stat{% if stats.hot %} warn{% endif %}"><b>{{ stats.hot }}</b><span>Segments A2 ≥ 90%</span></div>
         {% if stats.conflicts %}<a class="mp-stat crit" href="#review"><b>{{ stats.conflicts }}</b><span>RF conflict{{ stats.conflicts|pluralize }}</span></a>{% endif %}
         {% endif %}
-        <div class="mp-stat{% if cards %} warn{% endif %}"><b>{{ cards|length }}</b><span>To review</span></div>
+        <a class="mp-stat{% if open_cards %} warn{% endif %}" href="#review"{% if checked_cards %} title="{{ checked_cards|length }} checked off"{% endif %}><b>{{ open_cards|length }}</b><span>To review</span></a>
         <button type="button" class="mp-stat mp-stat-settings" data-drawer="settings" title="Plan settings">
             <b>Settings</b><span>{{ settings_summary }}</span>{% if policy_counts %}<span class="mp-policy-counts">{{ policy_counts }}</span>{% endif %}
         </button>
@@ -173,7 +173,7 @@
             <div class="mp-views" role="tablist">
                 <button type="button" class="mp-view" role="tab" id="t-showflow" data-v="showflow">Showflow + plan</button>
                 <button type="button" class="mp-view" role="tab" id="t-packs" data-v="packs">Pack chart</button>
-                <button type="button" class="mp-view" role="tab" id="t-review" data-v="review">Review ({{ cards|length }})</button>
+                <button type="button" class="mp-view" role="tab" id="t-review" data-v="review">Review ({% if cards %}{{ open_cards|length }} of {% endif %}{{ cards|length }})</button>
             </div>
             <div class="mp-tools">
                 <div class="mp-pill" id="mp-pill" role="status" hidden>
@@ -247,35 +247,19 @@
         <section id="v-review" role="tabpanel" aria-labelledby="t-review" hidden>
             <p class="mp-note" style="margin-bottom:10px">Where the showflow was incomplete or contradicted itself, and where the plan is tight. Check each one before the plan is used.</p>
             <div class="mp-cards">
-            {% for c in cards %}
-                <div class="mp-card{% if c.plan %} plan{% endif %} k-{{ c.kind }}">
-                    <span class="mp-kind">{{ c.label }}</span>
-                    {% if c.mics %}<ul class="what mp-mics">{% for i in c.mics %}<li>{{ i.text }}</li>{% endfor %}</ul>
-                    {% if can_edit and editable and c.can_use %}<button type="button" class="mp-btn small" id="mp-use-showflow" data-url="{% url 'planner:mic_plan_use_showflow' day.pk %}">Use the showflow's numbers</button>{% endif %}
-                    {% else %}<div class="what">{{ c.text }}</div>{% endif %}
-                    {% if c.note %}<div class="assume">Plan: {{ c.note }}</div>{% endif %}
-                    <div class="where">{% if c.line %}Line {{ c.line }}{% if parts|length > 1 %} · Part {{ c.part_no }}{% endif %}{% endif %}</div>
-                    {% if c.part %}<a class="mp-btn small" href="?day={{ day.pk }}&amp;part={{ c.part }}#showflow:row-{{ c.row_order }}">Show in showflow</a>
-                    {% elif c.person %}<button type="button" class="mp-btn small" data-open-person="{{ c.person }}">Show person</button>{% endif %}
-                    {% if can_edit and c.kind == 'description_names' and c.row_pk %}
-                    <details class="mp-addfrom">
-                        <summary class="mp-btn small">Add people from this line</summary>
-                        <form method="post" action="{% url 'planner:mic_plan_people_add' day.pk %}">
-                            {% csrf_token %}
-                            <input type="hidden" name="row" value="{{ c.row_pk }}"><input type="hidden" name="from_flag" value="1">
-                            <p class="mp-note">On at line {{ c.line }}, off at an exit line or the end of its segment. Change, clear or add names before you confirm; a name already on the day is matched, not duplicated.</p>
-                            {% for n in c.candidates %}<input type="text" name="name" value="{{ n }}" aria-label="Name {{ forloop.counter }}">{% endfor %}
-                            <input type="text" name="name" placeholder="Another name" aria-label="Another name">
-                            <input type="text" name="name" placeholder="Another name" aria-label="Another name">
-                            <button class="mp-btn small primary" type="submit">Add these people</button>
-                        </form>
-                    </details>
-                    {% endif %}
-                </div>
+            {% for c in open_cards %}{% include "planner/_mic_plan_review_card.html" %}
             {% empty %}
-                <div class="mp-panel"><p class="mp-note">Nothing to review.</p></div>
+                <div class="mp-panel"><p class="mp-note">{% if checked_cards %}Every card is checked off.{% else %}Nothing to review.{% endif %}</p></div>
             {% endfor %}
             </div>
+            {% if checked_cards %}
+            <details class="mp-checked" id="mp-checked">
+                <summary>Checked ({{ checked_cards|length }})</summary>
+                <div class="mp-cards">
+                {% for c in checked_cards %}{% include "planner/_mic_plan_review_card.html" %}{% endfor %}
+                </div>
+            </details>
+            {% endif %}
         </section>
     {% endif %}
     </div>
