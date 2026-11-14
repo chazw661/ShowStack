@@ -266,21 +266,42 @@ def _pack_story(plan, apps, actions, S):
     return story + ([table] if table else [Paragraph('No packs in this plan.', S['empty'])])
 
 
-def _review_story(cards, S):
+def _review_story(cards, S, zone):
+    """Unchecked cards (conflicts first), then the checked ones with who
+    checked them, when, and their note."""
     W = usable_width(LANDSCAPE_PAGE)
-    widths = [1.0 * inch, 1.1 * inch]
-    widths.append(W - sum(widths))
     cell = S['body'].clone('MpReview', fontSize=9, leading=11.5)
-    order = sorted(cards, key=lambda c: (c['kind'] != 'conflict', c['part_no'] or 0))
-    data = []
-    for c in order:
-        where = 'Line {}'.format(c['line']) if c['line'] else '—'
-        if c['part_no'] and len({x['part_no'] for x in cards if x['part_no']}) > 1:
-            where += ' · part {}'.format(c['part_no'])
-        text = escape(c['text']) + ('<br/><i>Plan: {}</i>'.format(escape(c['note'])) if c['note'] else '')
-        data.append([c['label'].upper(), where, Paragraph(text, cell)])
-    table = data_table(['Flag', 'Where', 'What'], data, widths)
-    return [table] if table else [Paragraph('Nothing to review.', S['empty'])]
+    several = len({x['part_no'] for x in cards if x['part_no']}) > 1
+
+    def rows(group, who):
+        data = []
+        for c in sorted(group, key=lambda c: (c['kind'] != 'conflict', c['part_no'] or 0)):
+            where = 'Line {}'.format(c['line']) if c['line'] else '\u2014'
+            if c['part_no'] and several:
+                where += ' · part {}'.format(c['part_no'])
+            text = escape(c['text']) + ('<br/><i>Plan: {}</i>'.format(escape(c['note'])) if c['note'] else '')
+            if c.get('blocks'):
+                text += '<br/><b>Still blocks Send to Mic Tracker.</b>'
+            row = [c['label'].upper(), where, Paragraph(text, cell)]
+            if who:
+                check = c['check']
+                by = escape('{} · {}'.format(check.checked_by_name or '?', stamp(check.checked_at, zone)))
+                row.append(Paragraph(by + ('<br/>{}'.format(escape(check.note)) if check.note else ''), cell))
+            data.append(row)
+        return data
+
+    open_cards = [c for c in cards if c.get('check') is None]
+    done = [c for c in cards if c.get('check') is not None]
+    story = []
+    widths = [1.0 * inch, 1.1 * inch]
+    table = data_table(['Flag', 'Where', 'What'], rows(open_cards, False), widths + [W - sum(widths)])
+    story.append(table if table else Paragraph('Nothing left to review.' if done else 'Nothing to review.', S['empty']))
+    if done:
+        story += [Spacer(1, 10), Paragraph('<b>Checked ({})</b>'.format(len(done)), S['body'])]
+        wide = widths + [2.2 * inch]
+        story.append(data_table(['Flag', 'Where', 'What', 'Checked'], rows(done, True),
+                                [widths[0], widths[1], W - sum(wide), 2.2 * inch]))
+    return story
 
 
 def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, cards, a2s, brand, printed_at, zone):
@@ -310,7 +331,7 @@ def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, card
     story += [Spacer(1, 14), section_banner('Pack sheet', pagesize=LANDSCAPE_PAGE, S=S)]
     story += _pack_story(plan, apps, actions, S)
     story += [Spacer(1, 14), section_banner('Review', pagesize=LANDSCAPE_PAGE, S=S)]
-    story += _review_story(cards, S)
+    story += _review_story(cards, S, zone)
     canvas = _canvas_class(project.name, plan.version, stamp(printed_at, zone))
     doc.build(story, onFirstPage=header, onLaterPages=header, canvasmaker=canvas)
     return buffer

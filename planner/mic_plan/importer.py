@@ -472,3 +472,5 @@ def rebuild_day(day):
     ShowflowEvent.objects.bulk_create(events)
     # People, lines or cues may have changed: the day's plan no longer matches.
     MicPlan.objects.filter(day=day, stale=False).update(stale=True)
+    from .checks import prune
+    prune(day)                # only with no plan: a stale one keeps its checks

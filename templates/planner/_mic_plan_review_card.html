@@ -1,0 +1,62 @@
+{% comment %}One Review card (c: page.review_cards + checks.annotate); in the open
+list or, checked, in the "Checked (N)" section. Editors check, note and uncheck.{% endcomment %}
+<div class="mp-card{% if c.plan %} plan{% endif %} k-{{ c.kind }}{% if c.check %} checked{% endif %}{% if c.blocks %} blocks{% endif %}">
+    <span class="mp-kind">{{ c.label }}</span>
+    {% if c.mics %}<ul class="what mp-mics">{% for i in c.mics %}<li>{{ i.text }}</li>{% endfor %}</ul>
+    {% if can_edit and editable and c.can_use %}<button type="button" class="mp-btn small" id="mp-use-showflow" data-url="{% url 'planner:mic_plan_use_showflow' day.pk %}">Use the showflow's numbers</button>{% endif %}
+    {% else %}<div class="what">{{ c.text }}</div>{% endif %}
+    {% if c.note %}<div class="assume">Plan: {{ c.note }}</div>{% endif %}
+    <div class="where">{% if c.line %}Line {{ c.line }}{% if parts|length > 1 %} · Part {{ c.part_no }}{% endif %}{% endif %}</div>
+    {% if c.part %}<a class="mp-btn small" href="?day={{ day.pk }}&amp;part={{ c.part }}#showflow:row-{{ c.row_order }}">Show in showflow</a>
+    {% elif c.person %}<button type="button" class="mp-btn small" data-open-person="{{ c.person }}">Show person</button>{% endif %}
+    {% if can_edit and c.kind == 'description_names' and c.row_pk %}
+    <details class="mp-addfrom">
+        <summary class="mp-btn small">Add people from this line</summary>
+        <form method="post" action="{% url 'planner:mic_plan_people_add' day.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="row" value="{{ c.row_pk }}"><input type="hidden" name="from_flag" value="1">
+            <p class="mp-note">On at line {{ c.line }}, off at an exit line or the end of its segment. Change, clear or add names before you confirm; a name already on the day is matched, not duplicated.</p>
+            {% for n in c.candidates %}<input type="text" name="name" value="{{ n }}" aria-label="Name {{ forloop.counter }}">{% endfor %}
+            <input type="text" name="name" placeholder="Another name" aria-label="Another name">
+            <input type="text" name="name" placeholder="Another name" aria-label="Another name">
+            <button class="mp-btn small primary" type="submit">Add these people</button>
+        </form>
+    </details>
+    {% endif %}
+    {% if c.blocks %}<div class="mp-blocks">Still blocks Send to Mic Tracker.</div>{% endif %}
+    {% if c.check %}
+    <div class="mp-checked-by">Checked by {{ c.check.checked_by_name|default:"?" }} · <time data-local datetime="{{ c.check.checked_at|date:'c' }}">{{ c.check.checked_at|date:"M j, H:i" }} UTC</time></div>
+    {% if c.check.note %}<div class="mp-check-note">{{ c.check.note }}</div>{% endif %}
+    {% if can_edit %}
+    <div class="mp-check-tools">
+        <details class="mp-check-form">
+            <summary class="mp-btn small">{% if c.check.note %}Edit note{% else %}Add note{% endif %}</summary>
+            <form method="post" action="{% url 'planner:mic_plan_review_check' day.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="fp" value="{{ c.fp }}"><input type="hidden" name="action" value="note">
+                {% if part %}<input type="hidden" name="part" value="{{ part.pk }}">{% endif %}
+                <input type="text" name="note" value="{{ c.check.note }}" maxlength="{{ note_max }}" aria-label="Note">
+                <button class="mp-btn small primary" type="submit">Save note</button>
+            </form>
+        </details>
+        <form method="post" action="{% url 'planner:mic_plan_review_check' day.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="fp" value="{{ c.fp }}"><input type="hidden" name="action" value="uncheck">
+            {% if part %}<input type="hidden" name="part" value="{{ part.pk }}">{% endif %}
+            <button class="mp-btn small" type="submit">Uncheck</button>
+        </form>
+    </div>
+    {% endif %}
+    {% elif can_edit %}
+    <details class="mp-check-form">
+        <summary class="mp-btn small">Checked&hellip;</summary>
+        <form method="post" action="{% url 'planner:mic_plan_review_check' day.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="fp" value="{{ c.fp }}"><input type="hidden" name="action" value="check">
+            {% if part %}<input type="hidden" name="part" value="{{ part.pk }}">{% endif %}
+            <input type="text" name="note" maxlength="{{ note_max }}" placeholder="Note (optional)" aria-label="Note">
+            <button class="mp-btn small primary" type="submit">Mark checked</button>
+        </form>
+    </details>
+    {% endif %}
+</div>

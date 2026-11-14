@@ -695,4 +695,6 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
             line=line(a.row), segment_id=a.segment, reason=a.reason, late=a.late, tight=a.tight,
             wait_min=a.wait_min, backup=a.backup)
         for a in result.actions])
+    from .checks import prune
+    prune(plan.day)
     return plan
