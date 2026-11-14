@@ -22,6 +22,7 @@ from planner.mic_plan import checks, importer, planning, push
 from planner.models import MicPlan, MicPlanReviewCheck, ShowflowImport
 from planner.tests import showflow_fixture as F
 from planner.tests.test_mic_plan_import import MicPlanBase
+from planner.tests.test_mic_plan_rig import RigBase
 
 
 class MaterialTests(SimpleTestCase):
@@ -314,3 +315,58 @@ class SurvivalTests(CheckBase):
         plan.flags = plan.flags + [{'kind': 'spill', 'row': None, 'person': None, 'text': 'Busy 6 min after.'}]
         plan.save(update_fields=['flags'])
         self.assertEqual(['spill'], [c['kind'] for c in checks.unchecked(self.cards())])
+
+
+class RigKindsKeepChecksTests(RigBase):
+    """The same property for the rig cards, on days built to produce them:
+    body packs into the handheld zone (rig_use), a transmitter swap at a
+    break (swap), a pin the rig no longer fits (rig). And "moved", which
+    reports what the last re-solve changed: a no-op Re-generate changes
+    nothing, so the card goes and its check with it."""
+
+    def check_all(self):
+        for c in checks.day_cards(self.day):
+            checks.set_check(self.day, c, '', self.editor)
+
+    def assert_regenerate_keeps(self, kind):
+        # A rig change or an edit moves people once: that "moved" card goes on
+        # the next re-solve (test_moved_goes_with_the_next_re_generate).
+        cards = [c for c in checks.day_cards(self.day) if c['kind'] != 'moved']
+        self.assertIn(kind, {c['kind'] for c in cards})
+        self.check_all()
+        for _ in range(2):
+            self.assertEqual(302, self.generate().status_code)
+            after = checks.day_cards(self.day)
+            self.assertEqual(sorted(c['fp'] for c in cards), sorted(c['fp'] for c in after))
+            self.assertEqual([], [(c['kind'], c['text']) for c in checks.unchecked(after)])
+
+    def test_body_packs_in_the_handheld_zone(self):
+        self.rig(3, 1)
+        self.generate()
+        self.assert_regenerate_keeps('rig_use')
+
+    def test_transmitter_swap_at_a_break(self):
+        self.rig(12, 3, 1)
+        self.generate()
+        self.assertEqual(200, self.edit('move_rf', self.key('Kim Keynote'), rf=11, pool='HH').status_code)
+        self.assert_regenerate_keeps('swap')
+
+    def test_pin_the_rig_no_longer_fits(self):
+        self.assertEqual(200, self.edit('move_rf', self.key('Kim Keynote'), rf=12, pool='body').status_code)
+        self.rig(12, 3, 1)                                             # RF 12 is kept spare now
+        self.generate()
+        self.assert_regenerate_keeps('rig')
+
+    def test_moved_goes_with_the_next_re_generate(self):
+        self.assertEqual(200, self.edit('move_rf', self.key('Kim Keynote'), rf=2, pool='body').status_code)
+        moved = [c for c in checks.day_cards(self.day) if c['kind'] == 'moved']
+        self.assertEqual(1, len(moved))
+        self.check_all()
+        self.assertIsNotNone(next(c for c in checks.day_cards(self.day) if c['kind'] == 'moved')['check'])
+        others = {c['fp'] for c in checks.day_cards(self.day) if c['kind'] != 'moved'}
+        self.generate()
+        after = checks.day_cards(self.day)
+        self.assertEqual([], [c for c in after if c['kind'] == 'moved'])
+        self.assertEqual(others, {c['fp'] for c in after})
+        self.assertEqual([], checks.unchecked(after))
+        self.assertFalse(MicPlanReviewCheck.objects.filter(day=self.day, kind='moved').exists())
