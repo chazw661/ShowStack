@@ -259,6 +259,13 @@ touched. The end of the output should say *Signed + notarized*.
 **Share → AirDrop** → his Mac. Send the zip, not the .app: the zip carries the
 stapled notarization ticket intact.
 
+If his Mac says the app is **damaged**, check the zip first:
+`zipinfo -1 dist-beta/ShowStack-Listen-Beta-mac-arm64.zip | grep -c '\._'`
+must be `0`. Builds before this fix zipped every file's xattrs as `._*`
+entries, and Finder's unzip leaves them next to symlinks, including in
+`Python.framework`'s root, which breaks the seal. `build_app.sh` now zips with
+`--norsrc` and refuses to finish if any `._` entry gets through.
+
 **He installs it:** quit 🎧β, unzip, drag into Applications → **Replace**,
 open. The first line of the 🎧β menu shows the build (commit and time) so you
 can both confirm it's the new one.
