@@ -183,6 +183,16 @@ TOPICS = (
                   'conflict', 'handheld', 'renumber'),
     ),
     Topic(
+        slug='mic-plan-review',
+        title='Check off Review cards',
+        section='Show day',
+        summary='Mark each Review card checked, with a note; see who checked what, and when.',
+        pages=(
+            'planner:mic_plan',
+        ),
+        keywords=('mic plan', 'mic planner', 'review', 'check', 'checked', 'note', 'flags', 'conflict', 'late'),
+    ),
+    Topic(
         slug='mic-plan-a2-schedule',
         title='Run the A2 schedule and print the mic plan',
         section='Show day',

@@ -28,7 +28,7 @@ from django.utils.cache import add_never_cache_headers
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import importer, page, planning, push, revert, schedule
+from planner.mic_plan import checks, importer, page, planning, push, revert, schedule
 from planner.mic_plan.display import describe_edit, first_name, rig_text
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
@@ -206,6 +206,8 @@ def mic_plan(request):
     current = planning.settings_dict(planning.project_settings(project))
     plan_values = planning.plan_values(plan) if plan else current
     cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
+    if day:
+        checks.annotate(day, cards, people, plan)
     chart = page.pack_chart(plan, apps, actions, parts)
     edits = list(plan.edits.all()) if plan else []
     can_edit = can_edit_current_project(request)
@@ -228,6 +230,9 @@ def mic_plan(request):
         'chart': chart,
         'lanes': page.lane_windows(chart),
         'cards': cards,
+        'open_cards': checks.unchecked(cards),
+        'checked_cards': checks.checked(cards),
+        'note_max': checks.NOTE_MAX,
         'line_choices': line_choices,
         'overlaps': page.overlap_warnings(plan, parts),
         'edit_count': len(edits),
@@ -417,12 +422,18 @@ def plan_push(request, pk):
         return _back(day)
     if request.method != 'GET':
         return HttpResponse(status=405)
+    from planner.views import _shared_header_context
     try:
         preview = push.preview(day)
     except push.PushRefused as e:
-        messages.error(request, str(e))
-        return _back(day)
-    from planner.views import _shared_header_context
+        plan = MicPlan.objects.filter(day=day).first()
+        blocking = checks.blocking(checks.day_cards(day, plan, FLAG_LABELS)) if plan and not plan.stale else []
+        if not blocking:
+            messages.error(request, str(e))
+            return _back(day)
+        # Refused over Review cards: say which, checked or not.
+        return render(request, 'planner/mic_plan_push.html', {
+            **_shared_header_context(request), 'day': day, 'plan': plan, 'refused': str(e), 'blocking': blocking})
     started = {s['pk'] for s in preview.started}
     groups = []
     for name, title in (('create', 'Create'), ('update', 'Update'), ('mt', 'Changed in Mic Tracker since the last push'),
@@ -440,6 +451,7 @@ def plan_push(request, pk):
         'nothing': not preview.changes,
         'up_to_date': not preview.changes and preview.last is not None
         and preview.last.plan_version == preview.plan.version,
+        'blocking': checks.blocking(checks.day_cards(day, preview.plan, FLAG_LABELS)) if preview.short else [],
     })
 
 
@@ -536,7 +548,7 @@ def plan_pdf(request, pk):
     # Every A2's schedule, then the helpers' list when there is one.
     every = list(range(1, a2_count + 1)) + ([solver.HELPERS] if helpers else [])
     people = list(day.showflow_people.all())
-    cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS)
+    cards = checks.annotate(day, page.review_cards(parts, plan, apps, people, FLAG_LABELS), people, plan)
     zone = _zone(request)
     pdf = build_mic_plan_pdf(
         BytesIO(), project=day.project, day=day, plan=plan, apps=apps, actions=actions, parts=parts,
@@ -697,6 +709,28 @@ def showflow_break(request, pk):
         messages.error(request, 'That line is not a segment heading.')
         return _back(part.day, part)
     return _back(part.day, part, '#showflow:row-{}'.format(row.order))
+
+
+@staff_member_required
+@require_POST
+@edit_rights_required_page
+def review_check(request, pk):
+    """Check a Review card off (with an optional note), change its note, or
+    uncheck it. ``fp`` must be one of the day's cards as they are now."""
+    day = _day(request, pk)
+    part = _maybe_part(request, request.POST.get('part', ''))
+    action = request.POST.get('action')
+    card = next((c for c in checks.day_cards(day) if c['fp'] == request.POST.get('fp')), None)
+    if card is None or action not in ('check', 'note', 'uncheck'):
+        messages.error(request, 'That card has changed. Check it again on the Review tab.')
+        return _back(day, part, '#review')
+    if action == 'uncheck':
+        checks.uncheck(day, card)
+    elif action == 'note' and card['check'] is None:
+        messages.error(request, 'That card is not checked any more.')
+    else:
+        checks.set_check(day, card, request.POST.get('note', ''), request.user)
+    return _back(day, part, '#review')
 
 
 @staff_member_required

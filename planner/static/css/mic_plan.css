@@ -326,6 +326,20 @@ mark.mp-catch { border-bottom: 2px solid var(--mp-off); }
 .mp-card .what { font-size: 13.5px; }
 .mp-card .assume { font-size: 12.5px; color: var(--mp-accent-text); }
 .mp-card .where { font: 500 11.5px var(--mp-mono); color: var(--mp-muted); }
+/* Checked off: muted, except a card that still blocks Send keeps its red edge. */
+.mp-checked { margin-top: 16px; }
+.mp-checked > summary { cursor: pointer; font: 600 12px var(--mp-mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--mp-muted); margin-bottom: 10px; }
+.mp-card.checked:not(.blocks) { border-left-color: var(--mp-muted); }
+.mp-card.checked:not(.blocks) .mp-kind { color: var(--mp-muted); }
+.mp-card.checked .what, .mp-card.checked .assume { opacity: .75; }
+.mp-card.blocks { border-left-color: var(--mp-crit); }
+.mp-card .mp-blocks { font-size: 12.5px; font-weight: 600; color: var(--mp-crit); }
+.mp-card .mp-checked-by { font: 500 11.5px var(--mp-mono); color: var(--mp-muted); }
+.mp-card .mp-check-note { font-size: 12.5px; font-style: italic; }
+.mp-card .mp-check-tools { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+.mp-card .mp-check-form form { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.mp-card .mp-check-form input[type=text] { flex: 1 1 180px; min-width: 0; }
 
 /* -- Drawer: People, crew, settings --------------------------------------------------- */
 .mp-drawer { position: fixed; z-index: 50; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); overflow-y: auto;

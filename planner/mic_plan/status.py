@@ -1,11 +1,11 @@
 """One show day's Mic Planner status, for the dashboard card: imported?,
-the plan's version, channels used of the rig, open review items, and
+the plan's version, channels used of the rig, review items not checked off, and
 whether the plan has been sent to Mic Tracker since it last changed.
 Read-only; the counts are the Mic Planner page's own (``page``)."""
 
 from planner.models import MicPlan, MicPlanAppearance, MicPlanPush
 
-from . import importer
+from . import checks, importer
 from .page import review_cards
 from .planning import plan_rig
 from .push import last_push
@@ -46,8 +46,9 @@ def day_status(day):
         'version': plan.version,
         'stale': plan.stale,
         'channels': channel_count(plan),
-        # The page's "To review" tile counts the same cards.
-        'review': len(review_cards(parts, plan, apps, people, {})),
+        # The page's "To review" tile counts the same cards: those not checked off.
+        'review': len(checks.unchecked(checks.annotate(day, review_cards(parts, plan, apps, people, {}),
+                                                       people, plan))),
         'sent': None if sent is None else {'version': sent.plan_version, 'at': sent.pushed_at.isoformat()},
         'changed_since_sent': bool(sent and sent.plan_version != plan.version),
     })

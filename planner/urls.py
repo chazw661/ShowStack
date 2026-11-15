@@ -193,6 +193,7 @@ urlpatterns = [
     path('mic-plan/day/<int:pk>/undo/', views_mic_plan.plan_undo, name='mic_plan_undo'),
     path('mic-plan/day/<int:pk>/use-showflow/', views_mic_plan.plan_use_showflow, name='mic_plan_use_showflow'),
     path('mic-plan/day/<int:pk>/push/', views_mic_plan.plan_push, name='mic_plan_push'),
+    path('mic-plan/day/<int:pk>/review/check/', views_mic_plan.review_check, name='mic_plan_review_check'),
     path('mic-plan/day/<int:pk>/revert/', views_mic_plan.plan_revert, name='mic_plan_revert'),
     path('project/branding/save/', views_branding.branding_save, name='branding_save'),
     path('project/branding/logo/upload/', views_branding.branding_logo_upload, name='branding_logo_upload'),

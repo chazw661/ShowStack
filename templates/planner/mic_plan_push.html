@@ -21,6 +21,21 @@
     <div class="mp-toolbar">
         <h1>Send plan v{{ plan.version }} to Mic Tracker &mdash; {{ day }}</h1>
     </div>
+    {% if refused %}
+    <div class="mp-push">
+        <p class="mp-banner bad" role="alert" id="mp-refused">{{ refused }}</p>
+        {% if blocking %}
+        <div class="mp-panel" id="mp-blocking">
+            <h2>Blocking cards <small>{{ blocking|length }}</small></h2>
+            <ul>
+                {% for c in blocking %}<li><span><b>{{ c.label }}</b>{% if c.line %} · line {{ c.line }}{% endif %} — {{ c.text }}{% if c.check %} <i class="mp-muted">(checked by {{ c.check.checked_by_name|default:"?" }})</i>{% endif %}</span></li>{% endfor %}
+            </ul>
+            <p class="mp-note">Checking a card off does not clear it: fix these on the Review tab first.</p>
+        </div>
+        {% endif %}
+        <div class="mp-actions"><a class="mp-btn" href="{% url 'planner:mic_plan' %}?day={{ day.pk }}#review">Back to Review</a></div>
+    </div>
+    {% else %}
     <form class="mp-push" method="post" id="mp-push">
         {% csrf_token %}
         <input type="hidden" name="version" value="{{ plan.version }}">
@@ -30,6 +45,15 @@
             groups and MIC'D marks already in Mic Tracker are never changed; a slot that moves takes them with it.
             {% if preview.last %}Last sent: v{{ preview.last.plan_version }}.{% endif %}</p>
         {% if preview.short %}<p class="mp-banner bad" role="alert" id="mp-short">{{ preview.short }}</p>{% endif %}
+        {% if blocking %}
+        <div class="mp-panel" id="mp-blocking">
+            <h2>Blocking cards <small>{{ blocking|length }}</small></h2>
+            <ul>
+                {% for c in blocking %}<li><span><b>{{ c.label }}</b>{% if c.line %} · line {{ c.line }}{% endif %} — {{ c.text }}{% if c.check %} <i class="mp-muted">(checked by {{ c.check.checked_by_name|default:"?" }})</i>{% endif %}</span></li>{% endfor %}
+            </ul>
+            <p class="mp-note">Checking a card off does not clear it: fix these on the Review tab first.</p>
+        </div>
+        {% endif %}
         {% if preview.rig_was %}<p class="mp-banner warn" role="status">Rig changed since the last push: {{ preview.rig_was }} &rarr; {{ preview.rig }}. Slots on a new channel are listed as <i>RF old &rarr; RF new</i>; reprint their labels.</p>{% endif %}
         {% for s in preview.started %}
         <p class="mp-banner warn" role="status">Show has started in <b>{{ s.name }}</b> (a mic is MIC'D): it is skipped unless you tick <i>Include started sessions</i>.</p>
@@ -88,5 +112,6 @@
             <a class="mp-btn" href="{% url 'planner:mic_plan' %}?day={{ day.pk }}">Cancel</a>
         </div>
     </form>
+    {% endif %}
 </div>
 {% endblock %}
