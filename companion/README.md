@@ -84,8 +84,19 @@ phones keep trusting it, only the Listen address changes.
 
 ## How it behaves
 
-* **Switch channels instantly** from the Listen page dropdown — over a data
-  channel with no reconnect, never touching the console signal path.
+* **Switch channels instantly** by tapping a tile in the Listen page's channel
+  grid — over a data channel with no reconnect, never touching the console
+  signal path. Each tile shows the presenter, a live meter and an **ON** pill
+  when that mic is mic'd in ShowStack. Inputs that aren't in the show's map are
+  under **Other channels**, in channel order, and every tile has a dot that
+  lights while its input has signal. On iOS 17+ audio plays with the ring/silent
+  switch on; older iOS shows "No sound? Turn off Silent mode." The lock screen
+  shows which channel you're on.
+* **Mic'd state stays current.** The app re-reads the channel map from ShowStack
+  every 5 s (3 s timeout, backing off to 10 s then 30 s while ShowStack is
+  unreachable) and pushes any change to connected phones straight away. If it
+  hasn't heard from ShowStack for 30 s the page says the mic'd state is stale;
+  audio and meters carry on regardless.
 * **Any sample rate.** The input is opened at whatever rate it's already set to
   (44.1 / 48 / 96 kHz…) and each listener's channel is resampled to 48 kHz for
   Opus. The app never changes a device's rate — on DVS that would retime the
@@ -133,6 +144,21 @@ showstack-notary --apple-id <apple id> --team-id D7ZDF3V7MU`). Builds are for
 this Mac's architecture (arm64). A differently-signed build is a new app to
 macOS, so it asks for microphone permission again.
 
+**Beta build** — `LISTEN_BETA=1` (with the same signing variables) builds
+**ShowStack Listen Beta.app** into `dist-beta/` and leaves `dist/` alone. It
+shares the installed app's certificate and settings, shows 🎧β, has its own
+login item and log, and doesn't register `showstack-listen://`. Its menu has
+**Test signal (simulated 24 ch)** for a home test with no Dante (not saved:
+a relaunch is always live; the menu bar and phones show TEST while it's on).
+
+**Pair with a show…** checks a pasted token with showstack.io unless the
+paste names its server (a `showstack-listen://` link, or the whole
+`--token … --api …` command). **Advanced: server…** points bare tokens at a
+local ShowStack for development; it's held in memory, so the next launch is
+back on showstack.io. The menu's Show row names the server whenever it isn't
+showstack.io. See
+`LISTEN_BETA_TEST.md` §7 and `A2_BETA_QUICKSTART.md`.
+
 Run the menu bar app without building: `python menubar_app.py`.
 
 ---
@@ -155,6 +181,15 @@ python listen_companion.py --token <SHOW_LISTEN_TOKEN> --api https://showstack.i
 * **Quick local test, no hardware:** `--test-tone --http` synthesizes a tone per
   channel and serves plain HTTP on `localhost:8443` (WebRTC allows HTTP on
   localhost only). In 🎧 Listen Setup → Advanced, save `http://localhost:8443`.
+* **A whole fake show:** `--simulate N` plays N channels that each do something
+  different — tones at several levels, pink noise, speech-like bursts, silent
+  inputs that come alive over time and a near-clip last channel — for checking
+  the channel grid's meters and activity dots without a console.
+  The pattern is documented on `Simulator` in `listen_companion.py`.
+* **Tests:** `venv/bin/python -m unittest discover -s tests` (headless — no
+  audio device or network needed).
+* **Beta-testing a branch from source** next to the installed app: see
+  `LISTEN_BETA_TEST.md`.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -168,6 +203,7 @@ python listen_companion.py --token <SHOW_LISTEN_TOKEN> --api https://showstack.i
 | `--cert` / `--key` | automatic | Use your own TLS files instead |
 | `--no-verify-tls` | off | Skip TLS verify when calling ShowStack |
 | `--test-tone` | off | Synthesize a tone per channel (no audio device needed) |
+| `--simulate N` | off | Simulate a show on N channels (no audio device needed) |
 | `--http` | off | Serve plain HTTP only (localhost testing; phones need HTTPS) |
 | `--list-devices` | — | List audio devices and exit |
 
