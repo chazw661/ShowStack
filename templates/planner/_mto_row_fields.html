@@ -3,6 +3,7 @@ Issue #68: shared editable cells for the Mic Tracker Overview table.
 Renders Type / Headset / Placement / Presenter / Notes for one presenter slot.
 Expects in context: edit_slot, is_viewer, mic_types, headset_colors, placements.
 Photo, Sensitivity + Output Level are intentionally excluded.
+The mto-col-* classes are what a user's hidden columns key on (#mto-root.mto-hide-*).
 Notes is PresenterSlot.notes, the same field the A1 and A2 notes write. It
 was excluded by #68 and is deliberately back; its save sends the note it last
 saw (defaultValue) so it cannot silently overwrite an edit made elsewhere.
@@ -10,7 +11,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
 {% endcomment %}
 
 {# ── Type ── #}
-<td class="mto-type-cell">
+<td class="mto-type-cell mto-col-type">
     {% if edit_slot.id and not is_viewer %}
     <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'mic_type', this.value, this)">
         {% for val, label in mic_types %}<option value="{{ val }}" {% if edit_slot.mic_type == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
@@ -20,7 +21,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
 </td>
 
 {# ── Headset Color ── #}
-<td class="mto-hc-cell">
+<td class="mto-hc-cell mto-col-headset">
     {% if edit_slot.id and not is_viewer %}
     <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'headset_color', this.value, this)">
         {% for val, label in headset_colors %}<option value="{{ val }}" {% if edit_slot.headset_color == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
@@ -30,7 +31,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
 </td>
 
 {# ── Placement ── #}
-<td class="mto-pl-cell">
+<td class="mto-pl-cell mto-col-placement">
     {% if edit_slot.id and not is_viewer %}
     <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'placement', this.value, this)">
         {% for val, label in placements %}<option value="{{ val }}" {% if edit_slot.placement == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
@@ -51,7 +52,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
 </td>
 
 {# ── Notes (PresenterSlot.notes; one line + ellipsis, full text on focus) ── #}
-<td class="mto-notes-cell">
+<td class="mto-notes-cell mto-col-notes">
     {% if edit_slot.id and not is_viewer %}
     {% comment %}Browsers don't put an ellipsis on a textarea, so an unfocused
     box shows the preview span laid over it instead.{% endcomment %}

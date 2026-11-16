@@ -229,6 +229,7 @@ urlpatterns = [
     path('api/mic/slot/upload-photo-from-url/', views.upload_slot_photo_from_url, name='upload_slot_photo_from_url'),
 
     path('api/mic/slot/update/', views.update_slot_field, name='update_slot_field'),
+    path('api/ui-prefs/mic-overview/', views.save_mic_overview_prefs, name='save_mic_overview_prefs'),
     path('api/mic/slot/assign-group/', views.assign_slot_group, name='assign_slot_group'),
     path('api/mic/slot/assign-a2-group/', views.assign_slot_a2_group, name='assign_slot_a2_group'),
 

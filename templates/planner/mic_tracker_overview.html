@@ -41,7 +41,55 @@
     }
     .mto-title { font-size: 15px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-blue); }
     .mto-sub { font-size: 11px; color: var(--text-dim); }
-    .mto-header-actions { margin-left: auto; display: flex; gap: 8px; }
+    .mto-header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+    /* Column choices (per user, saved to their profile). The hide classes are
+       rendered on #mto-root by the server, so hidden columns never flash. */
+    #mto-root.mto-hide-type .mto-col-type,
+    #mto-root.mto-hide-headset .mto-col-headset,
+    #mto-root.mto-hide-placement .mto-col-placement,
+    #mto-root.mto-hide-notes .mto-col-notes { display: none; }
+    /* A hidden column's width variable is 0, so it comes off the card
+       minimum: cards narrow, and mtoLayoutRows fits more of them per row.
+       Any spare width goes to Presenter (and Notes, if shown). */
+    #mto-root.mto-hide-type { --mto-w-type: 0px; }
+    #mto-root.mto-hide-headset { --mto-w-headset: 0px; }
+    #mto-root.mto-hide-placement { --mto-w-placement: 0px; }
+    #mto-root.mto-hide-notes { --mto-min-notes: 0px; }
+    .mto-cols { position: relative; }
+    .mto-cols-btn, .mto-hidden-badge {
+        font-family: inherit; cursor: pointer; min-height: 32px; white-space: nowrap;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+        padding: 6px 12px; border-radius: 4px;
+        background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-bright);
+    }
+    .mto-hidden-badge { background: var(--accent-blue); color: var(--mtt-text-inverse); border-color: var(--accent-blue); }
+    .mto-hidden-badge[hidden], .mto-cols-panel[hidden], .mto-cols-error[hidden] { display: none; }
+    .mto-cols-panel {
+        position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 230px;
+        padding: 10px 12px; background: var(--bg-card);
+        border: 1px solid var(--border-bright); border-radius: 6px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    .mto-cols-panel label { display: flex; align-items: center; gap: 8px; min-height: 32px;
+        font-size: 13px; color: var(--text-primary); cursor: pointer; }
+    .mto-cols-panel input { width: 18px; height: 18px; margin: 0; }
+    /* Presets: what the A1 and the A2 each want from the page. Pressed when
+       the columns showing are exactly the preset's. */
+    .mto-cols-presets { display: flex; flex-direction: column; gap: 6px;
+        padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+    .mto-cols-preset {
+        display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+        min-height: 44px; padding: 6px 10px; text-align: left; cursor: pointer;
+        font-family: inherit; background: var(--bg-raised); color: var(--text-primary);
+        border: 1px solid var(--border-bright); border-radius: 5px;
+    }
+    .mto-cols-preset[aria-pressed="true"] { border-color: var(--accent-blue);
+        box-shadow: inset 0 0 0 1px var(--accent-blue); }
+    .mto-cols-preset-name { font-size: 13px; font-weight: 700; }
+    .mto-cols-preset-desc { font-size: 11px; color: var(--text-dim); }
+    .mto-cols-note { margin-top: 6px; font-size: 11px; color: var(--text-dim); }
+    .mto-cols-error { margin-top: 6px; font-size: 11px; color: var(--accent-red); }
     #mto-root a.mto-back-btn,
     #mto-root a.mto-back-btn:link,
     #mto-root a.mto-back-btn:visited {
@@ -361,13 +409,43 @@
     <button id="mto-banner-dismiss" style="margin-left:8px; background:transparent; border:1px solid rgba(var(--mtt-rgb-white), 0.6);
         color:var(--mtt-banner-text); padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
 </div>
-<div id="mto-root">
+<div id="mto-root" class="{% for col in hidden_columns %}mto-hide-{{ col }} {% endfor %}">
     <div class="mto-header">
         <div>
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
             <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement, Presenter, Notes and Mic'd are editable here.</div>
         </div>
-        <div class="mto-header-actions"></div>
+        <div class="mto-header-actions">
+            {# Rendered with the user's saved state, so nothing changes after load. #}
+            <button type="button" id="mto-hidden-badge" class="mto-hidden-badge"
+                    onclick="mtoShowAllColumns()"{% if not hidden_columns %} hidden{% endif %}>
+                <span id="mto-hidden-count">{{ hidden_columns|length }}</span> hidden · Show all
+            </button>
+            <div class="mto-cols">
+                <button type="button" id="mto-cols-btn" class="mto-cols-btn" aria-expanded="false"
+                        aria-controls="mto-cols-panel" onclick="mtoToggleColumnsPanel()">Columns ▾</button>
+                <div id="mto-cols-panel" class="mto-cols-panel" hidden>
+                    <div class="mto-cols-presets" role="group" aria-label="Column presets">
+                        {% for preset in overview_presets %}
+                        <button type="button" class="mto-cols-preset" data-hide="{{ preset.hide|join:' ' }}"
+                                aria-pressed="{% if preset.active %}true{% else %}false{% endif %}"
+                                onclick="mtoApplyPreset(this.dataset.hide)">
+                            <span class="mto-cols-preset-name">{{ preset.label }}</span>
+                            <span class="mto-cols-preset-desc">{{ preset.desc }}</span>
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% for col in overview_columns %}
+                    <label class="mto-cols-item">
+                        <input type="checkbox" data-col="{{ col.key }}"{% if not col.hidden %} checked{% endif %}
+                               onchange="mtoSetColumn(this.dataset.col, this.checked)"> {{ col.label }}
+                    </label>
+                    {% endfor %}
+                    <div class="mto-cols-note">RF, Presenter and Mic'd always show.</div>
+                    <div id="mto-cols-error" class="mto-cols-error" hidden></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="mtt-toplevel-tabs">
@@ -412,11 +490,11 @@
                 <thead>
                     <tr>
                         <th class="mto-th-rf">RF</th>
-                        <th class="mto-th-type">Type</th>
-                        <th class="mto-th-hc">Headset</th>
-                        <th class="mto-th-pl">Placement</th>
+                        <th class="mto-th-type mto-col-type">Type</th>
+                        <th class="mto-th-hc mto-col-headset">Headset</th>
+                        <th class="mto-th-pl mto-col-placement">Placement</th>
                         <th class="mto-th-pres">Presenter</th>
-                        <th class="mto-th-notes">Notes</th>
+                        <th class="mto-th-notes mto-col-notes">Notes</th>
                         <th class="mto-th-micd">Mic'd</th>
                     </tr>
                 </thead>
@@ -578,6 +656,82 @@
     }
     setInterval(check, 5000);
     setTimeout(check, 5000);
+})();
+</script>
+
+<script>
+// Column choices, per user (viewers too): two presets -- A1 setup, A2 entry --
+// and a checkbox per column. The change shows at once (classes on #mto-root,
+// then mtoLayoutRows re-counts the cards per row), then saves to the user's
+// profile so it follows them to another device. A failed save leaves this
+// page as chosen and says it wasn't saved.
+(function() {
+    var root = document.getElementById('mto-root');
+    var panel = document.getElementById('mto-cols-panel');
+    var btn = document.getElementById('mto-cols-btn');
+    if (!root || !panel) return;
+    var boxes = Array.prototype.slice.call(panel.querySelectorAll('input[data-col]'));
+    var presets = Array.prototype.slice.call(panel.querySelectorAll('.mto-cols-preset'));
+    var badge = document.getElementById('mto-hidden-badge');
+    var count = document.getElementById('mto-hidden-count');
+    var error = document.getElementById('mto-cols-error');
+
+    function hidden() {
+        return boxes.filter(function(b) { return !b.checked; }).map(function(b) { return b.dataset.col; });
+    }
+    function apply() {
+        var h = hidden();
+        boxes.forEach(function(b) { root.classList.toggle('mto-hide-' + b.dataset.col, !b.checked); });
+        var key = h.slice().sort().join(' ');
+        presets.forEach(function(p) {
+            var match = p.dataset.hide.split(' ').filter(Boolean).sort().join(' ') === key;
+            p.setAttribute('aria-pressed', match ? 'true' : 'false');
+        });
+        count.textContent = h.length;
+        badge.hidden = h.length === 0;
+        if (window.mtoLayoutRows) window.mtoLayoutRows();
+    }
+    function csrf() {
+        var input = document.querySelector('input[name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
+    async function save() {
+        error.hidden = true;
+        try {
+            var resp = await fetch('{% url "planner:save_mic_overview_prefs" %}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                body: JSON.stringify({hidden: hidden()})
+            });
+            var data = await resp.json().catch(function() { return {}; });
+            if (!resp.ok || !data.success) throw new Error(data.error || 'HTTP ' + resp.status);
+        } catch (e) {
+            error.textContent = 'Not saved: ' + e.message;
+            error.hidden = false;
+        }
+    }
+    function change() { apply(); save(); }
+
+    window.mtoSetColumn = function() { change(); };
+    window.mtoApplyPreset = function(hide) {
+        var off = hide.split(' ');
+        boxes.forEach(function(b) { b.checked = off.indexOf(b.dataset.col) < 0; });
+        change();
+    };
+    window.mtoShowAllColumns = function() { window.mtoApplyPreset(''); };
+    window.mtoToggleColumnsPanel = function(open) {
+        if (open === undefined) open = panel.hidden;
+        panel.hidden = !open;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    // Close on a tap outside or Escape.
+    document.addEventListener('click', function(e) {
+        if (!panel.hidden && !e.target.closest('.mto-cols')) window.mtoToggleColumnsPanel(false);
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !panel.hidden) { window.mtoToggleColumnsPanel(false); btn.focus(); }
+    });
+    apply();
 })();
 </script>
 

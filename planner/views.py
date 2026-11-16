@@ -42,7 +42,7 @@ from django.urls import reverse
 from planner.models import Presenter
 import csv
 from django.shortcuts import redirect
-from .models import Project
+from .models import Project, UserProfile
 from .models import CommConfig, CommConfigPartyline, CommConfigRole, CommConfigKeyset, CommConfigRoleset, CommConfigSession, CommConfigPortAssignment, CommConfigDanteChannel, CommCrewName, AudioChecklistTemplate, AudioChecklistTemplateTask, CommConfigNetworkPort
 from .models import Amp, AmpDivider, Location, AmpLocation
 import hashlib
@@ -719,6 +719,66 @@ def mic_tracker_view(request):
     return render(request, 'planner/mic_tracker.html', context)
 
 
+# Overview columns a user may hide (the "A2 info" group), in display order.
+# RF, Presenter and Mic'd are always shown.
+MIC_OVERVIEW_HIDEABLE = (
+    ('type', 'Type'),
+    ('headset', 'Headset'),
+    ('placement', 'Placement'),
+    ('notes', 'Notes'),
+)
+
+
+# One-tap column sets for the Overview's two jobs: the A1 comparing many
+# sessions while setting up the console, the A2 entering one in rehearsal.
+MIC_OVERVIEW_PRESETS = (
+    ('A1 setup', 'RF, Type, Placement, Presenter, Mic\'d', ('headset', 'notes')),
+    ('A2 entry', 'Every column', ()),
+)
+
+
+def _clean_overview_hidden(names):
+    """Hideable column names from ``names``, deduplicated, in display order."""
+    if not isinstance(names, (list, tuple)):
+        return []
+    names = {n for n in names if isinstance(n, str)}
+    return [key for key, _ in MIC_OVERVIEW_HIDEABLE if key in names]
+
+
+def _mic_overview_hidden(user):
+    """The Overview columns this user has hidden. Nothing without a profile."""
+    profile = UserProfile.objects.filter(user=user).only('ui_prefs').first()
+    prefs = (profile.ui_prefs or {}) if profile else {}
+    section = prefs.get('mic_overview') if isinstance(prefs, dict) else None
+    return _clean_overview_hidden(section.get('hidden') if isinstance(section, dict) else None)
+
+
+@require_POST
+def save_mic_overview_prefs(request):
+    """Save the user's own Overview column choices. Not project data, so any
+    signed-in user may set theirs, viewers included. Never creates a
+    UserProfile: having one changes admin access and the sidebar, so a user
+    without one gets an error and keeps the default (every column)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Sign in required.'}, status=403)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        data = None
+    if not isinstance(data, dict) or not isinstance(data.get('hidden'), list):
+        return JsonResponse({'success': False, 'error': 'Expected {"hidden": [...]}.'}, status=400)
+    profile = UserProfile.objects.filter(user=request.user).first()
+    if profile is None:
+        return JsonResponse({'success': False,
+                             'error': "Column choices can't be saved for this account."}, status=409)
+    hidden = _clean_overview_hidden(data['hidden'])
+    prefs = profile.ui_prefs if isinstance(profile.ui_prefs, dict) else {}
+    prefs['mic_overview'] = {'hidden': hidden}
+    profile.ui_prefs = prefs
+    profile.save(update_fields=['ui_prefs'])
+    return JsonResponse({'success': True, 'hidden': hidden})
+
+
 def mic_tracker_overview_view(request):
     """View-only overview of every day × session in the current project.
 
@@ -743,12 +803,20 @@ def mic_tracker_overview_view(request):
 
     # Read-only gating for the Mic'd toggles — same rule as mic_tracker_view.
     is_viewer = not _can_edit_current_project(request)
+    # The user's hidden columns, rendered as classes so they never flash.
+    hidden = _mic_overview_hidden(request.user)
 
     return render(request, 'planner/mic_tracker_overview.html', {
         **_shared_header_context(request),
         'show_info': show_info,
         'days_data': days_data,
         'is_viewer': is_viewer,
+        'hidden_columns': hidden,
+        'overview_columns': [{'key': k, 'label': l, 'hidden': k in hidden}
+                             for k, l in MIC_OVERVIEW_HIDEABLE],
+        'overview_presets': [{'label': l, 'desc': d, 'hide': list(h),
+                              'active': sorted(h) == sorted(hidden)}
+                             for l, d, h in MIC_OVERVIEW_PRESETS],
         # Issue #68: editable A2-style fields on the overview (except photo +
         # sensitivity/output "beltpack" settings). Reuse the model choice lists.
         'mic_types': MicAssignment.MIC_TYPES,
