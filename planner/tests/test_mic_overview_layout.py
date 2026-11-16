@@ -1,5 +1,6 @@
-"""Mic Tracker Overview layout: cards that fill the row, Presenter and Notes
-sharing the width, and the day header's ◀ Session N of M ▶ buttons.
+"""Mic Tracker Overview layout: as many session cards per row as fit at the
+card minimum, Presenter and Notes sharing the spare width, and the day
+header's ◀ Session N of M ▶ buttons.
 
 The browser tests are skipped unless SS_BROWSER_TESTS=1 (see test_xss_browser).
 """
@@ -104,23 +105,47 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
             return {card: s.getBoundingClientRect().width,
                     row: g.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
                     pres: w('.mto-th-pres'), notes: w('.mto-th-notes'), type: w('.mto-th-type'),
+                    min: parseFloat(getComputedStyle(s).minWidth),
                     pageOverflow: document.documentElement.scrollWidth - innerWidth,
                     pos: document.querySelector('.mto-sess-pos').textContent}; }""")
 
-    def test_card_fills_the_row_and_presenter_gets_more_than_notes(self):
+    def assert_spare_shared(self, m):
+        """Presenter and Notes have their minimums and split the rest 60 / 40."""
+        self.assertEqual(108, round(m['type']))                          # fixed columns stay fixed
+        self.assertGreaterEqual(m['pres'], 150 - 1)
+        self.assertGreaterEqual(m['notes'], 105 - 1)
+        spare = m['card'] - m['min']
+        self.assertAlmostEqual(105 + spare * 0.4, m['notes'], delta=1.5)
+        self.assertAlmostEqual(150 + spare * 0.6, m['pres'], delta=1.5)
+
+    def test_one_card_per_row_where_two_do_not_fit(self):
+        # Every column showing, the minimum is 692px: one card up to a
+        # 1402px row, so through a 1440 laptop.
         for width, height in ((820, 1180), (1180, 820), (1440, 900)):
             with self.subTest(width=width):
                 m = self.layout(self.open(width, height))
+                self.assertEqual(692, round(m['min']))
                 self.assertAlmostEqual(m['row'], m['card'], delta=1)
                 self.assertEqual(0, m['pageOverflow'])
-                self.assertEqual(108, round(m['type']))                  # fixed columns stay fixed
-                self.assertGreaterEqual(m['notes'], 105)
-                self.assertAlmostEqual(1.5, m['pres'] / m['notes'], delta=0.05)
+                self.assert_spare_shared(m)
+                self.assertEqual('Session 1 of 3', m['pos'])
 
-    def test_two_sessions_side_by_side_where_both_fit(self):
+    def test_as_many_cards_as_fit_at_the_minimum(self):
         m = self.layout(self.open(1920, 1080))
         self.assertAlmostEqual((m['row'] - 18) / 2, m['card'], delta=1)
-        self.assertGreaterEqual(m['card'], 700)
+        self.assert_spare_shared(m)
+        self.assertEqual('Sessions 1–2 of 3', m['pos'])
+
+    def test_zeroed_column_variables_fit_more_cards(self):
+        # What hiding columns does: Headset and Notes off takes the minimum
+        # to 491px, so a 1180 landscape row fits two.
+        page = self.open(1180, 820)
+        page.evaluate("""() => { const r = document.getElementById('mto-root');
+            r.style.setProperty('--mto-w-headset', '0px'); r.style.setProperty('--mto-min-notes', '0px');
+            mtoLayoutRows(); }""")
+        m = self.layout(page)
+        self.assertEqual(491, round(m['min']))
+        self.assertAlmostEqual((m['row'] - 18) / 2, m['card'], delta=1)
         self.assertEqual('Sessions 1–2 of 3', m['pos'])
 
     def test_session_buttons_step_through_the_row(self):
