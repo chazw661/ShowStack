@@ -1840,6 +1840,13 @@ def get_assignment_details(request, assignment_id):
 
     
 
+def _norm_note(text):
+    """A note as compared by the stale-overwrite guard. A browser textarea
+    reports LF and drops a leading newline, while an admin form stores CRLF;
+    neither is someone else's edit."""
+    return str(text or '').replace('\r\n', '\n').strip()
+
+
 @require_POST
 @stamp_checksum
 @edit_rights_required
@@ -1867,6 +1874,14 @@ def update_slot_field(request):
                 'success': True,
                 'presenter_name': slot.presenter.name if slot.presenter else '',
             })
+        # Stale-overwrite guard (Overview notes): the caller sends the note it
+        # last saw. If someone changed it since, don't clobber their edit --
+        # hand back the current note so the page can show both. Callers that
+        # send no `expected` (the A1/A2 tabs) save unconditionally as before.
+        if field == 'notes' and data.get('expected') is not None:
+            current = slot.notes or ''
+            if _norm_note(data['expected']) != _norm_note(current):
+                return JsonResponse({'success': False, 'conflict': True, 'current': current})
         if field in ('notes', 'mic_type', 'headset_color', 'placement', 'sensitivity', 'output_level'):
             setattr(slot, field, value)
             slot.save(update_fields=[field])

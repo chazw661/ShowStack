@@ -89,8 +89,8 @@
         overflow-x: auto;
     }
     .mto-session {
-        flex: 0 0 700px;
-        width: 700px;
+        flex: 0 0 695px;
+        width: 695px;
         border: 1px solid var(--border);
         border-left: 4px solid var(--accent-blue);
         border-radius: 5px;
@@ -117,13 +117,17 @@
         white-space: nowrap;
     }
     /* Fixed px widths (card is a fixed width, table-layout: fixed) so field
-       text stays readable and never compresses. Sum ≈ 690 ≤ card inner width. */
+       text stays readable and never compresses. Sum = 685 ≤ card inner width.
+       Notes is the narrow one: a single truncated line, so a long note grows
+       the row on focus rather than the card (the 700px card, borders
+       included, still fits an iPad in portrait). */
     .mto-th-rf { width: 40px; text-align: center !important; }
-    .mto-th-type { width: 128px; }
-    .mto-th-hc { width: 118px; }
-    .mto-th-pl { width: 140px; }
-    .mto-th-pres { width: 175px; }
-    .mto-th-micd { width: 84px; text-align: center !important; }
+    .mto-th-type { width: 108px; }
+    .mto-th-hc { width: 96px; }
+    .mto-th-pl { width: 120px; }
+    .mto-th-pres { width: 148px; }
+    .mto-th-notes { width: 105px; }
+    .mto-th-micd { width: 68px; text-align: center !important; }
 
     /* Issue #68: inline editable controls in the overview table. */
     .mto-edit-select, .mto-edit-input {
@@ -165,6 +169,57 @@
     .mto-pres-input::placeholder { color: var(--text-dim); font-weight: 400; font-style: italic; }
     .mto-pres-input.mto-saved-flash { border-color: var(--text-primary); }
     .mto-unassigned { color: var(--text-dim); font-style: italic; }
+
+    /* Notes: one line with an ellipsis; focus shows the whole note, wrapped,
+       by growing the row downward (mtoFitNotes) -- never the column. The
+       ellipsis is the preview span's: text-overflow does nothing on a
+       textarea, so while unfocused the box's own text is transparent and the
+       span shows the note over it. */
+    .mto-notes-wrap { position: relative; }
+    .mto-notes-preview {
+        position: absolute; left: 6px; right: 6px; top: 5px;
+        font-size: 12px; line-height: 18px; color: var(--text-primary);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        pointer-events: none;
+    }
+    .mto-notes-wrap:focus-within .mto-notes-preview { display: none; }
+    /* !important: the admin paints every textarea's colour !important. */
+    .mto-notes-wrap:not(:focus-within) .mto-notes-input:not(:placeholder-shown) {
+        color: transparent !important; -webkit-text-fill-color: transparent;
+    }
+    .mto-notes-input {
+        display: block; width: 100%; box-sizing: border-box; height: 28px; resize: none;
+        background: var(--bg-raised); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 4px;
+        font-size: 12px; line-height: 18px; font-family: inherit; padding: 4px 5px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        transition: border-color 0.12s;
+    }
+    .mto-notes-input:focus {
+        white-space: pre-wrap; overflow-y: auto; max-height: 160px;
+        border-color: var(--accent-blue); outline: none;
+    }
+    .mto-notes-input::placeholder { color: var(--text-dim); }
+    .mto-notes-input.mto-saved-flash { border-color: var(--text-primary); }
+    .mto-notes-input.mto-notes-conflicted { border-color: var(--accent-red); }
+    .mto-notes-text {
+        display: block; color: var(--text-secondary);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .mto-notes-text:focus { white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+    .mto-notes-conflict {
+        margin-top: 4px; padding: 4px 5px; font-size: 11px; line-height: 1.35;
+        border: 1px solid var(--accent-red); border-radius: 4px;
+        background: var(--bg-raised); color: var(--text-primary);
+    }
+    .mto-notes-conflict-label { display: block; font-weight: 700; color: var(--text-secondary); }
+    .mto-notes-conflict-text { display: block; white-space: pre-wrap; overflow-wrap: anywhere;
+        max-height: 120px; overflow-y: auto; margin: 2px 0 4px; }
+    .mto-notes-conflict button {
+        font-family: inherit; font-size: 10px; font-weight: 700; cursor: pointer;
+        padding: 3px 6px; margin: 2px 2px 0 0; border-radius: 3px;
+        background: transparent; color: var(--text-primary); border: 1px solid var(--border-bright);
+    }
     .mto-dash { color: var(--text-dim); }
     .mto-micd { text-align: center; font-weight: 700; font-size: 10px; letter-spacing: 0.08em; }
     /* Mic'd ON: the same solid fill as the Tracker's toggles, not a tinted
@@ -243,7 +298,7 @@
     <div class="mto-header">
         <div>
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
-            <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement and Mic'd are editable here.</div>
+            <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement, Presenter, Notes and Mic'd are editable here.</div>
         </div>
         <div class="mto-header-actions"></div>
     </div>
@@ -286,6 +341,7 @@
                         <th class="mto-th-hc">Headset</th>
                         <th class="mto-th-pl">Placement</th>
                         <th class="mto-th-pres">Presenter</th>
+                        <th class="mto-th-notes">Notes</th>
                         <th class="mto-th-micd">Mic'd</th>
                     </tr>
                 </thead>
@@ -321,7 +377,7 @@
                 {% endif %}
                 {% endwith %}
                 {% empty %}
-                <tr><td colspan="6" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
+                <tr><td colspan="7" style="padding:12px;color:var(--text-dim);font-style:italic;text-align:center;">No mic assignments in this session.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
@@ -457,11 +513,83 @@
         if (row) row.classList.toggle('is-unassigned', !name);
     }
 
+    // Notes: while focused, the box is as tall as its text (up to the CSS
+    // max-height), so the whole note shows; blur drops back to one line.
+    window.mtoFitNotes = function(el) {
+        el.style.height = '';
+        el.style.height = Math.min(el.scrollHeight + 2, 160) + 'px';
+        mtoNotesPreview(el);
+    };
+    function mtoNotesPreview(el) {
+        var preview = el.parentNode.querySelector('.mto-notes-preview');
+        if (preview) preview.textContent = el.value;
+    }
+
+    // A notes save that lost the race: someone changed the note since this
+    // page loaded. Keep the user's text in the box and show theirs under it,
+    // so neither is lost, and let the user pick. textContent only -- a note
+    // is user text.
+    function mtoShowNotesConflict(slotId, el, current) {
+        var cell = el.closest('td');
+        var box = cell.querySelector('.mto-notes-conflict');
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'mto-notes-conflict';
+            var label = document.createElement('span');
+            label.className = 'mto-notes-conflict-label';
+            label.textContent = 'Changed elsewhere:';
+            var text = document.createElement('span');
+            text.className = 'mto-notes-conflict-text';
+            var mine = document.createElement('button');
+            mine.type = 'button';
+            mine.className = 'mto-notes-keep-mine';
+            mine.textContent = 'Keep mine';
+            var theirs = document.createElement('button');
+            theirs.type = 'button';
+            theirs.className = 'mto-notes-use-theirs';
+            theirs.textContent = 'Use theirs';
+            box.append(label, text, mine, theirs);
+            cell.appendChild(box);
+        }
+        box.querySelector('.mto-notes-conflict-text').textContent = current || '(empty)';
+        el.classList.add('mto-notes-conflicted');
+        function resolved() { box.remove(); el.classList.remove('mto-notes-conflicted'); }
+        // Keep mine: overwrite, having now seen theirs.
+        box.querySelector('.mto-notes-keep-mine').onclick = function() {
+            el.defaultValue = current;
+            resolved();
+            mtoSaveSlotField(slotId, 'notes', el.value, el);
+        };
+        // Use theirs: nothing to save, the server already has it.
+        box.querySelector('.mto-notes-use-theirs').onclick = function() {
+            el.defaultValue = current;
+            el.value = current;
+            mtoNotesPreview(el);
+            resolved();
+        };
+    }
+
     window.mtoSaveSlotField = async function(slotId, field, value, el) {
-        try { await post('/audiopatch/api/mic/slot/update/', {slot_id: slotId, field: field, value: value}); }
-        catch (e) { alert('Could not save — ' + e.message + '. Refresh and try again.'); return; }
+        var body = {slot_id: slotId, field: field, value: value};
+        // The note this box last loaded or saved; the server refuses the save
+        // if it no longer matches (see update_slot_field).
+        if (field === 'notes' && el) body.expected = el.defaultValue;
+        var resp;
+        try {
+            resp = await fetch('/audiopatch/api/mic/slot/update/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            if (data.conflict) { mtoShowNotesConflict(slotId, el, data.current); return; }
+            if (!data.success) throw new Error(data.error || 'Could not save.');
+        } catch (e) { alert('Could not save — ' + e.message + '. Refresh and try again.'); return; }
         if (window.mtoMarkLocalChange) window.mtoMarkLocalChange();
         if (field === 'presenter_name') mtoSetAssigned(el, (value || '').trim());
+        // Notes: what was just saved is the new baseline for the next save.
+        if (field === 'notes' && el) el.defaultValue = value;
         if (el) { el.classList.add('mto-saved-flash'); setTimeout(function() { el.classList.remove('mto-saved-flash'); }, 700); }
     };
 })();
