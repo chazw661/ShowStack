@@ -4,13 +4,14 @@ header's ◀ Session N of M ▶ buttons.
 
 The browser tests are skipped unless SS_BROWSER_TESTS=1 (see test_xss_browser).
 """
+import json
 import os
 import unittest
 from datetime import date
 
 from django.contrib.auth.models import User
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from planner.models import MicSession, Presenter, PresenterSlot, Project, ShowDay, UserProfile
@@ -211,3 +212,130 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
         for value, needed, shown in m['names']:
             self.assertEqual(name, value)
             self.assertLessEqual(needed, shown, '{!r} is cut off ({} px needed, {} shown)'.format(value, needed, shown))
+
+
+@unittest.skipUnless(BROWSER, 'set SS_BROWSER_TESTS=1 (needs playwright + browsers)')
+@override_settings(STORAGES={
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+})
+class SingleSessionDayBrowserTests(StaticLiveServerTestCase):
+    """A one-session day between two busier days. It has no session nav, and
+    neither it nor a layout error on any one row may stop the other days'
+    layout, the column presets, or the "show was updated" poll."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')  # sync Playwright
+        super().setUpClass()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.owner, self.project, self.days = make_show([2, 1, 3])
+        self.client.force_login(self.owner)
+        s = self.client.session
+        s['current_project_id'] = self.project.pk
+        s.save()
+        assignment = self.days[0].sessions.first().mic_assignments.first()
+        self.slot = (assignment.presenter_slots.first()
+                     or PresenterSlot.objects.create(assignment=assignment, order=0, is_active=True))
+
+    def open(self, init_script=None):
+        context = self.browser.new_context(viewport={'width': 1440, 'height': 900})
+        context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value,
+                              'url': self.live_server_url}])
+        self.addCleanup(context.close)
+        page = context.new_page()
+        self.errors, self.logged, self.checks = [], [], []
+        page.on('requestfinished', lambda r: '/api/mic-tracker-checksum/' in r.url and self.checks.append(r))
+        page.on('pageerror', lambda e: self.errors.append(str(e)))
+        page.on('console', lambda m: m.type == 'error' and self.logged.append(m.text))
+        if init_script:
+            page.add_init_script(init_script)
+        page.clock.install()                       # the poll's timers run when the test says
+        page.goto(self.live_server_url + reverse('planner:mic_tracker_overview'))
+        page.wait_for_load_state('networkidle')
+        return page
+
+    def days_state(self, page):
+        """Per day: cards, visible Headset / Notes headers, nav shown, cards per row."""
+        return page.evaluate("""() => [...document.querySelectorAll('.mto-day')].map(d => {
+            const g = d.querySelector('.mto-session-grid'), nav = d.querySelector('.mto-sess-nav');
+            const shown = sel => [...d.querySelectorAll(sel)].filter(e => e.offsetParent).length;
+            return {cards: d.querySelectorAll('.mto-session').length,
+                    headset: shown('th.mto-col-headset'), notes: shown('th.mto-col-notes'),
+                    nav: !!nav && !nav.hidden, perRow: g.style.getPropertyValue('--mto-per-row')}; })""")
+
+    def assert_poll_running(self, page):
+        """A change saved from another browser session raises the banner."""
+        def tick(checks):
+            # Wait for the check to finish: the live server shares the test's
+            # in-memory SQLite connection, so its query must not overlap ours.
+            done = len(self.checks) + checks
+            page.clock.run_for(5100)
+            while len(self.checks) < done:
+                page.wait_for_timeout(50)
+        tick(1)                                    # the first check sets the baseline
+        other = Client()
+        other.force_login(self.owner)
+        s = other.session
+        s['current_project_id'] = self.project.pk
+        s.save()
+        resp = other.post(reverse('planner:update_slot_field'),
+                          json.dumps({'slot_id': self.slot.pk, 'field': 'notes', 'value': 'Changed elsewhere'}),
+                          content_type='application/json')
+        self.assertTrue(resp.json()['success'])
+        self.assertFalse(page.locator('#mto-update-banner').is_visible())
+        tick(1)
+        self.assertTrue(page.locator('#mto-update-banner').is_visible())
+
+    def test_single_session_day_loads_clean_and_presets_reach_every_day(self):
+        page = self.open()
+        self.assertEqual([], self.errors)
+        self.assertEqual([], self.logged)
+        state = self.days_state(page)
+        self.assertEqual([2, 1, 3], [d['cards'] for d in state])
+        self.assertEqual([True, False, True], [d['nav'] for d in state])   # A2 entry: one card across
+        self.assertEqual([2, 1, 3], [d['headset'] for d in state])
+
+        page.click('#mto-cols-btn')
+        with page.expect_response('**/api/ui-prefs/mic-overview/'):
+            page.click('.mto-cols-preset[data-hide="headset notes"]')
+        state = self.days_state(page)
+        self.assertEqual([(0, 0)] * 3, [(d['headset'], d['notes']) for d in state])
+        # A1 setup fits two across: the two-session day loses its nav, the
+        # three-session day keeps it, the one-session day never has one.
+        self.assertEqual([False, False, True], [d['nav'] for d in state])
+        self.assertEqual('Sessions 1–2 of 3', page.locator('.mto-sess-pos').nth(1).text_content())
+
+        with page.expect_response('**/api/ui-prefs/mic-overview/'):
+            page.click('.mto-cols-preset[data-hide=""]')
+        state = self.days_state(page)
+        self.assertEqual([(2, 2), (1, 1), (3, 3)], [(d['headset'], d['notes']) for d in state])
+        self.assertEqual([], self.errors)
+        self.assertEqual([], self.logged)
+        self.assert_poll_running(page)
+
+    def test_an_error_on_one_row_stops_neither_the_others_nor_the_poll(self):
+        # Saved A1 setup, so the later three-session day lays out two across.
+        profile = UserProfile.objects.get(user=self.owner)
+        profile.ui_prefs = {'mic_overview': {'hidden': ['headset', 'notes']}}
+        profile.save()
+        # Make laying out the one-session day throw.
+        page = self.open("""(() => { const real = window.getComputedStyle;
+            window.getComputedStyle = function(el) {
+                if (el && el.id === 'mto-grid-%d') throw new Error('layout broke');
+                return real.apply(this, arguments); }; })()""" % self.days[1].pk)
+        self.assertEqual([], self.errors)                                  # caught, not thrown
+        self.assertTrue(any('mto-grid-{}'.format(self.days[1].pk) in m for m in self.logged), self.logged)
+        state = self.days_state(page)
+        self.assertEqual('2', state[2]['perRow'])                          # the day after it still laid out
+        self.assertEqual('Sessions 1–2 of 3', page.locator('.mto-sess-pos').nth(1).text_content())
+        self.assert_poll_running(page)
