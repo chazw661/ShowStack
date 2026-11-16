@@ -719,7 +719,7 @@ def mic_tracker_view(request):
     return render(request, 'planner/mic_tracker.html', context)
 
 
-# Overview columns a user may hide (the "A2 info" group), in display order.
+# Overview columns a user may hide, in display order.
 # RF, Presenter and Mic'd are always shown.
 MIC_OVERVIEW_HIDEABLE = (
     ('type', 'Type'),
