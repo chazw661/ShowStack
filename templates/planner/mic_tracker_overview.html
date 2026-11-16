@@ -442,7 +442,7 @@
                     </label>
                     {% endfor %}
                     <div class="mto-cols-note">RF, Presenter and Mic'd always show.</div>
-                    <div id="mto-cols-error" class="mto-cols-error" hidden></div>
+                    <div id="mto-cols-error" class="mto-cols-error" role="status" hidden>Shown on this page only: this choice won't be remembered.</div>
                 </div>
             </div>
         </div>
@@ -556,7 +556,8 @@
 // columns are hidden) -- set as --mto-per-row; CSS shares out the rest.
 // Runs before the first paint and on every resize; call it again after
 // changing the columns. Then ◀ Session N of M ▶ in each day header scrolls
-// the row one session at a time and follows swipes and the scrollbar.
+// the row one session at a time and follows swipes and the scrollbar; it is
+// hidden while every session of the day fits on screen.
 (function() {
     var rows = [];
     document.querySelectorAll('.mto-session-grid').forEach(function(grid) {
@@ -598,6 +599,7 @@
                 : 'Session ' + (i + 1) + ' of ' + cards.length;
             prev.disabled = i <= 0;
             next.disabled = i + n >= cards.length;
+            nav.hidden = n >= cards.length;
         };
         function go(i) {
             i = Math.max(0, Math.min(cards.length - 1, i));
@@ -609,7 +611,6 @@
         grid.addEventListener('scroll', function() {
             if (!raf) raf = requestAnimationFrame(function() { raf = 0; row.update(); });
         }, {passive: true});
-        nav.hidden = false;
     }
 
     window.mtoLayoutRows();
@@ -664,7 +665,7 @@
 // and a checkbox per column. The change shows at once (classes on #mto-root,
 // then mtoLayoutRows re-counts the cards per row), then saves to the user's
 // profile so it follows them to another device. A failed save leaves this
-// page as chosen and says it wasn't saved.
+// page as chosen and shows one quiet note in the panel; no alert.
 (function() {
     var root = document.getElementById('mto-root');
     var panel = document.getElementById('mto-cols-panel');
@@ -696,7 +697,6 @@
         return input ? input.value : '';
     }
     async function save() {
-        error.hidden = true;
         try {
             var resp = await fetch('{% url "planner:save_mic_overview_prefs" %}', {
                 method: 'POST',
@@ -705,8 +705,8 @@
             });
             var data = await resp.json().catch(function() { return {}; });
             if (!resp.ok || !data.success) throw new Error(data.error || 'HTTP ' + resp.status);
+            error.hidden = true;
         } catch (e) {
-            error.textContent = 'Not saved: ' + e.message;
             error.hidden = false;
         }
     }

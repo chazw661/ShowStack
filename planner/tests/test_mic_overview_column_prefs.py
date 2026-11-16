@@ -1,6 +1,6 @@
 """Mic Tracker Overview: per-user column choices.
 
-The "A2 info" columns (Type, Headset, Placement, Notes) can be hidden per
+Type, Headset, Placement and Notes can be hidden per
 user; RF, Presenter and Mic'd always show. The choice lives in
 UserProfile.ui_prefs, so it follows the user between devices, and the server
 renders it as classes on #mto-root so hidden columns never flash on load.
@@ -287,3 +287,81 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         self.assertEqual((692, 'Session 1 of 3'), (m()['min'], m()['pos']))
         self.assertEqual(['A2 entry'], pressed())
         self.assertEqual({'mic_overview': {'hidden': []}}, UserProfile.objects.get(user=owner).ui_prefs)
+
+    def open(self, owner, project, width, height=900):
+        self.client.force_login(owner)
+        s = self.client.session
+        s['current_project_id'] = project.pk
+        s.save()
+        context = self.browser.new_context(viewport={'width': width, 'height': height})
+        context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value,
+                              'url': self.live_server_url}])
+        self.addCleanup(context.close)
+        page = context.new_page()
+        page.goto(self.live_server_url + reverse('planner:mic_tracker_overview'))
+        return page
+
+    @staticmethod
+    def across(page):
+        """How many session cards of the first day are wholly on screen."""
+        return page.evaluate("""() => { const g = document.querySelector('.mto-session-grid'),
+                box = g.getBoundingClientRect();
+            return [...g.querySelectorAll('.mto-session')].filter(c => {
+                const r = c.getBoundingClientRect();
+                return r.left >= box.left - 1 && r.right <= box.right + 1; }).length; }""")
+
+    def test_a1_setup_shows_more_sessions_across_at_1440(self):
+        owner, project = make_show('Laptop prefs', sessions=4)
+        page = self.open(owner, project, 1440)
+        a2 = self.across(page)
+        page.click('#mto-cols-btn')
+        with page.expect_response('**/api/ui-prefs/mic-overview/'):
+            page.click('.mto-cols-preset[data-hide="headset notes"]')
+        a1 = self.across(page)
+        self.assertEqual((1, 2), (a2, a1))
+        self.assertGreater(a1, a2)
+
+    def test_session_nav_hidden_while_every_session_fits(self):
+        owner, project = make_show('Nav prefs', sessions=2)
+        nav = lambda page: page.locator('.mto-sess-nav').is_visible()
+        # A2 entry at 1180: one card across, so the nav shows ...
+        page = self.open(owner, project, 1180, 820)
+        self.assertEqual(1, self.across(page))
+        self.assertTrue(nav(page))
+        # ... A1 setup fits both, so it goes; back to A2 entry, it returns.
+        page.click('#mto-cols-btn')
+        with page.expect_response('**/api/ui-prefs/mic-overview/'):
+            page.click('.mto-cols-preset[data-hide="headset notes"]')
+        self.assertEqual(2, self.across(page))
+        self.assertFalse(nav(page))
+        with page.expect_response('**/api/ui-prefs/mic-overview/'):
+            page.click('.mto-cols-preset[data-hide=""]')
+        self.assertTrue(nav(page))
+        # A wide screen fits both with every column: no nav from the first paint.
+        wide = self.open(owner, project, 1920, 1080)
+        self.assertEqual(2, self.across(wide))
+        self.assertTrue(wide.locator('.mto-sess-nav').is_hidden())
+
+    def test_failed_save_is_one_quiet_note(self):
+        su = User.objects.create_superuser('prefs_browser_su', 'su@example.com', 'pw')
+        owner, project = make_show('Quiet prefs', sessions=1)
+        project.owner = su
+        project.save()
+        page = self.open(su, project, 1180, 820)
+        UserProfile.objects.filter(user=su).delete()                 # no profile: saves refused
+        dialogs = []
+        page.on('dialog', lambda d: (dialogs.append(d.message), d.dismiss()))
+        page.click('#mto-cols-btn')
+        note = page.locator('.mto-cols-error')
+        self.assertFalse(note.is_visible())
+        for col in ('notes', 'headset'):
+            with page.expect_response('**/api/ui-prefs/mic-overview/') as r:
+                page.locator('input[data-col="{}"]'.format(col)).uncheck()
+            self.assertEqual(409, r.value.status)
+            page.wait_for_function("() => !document.getElementById('mto-cols-error').hidden")
+        self.assertEqual(1, note.count())
+        self.assertTrue(note.is_visible())
+        self.assertIn("won't be remembered", note.text_content())
+        self.assertEqual([], dialogs)
+        self.assertFalse(page.locator('th.mto-col-notes').is_visible())   # the page still follows the choice
+        self.assertFalse(UserProfile.objects.filter(user=su).exists())
