@@ -13,7 +13,7 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from planner.models import MicSession, Project, ShowDay, UserProfile
+from planner.models import MicSession, Presenter, PresenterSlot, Project, ShowDay, UserProfile
 
 try:
     from playwright.sync_api import sync_playwright
@@ -74,6 +74,7 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
 
     def setUp(self):
         owner, project, _ = make_show([3])
+        self.owner = owner
         self.client.force_login(owner)
         s = self.client.session
         s['current_project_id'] = project.pk
@@ -169,3 +170,44 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
             return Math.min(...[...g.querySelectorAll('.mto-session')]
                 .map(c => Math.abs(c.offsetLeft - pad - g.scrollLeft))); }""")
         self.assertLess(offset, 2)
+
+    def test_wide_monitor_two_sessions_fill_the_row_and_names_fit(self):
+        # A wide monitor with two sessions: both cards fill the row between
+        # them, and Presenter takes most of the spare width, so a 20-character
+        # name shows whole. (The fixed-width cards before this layout left the
+        # right of the row empty and cut the same name to ~14 characters.)
+        name = 'Alexandra Montgomery'
+        self.assertEqual(20, len(name))
+        project = Project.objects.create(name='Wide show', owner=self.owner)
+        day = ShowDay.objects.create(project=project, date=date(2026, 11, 16))
+        for i in range(2):
+            session = MicSession.objects.create(day=day, name='Session {}'.format(i + 1), num_mics=1, order=i)
+            assignment = session.mic_assignments.first()
+            slot = (assignment.presenter_slots.first()
+                    or PresenterSlot.objects.create(assignment=assignment, order=0, is_active=True))
+            slot.presenter = Presenter.objects.create(project=project, name=name)
+            slot.save()
+        s = self.client.session
+        s['current_project_id'] = project.pk
+        s.save()
+        page = self.open(2500, 1200)
+        m = page.evaluate("""() => {
+            const g = document.querySelector('.mto-session-grid'), cs = getComputedStyle(g);
+            const cards = [...g.querySelectorAll('.mto-session')];
+            const inner = g.getBoundingClientRect().right - parseFloat(cs.paddingRight);
+            const w = (c, sel) => c.querySelector(sel).getBoundingClientRect().width;
+            return {
+                cards: cards.length,
+                gapRight: inner - cards[cards.length - 1].getBoundingClientRect().right,
+                fixed: ['.mto-th-rf', '.mto-th-type', '.mto-th-hc', '.mto-th-pl', '.mto-th-micd'].map(sel => Math.round(w(cards[0], sel))),
+                pres: w(cards[0], '.mto-th-pres'), notes: w(cards[0], '.mto-th-notes'),
+                names: cards.map(c => { const i = c.querySelector('.mto-pres-input');
+                                        return [i.value, i.scrollWidth, i.clientWidth]; }),
+            }; }""")
+        self.assertEqual(2, m['cards'])
+        self.assertLess(abs(m['gapRight']), 1.5, 'the cards leave the right of the row empty')
+        self.assertEqual([40, 108, 96, 120, 68], m['fixed'])
+        self.assertGreater(m['pres'], m['notes'])
+        for value, needed, shown in m['names']:
+            self.assertEqual(name, value)
+            self.assertLessEqual(needed, shown, '{!r} is cut off ({} px needed, {} shown)'.format(value, needed, shown))
