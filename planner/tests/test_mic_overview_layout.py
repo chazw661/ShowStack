@@ -1,5 +1,6 @@
 """Mic Tracker Overview layout: as many session cards per row as fit at the
-card minimum, Presenter and Notes sharing the spare width, and the day
+card minimum, every day split alike, cards no wider than the card maximum
+and left-aligned, Presenter and Notes sharing the spare width, and the day
 header's ◀ Session N of M ▶ buttons.
 
 The browser tests are skipped unless SS_BROWSER_TESTS=1 (see test_xss_browser).
@@ -22,6 +23,9 @@ except ImportError:  # pragma: no cover
     sync_playwright = None
 
 BROWSER = bool(os.environ.get('SS_BROWSER_TESTS')) and sync_playwright is not None
+
+CARD_MIN, CARD_MAX = 692, 1017          # every column showing
+A1_MAX = 661                            # A1 setup: no Headset, no Notes
 
 
 def make_show(sessions_per_day):
@@ -112,29 +116,32 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
                     pos: document.querySelector('.mto-sess-pos').textContent}; }""")
 
     def assert_spare_shared(self, m):
-        """Presenter and Notes have their minimums and split the rest 60 / 40."""
+        """Presenter and Notes have their minimums; Presenter gets 60% of the
+        rest up to 320px, Notes the remainder up to 260px."""
         self.assertEqual(108, round(m['type']))                          # fixed columns stay fixed
-        self.assertGreaterEqual(m['pres'], 150 - 1)
-        self.assertGreaterEqual(m['notes'], 105 - 1)
         spare = m['card'] - m['min']
-        self.assertAlmostEqual(105 + spare * 0.4, m['notes'], delta=1.5)
-        self.assertAlmostEqual(150 + spare * 0.6, m['pres'], delta=1.5)
+        pres = 150 + min(170, spare * 0.6)
+        self.assertAlmostEqual(pres, m['pres'], delta=1.5)
+        self.assertAlmostEqual(105 + spare - (pres - 150), m['notes'], delta=1.5)
+        self.assertLessEqual(m['pres'], 320 + 0.5)
+        self.assertLessEqual(m['notes'], 260 + 0.5)
 
     def test_one_card_per_row_where_two_do_not_fit(self):
         # Every column showing, the minimum is 692px: one card up to a
-        # 1402px row, so through a 1440 laptop.
+        # 1402px row, so through a 1440 laptop. The card fills the row up to
+        # its 1017px maximum.
         for width, height in ((820, 1180), (1180, 820), (1440, 900)):
             with self.subTest(width=width):
                 m = self.layout(self.open(width, height))
-                self.assertEqual(692, round(m['min']))
-                self.assertAlmostEqual(m['row'], m['card'], delta=1)
+                self.assertEqual(CARD_MIN, round(m['min']))
+                self.assertAlmostEqual(min(m['row'], CARD_MAX), m['card'], delta=1)
                 self.assertEqual(0, m['pageOverflow'])
                 self.assert_spare_shared(m)
                 self.assertEqual('Session 1 of 3', m['pos'])
 
     def test_as_many_cards_as_fit_at_the_minimum(self):
         m = self.layout(self.open(1920, 1080))
-        self.assertAlmostEqual((m['row'] - 18) / 2, m['card'], delta=1)
+        self.assertAlmostEqual(min((m['row'] - 18) / 2, CARD_MAX), m['card'], delta=1)
         self.assert_spare_shared(m)
         self.assertEqual('Sessions 1–2 of 3', m['pos'])
 
@@ -172,11 +179,12 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
                 .map(c => Math.abs(c.offsetLeft - pad - g.scrollLeft))); }""")
         self.assertLess(offset, 2)
 
-    def test_wide_monitor_two_sessions_fill_the_row_and_names_fit(self):
-        # A wide monitor with two sessions: both cards fill the row between
-        # them, and Presenter takes most of the spare width, so a 20-character
-        # name shows whole. (The fixed-width cards before this layout left the
-        # right of the row empty and cut the same name to ~14 characters.)
+    def test_wide_monitor_two_sessions_left_aligned_capped_and_names_fit(self):
+        # A wide monitor with two sessions: the cards sit at the left of the
+        # row at their maximum (the rest of the row stays empty, rather than
+        # spreading Mic'd far from the name), Presenter is at its 320px, and a
+        # 20-character name shows whole. (The old fixed-width cards cut the
+        # same name to ~14 characters.)
         name = 'Alexandra Montgomery'
         self.assertEqual(20, len(name))
         project = Project.objects.create(name='Wide show', owner=self.owner)
@@ -195,23 +203,114 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
         m = page.evaluate("""() => {
             const g = document.querySelector('.mto-session-grid'), cs = getComputedStyle(g);
             const cards = [...g.querySelectorAll('.mto-session')];
-            const inner = g.getBoundingClientRect().right - parseFloat(cs.paddingRight);
+            const left = g.getBoundingClientRect().left + parseFloat(cs.paddingLeft);
             const w = (c, sel) => c.querySelector(sel).getBoundingClientRect().width;
             return {
                 cards: cards.length,
-                gapRight: inner - cards[cards.length - 1].getBoundingClientRect().right,
+                lefts: cards.map(c => Math.round(c.getBoundingClientRect().left - left)),
+                widths: cards.map(c => c.getBoundingClientRect().width),
                 fixed: ['.mto-th-rf', '.mto-th-type', '.mto-th-hc', '.mto-th-pl', '.mto-th-micd'].map(sel => Math.round(w(cards[0], sel))),
                 pres: w(cards[0], '.mto-th-pres'), notes: w(cards[0], '.mto-th-notes'),
                 names: cards.map(c => { const i = c.querySelector('.mto-pres-input');
                                         return [i.value, i.scrollWidth, i.clientWidth]; }),
             }; }""")
         self.assertEqual(2, m['cards'])
-        self.assertLess(abs(m['gapRight']), 1.5, 'the cards leave the right of the row empty')
+        self.assertEqual([0, round(m['widths'][0]) + 18], m['lefts'])        # left-aligned, side by side
+        for width in m['widths']:
+            self.assertLessEqual(width, CARD_MAX + 0.5)
         self.assertEqual([40, 108, 96, 120, 68], m['fixed'])
+        self.assertAlmostEqual(320, m['pres'], delta=0.5)
         self.assertGreater(m['pres'], m['notes'])
         for value, needed, shown in m['names']:
             self.assertEqual(name, value)
             self.assertLessEqual(needed, shown, '{!r} is cut off ({} px needed, {} shown)'.format(value, needed, shown))
+
+
+@unittest.skipUnless(BROWSER, 'set SS_BROWSER_TESTS=1 (needs playwright + browsers)')
+@override_settings(STORAGES={
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+})
+class CardMaximumBrowserTests(StaticLiveServerTestCase):
+    """A day with fewer sessions than fit across (one, say) gets cards as
+    wide as the other days', never one stretched card, and hiding columns
+    visibly shrinks it."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')  # sync Playwright
+        super().setUpClass()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        super().tearDownClass()
+
+    def show(self, sessions_per_day):
+        self.owner, project, _ = make_show(sessions_per_day)
+        self.client.force_login(self.owner)
+        s = self.client.session
+        s['current_project_id'] = project.pk
+        s.save()
+
+    def open(self, width, hidden=()):
+        UserProfile.objects.filter(user=self.owner).update(ui_prefs={'mic_overview': {'hidden': list(hidden)}})
+        context = self.browser.new_context(viewport={'width': width, 'height': 900})
+        context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value,
+                              'url': self.live_server_url}])
+        self.addCleanup(context.close)
+        page = context.new_page()
+        page.goto(self.live_server_url + reverse('planner:mic_tracker_overview'))
+        page.wait_for_load_state('networkidle')
+        return page
+
+    @staticmethod
+    def days(page):
+        """Per day, per card: [left offset in the row, width], and cards wholly on screen."""
+        return page.evaluate("""() => [...document.querySelectorAll('.mto-session-grid')].map(g => {
+            const box = g.getBoundingClientRect(), left = box.left + parseFloat(getComputedStyle(g).paddingLeft);
+            const cards = [...g.querySelectorAll('.mto-session')];
+            return {cards: cards.map(c => { const r = c.getBoundingClientRect(); return [r.left - left, r.width]; }),
+                    across: cards.filter(c => { const r = c.getBoundingClientRect();
+                                                return r.left >= box.left - 1 && r.right <= box.right + 1; }).length}; })""")
+
+    def test_lone_card_on_a_wide_monitor_is_capped_and_left_aligned(self):
+        self.show([1])
+        for hidden, cap in (((), CARD_MAX), (('headset', 'notes'), A1_MAX)):
+            with self.subTest(hidden=hidden):
+                ((left, width),) = self.days(self.open(2500, hidden))[0]['cards']
+                self.assertAlmostEqual(0, left, delta=0.5)
+                self.assertAlmostEqual(cap, width, delta=0.5)
+
+    def test_a1_setup_narrows_a_lone_card(self):
+        self.show([1])
+        for width in (1440, 2500):
+            with self.subTest(width=width):
+                a2 = self.days(self.open(width))[0]['cards'][0][1]
+                a1 = self.days(self.open(width, ('headset', 'notes')))[0]['cards'][0][1]
+                self.assertLess(a1, a2 - 300)
+
+    def test_every_day_has_the_same_card_width(self):
+        # Mon 2 sessions, Tue 1. Under A1 setup at 1440 two fit across: Tue's
+        # card is as wide as Mon's, not the whole row.
+        self.show([2, 1])
+        mon, tue = self.days(self.open(1440, ('headset', 'notes')))
+        self.assertEqual(2, mon['across'])
+        self.assertAlmostEqual(mon['cards'][0][1], tue['cards'][0][1], delta=0.5)
+        self.assertAlmostEqual(0, tue['cards'][0][0], delta=0.5)
+
+    def test_multi_session_days_fit_as_many_across_as_before(self):
+        # The count across still comes from the card minimum.
+        self.show([5])
+        for width, hidden, across in ((820, (), 1), (1440, (), 1), (1440, ('headset', 'notes'), 2),
+                                      (1920, (), 2), (2500, (), 3), (2500, ('headset', 'notes'), 4)):
+            with self.subTest(width=width, hidden=hidden):
+                day = self.days(self.open(width, hidden))[0]
+                self.assertEqual(across, day['across'])
+                self.assertEqual(0, round(day['cards'][0][0]))
 
 
 @unittest.skipUnless(BROWSER, 'set SS_BROWSER_TESTS=1 (needs playwright + browsers)')

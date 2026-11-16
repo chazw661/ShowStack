@@ -249,14 +249,16 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(['A2 entry'], pressed())
         self.assertFalse(visible('#mto-hidden-badge'))
 
-        # One column off: its width goes to Presenter; still one card per row.
+        # One column off: the card loses its width (Presenter stays at its
+        # 320px maximum); still one card per row.
         page.click('#mto-cols-btn')
         with page.expect_response('**/api/ui-prefs/mic-overview/'):
             page.locator('input[data-col="notes"]').uncheck()
         after = m()
         self.assertFalse(visible('th.mto-col-notes'))
         self.assertEqual(587, after['min'])
-        self.assertGreater(after['pres'], start['pres'] + 100)
+        self.assertAlmostEqual(start['card'] - 260, after['card'], delta=1)
+        self.assertAlmostEqual(320, after['pres'], delta=0.5)
         self.assertEqual('1', page.text_content('#mto-hidden-count'))
         self.assertEqual([], pressed())
 
