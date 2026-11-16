@@ -111,7 +111,7 @@ class OverviewNotesTests(TestCase):
 
     def test_editor_gets_a_notes_box_bound_to_the_slot(self):
         html = self.overview()
-        self.assertIn('<th class="mto-th-notes">Notes</th>', html)
+        self.assertIn('<th class="mto-th-notes mto-col-notes">Notes</th>', html)
         self.assertIn("mtoSaveSlotField({}, 'notes', this.value, this)".format(self.slot.id), html)
         self.assertIn('>battery swap at break</textarea>', html)
 

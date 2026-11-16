@@ -101,6 +101,7 @@ OPEN = {
     # The viewer's own things, outside the project.
     'audiopatch/audiochecklist/template/save/': "saves to the user's own template library",
     'audiopatch/audiochecklist/template/delete/': "deletes from the user's own template library",
+    'audiopatch/api/ui-prefs/mic-overview/': "the user's own Overview column choices, on their profile",
     # Shared UI state, not project data. Pending a decision: it is stored on
     # the day, so a viewer collapsing a day collapses it for everyone.
     # Crews belong to a user, not a project: a project role has no bearing.

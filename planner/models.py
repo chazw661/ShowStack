@@ -785,6 +785,10 @@ class UserProfile(models.Model):
     subscription_start = models.DateField(blank=True, null=True)
     subscription_end = models.DateField(blank=True, null=True)
     
+    # Per-user UI choices that follow the user between devices, keyed by
+    # page, e.g. {"mic_overview": {"hidden": ["type", "notes"]}}.
+    ui_prefs = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
