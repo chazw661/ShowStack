@@ -25,7 +25,7 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
 from django.urls import reverse
 
-from planner.models import AudioChecklist, MicSession, Project, ShowDay
+from planner.models import AudioChecklist, MicSession, PresenterSlot, Project, ShowDay
 from planner.tests.test_console_patch_picker import staff
 
 try:
@@ -138,6 +138,27 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         aid, sid = row.get_attribute('data-assignment-id'), row.get_attribute('data-slot-id') or ''
         page.evaluate('([a, s, n]) => MTTSlots.patch(a, s, {micType: n})', [aid, sid, NAME])
         self.assert_text(page, '.mic-type-badge', NAME, 'mic type badge')
+
+    def test_overview_notes_and_the_conflict_box(self):
+        # mic_tracker_overview.html: the stored note in the Notes box, and the
+        # note someone else saved, which mtoShowNotesConflict puts beside it.
+        day = ShowDay.objects.create(project=self.project, date=date(2026, 3, 1))
+        session = MicSession.objects.create(day=day, name='Keynote', num_mics=1, order=0)
+        assignment = session.mic_assignments.first()
+        slot = (assignment.presenter_slots.first()
+                or PresenterSlot.objects.create(assignment=assignment, order=0, is_active=True))
+        slot.notes = QUOTED
+        slot.save()
+        conflict = {'success': False, 'conflict': True, 'current': NAME}
+        page = self.open(reverse('planner:mic_tracker_overview'),
+                         [('**/api/mic/slot/update/**', conflict)])
+        self.assert_text(page, '.mto-notes-input', QUOTED, 'overview note')
+        box = page.locator('.mto-notes-input').first
+        box.fill('mine')
+        box.blur()                                     # change -> save -> conflict
+        page.wait_for_selector('.mto-notes-conflict-text')
+        self.assert_text(page, '.mto-notes-conflict-text', NAME, 'conflicting note')
+        self.assertEqual('mine', box.input_value())
 
     # -- Network monitor -------------------------------------------------------
 
