@@ -1,0 +1,477 @@
+"""Which device feeds which, as far as the stored text says. Read-only.
+
+Three rules, each worked out live from what the other modules store -- no
+result is saved, so editing a label changes the answer at once:
+
+  (a) console / I/O output -> processor input
+      * an I/O device output whose name is a processor input's label;
+      * a console Matrix whose Destination is a processor input's label, or
+        "<processor> <type> <n>" ("SL P1 AES 1"), or a processor's name on its
+        own (a device-level match: the processor, no port).
+      A Matrix fed out through an I/O output that itself matched the same
+      processor is dropped (VIA_IO): the I/O output is the physical hop, and
+      counting both would draw the feed twice.
+
+  (b) processor output -> amp channel input
+      Parses what the amp rack view's suggestions write (admin.py, issue #43):
+      ``AVB <n> - <label>`` in AVB Stream, ``<label>`` in AES / Analogue
+      Input, either with an optional `` (<processor name>)`` suffix the
+      suggestions add when two processors share a label. The field picks the
+      output type; an AVB stream must match channel AND label (channel only is
+      DRIFT: the processor's output was renamed after the amp was patched).
+
+  (c) a free-text PA cable run -> its two ends
+      speaker end: the row's Destination against each Speaker Array's base,
+      display and source name. In a free-text row Destination is ALWAYS the
+      speaker array (the field's help text, which says amp rack, is wrong).
+      amp end: the Amp FK, or nothing -- there is no text to match an amp
+      on. The row's Label (a PA Zone) is the cable's label, not an end.
+
+Every match has one verdict:
+
+  MATCHED         one port (or one processor by name)
+  SAME_PROCESSOR  several ports, all on one processor -- certain, not
+                  ambiguous: "L Main" on AES 1 and Analog 1 of one P1 is a
+                  primary and its fallback
+  AMBIGUOUS       candidates on more than one processor / array / amp. Never
+                  resolved: the graph draws the text, unlinked, and lists them
+  UNMATCHED       nothing fits
+  DRIFT           (b) only, see above
+  VIA_IO          (a) only, see above
+
+Text is compared by ``norm``: case-folded, en/em dashes as "-", whitespace
+collapsed. Blank text is not a source and never matches.
+
+``ProjectIndex.load`` fetches everything in a fixed number of queries however
+big the project is; the rule functions only read it. The graph and the
+``infer_connections`` report both call ``match_all`` so they cannot disagree.
+"""
+import re
+from collections import defaultdict
+from dataclasses import dataclass, field
+
+from django.contrib.contenttypes.models import ContentType
+
+from planner.connections import endpoints as ep
+from planner.models import (
+    Amp, AmpChannel, Console, ConsoleAuxOutput, ConsoleMatrixOutput,
+    ConsoleStereoOutput, Device, DeviceInput, DeviceOutput, GalaxyInput,
+    GalaxyOutput, P1Input, P1Output, PACableSchedule, SpeakerArray,
+    SystemProcessor,
+)
+
+MATCHED = 'matched'
+SAME_PROCESSOR = 'same_processor'
+AMBIGUOUS = 'ambiguous'
+UNMATCHED = 'unmatched'
+DRIFT = 'drift'
+VIA_IO = 'via_io'
+
+RESOLVED = (MATCHED, SAME_PROCESSOR)
+
+# (b): AmpChannel field -> the processor output type it can be fed from.
+AMP_INPUT_FIELDS = (('avb_stream', 'AVB'), ('aes_input', 'AES'), ('analog_input', 'ANALOG'))
+FIELD_TRANSPORT = {'avb_stream': 'avb', 'aes_input': 'aes', 'analog_input': 'analog'}
+
+_DASHES = re.compile('[‐-―−]')
+_SPACES = re.compile(r'\s+')
+_SUFFIX = re.compile(r'^(.*?)\s*\(([^()]*)\)\s*$')
+_AVB = re.compile(r'^avb\s*(\d+)\s*(?:-\s*(.*))?$')
+_TYPE_WORDS = {'analog': 'ANALOG', 'analogue': 'ANALOG', 'aes': 'AES',
+               'aes/ebu': 'AES', 'avb': 'AVB', 'avb/milan': 'AVB'}
+_TYPED_PORT = re.compile(r'^(analog|analogue|aes/ebu|aes|avb/milan|avb)\s*(\d+)$')
+
+
+def norm(text):
+    """Comparison key: case-folded, dashes unified, whitespace collapsed."""
+    text = _DASHES.sub('-', text or '')
+    return _SPACES.sub(' ', text).strip().casefold()
+
+
+# -- what the index holds ----------------------------------------------------
+
+@dataclass
+class Node:
+    id: str
+    kind: str
+    label: str
+    location: dict | None = None
+    extra: dict = field(default_factory=dict)
+
+
+@dataclass
+class Port:
+    ref: str
+    node: str                 # node id of the device the port is on
+    label: ep.PortLabel
+    text: str = ''            # the port's name / label as stored
+    type: str = ''            # processor ports: 'ANALOG' / 'AES' / 'AVB'
+    number: int | None = None
+    pk: int = 0
+
+
+@dataclass
+class AmpInput:
+    """One filled-in input field of one amp channel."""
+    channel: Port
+    field: str                # 'avb_stream' / 'aes_input' / 'analog_input'
+    text: str
+
+
+@dataclass
+class Match:
+    rule: str                 # 'a' / 'b'
+    verdict: str
+    source: Port              # (a) the output; (b) the amp channel
+    text: str
+    targets: tuple = ()       # resolved: processor ports, or a processor node id
+    candidates: tuple = ()    # ambiguous / drift: what it could have been
+    field: str = ''           # (b) only
+    via: str = ''             # (a) matrix destination: 'label' / 'typed' / 'name'
+
+    @property
+    def transport(self):
+        if self.field:
+            return FIELD_TRANSPORT[self.field]
+        return None
+
+
+@dataclass
+class End:
+    """One end of a free-text PA cable run (rule c)."""
+    verdict: str
+    text: str
+    target: str = ''          # node id
+    via: str = ''             # 'fk' / 'amp' / 'amp_location' / 'array'
+    candidates: tuple = ()
+
+
+@dataclass
+class CableMatch:
+    row: object               # the PACableSchedule
+    speaker: End
+    amp: End
+
+
+def _location(loc, kind='location'):
+    if loc is None:
+        return None
+    return {'id': loc.pk, 'name': loc.name, 'kind': kind}
+
+
+class ProjectIndex:
+    """Every row the rules and the graph read, for one project, loaded once."""
+
+    def __init__(self, project):
+        self.project = project
+        self.nodes = {}               # node id -> Node
+        self.ports = {}               # port ref -> Port
+        self.device_inputs = []       # (Port, linked ConsoleInput Port or None)
+        self.device_outputs = []      # (Port, linked bus ref or '')
+        self.matrices = []            # (Port, destination text)
+        self.processor_inputs = []    # Port
+        self.processor_outputs = []   # Port
+        self.amp_inputs = []          # AmpInput
+        self.amp_channels = []        # Port, every channel, filled in or not
+        self.pa_rows = []             # PACableSchedule
+        self.array_names = defaultdict(set)     # norm(name) -> {node id}
+        self.processor_names = defaultdict(set)
+
+    @classmethod
+    def load(cls, project):
+        index = cls(project)
+        index._load()
+        return index
+
+    def _add(self, node):
+        self.nodes[node.id] = node
+        return node
+
+    def _port(self, port):
+        self.ports[port.ref] = port
+        return port
+
+    def _load(self):
+        pid = self.project.pk
+
+        # Devices -------------------------------------------------------
+        for c in (Console.objects.filter(project_id=pid, is_template=False)
+                  .select_related('location')):
+            self._add(Node(ep.node_id(ep.CONSOLE, c.pk), ep.CONSOLE, c.name,
+                           _location(c.location)))
+        for d in Device.objects.filter(project_id=pid).select_related('location'):
+            self._add(Node(ep.node_id(ep.DEVICE, d.pk), ep.DEVICE, d.name,
+                           _location(d.location)))
+        for p in SystemProcessor.objects.filter(project_id=pid).select_related('location'):
+            node = self._add(Node(ep.node_id(ep.PROCESSOR, p.pk), ep.PROCESSOR, p.name,
+                                  _location(p.location), {'device_type': p.device_type}))
+            if norm(p.name):
+                self.processor_names[norm(p.name)].add(node.id)
+        for a in Amp.objects.filter(project_id=pid).select_related('location', 'amp_model'):
+            self._add(Node(ep.node_id(ep.AMP, a.pk), ep.AMP, a.name,
+                           _location(a.location, ep.AMP_LOCATION),
+                           {'model': str(a.amp_model) if a.amp_model_id else ''}))
+        for arr in SpeakerArray.objects.filter(prediction__project_id=pid):
+            node = self._add(Node(ep.node_id(ep.ARRAY, arr.pk), ep.ARRAY, arr.display_name,
+                                  extra={'prediction': arr.prediction_id}))
+            for name in {arr.array_base_name, arr.display_name, arr.source_name}:
+                if norm(name):
+                    self.array_names[norm(name)].add(node.id)
+
+        # Console buses (what a DeviceOutput's generic link points at) ----
+        bus_cts = {}
+        for model, prefix, label in (
+                (ConsoleAuxOutput, 'consoleauxoutput', lambda b: ep.aux_label(b.aux_number)),
+                (ConsoleMatrixOutput, 'consolematrixoutput',
+                 lambda b: ep.matrix_label(b.matrix_number)),
+                (ConsoleStereoOutput, 'consolestereooutput',
+                 lambda b: ep.stereo_label(b.stereo_type))):
+            bus_cts[ContentType.objects.get_for_model(model).pk] = prefix
+            for bus in model.objects.filter(console__project_id=pid,
+                                            console__is_template=False):
+                port = self._port(Port(ep.port_ref(prefix, bus.pk),
+                                       ep.node_id(ep.CONSOLE, bus.console_id),
+                                       label(bus), (bus.name or '').strip(), pk=bus.pk))
+                if model is ConsoleMatrixOutput and norm(bus.destination):
+                    self.matrices.append((port, bus.destination.strip()))
+
+        # I/O device ports, numbered by position as the device page does ---
+        rows = (DeviceInput.objects
+                .filter(device__project_id=pid, input_number__isnull=False)
+                .order_by('device_id', 'input_number', 'pk')
+                .values_list('pk', 'device_id', 'signal_name', 'console_input_id',
+                             'console_input__console_id', 'console_input__input_ch',
+                             'console_input__dante_number'))
+        position = defaultdict(int)
+        for pk, device_id, name, ci_pk, console_id, input_ch, dante in rows:
+            position[device_id] += 1
+            port = self._port(Port(ep.port_ref('deviceinput', pk),
+                                   ep.node_id(ep.DEVICE, device_id),
+                                   ep.io_input_label(position[device_id]),
+                                   (name or '').strip(), pk=pk))
+            channel = None
+            # A link into a template console or another project draws nothing.
+            if ci_pk and ep.node_id(ep.CONSOLE, console_id) in self.nodes:
+                channel = self._port(Port(ep.port_ref('consoleinput', ci_pk),
+                                          ep.node_id(ep.CONSOLE, console_id),
+                                          ep.console_input_label(input_ch, dante, ci_pk),
+                                          pk=ci_pk))
+            self.device_inputs.append((port, channel))
+
+        rows = (DeviceOutput.objects
+                .filter(device__project_id=pid, output_number__isnull=False)
+                .order_by('device_id', 'output_number', 'pk')
+                .values_list('pk', 'device_id', 'signal_name', 'content_type_id', 'object_id'))
+        position = defaultdict(int)
+        for pk, device_id, name, ct_id, obj_id in rows:
+            position[device_id] += 1
+            port = self._port(Port(ep.port_ref('deviceoutput', pk),
+                                   ep.node_id(ep.DEVICE, device_id),
+                                   ep.io_output_label(position[device_id]),
+                                   (name or '').strip(), pk=pk))
+            bus = ''
+            if ct_id in bus_cts and obj_id:
+                ref = ep.port_ref(bus_cts[ct_id], obj_id)
+                bus = ref if ref in self.ports else ''
+            self.device_outputs.append((port, bus))
+
+        # Processor ports ---------------------------------------------------
+        for model, prefix, type_field, owner, out in (
+                (P1Input, 'p1input', 'input_type', 'p1_processor', False),
+                (P1Output, 'p1output', 'output_type', 'p1_processor', True),
+                (GalaxyInput, 'galaxyinput', 'input_type', 'galaxy_processor', False),
+                (GalaxyOutput, 'galaxyoutput', 'output_type', 'galaxy_processor', True)):
+            rows = (model.objects
+                    .filter(**{f'{owner}__system_processor__project_id': pid})
+                    .order_by(f'{owner}__system_processor_id', type_field, 'channel_number')
+                    .values_list('pk', f'{owner}__system_processor_id', type_field,
+                                 'channel_number', 'label'))
+            for pk, proc_id, port_type, number, label in rows:
+                port = self._port(Port(ep.port_ref(prefix, pk),
+                                       ep.node_id(ep.PROCESSOR, proc_id),
+                                       ep.processor_port_label(port_type, number),
+                                       (label or '').strip(), port_type, number, pk))
+                (self.processor_outputs if out else self.processor_inputs).append(port)
+
+        # Amp channels ------------------------------------------------------
+        rows = (AmpChannel.objects
+                .filter(amp__project_id=pid)
+                .order_by('amp_id', 'channel_number', 'pk')
+                .values_list('pk', 'amp_id', 'channel_number', 'channel_name',
+                             'avb_stream', 'aes_input', 'analog_input'))
+        for pk, amp_id, number, name, *values in rows:
+            port = self._port(Port(ep.port_ref('ampchannel', pk), ep.node_id(ep.AMP, amp_id),
+                                   ep.amp_channel_label(number), (name or '').strip(),
+                                   number=number, pk=pk))
+            self.amp_channels.append(port)
+            for (fname, _), value in zip(AMP_INPUT_FIELDS, values):
+                if norm(value):
+                    self.amp_inputs.append(AmpInput(port, fname, value.strip()))
+
+        # PA cable runs -------------------------------------------------------
+        self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)
+                            .select_related('label', 'amp', 'speaker_array')
+                            .order_by('id'))
+
+
+# -- rule (a) ----------------------------------------------------------------
+
+def _verdict(ports):
+    """Resolved / ambiguous / unmatched from a list of candidate ports."""
+    if not ports:
+        return UNMATCHED
+    if len({p.node for p in ports}) > 1:
+        return AMBIGUOUS
+    return MATCHED if len(ports) == 1 else SAME_PROCESSOR
+
+
+def _resolve(rule, source, text, ports, **kw):
+    verdict = _verdict(ports)
+    ports = tuple(ports)
+    if verdict in RESOLVED:
+        return Match(rule, verdict, source, text, targets=ports, **kw)
+    return Match(rule, verdict, source, text, candidates=ports, **kw)
+
+
+def _inputs_by_label(index):
+    by_label = defaultdict(list)
+    for port in index.processor_inputs:
+        if norm(port.text):
+            by_label[norm(port.text)].append(port)
+    return by_label
+
+
+def _typed_port(index, key):
+    """"sl p1 aes 1" -> the candidate input ports of every processor so named."""
+    found = []
+    for name, nodes in index.processor_names.items():
+        if not key.startswith(name + ' '):
+            continue
+        m = _TYPED_PORT.match(key[len(name) + 1:])
+        if not m:
+            continue
+        port_type, number = _TYPE_WORDS[m.group(1)], int(m.group(2))
+        found += [p for p in index.processor_inputs
+                  if p.node in nodes and p.type == port_type and p.number == number]
+    return found
+
+
+def match_matrix(index, port, text, by_label=None):
+    by_label = _inputs_by_label(index) if by_label is None else by_label
+    key = norm(text)
+    if by_label.get(key):
+        return _resolve('a', port, text, by_label[key], via='label')
+    typed = _typed_port(index, key)
+    if typed:
+        return _resolve('a', port, text, typed, via='typed')
+    named = sorted(index.processor_names.get(key, ()))
+    if len(named) == 1:
+        return Match('a', MATCHED, port, text, targets=(named[0],), via='name')
+    if named:
+        return Match('a', AMBIGUOUS, port, text, candidates=tuple(named), via='name')
+    return Match('a', UNMATCHED, port, text)
+
+
+def match_device_output(index, port, by_label=None):
+    by_label = _inputs_by_label(index) if by_label is None else by_label
+    return _resolve('a', port, port.text, by_label.get(norm(port.text), []))
+
+
+def _target_nodes(match):
+    return {t if isinstance(t, str) else t.node for t in match.targets}
+
+
+def rule_a(index):
+    by_label = _inputs_by_label(index)
+    io = [match_device_output(index, port, by_label)
+          for port, _ in index.device_outputs if norm(port.text)]
+
+    # Which processors each bus already reaches through a matched I/O output.
+    reached = defaultdict(set)
+    bus_of ={port.ref: bus for port, bus in index.device_outputs}
+    for m in io:
+        if m.verdict in RESOLVED and bus_of.get(m.source.ref):
+            reached[bus_of[m.source.ref]] |= _target_nodes(m)
+
+    matrices = []
+    for port, text in index.matrices:
+        m = match_matrix(index, port, text, by_label)
+        if m.verdict in RESOLVED and _target_nodes(m) & reached[port.ref]:
+            m.verdict = VIA_IO
+        matrices.append(m)
+    return io + matrices
+
+
+# -- rule (b) ----------------------------------------------------------------
+
+def _split_suffix(index, text):
+    """"L Main (SL P1)" -> ("L Main", {node ids of 'SL P1'}). A bracket that is
+    not a processor's name is part of the label."""
+    m = _SUFFIX.match(text)
+    if m and norm(m.group(2)) in index.processor_names:
+        return m.group(1), index.processor_names[norm(m.group(2))]
+    return text, None
+
+
+def match_amp_input(index, amp_input):
+    port_type = dict(AMP_INPUT_FIELDS)[amp_input.field]
+    body, only = _split_suffix(index, amp_input.text)
+    outputs = [p for p in index.processor_outputs
+               if p.type == port_type and (only is None or p.node in only)]
+    key = norm(body)
+    kw = {'field': amp_input.field}
+    src, text = amp_input.channel, amp_input.text
+
+    if port_type == 'AVB':
+        m = _AVB.match(key)
+        if m:
+            number, label = int(m.group(1)), norm(m.group(2))
+            on_channel = [p for p in outputs if p.number == number]
+            if not label:
+                return _resolve('b', src, text, on_channel, **kw)
+            exact = [p for p in on_channel if norm(p.text) == label]
+            if exact:
+                return _resolve('b', src, text, exact, **kw)
+            if on_channel:
+                return Match('b', DRIFT, src, text, candidates=tuple(on_channel), **kw)
+            return Match('b', UNMATCHED, src, text, **kw)
+    return _resolve('b', src, text, [p for p in outputs if norm(p.text) == key], **kw)
+
+
+def rule_b(index):
+    return [match_amp_input(index, ai) for ai in index.amp_inputs]
+
+
+# -- rule (c) ----------------------------------------------------------------
+
+def _end(nodes, text, via):
+    nodes = sorted(nodes)
+    if len(nodes) == 1:
+        return End(MATCHED, text, nodes[0], via)
+    return End(AMBIGUOUS, text, via=via, candidates=tuple(nodes))
+
+
+def match_cable(index, row):
+    destination = (row.destination or '').strip()
+    arrays = index.array_names.get(norm(destination), ()) if norm(destination) else ()
+    speaker = _end(arrays, destination, 'array') if arrays else End(UNMATCHED, destination)
+
+    amp_node = ep.node_id(ep.AMP, row.amp_id) if row.amp_id else ''
+    amp = (End(MATCHED, '', amp_node, 'fk') if amp_node in index.nodes
+           else End(UNMATCHED, ''))
+    return CableMatch(row, speaker, amp)
+
+
+def rule_c(index):
+    return [match_cable(index, row) for row in index.pa_rows if row.entry_mode == 'text']
+
+
+@dataclass
+class Matches:
+    a: list
+    b: list
+    c: list
+
+
+def match_all(index):
+    return Matches(rule_a(index), rule_b(index), rule_c(index))
