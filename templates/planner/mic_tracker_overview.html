@@ -35,6 +35,11 @@
         --mto-max-pres: 320px;
         --mto-max-notes: 260px;
         --mto-gap: 18px;
+        /* The Lock's colour. Amber, not the palette's grey --accent-amber:
+           the locked state must be impossible to miss in a dark room. Green
+           stays Mic'd and red conflict / error. #16171a on it is 9.5:1. */
+        --mto-lock: #ffab00;
+        --mto-lock-fg: #16171a;
     }
 
     .mto-header {
@@ -68,14 +73,14 @@
     #mto-root.mto-locked .mto-edit-select,
     #mto-root.mto-locked .mto-pres-input,
     #mto-root.mto-locked .mto-notes-wrap { display: none; }
-    #mto-root.mto-locked .mto-header { box-shadow: inset 0 3px 0 var(--accent-amber); }
+    #mto-root.mto-locked .mto-header { box-shadow: inset 0 4px 0 var(--mto-lock); }
     .mto-lock-btn {
         font-family: inherit; cursor: pointer; min-height: 44px; min-width: 44px; white-space: nowrap;
         font-size: 13px; font-weight: 800; padding: 8px 14px; border-radius: 6px;
         background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-bright);
     }
     #mto-root.mto-locked .mto-lock-btn {
-        background: var(--accent-amber); color: var(--mtt-text-inverse); border-color: var(--accent-amber);
+        background: var(--mto-lock); color: var(--mto-lock-fg); border-color: var(--mto-lock);
     }
     .mto-lock-on, #mto-root.mto-locked .mto-lock-off { display: none; }
     #mto-root.mto-locked .mto-lock-on { display: inline; }

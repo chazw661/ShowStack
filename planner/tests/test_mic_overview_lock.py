@@ -161,6 +161,11 @@ class LockBrowserTests(StaticLiveServerTestCase):
         self.assertEqual('🔒 Locked — tap to edit', btn.inner_text())
         self.assertEqual('true', btn.get_attribute('aria-pressed'))
         self.assertGreaterEqual(btn.bounding_box()['height'], 44)
+        # Filled amber with dark text, and an amber stripe over the header.
+        self.assertEqual(['rgb(255, 171, 0)', 'rgb(22, 23, 26)'], btn.evaluate(
+            'b => [getComputedStyle(b).backgroundColor, getComputedStyle(b).color]'))
+        self.assertIn('rgb(255, 171, 0)', page.evaluate(
+            "getComputedStyle(document.querySelector('.mto-header')).boxShadow"))
 
         micd = page.locator('.mto-micd-btn').first
         self.assertTrue(micd.is_visible())
