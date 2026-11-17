@@ -24,10 +24,11 @@ except ImportError:  # pragma: no cover
 
 BROWSER = bool(os.environ.get('SS_BROWSER_TESTS')) and sync_playwright is not None
 
-CARD_MIN, CARD_MAX = 652, 977           # every column showing
-A1_MIN, A1_MAX = 457, 627               # A1 setup: no Headset, no Notes
+CARD_MIN, CARD_MAX = 728, 977           # every column showing
+A1_MIN, A1_MAX = 533, 627               # A1 setup: no Headset, no Notes
 FIXED = [40, 90, 90, 104, 68]           # RF, Type, Headset, Placement, Mic'd
-TYPE_W, PRES_MIN, NOTES_MIN = 90, 150, 105
+TYPE_W, PRES_MIN, NOTES_MIN = 90, 226, 105
+NAME20 = 'Alexandra Montgomery'
 
 
 def make_show(sessions_per_day):
@@ -151,8 +152,8 @@ class OverviewLayoutBrowserTests(StaticLiveServerTestCase):
 
     def test_zeroed_column_variables_fit_more_cards(self):
         # What hiding columns does: Headset and Notes off takes the minimum
-        # to 457px, so a 1180 landscape row fits two.
-        page = self.open(1180, 820)
+        # to 533px, so a 1440 laptop row fits two.
+        page = self.open(1440, 900)
         page.evaluate("""() => { const r = document.getElementById('mto-root');
             r.style.setProperty('--mto-w-headset', '0px'); r.style.setProperty('--mto-min-notes', '0px');
             mtoLayoutRows(); }""")
@@ -316,10 +317,17 @@ class CardMaximumBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(across, day['across'])
                 self.assertEqual(0, round(day['cards'][0][0]))
 
-    def test_two_across_from_a_1480_window(self):
+    def test_laptop_widths_one_across_or_two_under_a1_setup(self):
+        # Every column: one across through a 1512 MacBook Pro window, the card
+        # filling the row. A1 setup: two across from 1480 down to 1242.
         self.show([2])
-        self.assertEqual(1, self.days(self.open(1470))[0]['across'])
-        self.assertEqual(2, self.days(self.open(1480))[0]['across'])
+        day = self.days(self.open(1512))[0]
+        self.assertEqual(1, day['across'])
+        self.assertAlmostEqual(1512 - 158, day['cards'][0][1], delta=1)
+        for width in (1242, 1480, 1512):
+            with self.subTest(width=width):
+                self.assertEqual(2, self.days(self.open(width, ('headset', 'notes')))[0]['across'])
+        self.assertEqual(1, self.days(self.open(1222, ('headset', 'notes')))[0]['across'])
 
     def test_every_dropdown_choice_fits_its_column(self):
         # A select sized to one choice (width: auto) is as wide as that
@@ -352,17 +360,25 @@ class CardMaximumBrowserTests(StaticLiveServerTestCase):
         for width in widths:
             self.assertGreaterEqual(width, 182)
 
-    def test_no_card_is_ever_cut_off(self):
-        # Laptop and desktop widths, a 2-session and a 5-session day, every
-        # column and A1 setup: at the start of each row and at every session
-        # it can snap to, each card on screen is wholly inside the row. (A
-        # card maximum on a row that overflows used to stop the card short
-        # and show part of the next one.)
+    def test_no_card_is_ever_cut_off_and_names_always_fit(self):
+        # iPad and laptop / desktop widths, a 2-session and a 5-session day,
+        # every column and A1 setup: at the start of each row and at every
+        # session it can snap to, each card on screen is wholly inside the
+        # row (a card maximum on a row that scrolled used to stop the card
+        # short and show part of the next one), and a 20-character name is
+        # never truncated.
         self.show([2, 5])
-        cut = []
+        project = Project.objects.get(owner=self.owner)
+        for session in MicSession.objects.filter(day__project=project):
+            for assignment in session.mic_assignments.all():
+                slot = (assignment.presenter_slots.first()
+                        or PresenterSlot.objects.create(assignment=assignment, order=0, is_active=True))
+                slot.presenter = Presenter.objects.create(project=project, name=NAME20)
+                slot.save()
+        cut, short = [], []
         for hidden in ((), ('headset', 'notes')):
             page = self.open(1200, hidden)
-            for width in range(1200, 1701, 20):
+            for width in [820, 1180] + list(range(1200, 1701, 20)):
                 page.set_viewport_size({'width': width, 'height': 900})
                 page.evaluate('() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
                 found = page.evaluate("""() => [...document.querySelectorAll('.mto-session-grid')].flatMap((g, day) => {
@@ -380,7 +396,13 @@ class CardMaximumBrowserTests(StaticLiveServerTestCase):
                     g.scrollTo({left: 0, behavior: 'instant'});
                     return out; })""")
                 cut += ['{} {}px: {}'.format(hidden or 'all columns', width, f) for f in found]
+                names = page.evaluate("""() => [...document.querySelectorAll('.mto-pres-input')]
+                    .filter(i => i.value).map(i => [i.value, i.scrollWidth, i.clientWidth])""")
+                self.assertEqual(2 * (2 + 5), len(names))                    # 2 RFs a session, 7 sessions
+                short += ['{} {}px: {} needs {}, has {}'.format(hidden or 'all columns', width, *n)
+                          for n in names if n[1] > n[2]][:1]
         self.assertEqual([], cut[:12], '{} cut-off views'.format(len(cut)))
+        self.assertEqual([], short[:12], '{} widths truncate a 20-character name'.format(len(short)))
 
 
 

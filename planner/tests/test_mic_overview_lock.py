@@ -266,7 +266,7 @@ class LockBrowserTests(StaticLiveServerTestCase):
         with page.expect_response('**/api/ui-prefs/mic-overview/'):
             page.click('.mto-cols-preset[data-hide="headset notes"]')
         self.assertFalse(page.locator('th.mto-col-headset').first.is_visible())
-        self.assertEqual(457, page.evaluate(layout)[1])
+        self.assertEqual(533, page.evaluate(layout)[1])
         self.assertEqual(['LAV', 'Tie', NAME], [t for t in self.first_row_text(page) if t is not None])
         page.locator('.mto-title').click()
         page.click('.mto-sess-next')
