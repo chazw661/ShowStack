@@ -156,6 +156,10 @@ NO_CUE_MIN_COVERAGE = 0.5
 # RECORDS"; the segment's name is the first row that is none of these.
 _NOT_A_HEADING = re.compile(r'(?i)^\s*(?:vog\b|\[|roll\s+records|end\s+records|stage\s+set'
                             r'|.*\bwalk-?\s?in\b)')
+# Every client but F: the VOG's lines open the description ("VOG: Please
+# welcome ..."), at most after a bracketed tag (Client E "[GFX] VOG: ...").
+# A bare "VO" is a video voice-over (Client A "VO can be ..."), not the VOG.
+_VOG_LINE = re.compile(r'(?i)^\W*(?:\[[^\]]*\]\s*)?(?:vog|voice\s+of\s+god)\b')
 _BREAK = re.compile(r'(?i)^\s*(?:lunch(?:\s+break)?|break)\b')     # Client E "BREAK", "LUNCH BREAK"
 # A segment named like a break is one unless its heading row names someone
 # to speak: Client A "Networking Break", Client B "BREAK" with "DJ Audio
@@ -358,6 +362,15 @@ def _tokens(text):
     return _TOKEN.findall(text or '')
 
 
+def _token_spans(text):
+    """[(token, start, end)]: the same tokens as _tokens, with where each is."""
+    return [(m.group(), m.start(), m.end()) for m in _TOKEN.finditer(text or '')]
+
+
+def _blank(match):
+    return ' ' * len(match.group())
+
+
 def _clean_token(tok):
     return tok.strip('.:;!?"“”')
 
@@ -470,11 +483,15 @@ class Roster:
     ``canon`` maps a lower-cased token sequence to a display name. Full
     names and the user's merged aliases always count; a first name counts
     only while it is unique among the people found.
+
+    ``rejected``: name keys of phrases the user said are not a person
+    (MicPlannerDayOverride not_a_person): never made into anyone.
     """
 
-    def __init__(self, known=()):
+    def __init__(self, known=(), rejected=()):
         self.names = {}          # display name -> set(lower aliases)
         self.manual = {}         # lower alias -> display name (from merges)
+        self.rejected = frozenset(rejected)
         self.bsm_only = set()
         for display, aliases in known:
             self.names.setdefault(display, set())
@@ -485,10 +502,13 @@ class Roster:
         self._index = None
 
     def resolve(self, raw):
-        """Display name for a spelling, adding the person if new."""
+        """Display name for a spelling, adding the person if new; None for a
+        phrase the user rejected."""
         key = name_key(raw)
         if key in self.manual:
             return self.manual[key]
+        if key in self.rejected:
+            return None
         idx = self.index()
         if key in idx:
             return idx[key]
@@ -505,7 +525,8 @@ class Roster:
 
     def add(self, raw):
         display = self.resolve(raw)
-        self.found.add(display)
+        if display is not None:
+            self.found.add(display)
         return display
 
     def index(self):
@@ -576,13 +597,34 @@ def _welcome_names(text, speaker_text=None):
     return names
 
 
+def is_vog(description):
+    """True if the row is a VOG line (_VOG_LINE)."""
+    return bool(_VOG_LINE.match(description or ''))
+
+
+def _find_words(text, raw):
+    """(start, end) of the words of ``raw`` in a description, after its
+    "please welcome" if it has one; None if they are not there as written."""
+    words = raw.split()
+    if not words:
+        return None
+    pattern = re.compile(r'(?<!\w)' + r'\s+'.join(map(re.escape, words)) + r'(?!\w)')
+    m = _WELCOME.search(text or '')
+    found = pattern.search(text or '', m.start() if m else 0) or pattern.search(text or '')
+    return found.span() if found else None
+
+
 def _speaker_text(text):
-    text = _GRAPHICS.sub('', text or '')
-    text = _TITLES_PREFIX.sub('', text.strip())
-    return _STAGE_NOTES.sub(' ', text)
+    """The cell with graphics cues, a "TITLE:" prefix and stage notes blanked
+    out. Blanked, not cut: a token's place is its place in the cell, so a
+    name's words can be shown where they are (``spans``)."""
+    text = _GRAPHICS.sub(_blank, text or '')
+    lead = len(text) - len(text.lstrip())
+    text = text[:lead] + _TITLES_PREFIX.sub(_blank, text[lead:])
+    return _STAGE_NOTES.sub(_blank, text)
 
 
-def split_cell(text, roster, discover, refs=None):
+def split_cell(text, roster, discover, refs=None, spans=None):
     """Names in a Speaker/Titles cell, and the text no name accounts for.
 
     Speaker cells run names together without separators ("Dana Able Chris
@@ -595,9 +637,22 @@ def split_cell(text, roster, discover, refs=None):
     With ``refs`` (the final pass, rows in order), a first name or a title +
     surname standing alone is whoever ``refs`` says was introduced last, and
     every full name matched counts as an introduction.
+
+    ``spans``: a list to append ``(name, start, end)`` to for each name found,
+    the characters of ``text`` its words came from.
     """
-    toks = _tokens(_speaker_text(text))
+    found = _token_spans(_speaker_text(text))
+    toks = [tok for tok, _, _ in found]
     names, leftovers, chunk = [], [], []
+    chunk_at = [0]     # toks index of the chunk's first word
+
+    def named(name, a, b):
+        """``name`` came from toks[a:b] (None: a phrase the user rejected)."""
+        if name is None:
+            return
+        names.append(name)
+        if spans is not None:
+            spans.append((name, found[a][1], found[b - 1][2]))
     bounded = [True]   # the chunk began at the cell's start or a separator
     # The chunk follows "Name -": an affiliation ("Alex Host - Acme AI Robin
     # Cole - Initech"), possibly with the next person's name at its end.
@@ -609,6 +664,7 @@ def split_cell(text, roster, discover, refs=None):
             bounded[0] = bounded_end
             return
         words = [_clean_token(t) for t in chunk]
+        at = chunk_at[0]
         alone = bounded[0] and bounded_end
         digits = any(ch.isdigit() for ch in ' '.join(words))
         dash, after_dash[0] = after_dash[0], False
@@ -616,25 +672,25 @@ def split_cell(text, roster, discover, refs=None):
         if dash and not digits:
             if (discover and bounded_end and len(words) >= 3 and _is_name_word(words[-2])
                     and _is_name_part(words[-1])):
-                names.append(roster.add(' '.join(words[-2:])))
+                named(roster.add(' '.join(words[-2:])), at + len(words) - 2, at + len(words))
             elif len(words) > 4:
                 leftovers.append(' '.join(chunk).strip(' -–'))
                 named_last[0] = False
         elif (discover and len(words) == 3 and _honorific(words[0])
                 and all(_is_name_part(w) for w in words[1:])):
-            names.append(roster.add(' '.join(words)))   # "Dr. Sol Tate" mid-cell
+            named(roster.add(' '.join(words)), at, at + 3)   # "Dr. Sol Tate" mid-cell
         elif (discover and alone and len(words) in (2, 3) and _is_name_word(words[0])
                 and all(_is_name_part(w) for w in words[1:])
                 and not (len(words) == 2 and _honorific(words[0]))):   # "Dr. Kim" is no one new
-            names.append(roster.add(' '.join(words)))
+            named(roster.add(' '.join(words)), at, at + len(words))
         elif (discover and len(words) % 2 == 0 and all(_is_name_word(w) for w in words)
                 and not any(_honorific(w) for w in words)):
             for j in range(0, len(words), 2):
-                names.append(roster.add(' '.join(words[j:j + 2])))
+                named(roster.add(' '.join(words[j:j + 2])), at + j, at + j + 2)
         else:
             named_last[0] = False
             text_ = ' '.join(chunk).strip(' -–')
-            if text_ and not _NOT_A_PERSON.search(text_):
+            if text_ and not _NOT_A_PERSON.search(text_) and name_key(text_) not in roster.rejected:
                 leftovers.append(text_)
         chunk.clear()
         bounded[0] = bounded_end
@@ -645,7 +701,7 @@ def split_cell(text, roster, discover, refs=None):
             ref, used = refs.short_at(toks, i)
             if used:
                 if ref is not AMBIGUOUS:   # an ambiguous one is flagged by the caller
-                    names.append(ref)
+                    named(ref, i, i + used)
                     roster.found.add(ref)
                 i += used
                 bounded[0] = False
@@ -656,7 +712,7 @@ def split_cell(text, roster, discover, refs=None):
             name = None  # "Tess St. Clair": a first name mid-name is not that person
         if name:
             close_chunk(bounded_end=False)
-            names.append(name)
+            named(name, i, i + used)
             roster.found.add(name)
             if refs is not None and used > 1:
                 refs.saw(name)
@@ -691,6 +747,8 @@ def split_cell(text, roster, discover, refs=None):
         else:
             if chunk and _honorific(toks[i]):
                 close_chunk()   # "Ann Lee Dr. Bo Chen": the title starts the next name
+            if not chunk:
+                chunk_at[0] = i
             chunk.append(toks[i])
             if (len(chunk) == 3 and _honorific(chunk[0]) and i + 1 < len(toks)
                     and _is_name_word(toks[i + 1])):
@@ -737,9 +795,10 @@ def detect_crew(rows, roster):
 
 def find_events(rows, crew, roster):
     """(events, unknown-crew flags). Each event: (kind, display name, row,
-    rows): ``row`` is the verb's, ``rows`` every row the cue's words came
-    from, crew name to last name (more than one when it spills onto the next row or
-    page).
+    rows, words): ``row`` is the verb's, ``rows`` every row the cue's words
+    came from, crew name to last name (more than one when it spills onto the
+    next row or page), ``words`` where the name is: ((row, start, end), ...)
+    in BSM cells.
 
     A cue is "<crew> (to) send(s)/catch(es) <names>", names joined by commas,
     "and" or "&"; or, with no crew, a cell that opens with the verb ("Send
@@ -751,6 +810,16 @@ def find_events(rows, crew, roster):
     crew_keys = {c.strip().lower() for c in crew if c.strip()}
     stream = _bsm_stream(rows)
     toks = [t for _, t in stream]
+    # (row, start, end) of each stream token in its BSM cell.
+    places = [(i, a, b) for i, row in enumerate(rows) for _, a, b in _token_spans(row['bsm'])]
+
+    def words(a, b):
+        """Where toks[a:b] are: ((row, start, end), ...), a piece per row."""
+        pieces = {}
+        for r, start, end in places[a:b]:
+            pieces[r] = (pieces[r][0], end) if r in pieces else (start, end)
+        return tuple((r, start, end) for r, (start, end) in pieces.items())
+
     events, flags = [], []
     k = 0
     while k < len(toks):
@@ -775,6 +844,7 @@ def find_events(rows, crew, roster):
             continue
         kind = 'send' if toks[k].lower().startswith('send') else 'catch'
         got = []
+        where = {}        # name -> words(...) of its first mention in the cue
         p = k + 1
         last = k + 1      # past the last name's words
         expect = True
@@ -786,6 +856,7 @@ def find_events(rows, crew, roster):
                 name, used = roster.match_at(toks, p)
                 if name:
                     got.append(name)
+                    where.setdefault(name, words(p, p + used))
                     p += used
                     last = p
                     expect = False
@@ -801,9 +872,14 @@ def find_events(rows, crew, roster):
                 raw = ' '.join(run)
                 new = name_key(raw) not in roster.index()
                 name = roster.add(raw)
+                if name is None:            # rejected: its words are not a name
+                    p += len(run)
+                    expect = False
+                    continue
                 if new:
                     roster.bsm_only.add(name)
                 got.append(name)
+                where.setdefault(name, words(p, p + len(run)))
                 p += len(run)
                 last = p
                 expect = False
@@ -814,7 +890,7 @@ def find_events(rows, crew, roster):
                 break
         spans = tuple(dict.fromkeys(stream[x][0] for x in range(k if crewless else max(j, 0), last)))
         for name in dict.fromkeys(got):
-            events.append((kind, name, row, spans))
+            events.append((kind, name, row, spans, where[name]))
             roster.found.add(name)
         k = p if got else k + 1
     return events, flags
@@ -831,6 +907,7 @@ class Event:
     row: int
     minute: float = None
     rows: tuple = ()      # every row the cue's words came from (find_events)
+    words: tuple = ()     # where the name is: ((row, start, end), ...) in BSM cells
 
 
 @dataclass
@@ -880,11 +957,12 @@ def event_minute(times, kind, row, rows=None, sent_here=False):
     return times[row].minute
 
 
-def analyse(rows, crew=None, known=()):
+def analyse(rows, crew=None, known=(), rejected=()):
     """Everything PR 1 shows for one part. ``crew`` None = detect it;
-    ``known`` = [(display name, [aliases])] for the day's people."""
+    ``known`` = [(display name, [aliases])] for the day's people;
+    ``rejected`` = name keys of phrases that are not a person (Roster)."""
     times, time_warnings = build_times(rows)
-    roster = Roster(known)
+    roster = Roster(known, rejected)
     mentions = {}
 
     def mention(name, i):
@@ -895,7 +973,9 @@ def analyse(rows, crew=None, known=()):
     speaker_text = ' '.join(re.sub(r'\s+', ' ', row['speaker']) for row in rows).lower()
     for i, row in enumerate(rows):
         for raw in _welcome_names(row['description'], speaker_text):
-            mention(roster.add(raw), i)
+            name = roster.add(raw)
+            if name is not None:
+                mention(name, i)
     titled = [i for i, row in enumerate(rows) if _TITLES_PREFIX.match(row['speaker'] or '')]
     for i in titled + [i for i in range(len(rows)) if i not in titled]:
         if rows[i]['speaker']:
@@ -912,12 +992,22 @@ def analyse(rows, crew=None, known=()):
     speakers = {}
     exits, enters, unknown_exits = {}, {}, []
     refs = Refs(roster)
+    spans = {}            # display name -> [(row, column, start, end)]: where its words are
     for i, row in enumerate(rows):
         refs.row = i
         for raw in _welcome_names(row['description'], speaker_text):
-            refs.saw(roster.resolve(raw))
+            name = roster.resolve(raw)
+            if name is None:
+                continue
+            refs.saw(name)
+            place = _find_words(row['description'], raw)
+            if place:
+                spans.setdefault(name, []).append((i, 'description') + place)
         if row['speaker']:
-            names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs)
+            cell = []
+            names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs, spans=cell)
+            for name, start, end in cell:
+                spans.setdefault(name, []).append((i, 'speaker', start, end))
         else:
             names, leftovers = [], []
         out, back, unknown = exits_and_entries(row['description'], roster, refs)
@@ -946,12 +1036,14 @@ def analyse(rows, crew=None, known=()):
     mics, mic_flags = _mic_numbers(rows, roster, speakers)
     flags += mic_flags
 
-    sends = {(name, row) for kind, name, row, _ in events_raw if kind == 'send'}
+    sends = {(name, row) for kind, name, row, _, _ in events_raw if kind == 'send'}
     events = [Event(kind, name, row, event_minute(
-        times, kind, row, rows, sent_here=kind == 'catch' and (name, row) in sends), spans)
-        for kind, name, row, spans in events_raw]
+        times, kind, row, rows, sent_here=kind == 'catch' and (name, row) in sends), spans, words)
+        for kind, name, row, spans, words in events_raw]
     for e in events:
         mention(e.name, e.row)
+        for r, start, end in e.words:
+            spans.setdefault(e.name, []).append((r, 'bsm', start, end))
 
     hints = {}
     for i, row in enumerate(rows):
@@ -989,7 +1081,7 @@ def analyse(rows, crew=None, known=()):
     people = {name: {'rows': sorted(mentions.get(name, ())), 'mic_hint': hints.get(name, ''),
                      'bsm_only': name in roster.bsm_only, 'intro': refs.intro.get(name),
                      'exits': sorted(exits.get(name, ())), 'enters': sorted(enters.get(name, ())),
-                     'mics': mics.get(name, [])}
+                     'mics': mics.get(name, []), 'spans': sorted(set(spans.get(name, ())))}
               for name in roster.found | set(mentions)}
     starts = [times[i].t0 for i in segments]
     ends = [times[i].t1 for i in segments]
@@ -1019,6 +1111,7 @@ def _brought_on(text, roster):
             words = words[:-1]
         if (2 <= len(words) <= 4 and _is_name_word(words[0])
                 and all(_is_name_part(w) for w in words[1:])
+                and name_key(' '.join(_clean_token(w) for w in words)) not in roster.rejected
                 and not any(_clean_token(w).lower() in TITLE_WORDS | ORG_WORDS
                             or _clean_token(w).lower().split('-')[-1] in ORG_WORDS for w in words)
                 and not (len(words) == 2 and _honorific(words[0]))):
@@ -1207,7 +1300,7 @@ def _mic_numbers(rows, roster, speakers):
                     continue
                 name, words = _list_name(text, roster)
                 if name is None:
-                    if len(words) > 1:
+                    if len(words) > 1 and name_key(' '.join(words)) not in roster.rejected:
                         flags.append(('mic_name', i, 'Line {}: {} is listed for "{}", who is not in the Speaker '
                                       'column. Merge or add them to use this number.'.format(
                                           row['line'] or '?', mic_label(kind, numbers[0]), ' '.join(words)), None))

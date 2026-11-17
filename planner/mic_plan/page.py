@@ -344,6 +344,7 @@ def review_cards(parts, plan, apps, people, labels):
                        'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
                        'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved',
                        'rig_use': 'Transmitter', 'swap': 'Swap', 'swap_mid': 'Swap mid-session', 'rig': 'Rig',
+                       'override_changed': 'Changed', 'override_gone': 'Line gone', 'override_person': 'Who?',
                        SHOWFLOW_CARD: 'Showflow'}
         for f in plan.flags:
             part, row = rows.get(f.get('row'), (None, None))

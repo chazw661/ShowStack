@@ -25,9 +25,9 @@ from planner.models import (
 
 from . import solver
 from .display import describe_change, describe_edit
-from . import importer
+from . import importer, overrides
 from .importer import active_parts
-from .parser import NO_CUE_MIN_COVERAGE, group_exit, segment_heading
+from .parser import NO_CUE_MIN_COVERAGE, group_exit, is_vog, name_key, segment_heading
 
 logger = logging.getLogger(__name__)
 
@@ -231,8 +231,16 @@ def build_day(day, follow=False):
 
     people, listings, exits, enters, added = [], {}, {}, {}, []
     changes = _mic_changes(day.showflow_people.all(), parts) if follow else set()
+    vog_rows = tuple(r.pk for part in parts for r in rows_by_part[part.pk] if is_vog(r.description))
     for p in day.showflow_people.all():
         if p.flags.get('gone'):
+            continue
+        if p.flags.get('role') == 'vog':
+            # Given a pack (importer.set_vog_pack): never on stage, one pack all day.
+            people.append(solver.Person(key=p.pk, name=p.display_name, name_key=p.name_key,
+                                        mic_type=solver.HH if p.mic_hint == 'HH' else solver.BODY,
+                                        fixed_rows=vog_rows))
+            listings[p.pk] = []
             continue
         people.append(solver.Person(
             key=p.pk, name=p.display_name, mic_type=solver.HH if p.mic_hint == 'HH' else solver.BODY,
@@ -253,13 +261,6 @@ def build_day(day, follow=False):
             where = importer.resolve_added(entry, parts, rows_by_part)
             if where is not None:
                 added.append(solver.Added(p.pk, where[1].pk, where[2].pk if where[2] is not None else None))
-    groups = []
-    for part in parts:
-        for r in rows_by_part[part.pk]:
-            g = group_exit(r.description)
-            if g is not None:
-                groups.append(solver.GroupExit(r.pk, g[0], tuple(g[1])))
-
     # A part's on/off comes from its cues when they cover at least half of
     # the people it lists (the parser's "No cue" rule); otherwise from lines.
     cued = set()
@@ -269,12 +270,87 @@ def build_day(day, follow=False):
         sent = {e.person_id for e in events if e.row.showflow_import_id == part.pk}
         if sent and listed and len(listed & sent) >= NO_CUE_MIN_COVERAGE * len(listed):
             cued.add(part.pk)
-    cues = tuple(solver.Cue(e.kind, e.person_id, e.row_id, e.event_min) for e in events)
-    data = solver.Day(rows=tuple(rows), segments=tuple(segments), people=tuple(people), cues=cues,
+    cues = [solver.Cue(e.kind, e.person_id, e.row_id, e.event_min) for e in events]
+    keep, mic_at, issues = _apply_overrides(day, parts, rows_by_part, cued, listings, exits, enters, cues)
+    groups = []
+    for part in parts:
+        for r in rows_by_part[part.pk]:
+            g = group_exit(r.description)
+            if g is not None:
+                groups.append(solver.GroupExit(r.pk, g[0], tuple(g[1]), frozenset(keep.get(r.pk, ()))))
+    data = solver.Day(rows=tuple(rows), segments=tuple(segments), people=tuple(people), cues=tuple(cues),
                       listings=listings, cued_parts=frozenset(cued), exits=exits, enters=enters,
-                      group_exits=tuple(groups), added=tuple(added))
+                      group_exits=tuple(groups), added=tuple(added), mic_at=mic_at, issues=tuple(issues))
     mode = 'cues' if parts and len(cued) == len(parts) else 'line estimates'
     return data, rows_by_part, mode
+
+
+def people_to_confirm(day):
+    """People the parse made from a part planned by line estimates (no cues)
+    whom no one has confirmed yet: there, a name in a Speaker cell is all
+    there is to go on ("Hall And Lobby"), so each starts unconfirmed. People
+    added by hand and roles (the VOG) are the user's own."""
+    data, _, _ = build_day(day)
+    loose = {str(pk) for pk in {r.part for r in data.rows} - set(data.cued_parts)}
+    return [p for p in day.showflow_people.all()
+            if not (p.flags.get('gone') or p.flags.get('confirmed') or p.flags.get('role') or p.flags.get('added'))
+            and any(p.flags.get('rows', {}).get(part) for part in loose)]
+
+
+def _apply_overrides(day, parts, rows_by_part, cued, listings, exits, enters, cues):
+    """Row overrides (overrides.py) as plan input, in place: a cued part's
+    on/off are cues, a cue-free part's are lines naming them and exits.
+    Returns ({row key: person keys kept on through a group exit there},
+    {(person key, row key): mic type}, issues)."""
+    applied, issues = overrides.plan_input(parts, rows_by_part)
+    who = {}
+    for p in day.showflow_people.all():
+        if not p.flags.get('gone'):
+            for spelling in [p.display_name] + list(p.aliases):
+                who.setdefault(name_key(spelling), p.pk)
+    keep, mic_at = {}, {}
+
+    def drop(person, row, kinds):
+        cues[:] = [c for c in cues if not (c.person == person and c.row == row.pk and c.kind in kinds)]
+
+    for part, row, e in applied:
+        for key in [k for field in overrides.LISTS for k in e.get(field, ())] + list(e.get('mic') or {}):
+            if key not in who:
+                issues.append({'kind': 'override_person', 'row': row.pk, 'person': None, 'entry': e['id'],
+                               'part': part.pk, 'text': 'Line {}: your change names "{}", who is no longer '
+                                                        'on this day; that part is not applied.'.format(
+                                                            row.line_no or '#{}'.format(row.order + 1), key)})
+        is_cued = part.pk in cued
+        for key in e.get('on', ()):
+            if key in who:
+                if is_cued:
+                    cues.append(solver.Cue('send', who[key], row.pk, row.est_time))
+                else:
+                    listings.setdefault(who[key], []).append(row.pk)
+        for key in e.get('off', ()):
+            if key in who:
+                if is_cued:
+                    cues.append(solver.Cue('catch', who[key], row.pk, row.est_time))
+                else:
+                    exits.setdefault(who[key], []).append(row.pk)
+        for key in e.get('not_on', ()):
+            if key in who:
+                person = who[key]
+                for into in (listings, enters):
+                    if person in into:
+                        into[person] = [k for k in into[person] if k != row.pk]
+                drop(person, row, ('send',))
+        for key in e.get('not_off', ()):
+            if key in who:
+                person = who[key]
+                if person in exits:
+                    exits[person] = [k for k in exits[person] if k != row.pk]
+                drop(person, row, ('catch',))
+                keep.setdefault(row.pk, set()).add(person)
+        for key, mic_type in (e.get('mic') or {}).items():
+            if key in who:
+                mic_at[(who[key], row.pk)] = solver.HH if mic_type == 'HH' else solver.BODY
+    return keep, mic_at, issues
 
 
 def plan_values(plan):
@@ -633,7 +709,7 @@ def _save(plan, data, rows_by_part, result, values, counts, fixed, edits, prev, 
             if was is not None and (was[0], was[1]) != (main.get(a.skey), a.mic_type):
                 if out is changes or (a.skey not in fixed.pins and a.skey not in fixed.types):
                     out.append(change(a, was))
-    flags = list(result.flags)
+    flags = list(result.flags) + list(data.issues)
     if moved:
         flags.append({'kind': 'moved', 'row': None, 'person': None,
                       'text': 'Moved from the RF they had: {}.'.format('; '.join(c['text'] for c in moved))})
