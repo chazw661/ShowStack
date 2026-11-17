@@ -23,7 +23,8 @@
         padding: 0 0 48px;
         /* Session table sizing. The fixed columns are variables so a hidden
            column can be set to 0, which also narrows the card. Presenter and
-           Notes have minimums and share whatever the card has beyond them. */
+           Notes have minimums and maximums and share whatever the card has
+           beyond the minimums; the maximums cap the card. */
         --mto-w-rf: 40px;
         --mto-w-type: 108px;
         --mto-w-headset: 96px;
@@ -31,6 +32,8 @@
         --mto-w-micd: 68px;
         --mto-min-pres: 150px;
         --mto-min-notes: 105px;
+        --mto-max-pres: 320px;
+        --mto-max-notes: 260px;
         --mto-gap: 18px;
     }
 
@@ -50,12 +53,12 @@
     #mto-root.mto-hide-placement .mto-col-placement,
     #mto-root.mto-hide-notes .mto-col-notes { display: none; }
     /* A hidden column's width variable is 0, so it comes off the card
-       minimum: cards narrow, and mtoLayoutRows fits more of them per row.
-       Any spare width goes to Presenter (and Notes, if shown). */
+       minimum and maximum: cards narrow, and mtoLayoutRows fits more of them
+       per row. Any spare width goes to Presenter (and Notes, if shown). */
     #mto-root.mto-hide-type { --mto-w-type: 0px; }
     #mto-root.mto-hide-headset { --mto-w-headset: 0px; }
     #mto-root.mto-hide-placement { --mto-w-placement: 0px; }
-    #mto-root.mto-hide-notes { --mto-min-notes: 0px; }
+    #mto-root.mto-hide-notes { --mto-min-notes: 0px; --mto-max-notes: 0px; }
     .mto-cols { position: relative; }
     .mto-cols-btn, .mto-hidden-badge {
         font-family: inherit; cursor: pointer; min-height: 32px; white-space: nowrap;
@@ -155,8 +158,9 @@
     .mto-session-grid {
         /* A day's sessions in one row that scrolls sideways. The row shows
            as many whole cards as fit at the card minimum (--mto-per-row, set
-           by mtoLayoutRows) and shares the rest of the width between them,
-           so fields never squish. Swipes snap to a whole session; the day
+           by mtoLayoutRows) and shares the rest of the width between them, up
+           to the card maximum, so fields never squish. Cards sit at the left;
+           a row with room to spare leaves it on the right. Swipes snap to a whole session; the day
            header's ◀ ▶ buttons are the main way to move on an iPad, the
            scrollbar the desktop's. */
         display: flex;
@@ -189,11 +193,18 @@
         --mto-card-min: calc(var(--mto-w-rf) + var(--mto-w-type) + var(--mto-w-headset)
                              + var(--mto-w-placement) + var(--mto-w-micd)
                              + var(--mto-min-pres) + var(--mto-min-notes) + 5px);
+        /* Maximum: Presenter and Notes at their maximums (1017px with every
+           column showing, 661px under A1 setup), so a lone card or a wide
+           monitor never spreads Mic'd far from the name. */
+        --mto-card-max: calc(var(--mto-card-min) + var(--mto-max-pres) - var(--mto-min-pres)
+                             + var(--mto-max-notes) - var(--mto-min-notes));
         /* The row's width (cqw = 1% of it) split between --mto-per-row
-           cards. A length, so Notes can be sized from it: a percentage
-           inside calc() on a fixed-layout column is treated as auto. */
-        --mto-card-w: max(var(--mto-card-min),
-                          calc((100cqw + var(--mto-gap)) / var(--mto-per-row, 1) - var(--mto-gap)));
+           cards, kept between the minimum and the maximum. A length, so
+           Notes can be sized from it: a percentage inside calc() on a
+           fixed-layout column is treated as auto. */
+        --mto-card-w: min(var(--mto-card-max), max(var(--mto-card-min),
+                          calc((100cqw + var(--mto-gap)) / var(--mto-per-row, 1) - var(--mto-gap))));
+        --mto-spare: calc(var(--mto-card-w) - var(--mto-card-min));
         flex: 0 0 var(--mto-card-w);
         width: var(--mto-card-w);
         min-width: var(--mto-card-min);
@@ -232,15 +243,18 @@
     }
     /* table-layout: fixed. RF, Type, Headset, Placement and Mic'd are fixed
        (the variables on #mto-root). Presenter and Notes each get their
-       minimum, and the card's width beyond its minimum is shared 60 / 40:
-       Notes is sized from the card, Presenter (no width) takes the rest. A
+       minimum; of the card's width beyond its minimum Presenter gets 60%
+       until it reaches its maximum, and Notes the rest (the card maximum
+       caps it at its own). Notes is sized, Presenter (no width) takes what
+       is left. A
        long note is one truncated line that grows the row on focus, never
        the card. */
     .mto-th-rf { width: var(--mto-w-rf); text-align: center !important; }
     .mto-th-type { width: var(--mto-w-type); }
     .mto-th-hc { width: var(--mto-w-headset); }
     .mto-th-pl { width: var(--mto-w-placement); }
-    .mto-th-notes { width: calc(var(--mto-min-notes) + (var(--mto-card-w) - var(--mto-card-min)) * 0.4); }
+    .mto-th-notes { width: calc(var(--mto-min-notes) + var(--mto-spare)
+                                - min(var(--mto-max-pres) - var(--mto-min-pres), var(--mto-spare) * 0.6)); }
     .mto-th-micd { width: var(--mto-w-micd); text-align: center !important; }
 
     /* Issue #68: inline editable controls in the overview table. */
@@ -551,9 +565,10 @@
 </div>
 
 <script>
-// Session rows. mtoLayoutRows: how many whole cards each day's row shows --
-// as many as fit at the card minimum (a CSS variable sum, so it changes when
-// columns are hidden) -- set as --mto-per-row; CSS shares out the rest.
+// Session rows. mtoLayoutRows: how many whole cards a row shows -- as many as
+// fit at the card minimum (a CSS variable sum, so it changes when columns are
+// hidden), up to the most sessions any day has -- set as --mto-per-row on
+// every day alike; CSS shares out the rest, up to the card maximum.
 // Runs before the first paint and on every resize; call it again after
 // changing the columns. Then ◀ Session N of M ▶ in each day header scrolls
 // the row one session at a time and follows swipes and the scrollbar; it is
@@ -565,24 +580,39 @@
         var cards = grid.querySelectorAll('.mto-session');
         if (!cards.length) return;
         var nav = document.querySelector('.mto-sess-nav[data-grid="' + grid.id + '"]');
-        var row = {grid: grid, cards: cards, nav: nav, perRow: 1};
+        var row = {grid: grid, cards: cards, nav: nav, perRow: 1, split: 1, fit: 0};
         rows.push(row);
         try { if (nav) wireNav(row); }
         catch (e) { console.error('Overview session nav: ' + grid.id, e); }
     });
 
-    function sizeRow(row) {
+    // How many cards fit across the row at the card minimum.
+    function fit(row) {
         var cs = getComputedStyle(row.grid);
         var inner = row.grid.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
         var gap = parseFloat(cs.columnGap) || 0;
         var min = parseFloat(getComputedStyle(row.cards[0]).minWidth) || inner;
-        var n = Math.max(1, Math.min(row.cards.length, Math.floor((inner + gap) / (min + gap))));
-        if (n !== row.perRow) { row.perRow = n; row.grid.style.setProperty('--mto-per-row', n); }
+        return Math.max(1, Math.floor((inner + gap) / (min + gap)));
+    }
+    function sizeRow(row, across) {
+        var n = Math.min(across, row.fit);
+        if (n !== row.split) { row.split = n; row.grid.style.setProperty('--mto-per-row', n); }
+        row.perRow = Math.min(n, row.cards.length);
         if (row.update) row.update();
     }
+    // Every day splits its row the same way -- by the most cards any day
+    // shows across -- so a day with fewer sessions has cards as wide as the
+    // others', not one stretched card.
     window.mtoLayoutRows = function() {
+        var across = 1;
         rows.forEach(function(row) {
-            try { sizeRow(row); }
+            row.fit = 0;
+            try { row.fit = fit(row); across = Math.max(across, Math.min(row.cards.length, row.fit)); }
+            catch (e) { console.error('Overview layout: ' + row.grid.id, e); }
+        });
+        rows.forEach(function(row) {
+            if (!row.fit) return;
+            try { sizeRow(row, across); }
             catch (e) { console.error('Overview layout: ' + row.grid.id, e); }
         });
     };
