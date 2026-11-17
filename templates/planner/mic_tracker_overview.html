@@ -59,6 +59,26 @@
     #mto-root.mto-hide-headset { --mto-w-headset: 0px; }
     #mto-root.mto-hide-placement { --mto-w-placement: 0px; }
     #mto-root.mto-hide-notes { --mto-min-notes: 0px; --mto-max-notes: 0px; }
+    /* Lock (per device): while #mto-root has .mto-locked, every editable
+       control but Mic'd gives way to the plain text a viewer sees, so a tap
+       while micing can't open a dropdown. Both are in the page; this only
+       swaps them, so a locked reload paints locked. */
+    .mto-lock-text { display: none; }
+    #mto-root.mto-locked .mto-lock-text { display: block; }
+    #mto-root.mto-locked .mto-edit-select,
+    #mto-root.mto-locked .mto-pres-input,
+    #mto-root.mto-locked .mto-notes-wrap { display: none; }
+    #mto-root.mto-locked .mto-header { box-shadow: inset 0 3px 0 var(--accent-amber); }
+    .mto-lock-btn {
+        font-family: inherit; cursor: pointer; min-height: 44px; min-width: 44px; white-space: nowrap;
+        font-size: 13px; font-weight: 800; padding: 8px 14px; border-radius: 6px;
+        background: var(--bg-raised); color: var(--text-primary); border: 1px solid var(--border-bright);
+    }
+    #mto-root.mto-locked .mto-lock-btn {
+        background: var(--accent-amber); color: var(--mtt-text-inverse); border-color: var(--accent-amber);
+    }
+    .mto-lock-on, #mto-root.mto-locked .mto-lock-off { display: none; }
+    #mto-root.mto-locked .mto-lock-on { display: inline; }
     .mto-cols { position: relative; }
     .mto-cols-btn, .mto-hidden-badge {
         font-family: inherit; cursor: pointer; min-height: 32px; white-space: nowrap;
@@ -424,12 +444,21 @@
         color:var(--mtt-banner-text); padding:7px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:13px;">Dismiss</button>
 </div>
 <div id="mto-root" class="{% for col in hidden_columns %}mto-hide-{{ col }} {% endfor %}">
+{% if not is_viewer %}
+{# Before anything inside is parsed, so a locked device never paints editable controls. #}
+<script>try { if (localStorage.getItem('mto-locked') === '1') document.getElementById('mto-root').classList.add('mto-locked'); } catch (e) {}</script>
+{% endif %}
     <div class="mto-header">
         <div>
             <div class="mto-title">🎤 Mic Tracker — Overview</div>
             <div class="mto-sub">Every day and session at a glance. Type, Headset, Placement, Presenter, Notes and Mic'd are editable here.</div>
         </div>
         <div class="mto-header-actions">
+            {% if not is_viewer %}
+            <button type="button" id="mto-lock-btn" class="mto-lock-btn" aria-pressed="false" onclick="mtoToggleLock()">
+                <span class="mto-lock-off">🔓 Lock</span><span class="mto-lock-on">🔒 Locked — tap to edit</span>
+            </button>
+            {% endif %}
             {# Rendered with the user's saved state, so nothing changes after load. #}
             <button type="button" id="mto-hidden-badge" class="mto-hidden-badge"
                     onclick="mtoShowAllColumns()"{% if not hidden_columns %} hidden{% endif %}>
@@ -904,9 +933,60 @@
             el.defaultValue = current;
             el.value = current;
             mtoNotesPreview(el);
+            mtoLockText(el);
             resolved();
         };
     }
+
+    // Lock. The plain text shown while locked is rebuilt from the control's
+    // current value -- what the user would see unlocked -- on locking, after
+    // each save and on "Use theirs". textContent only: these are user text.
+    function span(cls, text) {
+        var el = document.createElement('span');
+        el.className = cls;
+        el.textContent = text;
+        return el;
+    }
+    function mtoLockText(control) {
+        var cell = control && control.closest('td');
+        var box = cell && cell.querySelector('.mto-lock-text');
+        if (!box) return;
+        var shown;
+        if (control.tagName === 'SELECT') {
+            var opt = control.options[control.selectedIndex];
+            if (!control.value || !opt) shown = span('mto-dash', '—');
+            else if (cell.classList.contains('mto-type-cell')) shown = span('mto-type-badge', control.value);
+            else shown = span('mto-dim', opt.textContent);
+        } else if (control.classList.contains('mto-pres-input')) {
+            var name = control.value.trim();
+            shown = name ? span('mto-presenter', name) : span('mto-unassigned', '— Unassigned —');
+        } else {
+            shown = control.value ? span('mto-notes-text', control.value) : span('mto-dash', '—');
+            if (control.value) shown.tabIndex = 0;
+        }
+        box.replaceChildren(shown);
+    }
+    var root = document.getElementById('mto-root');
+    var lockBtn = document.getElementById('mto-lock-btn');
+    var CONTROLS = '.mto-edit-select, .mto-pres-input, .mto-notes-input';
+    function showLock(locked) {
+        if (locked) {
+            // Mid-edit: blurring fires the control's usual change, so a typed
+            // name or note saves as it would have. A notes conflict box stays
+            // up while locked, with both texts, until the user picks.
+            var active = document.activeElement;
+            if (active && root.contains(active) && active.matches(CONTROLS)) active.blur();
+            root.querySelectorAll(CONTROLS).forEach(mtoLockText);
+        }
+        root.classList.toggle('mto-locked', locked);
+        if (lockBtn) lockBtn.setAttribute('aria-pressed', locked ? 'true' : 'false');
+    }
+    window.mtoToggleLock = function() {
+        var locked = !root.classList.contains('mto-locked');
+        showLock(locked);
+        try { localStorage.setItem('mto-locked', locked ? '1' : '0'); } catch (e) {}
+    };
+    if (root.classList.contains('mto-locked')) showLock(true);
 
     window.mtoSaveSlotField = async function(slotId, field, value, el) {
         var body = {slot_id: slotId, field: field, value: value};
@@ -929,6 +1009,7 @@
         if (field === 'presenter_name') mtoSetAssigned(el, (value || '').trim());
         // Notes: what was just saved is the new baseline for the next save.
         if (field === 'notes' && el) el.defaultValue = value;
+        mtoLockText(el);
         if (el) { el.classList.add('mto-saved-flash'); setTimeout(function() { el.classList.remove('mto-saved-flash'); }, 700); }
     };
 })();
