@@ -7130,7 +7130,9 @@ class ShowflowPerson(models.Model):
     BACKUP_TYPE_CHOICES = [('HH', 'Handheld'), ('body', 'Body pack')]
     # With mic_hint 'backup', the extra pack the plan reserves for them.
     backup_mic_type = models.CharField(max_length=4, choices=BACKUP_TYPE_CHOICES, default='HH')
-    # {'bsm_only': bool, 'rows': {import id: [row order, ...]}}
+    # {'bsm_only': bool, 'rows': {import id: [row order, ...]},
+    #  'spans': {import id: [[row order, column, start, end], ...]}} -- column is the
+    #  parser's ('speaker', 'description' or 'bsm'); the characters the name came from.
     flags = models.JSONField(default=dict, blank=True)
 
     class Meta:

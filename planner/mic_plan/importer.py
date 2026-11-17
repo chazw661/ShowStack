@@ -405,8 +405,13 @@ def rebuild_day(day):
                 by_key[person.name_key] = person
             found[person.name_key] = person
             state = states.setdefault(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': True,
-                                                  'hint': '', 'exits': {}, 'enters': {}, 'mics': {}})
+                                                  'hint': '', 'exits': {}, 'enters': {}, 'mics': {},
+                                                  'spans': {}})
             state['rows'][str(part.pk)] = [rows[i].order for i in info['rows']]
+            if info.get('spans'):
+                # [row order, column, start, end]: the characters their name came from.
+                state['spans'][str(part.pk)] = [[rows[r].order, col, start, end]
+                                                for r, col, start, end in info['spans']]
             for kind in ('exits', 'enters'):
                 if info.get(kind):
                     state[kind][str(part.pk)] = [rows[i].order for i in info[kind]]
@@ -433,7 +438,7 @@ def rebuild_day(day):
     cleared = set()          # (part pk, row order) of "not listed" lines people were added from
     for person in found.values():
         state = states.get(person.pk, {'rows': {}, 'intro': {}, 'bsm_only': False, 'hint': person.mic_hint,
-                                       'exits': {}, 'enters': {}, 'mics': {}})
+                                       'exits': {}, 'enters': {}, 'mics': {}, 'spans': {}})
         missing = []
         for entry in person.flags.get('added', []):
             where = resolve_added(entry, parts, rows_by_part)
@@ -443,6 +448,7 @@ def rebuild_day(day):
                 cleared.add((where[0].pk, where[1].order))
         person.flags = {'rows': state['rows'], 'intro': state['intro'], 'bsm_only': state['bsm_only'],
                         'exits': state['exits'], 'enters': state['enters'], 'mics': state['mics'],
+                        'spans': state['spans'],
                         **_user_flags(person)}
         if missing:
             person.flags['added_missing'] = missing
