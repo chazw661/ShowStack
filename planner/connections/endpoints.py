@@ -10,10 +10,12 @@ Two kinds of end:
            its label is how that device's own page names it ("In 3", "Mtx 2",
            "AES 1", "Ch 4").
 
-The graph also uses two synthetic node kinds that no model backs:
-``amp_rack`` (one per project, ``amp_rack:unlinked``: the amp end of every PA
-cable run with no Amp linked) and ``unlinked`` (text that names no device, or
-names more than one).
+The graph also uses synthetic nodes that no device model backs:
+``amp_rack`` (``amp_rack:unlinked``, one per project: the amp end of every PA
+cable run with no Amp linked; ``amp_rack:text:<text>``: a run whose
+Destination says "amp rack" but names no Amp Location), ``amp_location`` (an
+Amp Location a run's Destination names) and ``unlinked`` (text that names no
+device, or names more than one).
 
 Plain functions and constants only: no queries. The loaders in
 ``matchers.ProjectIndex`` fetch the rows; this module names them.
@@ -30,6 +32,7 @@ AMP_LOCATION = 'amp_location'   # an amp's location dict carries this kind
 AMP_RACK = 'amp_rack'
 AMP_RACK_UNLINKED = 'amp_rack:unlinked'
 AMP_RACK_UNLINKED_LABEL = 'Amp rack \u2014 not linked'
+SPEAKER_UNNAMED_LABEL = 'Speaker \u2014 not named'
 UNLINKED = 'unlinked'
 
 DEVICE_KINDS = (CONSOLE, DEVICE, PROCESSOR, AMP, ARRAY)

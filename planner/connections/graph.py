@@ -21,7 +21,11 @@ cable and an AES feed does even when none is recorded.
 
 A PA cable run is drawn amp -> speaker array, labelled with its cable:
 "HR · 2× NL 8 75'" (the row's PA Zone, count, cable type, length). A run with
-no Amp linked starts at the project's one ``amp_rack:unlinked`` node.
+no Amp linked starts at the project's one ``amp_rack:unlinked`` node -- or at
+the amp rack its Destination names (an Amp Location, or ``amp_rack:text:...``
+for rack text with no Amp Location), whose speaker end is then unnamed. A
+Destination that is no single array is a node of its own text, shared by
+every run naming the same thing.
 
 Text that names nothing, or names more than one device, is drawn as an edge
 to (or from) an ``unlinked`` node carrying the text. An ambiguous match is
@@ -41,7 +45,7 @@ from planner.connections import matchers as m
 SCHEMA = 1
 CONFIRMED, INFERRED = 'confirmed', 'inferred'
 KIND_ORDER = {k: i for i, k in enumerate(
-    (ep.CONSOLE, ep.DEVICE, ep.PROCESSOR, ep.AMP_RACK, ep.AMP, ep.ARRAY, ep.UNLINKED))}
+    (ep.CONSOLE, ep.DEVICE, ep.PROCESSOR, ep.AMP_RACK, ep.AMP_LOCATION, ep.AMP, ep.ARRAY, ep.UNLINKED))}
 
 
 @dataclass
@@ -93,9 +97,27 @@ class _Graph:
         self.extra_nodes = {}   # synthetic: amp_rack (when used) and unlinked
 
     def unlinked(self, key, text, ambiguous=False):
+        """A node for text that names no single device. A shared key keeps
+        the first text seen and is ambiguous if any of its uses is."""
         node_id = ep.node_id(ep.UNLINKED, key)
-        self.extra_nodes[node_id] = {'id': node_id, 'kind': ep.UNLINKED, 'label': text,
-                                     'unlinked': True, 'ambiguous': ambiguous}
+        node = self.extra_nodes.setdefault(node_id, {
+            'id': node_id, 'kind': ep.UNLINKED, 'label': text,
+            'unlinked': True, 'ambiguous': False})
+        node['ambiguous'] = node['ambiguous'] or ambiguous
+        return node_id
+
+    def use(self, node_id):
+        """A real node an edge reaches; amp locations are only listed then."""
+        node = self.index.nodes[node_id]
+        if node.kind == ep.AMP_LOCATION:
+            self.extra_nodes[node_id] = _node_json(node)
+        return node_id
+
+    def rack_text(self, text):
+        """A Destination that says "amp rack" but names no Amp Location."""
+        node_id = f'{ep.AMP_RACK}:text:{m.norm(text)}'
+        self.extra_nodes.setdefault(node_id, {'id': node_id, 'kind': ep.AMP_RACK,
+                                              'label': text, 'unlinked': True})
         return node_id
 
     def amp_rack(self):
@@ -185,17 +207,27 @@ class _Graph:
         for cm in matches:
             row = cm.row
             amp, speaker = cm.amp, cm.speaker
-            from_node = amp.target if amp.verdict == m.MATCHED else self.amp_rack()
+            if amp.verdict == m.MATCHED:
+                from_node = self.use(amp.target)
+            elif amp.via == 'rack_text':
+                from_node = self.rack_text(amp.text)
+            else:
+                from_node = self.amp_rack()
             ambiguous = speaker.verdict == m.AMBIGUOUS
-            to_node = (speaker.target if speaker.verdict == m.MATCHED else
-                       self.unlinked(f'pa:{row.pk}:speaker', speaker.text, ambiguous))
+            if speaker.verdict == m.MATCHED:
+                to_node = speaker.target
+            elif m.norm(speaker.text):
+                to_node = self.unlinked(f'text:{m.norm(speaker.text)}', speaker.text, ambiguous)
+            else:                       # blank, or the Destination named the rack
+                to_node = self.unlinked(f'pa:{row.pk}:speaker', ep.SPEAKER_UNNAMED_LABEL)
             unlinked = amp.verdict != m.MATCHED or speaker.verdict != m.MATCHED
             self.links.append(Link(
                 from_node, to_node, transport='speaker', status=INFERRED,
                 unlinked=unlinked, rule='c', match=speaker.verdict,
                 source=('pa_cable', row.pk), cable=_pa_cable(row), ambiguous=ambiguous,
                 candidates=speaker.candidates,
-                text={'destination': speaker.text, 'amp_linked': amp.verdict == m.MATCHED},
+                text={'destination': speaker.text or amp.text,
+                      'amp_linked': amp.via == 'fk', 'destination_is_rack': speaker.verdict == m.RACK},
                 cable_label=_pa_cable_label(row)))
 
 
