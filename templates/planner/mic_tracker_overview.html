@@ -557,7 +557,8 @@
 // Runs before the first paint and on every resize; call it again after
 // changing the columns. Then ◀ Session N of M ▶ in each day header scrolls
 // the row one session at a time and follows swipes and the scrollbar; it is
-// hidden while every session of the day fits on screen.
+// hidden while every session of the day fits on screen. Each row is laid
+// out on its own, so an error in one never stops the others.
 (function() {
     var rows = [];
     document.querySelectorAll('.mto-session-grid').forEach(function(grid) {
@@ -566,7 +567,8 @@
         var nav = document.querySelector('.mto-sess-nav[data-grid="' + grid.id + '"]');
         var row = {grid: grid, cards: cards, nav: nav, perRow: 1};
         rows.push(row);
-        if (nav) wireNav(row);
+        try { if (nav) wireNav(row); }
+        catch (e) { console.error('Overview session nav: ' + grid.id, e); }
     });
 
     function sizeRow(row) {
@@ -578,7 +580,12 @@
         if (n !== row.perRow) { row.perRow = n; row.grid.style.setProperty('--mto-per-row', n); }
         if (row.update) row.update();
     }
-    window.mtoLayoutRows = function() { rows.forEach(sizeRow); };
+    window.mtoLayoutRows = function() {
+        rows.forEach(function(row) {
+            try { sizeRow(row); }
+            catch (e) { console.error('Overview layout: ' + row.grid.id, e); }
+        });
+    };
 
     function wireNav(row) {
         var grid = row.grid, cards = row.cards, nav = row.nav;
@@ -586,13 +593,15 @@
         var next = nav.querySelector('.mto-sess-next');
         var pos = nav.querySelector('.mto-sess-pos');
         function pad() { return parseFloat(getComputedStyle(grid).paddingLeft) || 0; }
-        function step() {      // one card plus the gap
-            return cards[1].offsetLeft - cards[0].offsetLeft;
+        function step() {      // one card plus the gap; 0 with a single card
+            return cards.length > 1 ? cards[1].offsetLeft - cards[0].offsetLeft : 0;
         }
         function first() {
-            return Math.min(cards.length - 1, Math.max(0, Math.round(grid.scrollLeft / step())));
+            var s = step();
+            return s > 0 ? Math.min(cards.length - 1, Math.max(0, Math.round(grid.scrollLeft / s))) : 0;
         }
         row.update = function() {
+            if (cards.length < 2) { nav.hidden = true; return; }   // nothing to step through
             var i = first(), n = row.perRow, last = Math.min(cards.length, i + n);
             pos.textContent = last > i + 1
                 ? 'Sessions ' + (i + 1) + '–' + last + ' of ' + cards.length
@@ -621,9 +630,11 @@
         window.addEventListener('resize', window.mtoLayoutRows);
     }
 })();
+</script>
 
-// "Updates available" poll — the Overview page previously had no polling, so
-// users on it never saw refresh warnings. Same mechanism as the main tracker.
+<script>
+// "Updates available" poll, same mechanism as the main tracker. It has its own
+// <script> block so an error in the layout script above can never stop it.
 (function() {
     var banner = document.getElementById('mto-update-banner');
     var dismissBtn = document.getElementById('mto-banner-dismiss');
@@ -656,7 +667,6 @@
         } catch (e) {}
     }
     setInterval(check, 5000);
-    setTimeout(check, 5000);
 })();
 </script>
 
