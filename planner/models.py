@@ -7053,6 +7053,10 @@ class ShowflowImport(models.Model):
     # Segment span in minutes from midnight; decides replace-or-add.
     span_start = models.PositiveSmallIntegerField(null=True, blank=True)
     span_end = models.PositiveSmallIntegerField(null=True, blank=True)
+    # SHA-256 of the uploaded PDF: the walkthrough checks that the file picked
+    # on a device is this one. A hash, not the file (showflows are under NDA).
+    # Blank on imports from before it was kept.
+    file_sha256 = models.CharField(max_length=64, blank=True, default='')
 
     class Meta:
         verbose_name = 'Showflow import'
@@ -7083,6 +7087,10 @@ class ShowflowRow(models.Model):
     est_time = models.PositiveSmallIntegerField(null=True, blank=True)
     # The row's own Start time, not interpolated between its neighbours.
     time_exact = models.BooleanField(default=False)
+    # Where the row is on page ``page_no``: [x0, top, x1, bottom] as fractions
+    # of the page as shown (extract._box). None on imports from before it
+    # was kept; Re-read can't add it (no PDF), only a new import.
+    bbox = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ['showflow_import', 'order']
@@ -7143,6 +7151,9 @@ class ShowflowEvent(models.Model):
     kind = models.CharField(max_length=5, choices=KIND_CHOICES)
     # When it happens, minutes from midnight (see parser.event_minute).
     event_min = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Orders of every row of the part the cue's words came from: ``row``'s
+    # alone, or more when the cue spills onto the next row or page.
+    source_rows = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ['row__showflow_import', 'row__order', 'id']

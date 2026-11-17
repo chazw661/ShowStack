@@ -736,7 +736,10 @@ def detect_crew(rows, roster):
 
 
 def find_events(rows, crew, roster):
-    """(events, unknown-crew flags). Each event: (kind, display name, row).
+    """(events, unknown-crew flags). Each event: (kind, display name, row,
+    rows): ``row`` is the verb's, ``rows`` every row the cue's words came
+    from, crew name to last name (more than one when it spills onto the next row or
+    page).
 
     A cue is "<crew> (to) send(s)/catch(es) <names>", names joined by commas,
     "and" or "&"; or, with no crew, a cell that opens with the verb ("Send
@@ -773,6 +776,7 @@ def find_events(rows, crew, roster):
         kind = 'send' if toks[k].lower().startswith('send') else 'catch'
         got = []
         p = k + 1
+        last = k + 1      # past the last name's words
         expect = True
         while p < len(toks):
             if expect and got and toks[p].lower() in SEPARATORS:
@@ -783,6 +787,7 @@ def find_events(rows, crew, roster):
                 if name:
                     got.append(name)
                     p += used
+                    last = p
                     expect = False
                     continue
                 run = []
@@ -800,14 +805,16 @@ def find_events(rows, crew, roster):
                     roster.bsm_only.add(name)
                 got.append(name)
                 p += len(run)
+                last = p
                 expect = False
             elif toks[p].lower() in SEPARATORS:
                 p += 1
                 expect = True
             else:
                 break
+        spans = tuple(dict.fromkeys(stream[x][0] for x in range(k if crewless else max(j, 0), last)))
         for name in dict.fromkeys(got):
-            events.append((kind, name, row))
+            events.append((kind, name, row, spans))
             roster.found.add(name)
         k = p if got else k + 1
     return events, flags
@@ -823,6 +830,7 @@ class Event:
     name: str
     row: int
     minute: float = None
+    rows: tuple = ()      # every row the cue's words came from (find_events)
 
 
 @dataclass
@@ -938,10 +946,10 @@ def analyse(rows, crew=None, known=()):
     mics, mic_flags = _mic_numbers(rows, roster, speakers)
     flags += mic_flags
 
-    sends = {(name, row) for kind, name, row in events_raw if kind == 'send'}
+    sends = {(name, row) for kind, name, row, _ in events_raw if kind == 'send'}
     events = [Event(kind, name, row, event_minute(
-        times, kind, row, rows, sent_here=kind == 'catch' and (name, row) in sends))
-        for kind, name, row in events_raw]
+        times, kind, row, rows, sent_here=kind == 'catch' and (name, row) in sends), spans)
+        for kind, name, row, spans in events_raw]
     for e in events:
         mention(e.name, e.row)
 

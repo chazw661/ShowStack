@@ -304,8 +304,9 @@ def _cell(cell, style):
     return Paragraph(escape(cell), style) if cell else ''
 
 
-def build_pdf(pages):
-    """PDF bytes: one ruled table per page, landscape letter."""
+def build_pdf(pages, crop=None):
+    """PDF bytes: one ruled table per page, landscape letter. ``crop``: a
+    CropBox (x0, y0, x1, y1) in points on every page."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import landscape, letter
     from reportlab.lib.styles import getSampleStyleSheet
@@ -327,7 +328,51 @@ def build_pdf(pages):
         story.append(table)
         if n + 1 < len(pages):
             story.append(PageBreak())
-    doc.build(story)
+    on_page = (lambda canvas, _doc: canvas.setCropBox(crop)) if crop else (lambda canvas, _doc: None)
+    doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
+    return buf.getvalue()
+
+
+def build_rotated_pdf(pages, rotate):
+    """PDF bytes that *show* what build_pdf's landscape pages do, one table a
+    page drawn at the top left, but stored as a portrait page turned by a
+    /Rotate of ``rotate`` (0, 90, 180 or 270; 0 is the same drawing unturned,
+    to compare against; 180 stays landscape). A viewer turns the page clockwise by /Rotate, so the
+    table is drawn turned the other way to come out upright."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import landscape, letter
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.pdfgen.canvas import Canvas
+    from reportlab.platypus import Table, TableStyle
+
+    style = getSampleStyleSheet()['BodyText']
+    style.fontSize, style.leading = 6, 7
+    shown_w, shown_h = landscape(letter)
+    buf = io.BytesIO()
+    # ReportLab takes the size as shown and swaps the stored MediaBox itself
+    # for 90 and 270, so there the stored page is portrait.
+    canvas = Canvas(buf, pagesize=landscape(letter))
+    width = shown_w - 36
+    for rows in pages:
+        cols = len(rows[0])
+        table = Table([[_cell(cell, style) for cell in row] for row in rows], colWidths=[width / cols] * cols)
+        table.setStyle(TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                                   ('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+        _, h = table.wrapOn(canvas, width, shown_h - 36)
+        canvas.saveState()
+        # (X, Y) as shown -> the stored page (portrait for 90 and 270).
+        if rotate == 90:
+            canvas.transform(0, 1, -1, 0, shown_h, 0)
+        elif rotate == 180:
+            canvas.transform(-1, 0, 0, -1, shown_w, shown_h)
+        elif rotate == 270:
+            canvas.transform(0, -1, 1, 0, 0, shown_w)
+        table.drawOn(canvas, 18, shown_h - 18 - h)
+        canvas.restoreState()
+        if rotate:
+            canvas.setPageRotation(rotate)
+        canvas.showPage()
+    canvas.save()
     return buf.getvalue()
 
 
