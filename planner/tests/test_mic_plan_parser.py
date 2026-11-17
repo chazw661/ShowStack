@@ -275,13 +275,13 @@ class LineColumnAndShortDurationTests(SimpleTestCase):
 
     def test_an_empty_grid_page_is_not_searched_for_tables(self):
         import pdfplumber.page
-        real = pdfplumber.page.Page.extract_tables
+        real = pdfplumber.page.Page.find_tables
         calls = []
 
         def counting(page, *args, **kwargs):
             calls.append(page.page_number)
             return real(page, *args, **kwargs)
-        with mock.patch.object(pdfplumber.page.Page, 'extract_tables', counting):
+        with mock.patch.object(pdfplumber.page.Page, 'find_tables', counting):
             extract(self.pdf)
         self.assertEqual(2, self.pages)
         self.assertEqual([1], calls)

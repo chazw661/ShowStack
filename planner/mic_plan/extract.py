@@ -147,13 +147,15 @@ def _appendix_row(row):
                 and not _TIME_LIKE.match(row['end']))
 
 
-def rows_from_tables(pages, document=False):
+def rows_from_tables(pages, document=False, boxes=None):
     """Rows from ``pages``: a list (one per page) of tables, each a list of
     rows of cells. Separated from pdfplumber so tests can feed tables in.
     ``document``: a page with no table carried document-style headings.
+    ``boxes``: the same shape as ``pages`` with a box (see _box) for each row.
 
     Returns ``(rows, columns, warnings)``: each row a dict of FIELDS plus
-    ``page_no``; ``columns`` the header as [{'header', 'field'}].
+    ``page_no`` and ``box`` (None without ``boxes``); ``columns`` the header
+    as [{'header', 'field'}].
     """
     mapping = None
     width = None
@@ -164,9 +166,9 @@ def rows_from_tables(pages, document=False):
     best, best_score = None, 1     # the row closest to a header: two named columns at least
     clock_seen = stopped = False
     for page_no, tables in enumerate(pages, start=1):
-        for table in tables:
+        for t, table in enumerate(tables):
             table_start = len(rows)
-            for cells in table:
+            for r, cells in enumerate(table):
                 cells = [_norm(c) for c in cells]
                 found = header_map(cells)
                 if found:
@@ -201,6 +203,7 @@ def rows_from_tables(pages, document=False):
                 if row['speaker'].lower() in NOBODY:
                     row['speaker'] = ''
                 row['page_no'] = page_no
+                row['box'] = boxes[page_no - 1][t][r] if boxes else None
                 rows.append(row)
                 raw.append(cells)
     if mapping is not None and rows and not any(r['line'] for r in rows):
@@ -240,12 +243,24 @@ def _document_headings(page):
     return False
 
 
+def _box(bbox, page):
+    """A table row's ``[x0, top, x1, bottom]`` as fractions of its page as
+    shown: the crop box, after any /Rotate (pdfplumber has applied it). That
+    is what pdf.js draws, so the walkthrough scales a box by the canvas size
+    alone. Four places: 0.0001 of a page is under a tenth of a point."""
+    x0, top, x1, bottom = page.cropbox
+    w, h = (x1 - x0) or 1, (bottom - top) or 1
+    return [round(min(1.0, max(0.0, v)), 4) for v in
+            ((bbox[0] - x0) / w, (bbox[1] - top) / h, (bbox[2] - x0) / w, (bbox[3] - top) / h)]
+
+
 def extract(data, max_pages=MAX_PAGES_DEFAULT, time_budget=TIME_BUDGET_S):
     """Rows from PDF bytes. Raises ShowflowError for anything unreadable.
 
     Returns ``(rows, columns, warnings, page count)``.
     """
     import pdfplumber
+    from pdfplumber.table import TableSettings
 
     if not data.startswith(b'%PDF-'):
         raise ShowflowError('That file is not a PDF.')
@@ -260,14 +275,19 @@ def extract(data, max_pages=MAX_PAGES_DEFAULT, time_budget=TIME_BUDGET_S):
             raise ShowflowError('That PDF has {} pages; Mic Planner reads up to {}. Split it into '
                                 'parts (an AM and a PM file, say) and import each.'.format(
                                     count, max_pages))
-        pages = []
+        pages, boxes = [], []
         document = False
+        # Page.extract_tables(), in two steps so each row's box comes from
+        # the same Table the text does.
+        settings = TableSettings.resolve(None)
         started = time.monotonic()
         for page in pdf.pages:
             try:
-                tables = [] if _only_line_numbers(page) else page.extract_tables()
+                found = [] if _only_line_numbers(page) else page.find_tables(settings)
+                tables = [t.extract(**(settings.text_settings or {})) for t in found]
                 document = document or (not tables and _document_headings(page))
                 pages.append(tables)
+                boxes.append([[_box(row.bbox, page) for row in t.rows] for t in found])
             except Exception as exc:
                 raise ShowflowError("Page {} couldn't be read ({}).".format(
                     page.page_number, type(exc).__name__))
@@ -276,5 +296,5 @@ def extract(data, max_pages=MAX_PAGES_DEFAULT, time_budget=TIME_BUDGET_S):
                 raise ShowflowError('That PDF is taking too long to read (stopped at page {} of '
                                     '{}). Split it into parts and import each.'.format(
                                         page.page_number, count))
-    rows, columns, warnings = rows_from_tables(pages, document)
+    rows, columns, warnings = rows_from_tables(pages, document, boxes)
     return rows, columns, warnings, count

@@ -19,6 +19,7 @@ from scratch, so a parser fix is never undone by the state an older parse
 left behind.
 """
 
+import hashlib
 import logging
 import secrets
 import time
@@ -98,6 +99,7 @@ def stage_upload(day, data, filename, user):
             warnings=[{'kind': 'parse', 'text': w, 'row_order': None, 'person': None}
                       for w in warnings],
             span_start=_minute(result.span[0]), span_end=_minute(result.span[1]),
+            file_sha256=hashlib.sha256(data).hexdigest(),
         )
         ShowflowRow.objects.bulk_create([
             ShowflowRow(
@@ -107,7 +109,7 @@ def stage_upload(day, data, filename, user):
                 speaker_text=row['speaker'], bsm_text=row['bsm'], audio_text=row['audio'],
                 notes_text=row['notes'],
                 is_segment=t.is_segment, segment_t0=_minute(t.t0), segment_t1=_minute(t.t1),
-                est_time=_minute(t.minute), time_exact=t.exact,
+                est_time=_minute(t.minute), time_exact=t.exact, bbox=row['box'],
             ) for i, (row, t) in enumerate(zip(rows, result.times))
         ])
     return imp
@@ -460,7 +462,8 @@ def rebuild_day(day):
     for part, rows, result in results:
         for e in result.events:
             events.append(ShowflowEvent(row=rows[e.row], person=by_key[name_key(e.name)],
-                                        kind=e.kind, event_min=_minute(e.minute)))
+                                        kind=e.kind, event_min=_minute(e.minute),
+                                        source_rows=[rows[i].order for i in e.rows]))
         part.warnings = [w for w in part.warnings if w['kind'] == 'parse'] + [
             {'kind': kind, 'text': text,
              'row_order': rows[row].order if row is not None else None,
