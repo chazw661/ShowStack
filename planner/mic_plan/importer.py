@@ -29,13 +29,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from planner.models import (
-    MicPlan, Presenter, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
+    MicPlan, MicPlannerDayOverride, Presenter, ShowflowEvent, ShowflowImport, ShowflowPerson, ShowflowRow,
 )
 
 from .extract import DOCUMENT_LAYOUT, ShowflowError, extract
 from .parser import NAME_SUFFIXES, analyse, name_key
 
-USER_FLAGS = ('presenter_by', 'added')   # keys of ShowflowPerson.flags a rebuild keeps
+USER_FLAGS = ('presenter_by', 'added', 'role', 'confirmed')   # keys of ShowflowPerson.flags a rebuild keeps
+VOG_KEY = 'vog'      # the name key of a day's VOG, made only when it is given a pack
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +150,13 @@ def confirm(pending, replace=None):
             raise ValueError('Not a part of this day.')
         if replace.crew_names:
             pending.crew_names = replace.crew_names
-        # Breaks set by hand follow the segment's line into the new file.
+        # Breaks set by hand follow the segment's line into the new file, and
+        # row overrides their row (overrides.resolve, by line or start + text).
         pending.break_overrides = replace.break_overrides
+        pending.row_overrides = replace.row_overrides
         replace.delete()
     pending.status = 'active'
-    pending.save(update_fields=['status', 'crew_names', 'break_overrides'])
+    pending.save(update_fields=['status', 'crew_names', 'break_overrides', 'row_overrides'])
     _renumber(pending.day)
     rebuild_day(pending.day)
     return pending
@@ -202,6 +205,84 @@ def merge(source, target):
     source.delete()
     target.save()
     rebuild_day(target.day)
+
+
+def _set_by(user):
+    return {'set_by': user, 'set_by_name': user.get_username() if user else '', 'set_at': timezone.now()}
+
+
+def rejected_keys(day):
+    """Name keys of the phrases ``day``'s parse must not make into people."""
+    return set(MicPlannerDayOverride.objects.filter(day=day, kind='not_a_person').values_list('key', flat=True))
+
+
+@transaction.atomic
+def reject_phrase(day, phrase, user=None):
+    """"Not a person": ``phrase`` is dropped wherever it appears on ``day``,
+    in every part, and stays dropped across Re-read and Replace."""
+    key = name_key(phrase)[:200]
+    if not key:
+        raise ValueError('Nothing to reject.')
+    MicPlannerDayOverride.objects.update_or_create(
+        day=day, kind='not_a_person', key=key, defaults={'value': {'phrase': phrase[:200]}, **_set_by(user)})
+    rebuild_day(day)
+
+
+@transaction.atomic
+def unreject_phrase(day, key):
+    MicPlannerDayOverride.objects.filter(day=day, kind='not_a_person', key=key).delete()
+    rebuild_day(day)
+
+
+def confirm_person(person, user=None, confirmed=True):
+    """The user says ``person`` is a real person on this day (or takes it
+    back). Read with planning.people_to_confirm."""
+    flags = dict(person.flags)
+    if confirmed:
+        flags['confirmed'] = {'by': user.pk if user else None,
+                              'by_name': user.get_username() if user else '', 'at': timezone.now().isoformat()}
+    else:
+        flags.pop('confirmed', None)
+    person.flags = flags
+    person.save(update_fields=['flags'])
+
+
+@transaction.atomic
+def set_vog_pack(day, pack, user=None):
+    """Give the VOG a pack for the day (``pack`` 'body' or 'HH'), or none
+    (None). With one, the VOG is a person with role 'vog' that the plan
+    gives one pack from its first line to its last; without, it is no one."""
+    if pack is None:
+        MicPlannerDayOverride.objects.filter(day=day, kind='vog').delete()
+        ShowflowPerson.objects.filter(day=day, name_key=VOG_KEY, flags__role='vog').delete()
+    else:
+        if pack not in ('body', 'HH'):
+            raise ValueError('A VOG pack is body or HH.')
+        MicPlannerDayOverride.objects.update_or_create(
+            day=day, kind='vog', key='', defaults={'value': {'pack': pack}, **_set_by(user)})
+        person, _ = ShowflowPerson.objects.get_or_create(
+            day=day, name_key=VOG_KEY, defaults={'display_name': 'VOG', 'flags': {'role': 'vog'}})
+        person.flags = {**person.flags, 'role': 'vog'}
+        person.mic_hint = 'HH' if pack == 'HH' else ''
+        person.mic_hint_locked = True
+        person.save(update_fields=['flags', 'mic_hint', 'mic_hint_locked'])
+    rebuild_day(day)
+
+
+@transaction.atomic
+def same_as(source, target=None, new_name=None):
+    """"Same as": ``source``'s spelling is ``target`` (merge), or a person
+    called ``new_name`` that is made for it ("Acme Lee Park" is
+    "Lee Park"). An existing person with that name is used, not doubled."""
+    if (target is None) == (not new_name):
+        raise ValueError('Pick a person or type a name.')
+    if target is None:
+        name = ' '.join(new_name.split())[:200]
+        target = ShowflowPerson.objects.filter(day=source.day, name_key=name_key(name)).first()
+        if target is None:
+            target = ShowflowPerson.objects.create(day=source.day, display_name=name, name_key=name_key(name)[:200])
+    merge(source, target)
+    return target
 
 
 @transaction.atomic
@@ -332,7 +413,8 @@ def _user_flags(person):
 
 def has_user_state(person):
     return bool(person.aliases or person.mic_hint_locked
-                or person.flags.get('presenter_by') == 'user' or person.flags.get('added'))
+                or person.flags.get('presenter_by') == 'user' or person.flags.get('added')
+                or person.flags.get('role'))
 
 
 def match_key(name):
@@ -387,11 +469,12 @@ def rebuild_day(day):
             by_key.setdefault(name_key(alias), p)
 
     parts = active_parts(day)
+    rejected = rejected_keys(day)
     results = []
     for part in parts:
         rows = list(part.rows.order_by('order'))
         results.append((part, rows, analyse([r.as_parser_row() for r in rows],
-                                            crew=part.crew_names, known=known)))
+                                            crew=part.crew_names, known=known, rejected=rejected)))
 
     presenters = {name_key(p.name): p for p in Presenter.objects.filter(project=day.project)}
     found = {}           # name_key -> person
@@ -426,7 +509,7 @@ def rebuild_day(day):
 
     # People added by hand are on the day whether or not a showflow names them.
     for p in people:
-        if p.flags.get('added') and p.name_key not in found:
+        if (p.flags.get('added') or p.flags.get('role')) and p.name_key not in found:
             found[p.name_key] = p
     keep = {p.pk for p in found.values()}
     gone = [p for p in people if p.pk not in keep and has_user_state(p)]

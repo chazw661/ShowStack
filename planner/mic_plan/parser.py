@@ -156,6 +156,10 @@ NO_CUE_MIN_COVERAGE = 0.5
 # RECORDS"; the segment's name is the first row that is none of these.
 _NOT_A_HEADING = re.compile(r'(?i)^\s*(?:vog\b|\[|roll\s+records|end\s+records|stage\s+set'
                             r'|.*\bwalk-?\s?in\b)')
+# Every client but F: the VOG's lines open the description ("VOG: Please
+# welcome ..."), at most after a bracketed tag (Client E "[GFX] VOG: ...").
+# A bare "VO" is a video voice-over (Client A "VO can be ..."), not the VOG.
+_VOG_LINE = re.compile(r'(?i)^\W*(?:\[[^\]]*\]\s*)?(?:vog|voice\s+of\s+god)\b')
 _BREAK = re.compile(r'(?i)^\s*(?:lunch(?:\s+break)?|break)\b')     # Client E "BREAK", "LUNCH BREAK"
 # A segment named like a break is one unless its heading row names someone
 # to speak: Client A "Networking Break", Client B "BREAK" with "DJ Audio
@@ -479,11 +483,15 @@ class Roster:
     ``canon`` maps a lower-cased token sequence to a display name. Full
     names and the user's merged aliases always count; a first name counts
     only while it is unique among the people found.
+
+    ``rejected``: name keys of phrases the user said are not a person
+    (MicPlannerDayOverride not_a_person): never made into anyone.
     """
 
-    def __init__(self, known=()):
+    def __init__(self, known=(), rejected=()):
         self.names = {}          # display name -> set(lower aliases)
         self.manual = {}         # lower alias -> display name (from merges)
+        self.rejected = frozenset(rejected)
         self.bsm_only = set()
         for display, aliases in known:
             self.names.setdefault(display, set())
@@ -494,10 +502,13 @@ class Roster:
         self._index = None
 
     def resolve(self, raw):
-        """Display name for a spelling, adding the person if new."""
+        """Display name for a spelling, adding the person if new; None for a
+        phrase the user rejected."""
         key = name_key(raw)
         if key in self.manual:
             return self.manual[key]
+        if key in self.rejected:
+            return None
         idx = self.index()
         if key in idx:
             return idx[key]
@@ -514,7 +525,8 @@ class Roster:
 
     def add(self, raw):
         display = self.resolve(raw)
-        self.found.add(display)
+        if display is not None:
+            self.found.add(display)
         return display
 
     def index(self):
@@ -585,6 +597,11 @@ def _welcome_names(text, speaker_text=None):
     return names
 
 
+def is_vog(description):
+    """True if the row is a VOG line (_VOG_LINE)."""
+    return bool(_VOG_LINE.match(description or ''))
+
+
 def _find_words(text, raw):
     """(start, end) of the words of ``raw`` in a description, after its
     "please welcome" if it has one; None if they are not there as written."""
@@ -630,7 +647,9 @@ def split_cell(text, roster, discover, refs=None, spans=None):
     chunk_at = [0]     # toks index of the chunk's first word
 
     def named(name, a, b):
-        """``name`` came from toks[a:b]."""
+        """``name`` came from toks[a:b] (None: a phrase the user rejected)."""
+        if name is None:
+            return
         names.append(name)
         if spans is not None:
             spans.append((name, found[a][1], found[b - 1][2]))
@@ -671,7 +690,7 @@ def split_cell(text, roster, discover, refs=None, spans=None):
         else:
             named_last[0] = False
             text_ = ' '.join(chunk).strip(' -–')
-            if text_ and not _NOT_A_PERSON.search(text_):
+            if text_ and not _NOT_A_PERSON.search(text_) and name_key(text_) not in roster.rejected:
                 leftovers.append(text_)
         chunk.clear()
         bounded[0] = bounded_end
@@ -853,6 +872,10 @@ def find_events(rows, crew, roster):
                 raw = ' '.join(run)
                 new = name_key(raw) not in roster.index()
                 name = roster.add(raw)
+                if name is None:            # rejected: its words are not a name
+                    p += len(run)
+                    expect = False
+                    continue
                 if new:
                     roster.bsm_only.add(name)
                 got.append(name)
@@ -934,11 +957,12 @@ def event_minute(times, kind, row, rows=None, sent_here=False):
     return times[row].minute
 
 
-def analyse(rows, crew=None, known=()):
+def analyse(rows, crew=None, known=(), rejected=()):
     """Everything PR 1 shows for one part. ``crew`` None = detect it;
-    ``known`` = [(display name, [aliases])] for the day's people."""
+    ``known`` = [(display name, [aliases])] for the day's people;
+    ``rejected`` = name keys of phrases that are not a person (Roster)."""
     times, time_warnings = build_times(rows)
-    roster = Roster(known)
+    roster = Roster(known, rejected)
     mentions = {}
 
     def mention(name, i):
@@ -949,7 +973,9 @@ def analyse(rows, crew=None, known=()):
     speaker_text = ' '.join(re.sub(r'\s+', ' ', row['speaker']) for row in rows).lower()
     for i, row in enumerate(rows):
         for raw in _welcome_names(row['description'], speaker_text):
-            mention(roster.add(raw), i)
+            name = roster.add(raw)
+            if name is not None:
+                mention(name, i)
     titled = [i for i, row in enumerate(rows) if _TITLES_PREFIX.match(row['speaker'] or '')]
     for i in titled + [i for i in range(len(rows)) if i not in titled]:
         if rows[i]['speaker']:
@@ -971,6 +997,8 @@ def analyse(rows, crew=None, known=()):
         refs.row = i
         for raw in _welcome_names(row['description'], speaker_text):
             name = roster.resolve(raw)
+            if name is None:
+                continue
             refs.saw(name)
             place = _find_words(row['description'], raw)
             if place:
@@ -1083,6 +1111,7 @@ def _brought_on(text, roster):
             words = words[:-1]
         if (2 <= len(words) <= 4 and _is_name_word(words[0])
                 and all(_is_name_part(w) for w in words[1:])
+                and name_key(' '.join(_clean_token(w) for w in words)) not in roster.rejected
                 and not any(_clean_token(w).lower() in TITLE_WORDS | ORG_WORDS
                             or _clean_token(w).lower().split('-')[-1] in ORG_WORDS for w in words)
                 and not (len(words) == 2 and _honorific(words[0]))):
@@ -1271,7 +1300,7 @@ def _mic_numbers(rows, roster, speakers):
                     continue
                 name, words = _list_name(text, roster)
                 if name is None:
-                    if len(words) > 1:
+                    if len(words) > 1 and name_key(' '.join(words)) not in roster.rejected:
                         flags.append(('mic_name', i, 'Line {}: {} is listed for "{}", who is not in the Speaker '
                                       'column. Merge or add them to use this number.'.format(
                                           row['line'] or '?', mic_label(kind, numbers[0]), ' '.join(words)), None))

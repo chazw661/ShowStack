@@ -119,6 +119,9 @@ class Person:
     backup: str = None       # None, BODY or HH: an extra pack of their own
     name_key: str = ''       # ShowflowPerson.name_key: what an edit is keyed on
     no_host: bool = False    # following the showflow, their mic changes: never one all-day pack
+    # A role at a fixed position (the VOG): never on stage, one pack from the
+    # first of these rows to the last. Empty for everyone else.
+    fixed_rows: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -135,6 +138,7 @@ class GroupExit:
     row: int                 # row key
     kind: str                # 'all': everyone on but hosts | 'both': the two non-hosts on
     stays: tuple = ()        # lower-cased words naming who stays ("(Kit Stays)")
+    keep: frozenset = frozenset()   # person keys the user said stay on here (row override not_off)
 
 
 @dataclass(frozen=True)
@@ -157,6 +161,12 @@ class Day:
     enters: dict = field(default_factory=dict)     # person key -> row keys saying they re-enter
     group_exits: tuple = ()  # GroupExit
     added: tuple = ()        # Added
+    # (person key, row key) -> BODY | HH: the type the user set for the
+    # appearance on at that row (row override mic).
+    mic_at: dict = field(default_factory=dict)
+    # Plan flags about the input itself (row overrides not applied): passed
+    # through to the plan's flags, never read by the solver.
+    issues: tuple = ()
 
 
 @dataclass
@@ -572,7 +582,7 @@ def _staged(ix, part, hosts, people=None):
         going = [p for p in leave.get(r.key, ()) if p in on]
         g = groups.get(r.key)
         if g is not None:
-            others = sorted((p for p in on if p not in hosts and p not in going
+            others = sorted((p for p in on if p not in hosts and p not in going and p not in g.keep
                              and not _staying(ix.people[p], g.stays)), key=lambda p: on[p]['since'])
             if g.kind == 'all':
                 going += others
@@ -639,6 +649,9 @@ def appearances(day, ix=None):
     # create people in, and ties must break the same way every time.
     for person in sorted(ix.people, key=lambda k: (ix.people[k].name, k)):
         p = ix.people[person]
+        if p.fixed_rows:
+            out += _fixed_appearance(ix, p)
+            continue
         listed = _listed_segments(ix, person)
         mine = list(staged.get(person, ()))
         for part in sorted(ix.part_rows):
@@ -647,11 +660,18 @@ def appearances(day, ix=None):
         mine = _merge_overlaps(mine)
         for a in mine:
             a.mic_type = p.mic_type
+            for (who, key), mic_type in day.mic_at.items():
+                row = ix.row.get(key)
+                t = ix.minute(row) if row is not None and who == person else None
+                if t is not None and (a.on_row == key or a.on <= t < a.off):
+                    a.mic_type = mic_type
         if mine and person in hosts:
             first = min(mine, key=lambda a: a.on)
             last = max(mine, key=lambda a: a.off)
+            # A type the user set on any of their rows holds for the all-day pack.
+            mic_type = next((a.mic_type for a in mine if a.mic_type != p.mic_type), p.mic_type)
             mine = [Appearance(person, first.part, first.on, last.off, first.on_row, last.off_row, 'host',
-                               mic_type=p.mic_type, is_host=True,
+                               mic_type=mic_type, is_host=True,
                                stage=tuple(sorted((a.on, a.off) for a in mine)))]
         out += mine
     out.sort(key=lambda a: (a.on, ix.people[a.person].name, a.person))
@@ -663,6 +683,19 @@ def appearances(day, ix=None):
         n = seen[(a.person, line)] = seen.get((a.person, line), -1) + 1
         a.skey = '{}|{}|{}'.format(p.name_key or ' '.join(p.name.lower().split()), line, n)
     return out, hosts
+
+
+def _fixed_appearance(ix, p):
+    """The one all-day appearance of a fixed-position role (the VOG): from
+    its first line to its last, never on stage."""
+    rows = sorted((ix.row[k] for k in p.fixed_rows if k in ix.row and ix.minute(ix.row[k]) is not None),
+                  key=ix.minute)
+    if not rows:
+        return []
+    first, last = rows[0], rows[-1]
+    on, off = ix.minute(first), ix.minute(last)
+    return [Appearance(p.key, first.part, on, max(on + 1, off), first.key, last.key, 'host',
+                       mic_type=p.mic_type, is_host=True)]
 
 
 def _merge_overlaps(apps):

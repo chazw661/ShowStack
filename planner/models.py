@@ -7050,6 +7050,9 @@ class ShowflowImport(models.Model):
     break_overrides = models.JSONField(default=dict, blank=True)
     # Parse warnings and review flags: [{kind, text, row_order, person}].
     warnings = models.JSONField(default=list, blank=True)
+    # What the user said about single rows (planner.mic_plan.overrides), each
+    # following its row by rowkey; kept on Replace like break_overrides.
+    row_overrides = models.JSONField(default=list, blank=True)
     # Segment span in minutes from midnight; decides replace-or-add.
     span_start = models.PositiveSmallIntegerField(null=True, blank=True)
     span_end = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -7440,3 +7443,33 @@ class MicPlanReviewCheck(models.Model):
 
     def __str__(self):
         return f'{self.day} {self.kind} checked by {self.checked_by_name}'
+
+
+class MicPlannerDayOverride(models.Model):
+    """A walkthrough decision that holds for a whole show day, not one row,
+    and survives Re-read, Replace and re-import (it belongs to the day):
+
+    not_a_person  ``key`` = the phrase's name_key ("hall and lobby"). The
+                  parser drops the phrase wherever it appears that day.
+    vog           ``key`` = ''. ``value`` = {'pack': 'body' | 'HH'}: the VOG
+                  wears a pack all day; without it the VOG is no one's pack.
+    """
+    KIND_CHOICES = [('not_a_person', 'Not a person'), ('vog', 'VOG pack')]
+
+    day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='mic_plan_overrides')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    key = models.CharField(max_length=200, blank=True)
+    value = models.JSONField(default=dict, blank=True)
+    set_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    set_by_name = models.CharField(max_length=150, blank=True)
+    set_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['day', 'kind', 'key']
+        verbose_name = 'Mic Planner day override'
+        constraints = [
+            UniqueConstraint(fields=['day', 'kind', 'key'], name='uniq_mic_plan_day_override'),
+        ]
+
+    def __str__(self):
+        return f'{self.day} {self.kind} {self.key}'.rstrip()
