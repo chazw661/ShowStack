@@ -26,11 +26,12 @@
            Notes have minimums and maximums and share whatever the card has
            beyond the minimums; the maximums cap the card. */
         --mto-w-rf: 40px;
-        --mto-w-type: 108px;
-        --mto-w-headset: 96px;
-        --mto-w-placement: 120px;
+        --mto-w-type: 90px;
+        --mto-w-headset: 90px;
+        --mto-w-placement: 104px;
         --mto-w-micd: 68px;
-        --mto-min-pres: 150px;
+        /* A 20-character name in the bold 17px presenter font, whole. */
+        --mto-min-pres: 226px;
         --mto-min-notes: 105px;
         --mto-max-pres: 320px;
         --mto-max-notes: 260px;
@@ -212,6 +213,11 @@
     @supports not selector(::-webkit-scrollbar) {
         .mto-session-grid { scrollbar-width: auto; scrollbar-color: var(--border-bright) var(--bg-raised); }
     }
+    /* A day whose sessions don't all fit (mtoLayoutRows sets the class):
+       no maximum, so each card is exactly the row / --mto-per-row and the
+       next session never shows partly, cut mid-column. Presenter and Notes
+       then share the spare width 60 / 40. Days that fit keep the maximum. */
+    .mto-session-grid.mto-row-overflows { --mto-max-pres: 100000px; --mto-max-notes: 100000px; }
     .mto-session {
         /* Minimum: the fixed columns + Presenter's and Notes' minimums + the
            card's 5px of border (692px with every column showing). */
@@ -291,7 +297,19 @@
         transition: border-color 0.12s;
     }
     .mto-edit-select:focus, .mto-edit-input:focus { border-color: var(--accent-blue); outline: none; }
-    .mto-edit-select { cursor: pointer; }
+    /* The dropdowns draw their own small arrow, and their cells pad 2px a
+       side, so Type / Headset / Placement fit their longest choice ("— select
+       —", "Instrument", "Cheek Mount", "Chest Pocket") in 90 / 90 / 104px,
+       with ~5px to spare for a wider system font. The browser's own arrow
+       and padding needed ~20px more per column. Card minimum 728px, 533px
+       under A1 setup. */
+    .mto-edit-select {
+        cursor: pointer; -webkit-appearance: none; appearance: none;
+        padding: 4px 13px 4px 4px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%239aa0a8'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 3px center;
+    }
+    .mto-row td.mto-type-cell, .mto-row td.mto-hc-cell, .mto-row td.mto-pl-cell { padding-left: 2px; padding-right: 2px; }
     .mto-edit-select option { background: var(--bg-raised); color: var(--text-primary); }
     .mto-edit-input::placeholder { color: var(--text-dim); }
     .mto-edit-select.mto-saved-flash, .mto-edit-input.mto-saved-flash { border-color: var(--text-primary); }
@@ -631,6 +649,9 @@
     function sizeRow(row, across) {
         var n = Math.min(across, row.fit);
         if (n !== row.split) { row.split = n; row.grid.style.setProperty('--mto-per-row', n); }
+        // A row that scrolls has no card maximum: its cards fill it exactly,
+        // so the next session is never partly on screen.
+        row.grid.classList.toggle('mto-row-overflows', n < row.cards.length);
         row.perRow = Math.min(n, row.cards.length);
         if (row.update) row.update();
     }

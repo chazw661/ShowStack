@@ -226,7 +226,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         s = self.client.session
         s['current_project_id'] = project.pk
         s.save()
-        context = self.browser.new_context(viewport={'width': 1180, 'height': 820})
+        context = self.browser.new_context(viewport={'width': 1440, 'height': 900})
         context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value,
                               'url': self.live_server_url}])
         self.addCleanup(context.close)
@@ -245,20 +245,19 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
                     pos: document.querySelector('.mto-sess-pos').textContent}; }""")
 
         start = m()
-        self.assertEqual((692, 'Session 1 of 3'), (start['min'], start['pos']))
+        self.assertEqual((728, 'Session 1 of 3'), (start['min'], start['pos']))
         self.assertEqual(['A2 entry'], pressed())
         self.assertFalse(visible('#mto-hidden-badge'))
 
-        # One column off: the card loses its width (Presenter stays at its
-        # 320px maximum); still one card per row.
+        # One column off: the minimum drops to 623px and two cards fit.
         page.click('#mto-cols-btn')
         with page.expect_response('**/api/ui-prefs/mic-overview/'):
             page.locator('input[data-col="notes"]').uncheck()
         after = m()
         self.assertFalse(visible('th.mto-col-notes'))
-        self.assertEqual(587, after['min'])
-        self.assertAlmostEqual(start['card'] - 260, after['card'], delta=1)
-        self.assertAlmostEqual(320, after['pres'], delta=0.5)
+        self.assertEqual(623, after['min'])
+        self.assertAlmostEqual((after['row'] - 18) / 2, after['card'], delta=1)
+        self.assertEqual('Sessions 1–2 of 3', after['pos'])
         self.assertEqual('1', page.text_content('#mto-hidden-count'))
         self.assertEqual([], pressed())
 
@@ -266,7 +265,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         with page.expect_response('**/api/ui-prefs/mic-overview/'):
             page.click('.mto-cols-preset[data-hide="headset notes"]')
         a1 = m()
-        self.assertEqual(491, a1['min'])
+        self.assertEqual(533, a1['min'])
         self.assertAlmostEqual((a1['row'] - 18) / 2, a1['card'], delta=1)
         self.assertEqual('Sessions 1–2 of 3', a1['pos'])
         self.assertEqual(['A1 setup'], pressed())
@@ -277,7 +276,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         self.assertEqual('2', page.text_content('#mto-hidden-count'))
 
         page.goto(url)                                                # follows the user
-        self.assertEqual((491, 'Sessions 1–2 of 3'), (m()['min'], m()['pos']))
+        self.assertEqual((533, 'Sessions 1–2 of 3'), (m()['min'], m()['pos']))
         self.assertEqual(['A1 setup'], pressed())
         self.assertTrue(visible('#mto-hidden-badge'))
 
@@ -286,7 +285,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         self.assertFalse(visible('#mto-hidden-badge'))
         for col in ALL:
             self.assertTrue(visible('th.mto-col-' + col), col)
-        self.assertEqual((692, 'Session 1 of 3'), (m()['min'], m()['pos']))
+        self.assertEqual((728, 'Session 1 of 3'), (m()['min'], m()['pos']))
         self.assertEqual(['A2 entry'], pressed())
         self.assertEqual({'mic_overview': {'hidden': []}}, UserProfile.objects.get(user=owner).ui_prefs)
 
@@ -326,8 +325,8 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
     def test_session_nav_hidden_while_every_session_fits(self):
         owner, project = make_show('Nav prefs', sessions=2)
         nav = lambda page: page.locator('.mto-sess-nav').is_visible()
-        # A2 entry at 1180: one card across, so the nav shows ...
-        page = self.open(owner, project, 1180, 820)
+        # A2 entry at 1440: one card across, so the nav shows ...
+        page = self.open(owner, project, 1440, 900)
         self.assertEqual(1, self.across(page))
         self.assertTrue(nav(page))
         # ... A1 setup fits both, so it goes; back to A2 entry, it returns.
