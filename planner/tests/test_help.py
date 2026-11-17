@@ -39,7 +39,7 @@ from planner.help.context import page_key, topics_for
 from planner.help.topics import SECTIONS, TOPICS, TOPICS_BY_SLUG
 from planner.models import (
     CommConfig, Console, Crew, Device, Location, MicSession, MultitrackSession,
-    PowerDistributionPlan, Project, ShowDay, SignalFlowDiagram,
+    PowerDistributionPlan, Project, ShowDay,
     SoundvisionPrediction, UserProfile,
 )
 
@@ -290,7 +290,6 @@ class EveryHelpLinkLeadsToATopicTests(TestCase):
             project=self.project, console=console, name='Record',
             target_daw='reaper', feed_source='console_dante', track_order_mode='console',
         )
-        flow = SignalFlowDiagram.objects.create(project=self.project, name='Flow')
         crew = Crew.objects.create(owner=self.user, name='House crew')
         plan = PowerDistributionPlan.objects.create(project=self.project, venue_name='Hall',
                                                     created_by=self.user)
@@ -298,7 +297,7 @@ class EveryHelpLinkLeadsToATopicTests(TestCase):
             'project_id': self.project.pk, 'console_id': console.pk,
             'day_id': day.pk, 'session_id': session.pk,
             'prediction_id': prediction.pk, 'pk': prediction.pk,
-            'config_id': comm.pk, 'diagram_id': flow.pk, 'crew_id': crew.pk,
+            'config_id': comm.pk, 'crew_id': crew.pk,
             'plan_id': plan.pk,
         }
         # Multitrack routes reuse ``session_id`` for their own session.

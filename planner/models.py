@@ -1755,6 +1755,10 @@ class SignalFlowDiagram(models.Model):
     canvas_state stores the full JointJS `graph.toJSON()` output as a JSON blob.
     viewport stores pan/zoom state (Phase 8 wires this).
     version is the optimistic-locking token (Phase 9 wires this).
+
+    RETIRED: the editor, its routes and its admin are gone; the rows are kept
+    until a later PR drops the model. ``manage.py export_signal_flow_diagrams``
+    is the only way to read them now.
     """
 
     project = models.ForeignKey(

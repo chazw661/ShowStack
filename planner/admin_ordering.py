@@ -72,12 +72,6 @@ def ordered_get_app_list(request, app_label=None):
         # already managed from within the Multitrack module UI, so the duplicate
         # sidebar link was just noise.
         'multitracktemplate',
-        # Signal Flow Diagrammer — 2026-05-27 UAT: surfaced in the sidebar so
-        # the editor can be opened from a project-scoped admin session. The
-        # changelist redirects to /audiopatch/signal-flow/ (planner.admin
-        # SignalFlowDiagramAdmin.changelist_view), so clicking the sidebar
-        # entry lands directly in the user-facing diagram list.
-        # 'signalflowdiagram',
     }
     
     # Define the correct order with proper groupings
@@ -163,7 +157,6 @@ def ordered_get_app_list(request, app_label=None):
         # Multitrack Session Builder (50 — bottom of sidebar)
         'multitracksession': 50,
         'multitracktemplate': 51,        # NEW — Phase 3
-        'signalflowdiagram': 52,   # Phase 7 — Signal Flow Diagrammer (v2.2)
     }
     
     for app in app_list:

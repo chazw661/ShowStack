@@ -791,27 +791,6 @@ TOPICS = (
         ),
         keywords=('multitrack', 'export', 'reaper', 'rpp', 'track template', 'rtracktemplate', 'nuendo', 'nuendo live', 'nlpr', 'daw',),
     ),
-    Topic(
-        slug='signalflow-start',
-        title='Start a signal flow diagram and place gear',
-        section='Documentation & recording',
-        summary='Create a diagram, drop shapes and link them to project equipment.',
-        pages=(
-            'planner:signal_flow_list',
-            'planner:signal_flow_editor',
-        ),
-        keywords=('signal flow', 'diagram', 'block diagram', 'flow chart', 'shapes', 'console', 'amp', 'speaker array', 'beltpack', 'equipment picker',),
-    ),
-    Topic(
-        slug='signalflow-ports-export',
-        title='Label ports, connect gear and export a PNG',
-        section='Documentation & recording',
-        summary='Add labelled ports, draw typed connectors, annotate, then export PNG or PDF.',
-        pages=(
-            'planner:signal_flow_editor',
-        ),
-        keywords=('signal flow', 'ports', 'connector', 'cable', 'circuit label', 'dante', 'aes', 'madi', 'resize', 'text', 'boundary', 'png', 'pdf', 'export',),
-    ),
 
     # -- Mobile ------------------------------------------------------
     Topic(

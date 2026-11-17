@@ -487,7 +487,7 @@ def sync_user_permission_groups(user):
     per-project ProjectMember roles.
 
     Background: the global 'Viewer' group gates several features across ALL
-    projects (multitrack, signal-flow upload, etc. in planner/views.py), and
+    projects (multitrack etc. in planner/views.py), and
     the invite-accept flow naively drops users into a global group. When a
     role changes we must re-derive the correct global groups from the user's
     highest role anywhere, or an upgraded editor stays blocked (and a

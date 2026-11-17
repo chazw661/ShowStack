@@ -168,7 +168,6 @@ NOT_FOUND = {
     'crew/': '/crew/',
     'm/': '/m/',
     'audiopatch/multitrack/': '/audiopatch/multitrack/',
-    'audiopatch/signal-flow/': '/audiopatch/signal-flow/',
     'audiopatch/comm-config/': '/audiopatch/comm-config/',
 }
 
@@ -188,7 +187,6 @@ KWARG_MODELS = {
            ('systemprocessor', 'SystemProcessor')],
     'assignment_id': [('power', 'AmplifierAssignment'), ('', 'MicAssignment')],
     'plan_id': [('', 'PowerDistributionPlan')],
-    'diagram_id': [('', 'SignalFlowDiagram')],
     'crew_id': [('', 'Crew')],
     'config_id': [('', 'CommConfig')],
     'device_id': [('network-monitor', 'DiscoveredDevice'), ('', 'Device')],
