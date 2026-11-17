@@ -229,8 +229,11 @@ class CompareTests(FixtureBase):
         self.plan()
         self.use(self.editor)
         resp = self.client.get(reverse('planner:mic_plan') + '?day={}'.format(self.day.pk))
-        self.assertContains(resp, "Use the showflow's numbers")
-        self.assertContains(resp, 'Plan: RF')
+        card, = [i for i in resp.context['walk']['strip'] if i['kind'] == 'showflow_mics']
+        self.assertTrue(card['can_use'])
+        self.assertTrue(all('Plan: RF' in t for t in card['mics']))
+        self.assertContains(resp, 'data-use-url="{}"'.format(reverse('planner:mic_plan_use_showflow',
+                                                                     args=[self.day.pk])))
         self.assertContains(resp, 'showflow mic: Lav 2 (line 100), Lav 4 (line 200)')
         self.assertContains(resp, 'class="mp-micnote"')
 
@@ -239,7 +242,7 @@ class CompareTests(FixtureBase):
         self.use(self.viewer)
         resp = self.client.get(reverse('planner:mic_plan') + '?day={}'.format(self.day.pk))
         self.assertContains(resp, 'Plan: RF')
-        self.assertNotContains(resp, 'mp-use-showflow')
+        self.assertContains(resp, 'data-use-url=""')
 
     def test_use_pins_them_all_and_clears_the_card(self):
         plan = self.plan()

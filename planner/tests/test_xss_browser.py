@@ -235,6 +235,41 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
 
     # -- Dashboard -------------------------------------------------------------
 
+    # -- Mic Planner walkthrough ----------------------------------------------
+
+    def test_walkthrough_row_text_names_leftovers_and_day_strip(self):
+        from planner.mic_plan import importer
+        from planner.models import ShowflowImport, ShowflowPerson
+        from planner.tests import showflow_fixture as F
+
+        day = ShowDay.objects.create(project=self.project, date=date(2026, 3, 1))
+        # Hostile text in a description, a Speaker cell (left over: not a
+        # name) and a BSM cue, on a cue-free page so every name is locked.
+        pages = [[F.HEADER_E,
+                  F._row14('300', '8:00 AM', '8:45 AM', '0:45:00', 'Opening ' + QUOTED),
+                  F._row14('301', desc='Max enters ' + NAME, speaker='Max Pine'),
+                  F._row14('302', desc='Ola enters', speaker='Ola Brand ' + NAME, bsm=QUOTED),
+                  F._row14('303', desc='Ned joins', speaker='Ned Quill')]]
+        pending = importer.stage_upload(day, F.build_pdf(pages), NAME + '.pdf', self.owner)
+        importer.confirm(pending)
+        ShowflowPerson.objects.filter(day=day, display_name='Max Pine').update(display_name=NAME)
+        ShowflowPerson.objects.filter(day=day, display_name='Ned Quill').update(display_name=QUOTED)
+        importer.reject_phrase(day, QUOTED + ' hall', self.owner)
+        self.assertTrue(ShowflowImport.objects.filter(day=day, status='active').exists())
+        page = self.open(reverse('planner:mic_plan') + '?day={}#walk'.format(day.pk))
+        page.wait_for_selector('#mp-walk-list .mp-wp')
+        # The PDF wraps a long cell, so the row text is matched up to its first break.
+        self.assert_text(page, '#mp-walk-list .mp-wp-body', 'enters <img src=x', 'row text')
+        self.assert_text(page, '#mp-walk-list .mp-wp-body', '"\'><img src=x', 'row text in quotes')
+        self.assert_text(page, '#mp-walk-list .mp-wchip b', NAME, 'name on a chip')
+        self.assert_text(page, '#mp-walk-list .mp-wp-plock .q', QUOTED, 'person lock question')
+        self.assert_text(page, '#mp-walk-list .mp-wp-same option', NAME, 'Same as list')
+        self.assert_text(page, '#mp-walk-strip', QUOTED + ' hall', 'rejected phrase on the strip')
+        page.click('#wp-{} .mp-wp-edit summary'.format(
+            ShowflowImport.objects.get(day=day).rows.get(line_no='301').pk))
+        self.assert_text(page, '#mp-walk-list .mp-wp-editor', NAME, 'row editor')
+        self.assertEqual(0, page.evaluate("document.querySelectorAll('#mp-walk-list mark img, #mp-walk-list b img').length"))
+
     def test_day_and_project_names_on_the_dashboard(self):
         day = {'date': '2026-03-01', 'name': NAME, 'mic_count': 3, 'planned': True}
         stats = {'project_name': NAME, 'show_days': [day],

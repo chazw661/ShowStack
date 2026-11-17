@@ -188,6 +188,10 @@ class Appearance:
     skey: str = ''
     # A host's own times on stage, ((on, off), ...): the appearance spans the day.
     stage: tuple = ()
+    # What put them off at off_row: 'catch' | 'exit' (a row saying so) |
+    # 'added' (an off line set by hand) | 'end' (assumed: the end of their
+    # segment; off_row is then the last row naming them) | 'fixed' (VOG).
+    off_how: str = 'end'
 
 
 @dataclass(frozen=True)
@@ -438,7 +442,8 @@ def _cue_appearances(ix, person, part, cues, listed):
     listed_in = {k: rows for k, rows in listed_in.items() if rows}
     out = []
     for w in windows:
-        app = Appearance(person, part, w['on'], w['off'], w['on_row'], w['off_row'] or w['on_row'], 'cue')
+        app = Appearance(person, part, w['on'], w['off'], w['on_row'], w['off_row'] or w['on_row'], 'cue',
+                         off_how='catch' if w['off'] is not None else 'end')
         if w['off'] is None:
             # Never caught: on through the segment they were sent into, and on
             # through any segments straight after it that still list them.
@@ -460,6 +465,7 @@ def _cue_appearances(ix, person, part, cues, listed):
                     hm(w['off']), hm(max(later)))
                 app.note_row = w['off_row']
                 app.off = max(later)
+                app.off_how = 'end'
         out.append(app)
     # Listed in a segment no cue window covers: on for that segment.
     for k, rows in sorted(listed_in.items()):
@@ -559,10 +565,10 @@ def _staged(ix, part, hosts, people=None):
             off = cap if cap is not None else st['on']
         return off
 
-    def close(person, off, off_row):
+    def close(person, off, off_row, how='end'):
         st = on.pop(person)
         out.setdefault(person, []).append(Appearance(person, part, st['on'], max(off, st['on']), st['on_row'],
-                                                     off_row, 'listed'))
+                                                     off_row, 'listed', off_how=how))
 
     for k, r in enumerate(rows):
         seg = ix.seg_index(r)
@@ -597,16 +603,18 @@ def _staged(ix, part, hosts, people=None):
             # An exit on their walk-on row, or on a row with no time of its
             # own later than the walk-on: off when the next row starts.
             exact = r.minute is not None and r.minute > st['on'] and st['on_row'] != r.key
-            close(person, r.minute if exact else off_after(k, st), r.key)
+            close(person, r.minute if exact else off_after(k, st), r.key, 'exit')
     for person in list(on):
         st = on[person]
         close(person, segs[st['seg']].t1 if st['seg'] >= 0 else off_after(st['last_k'], st), st['last'])
     return out
 
 
-def appearances(day, ix=None):
+def appearances(day, ix=None, fold_hosts=True):
     """All appearances of the day, hosts folded into one; and host keys.
-    Flags about them (\"who are 'both'?\") go to ``ix.flags``."""
+    Flags about them (\"who are 'both'?\") go to ``ix.flags``. With
+    ``fold_hosts`` off, a host's appearances stay one per time on stage,
+    each on the rows that put them on and off (the walkthrough)."""
     ix = ix or _Index(day)
     ix.flags = []
     cues_by = {}
@@ -643,7 +651,7 @@ def appearances(day, ix=None):
         t0, t1 = ix.minute(on_row), ix.minute(off_row)
         if t0 is not None and t1 is not None:
             staged.setdefault(a.person, []).append(
-                Appearance(a.person, on_row.part, t0, max(t0, t1), a.on_row, a.off_row, 'listed'))
+                Appearance(a.person, on_row.part, t0, max(t0, t1), a.on_row, a.off_row, 'listed', off_how='added'))
     out = []
     # Name order, not key order: keys follow the order a re-import happened to
     # create people in, and ties must break the same way every time.
@@ -665,13 +673,13 @@ def appearances(day, ix=None):
                 t = ix.minute(row) if row is not None and who == person else None
                 if t is not None and (a.on_row == key or a.on <= t < a.off):
                     a.mic_type = mic_type
-        if mine and person in hosts:
+        if mine and person in hosts and fold_hosts:
             first = min(mine, key=lambda a: a.on)
             last = max(mine, key=lambda a: a.off)
             # A type the user set on any of their rows holds for the all-day pack.
             mic_type = next((a.mic_type for a in mine if a.mic_type != p.mic_type), p.mic_type)
             mine = [Appearance(person, first.part, first.on, last.off, first.on_row, last.off_row, 'host',
-                               mic_type=mic_type, is_host=True,
+                               mic_type=mic_type, is_host=True, off_how=last.off_how,
                                stage=tuple(sorted((a.on, a.off) for a in mine)))]
         out += mine
     out.sort(key=lambda a: (a.on, ix.people[a.person].name, a.person))
@@ -695,7 +703,7 @@ def _fixed_appearance(ix, p):
     first, last = rows[0], rows[-1]
     on, off = ix.minute(first), ix.minute(last)
     return [Appearance(p.key, first.part, on, max(on + 1, off), first.key, last.key, 'host',
-                       mic_type=p.mic_type, is_host=True)]
+                       mic_type=p.mic_type, is_host=True, off_how='fixed')]
 
 
 def _merge_overlaps(apps):
@@ -705,7 +713,7 @@ def _merge_overlaps(apps):
         if out and a.on <= out[-1].off and a.part == out[-1].part:
             prev = out[-1]
             if a.off > prev.off:
-                prev.off, prev.off_row = a.off, a.off_row
+                prev.off, prev.off_row, prev.off_how = a.off, a.off_row, a.off_how
             if a.assumed and not prev.assumed:
                 prev.assumed, prev.note_row = a.assumed, a.note_row
             continue

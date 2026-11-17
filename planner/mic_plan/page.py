@@ -1,13 +1,12 @@
 """What the Mic Plan page shows, built from the stored plan (never re-solved):
-the Showflow + plan rows of one part, the day's pack chart, Review cards and
-stat tiles. plan.json is built from the same pieces (``plan_data``).
+the Showflow + plan rows of one part, the day's pack chart and stat tiles
+(the walkthrough is ``walkthrough``). plan.json is built from the same pieces (``plan_data``).
 """
 
 from planner.models import MicPlanA2Action, MicPlanAppearance
 
 from .display import TX_WORDS, first_name, format_action, overlap_warning, rig_text
-from .parser import description_candidates
-from .planning import SHOWFLOW_CARD, plan_rig, plan_values
+from .planning import plan_rig, plan_values
 from .solver import hm, is_helper
 
 BUSY_WARN, BUSY_HOT = 0.7, 0.9       # A2-busy meter: amber from 70 %, red from 90 %
@@ -294,91 +293,6 @@ def lane_windows(chart):
     return [{'rf': lane['rf'], 'pool': lane['pool'],
              'worn': [[b['from'], b['to'], b['key'], b['first']] for b in lane['bars']]}
             for lane in chart['lanes'] if not lane['spare'] and not lane['backup'] and not lane['over']]
-
-
-def review_cards(parts, plan, apps, people, labels):
-    """Parser flags of every part, the plan's own flags and "gone" people, as
-    cards; each links to its part and line. An assumption the plan made
-    about a flagged line is shown on that card."""
-    rows = {}
-    for part in parts:
-        for r in part.rows.all():
-            rows[r.pk] = (part, r)
-    by_part_order = {(part.pk, r.order): r for part, r in rows.values()}
-    assumed = {}
-    for a in apps:
-        if a.assumed and a.note_row_id:
-            assumed.setdefault((a.person_id, a.note_row_id), a.assumed)
-    numbers = {part.pk: k + 1 for k, part in enumerate(parts)}
-    cards = []
-    used = set()
-    for part in parts:
-        for w in part.warnings:
-            row = by_part_order.get((part.pk, w.get('row_order'))) if w.get('row_order') is not None else None
-            note = assumed.get((w.get('person'), row.pk)) if row else None
-            if note:
-                used.add((w.get('person'), row.pk))
-            card = _card(w['kind'], labels.get(w['kind'], w['kind']), w['text'], part, row,
-                         w.get('person'), numbers, note)
-            if w['kind'] == 'description_names' and row is not None:
-                # "Add people from this line": the names it brings on, to check.
-                card['candidates'] = description_candidates(row.description)
-            cards.append(card)
-    # An assumption about a line the parser did not flag goes on the parser's
-    # card for the same person inside that appearance (e.g. "No cue" two
-    # lines further down), and only otherwise gets a card of its own.
-    for a in apps:
-        if not a.assumed or (a.person_id, a.note_row_id) in used:
-            continue
-        for c in cards:
-            row = by_part_order.get((c['part'], c['row_order']))
-            if (c['person'] == a.person_id and c['note'] is None and c['part'] == a.part_id
-                    and row is not None and row.est_time is not None
-                    and a.on_min - 1 <= row.est_time <= a.off_min + 1
-                    and c['kind'] in ('no_cue', 'never_caught', 'caught_but_listed')):
-                c['note'] = a.assumed
-                used.add((a.person_id, a.note_row_id))
-                break
-    if plan is not None:
-        plan_labels = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill', 'who_both': 'Both?',
-                       'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
-                       'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved',
-                       'rig_use': 'Transmitter', 'swap': 'Swap', 'swap_mid': 'Swap mid-session', 'rig': 'Rig',
-                       'override_changed': 'Changed', 'override_gone': 'Line gone', 'override_person': 'Who?',
-                       SHOWFLOW_CARD: 'Showflow'}
-        for f in plan.flags:
-            part, row = rows.get(f.get('row'), (None, None))
-            card = _card(f['kind'], plan_labels.get(f['kind'], f['kind']), f['text'], part, row,
-                         f.get('person'), numbers, None, plan=True)
-            if f['kind'] == SHOWFLOW_CARD:
-                card['mics'] = [i for i in f['items'] if not i['repeat']]
-                card['can_use'] = any(i['fits'] for i in f['items'])
-            cards.append(card)
-        for a in apps:
-            if a.assumed and (a.person_id, a.note_row_id) not in used:
-                part, row = rows.get(a.note_row_id, (None, None))
-                cards.append(_card('assumed', 'Assumed', '{}: {}'.format(a.person_name, a.assumed),
-                                   part, row, a.person_id, numbers, None, plan=True))
-    for p in people:
-        for line in p.flags.get('added_missing', []):
-            cards.append(_card('added_missing', labels.get('added_missing', 'Added'),
-                               'Line {} no longer in this showflow: {} was added on at it by hand. Kept, but '
-                               'not in the plan until you move or remove it in People.'.format(line, p.display_name),
-                               None, None, p.pk, numbers, None))
-        if p.flags.get('gone'):
-            cards.append(_card('gone', labels.get('gone', 'Gone'),
-                               '{} is no longer in this showflow but has a merge, Presenter link or '
-                               'mic hint you set. Remove them in People if they are not needed.'
-                               .format(p.display_name), None, None, p.pk, numbers, None))
-    return cards
-
-
-def _card(kind, label, text, part, row, person, numbers, note, plan=False):
-    return {'kind': kind, 'label': label, 'text': text, 'part': part.pk if part else None,
-            'row_pk': row.pk if row else None,
-            'part_no': numbers.get(part.pk) if part else None, 'row_order': row.order if row else None,
-            'line': (row.line_no or '#{}'.format(row.order + 1)) if row else '', 'person': person,
-            'note': note, 'plan': plan}
 
 
 def stats(plan):

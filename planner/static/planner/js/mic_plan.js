@@ -1,4 +1,4 @@
-// Mic Plan page: three views (#showflow, #packs, #review), click a person or
+// Mic Plan page: three views (#showflow, #packs, #walk), click a person or
 // RF anywhere to highlight it everywhere, the People / settings drawer, and
 // the import, re-generate, edit and merge controls. Everything shown is
 // rendered by the server from the stored plan; this only shows and hides --
@@ -77,10 +77,11 @@
         emptyBox.addEventListener('change', function () { rowsTable.classList.toggle('show-blank', emptyBox.checked); });
     }
 
-    // Views, routed by hash: #showflow, #packs, #review; #showflow:row-N opens a line.
-    var VIEWS = ['showflow', 'packs', 'review'];
+    // Views, routed by hash: #showflow, #packs, #walk (the walkthrough; old
+    // #review links land there too); #showflow:row-N opens a line.
+    var VIEWS = ['showflow', 'packs', 'walk'];
     function show(hash) {
-        var parts = (hash || '').replace(/^#/, '').split(':');
+        var parts = (hash || '').replace(/^#/, '').replace(/^review\b/, 'walk').split(':');
         var v = VIEWS.indexOf(parts[0]) === -1 ? 'showflow' : parts[0];
         VIEWS.forEach(function (k) {
             var sec = $('v-' + k), tab = $('t-' + k);
@@ -90,6 +91,7 @@
         var wrap = $('mp-empty-wrap');
         if (wrap) wrap.hidden = v !== 'showflow';
         if (v === 'packs') layoutChart();
+        if (v === 'walk') document.dispatchEvent(new CustomEvent('mp-walk-shown'));
         if (parts[1]) {
             var tr = document.getElementById(parts[1]);
             if (tr) {
@@ -516,9 +518,6 @@
 
     if ($('mp-undo') && editBox) {
         $('mp-undo').addEventListener('click', function () { post(editBox.dataset.undoUrl, {}); });
-    }
-    if ($('mp-use-showflow') && editBox) {
-        $('mp-use-showflow').addEventListener('click', function () { post(this.dataset.url, {}); });
     }
     // The "N changed" list: a name shows that person.
     all('.mp-changed .chip[data-key]').forEach(function (chip) {

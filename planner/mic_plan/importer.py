@@ -19,6 +19,7 @@ from scratch, so a parser fix is never undone by the state an older parse
 left behind.
 """
 
+import difflib
 import hashlib
 import logging
 import secrets
@@ -154,6 +155,8 @@ def confirm(pending, replace=None):
         # row overrides their row (overrides.resolve, by line or start + text).
         pending.break_overrides = replace.break_overrides
         pending.row_overrides = replace.row_overrides
+        # Walkthrough checks too: each finds its row again (walkthrough, by rowkey).
+        replace.row_checks.update(part=pending)
         replace.delete()
     pending.status = 'active'
     pending.save(update_fields=['status', 'crew_names', 'break_overrides', 'row_overrides'])
@@ -267,6 +270,27 @@ def set_vog_pack(day, pack, user=None):
         person.mic_hint_locked = True
         person.save(update_fields=['flags', 'mic_hint', 'mic_hint_locked'])
     rebuild_day(day)
+
+
+CLOSE_RATIO = 0.8
+
+
+def close_names(day, name, exclude=None):
+    """People on ``day`` whose name is close to ``name`` but not it ("Pat
+    Gest" for "Pat Guest", or the same surname and first initial): a typed
+    Same as name is checked against them before a new person is made."""
+    key = name_key(name)
+    words = key.split()
+    out = []
+    for p in day.showflow_people.exclude(pk=getattr(exclude, 'pk', None)):
+        if p.flags.get('gone') or p.name_key == key:
+            continue
+        theirs = p.name_key.split()
+        same_surname = (len(words) > 1 and len(theirs) > 1 and words[-1] == theirs[-1]
+                        and words[0][:1] == theirs[0][:1])
+        if same_surname or difflib.SequenceMatcher(None, key, p.name_key).ratio() >= CLOSE_RATIO:
+            out.append(p)
+    return out
 
 
 @transaction.atomic
@@ -554,9 +578,12 @@ def rebuild_day(day):
                                         kind=e.kind, event_min=_minute(e.minute),
                                         source_rows=[rows[i].order for i in e.rows]))
         part.warnings = [w for w in part.warnings if w['kind'] == 'parse'] + [
-            {'kind': kind, 'text': text,
-             'row_order': rows[row].order if row is not None else None,
-             'person': by_key[name_key(name)].pk if name else None}
+            dict({'kind': kind, 'text': text,
+                  'row_order': rows[row].order if row is not None else None,
+                  'person': by_key[name_key(name)].pk if name else None},
+                 # The Speaker-cell characters no name accounts for: [[start, end]].
+                 **({'spans': [list(s) for s in result.leftovers[row]]}
+                    if kind == 'unmatched_speaker' and row in result.leftovers else {}))
             for kind, row, text, name in result.flags
             # People were added from this "not listed" line: it is dealt with.
             if not (kind == 'description_names' and row is not None and (part.pk, rows[row].order) in cleared)]
@@ -564,5 +591,3 @@ def rebuild_day(day):
     ShowflowEvent.objects.bulk_create(events)
     # People, lines or cues may have changed: the day's plan no longer matches.
     MicPlan.objects.filter(day=day, stale=False).update(stale=True)
-    from .checks import prune
-    prune(day)                # only with no plan: a stale one keeps its checks

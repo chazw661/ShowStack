@@ -65,7 +65,7 @@
             <a class="mp-btn" href="{% url 'planner:mic_plan_a2' day.pk %}" target="_blank" rel="noopener"
                title="The A2's mics and de-mics by segment, in a new window: for a second screen or an iPad.">A2 schedule ↗</a>
             <a class="mp-btn" data-tz-link href="{% url 'planner:mic_plan_pdf' day.pk %}" target="_blank" rel="noopener"
-               title="A2 schedule, pack sheet and review list.">PDF</a>
+               title="A2 schedule, pack sheet and the walkthrough's issues.">PDF</a>
             {% if can_edit %}
             {% if push_refusal %}
             <button type="button" class="mp-btn" disabled title="{{ push_refusal }}">Send to Mic Tracker</button>
@@ -125,16 +125,17 @@
         {% endif %}
     </div>
     {% if part %}
-    <div class="mp-stats">
+    {# Until every walkthrough row is confirmed, the plan's numbers rest on rows no one has checked. #}
+    <div class="mp-stats{% if walk_progress and not walk_progress.done %} unverified{% endif %}" id="mp-stats">
         {% if stats %}
-        <div class="mp-stat"><b>{{ stats.body }}</b><span>Body packs</span></div>
-        {% if stats.hh %}<div class="mp-stat"><b>{{ stats.hh }}</b><span>Handhelds</span></div>{% endif %}
-        <div class="mp-stat"><b>{{ stats.hosts }}</b><span>Host packs</span></div>
-        <div class="mp-stat" title="Times a pack goes to someone other than who wore it last"><b>{{ stats.swaps }}</b><span>Pack changes</span></div>
-        <div class="mp-stat{% if stats.hot %} warn{% endif %}"><b>{{ stats.hot }}</b><span>Segments A2 ≥ 90%</span></div>
-        {% if stats.conflicts %}<a class="mp-stat crit" href="#review"><b>{{ stats.conflicts }}</b><span>RF conflict{{ stats.conflicts|pluralize }}</span></a>{% endif %}
+        <div class="mp-stat"><b>{{ stats.body }}</b><span>Body packs</span><em class="mp-unv">unverified</em></div>
+        {% if stats.hh %}<div class="mp-stat"><b>{{ stats.hh }}</b><span>Handhelds</span><em class="mp-unv">unverified</em></div>{% endif %}
+        <div class="mp-stat"><b>{{ stats.hosts }}</b><span>Host packs</span><em class="mp-unv">unverified</em></div>
+        <div class="mp-stat" title="Times a pack goes to someone other than who wore it last"><b>{{ stats.swaps }}</b><span>Pack changes</span><em class="mp-unv">unverified</em></div>
+        <div class="mp-stat{% if stats.hot %} warn{% endif %}"><b>{{ stats.hot }}</b><span>Segments A2 ≥ 90%</span><em class="mp-unv">unverified</em></div>
+        {% if stats.conflicts %}<a class="mp-stat crit" href="#walk"><b>{{ stats.conflicts }}</b><span>RF conflict{{ stats.conflicts|pluralize }}</span></a>{% endif %}
         {% endif %}
-        <a class="mp-stat{% if open_cards %} warn{% endif %}" href="#review"{% if checked_cards %} title="{{ checked_cards|length }} checked off"{% endif %}><b>{{ open_cards|length }}</b><span>To review</span></a>
+        {% if walk_progress %}<a class="mp-stat{% if not walk_progress.done %} warn{% endif %}" href="#walk" id="mp-tocheck"><b>{{ walk_progress.open|add:walk_progress.reopened }}</b><span>Rows to confirm</span></a>{% endif %}
         <button type="button" class="mp-stat mp-stat-settings" data-drawer="settings" title="Plan settings">
             <b>Settings</b><span>{{ settings_summary }}</span>{% if policy_counts %}<span class="mp-policy-counts">{{ policy_counts }}</span>{% endif %}
         </button>
@@ -173,7 +174,7 @@
             <div class="mp-views" role="tablist">
                 <button type="button" class="mp-view" role="tab" id="t-showflow" data-v="showflow">Showflow + plan</button>
                 <button type="button" class="mp-view" role="tab" id="t-packs" data-v="packs">Pack chart</button>
-                <button type="button" class="mp-view" role="tab" id="t-review" data-v="review">Review ({% if cards %}{{ open_cards|length }} of {% endif %}{{ cards|length }})</button>
+                {% if walk %}<button type="button" class="mp-view" role="tab" id="t-walk" data-v="walk">Walkthrough (<span id="mp-walk-count">{{ walk_progress.confirmed }} of {{ walk_progress.total }}</span>)</button>{% endif %}
             </div>
             <div class="mp-tools">
                 <div class="mp-pill" id="mp-pill" role="status" hidden>
@@ -244,23 +245,23 @@
             {% endif %}
         </section>
 
-        <section id="v-review" role="tabpanel" aria-labelledby="t-review" hidden>
-            <p class="mp-note" style="margin-bottom:10px">Where the showflow was incomplete or contradicted itself, and where the plan is tight. Check each one before the plan is used.</p>
-            <div class="mp-cards">
-            {% for c in open_cards %}{% include "planner/_mic_plan_review_card.html" %}
-            {% empty %}
-                <div class="mp-panel"><p class="mp-note">{% if checked_cards %}Every card is checked off.{% else %}Nothing to review.{% endif %}</p></div>
-            {% endfor %}
-            </div>
-            {% if checked_cards %}
-            <details class="mp-checked" id="mp-checked">
-                <summary>Checked ({{ checked_cards|length }})</summary>
-                <div class="mp-cards">
-                {% for c in checked_cards %}{% include "planner/_mic_plan_review_card.html" %}{% endfor %}
+        {% if walk %}
+        <section id="v-walk" role="tabpanel" aria-labelledby="t-walk" hidden>
+            {# Built by mic_plan_walkthrough.js from the mp-walk JSON: every user string goes in as text. #}
+            <div class="mp-walk" id="mp-walk" data-can-edit="{{ can_edit|yesno:'1,' }}"
+                 data-url="{% url 'planner:mic_plan_walk' day.pk 'ACTION' %}"
+                 data-use-url="{% if can_edit and editable %}{% url 'planner:mic_plan_use_showflow' day.pk %}{% endif %}"
+                 data-plan-url="?day={{ day.pk }}" data-version="{{ plan.version|default:'' }}">{% csrf_token %}
+                <div class="mp-walk-top" id="mp-walk-top">
+                    <div class="mp-walk-progress" id="mp-walk-progress" role="status" aria-live="polite"></div>
+                    <div class="mp-walk-strip" id="mp-walk-strip"></div>
                 </div>
-            </details>
-            {% endif %}
+                <p class="mp-note mp-walk-keys">Enter confirms a line and moves on; ↑ ↓ move. Locked lines need a decision first.</p>
+                <ol class="mp-walk-list" id="mp-walk-list"></ol>
+            </div>
+            {{ walk|json_script:"mp-walk-data" }}
         </section>
+        {% endif %}
     {% endif %}
     </div>
 
@@ -433,5 +434,6 @@
     {% endif %}
     <p class="mp-banner warn mp-toast" id="mp-edit-msg" role="alert" hidden></p>
 </div>
+<script src="{% static 'planner/js/mic_plan_walkthrough.js' %}"></script>
 <script src="{% static 'planner/js/mic_plan.js' %}"></script>
 {% endblock %}

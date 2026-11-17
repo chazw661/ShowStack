@@ -104,7 +104,7 @@ class DashboardCardTests(DashboardBase):
         self.assertIsNone(row['sent'])
         self.assertFalse(row['changed_since_sent'])
 
-    def test_channels_and_the_review_count_match_the_page(self):
+    def test_channels_and_the_open_rows_match_the_page(self):
         s = MicPlanSettings.objects.get(project=self.project)
         s.wireless_channels, s.handheld_channels, s.spare_handhelds = 14, 3, 1
         s.save()
@@ -113,7 +113,9 @@ class DashboardCardTests(DashboardBase):
         used = sum(1 for p in self.plan().packs if not p.get('spare'))
         self.assertEqual('{} of 13 ch · 1 spare'.format(used), row['channels']['text'])
         page = self.client.get(reverse('planner:mic_plan') + '?day={}'.format(self.day.pk))
-        self.assertEqual(len(page.context['cards']), row['review'])
+        pr = page.context['walk_progress']
+        self.assertEqual(pr['open'] + pr['reopened'], row['open_rows'])
+        self.assertGreater(row['open_rows'], 0)
 
     def test_sent_then_changed_since(self):
         self.send()

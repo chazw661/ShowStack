@@ -225,7 +225,8 @@ class PdfTests(A2Base):
         self.assertIn('A2 schedule', text)
         self.assertNotIn('A2 schedule — A2', text)
         self.assertIn('Pack sheet', text)
-        self.assertIn('Review', text)
+        self.assertIn('Issues', text)
+        self.assertRegex(text, r'Walkthrough: \d+ of \d+ rows confirmed')
         self.assertIn('MIC', text)
         self.assertIn('DE-MIC', text)
         self.assertIn('Settings: Recycle at breaks', text)
@@ -268,8 +269,9 @@ class PdfTests(A2Base):
         self.assertIn('PINNED', text)
         self.assertIn('CONFLICT', text)
         self.assertIn('RF 3 on two people', text)
-        review = text[text.rindex('Review'):]
-        self.assertRegex(review, r'Line \S+')
+        issues = text[text.rindex('Issues'):]
+        self.assertIn('Blocks Send to Mic Tracker.', issues)
+        self.assertRegex(issues, r'CONFLICT Line \S+')
 
     def test_the_viewers_time_zone_is_used_for_printed_times(self):
         text, _ = self.pdf(tz='America/New_York')

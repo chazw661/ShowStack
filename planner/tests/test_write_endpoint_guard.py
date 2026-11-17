@@ -54,6 +54,7 @@ from planner.admin import project_of
 from planner.admin_site import showstack_admin_site
 from planner.models import Project, ProjectMember, UserProfile
 from planner.tests.write_guard_fixture import Factory
+from planner.views_mic_plan import WALK_ACTIONS
 
 METHODS = ('post', 'put', 'patch', 'delete')
 REFUSED = {401, 403, 404, 405}
@@ -304,15 +305,18 @@ class WriteGuardBase(TestCase):
                   and not NOT_A_WRITE.match(q['sql'])]
         return status, location, writes
 
-    def fill(self, route, admin_model):
+    def fill(self, route, admin_model, action=None):
         """(url, objects named) with each kwarg an object in the fixture's
-        project, or (None, reason)."""
+        project (``<action>`` = ``action``), or (None, reason)."""
         named = []
         url = route
         for match in re.finditer(r'<(?:(\w+):)?(\w+)>', route):
             kwarg = match.group(2)
             if kwarg == 'kind':
                 url = url.replace(match.group(0), 'input', 1)
+                continue
+            if kwarg == 'action':
+                url = url.replace(match.group(0), action, 1)
                 continue
             if kwarg == 'object_id' and admin_model is not None:
                 obj = self.factory.get(admin_model)
@@ -331,31 +335,40 @@ class WriteGuardBase(TestCase):
 
 class WriteEndpointGuardTests(WriteGuardBase):
 
+    @staticmethod
+    def actions(route):
+        """What ``<action>`` is probed with: every walkthrough action by name,
+        so one that skips the shared edit check fails on its own."""
+        return WALK_ACTIONS if '<str:action>' in route else (None,)
+
     def probe(self):
         results = []
         for route, callback, admin_model in patterns():
-            entry = {'route': route, 'view': f'{unwrap(callback).__module__}.'
-                                             f'{getattr(unwrap(callback), "__qualname__", "")}',
-                     'write': is_write(route, callback)}
-            url, named = self.fill(route, admin_model)
-            if url is None:
-                entry['unprobed'] = named
-                results.append(entry)
-                continue
-            entry['url'] = url
-            entry['in_project'] = False
-            self.login(self.viewer, self.project)
-            for method in METHODS:
-                entry[f'viewer:{method}'] = self.request(method, url)
-            # Only an object in the project has a non-member to keep out:
-            # catalogue rows, users and personal templates are in none.
-            entry['in_project'] = any(project_of(obj) == self.project for obj in named)
-            if entry['in_project']:
-                self.login(self.outsider, self.theirs)
-                for method in METHODS:
-                    entry[f'outsider:{method}'] = self.request(method, url)
-            results.append(entry)
+            for action in self.actions(route):
+                results.append(self.probe_one(route, callback, admin_model, action))
         return results
+
+    def probe_one(self, route, callback, admin_model, action):
+        entry = {'route': route, 'view': f'{unwrap(callback).__module__}.'
+                                         f'{getattr(unwrap(callback), "__qualname__", "")}',
+                 'write': is_write(route, callback), 'action': action}
+        url, named = self.fill(route, admin_model, action)
+        if url is None:
+            entry['unprobed'] = named
+            return entry
+        entry['url'] = url
+        entry['in_project'] = False
+        self.login(self.viewer, self.project)
+        for method in METHODS:
+            entry[f'viewer:{method}'] = self.request(method, url)
+        # Only an object in the project has a non-member to keep out:
+        # catalogue rows, users and personal templates are in none.
+        entry['in_project'] = any(project_of(obj) == self.project for obj in named)
+        if entry['in_project']:
+            self.login(self.outsider, self.theirs)
+            for method in METHODS:
+                entry[f'outsider:{method}'] = self.request(method, url)
+        return entry
 
     def problems(self, entry):
         route = entry['route']
@@ -407,8 +420,16 @@ class WriteEndpointGuardTests(WriteGuardBase):
         for entry in results:
             found = self.problems(entry)
             if found:
-                failures.setdefault(entry['route'], []).extend(found)
+                where = entry['route'] + (f" [{entry['action']}]" if entry['action'] else '')
+                failures.setdefault(where, []).extend(found)
         self.assertEqual({}, failures, '\n'.join(f'{r}: {f}' for r, f in failures.items()))
+
+    def test_every_walk_action_is_probed(self):
+        probed = [(e['action'], e['viewer:post'][0], e['write']) for e in self.probe()
+                  if '<str:action>' in e['route']]
+        self.assertEqual(sorted(WALK_ACTIONS), sorted(a for a, _, _ in probed))
+        self.assertEqual(7, len(probed))
+        self.assertEqual({(a, 403, True) for a in WALK_ACTIONS}, set(probed))
 
     def test_allowlists_name_real_routes(self):
         routes = {route for route, _, _ in patterns()}

@@ -287,7 +287,7 @@ class RigPlanTests(RigBase):
         resp = self.client.get(reverse('planner:mic_plan'))
         lane = {lane['rf']: lane for lane in resp.context['chart']['lanes']}[11]
         self.assertEqual(('HH', 'handheld → beltpack'), (lane['pool'], lane['tx']))
-        self.assertContains(resp, ' k-swap"')
+        self.assertIn('swap', {b['kind'] for p in resp.context['walk']['panels'] for b in p['badges']})
         a2 = self.client.get(reverse('planner:mic_plan_a2', args=[self.day.pk]))
         self.assertContains(a2, 'Swap RF 11 to beltpack transmitter')
         self.assertEqual(200, self.edit('move_rf', key, rf=8, pool='HH').status_code)        # an unused body channel

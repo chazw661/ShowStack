@@ -8,6 +8,34 @@ from .solver import Rig, hm, is_helper
 
 VERBS = {'mic': 'MIC', 'demic': 'DE-MIC'}
 
+# The short label of a parser flag (ShowflowImport.warnings kind).
+FLAG_LABELS = {
+    'parse': 'File',
+    'no_times': 'Times',
+    'time_backwards': 'Times',
+    'unknown_crew': 'Crew?',
+    'unmatched_speaker': 'Speaker?',
+    'never_caught': 'Not caught',
+    'caught_but_listed': 'Still listed',
+    'no_cue': 'No cue',
+    'bsm_only': 'BSM only',
+    'which_first': 'Which?',
+    'description_names': 'Not listed',
+    'who_exits': 'Exit?',
+    'added_missing': 'Added',
+    'gone': 'Gone',
+    'mic_name': 'Mic?',
+    'mic_which': 'Mic?',
+}
+
+# The short label of a plan flag (MicPlan.flags kind).
+PLAN_LABELS = {'late': 'Late', 'tight': 'Tight', 'shortage': 'Short', 'spill': 'Spill', 'who_both': 'Both?',
+               'reuse': 'Mid-session', 'break': 'Turnover', 'conflict': 'Conflict',
+               'pin_reuse': 'Mid-session', 'unmatched': 'Your change', 'moved': 'Moved',
+               'rig_use': 'Transmitter', 'swap': 'Swap', 'swap_mid': 'Swap mid-session', 'rig': 'Rig',
+               'override_changed': 'Changed', 'override_gone': 'Line gone', 'override_person': 'Who?',
+               'showflow_mics': 'Showflow'}
+
 
 def format_action(action, a2_count=1):
     """``action``: a MicPlanA2Action or a solver.Action (same field names).
