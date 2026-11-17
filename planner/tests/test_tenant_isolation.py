@@ -14,8 +14,8 @@ Run with::
     python manage.py test planner.tests.test_tenant_isolation \\
         --settings=audiopatch.test_settings
 
-Layout mirrors ``test_signal_flow_phase10._Phase10Base``: force_login plus
-``session['current_project_id']`` is what feeds ``CurrentProjectMiddleware``.
+force_login plus ``session['current_project_id']`` is what feeds
+``CurrentProjectMiddleware``.
 """
 
 import json
