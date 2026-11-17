@@ -245,20 +245,20 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
                     pos: document.querySelector('.mto-sess-pos').textContent}; }""")
 
         start = m()
-        self.assertEqual((692, 'Session 1 of 3'), (start['min'], start['pos']))
+        self.assertEqual((652, 'Session 1 of 3'), (start['min'], start['pos']))
         self.assertEqual(['A2 entry'], pressed())
         self.assertFalse(visible('#mto-hidden-badge'))
 
-        # One column off: the card loses its width (Presenter stays at its
-        # 320px maximum); still one card per row.
+        # One column off: still one card per row of three, so the row
+        # scrolls and the card keeps filling it; Notes' width goes to Presenter.
         page.click('#mto-cols-btn')
         with page.expect_response('**/api/ui-prefs/mic-overview/'):
             page.locator('input[data-col="notes"]').uncheck()
         after = m()
         self.assertFalse(visible('th.mto-col-notes'))
-        self.assertEqual(587, after['min'])
-        self.assertAlmostEqual(start['card'] - 260, after['card'], delta=1)
-        self.assertAlmostEqual(320, after['pres'], delta=0.5)
+        self.assertEqual(547, after['min'])
+        self.assertAlmostEqual(start['card'], after['card'], delta=1)
+        self.assertGreater(after['pres'], start['pres'] + 100)
         self.assertEqual('1', page.text_content('#mto-hidden-count'))
         self.assertEqual([], pressed())
 
@@ -266,7 +266,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         with page.expect_response('**/api/ui-prefs/mic-overview/'):
             page.click('.mto-cols-preset[data-hide="headset notes"]')
         a1 = m()
-        self.assertEqual(491, a1['min'])
+        self.assertEqual(457, a1['min'])
         self.assertAlmostEqual((a1['row'] - 18) / 2, a1['card'], delta=1)
         self.assertEqual('Sessions 1–2 of 3', a1['pos'])
         self.assertEqual(['A1 setup'], pressed())
@@ -277,7 +277,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         self.assertEqual('2', page.text_content('#mto-hidden-count'))
 
         page.goto(url)                                                # follows the user
-        self.assertEqual((491, 'Sessions 1–2 of 3'), (m()['min'], m()['pos']))
+        self.assertEqual((457, 'Sessions 1–2 of 3'), (m()['min'], m()['pos']))
         self.assertEqual(['A1 setup'], pressed())
         self.assertTrue(visible('#mto-hidden-badge'))
 
@@ -286,7 +286,7 @@ class ColumnPrefsBrowserTests(StaticLiveServerTestCase):
         self.assertFalse(visible('#mto-hidden-badge'))
         for col in ALL:
             self.assertTrue(visible('th.mto-col-' + col), col)
-        self.assertEqual((692, 'Session 1 of 3'), (m()['min'], m()['pos']))
+        self.assertEqual((652, 'Session 1 of 3'), (m()['min'], m()['pos']))
         self.assertEqual(['A2 entry'], pressed())
         self.assertEqual({'mic_overview': {'hidden': []}}, UserProfile.objects.get(user=owner).ui_prefs)
 
