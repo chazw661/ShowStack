@@ -8,6 +8,9 @@ Notes is PresenterSlot.notes, the same field the A1 and A2 notes write. It
 was excluded by #68 and is deliberately back; its save sends the note it last
 saw (defaultValue) so it cannot silently overwrite an edit made elsewhere.
 A textarea, not an input: A2 notes can hold newlines an input would drop.
+An editor's cell also holds .mto-lock-text, the viewer's plain-text markup,
+shown instead of the control while the page is locked (#mto-root.mto-locked);
+mtoLockText keeps it in step with the control.
 {% endcomment %}
 
 {# ── Type ── #}
@@ -16,6 +19,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
     <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'mic_type', this.value, this)">
         {% for val, label in mic_types %}<option value="{{ val }}" {% if edit_slot.mic_type == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
     </select>
+    <span class="mto-lock-text">{% if edit_slot.mic_type %}<span class="mto-type-badge">{{ edit_slot.mic_type }}</span>{% else %}<span class="mto-dash">—</span>{% endif %}</span>
     {% elif edit_slot.mic_type %}<span class="mto-type-badge">{{ edit_slot.mic_type }}</span>
     {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
@@ -26,6 +30,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
     <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'headset_color', this.value, this)">
         {% for val, label in headset_colors %}<option value="{{ val }}" {% if edit_slot.headset_color == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
     </select>
+    <span class="mto-lock-text">{% if edit_slot.headset_color %}<span class="mto-dim">{{ edit_slot.get_headset_color_display }}</span>{% else %}<span class="mto-dash">—</span>{% endif %}</span>
     {% elif edit_slot.headset_color %}<span class="mto-dim">{{ edit_slot.get_headset_color_display }}</span>
     {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
@@ -36,6 +41,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
     <select class="mto-edit-select" onchange="mtoSaveSlotField({{ edit_slot.id }}, 'placement', this.value, this)">
         {% for val, label in placements %}<option value="{{ val }}" {% if edit_slot.placement == val %}selected{% endif %}>{% if val %}{{ label }}{% else %}— select —{% endif %}</option>{% endfor %}
     </select>
+    <span class="mto-lock-text">{% if edit_slot.placement %}<span class="mto-dim">{{ edit_slot.get_placement_display }}</span>{% else %}<span class="mto-dash">—</span>{% endif %}</span>
     {% elif edit_slot.placement %}<span class="mto-dim">{{ edit_slot.get_placement_display }}</span>
     {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
@@ -47,6 +53,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
            value="{% if edit_slot.presenter %}{{ edit_slot.presenter.name }}{% endif %}"
            placeholder="— Unassigned —" autocomplete="off"
            onchange="mtoSaveSlotField({{ edit_slot.id }}, 'presenter_name', this.value, this)">
+    <span class="mto-lock-text">{% if edit_slot.presenter %}<span class="mto-presenter">{{ edit_slot.presenter.name }}</span>{% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}</span>
     {% elif edit_slot.presenter %}<span class="mto-presenter">{{ edit_slot.presenter.name }}</span>
     {% else %}<span class="mto-unassigned">— Unassigned —</span>{% endif %}
 </td>
@@ -62,6 +69,7 @@ A textarea, not an input: A2 notes can hold newlines an input would drop.
                   onchange="mtoSaveSlotField({{ edit_slot.id }}, 'notes', this.value, this)">{{ edit_slot.notes }}</textarea>
         <span class="mto-notes-preview" aria-hidden="true">{{ edit_slot.notes }}</span>
     </div>
+    <span class="mto-lock-text">{% if edit_slot.notes %}<span class="mto-notes-text" tabindex="0">{{ edit_slot.notes }}</span>{% else %}<span class="mto-dash">—</span>{% endif %}</span>
     {% elif edit_slot.notes %}<span class="mto-notes-text" tabindex="0">{{ edit_slot.notes }}</span>
     {% else %}<span class="mto-dash">—</span>{% endif %}
 </td>
