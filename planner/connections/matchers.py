@@ -12,20 +12,50 @@ result is saved, so editing a label changes the answer at once:
       processor is dropped (VIA_IO): the I/O output is the physical hop, and
       counting both would draw the feed twice.
 
-  (b) processor output -> amp channel input
-      Parses what the amp rack view's suggestions write (admin.py, issue #43):
-      ``AVB <n> - <label>`` in AVB Stream, ``<label>`` in AES / Analogue
-      Input, either with an optional `` (<processor name>)`` suffix the
-      suggestions add when two processors share a label. The field picks the
-      output type; an AVB stream must match channel AND label (channel only is
-      DRIFT: the processor's output was renamed after the amp was patched).
+  (b) processor (or I/O) output -> amp channel input
+      ``x`` / ``-`` / ``n/a`` / blank are PLACEHOLDERS: an empty field, not
+      text that failed to match. The field picks the output type. Being IN
+      USE (a label or an assigned bus) is a tie-breaker, never a filter: when
+      candidates sit on more than one processor, the unused ones drop out --
+      P1 and Galaxy configs pre-create every output, so two P1s both "have"
+      AVB 1 -- and a single processor left decides it; none or several left
+      is ambiguous. One processor's unlabelled output still matches on its
+      own. Accepted:
+      * AVB Stream: ``AVB <n> - <label>`` (what the rack view's suggestions
+        write, admin.py issue #43) -- channel AND label must match, channel
+        only is DRIFT (the output was renamed after the amp was patched);
+        ``AVB <n>`` or a bare ``<n>`` -- AVB output n, on whichever processor
+        has one (two processors: ambiguous).
+      * AES Input, tried in order:
+        1. ``<label>`` -- a processor AES output's label;
+        2. ``<label> - <n>`` / ``<n> - <label>`` ("Center - 3") -- AES output
+           n; when several processors have one, the one whose label is
+           <label> wins, else ambiguous;
+        3. ``<label>`` -- an I/O device output's name (a stage box feeding
+           the amp directly, VIA I/O). A processor label wins over it.
+      * Analogue Input: the fallback is fed from a processor's analogue
+        outputs OR straight from an I/O device, depending on the engineer,
+        so both are ONE POOL and neither is preferred (``_analog``):
+        ``<label> - <n>`` / ``<n> - <label>`` is certain only when exactly one
+        output in the pool is number n with that label (I/O: its name and
+        its position on the device); ``<label>`` or ``<n>`` alone matches in
+        the pool, with the in-use tie-breaker (I/O: named). "A" / "B" are
+        input selections, not names, and never match.
+      Several outputs on one I/O device: SAME_DEVICE (like SAME_PROCESSOR);
+      candidates on different devices: ambiguous. A `` (<processor name>)``
+      suffix, which the suggestions add when two processors share a label,
+      limits candidates to that processor.
 
   (c) a free-text PA cable run -> its two ends
-      speaker end: the row's Destination against each Speaker Array's base,
-      display and source name. In a free-text row Destination is ALWAYS the
-      speaker array (the field's help text, which says amp rack, is wrong).
-      amp end: the Amp FK, or nothing -- there is no text to match an amp
-      on. The row's Label (a PA Zone) is the cable's label, not an end.
+      In a free-text row Destination is the speaker array (the field's help
+      text, which says amp rack, is wrong) -- except when it is an amp rack's
+      name (an Amp Location) or contains "amp rack", which some rows do: then
+      it is the AMP end, and the speaker end is unnamed.
+      speaker end: Destination against each Speaker Array's base, display and
+      source name; when no single array matches, the text itself (one node
+      per distinct text, so cables naming the same thing meet there).
+      amp end: the Amp FK; else the rack Destination names; else nothing.
+      The row's Label (a PA Zone) is the cable's label, not an end.
 
 Every match has one verdict:
 
@@ -33,11 +63,14 @@ Every match has one verdict:
   SAME_PROCESSOR  several ports, all on one processor -- certain, not
                   ambiguous: "L Main" on AES 1 and Analog 1 of one P1 is a
                   primary and its fallback
+  SAME_DEVICE     (b) via I/O: several outputs of that name, all on one I/O
+                  device ("L&R" twice on one stage box) -- certain likewise
   AMBIGUOUS       candidates on more than one processor / array / amp. Never
                   resolved: the graph draws the text, unlinked, and lists them
   UNMATCHED       nothing fits
   DRIFT           (b) only, see above
   VIA_IO          (a) only, see above
+  PLACEHOLDER     (b) only: an x / - / n/a in an amp input field
 
 Text is compared by ``norm``: case-folded, en/em dashes as "-", whitespace
 collapsed. Blank text is not a source and never matches.
@@ -54,7 +87,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from planner.connections import endpoints as ep
 from planner.models import (
-    Amp, AmpChannel, Console, ConsoleAuxOutput, ConsoleMatrixOutput,
+    Amp, AmpChannel, AmpLocation, Console, ConsoleAuxOutput, ConsoleMatrixOutput,
     ConsoleStereoOutput, Device, DeviceInput, DeviceOutput, GalaxyInput,
     GalaxyOutput, P1Input, P1Output, PACableSchedule, SpeakerArray,
     SystemProcessor,
@@ -66,8 +99,12 @@ AMBIGUOUS = 'ambiguous'
 UNMATCHED = 'unmatched'
 DRIFT = 'drift'
 VIA_IO = 'via_io'
+PLACEHOLDER = 'placeholder'
+RACK = 'rack'                 # (c): the Destination named the amp rack
 
-RESOLVED = (MATCHED, SAME_PROCESSOR)
+SAME_DEVICE = 'same_device'
+
+RESOLVED = (MATCHED, SAME_PROCESSOR, SAME_DEVICE)
 
 # (b): AmpChannel field -> the processor output type it can be fed from.
 AMP_INPUT_FIELDS = (('avb_stream', 'AVB'), ('aes_input', 'AES'), ('analog_input', 'ANALOG'))
@@ -79,6 +116,11 @@ _SUFFIX = re.compile(r'^(.*?)\s*\(([^()]*)\)\s*$')
 _AVB = re.compile(r'^avb\s*(\d+)\s*(?:-\s*(.*))?$')
 _TYPE_WORDS = {'analog': 'ANALOG', 'analogue': 'ANALOG', 'aes': 'AES',
                'aes/ebu': 'AES', 'avb': 'AVB', 'avb/milan': 'AVB'}
+_BARE_NUMBER = re.compile(r'^(\d+)$')
+_LABEL_NUMBER = re.compile(r'^(?P<label>.*\S)\s*-\s*(?P<n>\d+)$')
+_NUMBER_LABEL = re.compile(r'^(?P<n>\d+)\s*-\s*(?P<label>\S.*)$')
+PLACEHOLDERS = {'x', '-', 'n/a'}
+_RACK_WORDS = 'amp rack'
 _TYPED_PORT = re.compile(r'^(analog|analogue|aes/ebu|aes|avb/milan|avb)\s*(\d+)$')
 
 
@@ -108,6 +150,7 @@ class Port:
     type: str = ''            # processor ports: 'ANALOG' / 'AES' / 'AVB'
     number: int | None = None
     pk: int = 0
+    in_use: bool = True       # processor output: a label or an assigned bus; I/O output: a name
 
 
 @dataclass
@@ -127,7 +170,8 @@ class Match:
     targets: tuple = ()       # resolved: processor ports, or a processor node id
     candidates: tuple = ()    # ambiguous / drift: what it could have been
     field: str = ''           # (b) only
-    via: str = ''             # (a) matrix destination: 'label' / 'typed' / 'name'
+    via: str = ''             # (a) 'label' / 'typed' / 'name'; (b) 'io' for an I/O output
+    excluded: int = 0         # (b): unused outputs dropped to break a tie (0 = no tie decided)
 
     @property
     def transport(self):
@@ -142,7 +186,7 @@ class End:
     verdict: str
     text: str
     target: str = ''          # node id
-    via: str = ''             # 'fk' / 'amp' / 'amp_location' / 'array'
+    via: str = ''             # 'fk' / 'amp_location' / 'rack_text' / 'array' / 'text'
     candidates: tuple = ()
 
 
@@ -170,11 +214,13 @@ class ProjectIndex:
         self.device_outputs = []      # (Port, linked bus ref or '')
         self.matrices = []            # (Port, destination text)
         self.processor_inputs = []    # Port
-        self.processor_outputs = []   # Port
+        self.processor_outputs = []   # Port, used or not (see Port.in_use)
         self.amp_inputs = []          # AmpInput
+        self.amp_placeholders = []    # AmpInput holding x / - / n/a
         self.amp_channels = []        # Port, every channel, filled in or not
         self.pa_rows = []             # PACableSchedule
         self.array_names = defaultdict(set)     # norm(name) -> {node id}
+        self.amp_location_names = defaultdict(set)
         self.processor_names = defaultdict(set)
 
     @classmethod
@@ -211,6 +257,11 @@ class ProjectIndex:
             self._add(Node(ep.node_id(ep.AMP, a.pk), ep.AMP, a.name,
                            _location(a.location, ep.AMP_LOCATION),
                            {'model': str(a.amp_model) if a.amp_model_id else ''}))
+        for loc in AmpLocation.objects.filter(project_id=pid):
+            node = self._add(Node(ep.node_id(ep.AMP_LOCATION, loc.pk), ep.AMP_LOCATION,
+                                  loc.name))
+            if norm(loc.name):
+                self.amp_location_names[norm(loc.name)].add(node.id)
         for arr in SpeakerArray.objects.filter(prediction__project_id=pid):
             node = self._add(Node(ep.node_id(ep.ARRAY, arr.pk), ep.ARRAY, arr.display_name,
                                   extra={'prediction': arr.prediction_id}))
@@ -268,7 +319,8 @@ class ProjectIndex:
             port = self._port(Port(ep.port_ref('deviceoutput', pk),
                                    ep.node_id(ep.DEVICE, device_id),
                                    ep.io_output_label(position[device_id]),
-                                   (name or '').strip(), pk=pk))
+                                   (name or '').strip(), number=position[device_id], pk=pk,
+                                   in_use=bool((name or '').strip())))
             bus = ''
             if ct_id in bus_cts and obj_id:
                 ref = ep.port_ref(bus_cts[ct_id], obj_id)
@@ -285,12 +337,15 @@ class ProjectIndex:
                     .filter(**{f'{owner}__system_processor__project_id': pid})
                     .order_by(f'{owner}__system_processor_id', type_field, 'channel_number')
                     .values_list('pk', f'{owner}__system_processor_id', type_field,
-                                 'channel_number', 'label'))
-            for pk, proc_id, port_type, number, label in rows:
+                                 'channel_number', 'label',
+                                 *(['assigned_bus'] if out else [])))
+            for pk, proc_id, port_type, number, label, *bus in rows:
+                label = (label or '').strip()
                 port = self._port(Port(ep.port_ref(prefix, pk),
                                        ep.node_id(ep.PROCESSOR, proc_id),
                                        ep.processor_port_label(port_type, number),
-                                       (label or '').strip(), port_type, number, pk))
+                                       label, port_type, number, pk,
+                                       in_use=bool(label) or bool(bus and bus[0])))
                 (self.processor_outputs if out else self.processor_inputs).append(port)
 
         # Amp channels ------------------------------------------------------
@@ -305,7 +360,9 @@ class ProjectIndex:
                                    number=number, pk=pk))
             self.amp_channels.append(port)
             for (fname, _), value in zip(AMP_INPUT_FIELDS, values):
-                if norm(value):
+                if norm(value) in PLACEHOLDERS:
+                    self.amp_placeholders.append(AmpInput(port, fname, value.strip()))
+                elif norm(value):
                     self.amp_inputs.append(AmpInput(port, fname, value.strip()))
 
         # PA cable runs -------------------------------------------------------
@@ -413,29 +470,94 @@ def _split_suffix(index, text):
     return text, None
 
 
+def _by_number(outputs, number, label=''):
+    """Output ``number`` of one type. Several processors have one: the one
+    whose label is ``label`` wins, else they are all candidates."""
+    on_number = [p for p in outputs if p.number == number]
+    labelled = [p for p in on_number if label and norm(p.text) == label]
+    return labelled or on_number
+
+
 def match_amp_input(index, amp_input):
     port_type = dict(AMP_INPUT_FIELDS)[amp_input.field]
     body, only = _split_suffix(index, amp_input.text)
     outputs = [p for p in index.processor_outputs
                if p.type == port_type and (only is None or p.node in only)]
     key = norm(body)
-    kw = {'field': amp_input.field}
     src, text = amp_input.channel, amp_input.text
 
+    def resolve(ports, via):
+        excluded = 0
+        if len({p.node for p in ports}) > 1:
+            used = [p for p in ports if p.in_use]
+            if used and len({p.node for p in used}) == 1:
+                ports, excluded = used, len(ports) - len(used)
+        match = _resolve('b', src, text, ports, field=amp_input.field, via=via)
+        match.excluded = excluded
+        if match.verdict == SAME_PROCESSOR and match.targets[0].node.startswith(ep.DEVICE + ':'):
+            match.verdict = SAME_DEVICE     # _verdict's word; these are I/O outputs
+        if match.verdict in RESOLVED and all(_is_io(t) for t in match.targets):
+            match.via = 'io'
+        return match
+
+    if port_type == 'ANALOG':
+        return _analog(index, key, outputs, only, resolve, src, text, amp_input.field)
+
     if port_type == 'AVB':
-        m = _AVB.match(key)
+        m = _AVB.match(key) or _BARE_NUMBER.match(key)
         if m:
-            number, label = int(m.group(1)), norm(m.group(2))
+            number = int(m.group(1))
+            label = norm(m.group(2)) if m.re is _AVB else ''
             on_channel = [p for p in outputs if p.number == number]
             if not label:
-                return _resolve('b', src, text, on_channel, **kw)
+                return resolve(on_channel, 'number')
             exact = [p for p in on_channel if norm(p.text) == label]
-            if exact:
-                return _resolve('b', src, text, exact, **kw)
-            if on_channel:
-                return Match('b', DRIFT, src, text, candidates=tuple(on_channel), **kw)
-            return Match('b', UNMATCHED, src, text, **kw)
-    return _resolve('b', src, text, [p for p in outputs if norm(p.text) == key], **kw)
+            if exact or not on_channel:
+                return resolve(exact, 'label')
+            return Match('b', DRIFT, src, text, candidates=tuple(on_channel),
+                         field=amp_input.field)
+        return resolve([p for p in outputs if norm(p.text) == key], 'label')
+
+    exact = [p for p in outputs if norm(p.text) == key]
+    if exact:
+        return resolve(exact, 'label')
+    m = _LABEL_NUMBER.match(key) or _NUMBER_LABEL.match(key)
+    if m:
+        found = _by_number(outputs, int(m.group('n')), norm(m.group('label')))
+        if found:
+            return resolve(found, 'number')
+    if only is None:
+        named = [p for p, _ in index.device_outputs if norm(p.text) == key]
+        if named:
+            return resolve(named, 'io')
+    return resolve([], 'label')
+
+
+def _is_io(port):
+    return port.ref.startswith('deviceoutput:')
+
+
+NEVER_NAMES = {'a', 'b'}      # analogue "A" / "B": an input selection, not a name
+
+
+def _analog(index, key, outputs, only, resolve, src, text, field):
+    """Analogue Input: processor analogue outputs and I/O outputs, one pool."""
+    if key in NEVER_NAMES:
+        return Match('b', UNMATCHED, src, text, field=field)
+    pool = outputs + ([p for p, _ in index.device_outputs] if only is None else [])
+    m = _LABEL_NUMBER.match(key) or _NUMBER_LABEL.match(key)
+    if m:
+        number, label = int(m.group('n')), norm(m.group('label'))
+        both = [p for p in pool if p.number == number and norm(p.text) == label]
+        if both:
+            return resolve(both, 'number')          # several on one device: same_*
+        either = [p for p in pool if p.number == number or norm(p.text) == label]
+        if either:
+            return Match('b', AMBIGUOUS, src, text, candidates=tuple(either), field=field)
+        return Match('b', UNMATCHED, src, text, field=field)
+    if _BARE_NUMBER.match(key):
+        return resolve([p for p in pool if p.number == int(key)], 'number')
+    return resolve([p for p in pool if norm(p.text) == key], 'label')
 
 
 def rule_b(index):
@@ -451,15 +573,32 @@ def _end(nodes, text, via):
     return End(AMBIGUOUS, text, via=via, candidates=tuple(nodes))
 
 
+def _looks_like_rack(index, key):
+    return key in index.amp_location_names or _RACK_WORDS in key
+
+
 def match_cable(index, row):
     destination = (row.destination or '').strip()
-    arrays = index.array_names.get(norm(destination), ()) if norm(destination) else ()
-    speaker = _end(arrays, destination, 'array') if arrays else End(UNMATCHED, destination)
-
+    key = norm(destination)
     amp_node = ep.node_id(ep.AMP, row.amp_id) if row.amp_id else ''
-    amp = (End(MATCHED, '', amp_node, 'fk') if amp_node in index.nodes
-           else End(UNMATCHED, ''))
-    return CableMatch(row, speaker, amp)
+    fk = End(MATCHED, '', amp_node, 'fk') if amp_node in index.nodes else None
+
+    if key and _looks_like_rack(index, key):
+        racks = index.amp_location_names.get(key, ())
+        if fk:
+            amp = fk
+        elif len(racks) == 1:
+            amp = End(MATCHED, destination, next(iter(racks)), 'amp_location')
+        else:                           # "SR Amp Racks", no Amp Location of that name
+            amp = End(UNMATCHED, destination, via='rack_text')
+        return CableMatch(row, End(RACK, ''), amp)
+
+    arrays = index.array_names.get(key, ()) if key else ()
+    if arrays:
+        speaker = _end(arrays, destination, 'array')
+    else:
+        speaker = End(UNMATCHED, destination, via='text' if key else '')
+    return CableMatch(row, speaker, fk or End(UNMATCHED, ''))
 
 
 def rule_c(index):

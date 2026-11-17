@@ -190,9 +190,10 @@ class GraphTests(ConnectionFixtures, TestCase):
         row = self.text_cable(self.zone('OFL'), destination='Nowhere')
         graph = self.graph()
         [edge] = _edges(graph, 'amp_rack:unlinked')
-        self.assertEqual(edge['to'], f'unlinked:pa:{row.pk}:speaker')
+        self.assertEqual(edge['to'], 'unlinked:text:nowhere')
         nodes = {n['id']: n for n in graph['nodes']}
         self.assertEqual(nodes[edge['to']]['label'], 'Nowhere')
+        del row
         self.assertEqual(edge['label'], "OFL · 2× NL 4 100'")
         self.assertEqual(graph['warnings'], [])
 
@@ -209,6 +210,75 @@ class GraphTests(ConnectionFixtures, TestCase):
         [warning] = graph['warnings']
         self.assertEqual((warning['kind'], warning['rule'], warning['edge']),
                          ('ambiguous', 'c', edge['id']))
+
+    # -- strings from the prod report ------------------------------------------
+
+    def test_cables_naming_the_same_text_share_its_node_and_edge(self):
+        self.text_cable(self.zone('D2'), destination='KIVA DELAY 2 & 3')
+        self.text_cable(self.zone('D3'), destination='kiva delay  2 & 3', cable='NL_8', count=1)
+        self.text_cable(self.zone('FF'), destination='5XT FF 1&8, 2&7')
+        graph = self.graph()
+        nodes = {n['id']: n for n in graph['nodes']}
+        shared = 'unlinked:text:kiva delay 2 & 3'
+        self.assertEqual(nodes[shared]['label'], 'KIVA DELAY 2 & 3')
+        [edge] = _edges(graph, 'amp_rack:unlinked', shared)
+        self.assertEqual(edge['label'], "D2 · 2× NL 4 100'; D3 · 1× NL 8 100'")
+        self.assertEqual(len(edge['sources']), 2)
+        self.assertEqual(nodes['unlinked:text:5xt ff 1&8, 2&7']['label'], '5XT FF 1&8, 2&7')
+
+    def test_amp_rack_destination_starts_the_edge_at_that_rack(self):
+        row = self.text_cable(self.zone('SR'), destination='SR Amp Racks')
+        graph = self.graph()
+        rack = 'amp_rack:text:sr amp racks'
+        [edge] = _edges(graph, rack)
+        self.assertEqual(edge['to'], f'unlinked:pa:{row.pk}:speaker')
+        nodes = {n['id']: n for n in graph['nodes']}
+        self.assertEqual((nodes[rack]['kind'], nodes[rack]['label']), ('amp_rack', 'SR Amp Racks'))
+        self.assertEqual(nodes[edge['to']]['label'], 'Speaker — not named')
+        self.assertTrue(edge['text']['destination_is_rack'])
+
+    def test_amp_rack_destination_naming_an_amp_location_lists_that_location(self):
+        amp = self.amp('SR LA12X #1', rack='SR Amp Racks')
+        self.text_cable(self.zone('SR'), destination='SR Amp Racks')
+        graph = self.graph()
+        loc = f'amp_location:{amp.location_id}'
+        self.assertEqual(len(_edges(graph, loc)), 1)
+        self.assertIn(loc, {n['id'] for n in graph['nodes']})
+
+    def test_io_output_feeding_an_amp_is_a_device_to_amp_edge(self):
+        amp = self.amp('SL LA12X #1')
+        self.device_output(self.box, 1, 'LEFT')
+        self.amp_channel(amp, 1, aes_input='LEFT')
+        self.amp_channel(amp, 2, avb_stream='x')
+        graph = self.graph()
+        [edge] = _edges(graph, self.box_id, f'amp:{amp.pk}')
+        self.assertEqual((edge['label'], edge['transports'], edge['status']),
+                         ('Out 1 → Ch 1', ['aes'], 'inferred'))
+        self.assertEqual(_edges(graph, to=f'amp:{amp.pk}'), [edge])   # 'x' draws nothing
+
+    def test_one_io_name_twice_on_one_box_is_one_certain_edge(self):
+        amp = self.amp('SL LA12X #1')
+        self.device_output(self.box, 1, 'L&R')
+        self.device_output(self.box, 2, 'L&R')
+        self.amp_channel(amp, 1, analog_input='L&R')
+        graph = self.graph()
+        [edge] = _edges(graph, self.box_id, f'amp:{amp.pk}')
+        self.assertEqual((edge['label'], edge['match'], edge['unlinked']),
+                         ('Out 1–2 → Ch 1', ['same_device'], False))
+        self.assertNotIn('ambiguous', edge)
+        self.assertEqual(graph['warnings'], [])
+
+    def test_one_io_name_on_two_boxes_is_an_ambiguous_unlinked_edge(self):
+        amp = self.amp('SL LA12X #1')
+        other = self.device('Drum Box')
+        self.device_output(self.box, 1, 'L&R')
+        self.device_output(other, 1, 'L&R')
+        self.amp_channel(amp, 1, analog_input='L&R')
+        graph = self.graph()
+        [edge] = _edges(graph, to=f'amp:{amp.pk}')
+        self.assertTrue(edge['ambiguous'] and edge['unlinked'])
+        self.assertEqual({c['node'] for c in edge['candidates']},
+                         {self.box_id, f'device:{other.pk}'})
 
     # -- shape, scope, cost ----------------------------------------------------
 

@@ -85,3 +85,60 @@ class InferConnectionsCommandTests(ConnectionFixtures, TestCase):
         self.assertNotIn('(a)', out)
         self.assertNotIn('(b)', out)
         self.assertIn('(c)', out)
+
+
+class InferConnectionsProdStringsTests(ConnectionFixtures, TestCase):
+    """The placeholder, via-I/O and amp-rack lines, on strings from prod."""
+
+    def test_counts(self):
+        sl = self.p1('SL P1')
+        self.p1_out(sl, 'AES', 3, '')
+        amp = self.amp('SL LA12X #1')
+        self.device_output(self.device(), 1, 'LEFT')
+        self.amp_channel(amp, 1, avb_stream='AVB 1', aes_input='x')
+        self.amp_channel(amp, 2, avb_stream='1', aes_input='X')
+        self.amp_channel(amp, 3, aes_input='Center - 3')
+        self.amp_channel(amp, 4, aes_input='LEFT')
+        self.text_cable(self.zone('SR'), destination='SR Amp Racks')
+        self.text_cable(self.zone('D2'), destination='KIVA DELAY 2 & 3')
+        self.text_cable(self.zone('D3'), destination='KIVA DELAY 2 & 3')
+        self.text_cable(self.zone('FF'), destination='5XT FF 1&8, 2&7')
+        out = StringIO()
+        call_command('infer_connections', '--project', str(self.project.pk), stdout=out)
+        out = out.getvalue()
+        self.assertIn('(b) matched 4 (same-processor 0)  ambiguous 0  unmatched 0  drift 0  '
+                      'placeholder 2   [via I/O output: 1]', out)
+        self.assertIn('resolve to one processor 3 · to one I/O output 1', out)
+        self.assertIn('placeholder (x, -, n/a) 2', out)
+        self.assertNotIn('tie decided', out)    # one P1: no tie to decide
+        self.assertIn('analog input: resolved to I/O output 0 · to processor 0 · '
+                      'ambiguous between both 0', out)
+        self.assertIn('destination → speaker array: matched 0  ambiguous 0  unmatched 3 '
+                      '(2 distinct texts)', out)
+        self.assertIn('destination looked like amp rack: 1   [Amp Location 0 · text only 1]', out)
+
+    def test_analog_breakdown(self):
+        sl = self.p1('SL P1')
+        box = self.device('Stage Box')
+        for n, name in enumerate(['LEFT', 'R', 'CENTER'], 1):
+            self.device_output(box, n, name)
+        self.p1_out(sl, 'ANALOG', 3, 'Center')
+        self.p1_out(sl, 'ANALOG', 4, 'Sub')
+        amp = self.amp('SL LA12X #1')
+        self.amp_channel(amp, 1, analog_input='LEFT')         # I/O
+        self.amp_channel(amp, 2, analog_input='Sub')          # processor
+        self.amp_channel(amp, 3, analog_input='Center - 3')   # both
+        out = StringIO()
+        call_command('infer_connections', '--project', str(self.project.pk), stdout=out)
+        self.assertIn('analog input: resolved to I/O output 1 · to processor 1 · '
+                      'ambiguous between both 1', out.getvalue())
+
+    def test_a_tie_decided_by_use_is_reported(self):
+        sl = self.p1('SL P1')
+        self.p1('SR P1')
+        self.p1_out(sl, 'AVB', 1, 'Main L')
+        self.amp_channel(self.amp('SL LA12X #1'), 1, avb_stream='AVB 1')
+        out = StringIO()
+        call_command('infer_connections', '--project', str(self.project.pk), stdout=out)
+        self.assertIn('tie decided by excluding unused outputs (no label, no bus): '
+                      '1 match(es), 1 output(s) excluded', out.getvalue())

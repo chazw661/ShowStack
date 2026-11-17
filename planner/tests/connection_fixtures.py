@@ -51,17 +51,18 @@ class ConnectionFixtures:
         port.save()
         return port
 
-    def p1_out(self, proc, port_type, number, label):
+    def p1_out(self, proc, port_type, number, label, bus=None):
         port = P1Output.objects.get(p1_processor__system_processor=proc,
                                     output_type=port_type, channel_number=number)
         port.label = label
+        port.assigned_bus = bus
         port.save()
         return port
 
-    def galaxy_out(self, proc, port_type, number, label):
+    def galaxy_out(self, proc, port_type, number, label, bus=None):
         return GalaxyOutput.objects.create(galaxy_processor=proc.galaxy_config,
                                            output_type=port_type, channel_number=number,
-                                           label=label)
+                                           label=label, assigned_bus=bus)
 
     # -- consoles and I/O ----------------------------------------------------
 
