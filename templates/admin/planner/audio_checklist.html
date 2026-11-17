@@ -413,6 +413,35 @@
     #content .checklist-table tbody tr.status-complete    { background: rgba(76,175,80,0.24) !important; }
     #content .checklist-table tbody tr.status-na          { background: rgba(96,125,139,0.18) !important; }
 
+    /* Task names wrap instead of being cut off: a one-row textarea that grows
+       with its text (fitTaskText), never narrower than a typical 30-character
+       name in this 13px font (~204px of text). */
+    #content textarea.task-input {
+        display: block; box-sizing: border-box; min-width: 224px; height: auto;
+        font: inherit; font-size: 13px; line-height: 18px;
+        resize: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    /* Dropdowns never narrower than their longest choice ("Pre-Production",
+       "Not Started"), so a panel at its minimum width still reads whole. */
+    #content .stage-select { min-width: 136px; }
+    #content .status-select { min-width: 112px; }
+    /* Setup and Daily sit side by side while both fit at their minimum
+       widths (each panel's flex-basis is its table's min-content width, set
+       by sizeChecklistPanels) and stack, Setup on top, when they don't. */
+    .checklist-panels { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+    .checklist-panel { flex: 1 1 auto; min-width: 0; }
+    /* Day columns that still don't fit scroll sideways; the TASK column stays
+       put on the left, on an opaque background so the days pass beneath it. */
+    .daily-scroll { overflow-x: auto; }
+    .daily-scroll .checklist-table th:first-child,
+    .daily-scroll .checklist-table td:first-child {
+        position: sticky; left: 0; z-index: 2;
+        box-shadow: 3px 0 4px -2px rgba(0, 0, 0, 0.6);
+    }
+    #content .daily-scroll .checklist-table tbody td:first-child {
+        background: linear-gradient(135deg, rgba(44,39,90,0.60) 0%, rgba(24,21,52,0.66) 100%), #2a2a2a;
+    }
+
     /* Daily-task per-day status dropdown — color-coded like the setup-task
        STATUS dropdown. The extra .day-status-select class raises specificity
        so these win over the flat indigo #content .status-select rule above. */
@@ -578,16 +607,16 @@ function renderChecklists() {
         `;
         sectionDiv.appendChild(header);
 
-        // Create a two-column layout
+        // Setup and Daily side by side, or stacked when they don't both fit.
         const layoutDiv = document.createElement('div');
-        layoutDiv.style.display = 'flex';
-        layoutDiv.style.gap = '20px';
+        layoutDiv.className = 'checklist-panels';
 
         // Left column - Setup tasks (one-time)
         if (section.setup && section.setup.length > 0) {
             const setupDiv = document.createElement('div');
-            // Take the full width when the Daily column is disabled (issue #53).
-            setupDiv.style.flex = dailyDisabled ? '1' : '0 0 55%';
+            setupDiv.className = 'checklist-panel';
+            // Setup takes the larger share of a shared row (it was 55%).
+            setupDiv.style.flexGrow = '1.2';
             
             const setupHeader = document.createElement('h4');
             setupHeader.style.color = '#ffc107';
@@ -607,7 +636,7 @@ function renderChecklists() {
         if (!dailyDisabled && section.daily && section.daily.length > 0) {
             const numDays = section.num_days || 4;
             const dailyDiv = document.createElement('div');
-            dailyDiv.style.flex = '1';
+            dailyDiv.className = 'checklist-panel';
 
             const dailyHeader = document.createElement('h4');
             dailyHeader.style.color = '#ffc107';
@@ -632,14 +661,60 @@ function renderChecklists() {
             dailyDiv.appendChild(dailyHeader);
 
             const dailyTable = createDailyTable(sectionName, 'daily', section.daily, sectionStatuses.daily, numDays);
-            dailyDiv.appendChild(dailyTable);
+            const dailyScroll = document.createElement('div');
+            dailyScroll.className = 'daily-scroll';
+            dailyScroll.appendChild(dailyTable);
+            dailyDiv.appendChild(dailyScroll);
             layoutDiv.appendChild(dailyDiv);
         }
 
         sectionDiv.appendChild(layoutDiv);
         container.appendChild(sectionDiv);
+        sizeChecklistPanels(layoutDiv);
     });
     if (!CAN_EDIT) applyReadOnly(container);
+    fitAllTaskText();
+}
+
+// Each panel's flex-basis is the narrowest its table can be without cutting
+// anything (min-content, every day column included), so the two share a row
+// only when both fit whole; otherwise Daily wraps under Setup. A Daily table
+// still wider than the page then scrolls its days sideways (.daily-scroll).
+function sizeChecklistPanels(layoutDiv) {
+    layoutDiv.querySelectorAll('.checklist-panel').forEach(panel => {
+        const table = panel.querySelector('.checklist-table');
+        if (!table) return;
+        const was = table.style.width;
+        table.style.width = 'min-content';
+        panel.style.flexBasis = Math.ceil(table.getBoundingClientRect().width) + 'px';
+        table.style.width = was;
+    });
+}
+
+// Task names: as tall as their text, so a long name wraps onto more lines.
+function fitTaskText(el) {
+    el.style.height = 'auto';
+    el.style.height = (el.scrollHeight + 2) + 'px';
+}
+function fitAllTaskText() {
+    document.querySelectorAll('#checklistContainer textarea.task-input').forEach(fitTaskText);
+}
+// A task name is one line of text: Enter saves it, and a pasted line break
+// becomes a space.
+function taskKey(event, el) {
+    if (event.key === 'Enter') { event.preventDefault(); el.blur(); }
+}
+function taskInput(el) {
+    if (/[\r\n]/.test(el.value)) el.value = el.value.replace(/\s*[\r\n]+\s*/g, ' ');
+    fitTaskText(el);
+}
+// A width change rewraps the names.
+if (window.ResizeObserver) {
+    let lastWidth = 0;
+    new ResizeObserver(entries => {
+        const w = entries[0].contentRect.width;
+        if (w !== lastWidth) { lastWidth = w; fitAllTaskText(); }
+    }).observe(document.getElementById('checklistContainer'));
 }
 
 // A viewer sees the checklist but can't change it (the server refuses with
@@ -687,7 +762,7 @@ function createDailyTable(sectionName, type, tasks, taskStatuses, numDays) {
 
     // Day headers row - editable labels stored in localStorage
     const dayHeaderRow = document.createElement('tr');
-    let dayHeadersHtml = '<th rowspan="2" style="background-color: #ffc107; color: #000; width: 300px;">TASK</th>';
+    let dayHeadersHtml = '<th rowspan="2" style="background-color: #ffc107; color: #000;">TASK</th>';
     for (let d = 1; d <= numDays; d++) {
         const label = getDayLabel(sectionName, d);
         dayHeadersHtml += `<th style="background-color: #ffc107; color: #000; min-width:104px;">
@@ -724,8 +799,8 @@ function createSetupRow(sectionName, type, task, taskStatus) {
 
     row.innerHTML = `
         <td>
-            <input type="text" class="task-input" value="${esc(task.task)}" 
-                   onchange="updateTask(${task.id}, 'task', this.value)">
+            <textarea class="task-input" rows="1" onkeydown="taskKey(event, this)" oninput="taskInput(this)"
+                      onchange="updateTask(${task.id}, 'task', this.value)">${esc(task.task)}</textarea>
         </td>
         <td>
             <select class="stage-select" 
@@ -761,8 +836,8 @@ function createDailyRow(sectionName, type, task, taskStatus, numDays) {
     const days = (taskStatus && taskStatus.days) || {};
     let cells = `
         <td>
-            <input type="text" class="task-input" value="${esc(task.task)}"
-                   onchange="updateTask(${task.id}, 'task', this.value)">
+            <textarea class="task-input" rows="1" onkeydown="taskKey(event, this)" oninput="taskInput(this)"
+                      onchange="updateTask(${task.id}, 'task', this.value)">${esc(task.task)}</textarea>
         </td>
     `;
     for (let d = 1; d <= numDays; d++) {
