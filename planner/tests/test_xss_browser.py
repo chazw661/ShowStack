@@ -233,6 +233,39 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         page.wait_for_selector('#crew-name-77')
         self.assert_text(page, '#crew-name-77 .cc-crew-name-text', NAME, 'crew name')
 
+    # -- PA Cable Entries --------------------------------------------------------
+
+    def test_names_on_a_pa_cable_run_and_its_linked_arrays_panel(self):
+        # pa_cable_array_speakers.js builds the arrays panel from JSON; the
+        # change form and the list are server-rendered.
+        from planner.models import (Amp, AmpLocation, AmpModel, PACableSchedule, PAZone,
+                                    SoundvisionPrediction, SpeakerArray)
+        rack = AmpLocation.objects.create(project=self.project, name=QUOTED)
+        amp = Amp.objects.create(project=self.project, name=NAME, location=rack,
+                                 amp_model=AmpModel.objects.get_or_create(
+                                     manufacturer="L'Acoustics", model_name='XSS4',
+                                     defaults={'channel_count': 4})[0])
+        pred = SoundvisionPrediction.objects.create(project=self.project, file_name='x.pdf')
+        array = SpeakerArray.objects.create(prediction=pred, source_name=NAME,
+                                            array_base_name=NAME,
+                                            configuration='vertical_flown', bumper_type='K2-BUMP')
+        run = PACableSchedule.objects.create(
+            project=self.project, amp=amp, destination=QUOTED[:50],
+            label=PAZone.objects.create(project=self.project, name='<b>HL'))
+        run.speaker_arrays.add(array)
+        page = self.open(reverse('admin:planner_pacableschedule_change', args=[run.pk]))
+        page.wait_for_selector('#pa-array-ref .pa-array-ref__arrayname')
+        self.assert_text(page, '#pa-array-ref .pa-array-ref__arrayname', array.display_name,
+                         'arrays panel')
+        self.assert_text(page, '#id_amp option', NAME, 'amp picker')
+        self.assert_text(page, '#id_speaker_arrays_to option', NAME, 'linked arrays picker')
+        self.assertEqual(page.input_value('#id_destination'), QUOTED[:50])
+        page = self.open(reverse('admin:planner_pacableschedule_changelist'))
+        self.assert_text(page, '#result_list td.field-from_col', NAME, 'From column')
+        self.assert_text(page, '#result_list td.field-to_col', QUOTED[:50], 'To column')
+        self.assert_text(page, '#result_list td.field-arrays_col .cb-array', NAME, 'Arrays column')
+        self.assert_text(page, '#result_list .field-cable_label_col', '<b>HL', 'Cable Label')
+
     # -- Wiring Diagram ----------------------------------------------------------
 
     def test_names_in_the_wiring_diagram_svg_and_warnings(self):

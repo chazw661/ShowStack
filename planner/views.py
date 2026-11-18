@@ -4392,13 +4392,12 @@ def all_pa_cables_pdf_export(request):
     
     # Filter by current project and preserve ordering
     if hasattr(request, 'current_project') and request.current_project:
-        # speaker_array and amp join the select_related because the table's
-        # Array/Speaker and Destination columns resolve through them for a
-        # linked-mode cable (issue #73).
+        # amp and amp_location join because the table's From column
+        # resolves through them.
         queryset = PACableSchedule.objects.filter(
             project=request.current_project
         ).select_related(
-            'label', 'speaker_array', 'amp'
+            'label', 'amp', 'amp_location'
         ).order_by('label__name', 'destination')
     else:
         queryset = PACableSchedule.objects.none()
@@ -4771,7 +4770,7 @@ def import_pa_cables_csv(request):
 
         summary = f"Imported {imported} cable entr{'y' if imported == 1 else 'ies'}"
         if zones_created:
-            summary += f", auto-created {zones_created} zone(s)"
+            summary += f", auto-created {zones_created} cable label(s)"
         if errors:
             messages.warning(
                 request,

@@ -248,10 +248,16 @@ class RuleCTests(ConnectionFixtures, TestCase):
         end = self.match(self.text_cable(self.zone('HR'), destination='')).speaker
         self.assertEqual(end.verdict, m.UNMATCHED)
 
-    def test_amp_end_is_the_fk(self):
+    def test_a_run_entered_with_an_end_is_never_matched_from_text(self):
+        # PR 2b-1: an amp, an amp rack or a linked array means the run was
+        # entered with its ends; only runs with none are read by rule (c).
         amp = self.amp('SL LA12X #1')
-        end = self.match(self.text_cable(destination='x', amp=amp)).amp
-        self.assertEqual((end.verdict, end.via, end.target), (m.MATCHED, 'fk', f'amp:{amp.pk}'))
+        self.text_cable(destination='X', amp=amp)
+        self.text_cable(destination='X', amp_location=amp.location)
+        self.linked_cable(None, self.array(self.pred, 'X'), destination='X')
+        loose = self.text_cable(destination='X')
+        self.assertEqual([cm.row.pk for cm in m.rule_c(m.ProjectIndex.load(self.project))],
+                         [loose.pk])
 
     def test_amp_end_without_fk_is_never_guessed_from_an_amp_name(self):
         self.amp('Sub Amp', rack='SL Racks')
@@ -427,10 +433,10 @@ class RuleCProdStringsTests(ConnectionFixtures, TestCase):
         self.assertEqual((cm.speaker.verdict, cm.amp.target),
                          (m.RACK, f'amp_location:{amp.location_id}'))
 
-    def test_the_amp_fk_still_wins_over_rack_text(self):
+    def test_rack_text_on_a_run_with_an_amp_is_not_read(self):
         amp = self.amp('SR LA12X #1')
-        cm = self.match(self.text_cable(destination='SR Amp Racks', amp=amp))
-        self.assertEqual((cm.speaker.verdict, cm.amp.via), (m.RACK, 'fk'))
+        self.text_cable(destination='SR Amp Racks', amp=amp)
+        self.assertEqual(m.rule_c(m.ProjectIndex.load(self.project)), [])
 
     def test_text_that_is_no_array_stays_text(self):
         for text in ('KIVA DELAY 2 & 3', '5XT FF 1&8, 2&7'):

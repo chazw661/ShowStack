@@ -62,9 +62,10 @@ class InferConnectionsCommandTests(ConnectionFixtures, TestCase):
         self.assertIn('(b) matched 1 (same-processor 0)  ambiguous 0  unmatched 1  drift 1', out)
         self.assertIn('Amp channels (n=4): avb 1 · aes 0 · analog 0 · multiple 1 · none 2', out)
         self.assertIn('AES/analog input with no recorded cable: 1', out)
-        self.assertIn('(c) Free-text PA rows (n=4): amp FK set 1 · not set 3'
-                      '   [amp_location set: 0]', out)
-        self.assertIn('destination → speaker array: matched 2  ambiguous 1  unmatched 1', out)
+        self.assertIn('PA runs entered with an end (n=1, confirmed): from an amp 1 · '
+                      'from an amp rack only 0 · neither 0   [to linked arrays: 0]', out)
+        self.assertIn('(c) PA rows with no amp, rack or array (n=3)', out)
+        self.assertIn('destination → speaker array: matched 1  ambiguous 1  unmatched 1', out)
         self.assertNotIn('report only, not matched): 1', out)
 
     def test_detail_lists_what_did_not_resolve(self):

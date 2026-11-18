@@ -1,24 +1,24 @@
-"""A linked-mode PA cable must name its array and amp in every export.
+"""Every PA cable export names a run's Cable Label, From and To.
 
-Issue #73 gave ``PACableSchedule`` two entry modes. A 'text' cable carries its
-values in ``label`` (a PAZone FK) and ``destination`` (a CharField). A 'linked'
-cable leaves both of those empty and points at a Soundvision ``SpeakerArray``
-and an ``Amp`` instead, and the effective values are resolved by two
-properties:
+PR 2b-1 made one entry mode. Three properties resolve what a run is, and the
+changelist, the CSV, the PA Cable PDF and the System Report all read them, so
+no export can disagree with the screen:
 
-    array_speaker_display  ->  speaker_array.display_name  or  label.name
-    destination_display    ->  amp.name                    or  destination
+    cable_label_display  ->  label.name
+    from_display         ->  amp.name, else amp_location.name
+    to_display           ->  destination, else the linked arrays' names
 
-The PA Cable changelist columns use those properties, and the System Report
-started to in #99. The PA Cable PDF and the Cable Schedule CSV did not: they
-read the raw ``label`` and ``destination`` columns, so a linked cable exported
-with both its Array/Speaker and Destination cells empty -- the run was listed,
-with its cable type, count and length, but with nothing to say what it ran
-from or to.
+Three kinds of row are exported side by side: an old free-text row (label
+and destination, no From), an old linked row (amp and a linked array, no
+label or destination -- what migration 0234 left it as) and a new run.
+
+(Before #99 / issue #73, the PDF and CSV read the raw columns, so a linked
+row exported with both cells blank; the "never two blanks" tests keep that
+fixed.)
 
 Run with::
 
-    python manage.py test planner.tests.test_pa_cable_linked_exports \\
+    python manage.py test planner.tests.test_pa_cable_exports \\
         --settings=audiopatch.test_settings
 """
 import csv
@@ -36,10 +36,11 @@ from planner.utils.pdf_exports import pa_cable_pdf
 
 
 class _CableMixin:
-    """One project holding one free-text cable and one linked cable."""
+    """One project: an amp in a rack, a Soundvision array, a cable label."""
 
     ARRAY_NAME = 'K2 Main L'
     AMP_NAME = 'SL LA12X #2'
+    RACK_NAME = 'SL LA Racks'
 
     def setUp(self):
         self.user = get_user_model().objects.create_superuser(
@@ -53,12 +54,11 @@ class _CableMixin:
         session.save()
 
         self.zone = PAZone.objects.create(project=self.project, name='Main R')
-        loc = AmpLocation.objects.create(project=self.project,
-                                         name='SL LA Racks')
+        self.rack = AmpLocation.objects.create(project=self.project, name=self.RACK_NAME)
         model = AmpModel.objects.create(manufacturer="L'Acoustics",
                                         model_name='LA12X', channel_count=4)
         self.amp = Amp.objects.create(project=self.project, name=self.AMP_NAME,
-                                      location=loc, amp_model=model)
+                                      location=self.rack, amp_model=model)
         pred = SoundvisionPrediction.objects.create(project=self.project,
                                                     file_name='show.pdf')
         self.array = SpeakerArray.objects.create(
@@ -67,35 +67,64 @@ class _CableMixin:
             configuration='vertical_flown', bumper_type='K2-BUMP')
 
     def add_text_cable(self, **kw):
+        """An old free-text row: a label and a destination, no From."""
         kw.setdefault('label', self.zone)
         kw.setdefault('destination', 'SR Amp Rack')
         return PACableSchedule.objects.create(
-            project=self.project, entry_mode='text', cable='NL_4',
-            count=2, length=100, **kw)
+            project=self.project, cable='NL_4', count=2, length=100, **kw)
 
     def add_linked_cable(self, **kw):
+        """An old linked row as migrated: an amp and an array, nothing typed."""
+        row = PACableSchedule.objects.create(
+            project=self.project, entry_mode='linked', amp=self.amp,
+            cable='XLR', count=1, length=200, **kw)
+        row.speaker_arrays.add(self.array)
+        return row
+
+    def add_new_run(self, **kw):
+        kw.setdefault('destination', 'KIVA DELAY 2 & 3')
         return PACableSchedule.objects.create(
-            project=self.project, entry_mode='linked',
-            speaker_array=self.array, amp=self.amp, cable='XLR',
-            count=1, length=200, **kw)
+            project=self.project, label=self.zone, amp=self.amp, cable='NL_4',
+            count=1, length=50, **kw)
 
     def queryset(self):
         return PACableSchedule.objects.filter(project=self.project)
 
 
-class LinkedCableModelTests(_CableMixin, TestCase):
-    """The premise: a linked cable really does leave the raw columns empty."""
+class DisplayPropertyTests(_CableMixin, TestCase):
 
-    def test_a_linked_cable_has_no_label_and_no_destination(self):
+    def test_an_old_linked_row(self):
         cable = self.add_linked_cable()
-        self.assertIsNone(cable.label)
-        self.assertEqual(cable.destination, '')
-        # ...but it is not anonymous; the properties resolve it.
-        self.assertEqual(cable.array_speaker_display, self.ARRAY_NAME)
-        self.assertEqual(cable.destination_display, self.AMP_NAME)
+        self.assertEqual((cable.cable_label_display, cable.from_display, cable.to_display),
+                         ('', self.AMP_NAME, self.ARRAY_NAME))
+
+    def test_an_old_free_text_row(self):
+        cable = self.add_text_cable()
+        self.assertEqual((cable.cable_label_display, cable.from_display, cable.to_display),
+                         ('Main R', '', 'SR Amp Rack'))
+
+    def test_a_new_run(self):
+        cable = self.add_new_run()
+        self.assertEqual((cable.cable_label_display, cable.from_display, cable.to_display),
+                         ('Main R', self.AMP_NAME, 'KIVA DELAY 2 & 3'))
+
+    def test_a_run_from_a_rack_only(self):
+        cable = self.add_text_cable(amp_location=self.rack)
+        self.assertEqual(cable.from_display, self.RACK_NAME)
+
+    def test_picking_an_amp_sets_its_rack(self):
+        other = AmpLocation.objects.create(project=self.project, name='Other')
+        cable = self.add_new_run(amp_location=other)
+        cable.refresh_from_db()
+        self.assertEqual(cable.amp_location, self.rack)
+
+    def test_typed_to_wins_over_linked_arrays(self):
+        cable = self.add_new_run()
+        cable.speaker_arrays.add(self.array)
+        self.assertEqual(cable.to_display, 'KIVA DELAY 2 & 3')
 
 
-class PaCablePdfLinkedModeTests(_CableMixin, TestCase):
+class PaCablePdfTests(_CableMixin, TestCase):
     """The PA Cable Schedule PDF."""
 
     def rows(self):
@@ -110,56 +139,50 @@ class PaCablePdfLinkedModeTests(_CableMixin, TestCase):
             ])
         return out
 
-    def test_a_linked_cable_names_its_array_and_amp(self):
+    def test_all_three_kinds_of_row(self):
+        self.add_text_cable()
         self.add_linked_cable()
-        row = self.rows()[0]
-        self.assertEqual(row[0], self.ARRAY_NAME)   # Array/Speaker
-        self.assertEqual(row[1], self.AMP_NAME)     # Destination
+        self.add_new_run()
+        got = sorted((r[0], r[1], r[2]) for r in self.rows())
+        self.assertEqual(got, [('-', self.AMP_NAME, self.ARRAY_NAME),
+                               ('Main R', '-', 'SR Amp Rack'),
+                               ('Main R', self.AMP_NAME, 'KIVA DELAY 2 &amp; 3')])
 
-    def test_a_linked_cable_no_longer_exports_two_blanks(self):
-        """The regression itself: '-' in both cells is what the bug looked like."""
+    def test_a_linked_row_never_exports_two_blanks(self):
         self.add_linked_cable()
         row = self.rows()[0]
-        self.assertNotEqual(row[0], '-')
         self.assertNotEqual(row[1], '-')
+        self.assertNotEqual(row[2], '-')
 
-    def test_a_free_text_cable_is_unchanged(self):
-        self.add_text_cable()
-        row = self.rows()[0]
-        self.assertEqual(row[0], 'Main R')
-        self.assertEqual(row[1], 'SR Amp Rack')
-
-    def test_both_modes_in_one_export(self):
-        self.add_text_cable()
-        self.add_linked_cable()
-        got = sorted((r[0], r[1]) for r in self.rows())
-        self.assertEqual(got, [(self.ARRAY_NAME, self.AMP_NAME),
-                               ('Main R', 'SR Amp Rack')])
-
-    def test_a_cable_with_neither_still_renders_a_placeholder(self):
+    def test_a_cable_with_nothing_still_renders_a_placeholder(self):
         """An empty row must not crash or print 'None'."""
         PACableSchedule.objects.create(
             project=self.project, cable='NL_4', count=1, length=10)
-        row = self.rows()[0]
-        self.assertEqual(row[0], '-')
-        self.assertEqual(row[1], '-')
+        self.assertEqual(self.rows()[0][:3], ['-', '-', '-'])
 
-    def test_the_heading_names_the_column_it_holds(self):
+    def test_markup_in_a_name_is_escaped_for_the_paragraph(self):
+        self.add_new_run(destination='<b>Fill</b> & <i>sub</i>')
+        pdf = pa_cable_pdf.generate_pa_cable_pdf(self.queryset())   # would raise on bad markup
+        self.assertTrue(pdf.startswith(b'%PDF-'))
+        self.assertIn('&lt;b&gt;Fill', self.rows()[0][2])
+
+    def test_it_renders(self):
         self.add_linked_cable()
         pdf = pa_cable_pdf.generate_pa_cable_pdf(self.queryset())
         self.assertTrue(pdf.startswith(b'%PDF-'))
         self.assertIn(b'%%EOF', pdf[-32:])
 
-    def test_the_export_view_renders_the_linked_name(self):
+    def test_the_export_view_renders(self):
         """End to end through the real view, including its select_related."""
         self.add_linked_cable()
+        self.add_new_run()
         response = self.client.get('/audiopatch/pa-cables/all/pdf/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertTrue(response.content.startswith(b'%PDF-'))
 
 
-class PaCableCsvLinkedModeTests(_CableMixin, TestCase):
+class PaCableCsvTests(_CableMixin, TestCase):
     """The "Export Cable Schedule to CSV" admin action."""
 
     def export(self):
@@ -180,7 +203,7 @@ class PaCableCsvLinkedModeTests(_CableMixin, TestCase):
 
     def cable_rows(self, rows):
         """The run rows: between the column headings and the blank line."""
-        body = self.section(rows, 'Array/Speaker')
+        body = self.section(rows, 'Cable Label')
         out = []
         for row in body:
             if not any(cell.strip() for cell in row):
@@ -188,30 +211,20 @@ class PaCableCsvLinkedModeTests(_CableMixin, TestCase):
             out.append(row)
         return out
 
-    def test_a_linked_cable_names_its_array_and_amp(self):
+    def test_all_three_kinds_of_row(self):
+        self.add_text_cable()
         self.add_linked_cable()
-        row = self.cable_rows(self.export())[0]
-        self.assertEqual(row[0], self.ARRAY_NAME)
-        self.assertEqual(row[1], self.AMP_NAME)
+        self.add_new_run()
+        got = sorted((r[0], r[1], r[2]) for r in self.cable_rows(self.export()))
+        self.assertEqual(got, [('', self.AMP_NAME, self.ARRAY_NAME),
+                               ('Main R', '', 'SR Amp Rack'),
+                               ('Main R', self.AMP_NAME, 'KIVA DELAY 2 & 3')])
 
-    def test_a_linked_cable_no_longer_exports_two_blanks(self):
+    def test_a_linked_row_never_exports_two_blanks(self):
         self.add_linked_cable()
         row = self.cable_rows(self.export())[0]
-        self.assertNotEqual(row[0], '')
         self.assertNotEqual(row[1], '')
-
-    def test_a_free_text_cable_is_unchanged(self):
-        self.add_text_cable()
-        row = self.cable_rows(self.export())[0]
-        self.assertEqual(row[0], 'Main R')
-        self.assertEqual(row[1], 'SR Amp Rack')
-
-    def test_both_modes_in_one_export(self):
-        self.add_text_cable()
-        self.add_linked_cable()
-        got = sorted((r[0], r[1]) for r in self.cable_rows(self.export()))
-        self.assertEqual(got, [(self.ARRAY_NAME, self.AMP_NAME),
-                               ('Main R', 'SR Amp Rack')])
+        self.assertNotEqual(row[2], '')
 
 
 class PaCableCsvColumnAlignmentTests(_CableMixin, TestCase):
@@ -222,17 +235,17 @@ class PaCableCsvColumnAlignmentTests(_CableMixin, TestCase):
     last heading was always empty. 'Count2' was the phantom -- no such field.
     """
 
-    export = PaCableCsvLinkedModeTests.export
-    section = PaCableCsvLinkedModeTests.section
-    cable_rows = PaCableCsvLinkedModeTests.cable_rows
+    export = PaCableCsvTests.export
+    section = PaCableCsvTests.section
+    cable_rows = PaCableCsvTests.cable_rows
 
-    HEADINGS = ['Array/Speaker', 'Destination', 'Count', 'Cable', 'Fan Out',
+    HEADINGS = ['Cable Label', 'From', 'To', 'Count', 'Cable', 'Fan Out',
                 'Notes', 'Drawing Ref']
 
     def test_the_heading_row_is_what_we_expect(self):
         rows = self.export()
         for row in rows:
-            if row and row[0] == 'Array/Speaker':
+            if row and row[0] == 'Cable Label':
                 self.assertEqual(row, self.HEADINGS)
                 return
         self.fail('no column heading row in the CSV')
@@ -243,8 +256,9 @@ class PaCableCsvColumnAlignmentTests(_CableMixin, TestCase):
                                 quantity=3)
         row = self.cable_rows(self.export())[0]
         by_name = dict(zip(self.HEADINGS, row))
-        self.assertEqual(by_name['Array/Speaker'], 'Main R')
-        self.assertEqual(by_name['Destination'], 'SR Amp Rack')
+        self.assertEqual(by_name['Cable Label'], 'Main R')
+        self.assertEqual(by_name['From'], '')
+        self.assertEqual(by_name['To'], 'SR Amp Rack')
         self.assertEqual(by_name['Count'], '2')
         self.assertEqual(by_name['Cable'], 'NL 4')
         self.assertEqual(by_name['Fan Out'], 'NL4 Y x3')
@@ -270,8 +284,8 @@ class PaCableCsvFanOutSummaryTests(_CableMixin, TestCase):
     behind.
     """
 
-    export = PaCableCsvLinkedModeTests.export
-    section = PaCableCsvLinkedModeTests.section
+    export = PaCableCsvTests.export
+    section = PaCableCsvTests.section
 
     def summary(self):
         rows = self.section(self.export(), 'FAN OUT SUMMARY')

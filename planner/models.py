@@ -112,6 +112,7 @@ class Project(models.Model):
             amp_location_map = {}
             console_map = {}
             amp_map = {}
+            array_map = {}              # PA cable runs link arrays by these
 
             # 1. Duplicate Locations (needed for other models)
             for location in self.location_set.all():
@@ -553,6 +554,7 @@ class Project(models.Model):
                         is_single_point=array.is_single_point,
                         bumper_angle=array.bumper_angle
                     )
+                    array_map[array.id] = new_array
                 
                     # Duplicate Speaker Cabinets
                     for cabinet in array.cabinets.all():
@@ -719,6 +721,8 @@ class Project(models.Model):
                 new_cable = PACableSchedule.objects.create(
                     project=new_project,
                     label=pa_zone_map.get(cable.label_id) if cable.label_id else None,
+                    amp=amp_map.get(cable.amp_id),
+                    amp_location=amp_location_map.get(cable.amp_location_id),
                     destination=cable.destination,
                     count=cable.count,
                     cable=cable.cable,
@@ -726,7 +730,10 @@ class Project(models.Model):
                     drawing_ref=cable.drawing_ref,
                     length=cable.length
                 )
-                
+                new_cable.speaker_arrays.set(
+                    [array_map[a] for a in cable.speaker_arrays.values_list('id', flat=True)
+                     if a in array_map])
+
                 # Duplicate PAFanOuts
                 for fan_out in cable.fan_outs.all():
                     PAFanOut.objects.create(
@@ -2752,7 +2759,8 @@ class GalaxyOutput(models.Model):
 # Add these models to your models.py file
 
 class PAZone(models.Model):
-    """User-defined PA zones"""
+    """A cable label (HL, FF1, ...). Shown as "Cable Label" everywhere; the
+    model keeps its old PA Zone name."""
 
     project = models.ForeignKey(
         'Project',
@@ -2763,7 +2771,7 @@ class PAZone(models.Model):
 
     name = models.CharField(
         max_length=20, 
-        help_text="Short zone code (e.g., HL, HR, FF1)"
+        help_text="Short cable label (e.g., HL, HR, FF1)"
     )
    
    
@@ -2785,15 +2793,15 @@ class PAZone(models.Model):
         max_length=20,
         choices=ZONE_TYPE_CHOICES,
         default='CUSTOM',
-        help_text="Category of zone"
+        help_text="Category"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = "PA Zone"
-        verbose_name_plural = "PA Zones"  # Child
+        verbose_name = "Cable Label"
+        verbose_name_plural = "Cable Labels"
         ordering = ['id']  # or ['id']
         unique_together = ['project', 'name']
     
@@ -2869,8 +2877,8 @@ class PACableSchedule(models.Model):
     label = models.ForeignKey(
         PAZone,
         on_delete=models.SET_NULL,
-        verbose_name="Label",
-        help_text="PA Zone label",
+        verbose_name="Cable Label",
+        help_text="The label printed on the cable, e.g. HL, FF1",
         related_name='cables',
         null=True,  # Add this temporarily
         blank=True,  # Add this temporarily
@@ -2878,20 +2886,23 @@ class PACableSchedule(models.Model):
     
     destination = models.CharField(
         max_length=50,
-        verbose_name="Destination",
-        help_text="e.g., 'SL Amp Rack', 'SL Amp Rack 1', 'FOH Amp Rack'",
+        verbose_name="To",
+        help_text="Speaker or fan-out destination, e.g. 'KIVA DELAY 2 & 3'",
         null=True,  # Add this temporarily
         default="",  # Add this
 
     )
 
-    # Issue #73: interactive entry driven by the imported Soundvision report
-    # and the Amplifier Reference module. A cable can either be typed by hand
-    # ('text', the original behaviour — existing cables stay on this) or linked
-    # to a Speaker Array / single Speaker and an Amp ('linked'). The Array/Speaker
-    # and Destination values shown throughout the app come from
-    # ``array_speaker_display`` / ``destination_display`` below, which resolve
-    # the right source based on this mode.
+    # One entry mode (PR 2b-1). A run goes FROM an amp or an amp rack TO a
+    # typed destination (a speaker, or a fan-out to several), and can be
+    # linked to the Soundvision arrays it feeds -- optional, because most
+    # shows never import a report. ``amp`` wins over ``amp_location`` when
+    # both are set; picking an amp fills ``amp_location`` with its rack.
+    #
+    # ``entry_mode`` and the single ``speaker_array`` FK are the issue #73
+    # two-mode design: no longer shown or read (``speaker_array`` values
+    # were copied into ``speaker_arrays`` by migration 0234). Dropped in a
+    # later cleanup PR.
     ENTRY_MODE_CHOICES = [
         ('text', 'Free text'),
         ('linked', 'From Soundvision / Amps'),
@@ -2900,10 +2911,7 @@ class PACableSchedule(models.Model):
         max_length=10,
         choices=ENTRY_MODE_CHOICES,
         default='text',
-        verbose_name="Entry mode",
-        help_text="'From Soundvision / Amps' links this cable to a Speaker Array "
-                  "and an Amp; 'Free text' uses the plain Array/Speaker and "
-                  "Destination fields.",
+        editable=False,
     )
     speaker_array = models.ForeignKey(
         'SpeakerArray',
@@ -2911,8 +2919,7 @@ class PACableSchedule(models.Model):
         null=True,
         blank=True,
         related_name='pa_cables',
-        verbose_name="Array / Speaker (linked)",
-        help_text="Speaker array or single speaker from the imported Soundvision report.",
+        editable=False,
     )
     amp = models.ForeignKey(
         'Amp',
@@ -2920,8 +2927,24 @@ class PACableSchedule(models.Model):
         null=True,
         blank=True,
         related_name='pa_cables',
-        verbose_name="Destination amp (linked)",
-        help_text="Amplifier from the Amplifier Reference module.",
+        verbose_name="From amp",
+        help_text="The amp this cable leaves from. Sets From amp rack to its rack.",
+    )
+    amp_location = models.ForeignKey(
+        'AmpLocation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pa_cables',
+        verbose_name="From amp rack",
+        help_text="The amp rack this cable leaves from, when no single amp is picked.",
+    )
+    speaker_arrays = models.ManyToManyField(
+        'SpeakerArray',
+        blank=True,
+        related_name='pa_cable_runs',
+        verbose_name="Linked speaker arrays",
+        help_text="Optional: the Soundvision arrays this run feeds.",
     )
 
     count = models.PositiveIntegerField(
@@ -2977,7 +3000,6 @@ class PACableSchedule(models.Model):
     service_loop = models.DecimalField(max_digits=4, decimal_places=1, default=10.0, editable=False)
     from_location = models.CharField(max_length=50, default="AMP RACK", editable=False)
     to_location = models.CharField(max_length=50, blank=True, editable=False)
-    amp_location = models.ForeignKey(Location, on_delete=models.SET_NULL, blank=True, null=True, editable=False)
     color = models.CharField(
         max_length=7,
         blank=True,
@@ -2994,35 +3016,36 @@ class PACableSchedule(models.Model):
         ordering = ['id']
     
     @property
-    def array_speaker_display(self):
-        """Unified 'Array/Speaker' value (issue #73).
-
-        Linked mode -> the Soundvision Speaker Array / single Speaker name.
-        Free-text mode -> the PAZone label (original behaviour).
-        """
-        if self.entry_mode == 'linked' and self.speaker_array_id:
-            return self.speaker_array.display_name
-        return self.label.name if self.label else ""
+    def cable_label_display(self):
+        return self.label.name if self.label_id else ""
 
     @property
-    def destination_display(self):
-        """Unified 'Destination' value (issue #73).
-
-        Linked mode -> the Amplifier name from the Amplifier Reference module.
-        Free-text mode -> the typed destination (original behaviour).
-        """
-        if self.entry_mode == 'linked' and self.amp_id:
+    def from_display(self):
+        """The amp's name, else the amp rack's."""
+        if self.amp_id:
             return self.amp.name
-        return self.destination or ""
+        return self.amp_location.name if self.amp_location_id else ""
+
+    @property
+    def array_names(self):
+        """Linked Soundvision arrays, by display name. Unsaved: none."""
+        if not self.pk:
+            return []
+        return [a.display_name for a in self.speaker_arrays.all()]
+
+    @property
+    def to_display(self):
+        """The typed destination, else the linked arrays' names."""
+        return (self.destination or '').strip() or ', '.join(self.array_names)
 
     def save(self, *args, **kwargs):
-        # Auto-populate hidden fields for compatibility. Reflect the *effective*
-        # Array/Speaker and Destination (linked or free text) so downstream
-        # readers of the legacy zone/to_location fields stay correct (issue #73).
-        self.zone = self.array_speaker_display or (self.label.name if self.label else '')
+        # Auto-populate hidden fields for compatibility.
+        if self.amp_id:
+            self.amp_location_id = self.amp.location_id
+        self.zone = self.cable_label_display
         self.cable_type = self.cable
         self.quantity = self.count
-        self.to_location = self.destination_display or (self.destination or '')
+        self.to_location = (self.destination or '')[:50]
         
         # Extract length from cable choice if it's a standard length
         if self.cable:
@@ -3050,8 +3073,8 @@ class PACableSchedule(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        label_str = self.array_speaker_display or "No Zone"
-        return f"{label_str} - {self.destination_display} - {self.get_cable_display()}"
+        label_str = self.cable_label_display or "No label"
+        return f"{label_str} - {self.from_display} - {self.destination or ''} - {self.get_cable_display()}"
         
     @property
     def total_length_per_run(self):

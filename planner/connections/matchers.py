@@ -46,16 +46,19 @@ result is saved, so editing a label changes the answer at once:
       suffix, which the suggestions add when two processors share a label,
       limits candidates to that processor.
 
-  (c) a free-text PA cable run -> its two ends
-      In a free-text row Destination is the speaker array (the field's help
-      text, which says amp rack, is wrong) -- except when it is an amp rack's
-      name (an Amp Location) or contains "amp rack", which some rows do: then
-      it is the AMP end, and the speaker end is unnamed.
+  (c) an older PA cable run that names neither end -> its two ends
+      Only rows with no amp, no amp rack and no linked array: a run that
+      has any of those was entered with its ends and is drawn as entered
+      (``entered_pa_run``), never matched from text.
+      In such a row Destination ("To") is the speaker array -- except when it
+      is an amp rack's name (an Amp Location) or contains "amp rack", which
+      some old rows do: then it is the AMP end, and the speaker end is
+      unnamed.
       speaker end: Destination against each Speaker Array's base, display and
       source name; when no single array matches, the text itself (one node
       per distinct text, so cables naming the same thing meet there).
       amp end: the Amp FK; else the rack Destination names; else nothing.
-      The row's Label (a PA Zone) is the cable's label, not an end.
+      The row's Cable Label (model PAZone) is the cable's label, not an end.
 
 Every match has one verdict:
 
@@ -370,7 +373,8 @@ class ProjectIndex:
 
         # PA cable runs -------------------------------------------------------
         self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)
-                            .select_related('label', 'amp', 'speaker_array')
+                            .select_related('label')
+                            .prefetch_related('speaker_arrays', 'fan_outs')
                             .order_by('id'))
 
 
@@ -604,8 +608,16 @@ def match_cable(index, row):
     return CableMatch(row, speaker, fk or End(UNMATCHED, ''))
 
 
+def entered_pa_run(row):
+    """A run entered with an end -- an amp, an amp rack or a linked array.
+
+    The graph draws it as entered; rule (c) reads only the rest. Reads the
+    prefetched arrays, so no query."""
+    return bool(row.amp_id or row.amp_location_id or row.speaker_arrays.all())
+
+
 def rule_c(index):
-    return [match_cable(index, row) for row in index.pa_rows if row.entry_mode == 'text']
+    return [match_cable(index, row) for row in index.pa_rows if not entered_pa_run(row)]
 
 
 @dataclass

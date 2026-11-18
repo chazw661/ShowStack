@@ -474,11 +474,13 @@ class JumperFormTests(_SummaryFixtureMixin, TestCase):
 
     def base_data(self, **overrides):
         # `project` is normally filled in by the admin's save_model; a bare
-        # form has to be handed it.
+        # form has to be handed it. A new run needs a From (PR 2b-1).
+        from planner.models import AmpLocation
+        rack, _ = AmpLocation.objects.get_or_create(project=self.project, name='SL Racks')
         data = {
             'project': self.project.pk,
-            'entry_mode': 'text',
-            'destination': 'SL Amp Rack',
+            'amp_location': rack.pk,
+            'destination': 'KIVA DELAY 2 & 3',
             'count': 2,
             'cable': 'NL_4',
             'length': 100,

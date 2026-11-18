@@ -13,7 +13,8 @@ Six fixed columns, signal flowing left to right:
   3 Processor     also text a feed names that matched no single processor
   4 Amp           grouped by amp location, in the locations' order; amps with
                   none, and the "not linked" amp rack, last under "No location"
-  5 Speaker       speaker arrays, and text no single array matched
+  5 Speaker       speaker arrays; where a run goes, as typed (a plain
+                  "destination" box); text no single array matched (unlinked)
 
 An I/O device is split so a console bus feeding a stage-box output runs left
 to right like everything else; one with ports on one side only gets that box.
@@ -209,10 +210,12 @@ class _Builder:
                 'amp location' if kind == 'amp_location' else 'not linked')
             return self.box(node_id, label=node['label'], column=AMP, kind=kind, sub=sub,
                             style=style, node=node_id, group=key)
-        column = {'console': CONSOLE, 'processor': PROCESSOR, 'speaker_array': SPEAKER}[kind]
-        sub = {'console': 'Console', 'speaker_array': 'Speaker array'}.get(kind) or (
+        column = {'console': CONSOLE, 'processor': PROCESSOR, 'speaker_array': SPEAKER,
+                  'destination': SPEAKER}[kind]
+        sub = {'console': 'Console', 'speaker_array': 'Speaker array',
+               'destination': 'destination'}.get(kind) or (
             node.get('device_type') or 'Processor')
-        if kind != 'speaker_array' and _where(node):
+        if kind not in ('speaker_array', 'destination') and _where(node):
             sub = f'{sub} · {_where(node)}'
         return self.box(node_id, label=node['label'], column=column, kind=kind, sub=sub,
                         node=node_id)
