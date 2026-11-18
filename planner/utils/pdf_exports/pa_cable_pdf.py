@@ -7,14 +7,15 @@ navy/blue look used across all ShowStack module exports (title header, navy
 table headers, zebra striping, "Page X of Y" footer, orphan-safe page breaks).
 
 Data preserved from the original export:
-  * the cable run list (array/speaker, destination, count, length, cable
-    type, fan-outs, notes, drawing ref)
+  * the cable run list (cable label, from, to, count, length, cable type,
+    fan-outs, notes, drawing ref)
   * the Quick Order List summary (cable lengths rolled up to stock spools,
     fan-outs, extension cables, and PA couplers -- all with the 20% safety
     margin for temporary installations)
 """
 
 from io import BytesIO
+from xml.sax.saxutils import escape
 import math
 
 from reportlab.lib.units import inch
@@ -34,32 +35,30 @@ def _project_name(queryset):
 def _cable_rows(queryset, S):
     """Build the main cable-run table rows.
 
-    Array/Speaker and Destination come from ``array_speaker_display`` and
-    ``destination_display`` -- the two properties that resolve a cable's
-    effective values whichever entry mode it is in (issue #73), and the same
-    two the PA Cable changelist columns and the System Report use (#99).
+    Cable Label, From and To are ``cable_label_display`` / ``from_display`` /
+    ``to_display`` -- the same three properties as the PA Cable changelist,
+    its CSV and the System Report, so no export can disagree with the screen.
+    To falls back to the linked arrays' names when nothing was typed.
 
-    Reading the raw ``label`` and ``destination`` columns instead, as this did,
-    printed an empty cell for both on every row entered in "From Soundvision /
-    Amps" mode: a linked cable leaves ``label`` NULL and ``destination`` blank
-    and carries its array and amp in ``speaker_array`` / ``amp``. The run was
-    in the table, with its cable type, count and length -- just with no
-    indication of what it ran from or to.
+    Every typed value goes into a Paragraph, which reads markup, so each is
+    escaped: a name with "<" or "&" in it prints as typed.
     """
     data = []
-    for cable in queryset.prefetch_related('fan_outs'):
-        label_text = cable.array_speaker_display or '-'
-        destination = cable.destination_display or '-'
+    for cable in queryset.prefetch_related('fan_outs', 'speaker_arrays'):
+        label_text = escape(cable.cable_label_display or '-')
+        from_text = escape(cable.from_display or '-')
+        to_text = escape(cable.to_display or '-')
         count = str(cable.count) if cable.count else '1'
         length = f"{cable.length}'" if cable.length else '-'
-        cable_type = cable.get_cable_display() if cable.cable else '-'
-        fan_out = cable.fan_out_summary or '-'
-        notes = cable.notes or '-'
-        drawing_ref = cable.drawing_ref or '-'
+        cable_type = escape(cable.get_cable_display() if cable.cable else '-')
+        fan_out = escape(cable.fan_out_summary or '-')
+        notes = escape(cable.notes or '-')
+        drawing_ref = escape(cable.drawing_ref or '-')
 
         data.append([
             Paragraph(f"<b>{label_text}</b>", S['body']),
-            Paragraph(destination, S['body']),
+            Paragraph(from_text, S['body']),
+            Paragraph(to_text, S['body']),
             count,
             length,
             Paragraph(cable_type, S['body']),
@@ -184,12 +183,12 @@ def generate_pa_cable_pdf(queryset):
 
     # ==================== CABLE LIST ====================
     if queryset.exists():
-        headers = ['Array/Speaker', 'Destination', 'Count', 'Length', 'Cable',
+        headers = ['Cable Label', 'From', 'To', 'Count', 'Length', 'Cable',
                    'Fan Outs', 'Notes', 'Dwg Ref']
-        widths = [w * inch for w in (1.1, 1.4, 0.6, 0.7, 1.0, 1.7, 2.2, 0.8)]
+        widths = [w * inch for w in (0.9, 1.3, 1.5, 0.5, 0.6, 0.9, 1.6, 1.6, 0.6)]
         data = _cable_rows(queryset, S)
-        # Keep Array/Speaker + Destination even if a page happens to be blank.
-        headers, data, widths = kit.prune_empty_columns(headers, data, widths, keep=(0, 1))
+        # Keep Cable Label, From and To even if a page happens to be blank.
+        headers, data, widths = kit.prune_empty_columns(headers, data, widths, keep=(0, 1, 2))
         table = kit.data_table(headers, data, widths)
         if table is not None:
             story.append(table)

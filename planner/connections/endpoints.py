@@ -14,8 +14,10 @@ The graph also uses synthetic nodes that no device model backs:
 ``amp_rack`` (``amp_rack:unlinked``, one per project: the amp end of every PA
 cable run with no Amp linked; ``amp_rack:text:<text>``: a run whose
 Destination says "amp rack" but names no Amp Location), ``amp_location`` (an
-Amp Location a run's Destination names) and ``unlinked`` (text that names no
-device, or names more than one).
+Amp Location a run leaves from, or that an old run's Destination names),
+``destination`` (``destination:<text>``: where a run entered from an amp or
+rack goes, as typed -- a speaker or a fan-out, shared by runs naming the same
+place) and ``unlinked`` (text that names no device, or names more than one).
 
 Plain functions and constants only: no queries. The loaders in
 ``matchers.ProjectIndex`` fetch the rows; this module names them.
@@ -33,6 +35,7 @@ AMP_RACK = 'amp_rack'
 AMP_RACK_UNLINKED = 'amp_rack:unlinked'
 AMP_RACK_UNLINKED_LABEL = 'Amp rack \u2014 not linked'
 SPEAKER_UNNAMED_LABEL = 'Speaker \u2014 not named'
+DESTINATION = 'destination'
 UNLINKED = 'unlinked'
 
 DEVICE_KINDS = (CONSOLE, DEVICE, PROCESSOR, AMP, ARRAY)

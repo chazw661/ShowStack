@@ -1227,30 +1227,31 @@ class PACableInlineForm(JumperLengthMixin, forms.ModelForm):
         self.fields['notes'].widget.attrs['style'] = 'width: 150px;'
         self.fields['drawing_ref'].widget.attrs['style'] = 'width: 80px;'
 
-        # Issue #73: destination is only required in free-text mode. In linked
-        # mode it's hidden and supplied by the Amp, so don't hard-require it at
-        # the field level (that produced an invisible "please correct the error"
-        # on hidden fields). Per-mode requirements are enforced in clean().
+        # "To" is required on a new run unless arrays are linked; clean()
+        # says so on the right field, so the field itself is optional.
         if 'destination' in self.fields:
             self.fields['destination'].required = False
 
     def clean(self):
+        """One entry mode (PR 2b-1).
+
+        A new run needs a From (an amp or an amp rack) and a To (typed text,
+        or at least one linked array). A run saved before this rule keeps
+        saving as it is: no row is converted. Picking an amp sets the rack to
+        the amp's own, so the two never disagree.
+        """
         cleaned = self._clean_jumper_length(super().clean())
-        mode = cleaned.get('entry_mode')
-        if mode == 'linked':
-            # A linked cable must point at a Speaker Array / single Speaker.
-            if not cleaned.get('speaker_array'):
-                self.add_error(
-                    'speaker_array',
-                    'Pick a Speaker Array or single Speaker, or switch Entry mode to Free text.',
-                )
-        else:
-            # Free-text mode keeps the original requirement: a typed destination.
-            if not cleaned.get('destination'):
-                self.add_error(
-                    'destination',
-                    'Enter a destination, or switch Entry mode to From Soundvision / Amps.',
-                )
+        amp = cleaned.get('amp')
+        if amp is not None and 'amp_location' in self.fields:
+            cleaned['amp_location'] = amp.location
+        if self.instance.pk or 'amp' not in self.fields:
+            return cleaned
+        if amp is None and not cleaned.get('amp_location'):
+            self.add_error('amp', 'Pick the amp, or the amp rack, this cable leaves from.')
+        arrays = cleaned.get('speaker_arrays')     # a queryset; absent when the project has none
+        if not (cleaned.get('destination') or '').strip() and not (arrays is not None
+                                                                     and arrays.exists()):
+            self.add_error('destination', 'Type where this cable goes, or link a speaker array.')
         return cleaned
 
 

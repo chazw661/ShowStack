@@ -7,7 +7,9 @@ shows before anything is stored:
 
   (a) console / I/O output -> processor input
   (b) processor output -> amp channel input
-  (c) free-text PA cable runs: Destination -> speaker array (or amp rack)
+  (c) PA cable runs with no amp, rack or linked array: Destination ->
+      speaker array (or amp rack). Runs entered with an end are counted
+      first; they are drawn as entered, not matched.
 
 Nothing is written: no transaction, no --apply. Safe to run on prod at any
 time once deployed.
@@ -60,7 +62,7 @@ class Command(BaseCommand):
         for project in projects:
             index = m.ProjectIndex.load(project)
             matches = m.match_all(index)
-            if not (matches.a or matches.b or matches.c or index.amp_channels):
+            if not (matches.a or matches.b or index.pa_rows or index.amp_channels):
                 continue
             reported += 1
             self.stdout.write('')
@@ -71,6 +73,7 @@ class Command(BaseCommand):
             if 'b' in rules:
                 self._rule_b(index, matches.b, detail)
             if 'c' in rules:
+                self._entered(index.pa_rows)
                 self._rule_c(matches.c, detail)
 
         self.stdout.write('')
@@ -157,11 +160,17 @@ class Command(BaseCommand):
                 if x.verdict not in m.RESOLVED:
                     self._detail(x, FIELD_NAMES[x.field])
 
+    def _entered(self, rows):
+        entered = [r for r in rows if m.entered_pa_run(r)]
+        amp = sum(1 for r in entered if r.amp_id)
+        rack = sum(1 for r in entered if not r.amp_id and r.amp_location_id)
+        arrays = sum(1 for r in entered if r.speaker_arrays.all())
+        self.stdout.write(' PA runs entered with an end (n=%d, confirmed): from an amp %d · '
+                          'from an amp rack only %d · neither %d   [to linked arrays: %d]'
+                          % (len(entered), amp, rack, len(entered) - amp - rack, arrays))
+
     def _rule_c(self, matches, detail):
-        fk = sum(1 for x in matches if x.amp.via == 'fk')
-        loc = sum(1 for x in matches if x.row.amp_location_id)
-        self.stdout.write(' (c) Free-text PA rows (n=%d): amp FK set %d · not set %d'
-                          '   [amp_location set: %d]' % (len(matches), fk, len(matches) - fk, loc))
+        self.stdout.write(' (c) PA rows with no amp, rack or array (n=%d)' % len(matches))
         dest = Counter(x.speaker.verdict for x in matches)
         texts = {m.norm(x.speaker.text) for x in matches
                  if x.speaker.verdict == m.UNMATCHED and m.norm(x.speaker.text)}

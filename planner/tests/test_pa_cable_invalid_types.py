@@ -150,7 +150,7 @@ class CableTypeFilterTests(_ProjectMixin, TestCase):
 class SystemReportCableTypeTests(_ProjectMixin, TestCase):
     """The System Report's Cable Type column."""
 
-    HEADERS = ['Array/Speaker', 'Cable Type', 'Length', 'Count', 'Destination',
+    HEADERS = ['Cable Label', 'From', 'To', 'Cable Type', 'Length', 'Count',
                'Fan Outs']
 
     def rows(self):
@@ -169,7 +169,7 @@ class SystemReportCableTypeTests(_ProjectMixin, TestCase):
                   % [type(f).__name__ for f in story])
 
     def cable_column(self):
-        return [row[1] for row in self.rows()[1:]]   # skip the header row
+        return [row[3] for row in self.rows()[1:]]   # skip the header row
 
     def test_known_type_shows_its_display_label_not_the_stored_code(self):
         self.add('NL_4')
@@ -230,7 +230,7 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
     def column(self, index):
         return [row[index] for row in self.rows()[1:]]   # skip the header row
 
-    # -- Destination (was `to_location`) -------------------------------------
+    # -- To (was `to_location`) -----------------------------------------------
 
     def test_destination_follows_an_update_that_skipped_save(self):
         row = self.add('NL_4')                       # destination 'SL Amp Rack'
@@ -238,7 +238,7 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
             destination='SR Amp Rack 2')
         row.refresh_from_db()
         self.assertEqual(row.to_location, 'SL Amp Rack')   # mirror now stale
-        self.assertEqual(self.column(4), ['SR Amp Rack 2'])
+        self.assertEqual(self.column(2), ['SR Amp Rack 2'])
 
     def test_destination_is_blank_rather_than_a_ghost(self):
         """A row whose destination was cleared must not print the old one."""
@@ -246,14 +246,10 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
         PACableSchedule.objects.filter(pk=row.pk).update(destination='')
         row.refresh_from_db()
         self.assertEqual(row.to_location, 'SL Amp Rack')   # mirror now stale
-        self.assertEqual(self.column(4), [''])
+        self.assertEqual(self.column(2), [''])
 
-    def test_destination_resolves_a_linked_amp(self):
-        """Linked mode: Destination comes from the Amp, as it does on screen.
-
-        That is ``destination_display``, the same property the PA Cable
-        changelist's Destination column uses (issue #73).
-        """
+    def test_from_resolves_the_amp(self):
+        """From is the amp's name: ``from_display``, as on screen."""
         # Amp.save() -> setup_channels() dereferences amp_model unguarded, so
         # a model is required even though the FK is null=True.
         amp = Amp.objects.create(
@@ -264,14 +260,13 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
                 manufacturer="L'Acoustics", model_name='LA12X',
                 channel_count=4))
         row = self.add('NL_4')
-        row.entry_mode = 'linked'
         row.amp = amp
         row.save()
-        self.assertEqual(self.column(4), ['SL Rack LA12X #1'])
+        self.assertEqual(self.column(1), ['SL Rack LA12X #1'])
 
-    # -- Array/Speaker (was the bare `label` FK) -----------------------------
+    # -- Cable Label (was the bare `label` FK) -------------------------------
 
-    def test_array_speaker_follows_a_relabel_that_skipped_save(self):
+    def test_cable_label_follows_a_relabel_that_skipped_save(self):
         zone_a = PAZone.objects.create(project=self.project, name='Main L')
         zone_b = PAZone.objects.create(project=self.project, name='Main R')
         row = self.add('NL_4')
@@ -282,8 +277,8 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
         self.assertEqual(row.zone, 'Main L')               # mirror now stale
         self.assertEqual(self.column(0), ['Main R'])
 
-    def test_array_speaker_resolves_a_linked_array(self):
-        """Linked mode used to print nothing: `label` is null on those rows."""
+    def test_to_falls_back_to_a_linked_array(self):
+        """A run with nothing typed in To names the arrays it is linked to."""
         prediction = SoundvisionPrediction.objects.create(
             project=self.project, file_name='mirror probe.pdf')
         array = SpeakerArray.objects.create(
@@ -291,12 +286,10 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
             array_base_name='Main Hang L',
             configuration='vertical_flown', bumper_type='NONE')
         row = self.add('NL_4')
-        row.entry_mode = 'linked'
-        row.speaker_array = array
-        row.label = None
+        row.destination = ''
         row.save()
-        self.assertEqual(self.column(0), ['Main Hang L'])
-        self.assertEqual(self.column(0), [array.display_name])
+        row.speaker_arrays.add(array)
+        self.assertEqual(self.column(2), [array.display_name])
 
     # -- Length (was `length_per_run`) and Count (was `quantity`) ------------
 
@@ -308,14 +301,14 @@ class SystemReportLiveFieldTests(_ProjectMixin, TestCase):
         # never held the typed length to begin with (0 for NL_4). The point of
         # this test is that the column tracks `length`.
         self.assertEqual(float(row.length_per_run), 0.0)
-        self.assertEqual(self.column(2), ['250'])
+        self.assertEqual(self.column(4), ['250'])
 
     def test_count_follows_an_update_that_skipped_save(self):
         row = self.add('NL_4', count=2)
         PACableSchedule.objects.filter(pk=row.pk).update(count=7)
         row.refresh_from_db()
         self.assertEqual(row.quantity, 2)                  # mirror now stale
-        self.assertEqual(self.column(3), ['7'])
+        self.assertEqual(self.column(5), ['7'])
 
     # -- the mirrors that have no live counterpart at all --------------------
 

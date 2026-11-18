@@ -1,34 +1,36 @@
 // PA Cable Schedule — array speaker reference panel (issue #73, Phase 2).
 //
-// When a cable is linked (entry_mode = "From Soundvision / Amps") and an
-// Array/Speaker is selected, this lists every speaker in that array (e.g.
-// KARA II 1 / KARA II 2 / KARA II 3, top to bottom) on the left, with the
-// cable assigned to the array shown on the right. It updates live as the
-// engineer changes the array, cable type, or count — no save required.
+// For each speaker array linked to the run (the "Linked speaker arrays"
+// picker), this lists every speaker in that array (e.g. KARA II 1 / KARA II 2
+// / KARA II 3, top to bottom), with the cable assigned to the run beside it.
+// It updates live as the engineer links arrays or changes the cable type or
+// count — no save required.
+//
+// The picker is Django's filter_horizontal widget: the linked arrays are the
+// options in #id_speaker_arrays_to, and moving one fires no change event, so
+// a MutationObserver watches that list. Without the widget (no JS filter),
+// the plain <select multiple> is read instead.
 //
 // Speaker data comes from the read-only endpoint seeded on the container via
-// data-endpoint-base (mount-path aware). The panel is hidden in free-text mode.
+// data-endpoint-base (mount-path aware). Every name is escaped.
 (function () {
     'use strict';
 
     document.addEventListener('DOMContentLoaded', function () {
         const container = document.getElementById('pa-array-ref');
-        if (!container) return; // not on the PA cable change form
+        if (!container) return; // not on the PA cable change form, or no arrays
 
-        const modeSelect = document.getElementById('id_entry_mode');
-        const arraySelect = document.getElementById('id_speaker_array');
         const cableSelect = document.getElementById('id_cable');
         const countInput = document.getElementById('id_count');
-        const row = container.closest('.form-row');
 
-        let cache = {}; // arrayId -> {array_name, speakers}
+        const cache = {}; // arrayId -> {array_name, speakers}
 
-        function currentMode() {
-            return modeSelect ? modeSelect.value : 'text';
-        }
-        function currentArrayId() {
-            if (arraySelect && arraySelect.value) return arraySelect.value;
-            return container.dataset.arrayId || '';
+        function linkedIds() {
+            const chosen = document.getElementById('id_speaker_arrays_to');
+            if (chosen) return Array.from(chosen.options).map(function (o) { return o.value; });
+            const plain = document.getElementById('id_speaker_arrays');
+            if (!plain) return [];
+            return Array.from(plain.selectedOptions).map(function (o) { return o.value; });
         }
         function cableLabel() {
             if (cableSelect && cableSelect.selectedIndex >= 0) {
@@ -41,38 +43,35 @@
             return container.dataset.count || '';
         }
 
-        function refresh() {
-            const linked = currentMode() === 'linked';
-            const arrayId = currentArrayId();
-
-            // Hide the whole row in free-text mode — it only applies to linked cables.
-            if (row) row.style.display = linked ? '' : 'none';
-            if (!linked || !arrayId) {
-                showHint();
-                return;
-            }
-            if (cache[arrayId]) {
-                render(cache[arrayId]);
-                return;
-            }
-            const url = container.dataset.endpointBase + arrayId + '/speakers/';
-            fetch(url, { credentials: 'same-origin' })
+        function load(arrayId) {
+            if (cache[arrayId]) return Promise.resolve(cache[arrayId]);
+            const url = container.dataset.endpointBase + encodeURIComponent(arrayId) + '/speakers/';
+            return fetch(url, { credentials: 'same-origin' })
                 .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-                .then(function (data) { cache[arrayId] = data; render(data); })
-                .catch(function () {
-                    container.innerHTML =
-                        '<em class="pa-array-ref__hint">Could not load speakers for this array.</em>';
-                });
+                .then(function (data) { cache[arrayId] = data; return data; })
+                .catch(function () { return null; });
         }
 
-        function showHint() {
-            container.innerHTML =
-                '<em class="pa-array-ref__hint">Select an Array/Speaker in linked mode ' +
-                'to list its speakers here.</em>';
+        let generation = 0;
+        function refresh() {
+            const ids = linkedIds();
+            const mine = ++generation;
+            if (!ids.length) {
+                container.innerHTML =
+                    '<em class="pa-array-ref__hint">Link a speaker array to list its speakers here.</em>';
+                return;
+            }
+            Promise.all(ids.map(load)).then(function (all) {
+                if (mine !== generation) return;   // a newer refresh is on its way
+                container.innerHTML = all.map(block).join('');
+            });
         }
 
-        function render(data) {
-            const speakers = (data && data.speakers) || [];
+        function block(data) {
+            if (!data) {
+                return '<em class="pa-array-ref__hint">Could not load speakers for this array.</em>';
+            }
+            const speakers = data.speakers || [];
             const items = speakers.length
                 ? speakers.map(function (s) {
                     return '<li>' + escapeHtml(s.label) + '</li>';
@@ -90,11 +89,10 @@
                     escapeHtml(fanout) + '</div>'
                 : '';
 
-            container.innerHTML =
-                '<div class="pa-array-ref__grid">' +
+            return '<div class="pa-array-ref__grid">' +
                     '<div class="pa-array-ref__speakers">' +
                         '<div class="pa-array-ref__arrayname">' +
-                            escapeHtml((data && data.array_name) || '') + '</div>' +
+                            escapeHtml(data.array_name || '') + '</div>' +
                         '<ul class="pa-array-ref__list">' + items + '</ul>' +
                     '</div>' +
                     '<div class="pa-array-ref__cable">' +
@@ -108,15 +106,24 @@
         function escapeHtml(s) {
             return String(s)
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
-        if (modeSelect) modeSelect.addEventListener('change', refresh);
-        if (arraySelect) arraySelect.addEventListener('change', refresh);
-        // Live-update the "assigned cable" side as the engineer edits it.
+        // SelectFilter2 builds #id_speaker_arrays_to on window load, after
+        // this runs, so start watching once it exists.
+        function watch() {
+            const chosen = document.getElementById('id_speaker_arrays_to');
+            if (chosen) {
+                new MutationObserver(refresh).observe(chosen, { childList: true });
+            } else {
+                const plain = document.getElementById('id_speaker_arrays');
+                if (plain) plain.addEventListener('change', refresh);
+            }
+            refresh();
+        }
         if (cableSelect) cableSelect.addEventListener('change', refresh);
         if (countInput) countInput.addEventListener('input', refresh);
-
-        refresh();
+        if (document.readyState === 'complete') watch();
+        else window.addEventListener('load', watch);
     });
 })();

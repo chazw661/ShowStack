@@ -883,8 +883,8 @@ def _section_pa_cable(project, styles, PACableSchedule):
     story = [_section_banner("5", "PA Cable Schedule", styles), Spacer(1, 0.12 * inch)]
     cables = (PACableSchedule.objects
               .filter(project=project)
-              .select_related('label', 'speaker_array', 'amp')
-              .prefetch_related('fan_outs')
+              .select_related('label', 'amp', 'amp_location')
+              .prefetch_related('fan_outs', 'speaker_arrays')
               .order_by('label'))
 
     if not cables.exists():
@@ -907,30 +907,30 @@ def _section_pa_cable(project, styles, PACableSchedule):
         # bulk_create, bulk_update, an admin bulk action -- leaves them
         # holding the previous value, and the report printed history.
         #
-        #   label / speaker_array -> array_speaker_display   (was `label`)
+        #   label                 -> cable_label_display     (was `label`)
+        #   amp / amp_location    -> from_display
+        #   destination / arrays  -> to_display              (was `to_location`)
         #   cable                 -> cable_type_label(cable) (was `cable_type`)
         #   length                -> length                  (was length_per_run)
         #   count                 -> count                   (was `quantity`)
-        #   destination / amp     -> destination_display     (was `to_location`)
         #
-        # array_speaker_display / destination_display are the same two
-        # properties the PA Cable changelist columns use (issue #73), so a
-        # cable entered in "From Soundvision / Amps" mode resolves to its
-        # linked array and amp here exactly as it does on screen -- the old
-        # `label` read printed nothing at all for those rows.
+        # The label / from / to properties are the same three the PA Cable
+        # changelist, its CSV and PDF use, so this cannot disagree with them.
         #
         # cable_type_label() additionally flags a value that is not a known
         # choice instead of printing it as though it were a real type.
         rows.append([
-            cable.array_speaker_display or '',
+            cable.cable_label_display,
+            cable.from_display,
+            cable.to_display,
             pa_cable_math.cable_type_label(cable.cable),
             str(cable.length) if cable.length else '',
             str(cable.count) if cable.count else '0',
-            cable.destination_display or '', fan_str,
+            fan_str,
         ])
-    headers = ['Array/Speaker', 'Cable Type', 'Length', 'Count', 'Destination',
+    headers = ['Cable Label', 'From', 'To', 'Cable Type', 'Length', 'Count',
                'Fan Outs']
-    widths = [w * inch for w in (1.6, 1.4, 0.9, 0.7, 2.2, 2.8)]
+    widths = [w * inch for w in (1.0, 1.5, 1.8, 1.2, 0.7, 0.6, 2.8)]
     table = _data_table(headers, rows, widths)
     if table:
         story.append(table)

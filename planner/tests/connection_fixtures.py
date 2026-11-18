@@ -127,8 +127,11 @@ class ConnectionFixtures:
             destination=destination, cable=kw.pop('cable', 'NL_4'),
             count=kw.pop('count', 2), length=kw.pop('length', 100), **kw)
 
-    def linked_cable(self, amp, array, project=None, **kw):
-        return PACableSchedule.objects.create(
-            project=project or self.project, entry_mode='linked', amp=amp,
-            speaker_array=array, cable=kw.pop('cable', 'NL_4'), count=kw.pop('count', 1),
+    def linked_cable(self, amp, *arrays, project=None, **kw):
+        """A run from ``amp`` (or None) linked to ``arrays``."""
+        row = PACableSchedule.objects.create(
+            project=project or self.project, amp=amp,
+            cable=kw.pop('cable', 'NL_4'), count=kw.pop('count', 1),
             length=kw.pop('length', 150), **kw)
+        row.speaker_arrays.set(arrays)
+        return row

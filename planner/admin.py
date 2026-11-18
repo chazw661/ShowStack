@@ -3761,27 +3761,32 @@ class PACableAdmin(BaseEquipmentAdmin):
         )
         return HttpResponseRedirect(url + '?saved=1')
     list_display = [
-    'array_speaker_col', 'destination_col', 'count', 'length',
+    'cable_label_col', 'from_col', 'to_col', 'arrays_col', 'count', 'length',
     'cable_display', 'fan_outs_col', 'couplers_col', 'extensions_col',  # issue #73: broken out
     'notes', 'drawing_ref','color_display'
 ]
     list_filter = [CableTypeFilter]
-    search_fields = ['destination', 'notes', 'drawing_ref']
+    search_fields = ['destination', 'notes', 'drawing_ref', 'label__name', 'amp__name',
+                     'amp_location__name']
     list_editable = ['count' ,'length']  
     
     change_list_template = 'admin/planner/pacableschedule/change_list.html'
     
     readonly_fields = ('array_speaker_reference',)
 
+    filter_horizontal = ('speaker_arrays',)
+
+    # One entry mode (PR 2b-1): from an amp or an amp rack, to a typed
+    # destination, optionally linked to Soundvision arrays.
+    ARRAY_FIELDS = ('speaker_arrays', 'array_speaker_reference')
     fieldsets = (
-        ('Array / Speaker & Destination', {
-            'fields': ('entry_mode', 'speaker_array', 'amp', 'label', 'destination',
-                       'array_speaker_reference'),
+        ('Cable run', {
+            'fields': ('amp', 'amp_location', 'label', 'destination',
+                       'speaker_arrays', 'array_speaker_reference'),
             'description': (
-                "Choose <strong>From Soundvision / Amps</strong> to pick a Speaker "
-                "Array (or single Speaker) and an Amp from the imported report, or "
-                "<strong>Free text</strong> to type the Array/Speaker and Destination "
-                "by hand. Existing cables stay on Free text."
+                "Pick the <strong>amp</strong> the cable leaves from (or its "
+                "<strong>amp rack</strong>), then type where it goes. Link speaker "
+                "arrays if the show has a Soundvision report."
             ),
         }),
         ('Cable Configuration', {
@@ -3794,6 +3799,22 @@ class PACableAdmin(BaseEquipmentAdmin):
     
     actions = ['export_cable_schedule', 'assign_color', 'duplicate_cable_runs']
 
+    def get_fieldsets(self, request, obj=None):
+        """The linked-array fields only when the project has Soundvision arrays."""
+        fieldsets = super().get_fieldsets(request, obj)
+        if self._project_has_arrays(request):
+            return fieldsets
+        return tuple(
+            (name, {**opts, 'fields': tuple(f for f in opts['fields']
+                                            if f not in self.ARRAY_FIELDS)})
+            for name, opts in fieldsets)
+
+    @staticmethod
+    def _project_has_arrays(request):
+        from planner.models import SpeakerArray
+        project = getattr(request, 'current_project', None)
+        return bool(project) and SpeakerArray.objects.filter(prediction__project=project).exists()
+
     @admin.action(description='Duplicate selected cable runs')
     def duplicate_cable_runs(self, request, queryset):
         """Issue #22: clone each selected PACableSchedule row (including its
@@ -3803,9 +3824,13 @@ class PACableAdmin(BaseEquipmentAdmin):
         n_fans = 0
         for cable in queryset:
             fan_outs = list(cable.fan_outs.all())
+            arrays = list(cable.speaker_arrays.all())
             cable.pk = None
             cable._state.adding = True
             cable.save()
+            # add(), not set(): set() diffs against the prefetched cache,
+            # which still describes the original row, and would add nothing.
+            cable.speaker_arrays.add(*arrays)
             for fan in fan_outs:
                 fan.pk = None
                 fan._state.adding = True
@@ -3857,60 +3882,86 @@ class PACableAdmin(BaseEquipmentAdmin):
                 PAZone.objects.filter(project=current_project)
                 if current_project else PAZone.objects.none()
             )
-        elif db_field.name == "speaker_array":
-            # Issue #73: linked Array/Speaker dropdown = every speaker array and
-            # single speaker in the project's imported Soundvision report(s).
-            from planner.models import SpeakerArray
-            kwargs["queryset"] = (
-                SpeakerArray.objects.filter(prediction__project=current_project)
-                if current_project else SpeakerArray.objects.none()
-            )
         elif db_field.name == "amp":
-            # Issue #73: linked Destination dropdown = every amp in the project's
-            # Amplifier Reference module.
+            # Every amp in the project, by rack then name: "SL Racks · LA12X #1".
             from planner.models import Amp
             kwargs["queryset"] = (
-                Amp.objects.filter(project=current_project)
+                Amp.objects.filter(project=current_project).select_related('location')
+                .order_by('location__sort_order', 'location__name', 'name')
                 if current_project else Amp.objects.none()
             )
+            field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+            field.label_from_instance = (
+                lambda amp: f"{amp.location.name} · {amp.name}" if amp.location_id else amp.name)
+            return field
+        elif db_field.name == "amp_location":
+            from planner.models import AmpLocation
+            kwargs["queryset"] = (
+                AmpLocation.objects.filter(project=current_project)
+                if current_project else AmpLocation.objects.none()
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "speaker_arrays":
+            from planner.models import SpeakerArray
+            current_project = getattr(request, 'current_project', None)
+            kwargs["queryset"] = (
+                SpeakerArray.objects.filter(prediction__project=current_project)
+                .select_related('prediction__show_day')
+                if current_project else SpeakerArray.objects.none()
+            )
+            field = super().formfield_for_manytomany(db_field, request, **kwargs)
+            # "K2 L (Day 1)", or the report's file name: two predictions can
+            # both have a "K2 L". SpeakerArray.__str__ prints "(None)" with no day.
+            field.label_from_instance = lambda a: '{} ({})'.format(
+                a.display_name, a.prediction.show_day or a.prediction.file_name)
+            return field
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
    
     
     
-    def array_speaker_col(self, obj):
-        """Issue #73: unified Array/Speaker column (linked array/speaker or text label)."""
-        return obj.array_speaker_display or "-"
-    array_speaker_col.short_description = 'Array/Speaker'
+    def cable_label_col(self, obj):
+        return obj.cable_label_display or "-"
+    cable_label_col.short_description = 'Cable Label'
+    cable_label_col.admin_order_field = 'label__name'
 
-    def destination_col(self, obj):
-        """Issue #73: unified Destination column (linked amp or free text)."""
-        return obj.destination_display or "-"
-    destination_col.short_description = 'Destination'
+    def from_col(self, obj):
+        return obj.from_display or "-"
+    from_col.short_description = 'From'
+
+    def to_col(self, obj):
+        return (obj.destination or '').strip() or "-"
+    to_col.short_description = 'To'
+    to_col.admin_order_field = 'destination'
+
+    def arrays_col(self, obj):
+        return self._chips(obj.array_names, 'cb-array')
+    arrays_col.short_description = 'Arrays'
 
     def array_speaker_reference(self, obj):
-        """Issue #73 (Phase 2): a container the JS fills with the selected
-        array's speakers (vertical list) and the cable assigned to it. Rendered
-        for both add and change; populated live from the speaker_array dropdown.
+        """Issue #73 (Phase 2): a container the JS fills with each linked
+        array's speakers (one block per array) and the cable assigned to it.
+        Populated live from the Linked speaker arrays picker.
 
-        Data attributes seed the JS: the endpoint base (mount-path aware), the
-        currently-saved array id, and the saved cable summary shown on the right."""
+        Data attributes seed the JS: the endpoint base (mount-path aware) and
+        the saved cable summary shown beside each block."""
         from django.urls import reverse
         sample = reverse('planner:pa_cable_array_speakers', args=[999999])
         base = sample.rsplit('999999/speakers/', 1)[0]  # '.../pa-cables/array/'
-        array_id = obj.speaker_array_id if (obj and obj.entry_mode == 'linked') else ''
         cable_label = obj.get_cable_display() if (obj and obj.cable) else ''
         count = obj.count if obj else ''
         fanout = (obj.fan_out_summary if obj else '') or ''
         return format_html(
             '<div id="pa-array-ref" class="pa-array-ref" '
-            'data-endpoint-base="{}" data-array-id="{}" '
+            'data-endpoint-base="{}" '
             'data-cable="{}" data-count="{}" data-fanout="{}">'
-            '<em class="pa-array-ref__hint">Select an Array/Speaker in linked mode '
-            'to list its speakers here.</em>'
+            '<em class="pa-array-ref__hint">Link a speaker array to list its '
+            'speakers here.</em>'
             '</div>',
-            base, array_id, cable_label, count, fanout,
+            base, cable_label, count, fanout,
         )
     array_speaker_reference.short_description = 'Array speakers & assigned cable'
 
@@ -4168,7 +4219,7 @@ class PACableAdmin(BaseEquipmentAdmin):
         # phantom -- there is no count2 field on PACableSchedule and
         # nothing has ever written one.
         writer.writerow([
-            'Array/Speaker', 'Destination', 'Count', 'Cable',
+            'Cable Label', 'From', 'To', 'Count', 'Cable',
             'Fan Out', 'Notes', 'Drawing Ref'
         ])
         
@@ -4179,8 +4230,8 @@ class PACableAdmin(BaseEquipmentAdmin):
         
         # Write data rows
         for cable in (queryset
-                      .select_related('label', 'speaker_array', 'amp')
-                      .prefetch_related('fan_outs')
+                      .select_related('label', 'amp', 'amp_location')
+                      .prefetch_related('fan_outs', 'speaker_arrays')
                       .order_by('label__sort_order', 'cable')):
             # Build fan out summary string for this cable
             fan_out_display = ''
@@ -4191,16 +4242,13 @@ class PACableAdmin(BaseEquipmentAdmin):
                         fan_out_items.append(f'{fan_out.get_fan_out_type_display()} x{fan_out.quantity}')
                 fan_out_display = ', '.join(fan_out_items)
             
-            # array_speaker_display / destination_display, not the raw
-            # label and destination columns: a cable entered in "From
-            # Soundvision / Amps" mode leaves both of those empty and
-            # carries its array and amp in speaker_array / amp instead
-            # (issue #73), so the raw reads exported a run with no
-            # indication of what it ran from or to. Same two properties
-            # as the changelist columns and the System Report (#99).
+            # The same three properties as the changelist, the PDF and
+            # the System Report, so no export can disagree with the screen.
+            # To falls back to the linked arrays when nothing was typed.
             writer.writerow([
-                cable.array_speaker_display or '',
-                cable.destination_display or '',
+                cable.cable_label_display,
+                cable.from_display,
+                cable.to_display,
                 cable.count,
                 cable.get_cable_display(),
                 fan_out_display,  # Changed: now shows all fan outs
@@ -4394,7 +4442,6 @@ class PACableAdmin(BaseEquipmentAdmin):
         # overwrite this one (Python class-body semantics).
         js = (
             'admin/js/pa_cable_inlines.js',
-            'admin/js/pa_cable_entry_mode.js',
             'admin/js/pa_cable_array_speakers.js',
             'admin/js/pa_cable_jumpers.js',
         )
@@ -4405,7 +4452,8 @@ class PACableAdmin(BaseEquipmentAdmin):
         qs = super().get_queryset(request)
         # Issue #73: the list now renders fan-outs / couplers / extensions per
         # row, so prefetch them to avoid N+1 queries in the changelist.
-        qs = qs.prefetch_related('fan_outs__extensions', 'couplers')
+        qs = (qs.select_related('label', 'amp', 'amp_location')
+              .prefetch_related('fan_outs__extensions', 'couplers', 'speaker_arrays'))
         if hasattr(request, 'current_project') and request.current_project:
             return qs.filter(project=request.current_project)
         return qs.none()

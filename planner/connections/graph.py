@@ -5,12 +5,14 @@
   confirmed  what is stored as a link today --
              * DeviceInput.console_input       (I/O input -> console channel)
              * DeviceOutput's generic FK       (console bus -> I/O output)
-             * linked-mode PA cable runs       (amp -> speaker array)
+             * PA cable runs entered with an end: from the amp (or, with no
+               amp, the amp rack) to each linked array, else to the typed
+               "To" text as a ``destination`` node
   inferred   what ``matchers`` reads out of the stored text, worked out on
              every call, so a renamed label shows up at once --
              * rule (a)  console / I/O output -> processor input
              * rule (b)  processor output -> amp channel
-             * rule (c)  free-text PA cable runs
+             * rule (c)  older PA cable runs with no amp, rack or array
              * amp input text that matched nothing
 
 Port-level links between the same two nodes become one edge, keyed by
@@ -19,13 +21,16 @@ in the key -- a same-processor match feeding AES 1 and Analog 1 is one edge
 with both in ``transports`` -- but network is, because an AVB feed has no
 cable and an AES feed does even when none is recorded.
 
-A PA cable run is drawn amp -> speaker array, labelled with its cable:
-"HR · 2× NL 8 75'" (the row's PA Zone, count, cable type, length). A run with
-no Amp linked starts at the project's one ``amp_rack:unlinked`` node -- or at
-the amp rack its Destination names (an Amp Location, or ``amp_rack:text:...``
-for rack text with no Amp Location), whose speaker end is then unnamed. A
-Destination that is no single array is a node of its own text, shared by
-every run naming the same thing.
+A PA cable run is labelled with its cable: "HR · 2× NL 8 75' · NL4 Y ×2"
+(the Cable Label, count, cable type, length, fan-outs). One run feeding
+several linked arrays is one edge per array, each saying so ("1 run → 3
+arrays") and carrying ``cable.shared`` so a total counts the run once. A run
+with no amp, rack or array is matched from its text (rule c): it starts at
+the project's one ``amp_rack:unlinked`` node -- or at the amp rack its
+Destination names (an Amp Location, or ``amp_rack:text:...`` for rack text
+with no Amp Location), whose speaker end is then unnamed. A Destination that
+is no single array is a node of its own text, shared by every run naming the
+same thing.
 
 Text that names nothing, or names more than one device, is drawn as an edge
 to (or from) an ``unlinked`` node carrying the text. An ambiguous match is
@@ -45,7 +50,8 @@ from planner.connections import matchers as m
 SCHEMA = 1
 CONFIRMED, INFERRED = 'confirmed', 'inferred'
 KIND_ORDER = {k: i for i, k in enumerate(
-    (ep.CONSOLE, ep.DEVICE, ep.PROCESSOR, ep.AMP_RACK, ep.AMP_LOCATION, ep.AMP, ep.ARRAY, ep.UNLINKED))}
+    (ep.CONSOLE, ep.DEVICE, ep.PROCESSOR, ep.AMP_RACK, ep.AMP_LOCATION, ep.AMP, ep.ARRAY,
+     ep.DESTINATION, ep.UNLINKED))}
 
 
 @dataclass
@@ -80,14 +86,18 @@ def _pa_cable(row):
             'ids': [], 'length_ft': length, 'count': row.count}
 
 
-def _pa_cable_label(row):
-    """"HR · 2× NL 8 75'": the PA Zone (the cable's label), then the run."""
+def _pa_cable_label(row, shared=0):
+    """"HR · 2× NL 8 75' · NL4 Y ×2": the Cable Label, the run, its fan-outs
+    (prefetched), and "1 run → 3 arrays" when it feeds several."""
     cable = _pa_cable(row)
     length = cable['length_ft']
     run = ' '.join(x for x in (f"{row.count}×", cable['type'],
                                f"{length:g}'" if length else '') if x)
     zone = row.label.name.strip() if row.label_id else ''
-    return ' · '.join(x for x in (zone, run) if x)
+    fans = ', '.join(f'{fo.get_fan_out_type_display()} ×{fo.quantity}'
+                     for fo in row.fan_outs.all() if fo.fan_out_type)
+    split = f'1 run → {shared} arrays' if shared > 1 else ''
+    return ' · '.join(x for x in (zone, run, fans, split) if x)
 
 
 class _Graph:
@@ -141,21 +151,47 @@ class _Graph:
                 self.links.append(Link(bus_port.node, port.node, bus_port, port,
                                        source=('fk', 'DeviceOutput.console_output')))
         for row in idx.pa_rows:
-            if row.entry_mode != 'linked':
-                continue
-            amp = ep.node_id(ep.AMP, row.amp_id)
-            array = ep.node_id(ep.ARRAY, row.speaker_array_id)
-            # A linked row whose array is gone (a Soundvision re-import nulls
-            # speaker_array) keeps any Destination text it still carries.
-            from_node = amp if amp in idx.nodes else self.amp_rack()
-            to_node = array if array in idx.nodes else self.unlinked(
-                f'pa:{row.pk}:speaker',
-                (row.destination or '').strip() or 'Speaker array \u2014 not linked')
+            if m.entered_pa_run(row):
+                self.pa_run(row)
+
+    def destination(self, text):
+        """Where a run goes, as typed: one node per distinct text."""
+        node_id = ep.node_id(ep.DESTINATION, m.norm(text))
+        self.extra_nodes.setdefault(node_id, {'id': node_id, 'kind': ep.DESTINATION,
+                                              'label': text.strip()})
+        return node_id
+
+    def pa_run(self, row):
+        """A run entered with its ends: from the amp, else its rack; to each
+        linked array, else to the typed To. Confirmed: nothing is matched."""
+        idx = self.index
+        amp = ep.node_id(ep.AMP, row.amp_id)
+        rack = ep.node_id(ep.AMP_LOCATION, row.amp_location_id)
+        if row.amp_id and amp in idx.nodes:
+            from_node = amp
+        elif row.amp_location_id and rack in idx.nodes:
+            from_node = self.use(rack)
+        else:
+            from_node = self.amp_rack()
+        arrays = [ep.node_id(ep.ARRAY, a.pk) for a in row.speaker_arrays.all()]
+        arrays = [a for a in arrays if a in idx.nodes]
+        text = (row.destination or '').strip()
+        if arrays:
+            targets = arrays
+        elif m.norm(text):
+            targets = [self.destination(text)]
+        else:
+            targets = [self.unlinked(f'pa:{row.pk}:speaker', ep.SPEAKER_UNNAMED_LABEL)]
+        shared = len(targets) if arrays else 0
+        cable = _pa_cable(row)
+        if shared > 1:
+            cable['shared'] = shared
+        for to_node in targets:
             self.links.append(Link(
                 from_node, to_node, transport='speaker',
-                unlinked=from_node == ep.AMP_RACK_UNLINKED or to_node not in idx.nodes,
-                source=('pa_cable', row.pk), cable=_pa_cable(row),
-                cable_label=_pa_cable_label(row)))
+                unlinked=from_node == ep.AMP_RACK_UNLINKED or to_node.startswith(ep.UNLINKED + ':'),
+                source=('pa_cable', row.pk), cable=dict(cable),
+                cable_label=_pa_cable_label(row, shared)))
 
     # -- inferred ---------------------------------------------------------------
 
@@ -304,6 +340,9 @@ def _merge_cables(cables):
         out[key] = values[0] if len(values) == 1 else values
         if len(values) > 1:
             out['mixed'] = True
+    shared = max((c.get('shared', 0) for c in recorded), default=0)
+    if shared:
+        out['shared'] = shared      # this run also feeds other arrays: count it once
     if len(recorded) < len(cables):
         out['partly_recorded'] = True
     return out

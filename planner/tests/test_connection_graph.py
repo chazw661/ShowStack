@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from planner.connections.graph import project_graph
-from planner.models import ConsoleAuxOutput
+from planner.models import ConsoleAuxOutput, PAFanOut
 from planner.tests.connection_fixtures import ConnectionFixtures
 
 
@@ -76,14 +76,14 @@ class GraphTests(ConnectionFixtures, TestCase):
         amp = self.amp('SL LA12X #1')
         arr = self.array(self.prediction(), 'K2 Main L')
         row = self.linked_cable(amp, arr, label=self.zone('Main L'))
-        arr.delete()   # what a Soundvision re-import does; the FK is SET_NULL
+        arr.delete()   # what a Soundvision re-import does: the link goes with it
         graph = self.graph()
         [edge] = _edges(graph, f'amp:{amp.pk}')
         self.assertEqual((edge['status'], edge['unlinked']), ('confirmed', True))
         self.assertEqual(edge['to'], f'unlinked:pa:{row.pk}:speaker')
         self.assertEqual(edge['label'], "Main L · 1× NL 4 150'")
         node = next(n for n in graph['nodes'] if n['id'] == edge['to'])
-        self.assertEqual(node['label'], 'Speaker array — not linked')
+        self.assertEqual(node['label'], 'Speaker — not named')
 
     # -- live rules ---------------------------------------------------------------
 
@@ -158,17 +158,79 @@ class GraphTests(ConnectionFixtures, TestCase):
         self.assertEqual(edge['text'], {'source': 'from somewhere', 'field': 'analog_input'})
         self.assertEqual(edge['label'], '→ Ch 2')
 
-    def test_free_text_pa_row_is_amp_to_array_labelled_with_its_zone_and_cable(self):
+    def test_a_run_from_an_amp_goes_to_its_typed_destination_confirmed(self):
+        # PR 2b-1: the To text is where the run goes, as typed -- never
+        # matched, even when it is an array's name (risk 1, accepted).
         amp = self.amp('SL LA12X #1')
-        arr = self.array(self.prediction(), 'KS28 L')
+        self.array(self.prediction(), 'KS28 L')
         self.text_cable(self.zone('HR'), destination='KS28 L', amp=amp,
                         cable='NL_8', count=2, length=75)
         graph = self.graph()
-        [edge] = _edges(graph, f'amp:{amp.pk}', f'speaker_array:{arr.pk}')
-        self.assertEqual((edge['status'], edge['unlinked'], edge['match']),
-                         ('inferred', False, ['matched']))
+        [edge] = _edges(graph, f'amp:{amp.pk}')
+        self.assertEqual(edge['to'], 'destination:ks28 l')
+        self.assertEqual((edge['status'], edge['unlinked']), ('confirmed', False))
+        self.assertNotIn('rules', edge)
         self.assertEqual(edge['label'], "HR · 2× NL 8 75'")
-        self.assertNotIn('HR', {n['label'] for n in graph['nodes']})   # the zone is no node
+        nodes = {n['id']: n for n in graph['nodes']}
+        self.assertEqual(nodes['destination:ks28 l'], {'id': 'destination:ks28 l',
+                                                       'kind': 'destination', 'label': 'KS28 L'})
+        self.assertNotIn('HR', {n['label'] for n in graph['nodes']})   # the label is no node
+
+    def test_runs_to_the_same_place_share_its_destination_node(self):
+        a, b = self.amp('Amp A'), self.amp('Amp B')
+        self.text_cable(self.zone('D2'), destination='KIVA DELAY 2 & 3', amp=a)
+        self.text_cable(self.zone('D3'), destination='kiva delay  2 & 3', amp=b)
+        graph = self.graph()
+        self.assertEqual({e['to'] for e in _edges(graph, f'amp:{a.pk}')}
+                         | {e['to'] for e in _edges(graph, f'amp:{b.pk}')},
+                         {'destination:kiva delay 2 & 3'})
+
+    def test_a_run_from_an_amp_rack_starts_at_that_rack(self):
+        amp = self.amp('SR LA12X #1', rack='SR Racks')
+        self.text_cable(self.zone('SR'), destination='Sub R', amp_location=amp.location)
+        graph = self.graph()
+        rack = f'amp_location:{amp.location_id}'
+        [edge] = _edges(graph, rack)
+        self.assertEqual((edge['to'], edge['status'], edge['unlinked']),
+                         ('destination:sub r', 'confirmed', False))
+        self.assertIn(rack, {n['id'] for n in graph['nodes']})
+
+    def test_the_amp_wins_over_its_rack(self):
+        amp = self.amp('SR LA12X #1', rack='SR Racks')
+        other = self.amp('Other', rack='Other Racks')
+        row = self.text_cable(destination='Sub R', amp=amp)
+        # disagreeing, as a bulk update (which skips save()) could leave it
+        type(row).objects.filter(pk=row.pk).update(amp_location=other.location)
+        graph = self.graph()
+        self.assertEqual(len(_edges(graph, f'amp:{amp.pk}')), 1)
+        self.assertEqual(_edges(graph, f'amp_location:{other.location_id}'), [])
+
+    def test_one_run_to_three_arrays_is_three_edges_counted_once(self):
+        amp = self.amp('Fill Amp')
+        pred = self.prediction()
+        arrays = [self.array(pred, f'FF {n}') for n in (1, 2, 3)]
+        row = self.linked_cable(amp, *arrays, label=self.zone('FF'), count=1, length=50)
+        PAFanOut.objects.create(cable_schedule=row, fan_out_type='DOFILL', quantity=1)
+        edges = _edges(self.graph(), f'amp:{amp.pk}')
+        self.assertEqual({e['to'] for e in edges}, {f'speaker_array:{a.pk}' for a in arrays})
+        for edge in edges:
+            self.assertEqual(edge['status'], 'confirmed')
+            self.assertEqual(edge['label'], "FF · 1× NL 4 50' · DOFill ×1 · 1 run → 3 arrays")
+            self.assertEqual(edge['cable']['shared'], 3)
+
+    def test_fan_outs_are_in_the_label(self):
+        amp = self.amp('Amp')
+        row = self.text_cable(self.zone('HL'), destination='HL fan', amp=amp, count=1, length=100)
+        PAFanOut.objects.create(cable_schedule=row, fan_out_type='NL4_Y', quantity=2)
+        [edge] = _edges(self.graph(), f'amp:{amp.pk}')
+        self.assertEqual(edge['label'], "HL · 1× NL 4 100' · NL4 Y ×2")
+
+    def test_arrays_with_no_amp_start_at_the_unlinked_rack(self):
+        arr = self.array(self.prediction(), 'K2 L')
+        self.linked_cable(None, arr)
+        [edge] = _edges(self.graph(), 'amp_rack:unlinked')
+        self.assertEqual((edge['to'], edge['status'], edge['unlinked']),
+                         (f'speaker_array:{arr.pk}', 'confirmed', True))
 
     def test_runs_with_no_amp_share_one_amp_rack_node(self):
         a = self.array(self.prediction(), 'Front Fill')
@@ -200,10 +262,9 @@ class GraphTests(ConnectionFixtures, TestCase):
     def test_ambiguous_destination_is_an_unlinked_edge_with_candidates(self):
         a = self.array(self.prediction(), 'Sub L')
         b = self.array(self.prediction(file_name='day2.pdf'), 'Sub L')
-        amp = self.amp('Sub Amp')
-        self.text_cable(self.zone('SL'), destination='Sub L', amp=amp)
+        self.text_cable(self.zone('SL'), destination='Sub L')     # no amp: rule (c)
         graph = self.graph()
-        [edge] = _edges(graph, f'amp:{amp.pk}')
+        [edge] = _edges(graph, 'amp_rack:unlinked')
         self.assertTrue(edge['ambiguous'] and edge['unlinked'])
         self.assertEqual({c['node'] for c in edge['candidates']},
                          {f'speaker_array:{a.pk}', f'speaker_array:{b.pk}'})
