@@ -3535,7 +3535,7 @@ class GalaxyProcessorAdmin(BaseEquipmentAdmin):
 # Add these to your admin.py file
 
 from .models import PACableSchedule, PAZone, PAFanOut, PAFanOutExtension, PACoupler
-from .forms import PACableChangelistForm, PACableInlineForm, PAZoneForm
+from .forms import PACableChangelistForm, PACableInlineForm, PACableRunForm, PAZoneForm
 
 class PACableInline(admin.TabularInline):
     """Inline admin for PA cables - spreadsheet-like entry"""
@@ -3733,7 +3733,7 @@ class CableTypeFilter(admin.SimpleListFilter):
 
 class PACableAdmin(BaseEquipmentAdmin):
     """Admin for PA Cable Schedule"""
-    form = PACableInlineForm
+    form = PACableRunForm
 
     plain_title_plural = "PA Cable"
     plain_title = "PA Cable Entry"
@@ -3781,12 +3781,12 @@ class PACableAdmin(BaseEquipmentAdmin):
     ARRAY_FIELDS = ('speaker_arrays', 'array_speaker_reference')
     fieldsets = (
         ('Cable run', {
-            'fields': ('amp', 'amp_location', 'label', 'destination',
+            'fields': ('source', 'label', 'destination',
                        'speaker_arrays', 'array_speaker_reference'),
             'description': (
-                "Pick the <strong>amp</strong> the cable leaves from (or its "
-                "<strong>amp rack</strong>), then type where it goes. Link speaker "
-                "arrays if the show has a Soundvision report."
+                "Pick where the cable leaves from: an <strong>amp</strong>, or a "
+                "<strong>whole amp rack</strong>. Then type where it goes. Link "
+                "speaker arrays if the show has a Soundvision report."
             ),
         }),
         ('Cable Configuration', {
@@ -3798,6 +3798,17 @@ class PACableAdmin(BaseEquipmentAdmin):
     )
     
     actions = ['export_cable_schedule', 'assign_color', 'duplicate_cable_runs']
+
+    def get_form(self, request, obj=None, **kwargs):
+        # The grouped From picker lists the current project's racks and amps.
+        form = super().get_form(request, obj, **kwargs)
+        form.project = getattr(request, 'current_project', None)
+        return form
+
+    @admin.display(description='From')
+    def source(self, obj):
+        """What a viewer sees in place of the From picker."""
+        return obj.from_display or '-'
 
     def get_fieldsets(self, request, obj=None):
         """The linked-array fields only when the project has Soundvision arrays."""
@@ -3882,23 +3893,14 @@ class PACableAdmin(BaseEquipmentAdmin):
                 PAZone.objects.filter(project=current_project)
                 if current_project else PAZone.objects.none()
             )
-        elif db_field.name == "amp":
-            # Every amp in the project, by rack then name: "SL Racks · LA12X #1".
-            from planner.models import Amp
+        elif db_field.name in ("amp", "amp_location"):
+            # Not on the form (the grouped From picker sets them), but scoped
+            # all the same: no dropdown may offer another project's rows.
+            from planner.models import Amp, AmpLocation
+            model = Amp if db_field.name == "amp" else AmpLocation
             kwargs["queryset"] = (
-                Amp.objects.filter(project=current_project).select_related('location')
-                .order_by('location__sort_order', 'location__name', 'name')
-                if current_project else Amp.objects.none()
-            )
-            field = super().formfield_for_foreignkey(db_field, request, **kwargs)
-            field.label_from_instance = (
-                lambda amp: f"{amp.location.name} · {amp.name}" if amp.location_id else amp.name)
-            return field
-        elif db_field.name == "amp_location":
-            from planner.models import AmpLocation
-            kwargs["queryset"] = (
-                AmpLocation.objects.filter(project=current_project)
-                if current_project else AmpLocation.objects.none()
+                model.objects.filter(project=current_project)
+                if current_project else model.objects.none()
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 

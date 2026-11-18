@@ -257,7 +257,10 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         page.wait_for_selector('#pa-array-ref .pa-array-ref__arrayname')
         self.assert_text(page, '#pa-array-ref .pa-array-ref__arrayname', array.display_name,
                          'arrays panel')
-        self.assert_text(page, '#id_amp option', NAME, 'amp picker')
+        self.assert_text(page, '#id_source option', NAME, 'From picker: amp')
+        self.assert_text(page, '#id_source option', QUOTED, 'From picker: whole rack')
+        self.assertEqual(page.eval_on_selector_all('#id_source optgroup', 'gs => gs.map(g => g.label)'),
+                         [QUOTED], 'From picker: rack group label')
         self.assert_text(page, '#id_speaker_arrays_to option', NAME, 'linked arrays picker')
         self.assertEqual(page.input_value('#id_destination'), QUOTED[:50])
         page = self.open(reverse('admin:planner_pacableschedule_changelist'))
