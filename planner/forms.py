@@ -1209,6 +1209,8 @@ class PACableChangelistForm(JumperLengthMixin, forms.ModelForm):
 class PACableInlineForm(JumperLengthMixin, forms.ModelForm):
     """Inline form for admin interface"""
 
+    from_field = 'amp'      # where "no From" is reported
+
     class Meta:
         model = PACableSchedule
         fields = '__all__'
@@ -1221,11 +1223,12 @@ class PACableInlineForm(JumperLengthMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._init_jumper_length()
 
-        # Customize field widgets for inline display
-        self.fields['destination'].widget.attrs['style'] = 'width: 120px;'
-        self.fields['count'].widget.attrs['style'] = 'width: 60px;'
-        self.fields['notes'].widget.attrs['style'] = 'width: 150px;'
-        self.fields['drawing_ref'].widget.attrs['style'] = 'width: 80px;'
+        # Customize field widgets for inline display. A viewer's form has
+        # none of these: read-only fields are left off it.
+        for name, width in (('destination', 120), ('count', 60), ('notes', 150),
+                            ('drawing_ref', 80)):
+            if name in self.fields:
+                self.fields[name].widget.attrs['style'] = f'width: {width}px;'
 
         # "To" is required on a new run unless arrays are linked; clean()
         # says so on the right field, so the field itself is optional.
@@ -1244,14 +1247,76 @@ class PACableInlineForm(JumperLengthMixin, forms.ModelForm):
         amp = cleaned.get('amp')
         if amp is not None and 'amp_location' in self.fields:
             cleaned['amp_location'] = amp.location
-        if self.instance.pk or 'amp' not in self.fields:
+        if self.instance.pk or self.from_field not in self.fields:
             return cleaned
         if amp is None and not cleaned.get('amp_location'):
-            self.add_error('amp', 'Pick the amp, or the amp rack, this cable leaves from.')
+            self.add_error(self.from_field, 'Pick the amp, or the amp rack, this cable leaves from.')
         arrays = cleaned.get('speaker_arrays')     # a queryset; absent when the project has none
         if not (cleaned.get('destination') or '').strip() and not (arrays is not None
                                                                      and arrays.exists()):
             self.add_error('destination', 'Type where this cable goes, or link a speaker array.')
+        return cleaned
+
+
+class PACableRunForm(PACableInlineForm):
+    """The PA cable change form: one grouped From picker.
+
+    One <optgroup> per amp rack, in the rack page's order: the rack itself
+    ("House Left — whole rack"), then its amps ("Amp 01 · LA12X").
+    A rack sets amp_location only; an amp sets amp and its rack. The two model
+    fields stay; the admin shows ``source`` in their place and sets
+    ``project`` on the form class (see PACableAdmin.get_form).
+    """
+
+    from_field = 'source'
+    project = None
+
+    source = forms.ChoiceField(
+        label='From', required=False,
+        help_text='The amp this cable leaves from, or the whole rack.')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'source' not in self.fields:
+            return
+        from planner.models import Amp, AmpLocation
+        project = self.project or (self.instance.project if self.instance.project_id else None)
+        racks = (AmpLocation.objects.filter(project=project).order_by('sort_order', 'name')
+                 if project else AmpLocation.objects.none())
+        amps = {}
+        for amp in (Amp.objects.filter(project=project).select_related('amp_model')
+                    .order_by('sort_order', 'name') if project else ()):
+            amps.setdefault(amp.location_id, []).append(amp)
+        self._racks = {r.pk: r for r in racks}
+        self._amps = {a.pk: a for group in amps.values() for a in group}
+        choices = [('', '---------')]
+        for rack in racks:
+            options = [(f'rack:{rack.pk}', f'{rack.name} — whole rack')]
+            options += [(f'amp:{a.pk}', self.amp_label(a)) for a in amps.get(rack.pk, ())]
+            choices.append((rack.name, options))
+        self.fields['source'].choices = choices
+        if self.instance.amp_id:
+            self.initial.setdefault('source', f'amp:{self.instance.amp_id}')
+        elif self.instance.amp_location_id:
+            self.initial.setdefault('source', f'rack:{self.instance.amp_location_id}')
+
+    @staticmethod
+    def amp_label(amp):
+        model = amp.amp_model.model_name if amp.amp_model_id else ''
+        return f'{amp.name} · {model}' if model else amp.name
+
+    def clean(self):
+        picked = self.cleaned_data.get('source') or ''
+        kind, _, pk = picked.partition(':')
+        amp = self._amps.get(int(pk)) if kind == 'amp' else None
+        rack = amp.location if amp else (self._racks.get(int(pk)) if kind == 'rack' else None)
+        self.cleaned_data.update(amp=amp, amp_location=rack)
+        cleaned = super().clean()
+        if 'source' in self.fields:
+            # amp / amp_location are not form fields here, so construct_instance
+            # leaves them alone: set them on the instance directly.
+            self.instance.amp = amp
+            self.instance.amp_location = rack
         return cleaned
 
 

@@ -91,12 +91,13 @@ class OneModeAdminTests(_Run, TestCase):
 
     def test_the_add_form_shows_from_and_cable_label_and_no_mode(self):
         body = self.client.get(reverse(ADD)).content.decode()
-        self.assertIn('name="amp"', body)
-        self.assertIn('name="amp_location"', body)
+        self.assertIn('name="source"', body)                  # one grouped From picker
+        self.assertNotIn('name="amp"', body)
+        self.assertNotIn('name="amp_location"', body)
         self.assertNotIn('name="entry_mode"', body)
         self.assertIn('Cable Label', body)
-        self.assertIn('From amp', body)
-        self.assertIn('SL Racks · SL LA12X #1', body)        # the amp picker label
+        self.assertIn('<optgroup label="SL Racks">', body)
+        self.assertIn('SL LA12X #1 · TEST4', body)            # the amp option label
         self.assertNotIn('pa_cable_entry_mode.js', body)
 
     def test_linked_arrays_only_when_the_project_has_arrays(self):
@@ -109,18 +110,19 @@ class OneModeAdminTests(_Run, TestCase):
         their_amp = self.amp('Theirs', project=theirs)
         their_array = self.array(self.prediction(project=theirs), 'Their K2')
         self.array(self.prediction(), 'K2 L')                 # so the field is shown
-        response = self.client.post(reverse(ADD), self.admin_post(
-            amp=their_amp.pk, destination='X', speaker_arrays=[their_array.pk]))
-        self.assertEqual(response.status_code, 200)            # the form came back
-        errors = response.context['adminform'].form.errors
-        self.assertIn('amp', errors)
-        self.assertIn('speaker_arrays', errors)
+        for source in (f'amp:{their_amp.pk}', f'rack:{their_amp.location_id}'):
+            response = self.client.post(reverse(ADD), self.admin_post(
+                source=source, destination='X', speaker_arrays=[their_array.pk]))
+            self.assertEqual(response.status_code, 200)        # the form came back
+            errors = response.context['adminform'].form.errors
+            self.assertIn('Select a valid choice', str(errors['source']))
+            self.assertIn('speaker_arrays', errors)
         self.assertFalse(PACableSchedule.objects.filter(project=self.project).exists())
 
     def test_adding_through_the_admin(self):
         arr = self.array(self.prediction(), 'K2 L')
         response = self.client.post(reverse(ADD), self.admin_post(
-            amp=self.amp_a.pk, label=self.zone('HL').pk, speaker_arrays=[arr.pk]))
+            source=f'amp:{self.amp_a.pk}', label=self.zone('HL').pk, speaker_arrays=[arr.pk]))
         self.assertEqual(response.status_code, 302)
         row = PACableSchedule.objects.get(project=self.project)
         self.assertEqual((row.amp, row.amp_location, list(row.speaker_arrays.all())),
@@ -175,6 +177,100 @@ class OneModeAdminTests(_Run, TestCase):
         session['current_project_id'] = self.project.pk
         session.save()
         self.assertEqual(self.client.get(reverse(CHANGELIST)).status_code, 200)
+
+
+class GroupedFromPickerTests(_Run, TestCase):
+    """One <optgroup> per rack: the rack itself, then its amps."""
+
+    def picker(self, url=None):
+        response = self.client.get(url or reverse(ADD))
+        self.assertEqual(response.status_code, 200)
+        return response, response.context['adminform'].form.fields['source'].choices
+
+    def admin_post(self, **data):
+        return OneModeAdminTests.admin_post(self, **data)
+
+    def test_every_amp_on_the_rack_page_is_in_the_picker_in_the_same_order(self):
+        AmpLocation.objects.filter(pk=self.rack.pk).update(sort_order=2)
+        self.amp('SL LA12X #2', rack='SL Racks')
+        self.amp('Amp 01 - Kara L - Top & Mid', rack='House Left')
+        self.amp('Amp 02 - Spare', rack='House Left')
+        AmpLocation.objects.filter(project=self.project, name='House Left').update(sort_order=1)
+        AmpLocation.objects.create(project=self.project, name='Empty rack', sort_order=3)
+        self.amp('Theirs', project=self.make_project('theirs'), rack='House Left')
+
+        rack_page = self.client.get(reverse('admin:planner_amp_changelist')).context
+        expected = [(g['location'].name, [f'rack:{g["location"].pk}']
+                     + [f'amp:{a.pk}' for a in g['amps']])
+                     for g in rack_page['grouped_amps']]
+        _, choices = self.picker()
+        self.assertEqual(choices[0], ('', '---------'))
+        got = [(group, [value for value, _ in options]) for group, options in choices[1:]]
+        self.assertEqual(got, expected)
+        self.assertEqual([g for g, _ in got], ['House Left', 'SL Racks', 'Empty rack'])
+        self.assertEqual(sum(len(v) - 1 for _, v in got), 4)   # not the other project's amp
+
+    def test_option_labels(self):
+        _, choices = self.picker()
+        group, options = choices[1]
+        self.assertEqual(group, 'SL Racks')
+        self.assertEqual([label for _, label in options],
+                         ['SL Racks \u2014 whole rack', 'SL LA12X #1 \u00b7 TEST4'])
+
+    def test_picking_the_rack_saves_the_rack_only(self):
+        response = self.client.post(reverse(ADD), self.admin_post(
+            source=f'rack:{self.rack.pk}', destination='KIVA DELAY 2 & 3'))
+        self.assertEqual(response.status_code, 302)
+        row = PACableSchedule.objects.get(project=self.project)
+        self.assertEqual((row.amp, row.amp_location), (None, self.rack))
+        self.assertEqual(row.from_display, 'SL Racks')
+
+    def test_picking_an_amp_saves_the_amp_and_its_rack(self):
+        response = self.client.post(reverse(ADD), self.admin_post(
+            source=f'amp:{self.amp_a.pk}', destination='KIVA DELAY 2 & 3'))
+        self.assertEqual(response.status_code, 302)
+        row = PACableSchedule.objects.get(project=self.project)
+        self.assertEqual((row.amp, row.amp_location), (self.amp_a, self.rack))
+
+    def test_a_new_run_needs_a_from(self):
+        response = self.client.post(reverse(ADD), self.admin_post(destination='X'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Pick the amp, or the amp rack',
+                      str(response.context['adminform'].form.errors['source']))
+
+    def test_the_change_form_shows_what_the_run_has(self):
+        amp_row = self.text_cable(destination='A', amp=self.amp_a)
+        rack_row = self.text_cable(destination='B', amp_location=self.rack)
+        old_row = self.text_cable(destination='Amp 01 typed before')
+        change = 'admin:planner_pacableschedule_change'
+        for row, initial in ((amp_row, f'amp:{self.amp_a.pk}'),
+                             (rack_row, f'rack:{self.rack.pk}'), (old_row, None)):
+            response, _ = self.picker(reverse(change, args=[row.pk]))
+            self.assertEqual(response.context['adminform'].form['source'].value(), initial)
+
+    def test_switching_an_amp_run_to_the_whole_rack_clears_the_amp(self):
+        row = self.text_cable(destination='A', amp=self.amp_a)
+        response = self.client.post(
+            reverse('admin:planner_pacableschedule_change', args=[row.pk]),
+            self.admin_post(source=f'rack:{self.rack.pk}', destination='A'))
+        self.assertEqual(response.status_code, 302)
+        row.refresh_from_db()
+        self.assertEqual((row.amp, row.amp_location), (None, self.rack))
+
+    def test_a_viewer_reads_the_from_as_text(self):
+        row = self.text_cable(destination='A', amp=self.amp_a)
+        viewer = get_user_model().objects.create_user('vi', password='pw', is_staff=True)
+        ProjectMember.objects.create(user=viewer, project=self.project, role='viewer',
+                                     invited_by=self.user)
+        self.client.force_login(viewer)
+        session = self.client.session
+        session['current_project_id'] = self.project.pk
+        session.save()
+        response = self.client.get(reverse('admin:planner_pacableschedule_change', args=[row.pk]))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertNotIn('name="source"', body)
+        self.assertIn('SL LA12X #1', body)
 
 
 class SoundvisionReimportTests(_Run, TestCase):

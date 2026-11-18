@@ -103,7 +103,11 @@ class PaCableFormBrowserTests(ConnectionFixtures, StaticLiveServerTestCase):
 
     def test_a_new_run_saves_from_the_form(self):
         page = self.open(reverse('admin:planner_pacableschedule_add'))
-        page.select_option('#id_amp', label='SL Racks · SL LA12X #1')
+        groups = page.eval_on_selector_all(
+            '#id_source optgroup',
+            'gs => gs.map(g => [g.label, [...g.children].map(o => o.textContent)])')
+        self.assertEqual(groups, [['SL Racks', ['SL Racks \u2014 whole rack', 'SL LA12X #1 \u00b7 TEST4']]])
+        page.select_option('#id_source', label='SL LA12X #1 \u00b7 TEST4')
         page.fill('#id_destination', 'KIVA DELAY 2 & 3')
         page.fill('#id_length', '100')
         page.click('input[name="_save"]')
@@ -113,6 +117,18 @@ class PaCableFormBrowserTests(ConnectionFixtures, StaticLiveServerTestCase):
                          (self.amp_a, self.amp_a.location, 'KIVA DELAY 2 & 3'))
         page = self.open(reverse('admin:planner_pacableschedule_changelist'))
         self.shot(page, 'pa_cable_list.png')
+        self.assertEqual(self.errors, [])
+
+    def test_the_whole_rack_saves_from_the_form(self):
+        page = self.open(reverse('admin:planner_pacableschedule_add'))
+        page.select_option('#id_source', label='SL Racks \u2014 whole rack')
+        page.fill('#id_destination', 'KIVA DELAY 2 & 3')
+        page.fill('#id_length', '100')
+        page.click('input[name="_save"]')
+        page.wait_for_load_state('networkidle')
+        run = self.project.pacableschedule_set.get()
+        self.assertEqual((run.amp, run.amp_location), (None, self.amp_a.location))
+        self.assertEqual(page.input_value('#id_source'), f'rack:{self.amp_a.location_id}')
         self.assertEqual(self.errors, [])
 
     def test_the_form_fits_a_phone(self):
