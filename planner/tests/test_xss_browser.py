@@ -285,11 +285,19 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
             P1Processor.objects.create(system_processor=proc)
             P1Input.objects.filter(p1_processor__system_processor=proc, input_type='AES',
                                    channel_number=1).update(label=QUOTED)
+        # An amp input naming no output: an "Unlinked feeds" box of its text.
+        from planner.models import Amp, AmpChannel, AmpLocation
+        amp = Amp.objects.create(project=self.project, name='Amp 1', location=AmpLocation.objects.create(
+            project=self.project, name='Amp Racks'))
+        AmpChannel.objects.update_or_create(amp=amp, channel_number=1,
+                                            defaults={'aes_input': NAME})
         page = self.open(reverse('planner:wiring_diagram'))
         page.wait_for_selector('svg.wd-svg')
         self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'device box')
         self.assert_text(page, 'svg.wd-svg .wd-label', QUOTED, 'ambiguous edge label')
         self.assert_text(page, '.wd-warnings li', QUOTED, 'warnings panel')
+        self.assert_text(page, 'svg.wd-svg .wd-box.unlinked title', f'AES: {NAME}', 'unlinked feed box')
+        self.assert_text(page, 'svg.wd-svg .wd-col', 'Unlinked feeds', 'feeds column')
         page.click('#wd-toggle')
         self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'after the toggle')
         self.assertFalse(page.evaluate("document.getElementById('wd-scroll').classList.contains('fit')"))

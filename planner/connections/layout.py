@@ -5,16 +5,23 @@
 100%). No Django, no queries and no markup, so the screen view (``svg``) and a
 later 11x17 PDF draw the same picture.
 
-Six fixed columns, signal flowing left to right:
+Seven fixed columns, signal flowing left to right:
 
-  0 I/O inputs    an I/O device's inputs box, "<name> · inputs"
+  0 I/O inputs      an I/O device's inputs box, "<name> · inputs"
   1 Console
-  2 I/O outputs   the same device's outputs box, "<name> · outputs"
-  3 Processor     also text a feed names that matched no single processor
-  4 Amp           grouped by amp location, in the locations' order; amps with
-                  none, and the "not linked" amp rack, last under "No location"
-  5 Speaker       speaker arrays; where a run goes, as typed (a plain
-                  "destination" box); text no single array matched (unlinked)
+  2 I/O outputs     the same device's outputs box, "<name> · outputs"
+  3 Processor       also text a console / I/O output names that matched no
+                    single processor input. Hidden when there is no processor.
+  4 Unlinked feeds  amp input text that names no single output ("AVB 1",
+                    "AES: Left"), one box per field and text, the reason below
+                    it. Hidden when there is none.
+  5 Amp             grouped by amp location, in the locations' order; amps
+                    with none, and the "not linked" amp rack, last under
+                    "No location"
+  6 Speaker         speaker arrays; where a run goes, as typed (a plain
+                    "destination" box); text no single array matched
+                    (unlinked); arrays no cable reaches last, under
+                    "Not cabled"
 
 An I/O device is split so a console bus feeding a stage-box output runs left
 to right like everything else; one with ports on one side only gets that box.
@@ -33,8 +40,10 @@ right of the source, in a label zone as wide as the gap's longest label.
 from dataclasses import dataclass, field
 from statistics import mean
 
-IO_IN, CONSOLE, IO_OUT, PROCESSOR, AMP, SPEAKER = range(6)
-COLUMN_TITLES = ('I/O inputs', 'Console', 'I/O outputs', 'Processors', 'Amps', 'Speakers')
+IO_IN, CONSOLE, IO_OUT, PROCESSOR, FEEDS, AMP, SPEAKER = range(7)
+COLUMN_TITLES = ('I/O inputs', 'Console', 'I/O outputs', 'Processors', 'Unlinked feeds',
+                 'Amps', 'Speakers')
+HIDDEN_WHEN_EMPTY = (PROCESSOR, FEEDS)
 
 BOX_W = 200
 HEAD = 34           # title + subtitle above the first port slot
@@ -51,6 +60,8 @@ LABEL_MAX = 300
 SWEEPS = 4
 
 NO_LOCATION = 'No location'
+NOT_CABLED = 'not_cabled'
+NOT_CABLED_LABEL = 'Not cabled'
 
 
 @dataclass(eq=False)          # identity: boxes and segments point at each other
@@ -86,6 +97,7 @@ class Group:
     key: str
     label: str
     rank: int
+    column: int = AMP
     x: float = 0
     y: float = 0
 
@@ -117,7 +129,7 @@ class Route:
 class Layout:
     width: float
     height: float
-    columns: list           # [(title, x, width)]
+    columns: list           # [(title, x, width)], shown columns only
     boxes: list             # real boxes only
     groups: list
     routes: list
@@ -193,10 +205,15 @@ class _Builder:
         if kind == 'device':
             return self.device_box(node, _io_side(edge, end) if edge else 'in')
         if kind == 'unlinked':
-            column = SPEAKER if edge and 'speaker' in edge.get('transports', ()) else PROCESSOR
+            if node.get('feed'):
+                column = FEEDS
+            elif edge and 'speaker' in edge.get('transports', ()):
+                column = SPEAKER
+            else:
+                column = PROCESSOR
+            sub = node.get('reason') or ('ambiguous' if node.get('ambiguous') else 'not linked')
             return self.box(node_id, label=node['label'], column=column, kind=kind,
-                            sub='ambiguous' if node.get('ambiguous') else 'not linked',
-                            style='unlinked', node=node_id)
+                            sub=sub, style='unlinked', node=node_id)
         if kind in ('amp', 'amp_location', 'amp_rack'):
             group = _location_group(node)
             if group is None:
@@ -238,9 +255,14 @@ class _Builder:
                 self.not_drawn.append(edge)
                 continue
             self.edges.append((edge, src, dst))
+        # A column with no box of its own is left out: no title, no width, and
+        # no dummies, so lines cross the gap where it would be.
+        self.hidden = {c for c in HIDDEN_WHEN_EMPTY if not self.columns[c]}
+        for edge, src, dst in self.edges:
             chain = [src] + [self.box(f"{edge['id']}~{c}", label='', column=c, kind='dummy',
                                       style='dummy', h=SLOT)
-                             for c in range(src.column + 1, dst.column)] + [dst]
+                             for c in range(src.column + 1, dst.column)
+                             if c not in self.hidden] + [dst]
             for i, (a, b) in enumerate(zip(chain, chain[1:])):
                 seg = Segment(edge, a, b, first=i == 0)
                 a.outs.append(seg)
@@ -250,6 +272,11 @@ class _Builder:
         ranked = sorted(self.groups.items(),
                         key=lambda kv: (kv[1][1] is None, kv[1][1] or 0, kv[1][0].casefold(), kv[0]))
         self.groups = {key: Group(key, label, rank) for rank, (key, (label, _)) in enumerate(ranked)}
+        # Speaker arrays no cable reaches go last, under their own header.
+        for box in self.columns[SPEAKER]:
+            if box.kind == 'speaker_array' and not box.ins and not box.outs:
+                box.group = NOT_CABLED
+                self.groups.setdefault(NOT_CABLED, Group(NOT_CABLED, NOT_CABLED_LABEL, 1, SPEAKER))
 
     # -- order ---------------------------------------------------------------
 
@@ -298,7 +325,8 @@ class _Builder:
             group = object()
             for box in column:
                 header = 0
-                if box.column == AMP and not box.dummy and box.group != group:
+                if (not box.dummy and box.group != group
+                        and (box.column == AMP or box.group is not None)):
                     group = box.group
                     header = GROUP_HEAD
                 wanted = [s.from_box.slot_y(s) - (box.slot_y(s) - box.y) for s in box.ins
@@ -315,11 +343,13 @@ class _Builder:
         x = MARGIN
         self.column_x = []
         for c, column in enumerate(self.columns):
+            self.column_x.append(x)
+            if c in self.hidden:
+                continue
             for box in column:
                 box.x = x
                 if box.dummy:
                     box.w = BOX_W
-            self.column_x.append(x)
             if c == len(self.columns) - 1:
                 break
             gap = [s for s in self.segments if s.from_box.column == c]
@@ -335,16 +365,16 @@ class _Builder:
                     seg.track_x = track0
             x = track0 + max(len(bends) - 1, 0) * TRACK + 2 * LABEL_PAD
         for group in self.groups.values():
-            group.x = self.column_x[AMP]
+            group.x = self.column_x[group.column]
 
     # -- routes ----------------------------------------------------------------
 
-    @staticmethod
-    def label(edge):
+    def label(self, edge):
         text = edge.get('label') or ''
         if edge.get('unlinked') or edge.get('ambiguous'):
             text = text.rstrip(' →')        # "Out 4 →": the far end is the "?" box
-            source = _edge_text(edge)
+            frm = self.nodes.get(edge['from'], {})
+            source = frm['label'] if frm.get('feed') else _edge_text(edge)
             text = ' · '.join(x for x in (f'? {source}' if source else '?', text) if x)
         return text
 
@@ -413,9 +443,10 @@ def layout(graph):
     boxes = [box for column in b.columns for box in column if not box.dummy]
     width = b.column_x[-1] + BOX_W + MARGIN
     height = max([box.y + box.h for box in boxes] + [MARGIN + TITLE_H]) + MARGIN
-    columns = [(title, b.column_x[c], BOX_W) for c, title in enumerate(COLUMN_TITLES)]
+    columns = [(title, b.column_x[c], BOX_W) for c, title in enumerate(COLUMN_TITLES)
+               if c not in b.hidden]
     groups = sorted((g for g in b.groups.values()
-                     if any(box.group == g.key for box in b.columns[AMP])),
-                    key=lambda g: g.rank)
+                     if any(box.group == g.key for box in b.columns[g.column])),
+                    key=lambda g: (g.column, g.rank))
     return Layout(width, height, columns, boxes, groups, routes,
                   [e['id'] for e in b.not_drawn])

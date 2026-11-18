@@ -8,6 +8,7 @@ Run with::
 from django.test import SimpleTestCase, TestCase
 
 from planner.connections import layout as L
+from planner.connections import svg
 from planner.connections.graph import project_graph
 from planner.models import AmpLocation, ConsoleAuxOutput
 from planner.tests.connection_fixtures import ConnectionFixtures
@@ -189,6 +190,137 @@ class WiringLayoutTests(WiringShow, TestCase):
     def test_the_layout_needs_no_database(self):
         with self.assertNumQueries(0):
             L.layout(self.graph)
+
+
+class UnlinkedFeedsTests(ConnectionFixtures, TestCase):
+    """Amp input text that names no single output: the "Unlinked feeds" column."""
+
+    def draw(self):
+        self.graph = project_graph(self.project)
+        self.lay = L.layout(self.graph)
+        self.boxes = {b.id: b for b in self.lay.boxes}
+        return self.lay
+
+    def titles(self):
+        return [title for title, _, _ in self.lay.columns]
+
+    def feeds(self):
+        return sorted((b for b in self.lay.boxes if b.column == L.FEEDS), key=lambda b: b.label)
+
+    def test_no_processor_project_has_no_processors_column_and_its_feeds_are_unlinked(self):
+        amp = self.amp('SL Amp 1')
+        self.amp_channel(amp, 1, avb_stream='1')
+        self.amp_channel(amp, 2, aes_input='Left')
+        self.amp_channel(amp, 3, analog_input='Center')
+        self.draw()
+        self.assertNotIn('Processors', self.titles())
+        self.assertEqual(self.titles()[-3:], ['Unlinked feeds', 'Amps', 'Speakers'])
+        self.assertFalse([b for b in self.lay.boxes if b.column == L.PROCESSOR])
+        self.assertEqual([(b.label, b.sub, b.style) for b in self.feeds()], [
+            ('AES: Left', 'not matched to an output', 'unlinked'),
+            ('AVB 1', 'no processor in project', 'unlinked'),
+            ('Analog: Center', 'not matched to an output', 'unlinked')])
+        self.assertEqual(len(self.lay.routes), 3)
+        for route in self.lay.routes:
+            self.assertEqual(route.to_node, f'amp:{amp.pk}')
+            self.assertTrue(route.question)
+            self.assertTrue(route.label.startswith(('? AVB 1', '? AES: Left', '? Analog: Center')),
+                            route.label)
+
+    def test_the_feeds_column_sits_immediately_left_of_the_amps(self):
+        self.p1('SL P1')
+        amp = self.amp('SL Amp 1')
+        self.amp_channel(amp, 1, avb_stream='AVB 40')
+        self.draw()
+        titles = self.titles()
+        self.assertEqual(titles.index('Unlinked feeds') + 1, titles.index('Amps'))
+        self.assertEqual(titles.index('Processors') + 1, titles.index('Unlinked feeds'))
+        x = {title: x for title, x, _ in self.lay.columns}
+        self.assertLess(x['Processors'], x['Unlinked feeds'])
+        self.assertLess(x['Unlinked feeds'], x['Amps'])
+        [feed] = self.feeds()
+        self.assertEqual((feed.label, feed.sub, feed.x),
+                         ('AVB 40', 'not matched to a processor output', x['Unlinked feeds']))
+
+    def test_the_same_text_on_two_channels_is_one_node(self):
+        a, b = self.amp('SL Amp 1'), self.amp('SL Amp 2')
+        self.amp_channel(a, 1, aes_input='Left')
+        self.amp_channel(a, 2, aes_input=' left ')         # the same text, normalised
+        self.amp_channel(b, 1, aes_input='Left')
+        self.amp_channel(b, 2, analog_input='Left')        # another field: its own node
+        self.draw()
+        self.assertEqual([f.label for f in self.feeds()], ['AES: Left', 'Analog: Left'])
+        aes = next(f for f in self.feeds() if f.label == 'AES: Left')
+        self.assertEqual(sorted(r.to_node for r in self.lay.routes if r.from_node == aes.node),
+                         sorted([f'amp:{a.pk}', f'amp:{b.pk}']))
+        feed_nodes = [n for n in self.graph['nodes'] if n.get('feed')]
+        self.assertEqual(len(feed_nodes), 2)
+
+    def test_labels_are_never_a_bare_number(self):
+        amp, other = self.amp('SL Amp 1'), self.amp('SL Amp 2')
+        self.amp_channel(amp, 1, avb_stream='1')
+        self.amp_channel(amp, 2, avb_stream='12')
+        self.amp_channel(amp, 3, aes_input='3')
+        self.amp_channel(amp, 4, analog_input='4')
+        self.amp_channel(other, 1, avb_stream='AVB 7')     # already says AVB: not "AVB AVB 7"
+        self.draw()
+        labels = sorted(f.label for f in self.feeds())
+        self.assertEqual(labels, ['AES: 3', 'AVB 1', 'AVB 12', 'AVB 7', 'Analog: 4'])
+        for label in labels + [r.label for r in self.lay.routes]:
+            self.assertNotRegex(label.lstrip('? '), r'^\d+$')
+
+    def test_an_ambiguous_feed_counts_its_sources_and_warns_with_them(self):
+        self.p1('SL P1')
+        self.p1('SR P1')
+        amp = self.amp('SL Amp 1')
+        self.amp_channel(amp, 1, avb_stream='1')            # AVB 1 on both, neither in use
+        self.draw()
+        [feed] = self.feeds()
+        self.assertEqual((feed.label, feed.sub), ('AVB 1', '2 possible sources'))
+        from planner.views_wiring import warnings_for
+        [warning] = [w for w in warnings_for(self.graph, self.lay) if w['kind'] == 'ambiguous']
+        self.assertEqual(warning['edge'], f'AVB 1 → SL Amp 1')
+        self.assertEqual(sorted(warning['candidates']), ['SL P1 AVB 1', 'SR P1 AVB 1'])
+
+    def test_with_no_unlinked_feed_the_column_is_hidden(self):
+        self.p1('SL P1')
+        self.amp('SL Amp 1')
+        self.draw()
+        self.assertNotIn('Unlinked feeds', self.titles())
+        self.assertIn('Processors', self.titles())
+
+    def test_a_line_crosses_a_hidden_column_with_no_lane_of_its_own(self):
+        box = self.device('Stage Box')
+        self.device_output(box, 1, 'Fill')
+        amp = self.amp('FF Amp')
+        self.amp_channel(amp, 1, analog_input='Fill')       # I/O output -> amp, no processor
+        self.draw()
+        self.assertEqual(self.titles(), ['I/O inputs', 'Console', 'I/O outputs', 'Amps', 'Speakers'])
+        [route] = [r for r in self.lay.routes if r.to_node == f'amp:{amp.pk}']
+        xs = [x for x, _ in route.points]
+        self.assertEqual(xs, sorted(xs))
+        self.assertEqual(route.points[-1][0], self.boxes[f'amp:{amp.pk}'].x)
+
+
+class NotCabledTests(WiringShow, TestCase):
+
+    def test_arrays_with_no_cable_sit_last_under_not_cabled(self):
+        pred = self.prediction(file_name='more.pdf')
+        spare = self.array(pred, 'Spare Sub')
+        lay = self.draw()
+        speakers = sorted((b for b in lay.boxes if b.column == L.SPEAKER), key=lambda b: b.y)
+        self.assertEqual(speakers[-1].node, f'speaker_array:{spare.pk}')
+        self.assertEqual(speakers[-1].group, L.NOT_CABLED)
+        cabled = self.boxes[f'speaker_array:{self.k2.pk}']
+        self.assertIsNone(cabled.group)
+        [header] = [g for g in lay.groups if g.key == L.NOT_CABLED]
+        self.assertEqual((header.label, header.x), ('Not cabled', speakers[-1].x))
+        self.assertLess(cabled.y, header.y)
+        self.assertLessEqual(header.y + L.GROUP_HEAD, speakers[-1].y + 0.01)
+        self.assertIn('>Not cabled<', svg.render(lay))
+
+    def test_no_header_when_every_array_is_cabled(self):
+        self.assertFalse([g for g in self.draw().groups if g.key == L.NOT_CABLED])
 
 
 class LayoutOfAHandBuiltGraphTests(SimpleTestCase):
