@@ -274,7 +274,10 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
                   F._row14('300', '8:00 AM', '8:45 AM', '0:45:00', 'Opening ' + QUOTED),
                   F._row14('301', desc='Max enters ' + NAME, speaker='Max Pine'),
                   F._row14('302', desc='Ola enters', speaker='Ola Brand ' + NAME, bsm=QUOTED),
-                  F._row14('303', desc='Ned joins', speaker='Ned Quill')]]
+                  F._row14('303', desc='Ned joins', speaker='Ned Quill'),
+                  # A company after "Name," and an upper-case note: grey marks.
+                  F._row14('304', desc='Ola returns', speaker='Ola Brand, Acme Health <b>x</b>'),
+                  F._row14('305', desc='Doors', speaker='ROOM AND FOYER')]]
         pending = importer.stage_upload(day, F.build_pdf(pages), NAME + '.pdf', self.owner)
         importer.confirm(pending)
         ShowflowPerson.objects.filter(day=day, display_name='Max Pine').update(display_name=NAME)
@@ -294,6 +297,9 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
             ShowflowImport.objects.get(day=day).rows.get(line_no='301').pk))
         self.assert_text(page, '#mp-walk-list .mp-wp-editor', NAME, 'row editor')
         self.assertEqual(0, page.evaluate("document.querySelectorAll('#mp-walk-list mark img, #mp-walk-list b img').length"))
+        self.assert_text(page, '#mp-walk-list mark.company', 'Acme Health <b>x<', 'company mark')   # "/" ends the company
+        self.assert_text(page, '#mp-walk-list mark.note', 'ROOM AND FOYER', 'note mark')
+        self.assertEqual(0, page.evaluate("document.querySelectorAll('#mp-walk-list mark b').length"))
 
     def test_day_and_project_names_on_the_dashboard(self):
         day = {'date': '2026-03-01', 'name': NAME, 'mic_count': 3, 'planned': True}

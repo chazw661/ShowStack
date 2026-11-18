@@ -89,6 +89,20 @@ ORG_WORDS = (
     | {'feud', 'keynote', 'reporting', 'powered', 'game', 'session', 'our', 'your'}
     | {'product', 'management', 'inc', 'llc', 'group', 'summit'}
 )
+# Words that make a Speaker-cell item a company, for "Name, Company" lists
+# (Client H "Name, Company Name, Company"). Speaker cells only: description
+# lines keep ORG_WORDS.
+COMPANY_WORDS = ORG_WORDS | {
+    'cancer', 'center', 'centers', 'centre', 'network', 'networks', 'oncology', 'specialists',
+    'solutions', 'labs', 'systems', 'technologies', 'partners', 'hospital', 'clinic', 'university',
+    'institute', 'foundation', 'corp', 'corporation', 'company', 'bank', 'associates', 'medical',
+    'healthcare',
+}
+# Client H: an upper-case run in a Speaker cell of a file that writes names in
+# mixed case is a note ("ROOM AND FOYER", "MISSING SLIDES"); one ending in ":"
+# that opens the cell labels the list after it ("IN SPEAKER SEATING ORDER:").
+_CAPS_WORD = re.compile(r"[A-Z][A-Z'’-]*")
+LABEL_MAX_WORDS = 6
 # Client A "Name, President & CEO"; Client D "Title, Company, Name" welcomes
 TITLE_WORDS = {
     'president', 'ceo', 'cfo', 'coo', 'cto', 'cmo', 'cio', 'chair', 'chairman', 'chairwoman',
@@ -624,7 +638,84 @@ def _speaker_text(text):
     return _STAGE_NOTES.sub(_blank, text)
 
 
-def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=None):
+def _caps(tok):
+    return bool(_CAPS_WORD.fullmatch(_clean_token(tok)))
+
+
+def names_mixed_case(rows):
+    """Whether a file's Speaker cells write names in mixed case ("Ann Lee"),
+    so an upper-case run there is a note, not a name."""
+    titled = caps = 0
+    for row in rows:
+        for tok in _tokens(row['speaker']):
+            w = _clean_token(tok)
+            if len(w) < 2 or not w.isalpha() or not w[0].isupper():
+                continue
+            if w.isupper():
+                caps += 1
+            else:
+                titled += 1
+    return titled > caps
+
+
+def _notes(toks, roster, caps_notes):
+    """{first token: end} of the cell's notes: an upper-case list label
+    opening the cell, and (``caps_notes``) every other upper-case run of two
+    or more words. A run with a known person in it, in any case, is not a
+    note: the person is read as usual."""
+    def known(a, b):
+        for j in range(a, b):
+            name, used = roster.match_at(toks, j)
+            if name and j + used <= b:
+                return True
+        return False
+
+    out = {}
+    j = 0
+    while j < min(len(toks), LABEL_MAX_WORDS) and _caps(toks[j]):
+        if toks[j].endswith(':'):
+            # A list follows: "SEATING ORDER: Ann Lee", not "VIDEO: 356 - Title".
+            if j + 1 < len(toks) and _is_name_word(toks[j + 1]) and not known(0, j + 1):
+                out[0] = j + 1
+            break
+        j += 1
+    if caps_notes:
+        i = out.get(0, 0)
+        while i < len(toks):
+            j = i
+            while j < len(toks) and toks[j] not in SEPARATORS and _caps(toks[j]):
+                j += 1
+            if j - i >= 2 and not known(i, j):
+                out[i] = j
+            i = max(j, i + 1)
+    return out
+
+
+def _company_list(toks, roster, labelled):
+    """Whether the cell is a "Name, Company" list (Client H): a company word,
+    one word after a comma that follows a full name, or, under a list label,
+    four or more words after a comma (a company with the next name glued on).
+    A label alone is not enough: "PANEL: Ann Lee, Bo Chen" is names."""
+    parts = [[]]
+    for tok in toks:
+        if tok == ',':
+            parts.append([])
+        elif tok not in SEPARATORS and tok not in PUNCT and _clean_token(tok):
+            parts[-1].append(_clean_token(tok))
+    for k in range(1, len(parts)):
+        words = parts[k]
+        if not words or words[0].lower() in TITLE_WORDS or words[0].lower() in NAME_SUFFIXES:
+            continue
+        if any(w.lower() in COMPANY_WORDS for w in words) or (labelled and len(words) >= 4):
+            return True
+        if len(words) == 1 and len(parts[k - 1]) >= 2 and _is_name_word(words[0]) \
+                and not roster.match_at(words, 0)[0]:
+            return True
+    return False
+
+
+def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=None,
+               caps_notes=False, marks=None):
     """Names in a Speaker/Titles cell, and the text no name accounts for.
 
     Speaker cells run names together without separators ("Dana Able Chris
@@ -641,11 +732,21 @@ def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=Non
     ``spans``: a list to append ``(name, start, end)`` to for each name found,
     the characters of ``text`` its words came from; ``leftover_spans`` the
     same, ``(start, end)``, for each leftover.
+
+    Notes (``_notes``) are passed over. In a "Name, Company" list a comma
+    after a name starts that person's company, as "Name -" does; ``marks``
+    gets ``(start, end, 'note' | 'company')`` for each.
     """
     found = _token_spans(_speaker_text(text))
     toks = [tok for tok, _, _ in found]
     names, leftovers, chunk = [], [], []
     chunk_at = [0]     # toks index of the chunk's first word
+    notes = _notes(toks, roster, caps_notes)
+    companies = _company_list(toks, roster, 0 in notes)
+
+    def marked(kind, a, b):
+        if marks is not None and a < b:
+            marks.append((found[a][1], found[b - 1][2], kind))
 
     def named(name, a, b):
         """``name`` came from toks[a:b] (None: a phrase the user rejected)."""
@@ -663,10 +764,15 @@ def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=Non
     # The chunk follows "Name -": an affiliation ("Alex Host - Acme AI Robin
     # Cole - Initech"), possibly with the next person's name at its end.
     after_dash = [False]
+    dash_from = [None]   # "Name - Acme AI": where the words the title skip passed over start
+    dash_to = [None]
     named_last = [False]
 
     def close_chunk(bounded_end=True):
         if not chunk:
+            if after_dash[0] and dash_from[0] is not None:
+                marked('company', dash_from[0], dash_to[0])   # "Name - Acme" ends the cell
+            dash_from[0] = None
             bounded[0] = bounded_end
             return
         words = [_clean_token(t) for t in chunk]
@@ -674,14 +780,19 @@ def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=Non
         alone = bounded[0] and bounded_end
         digits = any(ch.isdigit() for ch in ' '.join(words))
         dash, after_dash[0] = after_dash[0], False
+        start, dash_from[0] = (dash_from[0] if dash and dash_from[0] is not None else at), None
         named_last[0] = True
         if dash and not digits:
             if (discover and bounded_end and len(words) >= 3 and _is_name_word(words[-2])
-                    and _is_name_part(words[-1])):
+                    and _is_name_part(words[-1])
+                    and not any(w.lower() in COMPANY_WORDS for w in words[-2:])):
                 named(roster.add(' '.join(words[-2:])), at + len(words) - 2, at + len(words))
+                marked('company', start, at + len(words) - 2)
             elif len(words) > 4:
                 left_over(' '.join(chunk).strip(' -–'), at, at + len(chunk))
                 named_last[0] = False
+            else:
+                marked('company', start, at + len(chunk))
         elif (discover and len(words) == 3 and _honorific(words[0])
                 and all(_is_name_part(w) for w in words[1:])):
             named(roster.add(' '.join(words)), at, at + 3)   # "Dr. Sol Tate" mid-cell
@@ -703,6 +814,12 @@ def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=Non
 
     i = 0
     while i < len(toks):
+        if i in notes:
+            close_chunk()
+            marked('note', i, notes[i])
+            after_dash[0] = named_last[0] = False
+            i = notes[i]
+            continue
         if refs is not None and not chunk:
             ref, used = refs.short_at(toks, i)
             if used:
@@ -717,6 +834,9 @@ def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=Non
         if name and used == 1 and chunk:
             name = None  # "Tess St. Clair": a first name mid-name is not that person
         if name:
+            if not chunk:
+                after_dash[0] = False   # "Ann Lee, Bo Chen": a name, not Ann's company
+                dash_from[0] = None
             close_chunk(bounded_end=False)
             named(name, i, i + used)
             roster.found.add(name)
@@ -742,13 +862,14 @@ def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=Non
                         else:
                             break
                     after_dash[0] = toks[i] in ('-', '–')
+                    dash_from[0], dash_to[0] = (i + 1, j) if after_dash[0] else (None, None)
                     i = j
             bounded[0] = False
             named_last[0] = True
             continue
         if toks[i] in SEPARATORS or toks[i] in ('-', '–', '(', ')'):
             close_chunk()
-            if toks[i] in ('-', '–') and named_last[0]:
+            if (toks[i] in ('-', '–') or (toks[i] == ',' and companies)) and named_last[0]:
                 after_dash[0] = True
         else:
             if chunk and _honorific(toks[i]):
@@ -927,6 +1048,8 @@ class Analysis:
     span: tuple = (None, None)
     # Speaker-cell text no name accounts for: row index -> [(start, end)].
     leftovers: dict = field(default_factory=dict)
+    # Speaker-cell notes and companies: row index -> [(start, end, kind)].
+    marks: dict = field(default_factory=dict)
 
 
 def _next_segment(times, row):
@@ -985,9 +1108,10 @@ def analyse(rows, crew=None, known=(), rejected=()):
             if name is not None:
                 mention(name, i)
     titled = [i for i, row in enumerate(rows) if _TITLES_PREFIX.match(row['speaker'] or '')]
+    caps_notes = names_mixed_case(rows)
     for i in titled + [i for i in range(len(rows)) if i not in titled]:
         if rows[i]['speaker']:
-            split_cell(rows[i]['speaker'], roster, discover=True)
+            split_cell(rows[i]['speaker'], roster, discover=True, caps_notes=caps_notes)
 
     if crew is None:
         crew = detect_crew(rows, roster)
@@ -1002,6 +1126,7 @@ def analyse(rows, crew=None, known=(), rejected=()):
     refs = Refs(roster)
     spans = {}            # display name -> [(row, column, start, end)]: where its words are
     leftover_at = {}      # row -> [(start, end)] of Speaker-cell leftovers
+    marks_at = {}         # row -> [(start, end, kind)] of Speaker-cell notes and companies
     for i, row in enumerate(rows):
         refs.row = i
         for raw in _welcome_names(row['description'], speaker_text):
@@ -1013,11 +1138,13 @@ def analyse(rows, crew=None, known=(), rejected=()):
             if place:
                 spans.setdefault(name, []).append((i, 'description') + place)
         if row['speaker']:
-            cell, rest = [], []
+            cell, rest, marks = [], [], []
             names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs, spans=cell,
-                                          leftover_spans=rest)
+                                          leftover_spans=rest, caps_notes=caps_notes, marks=marks)
             if leftovers:
                 leftover_at[i] = rest
+            if marks:
+                marks_at[i] = marks
             for name, start, end in cell:
                 spans.setdefault(name, []).append((i, 'speaker', start, end))
         else:
@@ -1103,7 +1230,8 @@ def analyse(rows, crew=None, known=(), rejected=()):
         known_t = [t.minute for t in times if t.minute is not None]
         span = (min(known_t), max(known_t)) if known_t else (None, None)
     return Analysis(times=times, people=people, events=events, flags=_dedupe(flags),
-                    crew=list(crew), segments=segments, span=span, leftovers=leftover_at)
+                    crew=list(crew), segments=segments, span=span, leftovers=leftover_at,
+                    marks=marks_at)
 
 
 def _brought_on(text, roster):

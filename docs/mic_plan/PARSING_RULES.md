@@ -108,6 +108,24 @@ below is a placeholder, and the test fixture
 - After "Name -" comes an affiliation ("Alex Host - Acme AI Robin Cole -
   Initech"). It is skipped, and a trailing capitalised pair in it is the next
   person.
+- "Name, Company" lists (Client H): after "Name," comes a company, read as
+  after "Name -" ("Ann Lee, Acme Bo Chen, Coast Health Cy Dunn"). Only in a
+  cell shaped like one: a company word (`COMPANY_WORDS`: Health, Network,
+  Solutions, Cancer Center...), one word after a comma that follows a full
+  name ("Ann Lee, Acme"), or, under a list label, four or more words after a
+  comma. "Ann Lee, Bo Chen, Cy Dunn" is still three people. A trailing pair
+  with a company word in it ("Coast Cancer Specialists") is never a person.
+- Upper-case notes (Client H): in a file whose Speaker cells write names in
+  mixed case (more mixed-case words than upper-case ones), a run of two or
+  more upper-case words is a note, not a name ("ROOM AND FOYER", "MISSING
+  SLIDES"). A run that holds a known person, in any case, is that person. One
+  upper-case word ("ACME Health") is not a note. A file that writes names in
+  capitals keeps reading them.
+- A list label opening the cell (up to six upper-case words ending in ":"
+  with a name after it: "IN SPEAKER SEATING ORDER: Ann Lee") is passed over,
+  in any file. "VIDEO: 356 - Title" is not a label.
+- Notes and companies are not flagged: the walkthrough shows them grey, with
+  no lock. A row with a note keeps "Add people from this line".
 - A first name on its own doesn't match in the middle of a name, so "Tess
   St. Clair" is never read as Clair Dunn.
 - An all-caps name ("ROBIN COLE" in a VOG line) is shown in title case.

@@ -196,7 +196,9 @@
     }
 
     // -- One panel -------------------------------------------------------------
-    // A cell's text with its marks: name words, leftover text.
+    // A cell's text with its marks: name words, leftover text, notes, companies.
+    var MARK_TITLES = {leftover: 'Not a person ShowStack recognised', note: 'A note, not a person',
+                       company: 'A company, not a person', name: 'Read as a name'};
     function cellText(text, marks) {
         var out = el('span', 'txt');
         var cuts = marks.slice().sort(function (a, b) { return a.start - b.start; });
@@ -206,7 +208,7 @@
             if (m.start > at) out.appendChild(document.createTextNode(text.slice(at, m.start)));
             var mk = el('mark', 'mp-mk ' + m.kind, text.slice(m.start, m.end));
             if (m.person) mk.dataset.who = String(m.person);
-            mk.title = m.kind === 'leftover' ? 'Not a person ShowStack recognised' : 'Read as a name';
+            mk.title = MARK_TITLES[m.kind] || MARK_TITLES.name;
             out.appendChild(mk);
             at = m.end;
         });
@@ -358,11 +360,11 @@
         edit.appendChild(el('summary', 'mp-btn small', 'Edit'));
         edit.addEventListener('toggle', function () { if (edit.open && !edit.dataset.built) { buildEditor(edit, p); edit.dataset.built = '1'; } });
         t.appendChild(edit);
-        if (p.leftovers && p.leftovers.length) {
+        if (p.can_add) {
             var add = el('details', 'mp-wp-add');
             add.appendChild(el('summary', 'mp-btn small', 'Add people from this line'));
             var inputs = [];
-            p.leftovers.concat(['', '']).forEach(function (n, i) {
+            (p.leftovers || []).concat(['', '']).forEach(function (n, i) {
                 var inp = el('input');
                 inp.type = 'text';
                 inp.value = n;

@@ -649,7 +649,7 @@ def showflow_reread(request, pk):
     people = sum(1 for p in part.day.showflow_people.all()
                  if p.flags.get('rows', {}).get(str(part.pk)))
     part.refresh_from_db(fields=['warnings'])
-    flags = sum(1 for w in part.warnings if w['kind'] != 'parse')
+    flags = sum(1 for w in part.warnings if w['kind'] not in ('parse', importer.MARKS))
     messages.success(request, 'Re-read with current rules: {} {}, {} to check.'.format(
         people, 'person' if people == 1 else 'people', flags))
     return _back(part.day, part)
