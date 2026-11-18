@@ -387,14 +387,14 @@ class ReviewPageTests(MicPlanBase):
 
     def test_review_cards_carry_parser_flags_with_their_line(self):
         self.upload('CLIENT_E_PAGES')
-        cards = self.page().context['cards']
-        texts = {(c['line'], c['text']) for c in cards}
+        panels = self.page().context['walk']['panels']
+        texts = {(p['line'], i['text']) for p in panels for i in p['issues']}
         self.assertIn(('311', 'Line 311: description names people not in the Speaker column — check '
                               'who goes on'), texts)
         self.assertTrue(any(line == '319' and text.startswith('Line 319: which Vic?')
                             for line, text in texts))
         part = self.parts()[0]
-        self.assertContains(self.page(), '?day={}&amp;part={}#showflow:row-'.format(self.day.pk, part.pk))
+        self.assertEqual({part.pk}, {p['part'] for p in panels})
 
     def test_intro_rows_are_stored_per_part(self):
         self.upload('CLIENT_E_PAGES')
@@ -571,13 +571,13 @@ class ProvenanceTests(MicPlanBase):
         resp = self.client.get(reverse('planner:mic_plan'))
         self.assertContains(resp, 'no longer in this showflow')
         self.assertContains(resp, reverse('planner:mic_plan_remove', args=[gone.pk]))
-        self.assertTrue(any(c['kind'] == 'gone' and c['person'] == gone.pk
-                            for c in resp.context['cards']))
+        self.assertTrue(any(i['kind'] == 'gone' and i['person'] == gone.pk
+                            for i in resp.context['walk']['strip']))
 
         self.client.post(reverse('planner:mic_plan_remove', args=[gone.pk]))
         self.assertFalse(ShowflowPerson.objects.filter(pk=gone.pk).exists())
         resp = self.client.get(reverse('planner:mic_plan'))
-        self.assertFalse(any(c['kind'] == 'gone' for c in resp.context['cards']))
+        self.assertFalse(any(i['kind'] == 'gone' for i in resp.context['walk']['strip']))
 
     def test_remove_refuses_someone_still_in_the_showflow(self):
         stone = self.person('Vic Stone')

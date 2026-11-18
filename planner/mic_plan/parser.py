@@ -624,7 +624,7 @@ def _speaker_text(text):
     return _STAGE_NOTES.sub(_blank, text)
 
 
-def split_cell(text, roster, discover, refs=None, spans=None):
+def split_cell(text, roster, discover, refs=None, spans=None, leftover_spans=None):
     """Names in a Speaker/Titles cell, and the text no name accounts for.
 
     Speaker cells run names together without separators ("Dana Able Chris
@@ -639,7 +639,8 @@ def split_cell(text, roster, discover, refs=None, spans=None):
     every full name matched counts as an introduction.
 
     ``spans``: a list to append ``(name, start, end)`` to for each name found,
-    the characters of ``text`` its words came from.
+    the characters of ``text`` its words came from; ``leftover_spans`` the
+    same, ``(start, end)``, for each leftover.
     """
     found = _token_spans(_speaker_text(text))
     toks = [tok for tok, _, _ in found]
@@ -653,6 +654,11 @@ def split_cell(text, roster, discover, refs=None, spans=None):
         names.append(name)
         if spans is not None:
             spans.append((name, found[a][1], found[b - 1][2]))
+
+    def left_over(text_, a, b):
+        leftovers.append(text_)
+        if leftover_spans is not None:
+            leftover_spans.append((found[a][1], found[b - 1][2]))
     bounded = [True]   # the chunk began at the cell's start or a separator
     # The chunk follows "Name -": an affiliation ("Alex Host - Acme AI Robin
     # Cole - Initech"), possibly with the next person's name at its end.
@@ -674,7 +680,7 @@ def split_cell(text, roster, discover, refs=None, spans=None):
                     and _is_name_part(words[-1])):
                 named(roster.add(' '.join(words[-2:])), at + len(words) - 2, at + len(words))
             elif len(words) > 4:
-                leftovers.append(' '.join(chunk).strip(' -–'))
+                left_over(' '.join(chunk).strip(' -–'), at, at + len(chunk))
                 named_last[0] = False
         elif (discover and len(words) == 3 and _honorific(words[0])
                 and all(_is_name_part(w) for w in words[1:])):
@@ -691,7 +697,7 @@ def split_cell(text, roster, discover, refs=None, spans=None):
             named_last[0] = False
             text_ = ' '.join(chunk).strip(' -–')
             if text_ and not _NOT_A_PERSON.search(text_) and name_key(text_) not in roster.rejected:
-                leftovers.append(text_)
+                left_over(text_, at, at + len(chunk))
         chunk.clear()
         bounded[0] = bounded_end
 
@@ -919,6 +925,8 @@ class Analysis:
     crew: list
     segments: list = field(default_factory=list)
     span: tuple = (None, None)
+    # Speaker-cell text no name accounts for: row index -> [(start, end)].
+    leftovers: dict = field(default_factory=dict)
 
 
 def _next_segment(times, row):
@@ -993,6 +1001,7 @@ def analyse(rows, crew=None, known=(), rejected=()):
     exits, enters, unknown_exits = {}, {}, []
     refs = Refs(roster)
     spans = {}            # display name -> [(row, column, start, end)]: where its words are
+    leftover_at = {}      # row -> [(start, end)] of Speaker-cell leftovers
     for i, row in enumerate(rows):
         refs.row = i
         for raw in _welcome_names(row['description'], speaker_text):
@@ -1004,8 +1013,11 @@ def analyse(rows, crew=None, known=(), rejected=()):
             if place:
                 spans.setdefault(name, []).append((i, 'description') + place)
         if row['speaker']:
-            cell = []
-            names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs, spans=cell)
+            cell, rest = [], []
+            names, leftovers = split_cell(row['speaker'], roster, discover=False, refs=refs, spans=cell,
+                                          leftover_spans=rest)
+            if leftovers:
+                leftover_at[i] = rest
             for name, start, end in cell:
                 spans.setdefault(name, []).append((i, 'speaker', start, end))
         else:
@@ -1091,7 +1103,7 @@ def analyse(rows, crew=None, known=(), rejected=()):
         known_t = [t.minute for t in times if t.minute is not None]
         span = (min(known_t), max(known_t)) if known_t else (None, None)
     return Analysis(times=times, people=people, events=events, flags=_dedupe(flags),
-                    crew=list(crew), segments=segments, span=span)
+                    crew=list(crew), segments=segments, span=span, leftovers=leftover_at)
 
 
 def _brought_on(text, roster):

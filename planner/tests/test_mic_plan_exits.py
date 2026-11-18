@@ -129,10 +129,11 @@ class AddPeopleTests(MicPlanBase):
 
     def test_the_card_offers_the_names_on_the_line(self):
         page = self.page()
-        card, = [c for c in page.context['cards'] if c['kind'] == 'description_names']
-        self.assertEqual(['Cy Dorn', 'Eli Fay', 'Hal Grey'], card['candidates'])
-        self.assertContains(page, 'Add people from this line')
-        self.assertContains(page, 'value="Eli Fay"')
+        panel, = [p for p in page.context['walk']['panels']
+                  if any(i['kind'] == 'description_names' for i in p['issues'])]
+        self.assertEqual(['Cy Dorn', 'Eli Fay', 'Hal Grey'], panel['leftovers'])
+        self.assertIn('leftover', {m['kind'] for r in panel['rows'] for m in r['marks']})
+        self.assertIn('leftover', [l['kind'] for l in panel['locks']])
 
     def test_adding_from_the_flag_creates_matches_links_clears_and_marks_stale(self):
         eli = Presenter.objects.create(project=self.project, name='Eli Fay')
@@ -184,7 +185,8 @@ class AddPeopleTests(MicPlanBase):
         self.assertEqual(['311'], cy.flags['added_missing'])
         self.assertFalse(cy.flags.get('gone'))
         page = self.page()
-        self.assertContains(page, 'Line 311 no longer in this showflow: Cy Dorn was added on at it by hand.')
+        self.assertIn('Line 311 is no longer in this showflow: Cy Dorn was added on at it by hand.',
+                      [i['text'] for i in page.context['walk']['strip'] if i['kind'] == 'added_missing'])
         self.assertEqual([], list(planning.build_day(self.day)[0].added))
 
     def test_add_person_with_an_off_line_then_edit_and_remove(self):

@@ -12,6 +12,7 @@ of the request: showflows can be under NDA and Railway's disk is ephemeral.
 """
 
 import html
+import json
 import re
 from io import BytesIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -28,7 +29,7 @@ from django.utils.cache import add_never_cache_headers
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
-from planner.mic_plan import checks, importer, page, planning, push, revert, schedule
+from planner.mic_plan import importer, overrides, page, planning, push, revert, rowkey, schedule, walkthrough
 from planner.mic_plan.display import describe_edit, first_name, rig_text
 from planner.mic_plan.extract import ShowflowError
 from planner.mic_plan.parser import hm
@@ -40,24 +41,6 @@ from planner.models import (
 from planner.tenancy import can_edit_current_project, edit_rights_required_page
 from planner.tenancy import current_project_or_none as _scoped_project
 
-FLAG_LABELS = {
-    'parse': 'File',
-    'no_times': 'Times',
-    'time_backwards': 'Times',
-    'unknown_crew': 'Crew?',
-    'unmatched_speaker': 'Speaker?',
-    'never_caught': 'Not caught',
-    'caught_but_listed': 'Still listed',
-    'no_cue': 'No cue',
-    'bsm_only': 'BSM only',
-    'which_first': 'Which?',
-    'description_names': 'Not listed',
-    'who_exits': 'Exit?',
-    'added_missing': 'Added',
-    'gone': 'Gone',
-    'mic_name': 'Mic?',
-    'mic_which': 'Mic?',
-}
 _CUE_WORD = re.compile(r'(?i)\b(?:sends?|sending|catch(?:es)?|catching)\b')
 INT_SETTINGS = ('a2_count', 'mic_min', 'demic_min', 'premic_lead_min', 'margin_min')
 RIG_SETTINGS = ('wireless_channels', 'handheld_channels', 'spare_handhelds')
@@ -205,9 +188,8 @@ def mic_plan(request):
                                       'missing': where is None})
     current = planning.settings_dict(planning.project_settings(project))
     plan_values = planning.plan_values(plan) if plan else current
-    cards = page.review_cards(parts, plan, apps, people, FLAG_LABELS) if day else []
-    if day:
-        checks.annotate(day, cards, people, plan)
+    walk = walkthrough.build(day, plan) if day and parts else None
+    walk_data = walkthrough.page_data(walk) if walk else None
     chart = page.pack_chart(plan, apps, actions, parts)
     edits = list(plan.edits.all()) if plan else []
     can_edit = can_edit_current_project(request)
@@ -229,10 +211,8 @@ def mic_plan(request):
         'stats': page.stats(plan),
         'chart': chart,
         'lanes': page.lane_windows(chart),
-        'cards': cards,
-        'open_cards': checks.unchecked(cards),
-        'checked_cards': checks.checked(cards),
-        'note_max': checks.NOTE_MAX,
+        'walk': walk_data,
+        'walk_progress': walk_data['progress'] if walk_data else None,
         'line_choices': line_choices,
         'overlaps': page.overlap_warnings(plan, parts),
         'edit_count': len(edits),
@@ -250,7 +230,6 @@ def mic_plan(request):
         'policy_counts': page.policy_counts_text(plan.policy_counts) if plan else '',
         'policy_choices': MicPlanSettings.PACK_POLICY_CHOICES,
         'number_choices': MicPlanSettings.SHOWFLOW_NUMBERS_CHOICES,
-        'flag_labels': FLAG_LABELS,
         # Crew names only matter when this file has send/catch cues to read. Not
         # "has crew names": a new part starts with the project's last ones.
         'has_cues': bool(events) or any(_CUE_WORD.search(r.bsm_text) for r in rows),
@@ -315,7 +294,7 @@ def _edit_response(request, day, apply):
         return JsonResponse({'error': 'The plan could not be worked out with that change. Nothing was changed.'},
                             status=422)
     conflicts = sum(1 for f in plan.flags if f['kind'] == 'conflict')
-    messages.success(request, '{}{}.'.format(text, ' \u2014 {} conflict{} in Review'.format(
+    messages.success(request, '{}{}.'.format(text, ' \u2014 {} conflict{} to fix'.format(
         conflicts, '' if conflicts == 1 else 's') if conflicts else ''))
     return JsonResponse({'ok': True, 'version': plan.version, 'changed': len(plan.changes),
                          'conflicts': conflicts})
@@ -427,11 +406,11 @@ def plan_push(request, pk):
         preview = push.preview(day)
     except push.PushRefused as e:
         plan = MicPlan.objects.filter(day=day).first()
-        blocking = checks.blocking(checks.day_cards(day, plan, FLAG_LABELS)) if plan and not plan.stale else []
+        blocking = walkthrough.build(day, plan)['blockers'] if plan and not plan.stale else []
         if not blocking:
             messages.error(request, str(e))
             return _back(day)
-        # Refused over Review cards: say which, checked or not.
+        # Refused over blockers: say which, confirmed rows or not.
         return render(request, 'planner/mic_plan_push.html', {
             **_shared_header_context(request), 'day': day, 'plan': plan, 'refused': str(e), 'blocking': blocking})
     started = {s['pk'] for s in preview.started}
@@ -451,7 +430,7 @@ def plan_push(request, pk):
         'nothing': not preview.changes,
         'up_to_date': not preview.changes and preview.last is not None
         and preview.last.plan_version == preview.plan.version,
-        'blocking': checks.blocking(checks.day_cards(day, preview.plan, FLAG_LABELS)) if preview.short else [],
+        'blocking': walkthrough.build(day, preview.plan)['blockers'] if preview.short else [],
     })
 
 
@@ -547,12 +526,11 @@ def plan_pdf(request, pk):
             if asked and (a2_count > 1 or asked == solver.HELPERS) else None)
     # Every A2's schedule, then the helpers' list when there is one.
     every = list(range(1, a2_count + 1)) + ([solver.HELPERS] if helpers else [])
-    people = list(day.showflow_people.all())
-    cards = checks.annotate(day, page.review_cards(parts, plan, apps, people, FLAG_LABELS), people, plan)
+    walk = walkthrough.build(day, plan)
     zone = _zone(request)
     pdf = build_mic_plan_pdf(
         BytesIO(), project=day.project, day=day, plan=plan, apps=apps, actions=actions, parts=parts,
-        cards=cards, a2s=[only] if only else every,
+        walk=walk, a2s=[only] if only else every,
         brand=brand_for(day.project), printed_at=timezone.now().astimezone(zone), zone=zone).getvalue()
     response = HttpResponse(pdf, content_type='application/pdf')
     name = 'mic-plan-{}-v{}{}.pdf'.format(day.date.isoformat(), plan.version, '-a2-{}'.format(only) if only else '')
@@ -711,26 +689,114 @@ def showflow_break(request, pk):
     return _back(part.day, part, '#showflow:row-{}'.format(row.order))
 
 
+WALK_ACTIONS = ('confirm', 'unconfirm', 'row', 'person', 'add', 'unreject', 'override')
+
+
+def _walk_row(day, value):
+    try:
+        return ShowflowRow.objects.select_related('showflow_import').get(
+            pk=int(value), showflow_import__day=day, showflow_import__status='active')
+    except (TypeError, ValueError, ShowflowRow.DoesNotExist):
+        raise ValueError('That line is no longer in this showflow.')
+
+
+def _walk_person(day, value):
+    try:
+        return ShowflowPerson.objects.get(pk=int(value), day=day)
+    except (TypeError, ValueError, ShowflowPerson.DoesNotExist):
+        raise ValueError('That person is no longer on this day.')
+
+
+def _names(value):
+    return [' '.join(str(n).split())[:200] for n in (value or []) if str(n).strip()][:20]
+
+
 @staff_member_required
 @require_POST
 @edit_rights_required_page
-def review_check(request, pk):
-    """Check a Review card off (with an optional note), change its note, or
-    uncheck it. ``fp`` must be one of the day's cards as they are now."""
+def walk_action(request, pk, action):
+    """The walkthrough's one endpoint (JSON in, JSON out). ``confirm``
+    answers with the confirmed panel alone; everything else with the whole
+    walkthrough, which the page compares panel by panel (``sig``). A row
+    that is not what the user saw comes back as it is now, with ok false."""
     day = _day(request, pk)
-    part = _maybe_part(request, request.POST.get('part', ''))
-    action = request.POST.get('action')
-    card = next((c for c in checks.day_cards(day) if c['fp'] == request.POST.get('fp')), None)
-    if card is None or action not in ('check', 'note', 'uncheck'):
-        messages.error(request, 'That card has changed. Check it again on the Review tab.')
-        return _back(day, part, '#review')
-    if action == 'uncheck':
-        checks.uncheck(day, card)
-    elif action == 'note' and card['check'] is None:
-        messages.error(request, 'That card is not checked any more.')
-    else:
-        checks.set_check(day, card, request.POST.get('note', ''), request.user)
-    return _back(day, part, '#review')
+    if action not in WALK_ACTIONS:
+        raise Http404
+    try:
+        body = json.loads(request.body or b'{}')
+        if not isinstance(body, dict):
+            raise ValueError
+    except ValueError:
+        return JsonResponse({'ok': False, 'why': 'Reload the page and try again.'}, status=400)
+    user = request.user
+    try:
+        if action == 'confirm':
+            row = _walk_row(day, body.get('row'))
+            walk = walkthrough.confirm(day, row.pk, str(body.get('digest') or ''), user, ack=bool(body.get('ack')))
+            panel = walkthrough.find_panel(walk, row.pk)
+            return JsonResponse({'ok': True, 'panels': [walkthrough.public(panel)] if panel else [],
+                                 'progress': walkthrough.progress(walk)})
+        if action == 'unconfirm':
+            walk = walkthrough.unconfirm(day, _walk_row(day, body.get('row')).pk)
+        elif action == 'row':
+            row = _walk_row(day, body.get('row'))
+            changes = {k: _names(body.get(k)) for k in overrides.LISTS}
+            mic = body.get('mic') or {}
+            changes['mic'] = {str(k)[:200]: v for k, v in mic.items()} if isinstance(mic, dict) else {}
+            overrides.set_row(row.showflow_import, row, changes, user)
+            walk = walkthrough.confirm_after_edit(day, row.pk, user)
+        elif action == 'person':
+            row = _walk_row(day, body.get('row'))
+            person = _walk_person(day, body.get('person'))
+            decision = body.get('decision')
+            if decision == 'person':
+                importer.confirm_person(person, user)
+            elif decision == 'not':
+                importer.reject_phrase(day, person.display_name, user)
+            elif decision == 'same':
+                name = ' '.join(str(body.get('name') or '').split())[:200]
+                target = _walk_person(day, body['target']) if body.get('target') else None
+                if target is None and not name:
+                    raise ValueError('Pick a person or type a name.')
+                if target is None and not body.get('force'):
+                    close = importer.close_names(day, name, exclude=person)
+                    if close:
+                        return JsonResponse({'ok': False, 'why': 'close',
+                                             'close': [{'pk': p.pk, 'name': p.display_name} for p in close]})
+                target = importer.same_as(person, target=target, new_name=None if target else name)
+                importer.confirm_person(target, user)
+            else:
+                raise ValueError('Person, Not a person or Same as.')
+            walk = walkthrough.confirm_after_edit(day, row.pk, user)
+        elif action == 'add':
+            row = _walk_row(day, body.get('row'))
+            importer.add_people(day, _names(body.get('names')), row.showflow_import, row, user, from_flag=True)
+            walk = walkthrough.confirm_after_edit(day, row.pk, user)
+        elif action == 'unreject':
+            importer.unreject_phrase(day, str(body.get('key') or '')[:200])
+            walk = walkthrough.build(day)
+        else:   # override
+            part = _part(request, body.get('part'))
+            if part.day_id != day.pk:
+                raise ValueError('Not a part of this day.')
+            if body.get('do') == 'accept':
+                entry = overrides.accept(part, str(body.get('entry') or ''))
+                found, _ = rowkey.find(entry['row'], list(part.rows.order_by('order')))
+                walk = (walkthrough.confirm_after_edit(day, found.pk, user) if found is not None
+                        else walkthrough.build(day))
+            elif body.get('do') == 'drop':
+                overrides.drop(part, str(body.get('entry') or ''))
+                walk = walkthrough.build(day)
+            else:
+                raise ValueError('Accept or drop.')
+    except walkthrough.Refused as e:
+        walk = walkthrough.build(day)
+        panel = walkthrough.find_panel(walk, e.panel['id']) if e.panel else None
+        return JsonResponse({'ok': False, 'why': str(e), 'panels': [walkthrough.public(panel)] if panel else [],
+                             'progress': walkthrough.progress(walk)})
+    except ValueError as e:
+        return JsonResponse({'ok': False, 'why': str(e)}, status=400)
+    return JsonResponse(dict(walkthrough.page_data(walk), ok=True))
 
 
 @staff_member_required

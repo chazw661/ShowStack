@@ -7425,28 +7425,27 @@ class MicPlanPush(models.Model):
         return f'{self.day} v{self.plan_version} sent {self.pushed_at:%Y-%m-%d %H:%M}'
 
 
-class MicPlanReviewCheck(models.Model):
-    """A Review card someone has checked off (planner.mic_plan.checks), per
-    show day, by the card's fingerprint: kind, part, line, person and the
-    numbers on it. Kept across Re-generate, Re-read and Replace while a card
-    still has that fingerprint; a card whose numbers change shows unchecked."""
-    day = models.ForeignKey(ShowDay, on_delete=models.CASCADE, related_name='review_checks')
-    fingerprint = models.CharField(max_length=40)
-    kind = models.CharField(max_length=30)                 # for display; the fingerprint holds it too
-    note = models.CharField(max_length=200, blank=True)
+class MicPlannerRowCheck(models.Model):
+    """A walkthrough row someone confirmed (planner.mic_plan.walkthrough).
+    ``row`` describes the showflow row (rowkey.describe), so a check follows
+    its row through Re-read and Replace (importer.confirm moves it to the new
+    part). ``digest`` is the row's raw text plus what its panel showed; a
+    row whose digest no longer matches is reopened, and ``shown`` says what
+    it showed then ("was → now")."""
+    part = models.ForeignKey(ShowflowImport, on_delete=models.CASCADE, related_name='row_checks')
+    row = models.JSONField(default=dict)
+    digest = models.CharField(max_length=40)
+    shown = models.JSONField(default=dict, blank=True)
     checked_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     checked_by_name = models.CharField(max_length=150, blank=True)
     checked_at = models.DateTimeField()
 
     class Meta:
-        ordering = ['day', 'checked_at', 'id']
-        verbose_name = 'Mic Planner review check'
-        constraints = [
-            UniqueConstraint(fields=['day', 'fingerprint'], name='uniq_mic_plan_review_check'),
-        ]
+        ordering = ['part', 'id']
+        verbose_name = 'Mic Planner row check'
 
     def __str__(self):
-        return f'{self.day} {self.kind} checked by {self.checked_by_name}'
+        return f'{self.part} line {self.row.get("line") or self.row.get("order")} checked by {self.checked_by_name}'
 
 
 class MicPlannerDayOverride(models.Model):

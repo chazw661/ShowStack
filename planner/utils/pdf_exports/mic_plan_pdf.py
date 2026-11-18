@@ -1,7 +1,7 @@
 # planner/utils/pdf_exports/mic_plan_pdf.py
 """
 Mic Plan PDF: the A2 schedule (one section per A2), the pack sheet and the
-review list of one show day's stored plan. Landscape letter.
+walkthrough's issues of one show day's stored plan. Landscape letter.
 
 Readable in black and white: every status is a word (MIC / DE-MIC, BREAK,
 HOST, BACKUP, PINNED, MID-SESSION, CONFLICT, late / tight), never a colour
@@ -266,45 +266,54 @@ def _pack_story(plan, apps, actions, S):
     return story + ([table] if table else [Paragraph('No packs in this plan.', S['empty'])])
 
 
-def _review_story(cards, S, zone):
-    """Unchecked cards (conflicts first), then the checked ones with who
-    checked them, when, and their note."""
+def _issues_story(walk, S, zone):
+    """The walkthrough's issues: its progress, the blockers, every row with
+    an issue (confirmed by whom, or still open), then the day's issues."""
+    from datetime import datetime
+    from planner.mic_plan.walkthrough import progress
+
     W = usable_width(LANDSCAPE_PAGE)
     cell = S['body'].clone('MpReview', fontSize=9, leading=11.5)
-    several = len({x['part_no'] for x in cards if x['part_no']}) > 1
-
-    def rows(group, who):
-        data = []
-        for c in sorted(group, key=lambda c: (c['kind'] != 'conflict', c['part_no'] or 0)):
-            where = 'Line {}'.format(c['line']) if c['line'] else '\u2014'
-            if c['part_no'] and several:
-                where += ' · part {}'.format(c['part_no'])
-            text = escape(c['text']) + ('<br/><i>Plan: {}</i>'.format(escape(c['note'])) if c['note'] else '')
-            if c.get('blocks'):
-                text += '<br/><b>Still blocks Send to Mic Tracker.</b>'
-            row = [c['label'].upper(), where, Paragraph(text, cell)]
-            if who:
-                check = c['check']
-                by = escape('{} · {}'.format(check.checked_by_name or '?', stamp(check.checked_at, zone)))
-                row.append(Paragraph(by + ('<br/>{}'.format(escape(check.note)) if check.note else ''), cell))
-            data.append(row)
-        return data
-
-    open_cards = [c for c in cards if c.get('check') is None]
-    done = [c for c in cards if c.get('check') is not None]
-    story = []
+    several = len(walk['parts']) > 1
+    pr = progress(walk)
+    story = [Paragraph('Walkthrough: {} of {} rows confirmed{}{}.'.format(
+        pr['confirmed'], pr['total'], ' · {} reopened'.format(pr['reopened']) if pr['reopened'] else '',
+        ' · done' if pr['done'] else ''), S['meta'])]
     widths = [1.0 * inch, 1.1 * inch]
-    table = data_table(['Flag', 'Where', 'What'], rows(open_cards, False), widths + [W - sum(widths)])
-    story.append(table if table else Paragraph('Nothing left to review.' if done else 'Nothing to review.', S['empty']))
-    if done:
-        story += [Spacer(1, 10), Paragraph('<b>Checked ({})</b>'.format(len(done)), S['body'])]
-        wide = widths + [2.2 * inch]
-        story.append(data_table(['Flag', 'Where', 'What', 'Checked'], rows(done, True),
-                                [widths[0], widths[1], W - sum(wide), 2.2 * inch]))
+
+    def where(p):
+        return 'Line {}{}'.format(p['line'], ' · part {}'.format(p['part_no']) if several else '')
+
+    panels = {p['id']: p for p in walk['panels']}
+    data = [[b['label'].upper(), where(panels[b['panel']]) if b.get('panel') in panels else '—',
+             Paragraph(escape(b['text']) + '<br/><b>Blocks Send to Mic Tracker.</b>', cell)]
+            for b in walk['blockers']]
+    if data:
+        story.append(data_table(['Blocker', 'Where', 'What'], data, widths + [W - sum(widths)]))
+        story.append(Spacer(1, 8))
+    data = []
+    for p in walk['panels']:
+        if not (p['issues'] or p['badges']):
+            continue
+        what = [escape(i['text']) for i in p['issues']] + ['Plan: ' + escape(b['label']) for b in p['badges']]
+        if p['state'] == 'confirmed':
+            at = p.get('at')
+            state = 'Confirmed by {}{}'.format(p.get('by') or '?', ' · ' + stamp(datetime.fromisoformat(at), zone)
+                                               if at else '')
+        else:
+            state = {'reopened': 'REOPENED', 'auto': 'Confirmed'}.get(p['state'], 'OPEN')
+        data.append([where(p), Paragraph(escape(state), cell), Paragraph('<br/>'.join(what), cell)])
+    wide = [1.1 * inch, 1.8 * inch]
+    table = data_table(['Where', 'State', 'What'], data, wide + [W - sum(wide)])
+    story.append(table if table else Paragraph('No row has an issue.', S['empty']))
+    data = [[i['label'].upper(), Paragraph(escape(i['text']), cell)] for i in walk['strip']]
+    if data:
+        story += [Spacer(1, 8), Paragraph('<b>Day</b>', S['body'])]
+        story.append(data_table(['Issue', 'What'], data, [widths[0], W - widths[0]]))
     return story
 
 
-def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, cards, a2s, brand, printed_at, zone):
+def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, walk, a2s, brand, printed_at, zone):
     """Write the PDF into ``buffer`` and return it. ``a2s``: the A2 numbers
     whose schedules to include, and HELPERS for the de-mic helpers' list."""
     S = styles()
@@ -330,8 +339,8 @@ def build_mic_plan_pdf(buffer, *, project, day, plan, apps, actions, parts, card
         story += _schedule_story(sched, S, label)
     story += [Spacer(1, 14), section_banner('Pack sheet', pagesize=LANDSCAPE_PAGE, S=S)]
     story += _pack_story(plan, apps, actions, S)
-    story += [Spacer(1, 14), section_banner('Review', pagesize=LANDSCAPE_PAGE, S=S)]
-    story += _review_story(cards, S, zone)
+    story += [Spacer(1, 14), section_banner('Issues', pagesize=LANDSCAPE_PAGE, S=S)]
+    story += _issues_story(walk, S, zone)
     canvas = _canvas_class(project.name, plan.version, stamp(printed_at, zone))
     doc.build(story, onFirstPage=header, onLaterPages=header, canvasmaker=canvas)
     return buffer

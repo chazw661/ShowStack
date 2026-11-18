@@ -384,6 +384,12 @@ function shortTime(iso) {
   const h = t.getHours(), m = String(t.getMinutes()).padStart(2, '0');
   return ((h + 11) % 12 + 1) + ':' + m + (h < 12 ? 'a' : 'p');
 }
+// " · 12 rows to confirm" (the walkthrough's open and reopened rows), or " · walkthrough done".
+function openRows(day) {
+  const n = Number(day.open_rows) || 0;
+  return n ? ' · <span class="ss-mp-over">' + n + ' row' + (n === 1 ? '' : 's') + ' to confirm</span>' : ' · walkthrough done';
+}
+
 // One show day on the Mic Planner card (mic_plan/status.py day_status).
 function plannerDay(day) {
   const date = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
@@ -391,11 +397,11 @@ function plannerDay(day) {
   if (day.state === 'none') {
     lines.push('Not imported');
   } else if (day.state === 'imported') {
-    lines.push('Imported, no plan yet');
+    lines.push('Imported, no plan yet' + openRows(day));
   } else {
     const ch = day.channels;
     lines.push('v' + day.version + ' · <span' + (ch.over ? ' class="ss-mp-over"' : '') + '>' + esc(ch.text) + '</span>'
-               + ' · ' + day.review + ' to review');
+               + openRows(day));
     if (day.stale) {
       lines.push('<span class="ss-mp-over">Stale — re-generate</span>');
     } else if (day.sent && day.changed_since_sent) {

@@ -183,14 +183,15 @@ TOPICS = (
                   'conflict', 'handheld', 'renumber'),
     ),
     Topic(
-        slug='mic-plan-review',
-        title='Check off Review cards',
+        slug='mic-plan-walkthrough',
+        title='Confirm the showflow line by line',
         section='Show day',
-        summary='Mark each Review card checked, with a note; see who checked what, and when.',
+        summary='Walk through each showflow line as it was read, confirm it with Enter, and fix what is wrong there.',
         pages=(
             'planner:mic_plan',
         ),
-        keywords=('mic plan', 'mic planner', 'review', 'check', 'checked', 'note', 'flags', 'conflict', 'late'),
+        keywords=('mic plan', 'mic planner', 'walkthrough', 'review', 'confirm', 'lock', 'person', 'not a person',
+                  'same as', 'reopened', 'conflict', 'unverified'),
     ),
     Topic(
         slug='mic-plan-a2-schedule',
@@ -831,4 +832,7 @@ SLUG_ALIASES = {
     'mic-planner-edits': 'mic-plan-edits',
     'mic-planner-a2-schedule': 'mic-plan-a2-schedule',
     'mic-planner-push': 'mic-plan-push',
+    # The Review tab became the walkthrough.
+    'mic-plan-review': 'mic-plan-walkthrough',
+    'mic-planner-review': 'mic-plan-walkthrough',
 }

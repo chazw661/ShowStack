@@ -26,14 +26,14 @@
         <p class="mp-banner bad" role="alert" id="mp-refused">{{ refused }}</p>
         {% if blocking %}
         <div class="mp-panel" id="mp-blocking">
-            <h2>Blocking cards <small>{{ blocking|length }}</small></h2>
+            <h2>Blockers <small>{{ blocking|length }}</small></h2>
             <ul>
-                {% for c in blocking %}<li><span><b>{{ c.label }}</b>{% if c.line %} · line {{ c.line }}{% endif %} — {{ c.text }}{% if c.check %} <i class="mp-muted">(checked by {{ c.check.checked_by_name|default:"?" }})</i>{% endif %}</span></li>{% endfor %}
+                {% for c in blocking %}<li><span><b>{{ c.label }}</b>{% if c.line %} · line {{ c.line }}{% endif %} — {{ c.text }}</span></li>{% endfor %}
             </ul>
             <p class="mp-note">Checking a card off does not clear it: fix these on the Review tab first.</p>
         </div>
         {% endif %}
-        <div class="mp-actions"><a class="mp-btn" href="{% url 'planner:mic_plan' %}?day={{ day.pk }}#review">Back to Review</a></div>
+        <div class="mp-actions"><a class="mp-btn" href="{% url 'planner:mic_plan' %}?day={{ day.pk }}#walk">Back to the walkthrough</a></div>
     </div>
     {% else %}
     <form class="mp-push" method="post" id="mp-push">
@@ -47,9 +47,9 @@
         {% if preview.short %}<p class="mp-banner bad" role="alert" id="mp-short">{{ preview.short }}</p>{% endif %}
         {% if blocking %}
         <div class="mp-panel" id="mp-blocking">
-            <h2>Blocking cards <small>{{ blocking|length }}</small></h2>
+            <h2>Blockers <small>{{ blocking|length }}</small></h2>
             <ul>
-                {% for c in blocking %}<li><span><b>{{ c.label }}</b>{% if c.line %} · line {{ c.line }}{% endif %} — {{ c.text }}{% if c.check %} <i class="mp-muted">(checked by {{ c.check.checked_by_name|default:"?" }})</i>{% endif %}</span></li>{% endfor %}
+                {% for c in blocking %}<li><span><b>{{ c.label }}</b>{% if c.line %} · line {{ c.line }}{% endif %} — {{ c.text }}</span></li>{% endfor %}
             </ul>
             <p class="mp-note">Checking a card off does not clear it: fix these on the Review tab first.</p>
         </div>

@@ -78,8 +78,13 @@ def refusal(plan, apps):
         return 'The showflow changed after this plan was made. Re-generate it first.'
     conflicts = sum(1 for f in plan.flags if f['kind'] == 'conflict')
     if conflicts:
-        return 'The plan has {} RF conflict{}. Fix {} on the Review tab first.'.format(
+        return 'The plan has {} RF conflict{}. Fix {} first (the walkthrough steps through them).'.format(
             conflicts, '' if conflicts == 1 else 's', 'it' if conflicts == 1 else 'them')
+    held = sum(1 for f in plan.flags if f['kind'] == 'override_changed')
+    if held:
+        return ('{} of your row changes {} held back: the showflow changed under {}. Accept or drop {} in '
+                'the walkthrough first.'.format(held, 'is' if held == 1 else 'are', 'it' if held == 1 else 'them',
+                                                 'it' if held == 1 else 'them'))
     if any(a.is_host and not a.stage for a in apps):
         return 'This plan was made before Send to Mic Tracker existed. Re-generate it first.'
     if before_rig(plan):
