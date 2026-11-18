@@ -182,7 +182,7 @@ def build(day, plan=None, values=None):
                            'cells': {c: getattr(r, f) for c, f in COLUMNS.items() if getattr(r, f)}, 'marks': []}
                           for r in group],
                  'on': [], 'off': [], 'issues': [], 'badges': [], 'locks': [], 'person_locks': [],
-                 'leftovers': [], '_rows': group}
+                 'leftovers': [], 'can_add': False, '_rows': group}
             panels.append(p)
             for r in group:
                 panel_of[r.pk] = p
@@ -271,6 +271,15 @@ def build(day, plan=None, values=None):
     strip = []
     for part in parts:
         for w in part.warnings:
+            if w['kind'] == importer.MARKS:
+                # Notes and companies: shown, never locked. A note may hide
+                # someone, so its row can still add people.
+                for start, end, kind in w['marks']:
+                    mark(part.pk, w['row_order'], 'speaker', start, end, kind)
+                r = by_order.get((part.pk, w['row_order']))
+                if r is not None and r.pk in panel_of and any(m[2] == 'note' for m in w['marks']):
+                    panel_of[r.pk]['can_add'] = True
+                continue
             label = FLAG_LABELS.get(w['kind'], w['kind'])
             r = by_order.get((part.pk, w.get('row_order'))) if w.get('row_order') is not None else None
             if r is None or r.pk not in panel_of:
@@ -279,6 +288,7 @@ def build(day, plan=None, values=None):
             p = panel_of[r.pk]
             p['issues'].append({'kind': w['kind'], 'label': label, 'text': w['text']})
             if w['kind'] == 'unmatched_speaker':
+                p['can_add'] = True
                 spans = w.get('spans') or [
                     s for s in (_locate(r.speaker_text, q) for q in re.findall(r'"([^"]+)"', w['text'])) if s]
                 for start, end in spans:
@@ -291,6 +301,7 @@ def build(day, plan=None, values=None):
                         mark(part.pk, r.order, 'description', found[0], found[1], 'leftover')
                         at = found[1]
                 p['leftovers'] = description_candidates(r.description)
+                p['can_add'] = True
     for i in issues:
         label = PLAN_LABELS.get(i['kind'], i['kind'])
         item = {'kind': i['kind'], 'label': label, 'text': i['text'], 'entry': i.get('entry'), 'part': i.get('part')}

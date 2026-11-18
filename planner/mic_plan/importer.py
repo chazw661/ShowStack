@@ -474,6 +474,11 @@ def _hint_rank(hint):
     return {'HH': 2, 'backup': 1}.get(hint, 0)
 
 
+# ShowflowImport.warnings kind that is not an issue: a row's Speaker-cell
+# notes and companies, [[start, end, 'note' | 'company']].
+MARKS = 'speaker_marks'
+
+
 def rebuild_day(day):
     """Re-run every active part of ``day`` and reconcile people and events.
 
@@ -586,7 +591,11 @@ def rebuild_day(day):
                     if kind == 'unmatched_speaker' and row in result.leftovers else {}))
             for kind, row, text, name in result.flags
             # People were added from this "not listed" line: it is dealt with.
-            if not (kind == 'description_names' and row is not None and (part.pk, rows[row].order) in cleared)]
+            if not (kind == 'description_names' and row is not None and (part.pk, rows[row].order) in cleared)] + [
+            # Not a flag: the Speaker-cell notes and companies, for the walkthrough.
+            {'kind': MARKS, 'text': '', 'row_order': rows[row].order, 'person': None,
+             'marks': [list(m) for m in marks]}
+            for row, marks in sorted(result.marks.items())]
         part.save(update_fields=['warnings'])
     ShowflowEvent.objects.bulk_create(events)
     # People, lines or cues may have changed: the day's plan no longer matches.
