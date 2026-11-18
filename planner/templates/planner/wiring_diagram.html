@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Wiring Diagram{% if project %} — {{ project.name }}{% endif %} — ShowStack{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/surfaces.css' %}">
+<style>
+  .wd-page { padding: 20px; background: var(--ss-surface); color: #eee; }
+  .wd-page h1 { color: #fff; margin: 0 0 4px; font-size: 26px; }
+  .wd-lede { color: #bbb; margin: 0 0 14px; font-size: 14px; }
+  .wd-bar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 12px; }
+  .wd-counts { color: #bbb; font-size: 13px; }
+  .wd-toggle { background: var(--ss-raised); color: #eee; border: 1px solid var(--ss-border);
+               border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+  .wd-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: #ccc; margin-bottom: 12px; }
+  .wd-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .wd-legend i { display: inline-block; width: 34px; height: 0; border-top: 2px solid #6f9bd1; }
+  .wd-legend i.inferred { border-top-style: dashed; }
+  .wd-legend i.unlinked { border-top: 2px dashed #e0a43a; }
+  .wd-legend i.network { border-top: 2px dotted #4fbf86; }
+  .wd-scroll { overflow: auto; max-height: 78vh; border: 1px solid var(--ss-border);
+               border-radius: 6px; background: #fff; }
+  .wd-scroll svg { display: block; }
+  .wd-scroll.fit svg { width: 100%; height: auto; }
+  .wd-warnings { margin-top: 18px; background: var(--ss-raised); border-radius: 6px; padding: 12px 16px; }
+  .wd-warnings h2 { color: #fff; font-size: 16px; margin: 0 0 8px; background: none; padding: 0; }
+  .wd-warnings ul { margin: 0; padding-left: 18px; }
+  .wd-warnings li { margin: 0 0 8px; color: #ddd; font-size: 13px; list-style: disc; }
+  .wd-warnings .k { color: #f6c04f; font-weight: 600; }
+  .wd-warnings .q { color: #fff; }
+  .wd-empty { color: #bbb; font-size: 14px; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block content_title %}{% endblock %}
+
+{% block content %}
+<div class="wd-page">
+  <h1>Wiring Diagram</h1>
+  {% if no_project %}
+    <p class="wd-empty">Choose a project to see its wiring diagram.</p>
+  {% elif empty %}
+    <p class="wd-lede">{{ project.name }}</p>
+    <p class="wd-empty">Nothing to draw yet. Add consoles, I/O devices, processors, amps or PA cable runs and they appear here.</p>
+  {% else %}
+    <p class="wd-lede">{{ project.name }}: read from the patch, processor, amp and PA cable pages. Nothing here edits anything.</p>
+    <div class="wd-bar">
+      <button type="button" class="wd-toggle" id="wd-toggle" aria-pressed="true">Show at 100%</button>
+      <span class="wd-counts">{{ counts.boxes }} boxes · {{ counts.confirmed }} confirmed · {{ counts.inferred }} inferred · {{ counts.unlinked }} not linked</span>
+    </div>
+    <div class="wd-legend" aria-label="Legend">
+      <span><i></i>Confirmed (linked on a page)</span>
+      <span><i class="inferred"></i>Inferred from labels</span>
+      <span><i class="unlinked"></i>? Not linked or ambiguous</span>
+      <span><i class="network"></i>AVB / network (no cable)</span>
+    </div>
+    <div class="wd-scroll fit" id="wd-scroll">{{ svg }}</div>
+
+    <section class="wd-warnings">
+      <h2>Warnings{% if warnings %} ({{ warnings|length }}){% endif %}</h2>
+      {% if warnings %}
+        <ul>
+          {% for w in warnings %}
+            <li><span class="k">{{ w.title }}</span>: {{ w.edge }}{% if w.text %}, <span class="q">“{{ w.text }}”</span>{% endif %}{% if w.candidates %}. Could be: {{ w.candidates|join:", " }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="wd-empty">None.</p>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block footer %}
+{{ block.super }}
+<script>
+(function () {
+  var button = document.getElementById('wd-toggle');
+  var box = document.getElementById('wd-scroll');
+  if (!button || !box) return;
+  // Only a class on the container changes; the SVG itself is never touched.
+  button.addEventListener('click', function () {
+    var fit = box.classList.toggle('fit');
+    button.setAttribute('aria-pressed', fit ? 'true' : 'false');
+    button.textContent = fit ? 'Show at 100%' : 'Fit to width';
+  });
+})();
+</script>
+{% endblock %}

@@ -101,6 +101,7 @@ def ordered_get_app_list(request, app_label=None):
         
         # PA Cable System (10-11)
         'pacableschedule': 10,
+        'wiringdiagram': 10.5,   # a page, not a model: added below
         'pafanout': 11,
         
         # Communications (12-15)
@@ -184,6 +185,13 @@ def ordered_get_app_list(request, app_label=None):
                     model['add_url'] = None
                 filtered_models.append(model)
             
+            # Wiring Diagram is a read-only page, not a model, so it gets a
+            # row of its own, for every role that can open the project.
+            filtered_models.append({
+                'name': 'Wiring Diagram', 'object_name': 'WiringDiagram',
+                'admin_url': reverse('planner:wiring_diagram'), 'add_url': None,
+                'view_only': True, 'perms': {'view': True},
+            })
             app['models'] = filtered_models
             
             # Sort remaining models

@@ -200,7 +200,10 @@ class CableMatch:
 def _location(loc, kind='location'):
     if loc is None:
         return None
-    return {'id': loc.pk, 'name': loc.name, 'kind': kind}
+    out = {'id': loc.pk, 'name': loc.name, 'kind': kind}
+    if kind == ep.AMP_LOCATION:
+        out['sort_order'] = loc.sort_order      # the amp column groups in this order
+    return out
 
 
 class ProjectIndex:
@@ -259,7 +262,7 @@ class ProjectIndex:
                            {'model': str(a.amp_model) if a.amp_model_id else ''}))
         for loc in AmpLocation.objects.filter(project_id=pid):
             node = self._add(Node(ep.node_id(ep.AMP_LOCATION, loc.pk), ep.AMP_LOCATION,
-                                  loc.name))
+                                  loc.name, extra={'sort_order': loc.sort_order}))
             if norm(loc.name):
                 self.amp_location_names[norm(loc.name)].add(node.id)
         for arr in SpeakerArray.objects.filter(prediction__project_id=pid):

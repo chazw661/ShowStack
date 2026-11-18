@@ -233,6 +233,31 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         page.wait_for_selector('#crew-name-77')
         self.assert_text(page, '#crew-name-77 .cc-crew-name-text', NAME, 'crew name')
 
+    # -- Wiring Diagram ----------------------------------------------------------
+
+    def test_names_in_the_wiring_diagram_svg_and_warnings(self):
+        # connections/svg.py draws names server-side; the page's only script
+        # is the fit/100% toggle, which must leave the text as it is.
+        from planner.models import (Device, DeviceOutput, Location, P1Input, P1Processor,
+                                    SystemProcessor)
+        rack = Location.objects.create(project=self.project, name='Racks')
+        box = Device.objects.create(project=self.project, name=NAME)
+        DeviceOutput.objects.create(device=box, output_number=1, signal_name=QUOTED)
+        for name in ('SL', 'SR'):
+            proc = SystemProcessor.objects.create(project=self.project, name=name, device_type='P1',
+                                                  location=rack)
+            P1Processor.objects.create(system_processor=proc)
+            P1Input.objects.filter(p1_processor__system_processor=proc, input_type='AES',
+                                   channel_number=1).update(label=QUOTED)
+        page = self.open(reverse('planner:wiring_diagram'))
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'device box')
+        self.assert_text(page, 'svg.wd-svg .wd-label', QUOTED, 'ambiguous edge label')
+        self.assert_text(page, '.wd-warnings li', QUOTED, 'warnings panel')
+        page.click('#wd-toggle')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'after the toggle')
+        self.assertFalse(page.evaluate("document.getElementById('wd-scroll').classList.contains('fit')"))
+
     # -- Dashboard -------------------------------------------------------------
 
     # -- Mic Planner walkthrough ----------------------------------------------
