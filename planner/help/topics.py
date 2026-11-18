@@ -530,6 +530,16 @@ TOPICS = (
         keywords=('pa cable', 'nl4', 'nl8', 'cable run', 'zone', 'label', 'destination', 'length', 'duplicate',),
     ),
     Topic(
+        slug='wiring-diagram',
+        title='Read the wiring diagram',
+        section='Amps & PA',
+        summary='See the whole system, I/O to speakers, drawn from what you have entered.',
+        pages=(
+            'planner:wiring_diagram',
+        ),
+        keywords=('wiring', 'diagram', 'signal flow', 'block diagram', 'connections', 'inferred', 'not linked', 'ambiguous',),
+    ),
+    Topic(
         slug='pa-cable-fanouts-jumpers',
         title='Add fan-outs, extensions and jumpers',
         section='Amps & PA',

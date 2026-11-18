@@ -357,6 +357,12 @@ def project_graph(project, index=None, matches=None):
 
     nodes = {nid: _node_json(n) for nid, n in index.nodes.items()
              if n.kind in ep.DEVICE_KINDS}
+    # An I/O device is drawn as an inputs box and an outputs box; one with
+    # no ports on a side gets no box for it.
+    for side, ports in (('inputs', index.device_inputs), ('outputs', index.device_outputs)):
+        for port, _ in ports:
+            counts = nodes[port.node].setdefault('ports', {'inputs': 0, 'outputs': 0})
+            counts[side] += 1
     nodes.update(g.extra_nodes)
 
     grouped = defaultdict(list)
