@@ -35,7 +35,9 @@ same thing.
 Text that names nothing, or names more than one device, is drawn as an edge
 to (or from) an ``unlinked`` node carrying the text. An ambiguous match is
 never resolved: the edge has ``ambiguous: true`` and its ``candidates``, and
-``warnings`` lists it too.
+``warnings`` lists it too. An amp input's text is one ``feed`` node per field
+and text ("AVB 1", "AES: Left"), shared by every amp channel that typed it,
+with the ``reason`` it names nothing.
 
 Seam for PR 2b: ``_stored_links`` is where stored Connection rows join, and
 where a confirmed row will suppress the inferred links it covers.
@@ -100,11 +102,23 @@ def _pa_cable_label(row, shared=0):
     return ' · '.join(x for x in (zone, run, fans, split) if x)
 
 
+FEED_PREFIX = {'avb_stream': 'AVB', 'aes_input': 'AES', 'analog_input': 'Analog'}
+
+
+def _feed_label(field, text):
+    """An amp input's field and text: "AVB 1", "AES: Left", never a bare number."""
+    prefix = FEED_PREFIX[field]
+    if field == 'avb_stream':
+        return text if m.norm(text).startswith('avb') else f'{prefix} {text}'
+    return f'{prefix}: {text}'
+
+
 class _Graph:
     def __init__(self, index):
         self.index = index
         self.links = []
         self.extra_nodes = {}   # synthetic: amp_rack (when used) and unlinked
+        self.has_processors = any(n.kind == ep.PROCESSOR for n in index.nodes.values())
 
     def unlinked(self, key, text, ambiguous=False):
         """A node for text that names no single device. A shared key keeps
@@ -114,6 +128,29 @@ class _Graph:
             'id': node_id, 'kind': ep.UNLINKED, 'label': text,
             'unlinked': True, 'ambiguous': False})
         node['ambiguous'] = node['ambiguous'] or ambiguous
+        return node_id
+
+    def feed(self, match):
+        """The node for an amp input's text that names no single output: one
+        per field and text, so channels that typed the same thing share it."""
+        text = match.text.strip()
+        node_id = ep.node_id(ep.UNLINKED, f'b:{match.field}:{m.norm(text)}')
+        if node_id not in self.extra_nodes:
+            if match.verdict == m.AMBIGUOUS:
+                n = len({c.ref for c in match.candidates})
+                reason = f'{n} possible sources'
+            elif match.verdict == m.DRIFT:
+                reason = 'label differs from the stream'
+            elif match.field != 'avb_stream':
+                reason = 'not matched to an output'
+            elif self.has_processors:
+                reason = 'not matched to a processor output'
+            else:
+                reason = 'no processor in project'
+            self.extra_nodes[node_id] = {
+                'id': node_id, 'kind': ep.UNLINKED, 'label': _feed_label(match.field, text),
+                'unlinked': True, 'ambiguous': match.verdict == m.AMBIGUOUS,
+                'feed': match.field, 'reason': reason}
         return node_id
 
     def use(self, node_id):
@@ -232,7 +269,7 @@ class _Graph:
                     self.links.append(Link(target.node, ch.node, target, ch, **common))
                 continue
             ambiguous = match.verdict == m.AMBIGUOUS
-            node = self.unlinked(f'b:{ch.ref}:{match.field}', match.text, ambiguous)
+            node = self.feed(match)
             self.links.append(Link(node, ch.node, None, ch, unlinked=True,
                                    ambiguous=ambiguous, drift=match.verdict == m.DRIFT,
                                    candidates=match.candidates,
