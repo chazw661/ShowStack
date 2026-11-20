@@ -345,6 +345,45 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'after the toggle')
         self.assertFalse(page.evaluate("document.getElementById('wd-scroll').classList.contains('fit')"))
 
+    def test_names_on_every_wiring_diagram_tab(self):
+        # PR: wiring tabs. Hostile device names on the Dante tab's boxes
+        # (with their IP lines), the Analog tab's unset banner and line, and
+        # the Speaker cables tab; the tab bar is static text.
+        from planner.models import (Amp, AmpLocation, Console, ConsoleInput, Device,
+                                    DeviceInput, PACableSchedule)
+        desk = Console.objects.create(project=self.project, name=QUOTED,
+                                      primary_ip_address='10.0.0.1')
+        kick = ConsoleInput.objects.create(console=desk, input_ch='1', source=NAME)
+        dante = Device.objects.create(project=self.project, name=NAME, console_connection='dante',
+                                      primary_ip_address='10.0.0.20')
+        DeviceInput.objects.create(device=dante, input_number=1, signal_name=NAME, console_input=kick)
+        plain = Device.objects.create(project=self.project, name=QUOTED)
+        snare = ConsoleInput.objects.create(console=desk, input_ch='2', source=QUOTED)
+        DeviceInput.objects.create(device=plain, input_number=1, signal_name=QUOTED, console_input=snare)
+        amp = Amp.objects.create(project=self.project, name=NAME, location=AmpLocation.objects.create(
+            project=self.project, name=QUOTED))
+        PACableSchedule.objects.create(project=self.project, amp=amp, destination=NAME,
+                                       cable='NL_4', count=1, length=50)
+        url = reverse('planner:wiring_diagram')
+
+        page = self.open(url + '?view=dante')
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'Dante device box')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', QUOTED, 'console box')
+        self.assert_text(page, 'svg.wd-svg .wd-box text.ln', 'Pri 10.0.0.20', 'IP line')
+        self.assert_text(page, '.wd-banner a', QUOTED, 'unset banner')
+        self.assert_text(page, '.wd-tabs a[aria-current="page"]', 'Dante', 'tab bar')
+
+        page = self.open(url + '?view=analog')
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-label.unset', 'connection not set', 'unset line')
+        self.assert_text(page, '.wd-banner a', QUOTED, 'unset banner')
+
+        page = self.open(url + '?view=speakers')
+        page.wait_for_selector('svg.wd-svg')
+        self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'amp / destination box')
+        self.assert_text(page, 'svg.wd-svg .wd-group', QUOTED, 'amp rack header')
+
     # -- Dashboard -------------------------------------------------------------
 
     # -- Mic Planner walkthrough ----------------------------------------------

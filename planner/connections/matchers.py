@@ -133,6 +133,12 @@ _RACK_WORDS = 'amp rack'
 _TYPED_PORT = re.compile(r'^(analog|analogue|aes/ebu|aes|avb/milan|avb)\s*(\d+)$')
 
 
+def _ips(obj):
+    """The IP Address Manager's two addresses for a console or I/O device."""
+    return {'primary_ip': obj.primary_ip_address or '',
+            'secondary_ip': obj.secondary_ip_address or ''}
+
+
 def norm(text):
     """Comparison key: case-folded, dashes unified, whitespace collapsed."""
     text = _DASHES.sub('-', text or '')
@@ -258,10 +264,11 @@ class ProjectIndex:
         for c in (Console.objects.filter(project_id=pid, is_template=False)
                   .select_related('location')):
             self._add(Node(ep.node_id(ep.CONSOLE, c.pk), ep.CONSOLE, c.name,
-                           _location(c.location)))
+                           _location(c.location), _ips(c)))
         for d in Device.objects.filter(project_id=pid).select_related('location'):
             self._add(Node(ep.node_id(ep.DEVICE, d.pk), ep.DEVICE, d.name,
-                           _location(d.location)))
+                           _location(d.location),
+                           {**_ips(d), 'console_connection': d.console_connection or ''}))
         for p in SystemProcessor.objects.filter(project_id=pid).select_related('location'):
             node = self._add(Node(ep.node_id(ep.PROCESSOR, p.pk), ep.PROCESSOR, p.name,
                                   _location(p.location), {'device_type': p.device_type}))
@@ -396,7 +403,7 @@ class ProjectIndex:
         # PA cable runs -------------------------------------------------------
         self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)
                             .select_related('label')
-                            .prefetch_related('speaker_arrays', 'fan_outs')
+                            .prefetch_related('speaker_arrays', 'fan_outs__extensions')
                             .order_by('id'))
 
 

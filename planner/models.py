@@ -209,7 +209,8 @@ class Project(models.Model):
                 input_count=device.input_count,
                 output_count=device.output_count,
                 primary_ip_address=device.primary_ip_address,
-                secondary_ip_address=device.secondary_ip_address
+                secondary_ip_address=device.secondary_ip_address,
+                console_connection=device.console_connection,
             )
                 # Duplicate Device Inputs
                 for device_input in device.inputs.all():
@@ -1835,6 +1836,20 @@ class Device(models.Model):
     output_count = models.PositiveIntegerField(default=0)
     primary_ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="Primary IP Address", help_text="Primary device IP address (optional)")
     secondary_ip_address = models.GenericIPAddressField(blank=True, null=True, verbose_name="Secondary IP Address", help_text="Secondary device IP address (optional)")
+    # How the device reaches the console(s): the wiring diagram's transport
+    # for its console links (Dante is a network feed, the rest are cables).
+    # One per device; blank = not set.
+    CONSOLE_CONNECTION_CHOICES = [
+        ('dante', 'Dante'),
+        ('twinlane', 'TWINLANe'),
+        ('madi', 'MADI'),
+        ('analog', 'Analog'),
+        ('other', 'Other'),
+    ]
+    console_connection = models.CharField(
+        max_length=10, blank=True, default='', choices=CONSOLE_CONNECTION_CHOICES,
+        verbose_name="Console connection",
+        help_text="How this device connects to the console")
 
     
     def __str__(self):

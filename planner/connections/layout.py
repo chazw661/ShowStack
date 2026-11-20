@@ -49,9 +49,11 @@ IO_IN, CONSOLE, IO_OUT, PROCESSOR, FEEDS, AMP, SPEAKER = range(7)
 COLUMN_TITLES = ('I/O inputs', 'Console', 'I/O outputs', 'Processors', 'Unlinked feeds',
                  'Amps', 'Speakers')
 HIDDEN_WHEN_EMPTY = (PROCESSOR, FEEDS)
+ALL_COLUMNS = tuple(range(len(COLUMN_TITLES)))
 
 BOX_W = 200
 HEAD = 34           # title + subtitle above the first port slot
+LINE_H = 13         # each extra text line under the subtitle (an IP line)
 SLOT = 18           # port slots, and the lines on them, are this far apart
 PAD = 8             # below the last slot
 GAP_Y = 18          # between boxes in a column
@@ -65,6 +67,7 @@ LABEL_MAX = 300
 SWEEPS = 4
 
 NO_LOCATION = 'No location'
+UNSET_NOTE = 'connection not set'       # a console link whose device has none (Analog tab)
 NOT_CABLED = 'not_cabled'
 NOT_CABLED_LABEL = 'Not cabled'
 
@@ -76,6 +79,7 @@ class Box:
     column: int
     kind: str
     sub: str = ''
+    lines: list = field(default_factory=list)   # extra text lines (the graph node's ``lines``)
     style: str = 'device'       # 'device' / 'unlinked' / 'location' / 'dummy'
     node: str = ''              # graph node id ('' for a dummy)
     group: str | None = None
@@ -92,8 +96,12 @@ class Box:
     def dummy(self):
         return self.style == 'dummy'
 
+    @property
+    def head(self):
+        return HEAD + LINE_H * len(self.lines)
+
     def row_y(self, i):
-        return self.y + HEAD + SLOT / 2 + i * SLOT
+        return self.y + self.head + SLOT / 2 + i * SLOT
 
     def slot_y(self, segment):
         if self.dummy:
@@ -185,7 +193,9 @@ def _location_group(node):
 
 
 class _Builder:
-    def __init__(self, graph):
+    def __init__(self, graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
+        self.hide_empty = hide_empty
+        self.label_max = label_max
         self.graph = graph
         self.nodes = {n['id']: n for n in graph['nodes']}
         self.boxes = {}                 # box id -> Box
@@ -198,6 +208,7 @@ class _Builder:
     def box(self, box_id, **kw):
         if box_id not in self.boxes:
             box = Box(box_id, **kw)
+            box.lines = list(self.nodes.get(box.node, {}).get('lines', ()))
             self.boxes[box_id] = box
             self.columns[box.column].append(box)
         return self.boxes[box_id]
@@ -269,7 +280,7 @@ class _Builder:
             self.edges.append((edge, src, dst))
         # A column with no box of its own is left out: no title, no width, and
         # no dummies, so lines cross the gap where it would be.
-        self.hidden = {c for c in HIDDEN_WHEN_EMPTY if not self.columns[c]}
+        self.hidden = {c for c in self.hide_empty if not self.columns[c]}
         for edge, src, dst in self.edges:
             chain = [src] + [self.box(f"{edge['id']}~{c}", label='', column=c, kind='dummy',
                                       style='dummy', h=SLOT)
@@ -330,7 +341,7 @@ class _Builder:
             named = self.nodes.get(box.node, {}).get('slots')
             if named:
                 self.name_slots(box, named)
-            box.h = HEAD + max(len(box.slots) or len(box.ins), len(box.outs), 1) * SLOT + PAD
+            box.h = box.head + max(len(box.slots) or len(box.ins), len(box.outs), 1) * SLOT + PAD
 
     def name_slots(self, box, named):
         """The slots this box's lines use, in the graph's input order; a line
@@ -384,7 +395,7 @@ class _Builder:
             if c == len(self.columns) - 1:
                 break
             gap = [s for s in self.segments if s.from_box.column == c]
-            labels = [min(text_width(self.label(s.edge)), LABEL_MAX) for s in gap if s.first]
+            labels = [min(text_width(self.label(s.edge)), self.label_max) for s in gap if s.first]
             label_zone = (max(labels) + 2 * LABEL_PAD) if labels else LABEL_PAD
             bends = sorted((s for s in gap if abs(s.from_box.slot_y(s) - s.to_box.slot_y(s)) > 0.5),
                            key=lambda s: (s.from_box.slot_y(s), s.to_box.slot_y(s)))
@@ -410,6 +421,8 @@ class _Builder:
             # "→ In 1": no from-port, so the arrow follows the text directly.
             joiner = ' ' if text.startswith('→') else ' · '
             text = joiner.join(x for x in (head, text) if x)
+        if edge.get('connection_unset'):
+            text = ' · '.join(x for x in (text, UNSET_NOTE) if x)
         return text
 
     def routes(self):
@@ -430,7 +443,7 @@ class _Builder:
             y0 = points[0][1]
             out.append(Route(
                 id=edge['id'], from_node=edge['from'], to_node=edge['to'],
-                points=_simplify(points), label=clip(full, LABEL_MAX), label_full=full,
+                points=_simplify(points), label=clip(full, self.label_max), label_full=full,
                 label_x=src.x + src.w + LABEL_PAD, label_y=y0 - 4,
                 classes=_classes(edge), question=bool(edge.get('unlinked') or edge.get('ambiguous'))))
         return out
@@ -447,6 +460,8 @@ def _classes(edge):
         out.append('network')
     if edge.get('ambiguous'):
         out.append('ambiguous')
+    if edge.get('connection_unset'):
+        out.append('unset')
     return tuple(out)
 
 
@@ -466,8 +481,10 @@ def _simplify(points):
     return out
 
 
-def layout(graph):
-    b = _Builder(graph)
+def layout(graph, hide_empty=HIDDEN_WHEN_EMPTY, label_max=LABEL_MAX):
+    """``hide_empty``: the columns left out when no box is in them (a tab
+    passes ``ALL_COLUMNS``). ``label_max``: where a line's label is clipped."""
+    b = _Builder(graph, hide_empty, label_max)
     b.build()
     b.order()
     b.sort_slots()
@@ -475,7 +492,8 @@ def layout(graph):
     b.place_x()
     routes = b.routes()
     boxes = [box for column in b.columns for box in column if not box.dummy]
-    width = b.column_x[-1] + BOX_W + MARGIN
+    shown = [b.column_x[c] for c in range(len(COLUMN_TITLES)) if c not in b.hidden]
+    width = (max(shown) if shown else MARGIN) + BOX_W + MARGIN
     height = max([box.y + box.h for box in boxes] + [MARGIN + TITLE_H]) + MARGIN
     columns = [(title, b.column_x[c], BOX_W) for c, title in enumerate(COLUMN_TITLES)
                if c not in b.hidden]

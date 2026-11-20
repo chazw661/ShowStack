@@ -28,8 +28,9 @@ physical input a source plugs into, numbered by the rack view's input row:
 "XLR n" (analog), "AES n", "AVB n", n the lowest channel that source feeds
 on that transport, and "XLR 1 → Ch 1–2" when it feeds several channels.
 
-A PA cable run is labelled with its cable: "HR · 2× NL 8 75' · NL4 Y ×2"
-(the Cable Label, count, cable type, length, fan-outs). One run feeding
+A PA cable run is labelled with its cable: "HR · 2× NL 8 75' · NL4 Y ×2
++NL4 25' ×1" (the Cable Label, count, cable type, length, fan-outs, each
+fan-out's extensions). One run feeding
 several linked arrays is one edge per array, each saying so ("1 run → 3
 arrays") and carrying ``cable.shared`` so a total counts the run once. A run
 with no amp, rack or array is matched from its text (rule c): it starts at
@@ -104,7 +105,9 @@ def _pa_cable_label(row, shared=0):
     run = ' '.join(x for x in (f"{row.count}×", cable['type'],
                                f"{length:g}'" if length else '') if x)
     zone = row.label.name.strip() if row.label_id else ''
-    fans = ', '.join(f'{fo.get_fan_out_type_display()} ×{fo.quantity}'
+    fans = ', '.join(' '.join([f'{fo.get_fan_out_type_display()} ×{fo.quantity}']
+                              + [f"+{ext.extension_cable} {ext.extension_length}' ×{ext.quantity}"
+                                 for ext in fo.extensions.all()])
                      for fo in row.fan_outs.all() if fo.fan_out_type)
     split = f'1 run → {shared} arrays' if shared > 1 else ''
     return ' · '.join(x for x in (zone, run, fans, split) if x)
@@ -226,17 +229,27 @@ class _Graph:
 
     # -- confirmed -------------------------------------------------------------
 
+    def console_transport(self, device_node):
+        """An I/O device's Console connection is the transport of its console
+        links: Dante is a network feed (no cable), the rest are cables. Blank
+        (not set) leaves the transport unknown."""
+        transport = self.index.nodes[device_node].extra.get('console_connection') or None
+        return dict(transport=transport, network=transport == 'dante',
+                    cable=None if transport == 'dante' else {'recorded': False})
+
     def foreign_keys(self):
         idx = self.index
         for port, channel in idx.device_inputs:
             if channel:
                 self.links.append(Link(port.node, channel.node, port, channel,
-                                       source=('fk', 'DeviceInput.console_input')))
+                                       source=('fk', 'DeviceInput.console_input'),
+                                       **self.console_transport(port.node)))
         for port, bus in idx.device_outputs:
             if bus:
                 bus_port = idx.ports[bus]
                 self.links.append(Link(bus_port.node, port.node, bus_port, port,
-                                       source=('fk', 'DeviceOutput.console_output')))
+                                       source=('fk', 'DeviceOutput.console_output'),
+                                       **self.console_transport(port.node)))
         for row in idx.pa_rows:
             if m.entered_pa_run(row):
                 self.pa_run(row)
