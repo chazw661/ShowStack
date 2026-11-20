@@ -1,7 +1,8 @@
 """The wiring diagram as one standalone SVG string, drawn from ``layout``.
 
 Every name in it is user data (device names, labels, PA Destination text, amp
-input text), so every text node and attribute value goes through ``_e``. No
+input text), so every text node and attribute value goes through ``_e`` --
+input slot labels too, though today they are built from numbers. No
 script, no external references; the styles are inline so the file stands on
 its own.
 """
@@ -19,6 +20,7 @@ STYLE = """
 .wd-box.unlinked rect { fill: #fff8e6; stroke: #b7791f; stroke-dasharray: 5 3; }
 .wd-box .t { font: 600 12px system-ui, -apple-system, sans-serif; fill: #111; }
 .wd-box .s { font: 11px system-ui, -apple-system, sans-serif; fill: #555; }
+.wd-box .p { font: 10px system-ui, -apple-system, sans-serif; fill: #2b4c7e; }
 .wd-edge { fill: none; stroke: #2b4c7e; stroke-width: 1.4; }
 .wd-edge.inferred { stroke-dasharray: 6 4; }
 .wd-edge.unlinked { stroke: #b7791f; stroke-dasharray: 4 3; }
@@ -38,6 +40,17 @@ def _n(value):
     return f'{value:.1f}'.rstrip('0').rstrip('.')
 
 
+def _slots(box):
+    out = []
+    for i, label in enumerate(box.slots):
+        if not label:
+            continue
+        y = box.row_y(i)
+        out.append(f'<text class="p" data-slot="{_e(label)}" x="{_n(box.x + 8)}" y="{_n(y + 3.5)}">'
+                   f'{_e(clip(label, BOX_W - 16))}</text>')
+    return ''.join(out)
+
+
 def _box(box):
     title = clip(box.label, BOX_W - 16)
     sub = clip(box.sub, BOX_W - 16)
@@ -47,6 +60,7 @@ def _box(box):
         f'<rect x="{_n(box.x)}" y="{_n(box.y)}" width="{_n(box.w)}" height="{_n(box.h)}" rx="4"/>'
         f'<text class="t" x="{_n(box.x + 8)}" y="{_n(box.y + 15)}">{_e(title)}</text>'
         f'<text class="s" x="{_n(box.x + 8)}" y="{_n(box.y + 28)}">{_e(sub)}</text>'
+        f'{_slots(box)}'
         '</g>')
 
 

@@ -87,18 +87,22 @@ class GraphTests(ConnectionFixtures, TestCase):
 
     # -- live rules ---------------------------------------------------------------
 
-    def test_same_processor_aes_and_analog_is_one_certain_edge(self):
+    def test_same_processor_aes_and_analog_is_one_certain_edge_per_input(self):
+        # PR 3.2: each lands on its own named input slot.
         sl = self.p1('SL P1')
-        self.p1_in(sl, 'AES', 1, 'L Main')
-        self.p1_in(sl, 'ANALOG', 1, 'L Main')
+        aes = self.p1_in(sl, 'AES', 1, 'L Main')
+        analog = self.p1_in(sl, 'ANALOG', 1, 'L Main')
         self.matrix(self.desk, 1, destination='L Main')
-        [edge] = _edges(self.graph(), self.desk_id, f'processor:{sl.pk}')
-        self.assertEqual(edge['status'], 'inferred')
-        self.assertEqual(edge['transports'], ['aes', 'analog'])
-        self.assertEqual(edge['match'], ['same_processor'])
-        self.assertNotIn('ambiguous', edge)
-        self.assertEqual({l['to_port'] for l in edge['links']}, {'AES 1', 'Analog 1'})
-        self.assertEqual(edge['cable'], {'recorded': False})
+        graph = self.graph()
+        edges = _edges(graph, self.desk_id, f'processor:{sl.pk}')
+        self.assertEqual([(e['transports'], e['to_slot']) for e in edges],
+                         [(['aes'], f'p1input:{aes.pk}'), (['analog'], f'p1input:{analog.pk}')])
+        for edge in edges:
+            self.assertEqual((edge['status'], edge['match'], edge['cable']),
+                             ('inferred', ['same_processor'], {'recorded': False}))
+            self.assertNotIn('ambiguous', edge)
+        node = next(n for n in graph['nodes'] if n['id'] == f'processor:{sl.pk}')
+        self.assertEqual([s['label'] for s in node['slots']], ['AES 1', 'Analog 1'])
 
     def test_a_label_edit_shows_without_running_anything(self):
         sl, sr = self.p1('SL P1'), self.p1('SR P1')
@@ -108,11 +112,11 @@ class GraphTests(ConnectionFixtures, TestCase):
 
         port.label = 'Old'
         port.save()
-        self.p1_in(sr, 'AES', 2, 'Front')
+        port2 = self.p1_in(sr, 'AES', 2, 'Front')
         graph = self.graph()
         self.assertEqual(_edges(graph, self.box_id, f'processor:{sl.pk}'), [])
         [edge] = _edges(graph, self.box_id, f'processor:{sr.pk}')
-        self.assertEqual(edge['label'], 'Out 1 → AES 2')
+        self.assertEqual((edge['label'], edge['to_slot']), ('Out 1', f'p1input:{port2.pk}'))
 
     def test_ambiguous_match_is_an_unlinked_edge_with_candidates_and_a_warning(self):
         sl, sr = self.p1('SL P1'), self.p1('SR P1')
@@ -148,7 +152,7 @@ class GraphTests(ConnectionFixtures, TestCase):
                          (['avb'], None))
         self.assertEqual((by_network[False]['transports'], by_network[False]['cable']),
                          (['aes'], {'recorded': False}))
-        self.assertEqual(by_network[True]['label'], 'AVB 1 → Ch 1')
+        self.assertEqual(by_network[True]['label'], 'AVB 1')
 
     def test_amp_input_text_that_matches_nothing_is_an_unlinked_edge(self):
         amp = self.amp('SL LA12X #1')
@@ -156,7 +160,7 @@ class GraphTests(ConnectionFixtures, TestCase):
         [edge] = _edges(self.graph(), to=f'amp:{amp.pk}')
         self.assertTrue(edge['unlinked'])
         self.assertEqual(edge['text'], {'source': 'from somewhere', 'field': 'analog_input'})
-        self.assertEqual(edge['label'], '→ Ch 2')
+        self.assertEqual((edge['label'], edge['to_slot']), ('', 'analog:2'))
 
     def test_a_run_from_an_amp_goes_to_its_typed_destination_confirmed(self):
         # PR 2b-1: the To text is where the run goes, as typed -- never
@@ -314,7 +318,7 @@ class GraphTests(ConnectionFixtures, TestCase):
         graph = self.graph()
         [edge] = _edges(graph, self.box_id, f'amp:{amp.pk}')
         self.assertEqual((edge['label'], edge['transports'], edge['status']),
-                         ('Out 1 → Ch 1', ['aes'], 'inferred'))
+                         ('Out 1', ['aes'], 'inferred'))
         self.assertEqual(_edges(graph, to=f'amp:{amp.pk}'), [edge])   # 'x' draws nothing
 
     def test_one_io_name_twice_on_one_box_is_one_certain_edge(self):
@@ -325,7 +329,7 @@ class GraphTests(ConnectionFixtures, TestCase):
         graph = self.graph()
         [edge] = _edges(graph, self.box_id, f'amp:{amp.pk}')
         self.assertEqual((edge['label'], edge['match'], edge['unlinked']),
-                         ('Out 1–2 → Ch 1', ['same_device'], False))
+                         ('Out 1–2', ['same_device'], False))
         self.assertNotIn('ambiguous', edge)
         self.assertEqual(graph['warnings'], [])
 

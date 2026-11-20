@@ -7,9 +7,9 @@ later 11x17 PDF draw the same picture.
 
 Seven fixed columns, signal flowing left to right:
 
-  0 I/O inputs      an I/O device's inputs box, "<name> · inputs"
+  0 I/O inputs      an I/O device's inputs box, titled with its name only
   1 Console
-  2 I/O outputs     the same device's outputs box, "<name> · outputs"
+  2 I/O outputs     the same device's outputs box
   3 Processor       also text a console / I/O output names that matched no
                     single processor input. Hidden when there is no processor.
   4 Unlinked feeds  amp input text that names no single output ("AVB 1",
@@ -31,6 +31,11 @@ dummy in each column between, so it gets its own lane there.
 Ordering is barycenter: a few sweeps sorting each column by the mean position
 of its neighbours in the column before (then after). In the amp column the
 sort is only within a location group; groups never move.
+
+A box's lines meet it on port slots SLOT apart. Amps and processors have
+named input slots (the graph's ``slots``: "XLR 1", "AES 2 → Ch 2–3"), drawn
+inside the box's left edge in input order, and an edge lands on its
+``to_slot``; elsewhere a box has one slot per line, ordered to cross least.
 
 Routing is orthogonal: out of the source's right side, along to a vertical
 track of its own in the gap, then along into the target's left side. Every
@@ -80,16 +85,22 @@ class Box:
     h: float = 0
     ins: list = field(default_factory=list)     # segments ending here, top to bottom
     outs: list = field(default_factory=list)    # segments starting here
+    slots: list = field(default_factory=list)   # named input slots' labels, top to bottom
+    in_slot: dict = field(default_factory=dict)  # segment -> its input slot's index
 
     @property
     def dummy(self):
         return self.style == 'dummy'
 
+    def row_y(self, i):
+        return self.y + HEAD + SLOT / 2 + i * SLOT
+
     def slot_y(self, segment):
         if self.dummy:
             return self.y + SLOT / 2
-        side = self.ins if segment.to_box is self else self.outs
-        return self.y + HEAD + SLOT / 2 + side.index(segment) * SLOT
+        if segment.to_box is self:
+            return self.row_y(self.in_slot.get(segment, self.ins.index(segment)))
+        return self.row_y(self.outs.index(segment))
 
 
 @dataclass
@@ -192,11 +203,12 @@ class _Builder:
         return self.boxes[box_id]
 
     def device_box(self, node, side):
+        # The column title says inputs or outputs.
         name = node['label']
         if side == 'in':
-            return self.box(f"{node['id']}#in", label=f'{name} · inputs', column=IO_IN,
+            return self.box(f"{node['id']}#in", label=name, column=IO_IN,
                             kind='device', sub=_where(node), node=node['id'])
-        return self.box(f"{node['id']}#out", label=f'{name} · outputs', column=IO_OUT,
+        return self.box(f"{node['id']}#out", label=name, column=IO_OUT,
                         kind='device', sub=_where(node), node=node['id'])
 
     def node_box(self, node_id, edge=None, end=None):
@@ -313,8 +325,27 @@ class _Builder:
         for box in self.boxes.values():
             box.ins.sort(key=lambda s: pos[s.from_box.id])
             box.outs.sort(key=lambda s: pos[s.to_box.id])
-            if not box.dummy:
-                box.h = HEAD + max(len(box.ins), len(box.outs), 1) * SLOT + PAD
+            if box.dummy:
+                continue
+            named = self.nodes.get(box.node, {}).get('slots')
+            if named:
+                self.name_slots(box, named)
+            box.h = HEAD + max(len(box.slots) or len(box.ins), len(box.outs), 1) * SLOT + PAD
+
+    def name_slots(self, box, named):
+        """The slots this box's lines use, in the graph's input order; a line
+        with no slot (a processor matched by name only) gets an unnamed one."""
+        used = {s.edge.get('to_slot') for s in box.ins}
+        rows = [slot for slot in named if slot['id'] in used]
+        index = {slot['id']: i for i, slot in enumerate(rows)}
+        box.slots = [slot['label'] for slot in rows]
+        for seg in box.ins:
+            if seg.edge.get('to_slot') not in index:
+                box.in_slot[seg] = len(box.slots)
+                box.slots.append('')
+            else:
+                box.in_slot[seg] = index[seg.edge['to_slot']]
+        box.ins.sort(key=lambda s: box.in_slot[s])
 
     # -- position --------------------------------------------------------------
 

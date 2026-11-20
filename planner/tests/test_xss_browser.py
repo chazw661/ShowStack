@@ -338,6 +338,8 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, 'svg.wd-svg .wd-label', QUOTED, 'ambiguous edge label')
         self.assert_text(page, '.wd-warnings li', QUOTED, 'warnings panel')
         self.assert_text(page, 'svg.wd-svg .wd-box.unlinked title', f'AES: {NAME}', 'unlinked feed box')
+        # PR 3.2: the feed lands on the amp's named input slot, drawn as text.
+        self.assert_text(page, 'svg.wd-svg .wd-box text.p', 'AES 1', 'amp input slot')
         self.assert_text(page, 'svg.wd-svg .wd-col', 'Unlinked feeds', 'feeds column')
         page.click('#wd-toggle')
         self.assert_text(page, 'svg.wd-svg .wd-box title', NAME, 'after the toggle')

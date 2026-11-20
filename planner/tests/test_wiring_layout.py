@@ -5,6 +5,8 @@ Run with::
     python manage.py test planner.tests.test_wiring_layout \\
         --settings=audiopatch.test_settings
 """
+import xml.etree.ElementTree as ET
+
 from django.test import SimpleTestCase, TestCase
 
 from planner.connections import layout as L
@@ -12,6 +14,8 @@ from planner.connections import svg
 from planner.connections.graph import project_graph
 from planner.models import AmpLocation, ConsoleAuxOutput
 from planner.tests.connection_fixtures import ConnectionFixtures
+
+SVG_NS = '{http://www.w3.org/2000/svg}'
 
 
 class WiringShow(ConnectionFixtures):
@@ -85,8 +89,9 @@ class WiringLayoutTests(WiringShow, TestCase):
         self.assertEqual(self.column(f'amp:{self.ff_amp.pk}'), L.AMP)
         self.assertEqual(self.column('amp_rack:unlinked'), L.AMP)
         self.assertEqual(self.column(f'speaker_array:{self.k2.pk}'), L.SPEAKER)
-        self.assertEqual(self.boxes[f'{box}#in'].label, 'Stage Box · inputs')
-        self.assertEqual(self.boxes[f'{box}#out'].label, 'Stage Box · outputs')
+        # The column titles say inputs / outputs; the box is the device's name.
+        self.assertEqual(self.boxes[f'{box}#in'].label, 'Stage Box')
+        self.assertEqual(self.boxes[f'{box}#out'].label, 'Stage Box')
 
     def test_a_device_with_one_side_gets_one_box(self):
         self.assertIn(f'device:{self.drums.pk}#out', self.boxes)
@@ -102,7 +107,7 @@ class WiringLayoutTests(WiringShow, TestCase):
         self.assertEqual(bus.label, 'Aux 1 → Out 1')
         self.assertEqual(bus.points[-1][0], self.boxes[f'{box}#out'].x)     # into the outputs box
         # the processor path
-        self.assertEqual(self.route(box, sl).label, 'Out 2 → AES 1')
+        self.assertEqual(self.route(box, sl).label, 'Out 2')
         self.assertEqual(self.route(sl, sl_amp).classes, ('inferred',))
         # direct I/O -> amp starts at the outputs box
         direct = self.route(box, f'amp:{self.ff_amp.pk}')
@@ -323,6 +328,117 @@ class NotCabledTests(WiringShow, TestCase):
         self.assertFalse([g for g in self.draw().groups if g.key == L.NOT_CABLED])
 
 
+class InputSlotTests(ConnectionFixtures, TestCase):
+    """PR 3.2: lines into amps and processors land on named input slots."""
+
+    def setUp(self):
+        super().setUp()
+        self.box = self.device('Stage Box')
+        self.sl = self.p1('SL P1')
+        self.amp_ = self.amp('SL Amp')
+        self.amp_id = f'amp:{self.amp_.pk}'
+
+    def draw(self):
+        self.graph = project_graph(self.project)
+        self.lay = L.layout(self.graph)
+        self.boxes = {b.id: b for b in self.lay.boxes}
+        return self.lay
+
+    def into(self, node_id):
+        return [r for r in self.lay.routes if r.to_node == node_id]
+
+    def assert_on_slots(self, box):
+        """Every line into ``box`` ends on the slot its edge names."""
+        edges = {e['id']: e for e in self.graph['edges']}
+        node = next(n for n in self.graph['nodes'] if n['id'] == box.node)
+        label = {s['id']: s['label'] for s in node['slots']}
+        for route in self.into(box.node):
+            slot = label[edges[route.id]['to_slot']]
+            self.assertEqual(route.points[-1], (box.x, box.row_y(box.slots.index(slot))), slot)
+
+    def test_amp_slots_match_the_channel_input_rows(self):
+        self.device_output(self.box, 1, 'Fill')
+        self.p1_out(self.sl, 'AES', 1, 'Main L')
+        self.p1_out(self.sl, 'AVB', 3, 'Delay')
+        self.amp_channel(self.amp_, 1, analog_input='Fill')
+        self.amp_channel(self.amp_, 2, aes_input='Main L')
+        self.amp_channel(self.amp_, 3, avb_stream='AVB 3 - Delay')
+        self.draw()
+        box = self.boxes[self.amp_id]
+        # the rack view's rows: channel n's AVB stream, XLR and AES inputs
+        self.assertEqual(box.slots, ['AVB 3', 'XLR 1', 'AES 2'])
+        self.assertEqual(box.h, L.HEAD + 3 * L.SLOT + L.PAD)
+        self.assert_on_slots(box)
+        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['AES 1', 'AVB 3', 'Out 1'])
+
+    def test_edge_labels_into_amps_have_no_channel(self):
+        self.device_output(self.box, 1, 'Fill')
+        self.p1_out(self.sl, 'AES', 1, 'Main L')
+        self.amp_channel(self.amp_, 1, analog_input='Fill', avb_stream='Nope')
+        self.amp_channel(self.amp_, 2, aes_input='Main L', avb_stream='Nope')
+        self.amp_channel(self.amp_, 3, aes_input='Main L')
+        self.draw()
+        labels = [r.label for r in self.into(self.amp_id)]
+        self.assertEqual(len(labels), 3)
+        for label in labels:
+            self.assertNotIn('→ Ch', label)
+            self.assertNotIn('Ch ', label)
+        self.assertIn('? AVB Nope', labels)
+        for edge in self.graph['edges']:
+            if edge['to'] == self.amp_id:
+                self.assertNotIn('→', edge['label'])
+
+    def test_one_source_into_several_channels_is_one_slot(self):
+        self.device_output(self.box, 1, 'Fill')
+        self.amp_channel(self.amp_, 1, analog_input='Fill', avb_stream='Nope')
+        self.amp_channel(self.amp_, 2, analog_input='Fill', avb_stream='Nope')
+        self.amp_channel(self.amp_, 4, analog_input='Fill')
+        self.draw()
+        box = self.boxes[self.amp_id]
+        self.assertEqual(box.slots, ['AVB 1 → Ch 1–2', 'XLR 1 → Ch 1–2, 4'])
+        self.assertEqual(len(self.into(self.amp_id)), 2)
+        self.assert_on_slots(box)
+
+    def test_two_sources_get_their_own_slots(self):
+        self.device_output(self.box, 1, 'Left')
+        self.device_output(self.box, 2, 'Right')
+        self.amp_channel(self.amp_, 1, analog_input='Left')
+        self.amp_channel(self.amp_, 2, analog_input='Right')
+        self.amp_channel(self.amp_, 3, analog_input='Left')
+        self.draw()
+        box = self.boxes[self.amp_id]
+        self.assertEqual(box.slots, ['XLR 1 → Ch 1, 3', 'XLR 2'])
+        self.assertEqual(sorted(r.label for r in self.into(self.amp_id)), ['Out 1', 'Out 2'])
+        self.assert_on_slots(box)
+
+    def test_processor_inputs_are_named_slots(self):
+        self.p1_in(self.sl, 'AES', 1, 'Main L')
+        self.p1_in(self.sl, 'ANALOG', 2, 'Fill')
+        self.device_output(self.box, 1, 'Main L')
+        self.device_output(self.box, 2, 'Fill')
+        self.draw()
+        box = self.boxes[f'processor:{self.sl.pk}']
+        self.assertEqual(box.slots, ['AES 1', 'Analog 2'])
+        self.assertEqual(sorted(r.label for r in self.into(box.node)), ['Out 1', 'Out 2'])
+        self.assert_on_slots(box)
+
+    def test_the_svg_draws_each_slot_label(self):
+        self.device_output(self.box, 1, 'Fill')
+        self.p1_in(self.sl, 'AES', 1, 'Fill')
+        self.amp_channel(self.amp_, 1, analog_input='Fill')
+        self.amp_channel(self.amp_, 2, analog_input='Fill')
+        root = ET.fromstring(svg.render(self.draw()))
+        slots = {t.get('data-slot'): t.text for t in root.iter(f'{SVG_NS}text')
+                 if t.get('class') == 'p'}
+        self.assertEqual(slots, {'XLR 1 → Ch 1–2': 'XLR 1 → Ch 1–2', 'AES 1': 'AES 1'})
+
+    def test_boxes_with_no_inputs_have_no_slots(self):
+        self.amp_channel(self.amp_, 1)
+        self.draw()
+        self.assertEqual(self.boxes[self.amp_id].slots, [])
+        self.assertEqual(self.boxes[f'device:{self.box.pk}#in'].slots, [])
+
+
 class LayoutOfAHandBuiltGraphTests(SimpleTestCase):
     """layout() reads only the dict: no project, no ORM."""
 
@@ -345,3 +461,20 @@ class LayoutOfAHandBuiltGraphTests(SimpleTestCase):
     def test_long_labels_are_clipped_with_the_full_text_kept(self):
         self.assertEqual(L.clip('abcdefghij', L.CHAR_W * 5), 'abcd…')
         self.assertEqual(L.clip('abc', L.CHAR_W * 5), 'abc')
+
+    def test_a_slot_label_is_escaped(self):
+        hostile = '"><img src=x onerror=1>'     # short enough not to be clipped
+        graph = {'nodes': [{'id': 'device:1', 'kind': 'device', 'label': 'Box',
+                            'ports': {'inputs': 0, 'outputs': 1}},
+                           {'id': 'amp:1', 'kind': 'amp', 'label': 'Amp',
+                            'slots': [{'id': 'analog:1', 'label': hostile}]}],
+                 'edges': [{'id': 'e1', 'from': 'device:1', 'to': 'amp:1', 'label': 'Out 1',
+                            'links': [{'from_ref': 'deviceoutput:1'}], 'status': 'inferred',
+                            'to_slot': 'analog:1'}],
+                 'warnings': []}
+        out = svg.render(L.layout(graph))
+        self.assertNotIn('<img', out)
+        root = ET.fromstring(out)
+        self.assertEqual([e for e in root.iter() if e.tag.endswith('img')], [])
+        [text] = [t for t in root.iter(f'{SVG_NS}text') if t.get('class') == 'p']
+        self.assertEqual((text.text, text.get('data-slot')), (hostile, hostile))
