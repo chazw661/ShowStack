@@ -1,7 +1,7 @@
 from django.db import models
 from django.db.models import CheckConstraint, UniqueConstraint, Q
 from django.core.validators import MinValueValidator
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from decimal import ROUND_HALF_UP, Decimal
@@ -113,6 +113,7 @@ class Project(models.Model):
             console_map = {}
             amp_map = {}
             array_map = {}              # PA cable runs link arrays by these
+            port_map = {}               # (model, old pk) -> new row: amp input links
 
             # 1. Duplicate Locations (needed for other models)
             for location in self.location_set.all():
@@ -220,7 +221,7 @@ class Project(models.Model):
                 
                 # Duplicate Device Outputs
                 for device_output in device.outputs.all():
-                    DeviceOutput.objects.create(
+                    port_map[('deviceoutput', device_output.pk)] = DeviceOutput.objects.create(
                     device=new_device,
                     output_number=device_output.output_number,
                     signal_name=device_output.signal_name
@@ -297,7 +298,7 @@ class Project(models.Model):
 
                 # Duplicate Amp Channels
                 for channel in amp.channels.all():
-                    AmpChannel.objects.create(
+                    port_map[('ampchannel', channel.pk)] = AmpChannel.objects.create(
                         amp=new_amp,
                         channel_number=channel.channel_number,
                         channel_name=channel.channel_name,
@@ -658,7 +659,7 @@ class Project(models.Model):
                     
                     # Duplicate P1Outputs
                     for p1_output in p1_config.outputs.all():
-                        P1Output.objects.create(
+                        port_map[('p1output', p1_output.pk)] = P1Output.objects.create(
                             p1_processor=new_p1,
                             output_type=p1_output.output_type,
                             channel_number=p1_output.channel_number,
@@ -685,7 +686,7 @@ class Project(models.Model):
                     
                     # Duplicate GalaxyOutputs
                     for galaxy_output in galaxy_config.outputs.all():
-                        GalaxyOutput.objects.create(
+                        port_map[('galaxyoutput', galaxy_output.pk)] = GalaxyOutput.objects.create(
                             galaxy_processor=new_galaxy,
                             output_type=galaxy_output.output_type,
                             channel_number=galaxy_output.channel_number,
@@ -763,6 +764,16 @@ class Project(models.Model):
                         day4_status=task.day4_status
                     )
             
+            # Amp input links, onto the copy's own outputs and channels.
+            for conn in Connection.objects.filter(project=self).select_related('from_ct', 'to_ct'):
+                source = port_map.get((conn.from_ct.model, conn.from_id))
+                channel = port_map.get((conn.to_ct.model, conn.to_id))
+                if source is not None and channel is not None:
+                    Connection.objects.create(
+                        project=new_project, from_ct=conn.from_ct, from_id=source.pk,
+                        to_ct=conn.to_ct, to_id=channel.pk, transport=conn.transport,
+                        cable_type=conn.cable_type, length_ft=conn.length_ft, notes=conn.notes)
+
             # NOTE: We intentionally do NOT duplicate:
             # - ProjectMember (team members)
             # - Invitations
@@ -1886,6 +1897,9 @@ class DeviceOutput(models.Model):
     )
     object_id = models.PositiveIntegerField(null=True, blank=True)
     console_output = GenericForeignKey('content_type', 'object_id')
+    # Amp inputs linked to this output; deleting it deletes the links.
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
 
 
 
@@ -2331,6 +2345,9 @@ class AmpChannel(models.Model):
     amp = models.ForeignKey(Amp, on_delete=models.CASCADE, related_name='channels')
     channel_number = models.IntegerField()
     channel_name = models.CharField(max_length=100, blank=True, default="")
+    # The source outputs this channel's inputs are linked to (PR 2b-2).
+    connections_in = GenericRelation('Connection', content_type_field='to_ct',
+                                     object_id_field='to_id')
 
     # Issue #30: per-channel speaker-zone routing label that lived in the
     # original spreadsheet (PA_A/LF_B/HF_C/SB_D etc.). A 4-channel amp records
@@ -2364,12 +2381,12 @@ class AmpChannel(models.Model):
         help_text="AVB stream assignment"
     )
     aes_input = models.CharField(
-        max_length=50, blank=True,
+        max_length=120, blank=True,
         verbose_name="AES Input",
         help_text="AES input assignment"
     )
     analog_input = models.CharField(
-        max_length=50, blank=True,
+        max_length=120, blank=True,
         verbose_name="Analog Input",
         help_text="Analog input assignment"
     )
@@ -2642,6 +2659,8 @@ class P1Output(models.Model):
     channel_number = models.PositiveIntegerField()
     label = models.CharField(max_length=100, blank=True, null=True, help_text="Channel label/name")
     assigned_bus = models.IntegerField(choices=BUS_CHOICES, blank=True, null=True, help_text="Assigned bus (1-8)")
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
     
     class Meta:
         unique_together = ['p1_processor', 'output_type', 'channel_number']
@@ -2741,6 +2760,8 @@ class GalaxyOutput(models.Model):
         blank=True,
         help_text="Output destination (e.g., amp name, speaker zone)"
     )
+    connections_out = GenericRelation('Connection', content_type_field='from_ct',
+                                      object_id_field='from_id')
     
     class Meta:
         ordering = ['output_type', 'channel_number']
@@ -2750,6 +2771,89 @@ class GalaxyOutput(models.Model):
     
     def __str__(self):
         return f"{self.get_output_type_display()} {self.channel_number}"
+
+
+class Connection(models.Model):
+    """A confirmed link from one port to another (wiring diagram, PR 2b).
+
+    Both ends are generic, so every hop can be stored in one table. For now
+    one use is allowed: an amp channel's input linked to the output feeding
+    it (``to`` = AmpChannel; ``from`` = P1Output / GalaxyOutput /
+    DeviceOutput), at most one per channel and transport. ``save()`` refuses
+    anything else, an end in another project, and a transport the source
+    cannot carry. The ends' GenericRelations delete a row with either end.
+    """
+    TRANSPORT_CHOICES = [('analog', 'Analog'), ('aes', 'AES'), ('dante', 'Dante'),
+                         ('avb', 'AVB'), ('madi', 'MADI'), ('speaker', 'Speaker')]
+    STATUS_CHOICES = [('confirmed', 'Confirmed')]
+
+    # from model -> (path to its project id, transports it can carry)
+    SOURCES = {
+        'p1output': ('p1_processor__system_processor__project_id', None),
+        'galaxyoutput': ('galaxy_processor__system_processor__project_id', None),
+        'deviceoutput': ('device__project_id', {'aes', 'analog'}),
+    }
+    PROCESSOR_TRANSPORT = {'AVB': 'avb', 'AES': 'aes', 'ANALOG': 'analog'}
+
+    project = models.ForeignKey('Project', on_delete=models.CASCADE, related_name='connections')
+    from_ct = models.ForeignKey(ContentType, on_delete=models.PROTECT, related_name='+')
+    from_id = models.PositiveBigIntegerField()
+    from_obj = GenericForeignKey('from_ct', 'from_id')
+    to_ct = models.ForeignKey(ContentType, on_delete=models.PROTECT, related_name='+')
+    to_id = models.PositiveBigIntegerField()
+    to_obj = GenericForeignKey('to_ct', 'to_id')
+    transport = models.CharField(max_length=10, choices=TRANSPORT_CHOICES)
+    cable_type = models.CharField(max_length=40, blank=True)
+    cable_id = models.CharField(max_length=40, null=True, blank=True)
+    length_ft = models.PositiveIntegerField(null=True, blank=True)
+    notes = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='confirmed')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            UniqueConstraint(fields=['to_ct', 'to_id', 'transport'],
+                             name='connection_one_feed_per_input'),
+            UniqueConstraint(fields=['project', 'cable_id'], condition=Q(cable_id__isnull=False),
+                             name='connection_cable_id_unique_per_project'),
+        ]
+        indexes = [models.Index(fields=['from_ct', 'from_id']),
+                   models.Index(fields=['to_ct', 'to_id'])]
+
+    def __str__(self):
+        return f'{self.from_ct.model}:{self.from_id} → {self.to_ct.model}:{self.to_id} ({self.transport})'
+
+    def check_ends(self):
+        """Raise ValidationError unless this is a link the module allows."""
+        from django.core.exceptions import ValidationError
+        if self.to_ct_id != ContentType.objects.get_for_model(AmpChannel).pk:
+            raise ValidationError('A connection goes to an amp channel.')
+        source = self.SOURCES.get(self.from_ct.model if self.from_ct_id else '')
+        if source is None or self.from_ct.app_label != 'planner':
+            raise ValidationError('A connection comes from a processor or I/O output.')
+        path, transports = source
+        model = self.from_ct.model_class()
+        row = (model.objects.filter(pk=self.from_id)
+               .values(path, *(['output_type'] if transports is None else [])).first())
+        to_project = (AmpChannel.objects.filter(pk=self.to_id)
+                      .values_list('amp__project_id', flat=True).first())
+        if row is None or to_project is None:
+            raise ValidationError('A connection end does not exist.')
+        if row[path] != self.project_id or to_project != self.project_id:
+            raise ValidationError('Both ends of a connection must be in its project.')
+        allowed = transports if transports is not None else {
+            self.PROCESSOR_TRANSPORT.get(row['output_type'])}
+        if self.transport not in allowed:
+            raise ValidationError(f'{self.from_ct.model} cannot carry {self.transport}.')
+        if self.status not in dict(self.STATUS_CHOICES):
+            raise ValidationError(f'Unknown status {self.status!r}.')
+
+    def save(self, *args, **kwargs):
+        if self.cable_id == '':
+            self.cable_id = None
+        self.check_ends()
+        super().save(*args, **kwargs)
             
 
 #-----------PA Cable-------

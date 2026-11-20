@@ -269,6 +269,47 @@ class NamesRenderAsTextTests(StaticLiveServerTestCase):
         self.assert_text(page, '#result_list td.field-arrays_col .cb-array', NAME, 'Arrays column')
         self.assert_text(page, '#result_list .field-cable_label_col', '<b>HL', 'Cable Label')
 
+    # -- Amp input pickers ------------------------------------------------------
+
+    def test_names_in_the_amp_input_pickers_and_link_tooltip(self):
+        # The datalists are filled from JSON with .value; the link button's
+        # tooltip is server-rendered, then set by script after a save.
+        from planner.models import (Amp, AmpLocation, AmpModel, Device, DeviceOutput,
+                                    P1Output, P1Processor, SystemProcessor)
+        from planner.models import Location
+        proc = SystemProcessor.objects.create(project=self.project, name=NAME, device_type='P1',
+                                              location=Location.objects.create(
+                                                  project=self.project, name='Racks'))
+        P1Processor.objects.create(system_processor=proc)
+        P1Output.objects.filter(p1_processor__system_processor=proc, output_type='AVB',
+                                channel_number=1).update(label=QUOTED)
+        box = Device.objects.create(project=self.project, name=QUOTED)
+        DeviceOutput.objects.create(device=box, output_number=1, signal_name=NAME)
+        amp = Amp.objects.create(project=self.project, name='Amp 1',
+                                 location=AmpLocation.objects.create(project=self.project, name='L'),
+                                 amp_model=AmpModel.objects.get_or_create(
+                                     manufacturer="L'Acoustics", model_name='XSS4',
+                                     defaults={'channel_count': 4, 'has_avb_inputs': True})[0])
+        avb = f'AVB 1 - {QUOTED} ({NAME})'
+        io = f'{NAME} · {QUOTED} Out 1'
+        page = self.open(reverse('admin:planner_amp_changelist'))
+        values = page.eval_on_selector_all('#amp-avb-input-options option', 'os => os.map(o => o.value)')
+        self.assertIn(avb, values)
+        values = page.eval_on_selector_all('#amp-analog-input-options option', 'os => os.map(o => o.value)')
+        self.assertIn(io, values)
+        cell = f'input.amp-cell-input[data-channel-id="{amp.channels.get(channel_number=1).pk}"]'
+        page.click('.amp-avb-toggle')                     # empty AVB rows are folded away
+        page.fill(cell + '[data-field="avb_stream"]', avb)
+        page.press(cell + '[data-field="avb_stream"]', 'Tab')
+        page.wait_for_selector('td.amp-input-cell.linked .amp-link-btn.linked')
+        title = page.get_attribute('td.amp-input-cell.linked .amp-link-btn', 'title')
+        self.assertEqual(title, f'Linked to {avb}')
+        page.reload()
+        page.wait_for_load_state('networkidle')
+        self.assertEqual(page.get_attribute('td.amp-input-cell.linked .amp-link-btn', 'title'),
+                         f'Linked to {avb}')
+        self.assert_text(page, cell + '[data-field="avb_stream"]', avb, 'linked input text')
+
     # -- Wiring Diagram ----------------------------------------------------------
 
     def test_names_in_the_wiring_diagram_svg_and_warnings(self):

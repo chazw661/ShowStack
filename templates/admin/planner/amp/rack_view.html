@@ -295,6 +295,30 @@
     }
     .amp-avb-toggle:hover { color: #f0f0f0; background: var(--ss-raised); }
 
+    /* PR 2b-2: an input's link state sits inside its cell, so no row grows. */
+    .amp-input-table td.amp-input-cell { position: relative; }
+    .amp-input-table td.amp-input-cell.linked { box-shadow: inset 2px 0 0 #3ddc84; }
+    .amp-input-cell .amp-cell-input { padding-right: 18px !important; }
+    .amp-link-btn {
+        position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+        width: 14px; height: 14px; padding: 0 !important; margin: 0 !important;
+        border: 0 !important; background: transparent !important;
+        color: #9ab !important; opacity: 0.35; line-height: 0; cursor: default;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .amp-link-btn.linked { color: #3ddc84 !important; opacity: 1; }
+    button.amp-link-btn.linked { cursor: pointer; }
+    .amp-link-menu {
+        position: absolute; z-index: 50; padding: 4px;
+        background: var(--ss-raised); border: 1px solid var(--ss-border); border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .amp-link-menu button {
+        background: transparent !important; color: #f0f0f0 !important; border: 0 !important;
+        font: inherit; font-size: 12px; padding: 4px 8px !important; cursor: pointer;
+    }
+    .amp-link-menu button:hover { background: var(--ss-surface) !important; }
+
     .amp-input-table .stream-col {
         background: var(--ss-surface);
         color: #9ab;
@@ -990,21 +1014,23 @@
                         <tbody>
                             {% for ch in card.channels %}
                             <tr{% if ch.avb_unused %} class="amp-avb-unused"{% endif %}>
-                                <td class="stream-col">
-                                    {# Issue #43: text+datalist so processor output labels can suggest "AVB N - Name". #}
+                                <td class="stream-col amp-input-cell{% if ch.links.avb_stream %} linked{% endif %}">
+                                    {# PR 2b-2: the datalist is the picker; an entry links the input. #}
                                     <input type="text" class="amp-cell-input"
-                                           value="{{ ch.avb_stream }}"
+                                           value="{{ ch.avb_stream|default:'' }}"
                                            list="amp-avb-input-options"
                                            data-channel-id="{{ ch.pk }}"
                                            data-field="avb_stream"{% if not can_edit %} readonly{% endif %}>
+                                    {% include "admin/planner/amp/_input_link.html" with channel_id=ch.pk field="avb_stream" linked=ch.links.avb_stream %}
                                 </td>
                                 <td class="ch-num">{{ ch.channel_number }}</td>
-                                <td>
+                                <td class="amp-input-cell{% if ch.links.analog_input %} linked{% endif %}">
                                     <input type="text" class="amp-cell-input"
                                            value="{{ ch.analog_input }}"
                                            list="amp-analog-input-options"
                                            data-channel-id="{{ ch.pk }}"
                                            data-field="analog_input"{% if not can_edit %} readonly{% endif %}>
+                                    {% include "admin/planner/amp/_input_link.html" with channel_id=ch.pk field="analog_input" linked=ch.links.analog_input %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -1024,12 +1050,13 @@
                             <tr>
                                 <td class="stream-col"></td>
                                 <td class="ch-num">{{ ch.channel_number }}</td>
-                                <td>
+                                <td class="amp-input-cell{% if ch.links.aes_input %} linked{% endif %}">
                                     <input type="text" class="amp-cell-input"
                                            value="{{ ch.aes_input }}"
                                            list="amp-aes-input-options"
                                            data-channel-id="{{ ch.pk }}"
                                            data-field="aes_input"{% if not can_edit %} readonly{% endif %}>
+                                    {% include "admin/planner/amp/_input_link.html" with channel_id=ch.pk field="aes_input" linked=ch.links.aes_input %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -1283,16 +1310,15 @@
     <option value="CUSTOM"></option>
 </datalist>
 
-{# Issue #43: processor output labels surfaced as datalist hints on the amp input fields. #}
-<datalist id="amp-analog-input-options">
-    {% for v in analog_input_options %}<option value="{{ v }}"></option>{% endfor %}
-</datalist>
-<datalist id="amp-aes-input-options">
-    {% for v in aes_input_options %}<option value="{{ v }}"></option>{% endfor %}
-</datalist>
-<datalist id="amp-avb-input-options">
-    {% for v in avb_input_options %}<option value="{{ v }}"></option>{% endfor %}
-</datalist>
+{# PR 2b-2: the amp input pickers. Filled by script from the JSON below, #}
+{# one entry per output that can feed the field; an entry links the input. #}
+<datalist id="amp-analog-input-options"></datalist>
+<datalist id="amp-aes-input-options"></datalist>
+<datalist id="amp-avb-input-options"></datalist>
+<script type="application/json" id="amp-input-sources">{{ input_sources_json|default:'{}'|safe }}</script>
+<div id="amp-link-menu" class="amp-link-menu" hidden>
+    <button type="button" id="amp-link-unlink">Unlink (keep text)</button>
+</div>
 
 {# ── Locations modal ────────────────────────────────────────── #}
 <div class="rack-modal" id="locations-modal" onclick="if(event.target===this)closeLocationsModal()">
@@ -1397,6 +1423,7 @@
         postForm(url, { field: field, value: el.value })
             .then(function (r) {
                 if (r.success) {
+                    if ('linked' in r) showLink(el.closest('.amp-input-cell'), r.linked);
                     flashState(el, 'saved');
                     setTimeout(function () { flashState(el, null); }, 600);
                 } else {
@@ -1408,6 +1435,79 @@
                 flashState(el, 'error');
                 console.error(err);
             });
+    }
+
+    // ───── PR 2b-2: amp input pickers ─────
+    // The datalists list every output that can feed each field, from JSON;
+    // a saved entry links the input. Built with .value, never markup.
+    var DATALISTS = { avb_stream: 'amp-avb-input-options', aes_input: 'amp-aes-input-options',
+                      analog_input: 'amp-analog-input-options' };
+
+    function fillInputPickers() {
+        var blob = document.getElementById('amp-input-sources');
+        var sources = {};
+        try { sources = JSON.parse(blob ? blob.textContent : '{}'); } catch (e) { sources = {}; }
+        Object.keys(DATALISTS).forEach(function (field) {
+            var list = document.getElementById(DATALISTS[field]);
+            if (!list) return;
+            list.textContent = '';
+            (sources[field] || []).forEach(function (text) {
+                var option = document.createElement('option');
+                option.value = text;
+                list.appendChild(option);
+            });
+        });
+    }
+
+    function showLink(cell, linked) {
+        if (!cell) return;
+        var btn = cell.querySelector('.amp-link-btn');
+        cell.classList.toggle('linked', !!linked);
+        if (!btn) return;
+        btn.classList.toggle('linked', !!linked);
+        var text = linked ? 'Linked to ' + linked : 'Not linked. Pick an entry from the list to link it.';
+        btn.setAttribute('title', text);
+        btn.setAttribute('aria-label', linked ? 'Linked to ' + linked : 'Not linked');
+    }
+
+    function bindLinkButtons() {
+        var menu = document.getElementById('amp-link-menu');
+        var unlinkBtn = document.getElementById('amp-link-unlink');
+        if (!menu || !unlinkBtn) return;
+        var target = null;
+        function close() { menu.hidden = true; target = null; }
+        document.querySelectorAll('button.amp-link-btn').forEach(function (btn) {
+            btn.addEventListener('click', function (event) {
+                event.stopPropagation();
+                if (!btn.classList.contains('linked')) {      // nothing to unlink: go to the field
+                    var input = btn.closest('.amp-input-cell').querySelector('.amp-cell-input');
+                    if (input) input.focus();
+                    return;
+                }
+                var box = btn.getBoundingClientRect();
+                menu.style.left = (box.left + window.scrollX - 120) + 'px';
+                menu.style.top = (box.bottom + window.scrollY + 4) + 'px';
+                menu.hidden = false;
+                target = btn;
+            });
+        });
+        unlinkBtn.addEventListener('click', function (event) {
+            event.stopPropagation();
+            var btn = target;
+            close();
+            if (!btn) return;
+            var cell = btn.closest('.amp-input-cell');
+            var url = '/audiopatch/api/amp-channel/' + btn.dataset.channelId + '/inline-update/';
+            postForm(url, { field: btn.dataset.field, unlink: '1' }).then(function (r) {
+                if (r.success) showLink(cell, '');
+            }).catch(function (err) { console.error(err); });
+        });
+        document.addEventListener('click', function (event) {
+            if (!menu.hidden && !menu.contains(event.target)) close();
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') close();
+        });
     }
 
     function flashState(el, cls) {
@@ -1862,6 +1962,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        fillInputPickers();
+        bindLinkButtons();
         bindAutosave();
         bindCabinets();
         bindRoutingNotes();

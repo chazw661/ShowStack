@@ -13,6 +13,8 @@ result is saved, so editing a label changes the answer at once:
       counting both would draw the feed twice.
 
   (b) processor (or I/O) output -> amp channel input
+      Only inputs with no stored link: an input linked to its source output
+      (a ``Connection``, PR 2b-2) is drawn from it, confirmed, never matched.
       ``x`` / ``-`` / ``n/a`` / blank are PLACEHOLDERS: an empty field, not
       text that failed to match. The field picks the output type. Being IN
       USE (a label or an assigned bus) is a tie-breaker, never a filter: when
@@ -25,7 +27,9 @@ result is saved, so editing a label changes the answer at once:
         write, admin.py issue #43) -- channel AND label must match, channel
         only is DRIFT (the output was renamed after the amp was patched);
         ``AVB <n>`` or a bare ``<n>`` -- AVB output n, on whichever processor
-        has one (two processors: ambiguous).
+        has one (two processors: ambiguous). A bare number that more than
+        ``BARE_NUMBER_MAX`` outputs could be is not a match at all: "3" on a
+        big rig says nothing.
       * AES Input, tried in order:
         1. ``<label>`` -- a processor AES output's label;
         2. ``<label> - <n>`` / ``<n> - <label>`` ("Center - 3") -- AES output
@@ -90,9 +94,9 @@ from django.contrib.contenttypes.models import ContentType
 
 from planner.connections import endpoints as ep
 from planner.models import (
-    Amp, AmpChannel, AmpLocation, Console, ConsoleAuxOutput, ConsoleMatrixOutput,
-    ConsoleStereoOutput, Device, DeviceInput, DeviceOutput, GalaxyInput,
-    GalaxyOutput, P1Input, P1Output, PACableSchedule, SpeakerArray,
+    Amp, AmpChannel, AmpLocation, Connection, Console, ConsoleAuxOutput,
+    ConsoleMatrixOutput, ConsoleStereoOutput, Device, DeviceInput, DeviceOutput,
+    GalaxyInput, GalaxyOutput, P1Input, P1Output, PACableSchedule, SpeakerArray,
     SystemProcessor,
 )
 
@@ -112,6 +116,7 @@ RESOLVED = (MATCHED, SAME_PROCESSOR, SAME_DEVICE)
 # (b): AmpChannel field -> the processor output type it can be fed from.
 AMP_INPUT_FIELDS = (('avb_stream', 'AVB'), ('aes_input', 'AES'), ('analog_input', 'ANALOG'))
 FIELD_TRANSPORT = {'avb_stream': 'avb', 'aes_input': 'aes', 'analog_input': 'analog'}
+TRANSPORT_FIELD = {t: f for f, t in FIELD_TRANSPORT.items()}
 
 _DASHES = re.compile('[‐-―−]')
 _SPACES = re.compile(r'\s+')
@@ -120,6 +125,7 @@ _AVB = re.compile(r'^avb\s*(\d+)\s*(?:-\s*(.*))?$')
 _TYPE_WORDS = {'analog': 'ANALOG', 'analogue': 'ANALOG', 'aes': 'AES',
                'aes/ebu': 'AES', 'avb': 'AVB', 'avb/milan': 'AVB'}
 _BARE_NUMBER = re.compile(r'^(\d+)$')
+BARE_NUMBER_MAX = 3      # a bare "3" with more candidates than this is not matched
 _LABEL_NUMBER = re.compile(r'^(?P<label>.*\S)\s*-\s*(?P<n>\d+)$')
 _NUMBER_LABEL = re.compile(r'^(?P<n>\d+)\s*-\s*(?P<label>\S.*)$')
 PLACEHOLDERS = {'x', '-', 'n/a'}
@@ -224,6 +230,8 @@ class ProjectIndex:
         self.amp_inputs = []          # AmpInput
         self.amp_placeholders = []    # AmpInput holding x / - / n/a
         self.amp_channels = []        # Port, every channel, filled in or not
+        self.amp_links = []           # (Connection pk, source Port or None, channel Port or None, transport)
+        self.linked_inputs = set()    # (channel ref, field) with a stored link
         self.pa_rows = []             # PACableSchedule
         self.array_names = defaultdict(set)     # norm(name) -> {node id}
         self.amp_location_names = defaultdict(set)
@@ -371,6 +379,20 @@ class ProjectIndex:
                 elif norm(value):
                     self.amp_inputs.append(AmpInput(port, fname, value.strip()))
 
+        # Stored links: an amp input linked to its source output (PR 2b-2) --
+        prefixes = {ContentType.objects.get_for_model(model).pk: prefix
+                    for model, prefix in ((P1Output, 'p1output'), (GalaxyOutput, 'galaxyoutput'),
+                                          (DeviceOutput, 'deviceoutput'))}
+        amp_ct = ContentType.objects.get_for_model(AmpChannel).pk
+        rows = (Connection.objects.filter(project_id=pid, to_ct_id=amp_ct)
+                .order_by('pk').values_list('pk', 'from_ct_id', 'from_id', 'to_id', 'transport'))
+        for pk, from_ct, from_id, to_id, transport in rows:
+            source = self.ports.get(ep.port_ref(prefixes.get(from_ct, ''), from_id))
+            channel = self.ports.get(ep.port_ref('ampchannel', to_id))
+            self.amp_links.append((pk, source, channel, transport))
+            if transport in TRANSPORT_FIELD:
+                self.linked_inputs.add((ep.port_ref('ampchannel', to_id), TRANSPORT_FIELD[transport]))
+
         # PA cable runs -------------------------------------------------------
         self.pa_rows = list(PACableSchedule.objects.filter(project_id=pid)
                             .select_related('label')
@@ -517,7 +539,8 @@ def match_amp_input(index, amp_input):
             label = norm(m.group(2)) if m.re is _AVB else ''
             on_channel = [p for p in outputs if p.number == number]
             if not label:
-                return resolve(on_channel, 'number')
+                match = resolve(on_channel, 'number')
+                return _bare(match) if m.re is _BARE_NUMBER else match
             exact = [p for p in on_channel if norm(p.text) == label]
             if exact or not on_channel:
                 return resolve(exact, 'label')
@@ -563,12 +586,20 @@ def _analog(index, key, outputs, only, resolve, src, text, field):
             return Match('b', AMBIGUOUS, src, text, candidates=tuple(either), field=field)
         return Match('b', UNMATCHED, src, text, field=field)
     if _BARE_NUMBER.match(key):
-        return resolve([p for p in pool if p.number == int(key)], 'number')
+        return _bare(resolve([p for p in pool if p.number == int(key)], 'number'))
     return resolve([p for p in pool if norm(p.text) == key], 'label')
 
 
+def _bare(match):
+    """A bare number with more than BARE_NUMBER_MAX candidates is not matched."""
+    if match.verdict == AMBIGUOUS and len(match.candidates) > BARE_NUMBER_MAX:
+        return Match('b', UNMATCHED, match.source, match.text, field=match.field)
+    return match
+
+
 def rule_b(index):
-    return [match_amp_input(index, ai) for ai in index.amp_inputs]
+    return [match_amp_input(index, ai) for ai in index.amp_inputs
+            if (ai.channel.ref, ai.field) not in index.linked_inputs]
 
 
 # -- rule (c) ----------------------------------------------------------------

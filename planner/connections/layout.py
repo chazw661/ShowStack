@@ -375,7 +375,10 @@ class _Builder:
             text = text.rstrip(' →')        # "Out 4 →": the far end is the "?" box
             frm = self.nodes.get(edge['from'], {})
             source = frm['label'] if frm.get('feed') else _edge_text(edge)
-            text = ' · '.join(x for x in (f'? {source}' if source else '?', text) if x)
+            head = f'? {source}' if source else '?'
+            # "→ In 1": no from-port, so the arrow follows the text directly.
+            joiner = ' ' if text.startswith('→') else ' · '
+            text = joiner.join(x for x in (head, text) if x)
         return text
 
     def routes(self):

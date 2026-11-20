@@ -2420,7 +2420,7 @@ class AmpAdmin(BaseEquipmentAdmin):
                 })
 
             all_locations = list(locations)
-            from .models import AmpModel, P1Output, GalaxyOutput
+            from .models import AmpModel
             # Phase C: the project's generated power plan, if any. The Leg
             # select offers the legs of its service (L1-L3 before there is one);
             # a stored leg outside them stays listed so the card shows it.
@@ -2445,74 +2445,26 @@ class AmpAdmin(BaseEquipmentAdmin):
             from planner.views import _can_edit_current_project
             extra_context['can_edit'] = _can_edit_current_project(request)
 
-            # Issue #43: surface processor output labels as datalist
-            # suggestions on the amp's Analogue / AES / AVB input fields.
-            # Unlabeled outputs are skipped; entries get a "(<processor>)"
-            # suffix only when two processors expose the same label at the
-            # same slot, so a single-processor setup stays terse.
-            from collections import defaultdict
-
-            p1_outs = P1Output.objects.filter(
-                p1_processor__system_processor__project=request.current_project
-            ).select_related('p1_processor__system_processor')
-            gal_outs = GalaxyOutput.objects.filter(
-                galaxy_processor__system_processor__project=request.current_project
-            ).select_related('galaxy_processor__system_processor')
-
-            tagged = []  # (output_type, channel_number, label, processor_name)
-            for o in p1_outs:
-                label = (o.label or '').strip()
-                if not label:
-                    continue
-                tagged.append((
-                    o.output_type, o.channel_number, label,
-                    o.p1_processor.system_processor.name,
-                ))
-            for o in gal_outs:
-                label = (o.label or '').strip()
-                if not label:
-                    continue
-                tagged.append((
-                    o.output_type, o.channel_number, label,
-                    o.galaxy_processor.system_processor.name,
-                ))
-
-            def _build_simple(kind):
-                # by_label[label] -> set of processor names
-                by_label = defaultdict(set)
-                for t, _ch, lbl, proc in tagged:
-                    if t == kind:
-                        by_label[lbl].add(proc)
-                out = []
-                for lbl, procs in by_label.items():
-                    if len(procs) == 1:
-                        out.append(lbl)
-                    else:
-                        for proc in procs:
-                            out.append(f'{lbl} ({proc})')
-                return sorted(out)
-
-            def _build_avb():
-                # Group by (channel_number, label) so two processors that
-                # emit the same labeled stream collapse, and only ambiguous
-                # ones grow the "(proc)" suffix.
-                by_slot = defaultdict(set)
-                for t, ch, lbl, proc in tagged:
-                    if t == 'AVB':
-                        by_slot[(ch, lbl)].add(proc)
-                rows = []  # (channel_number, display_string) so sort is numeric
-                for (ch, lbl), procs in by_slot.items():
-                    if len(procs) == 1:
-                        rows.append((ch, f'AVB {ch} - {lbl}'))
-                    else:
-                        for proc in procs:
-                            rows.append((ch, f'AVB {ch} - {lbl} ({proc})'))
-                rows.sort()  # (channel_number, display) — numeric primary
-                return [s for _ch, s in rows]
-
-            extra_context['analog_input_options'] = _build_simple('ANALOG')
-            extra_context['aes_input_options'] = _build_simple('AES')
-            extra_context['avb_input_options'] = _build_avb()
+            # PR 2b-2: the input fields' datalists are the picker. Each lists
+            # every output that can feed it, one entry per output, naming its
+            # device; saving an entry links the input (connections.amp_sources).
+            from planner.connections import amp_sources
+            from planner.utils.script_json import script_json
+            sources = amp_sources.all_sources(request.current_project)
+            entries = amp_sources.picker(request.current_project, sources)
+            extra_context['input_sources_json'] = script_json(
+                {f: list(entries[f]) for f in amp_sources.FIELDS})
+            channels = [ch for group in active_locations for card in group['cards']
+                        for ch in card['channels']]
+            # The link button's tooltip names the source, as its entry reads now.
+            named = {(s.model, s.pk, s.field): s.text for s in sources}
+            links = amp_sources.links_for(channels)
+            for ch in channels:
+                ch.links = {}
+                for f in amp_sources.FIELDS:
+                    conn = links.get((ch.pk, f))
+                    ch.links[f] = (named.get((conn.from_ct.model, conn.from_id, f)) or 'its source'
+                                   if conn else '')
 
         return super().changelist_view(request, extra_context=extra_context)
 
@@ -2611,6 +2563,21 @@ class AmpAdmin(BaseEquipmentAdmin):
         return fieldsets
     
     inlines = [AmpChannelInline]
+
+    def save_formset(self, request, form, formset, change):
+        super().save_formset(request, form, formset, change)
+        if formset.model is not AmpChannel:
+            return
+        # PR 2b-2: an input whose text is exactly one rack-view datalist
+        # entry is linked to that output; edited to anything else, unlinked.
+        from planner.connections import amp_sources
+        entries = None
+        for f in formset.forms:
+            changed = [n for n in amp_sources.FIELDS if n in f.changed_data]
+            if changed and f.instance.pk:
+                entries = entries or amp_sources.picker(f.instance.amp.project)
+                for name in changed:
+                    amp_sources.link_from_text(f.instance, name, entries)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """The single dropdown hook for Amp (#100).

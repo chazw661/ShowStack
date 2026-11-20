@@ -6,7 +6,7 @@ the verdicts), and counts the results, so the rules can be judged against real
 shows before anything is stored:
 
   (a) console / I/O output -> processor input
-  (b) processor output -> amp channel input
+  (b) processor output -> amp channel input (inputs with no stored link)
   (c) PA cable runs with no amp, rack or linked array: Destination ->
       speaker array (or amp rack). Runs entered with an end are counted
       first; they are drawn as entered, not matched.
@@ -115,6 +115,10 @@ class Command(BaseCommand):
                     self._detail(x, 'from')
 
     def _rule_b(self, index, matches, detail):
+        orphaned = sum(1 for _, source, channel, _ in index.amp_links
+                       if source is None or channel is None)
+        self.stdout.write(' amp inputs linked (confirmed): %d · orphaned: %d'
+                          % (len(index.amp_links) - orphaned, orphaned))
         io = sum(1 for x in matches if x.verdict in m.RESOLVED and x.via == 'io')
         self.stdout.write(' (b) %s  placeholder %d   [via I/O output: %d]'
                           % (self._counts(matches, (('drift', m.DRIFT),)),

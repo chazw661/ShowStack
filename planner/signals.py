@@ -221,3 +221,62 @@ def unlink_device_outputs_on_delete(sender, instance, **kwargs):
     (DeviceOutput.objects
      .filter(content_type=ContentType.objects.get_for_model(sender), object_id=instance.pk)
      .update(content_type=None, object_id=None))
+
+
+# -- Amp input links (wiring diagram, PR 2b-2) --------------------------------
+# A linked amp input's text is a copy of its source's datalist entry, which
+# names the output's label, port and device. Renaming any of those rewrites
+# the copy; an I/O output added or deleted renumbers the device's outputs.
+# A new row has no links yet, so a create costs nothing.
+
+def _refresh_amp_inputs(project, outputs):
+    from planner.connections.amp_sources import refresh_linked_text
+    if project is not None and outputs:
+        refresh_linked_text(project, outputs)
+
+
+def _device_outputs(device):
+    return [('deviceoutput', pk) for pk in device.outputs.values_list('pk', flat=True)]
+
+
+@receiver(post_save, sender='planner.P1Output')
+def p1_output_saved(sender, instance, created, **kwargs):
+    if not created:
+        _refresh_amp_inputs(instance.p1_processor.system_processor.project,
+                            [('p1output', instance.pk)])
+
+
+@receiver(post_save, sender='planner.GalaxyOutput')
+def galaxy_output_saved(sender, instance, created, **kwargs):
+    if not created:
+        _refresh_amp_inputs(instance.galaxy_processor.system_processor.project,
+                            [('galaxyoutput', instance.pk)])
+
+
+@receiver(post_save, sender=DeviceOutput)
+@receiver(post_delete, sender=DeviceOutput)
+def device_output_changed(sender, instance, **kwargs):
+    # Any output saved, added or deleted can renumber the device's others.
+    from planner.models import Device
+    device = Device.objects.filter(pk=instance.device_id).first()   # gone: deleted with it
+    if device is not None:
+        _refresh_amp_inputs(device.project, _device_outputs(device))
+
+
+@receiver(post_save, sender='planner.SystemProcessor')
+def system_processor_saved(sender, instance, created, **kwargs):
+    if created:
+        return
+    # By query, not instance.p1_config: a config can be attached unsaved.
+    from planner.models import GalaxyOutput, P1Output
+    outputs = [('p1output', pk) for pk in P1Output.objects.filter(
+        p1_processor__system_processor=instance).values_list('pk', flat=True)]
+    outputs += [('galaxyoutput', pk) for pk in GalaxyOutput.objects.filter(
+        galaxy_processor__system_processor=instance).values_list('pk', flat=True)]
+    _refresh_amp_inputs(instance.project, outputs)
+
+
+@receiver(post_save, sender='planner.Device')
+def device_saved(sender, instance, created, **kwargs):
+    if not created:
+        _refresh_amp_inputs(instance.project, _device_outputs(instance))
