@@ -305,10 +305,18 @@ class _Graph:
 
 
 def _stored_links(index):
-    """PR 2b: stored Connection rows join here as confirmed links, and a
-    confirmed row suppresses the inferred links on the ports it covers.
-    Nothing is stored yet."""
-    return []
+    """Stored Connection rows, as confirmed links. Today: an amp input linked
+    to its source output (PR 2b-2), drawn from the processor or the I/O
+    device's outputs box; rule (b) leaves those inputs alone. A row whose end
+    is gone (deleted outside the ORM) is skipped; the report counts it."""
+    links = []
+    for pk, source, channel, transport in index.amp_links:
+        if source is None or channel is None:
+            continue
+        links.append(Link(source.node, channel.node, source, channel, transport,
+                          network=transport == 'avb', source=('connection', pk),
+                          cable=_cable_for(transport)))
+    return links
 
 
 # -- JSON ----------------------------------------------------------------------

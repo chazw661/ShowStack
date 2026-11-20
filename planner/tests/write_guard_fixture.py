@@ -91,6 +91,8 @@ class Factory:
         return None
 
     def _build(self, model):
+        if model.__name__ == 'Connection':
+            return self._connection(model)
         kwargs = {}
         for field in model._meta.concrete_fields:
             if field.primary_key and field.auto_created:
@@ -119,3 +121,15 @@ class Factory:
         obj = model(**kwargs)
         obj.save()
         return obj
+
+    def _connection(self, model):
+        """A Connection's ends are generic: an amp channel fed by an I/O output."""
+        from django.contrib.contenttypes.models import ContentType
+        from planner.models import AmpChannel, DeviceOutput
+        channel, source = self.get(AmpChannel), self.get(DeviceOutput)
+        if channel is None or source is None:
+            raise IntegrityError('no amp channel or I/O output for Connection')
+        return model.objects.create(
+            project=self.project, from_ct=ContentType.objects.get_for_model(DeviceOutput),
+            from_id=source.pk, to_ct=ContentType.objects.get_for_model(AmpChannel),
+            to_id=channel.pk, transport='analog')

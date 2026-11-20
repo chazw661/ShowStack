@@ -4059,6 +4059,11 @@ def amp_channel_inline_update(request, channel_id):
         return _amp_channel_cabinet_update(channel, {field: request.POST.get('value', '')})
     if field not in _INLINE_CHANNEL_FIELDS:
         return JsonResponse({'success': False, 'error': f'Field {field!r} not editable'}, status=400)
+    from planner.connections import amp_sources
+    if field in amp_sources.FIELDS and request.POST.get('unlink'):
+        # The link button's "Unlink (keep text)".
+        amp_sources.unlink(channel, field)
+        return JsonResponse({'success': True, 'linked': ''})
     value = request.POST.get('value', '')
     if field == 'channel_setting' and value not in dict(channel.channel_setting_choices):
         # The CH block only sends whole settings ("LF_B" on a 4-channel amp,
@@ -4066,6 +4071,11 @@ def amp_channel_inline_update(request, channel_id):
         return JsonResponse({'success': False, 'error': 'Unknown channel setting'}, status=400)
     setattr(channel, field, value)
     channel.save(update_fields=[field])
+    if field in amp_sources.FIELDS:
+        # PR 2b-2: text that is exactly one datalist entry links the input
+        # to that output; anything else unlinks it.
+        linked = amp_sources.link_from_text(channel, field)
+        return JsonResponse({'success': True, 'linked': value if linked else ''})
     return JsonResponse({'success': True})
 
 
