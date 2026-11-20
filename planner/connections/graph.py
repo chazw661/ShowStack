@@ -16,10 +16,17 @@
              * amp input text that matched nothing
 
 Port-level links between the same two nodes become one edge, keyed by
-(from, to, status, network, unlinked): "In 1–15 → Ch 1–15". Transport is not
-in the key -- a same-processor match feeding AES 1 and Analog 1 is one edge
-with both in ``transports`` -- but network is, because an AVB feed has no
-cable and an AES feed does even when none is recorded.
+(from, to, status, network, unlinked, to slot): "In 1–15 → Ch 1–15". Network
+is in the key because an AVB feed has no cable and an AES feed does even when
+none is recorded.
+
+Amps and processors have named input slots (PR 3.2), listed in the node's
+``slots``; an edge into one lands on one slot (``to_slot``) and is labelled
+with its source side only ("Out 1", "AVB 3"), the slot naming the input. A
+processor's slot is its input port ("AES 1", "Analog 2"). An amp's is the
+physical input a source plugs into, numbered by the rack view's input row:
+"XLR n" (analog), "AES n", "AVB n", n the lowest channel that source feeds
+on that transport, and "XLR 1 → Ch 1–2" when it feeds several channels.
 
 A PA cable run is labelled with its cable: "HR · 2× NL 8 75' · NL4 Y ×2"
 (the Cable Label, count, cable type, length, fan-outs). One run feeding
@@ -75,6 +82,7 @@ class Link:
     candidates: tuple = ()
     text: dict | None = None
     cable_label: str = ''       # PA runs: "HR · 2× NL 8 75'"
+    to_slot: str = ''           # the amp / processor input slot it lands on
 
 
 def _cable_for(transport):
@@ -111,6 +119,48 @@ def _feed_label(field, text):
     if field == 'avb_stream':
         return text if m.norm(text).startswith('avb') else f'{prefix} {text}'
     return f'{prefix}: {text}'
+
+
+SLOT_PREFIX = {'avb': 'AVB', 'analog': 'XLR', 'aes': 'AES'}   # rack view's row order
+
+
+def _slots(links, index):
+    """Give every link into an amp or a processor port its ``to_slot``;
+    returns {node id: [{'id', 'label'}]}, each node's slots in input order."""
+    kinds = {nid: n.kind for nid, n in index.nodes.items()}
+    by_source = defaultdict(list)       # amp: (amp, transport, source) -> links
+    named = defaultdict(dict)           # processor: node -> {slot id: (key, label)}
+    for link in links:
+        kind = kinds.get(link.to_node)
+        if not link.to_port:
+            continue
+        if kind == ep.AMP:
+            source = link.from_port.ref if link.from_port else link.from_node
+            by_source[(link.to_node, link.transport, source)].append(link)
+        elif kind == ep.PROCESSOR:
+            link.to_slot = link.to_port.ref
+            named[link.to_node][link.to_slot] = (_sort_key(link.to_port.label),
+                                                  str(link.to_port.label))
+    channels = defaultdict(set)         # (amp, slot id) -> channel labels
+    for (amp, transport, _), group in by_source.items():
+        labels = {l.to_port.label for l in group}
+        first = min(labels, key=_sort_key)
+        slot = f'{transport}:{first.number}'
+        for link in group:
+            link.to_slot = slot
+        channels[(amp, slot)] |= labels
+    prefixes = list(SLOT_PREFIX)
+    for (amp, slot), labels in channels.items():
+        transport, number = slot.split(':', 1)
+        first = min(labels, key=_sort_key)
+        label = f'{SLOT_PREFIX.get(transport, transport)} {first.number}'
+        if len(labels) > 1:
+            label += f' → {_runs(sorted(labels, key=_sort_key))}'
+        order = prefixes.index(transport) if transport in prefixes else len(prefixes)
+        named[amp][slot] = ((order,) + _sort_key(first), label)
+    return {node: [{'id': slot, 'label': label}
+                   for slot, (_, label) in sorted(slots.items(), key=lambda kv: kv[1][0])]
+            for node, slots in named.items()}
 
 
 class _Graph:
@@ -360,11 +410,18 @@ def _edge_label(links):
             froms.append(link.from_port.label)
         if link.to_port and link.to_port.label not in tos:
             tos.append(link.to_port.label)
+    # Into a slot: the slot names the input, so only the source side.
+    slotted = all(l.to_slot for l in links)
     phrases = []
     for froms, tos in groups.values():
-        if not froms and not tos:
+        if slotted:
+            phrase = _runs(froms)
+        elif not froms and not tos:
             continue
-        phrases.append(f'{_runs(froms)} → {_runs(tos)}'.strip())
+        else:
+            phrase = f'{_runs(froms)} → {_runs(tos)}'.strip()
+        if phrase:
+            phrases.append(phrase)
     # PA runs carry no ports; their label is the cable's. Several runs on
     # one edge are listed, "; "-separated (each already uses " · ").
     cables = '; '.join(dict.fromkeys(l.cable_label for l in links if l.cable_label))
@@ -438,6 +495,7 @@ def project_graph(project, index=None, matches=None):
     g.rule_a(matches.a)
     g.rule_b(matches.b)
     g.rule_c(matches.c)
+    slots = _slots(g.links, index)
 
     nodes = {nid: _node_json(n) for nid, n in index.nodes.items()
              if n.kind in ep.DEVICE_KINDS}
@@ -447,19 +505,23 @@ def project_graph(project, index=None, matches=None):
         for port, _ in ports:
             counts = nodes[port.node].setdefault('ports', {'inputs': 0, 'outputs': 0})
             counts[side] += 1
+    for node_id, node_slots in slots.items():
+        nodes[node_id]['slots'] = node_slots
     nodes.update(g.extra_nodes)
+    slot_order = {(nid, s['id']): i for nid, ss in slots.items() for i, s in enumerate(ss)}
 
     grouped = defaultdict(list)
     for link in g.links:
         grouped[(link.from_node, link.to_node, link.status, link.network,
-                 link.unlinked)].append(link)
+                 link.unlinked, link.to_slot)].append(link)
 
     def order(item):
-        (frm, to, status, network, unlinked), _ = item
-        return (_node_order(nodes, frm), _node_order(nodes, to), status, network, unlinked)
+        (frm, to, status, network, unlinked, slot), _ = item
+        return (_node_order(nodes, frm), _node_order(nodes, to),
+                slot_order.get((to, slot), -1), status, network, unlinked)
 
     edges, warnings = [], []
-    for n, ((frm, to, status, network, unlinked), links) in enumerate(
+    for n, ((frm, to, status, network, unlinked, slot), links) in enumerate(
             sorted(grouped.items(), key=order), 1):
         links.sort(key=lambda l: (_sort_key(l.from_port.label) if l.from_port else (),
                                   _sort_key(l.to_port.label) if l.to_port else ()))
@@ -473,6 +535,8 @@ def project_graph(project, index=None, matches=None):
             'links': [_link_json(l) for l in links],
             'sources': _sources(links),
         }
+        if slot:
+            edge['to_slot'] = slot
         rules = sorted({l.rule for l in links if l.rule})
         if rules:
             edge['rules'] = rules

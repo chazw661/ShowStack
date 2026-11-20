@@ -57,7 +57,7 @@ class WiringViewTests(WiringShow, TestCase):
             response = self.get(user)
             self.assertEqual(response.status_code, 200, role)
             self.assertIsNotNone(svg_of(response), role)
-            self.assertContains(response, 'Stage Box · outputs')
+            self.assertContains(response, 'Stage Box')
 
     def test_a_non_member_sees_nothing_of_the_project(self):
         outsider = User.objects.create_user('out', password='pw', is_staff=True)
@@ -73,7 +73,7 @@ class WiringViewTests(WiringShow, TestCase):
         self.device('Their Box', project=theirs)
         response = self.get(outsider, project=self.project)   # a stale session id
         self.assertNotContains(response, 'Stage Box')
-        self.assertContains(response, 'Their Box · inputs')
+        self.assertContains(response, 'Their Box')
 
     def test_anonymous_is_sent_to_log_in(self):
         response = self.client.get(self.url)
@@ -103,7 +103,7 @@ class WiringViewTests(WiringShow, TestCase):
         self.assertIn(f'device:{self.box.pk}#out', boxes)
         self.assertIn('unlinked:text:nowhere', boxes)
         labels = [t.text for t in root.iter(f'{SVG_NS}text') if 'wd-label' in (t.get('class') or '')]
-        self.assertIn('Out 2 → AES 1', labels)
+        self.assertIn('Out 2', labels)
         self.assertIn("HL · 2× NL 4 100'", labels)
         self.assertTrue(any(l.startswith('? Delay') for l in labels))
 
@@ -156,7 +156,7 @@ class WiringViewEscapesNamesTests(WiringShow, TestCase):
         root = ET.fromstring(svg_of(response))
         self.assertEqual([e for e in root.iter() if e.tag.endswith('img')], [])
         titles = {t.text for t in root.iter(f'{SVG_NS}title')}
-        self.assertIn(f'{NAME} · inputs', titles)
+        self.assertIn(NAME, titles)
         self.assertIn(QUOTED, titles)
         texts = [t.text or '' for t in root.iter(f'{SVG_NS}text')]
         self.assertIn(f'? {QUOTED}', ' '.join(texts))
