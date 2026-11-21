@@ -27,9 +27,6 @@ processor's slot is its input port ("AES 1", "Analog 2"). An amp's is the
 physical input a source plugs into, numbered by the rack view's input row:
 "XLR n" (analog), "AES n", "AVB n", n the lowest channel that source feeds
 on that transport, and "XLR 1 → Ch 1–2" when it feeds several channels.
-An amp model whose panel names its inputs (``panels``: the L-Acoustics
-amps' IN A..IN D) uses them for rows 1-4: "IN A · XLR", "IN A · AES"; AVB
-stays "AVB n".
 
 Each edge also carries ``label_lines``: its label split one line per port
 group ("Aux 1–4 → Out 1–4", "Mtx 1 → Out 5") and per PA run, which the
@@ -64,7 +61,6 @@ from itertools import groupby
 
 from planner.connections import endpoints as ep
 from planner.connections import matchers as m
-from planner.connections.panels import panel_name
 
 SCHEMA = 1
 CONFIRMED, INFERRED = 'confirmed', 'inferred'
@@ -134,7 +130,6 @@ def _feed_label(field, text):
 
 
 SLOT_PREFIX = {'avb': 'AVB', 'analog': 'XLR', 'aes': 'AES'}   # rack view's row order
-PANEL_TRANSPORTS = ('analog', 'aes')     # a panel socket; AVB has none
 
 
 def _slots(links, index):
@@ -166,10 +161,7 @@ def _slots(links, index):
     for (amp, slot), labels in channels.items():
         transport, number = slot.split(':', 1)
         first = min(labels, key=_sort_key)
-        panel = index.nodes[amp].extra.get('panel_inputs') or ()
-        name = panel_name(panel, first.number) if transport in PANEL_TRANSPORTS else None
-        prefix = SLOT_PREFIX.get(transport, transport)
-        label = f'{name} · {prefix}' if name else f'{prefix} {first.number}'
+        label = f'{SLOT_PREFIX.get(transport, transport)} {first.number}'
         if len(labels) > 1:
             label += f' → {_runs(sorted(labels, key=_sort_key))}'
         order = prefixes.index(transport) if transport in prefixes else len(prefixes)

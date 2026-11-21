@@ -1,10 +1,10 @@
-"""Wiring Diagram PR 3.3: amp panel input names, the "Show network feeds"
-toggle, and nothing cut short (wrapped labels, keys and the Connections
-table).
+"""Wiring Diagram PR 3.3: the "Show network feeds" toggle, and nothing cut
+short (wrapped labels, keys and the Connections table). Amp input slots
+stay numbered ("XLR n", "AES n", "AVB n"): L-Acoustics panels are numbered.
 
 Run with::
 
-    python manage.py test planner.tests.test_wiring_panel_names \\
+    python manage.py test planner.tests.test_wiring_network_and_wrapping \\
         --settings=audiopatch.test_settings
 """
 import re
@@ -17,7 +17,6 @@ from planner.connections import layout as L
 from planner.connections import svg
 from planner.connections import tabs as T
 from planner.connections.graph import project_graph
-from planner.connections.panels import panel_inputs
 from planner.models import Amp, AmpModel, ConsoleAuxOutput, ConsoleMatrixOutput
 from planner.tests.connection_fixtures import ConnectionFixtures
 from planner.tests.test_wiring_view import svg_of
@@ -41,72 +40,26 @@ def horizontal_runs(route):
             if abs(y0 - y1) < 0.01]
 
 
-class PanelTable(TestCase):
-    def test_l_acoustics_models_are_mapped_however_spelled(self):
-        for maker, model in (('L-Acoustics', 'LA12X'), ("L'Acoustics", 'la4x'),
-                             ('L-Acoustics', 'LA8'), ('L-ACOUSTICS', 'LA7.16i')):
-            self.assertEqual(panel_inputs(maker, model), ('IN A', 'IN B', 'IN C', 'IN D'), model)
-
-    def test_other_models_are_not(self):
-        self.assertEqual(panel_inputs('Powersoft', 'X8'), ())
-        self.assertEqual(panel_inputs("L'Acoustics", 'TEST4'), ())
-        self.assertEqual(panel_inputs('', ''), ())
-
-
-class PanelNameSlotTests(ConnectionFixtures, TestCase):
-    def setUp(self):
-        super().setUp()
-        self.box = self.device('Stage Box')
-        self.sl = self.p1('SL P1')
-
-    def amp_of(self, model_name, channels=4, name='SL Amp'):
+class LAmpSlotsStayNumberedTests(ConnectionFixtures, TestCase):
+    def test_an_la12x_has_numbered_slots(self):
         model, _ = AmpModel.objects.get_or_create(
-            manufacturer='L-Acoustics', model_name=model_name,
-            defaults={'channel_count': channels})
-        amp = self.amp(name, channels=channels)         # scaffolds its channels
+            manufacturer='L-Acoustics', model_name='LA12X', defaults={'channel_count': 4})
+        amp = self.amp('SL Amp')
         Amp.objects.filter(pk=amp.pk).update(amp_model=model)
-        return amp
-
-    def slots(self, amp):
-        graph = project_graph(self.project)
-        node = next(n for n in graph['nodes'] if n['id'] == f'amp:{amp.pk}')
-        box = next(b for b in L.layout(graph).boxes if b.node == node['id'])
-        return [s['label'] for s in node['slots']], box.slots
-
-    def test_rows_one_to_four_are_in_a_to_d_and_avb_stays_numbered(self):
-        amp = self.amp_of('LA12X')
-        self.device_output(self.box, 1, 'Fill')
-        self.p1_out(self.sl, 'AES', 1, 'Main L')
-        self.p1_out(self.sl, 'AVB', 3, 'Delay')
+        box, sl = self.device('Stage Box'), self.p1('SL P1')
+        self.device_output(box, 1, 'Fill')
+        self.p1_out(sl, 'AES', 1, 'Main L')
+        self.p1_out(sl, 'AVB', 3, 'Delay')
         self.amp_channel(amp, 1, analog_input='Fill')
         self.amp_channel(amp, 2, aes_input='Main L')
         self.amp_channel(amp, 3, avb_stream='AVB 3 - Delay')
         self.amp_channel(amp, 4, analog_input='Fill')
-        graph_slots, drawn = self.slots(amp)
-        # channel n's row: IN A for channel 1 ... the analog source feeds 1 and 4
-        self.assertEqual(graph_slots, ['AVB 3', 'IN A · XLR → Ch 1, 4', 'IN B · AES'])
-        self.assertEqual(drawn, graph_slots)
-
-    def test_the_same_letter_on_xlr_and_aes(self):
-        amp = self.amp_of('LA4X')
-        self.device_output(self.box, 1, 'Fill')
-        self.p1_out(self.sl, 'AES', 1, 'Main L')
-        self.amp_channel(amp, 1, analog_input='Fill', aes_input='Main L')
-        self.assertEqual(self.slots(amp)[0], ['IN A · XLR', 'IN A · AES'])
-
-    def test_a_row_past_the_panel_keeps_its_number(self):
-        amp = self.amp_of('LA7.16i', channels=16)
-        self.device_output(self.box, 1, 'Fill')
-        self.device_output(self.box, 2, 'Delay')
-        self.amp_channel(amp, 4, analog_input='Fill')
-        self.amp_channel(amp, 5, analog_input='Delay')
-        self.assertEqual(self.slots(amp)[0], ['IN D · XLR', 'XLR 5'])
-
-    def test_an_unmapped_model_keeps_the_numbers(self):
-        amp = self.amp('Other Amp')       # the fixtures' "L'Acoustics TEST4"
-        self.device_output(self.box, 1, 'Fill')
-        self.amp_channel(amp, 2, analog_input='Fill')
-        self.assertEqual(self.slots(amp)[0], ['XLR 2'])
+        graph = project_graph(self.project)
+        node = next(n for n in graph['nodes'] if n['id'] == f'amp:{amp.pk}')
+        self.assertEqual([s['label'] for s in node['slots']], ['AVB 3', 'XLR 1 → Ch 1, 4', 'AES 2'])
+        drawn = next(b for b in L.layout(graph).boxes if b.node == node['id'])
+        self.assertEqual(drawn.slots, [s['label'] for s in node['slots']])
+        self.assertNotIn('IN ', ' '.join(texts(svg.render(L.layout(graph)))))
 
 
 class NetworkShow(ConnectionFixtures):
