@@ -1650,8 +1650,8 @@ class DeviceAdmin(BaseEquipmentAdmin):
 
     def get_fields(self, request, obj=None):
         if obj is None:
-            return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'input_count', 'output_count']
-        return ['name', 'location', 'primary_ip_address', 'secondary_ip_address']
+            return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'console_connection', 'input_count', 'output_count']
+        return ['name', 'location', 'primary_ip_address', 'secondary_ip_address', 'console_connection']
     
     def get_form(self, request, obj=None, **kwargs):
         if obj is None:

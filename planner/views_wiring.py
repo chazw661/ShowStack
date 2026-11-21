@@ -1,15 +1,19 @@
 """Wiring Diagram: the project's connection graph drawn as one read-only SVG.
 
 Any project role can open it; nothing on it edits anything. The graph is
-inferred live (``connections.graph``), laid out by ``connections.layout`` and
-drawn by ``connections.svg``, which escapes every name.
+inferred live (``connections.graph``), filtered to the tab in ``?view=``
+(``connections.tabs``), laid out by ``connections.layout`` and drawn by
+``connections.svg``, which escapes every name. Each tab is laid out on its
+own; an unknown ``view`` is the Overview.
 """
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_GET
 
 from planner.connections import svg
+from planner.connections import tabs as T
 from planner.connections.graph import project_graph
 from planner.connections.layout import layout
 from planner.tenancy import current_project_or_none as _scoped_project
@@ -59,6 +63,24 @@ def warnings_for(graph, lay):
     return rows
 
 
+TAB_EMPTY = {
+    T.DANTE: 'No console or Dante I/O device yet. Set Console connection to Dante on an '
+             'I/O device page.',
+    T.ANALOG: 'No analog or AES feed and no non-Dante console link yet.',
+    T.SPEAKERS: 'No PA cable runs yet. Add them on the PA Cable Schedule.',
+}
+
+
+def unset_banner(graph, tab):
+    """The Dante and Analog tabs list the I/O devices with no Console
+    connection set, each linking to its device page."""
+    if tab not in (T.DANTE, T.ANALOG):
+        return []
+    return [{'name': n['label'],
+             'url': reverse('admin:planner_device_change', args=[n['id'].split(':', 1)[1]])}
+            for n in T.unset_devices(graph)]
+
+
 @staff_member_required
 @require_GET
 def wiring_diagram(request):
@@ -66,13 +88,22 @@ def wiring_diagram(request):
     project = _scoped_project(request)
     if project is None:
         return render(request, 'planner/wiring_diagram.html', {**context, 'no_project': True})
-    graph = project_graph(project)
-    lay = layout(graph)
+    tab = T.tab_or_default(request.GET.get('view'))
+    full = project_graph(project)
+    graph = T.graph_view(full, tab)
+    lay = layout(graph, **T.layout_options(tab))
     edges = graph['edges']
+    tab_label = dict(T.TABS)[tab]
     context.update({
         'project': project,
+        'tab': tab,
+        'tabs': [{'key': key, 'label': label, 'active': key == tab} for key, label in T.TABS],
+        'unset': unset_banner(full, tab),
+        'tab_empty': bool(full['nodes']) and not graph['nodes'],
+        'tab_empty_text': TAB_EMPTY.get(tab, ''),
+        'show_unset_legend': any(e.get('connection_unset') for e in edges),
         # svg.render escapes every name it draws.
-        'svg': mark_safe(svg.render(lay, title=f'Wiring diagram: {project.name}')),
+        'svg': mark_safe(svg.render(lay, title=f'Wiring diagram: {project.name} — {tab_label}')),
         'warnings': warnings_for(graph, lay),
         'counts': {
             'boxes': len(lay.boxes),
@@ -81,6 +112,6 @@ def wiring_diagram(request):
             'inferred': sum(e['status'] == 'inferred' and not e['unlinked'] for e in edges),
             'unlinked': sum(bool(e['unlinked']) for e in edges),
         },
-        'empty': not graph['nodes'],
+        'empty': not full['nodes'],
     })
     return render(request, 'planner/wiring_diagram.html', context)

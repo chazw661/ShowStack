@@ -8,7 +8,7 @@ its own.
 """
 from html import escape
 
-from planner.connections.layout import BOX_W, GROUP_HEAD, MARGIN, clip
+from planner.connections.layout import BOX_W, GROUP_HEAD, LINE_H, MARGIN, clip
 
 STYLE = """
 .wd-bg { fill: #ffffff; }
@@ -28,6 +28,8 @@ STYLE = """
 .wd-label { font: 11px system-ui, -apple-system, sans-serif; fill: #222; }
 .wd-label.unlinked { fill: #8a5a12; font-weight: 600; }
 .wd-label.network { fill: #2f855a; }
+.wd-edge.unset { stroke: #7a7a7a; stroke-dasharray: 1 3; stroke-width: 1.8; }
+.wd-label.unset { fill: #6b6b6b; font-style: italic; }
 .wd-end { fill: #2b4c7e; }
 """
 
@@ -60,6 +62,8 @@ def _box(box):
         f'<rect x="{_n(box.x)}" y="{_n(box.y)}" width="{_n(box.w)}" height="{_n(box.h)}" rx="4"/>'
         f'<text class="t" x="{_n(box.x + 8)}" y="{_n(box.y + 15)}">{_e(title)}</text>'
         f'<text class="s" x="{_n(box.x + 8)}" y="{_n(box.y + 28)}">{_e(sub)}</text>'
+        + ''.join(f'<text class="s ln" x="{_n(box.x + 8)}" y="{_n(box.y + 28 + LINE_H * (i + 1))}">'
+                  f'{_e(clip(line, BOX_W - 16))}</text>' for i, line in enumerate(box.lines)) +
         f'{_slots(box)}'
         '</g>')
 

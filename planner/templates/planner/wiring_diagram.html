@@ -31,6 +31,16 @@
   .wd-warnings .k { color: #f6c04f; font-weight: 600; }
   .wd-warnings .q { color: #fff; }
   .wd-empty { color: #bbb; font-size: 14px; }
+  .wd-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--ss-border); }
+  .wd-tabs a { color: #ccc; text-decoration: none; padding: 8px 14px; font-size: 14px;
+               border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; }
+  .wd-tabs a:hover { color: #fff; background: var(--ss-raised); }
+  .wd-tabs a[aria-current="page"] { color: #fff; background: var(--ss-raised);
+                                    border-color: var(--ss-border); font-weight: 600; }
+  .wd-banner { background: #3a3020; border: 1px solid #8a6d2c; color: #f3e2b8; border-radius: 6px;
+               padding: 10px 14px; margin: 0 0 12px; font-size: 13px; }
+  .wd-banner a { color: #ffd27a; }
+  .wd-legend i.unset { border-top: 2px dotted #9a9a9a; }
 </style>
 {% endblock %}
 
@@ -47,6 +57,16 @@
     <p class="wd-empty">Nothing to draw yet. Add consoles, I/O devices, processors, amps or PA cable runs and they appear here.</p>
   {% else %}
     <p class="wd-lede">{{ project.name }}: read from the patch, processor, amp and PA cable pages. Nothing here edits anything.</p>
+    <nav class="wd-tabs" aria-label="Diagram views">
+      {% for t in tabs %}<a href="?view={{ t.key }}"{% if t.active %} aria-current="page"{% endif %}>{{ t.label }}</a>{% endfor %}
+    </nav>
+    {% if unset %}
+      <p class="wd-banner" role="status">{{ unset|length }} I/O device{{ unset|length|pluralize }} {{ unset|length|pluralize:"has,have" }} no Console connection set:
+        {% for d in unset %}<a href="{{ d.url }}">{{ d.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+    {% endif %}
+    {% if tab_empty %}
+    <p class="wd-empty">{{ tab_empty_text }}</p>
+    {% else %}
     <div class="wd-bar">
       <button type="button" class="wd-toggle" id="wd-toggle" aria-pressed="true">Show at 100%</button>
       <span class="wd-counts">{{ counts.boxes }} boxes · {{ counts.confirmed }} confirmed · {{ counts.inferred }} inferred · {{ counts.unlinked }} not linked</span>
@@ -55,7 +75,8 @@
       <span><i></i>Confirmed (linked on a page)</span>
       <span><i class="inferred"></i>Inferred from labels</span>
       <span><i class="unlinked"></i>? Not linked or ambiguous</span>
-      <span><i class="network"></i>AVB / network (no cable)</span>
+      <span><i class="network"></i>AVB / Dante network (no cable)</span>
+      {% if show_unset_legend %}<span><i class="unset"></i>Console connection not set</span>{% endif %}
     </div>
     <div class="wd-scroll fit" id="wd-scroll">{{ svg }}</div>
 
@@ -71,6 +92,7 @@
         <p class="wd-empty">None.</p>
       {% endif %}
     </section>
+    {% endif %}
   {% endif %}
 </div>
 {% endblock %}
