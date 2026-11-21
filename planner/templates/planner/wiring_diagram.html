@@ -41,6 +41,22 @@
                padding: 10px 14px; margin: 0 0 12px; font-size: 13px; }
   .wd-banner a { color: #ffd27a; }
   .wd-legend i.unset { border-top: 2px dotted #9a9a9a; }
+  .wd-switch { color: #eee; font-size: 13px; text-decoration: none; display: inline-flex;
+               align-items: center; gap: 8px; }
+  .wd-switch .knob { width: 30px; height: 16px; border-radius: 8px; background: #555; position: relative; }
+  .wd-switch .knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px;
+                            height: 12px; border-radius: 50%; background: #fff; }
+  .wd-switch[aria-checked="true"] .knob { background: #2f855a; }
+  .wd-switch[aria-checked="true"] .knob::after { left: 16px; }
+  .wd-switch:focus-visible { outline: 2px solid #6f9bd1; outline-offset: 2px; }
+  .wd-connections { margin-top: 18px; background: var(--ss-raised); border-radius: 6px; padding: 12px 16px; }
+  .wd-connections h2 { color: #fff; font-size: 16px; margin: 0 0 8px; background: none; padding: 0; }
+  .wd-connections table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .wd-connections th, .wd-connections td { text-align: left; padding: 6px 8px; color: #ddd;
+                                            border-bottom: 1px solid var(--ss-border); vertical-align: top;
+                                            background: none; }
+  .wd-connections th { color: #aaa; font-weight: 600; }
+  .wd-connections td.k { color: #fff; font-weight: 600; white-space: nowrap; }
 </style>
 {% endblock %}
 
@@ -69,6 +85,10 @@
     {% else %}
     <div class="wd-bar">
       <button type="button" class="wd-toggle" id="wd-toggle" aria-pressed="true">Show at 100%</button>
+      {% if network_toggle %}
+      <a class="wd-switch" role="switch" aria-checked="{{ network|yesno:'true,false' }}"
+         href="?view=overview{% if network %}&amp;network=0{% endif %}"><span class="knob" aria-hidden="true"></span>Show network feeds{% if hidden_network %} ({{ hidden_network }} hidden){% endif %}</a>
+      {% endif %}
       <span class="wd-counts">{{ counts.boxes }} boxes · {{ counts.confirmed }} confirmed · {{ counts.inferred }} inferred · {{ counts.unlinked }} not linked</span>
     </div>
     <div class="wd-legend" aria-label="Legend">
@@ -79,6 +99,20 @@
       {% if show_unset_legend %}<span><i class="unset"></i>Console connection not set</span>{% endif %}
     </div>
     <div class="wd-scroll fit" id="wd-scroll">{{ svg }}</div>
+
+    {% if connections %}
+    <section class="wd-connections" id="wd-connections">
+      <h2>Connections ({{ connections|length }})</h2>
+      <table>
+        <thead><tr><th scope="col">Key</th><th scope="col">From</th><th scope="col">To</th><th scope="col">Cable / transport</th></tr></thead>
+        <tbody>
+          {% for c in connections %}
+          <tr data-key="{{ c.key }}"><td class="k">[{{ c.key }}]</td><td>{{ c.from }}</td><td>{{ c.to }}</td><td>{{ c.cable }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
 
     <section class="wd-warnings">
       <h2>Warnings{% if warnings %} ({{ warnings|length }}){% endif %}</h2>

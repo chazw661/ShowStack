@@ -4,11 +4,13 @@ Every name in it is user data (device names, labels, PA Destination text, amp
 input text), so every text node and attribute value goes through ``_e`` --
 input slot labels too, though today they are built from numbers. No
 script, no external references; the styles are inline so the file stands on
-its own.
+its own. Nothing is shortened: ``layout`` has wrapped every text into lines,
+and a line or tspan is drawn per line. Each box and line keeps its full text
+in a ``<title>``, the hover tooltip.
 """
 from html import escape
 
-from planner.connections.layout import BOX_W, GROUP_HEAD, LINE_H, MARGIN, clip
+from planner.connections.layout import BOX_W, GROUP_HEAD, LABEL_LH, LINE_H, MARGIN, SLOT_LH
 
 STYLE = """
 .wd-bg { fill: #ffffff; }
@@ -42,28 +44,39 @@ def _n(value):
     return f'{value:.1f}'.rstrip('0').rstrip('.')
 
 
+def _lines(lines, x, line_h):
+    """A text's lines as tspans ``line_h`` apart. Each but the last ends in
+    the space it was broken at, so the text still reads (and copies) whole."""
+    if len(lines) == 1:
+        return _e(lines[0])
+    out = []
+    for i, line in enumerate(lines):
+        dy = f' dy="{_n(line_h)}"' if i else ''
+        gap = ' ' if i < len(lines) - 1 else ''
+        out.append(f'<tspan x="{_n(x)}"{dy}>{_e(line)}{gap}</tspan>')
+    return ''.join(out)
+
+
 def _slots(box):
     out = []
-    for i, label in enumerate(box.slots):
+    x = box.x + 8
+    for i, (label, lines) in enumerate(zip(box.slots, box.slot_lines)):
         if not label:
             continue
         y = box.row_y(i)
-        out.append(f'<text class="p" data-slot="{_e(label)}" x="{_n(box.x + 8)}" y="{_n(y + 3.5)}">'
-                   f'{_e(clip(label, BOX_W - 16))}</text>')
+        out.append(f'<text class="p" data-slot="{_e(label)}" x="{_n(x)}" y="{_n(y + 3.5)}">'
+                   f'{_lines(lines, x, SLOT_LH)}</text>')
     return ''.join(out)
 
 
 def _box(box):
-    title = clip(box.label, BOX_W - 16)
-    sub = clip(box.sub, BOX_W - 16)
+    x = box.x + 8
     return (
         f'<g class="wd-box {_e(box.style)}" data-node="{_e(box.node)}" data-box="{_e(box.id)}">'
         f'<title>{_e(box.label)}</title>'
         f'<rect x="{_n(box.x)}" y="{_n(box.y)}" width="{_n(box.w)}" height="{_n(box.h)}" rx="4"/>'
-        f'<text class="t" x="{_n(box.x + 8)}" y="{_n(box.y + 15)}">{_e(title)}</text>'
-        f'<text class="s" x="{_n(box.x + 8)}" y="{_n(box.y + 28)}">{_e(sub)}</text>'
-        + ''.join(f'<text class="s ln" x="{_n(box.x + 8)}" y="{_n(box.y + 28 + LINE_H * (i + 1))}">'
-                  f'{_e(clip(line, BOX_W - 16))}</text>' for i, line in enumerate(box.lines)) +
+        + ''.join(f'<text class="{cls}" x="{_n(x)}" y="{_n(box.y + dy)}">{_e(line)}</text>'
+                  for cls, line, dy in box.text_rows) +
         f'{_slots(box)}'
         '</g>')
 
@@ -72,13 +85,19 @@ def _route(route):
     path = ' '.join(f'{"M" if i == 0 else "L"}{_n(x)} {_n(y)}' for i, (x, y) in enumerate(route.points))
     end_x, end_y = route.points[-1]
     classes = ' '.join(route.classes)
+    label = ''
+    if route.lines:
+        # The last line sits just above the run; the others stack above it.
+        top = route.label_y - (len(route.lines) - 1) * LABEL_LH
+        key = f' data-key="{route.key}"' if route.key else ''
+        label = (f'<text class="wd-label {_e(classes)}"{key} x="{_n(route.label_x)}" y="{_n(top)}">'
+                 f'{_lines(route.lines, route.label_x, LABEL_LH)}</text>')
     return (
         f'<g class="wd-link" data-edge="{_e(route.id)}">'
         f'<title>{_e(route.label_full)}</title>'
         f'<path class="wd-edge {_e(classes)}" d="{path}"/>'
         f'<path class="wd-end" d="M{_n(end_x)} {_n(end_y)} l-6 -3.5 v7 z"/>'
-        f'<text class="wd-label {_e(classes)}" x="{_n(route.label_x)}" y="{_n(route.label_y)}">'
-        f'{_e(route.label)}</text>'
+        f'{label}'
         '</g>')
 
 
@@ -92,9 +111,11 @@ def render(lay, title=''):
         out.append(f'<text class="wd-col" x="{_n(x)}" y="{_n(MARGIN + 12)}">{_e(text)}</text>')
     for group in lay.groups:
         y = group.y + GROUP_HEAD - 8
-        out.append(f'<text class="wd-group" x="{_n(group.x)}" y="{_n(y)}">{_e(group.label)}</text>'
+        last = y + LINE_H * (len(group.lines) - 1)
+        out.append(f'<text class="wd-group" x="{_n(group.x)}" y="{_n(y)}">'
+                   f'{_lines(group.lines, group.x, LINE_H)}</text>'
                    f'<line class="wd-group-rule" x1="{_n(group.x)}" x2="{_n(group.x + BOX_W)}" '
-                   f'y1="{_n(y + 4)}" y2="{_n(y + 4)}"/>')
+                   f'y1="{_n(last + 4)}" y2="{_n(last + 4)}"/>')
     out += [_route(r) for r in lay.routes]
     out += [_box(b) for b in lay.boxes]
     out.append('</svg>')

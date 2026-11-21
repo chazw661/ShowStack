@@ -364,8 +364,12 @@ class GraphTests(ConnectionFixtures, TestCase):
         self.assertEqual(set(graph), {'schema', 'project', 'nodes', 'edges', 'warnings'})
         self.assertEqual(graph['schema'], 1)
         self.assertEqual(set(graph['edges'][0]),
-                         {'id', 'from', 'to', 'label', 'transports', 'network', 'status',
-                          'unlinked', 'cable', 'links', 'sources'})
+                         {'id', 'from', 'to', 'label', 'label_lines', 'from_ports', 'to_ports',
+                          'transports', 'network', 'status', 'unlinked', 'cable', 'links',
+                          'sources'})
+        edge = graph['edges'][0]
+        self.assertEqual((edge['label_lines'], edge['from_ports'], edge['to_ports']),
+                         (['In 1 → Ch 1'], 'In 1', 'Ch 1'))
         self.assertEqual(set(graph['edges'][0]['links'][0]),
                          {'transport', 'from_port', 'from_ref', 'to_port', 'to_ref'})
 

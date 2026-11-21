@@ -1,5 +1,5 @@
 """Wiring Diagram tabs: Device.console_connection, and the Overview / Dante /
-Analog signal flow / Speaker cables views of one project graph.
+Analogue/AES / Speaker cables views of one project graph.
 
 Run with::
 
@@ -167,7 +167,7 @@ class DanteTabTests(TabShow, TestCase):
         self.assertIn('Pri 10.0.0.1 · Sec 10.0.1.1', texts)
 
     def test_only_the_columns_it_uses(self):
-        self.assertEqual(self.titles(), ['I/O inputs', 'Console', 'I/O outputs'])
+        self.assertEqual(self.titles(), ['Device inputs', 'Console', 'Device outputs'])
         last = max(x for _, x, _ in self.lay.columns)
         self.assertEqual(self.lay.width, last + L.BOX_W + L.MARGIN)
 

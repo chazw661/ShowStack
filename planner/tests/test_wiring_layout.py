@@ -300,7 +300,7 @@ class UnlinkedFeedsTests(ConnectionFixtures, TestCase):
         amp = self.amp('FF Amp')
         self.amp_channel(amp, 1, analog_input='Fill')       # I/O output -> amp, no processor
         self.draw()
-        self.assertEqual(self.titles(), ['I/O inputs', 'Console', 'I/O outputs', 'Amps', 'Speakers'])
+        self.assertEqual(self.titles(), ['Device inputs', 'Console', 'Device outputs', 'Amps', 'Speakers'])
         [route] = [r for r in self.lay.routes if r.to_node == f'amp:{amp.pk}']
         xs = [x for x, _ in route.points]
         self.assertEqual(xs, sorted(xs))
@@ -458,12 +458,14 @@ class LayoutOfAHandBuiltGraphTests(SimpleTestCase):
         self.assertEqual(lay.not_drawn, ['e1'])
         self.assertEqual(lay.routes, [])
 
-    def test_long_labels_are_clipped_with_the_full_text_kept(self):
-        self.assertEqual(L.clip('abcdefghij', L.CHAR_W * 5), 'abcd…')
-        self.assertEqual(L.clip('abc', L.CHAR_W * 5), 'abc')
+    def test_wrap_breaks_at_spaces_and_keeps_every_character(self):
+        self.assertEqual(L.wrap('abc def ghi', L.CHAR_W * 7), ['abc def', 'ghi'])
+        self.assertEqual(L.wrap('abcdefghij', L.CHAR_W * 4), ['abcd', 'efgh', 'ij'])
+        self.assertEqual(L.wrap('abc', L.CHAR_W * 5), ['abc'])
+        self.assertEqual(L.wrap('', L.CHAR_W * 5), [''])
 
     def test_a_slot_label_is_escaped(self):
-        hostile = '"><img src=x onerror=1>'     # short enough not to be clipped
+        hostile = '"><img src=x onerror=1>'
         graph = {'nodes': [{'id': 'device:1', 'kind': 'device', 'label': 'Box',
                             'ports': {'inputs': 0, 'outputs': 1}},
                            {'id': 'amp:1', 'kind': 'amp', 'label': 'Amp',
