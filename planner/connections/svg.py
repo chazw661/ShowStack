@@ -10,7 +10,8 @@ in a ``<title>``, the hover tooltip.
 """
 from html import escape
 
-from planner.connections.layout import BOX_W, GROUP_HEAD, LABEL_LH, LINE_H, MARGIN, SLOT_LH
+from planner.connections.layout import (BOX_W, GROUP_HEAD, KEY_PAD, LABEL_LH, LINE_H, MARGIN,
+                                        SLOT_LH)
 
 STYLE = """
 .wd-bg { fill: #ffffff; }
@@ -33,6 +34,8 @@ STYLE = """
 .wd-edge.unset { stroke: #7a7a7a; stroke-dasharray: 1 3; stroke-width: 1.8; }
 .wd-label.unset { fill: #6b6b6b; font-style: italic; }
 .wd-end { fill: #2b4c7e; }
+.wd-key rect { fill: #ffffff; stroke: #1f2d3d; stroke-width: 1.2; }
+.wd-key text { font: 700 11px system-ui, -apple-system, sans-serif; fill: #111; }
 """
 
 
@@ -86,11 +89,17 @@ def _route(route):
     end_x, end_y = route.points[-1]
     classes = ' '.join(route.classes)
     label = ''
-    if route.lines:
+    if route.key:
+        # A boxed badge on the line itself, drawn over it, next to the source box.
+        x0, y0, x1, y1 = route.badge
+        label = (f'<g class="wd-key"><rect x="{_n(x0)}" y="{_n(y0)}" width="{_n(x1 - x0)}" '
+                 f'height="{_n(y1 - y0)}" rx="3"/>'
+                 f'<text data-key="{route.key}" x="{_n(x0 + KEY_PAD)}" y="{_n(route.label_y)}">'
+                 f'[{route.key}]</text></g>')
+    elif route.lines:
         # The last line sits just above the run; the others stack above it.
         top = route.label_y - (len(route.lines) - 1) * LABEL_LH
-        key = f' data-key="{route.key}"' if route.key else ''
-        label = (f'<text class="wd-label {_e(classes)}"{key} x="{_n(route.label_x)}" y="{_n(top)}">'
+        label = (f'<text class="wd-label {_e(classes)}" x="{_n(route.label_x)}" y="{_n(top)}">'
                  f'{_lines(route.lines, route.label_x, LABEL_LH)}</text>')
     return (
         f'<g class="wd-link" data-edge="{_e(route.id)}">'
